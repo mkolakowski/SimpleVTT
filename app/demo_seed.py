@@ -3403,6 +3403,22 @@ def _ranger_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "attuned": False,
              "_slug": "wings-of-flying", "weight_lb": 0,
              "desc": "Rare wondrous item (cloak), attunement. While wearing this cloak, you can use an action to speak its command word, turning it into bat or bird wings that give you a flying speed of 60 feet for 1 hour (or until you repeat the command word). When the wings disappear, you can't use them again for 1d12 hours. RAW DMG p.214."},
+            # v2.300.0 — Cloak of the Manta Ray (RAW DMG p.158, uncommon, NO
+            # attunement). Composes two existing no-attunement boolean
+            # substrates in one catalog payload: `water_breath` (the v2.256.0
+            # Cap of Water Breathing flag) + `swim_speed` (the v2.242.0 Ring of
+            # Swimming flag), both surfaced on /sheet-json as boolean derived
+            # reads. The hood up/down action is GM-narrated. Seeded as inert
+            # spare loot (unequipped/unattuned) so it adds neither flag to
+            # Rowan's baseline (he carries Ring of Water Walking — water_walk,
+            # a distinct flag — but no water_breath/swim_speed item) — the
+            # harness PATCHes it equipped (no attune needed), reads the two
+            # derived flags, then restores. An aquatic cloak is on-theme for a
+            # wilderness ranger who already walks on water.
+            {"name": "Cloak of the Manta Ray", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "_slug": "cloak-of-the-manta-ray", "weight_lb": 1,
+             "desc": "Uncommon wondrous item, no attunement. While wearing this cloak with its hood up, you can breathe underwater and you have a swimming speed of 60 feet. Pulling the hood up or down requires an action. RAW DMG p.158."},
         ],
         # v2.18.3: Variant Human bonus feat = Sharpshooter. Captured as
         # a feats entry; mechanical effects (ignore long-range disadvantage,

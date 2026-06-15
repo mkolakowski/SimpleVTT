@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2857 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.299.0, 2026-06-14).
+**Total tests:** 2861 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.300.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2890,6 +2890,16 @@ v2.296.0 — Rod of Alertness (RAW DMG p.193, very rare, attunement): advantage 
 | `test_rod_requires_attunement` | Equipped-but-unattuned → no `2d20kh1`, no `roll_state_applied` (the attunement gate). Restored on teardown. |
 | `test_rod_baseline_has_no_advantage` | Control: inert seed (equipped=False) → straight `1d20`, no advantage (proves it's rod-sourced). |
 | `test_rod_exposes_derived_flag` | Equipped+attuned → `GET /sheet-json` `derived.check_advantage_on` has "perception" in `skills` and "Rod of Alertness" in `sources`. Restored on teardown. |
+
+### `test_item_cloak_of_the_manta_ray.py`
+v2.300.0 — Cloak of the Manta Ray (RAW DMG p.158, uncommon, no attunement): underwater breathing + 60 ft swim speed, composing two existing no-attunement boolean substrates in one payload (`water_breath` from the Cap of Water Breathing + `swim_speed` from the Ring of Swimming). Seeded as inert spare loot (unequipped) on Rowan Quickbow (Ranger, no other water_breath/swim_speed item — his Ring of Water Walking is the distinct `water_walk` flag); tests PATCH it equipped, read both derived flags, then restore.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cloak_equipped_exposes_both_flags` | Equipped via PATCH → `GET /sheet-json` `derived.water_breath` AND `derived.swim_speed` both present, each naming "Cloak of the Manta Ray" in `sources`. Restored on teardown. |
+| `test_cloak_no_attunement_required` | Equipped while `attuned` stays False → both flags still surface (no attunement gate). Restored on teardown. |
+| `test_cloak_baseline_has_neither_flag` | Control: inert seed (equipped=False) → neither `water_breath` nor `swim_speed` in derived (proves both are cloak-sourced). |
+| `test_cloak_unequip_drops_flags` | Equip → both flags present; unequip → both removed. Restored on teardown. |
 
 ### `test_item_ring_of_spell_turning.py`
 v2.299.0 — Ring of Spell Turning (RAW DMG p.193, legendary, attunement): advantage on saving throws against any spell that targets only you, via the v2.297.0 `spell_save_advantage` roll effect (third carrier after the Scarab + Robe of the Archmagi; the nat-20 spell-reflection clause is GM-narrated). Seeded as inert spare loot (unequipped/unattuned) on Zara Emberfire (Sorcerer, no other spell-save item, so the baseline cleanly proves the source); tests PATCH it equipped+attuned, roll a `vs_spell` save, then restore.

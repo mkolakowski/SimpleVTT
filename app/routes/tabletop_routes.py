@@ -32997,6 +32997,16 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "cap-of-water-breathing": [
         {"water_breath": True},
     ],
+    # v2.300.0 — Cloak of the Manta Ray (RAW DMG p.158, uncommon, no
+    # attunement). RAW: "while wearing this cloak with its hood up, you can
+    # breathe underwater, and you have a swimming speed of 60 feet." Composes
+    # TWO existing no-attunement boolean substrates in one payload: the
+    # v2.256.0 `water_breath` flag (Cap of Water Breathing) and the v2.242.0
+    # `swim_speed` flag (Ring of Swimming) — both surfaced as boolean derived
+    # reads. The hood up/down action is GM-narrated.
+    "cloak-of-the-manta-ray": [
+        {"water_breath": True, "swim_speed": True},
+    ],
     # v2.257.0 — Ring of X-ray Vision (RAW DMG p.193, rare, attunement). RAW:
     # the wearer can see into and through solid matter (radius 30 ft; 1 ft of
     # stone / 1 in. of metal / 3 ft of wood or dirt blocks it). Modeled as an

@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.300.0] - 2026-06-14 — "The Manta's Glide"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item drop-in — **Cloak of the Manta Ray** (RAW DMG p.158, uncommon, no attunement) composes two existing no-attunement boolean substrates in one payload: `water_breath` (the v2.256.0 Cap of Water Breathing flag) + `swim_speed` (the v2.242.0 Ring of Swimming flag). One registry entry, a demo-seed item on Rowan Quickbow, and four harness tests.
+
+**Description:** The cloak's entire mechanical benefit — "while wearing this cloak with its hood up, you can breathe underwater and you have a swimming speed of 60 feet" — is captured by two booleans that already exist on the passive engine: `water_breath: True` (surfaced as `derived.water_breath`) and `swim_speed: True` (surfaced as `derived.swim_speed`), both aggregated via boolean OR in `_equipped_item_effects` with source attribution. So this commit needs no new engine code — a single two-field registry payload, a demo seed, and tests. No attunement gate (the cloak rides alongside the wearer's loadout freely, the Ring of Water Walking pattern); the hood up/down action is GM-narrated. Seeded **unequipped** as spare loot on Rowan Quickbow (the demo's Ranger — an aquatic cloak is on-theme for a wilderness scout who already wears a Ring of Water Walking), specifically on a carrier with no other water_breath/swim_speed item so the inert baseline cleanly proves the cloak is the source (his Ring of Water Walking is the distinct `water_walk` flag; Mira holds the existing water-breathing/swimming items). The harness PATCHes it equipped, asserts both derived flags name the cloak, then restores the seed inventory; a no-attunement assertion, an inert-baseline control (neither flag present), and an unequip-drops-both-flags test round it out. MINOR — additive demo content + a new registry entry + tests, no schema change.
+
+### Added
+- `cloak-of-the-manta-ray` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — a two-field payload: `water_breath: True` + `swim_speed: True`, no attunement gate.
+- Demo seed: Rowan Quickbow gains a spare (unequipped) **Cloak of the Manta Ray**.
+- `tests/harness/test_item_cloak_of_the_manta_ray.py` (4 tests): equipping surfaces both `derived.water_breath` + `derived.swim_speed` with the cloak named in each source list; no attunement required (un-attuned still grants); inert baseline has neither flag; unequip drops both. Inventory restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2857 → 2861 (+4 drop-in tests); added the `test_item_cloak_of_the_manta_ray.py` section.
+
 ## [2.299.0] - 2026-06-14 — "The Turned Spell"
 
 **Schema version:** 69
