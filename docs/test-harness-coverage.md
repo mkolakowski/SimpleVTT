@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2984 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.342.0, 2026-06-15).
+**Total tests:** 2986 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.343.0, 2026-06-15).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3549,6 +3549,14 @@ v2.158.103 magic-items-automation Phase 7c — Sword of Sharpness +4d6 slashing 
 |------|-----------------|
 | `test_sharpness_no_rider_when_detuned` | Detune the Sword of Sharpness → nat-20 rider suppressed even with d20=20 seeded. Re-attunes in teardown. |
 | `test_sharpness_nat_20_extra_damage` | Iterates seeds 0-199 finding one that lands d20=20 on Pip's first attack; asserts `feature_used` with `source: "item-sword-of-sharpness-nat20"` fires and `hp_dealt` is in [4, 24] (4d6 range). |
+
+### `test_dagger_of_venom.py`
+v2.343.0 magic-items — Dagger of Venom (RAW DMG p.161, rare, NO attunement). First on_hit_save item to use the new `effect: "damage_condition"` variant — DC 15 CON save or 2d10 poison + poisoned (save negates both). Carrier: Pip Quickfingers at `attack_index 5`, equipped. Bandit-template targets roll the NPC save inline.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_dagger_of_venom_save_fires_on_hit` | A hit vs a Bandit → `feature_used` with `source: "item-dagger-of-venom-save"`, `dc: 15`, `ability: "CON"`. |
+| `test_dagger_of_venom_poisons_on_failed_save` | Sweep seeds until the Bandit fails the save → the `poisoned` buff is installed on the target AND its HP dropped below full (both halves of `damage_condition`). |
 
 ### `test_sword_of_life_stealing.py`
 v2.318.0 magic-items — Sword of Life Stealing +3d6 necrotic on natural 20 (RAW DMG p.206, rare, attunement). Third item on the `on_nat_20` `effect: "damage"` branch (Sharpness precedent), and the first to compose `exempt_creature_types` with a damage rider (Vorpal uses the same list with `effect: "decap"`). Construct and undead targets are exempt; the dispatcher short-circuits before rolling the rider dice. Demo fixture: Pip Quickfingers carries it at `attack_index 3` + inventory tail; **v2.318.1** reseated as inert spare loot — tests PATCH equipped+attuned via `/sheet-fields` (bypassing the `/attune` 3-item cap) then restore. The RAW temp-HP-equal-to-extra-damage clause is GM-narrated in v1.

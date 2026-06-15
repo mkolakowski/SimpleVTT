@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.343.0] - 2026-06-15 — "The Envenomed Blade"
+
+**Schema version:** 69
+
+**Commit summary:** SRD magic-item drop-in — **Dagger of Venom** (RAW DMG p.161, rare, NO attunement), wiring one of the previously-deferred mechanically-rich leftovers. The first on_hit_save item to use a NEW `effect: "damage_condition"` variant — damage AND a condition on the same failed save. RAW: a hit lets the target make a DC 15 CON save or take 2d10 poison AND become poisoned for 1 minute (save negates both). Seeded equipped on Pip Quickfingers; two harness tests.
+
+**Description:** The `_apply_magic_item_on_hit_save_effect` handler gains a `damage_condition` branch that builds the condition_buff (poisoned) from the catalog row and passes it to `_resolve_feature_save` (which installs it on a failed NPC save), while the damage-application block — extended to fire for `damage_condition` too — applies the 2d10 poison via the save-negates path (`save_for_half: False`). So a single failed save yields both the poison damage and the poisoned condition. No `condition` predicate → fires on every hit; no attunement → fires on slug match alone. The +1 attack/damage is baked onto Pip's attack row; the coat-the-blade action (RAW 1/min usage limit) is GM-narrated in v1 (the Frost Brand / Sun Blade always-on-rider precedent). MINOR — additive on_hit_save variant + content, no schema change.
+
+### Added
+- `effect: "damage_condition"` branch in `_apply_magic_item_on_hit_save_effect` (`app/routes/tabletop_routes.py`) — builds + installs a condition on a failed save AND applies save-negates damage; the damage-apply block now fires for both `damage` and `damage_condition`.
+- `_MAGIC_ITEM_ATTACK_RIDERS["dagger-of-venom"]` — `{requires_attunement: False, on_hit_save: {effect: "damage_condition", dice: "2d10", damage_type: "poison", save_for_half: False, dc: 15, ability: "CON", condition_key: "poisoned"}}`.
+- Demo seed: Pip Quickfingers gains a **Dagger of Venom** at `attack_index 5` + inventory tail, equipped (no attunement).
+- `tests/harness/test_dagger_of_venom.py` — 2 tests (DC 15 CON poison save feature_used fires on hit; on a failed save the target is poisoned AND took poison damage).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2984 → 2986 (+2 Dagger of Venom tests); new `test_dagger_of_venom.py` section.
+
 ## [2.342.0] - 2026-06-15 — "The Vault"
 
 **Schema version:** 69

@@ -370,6 +370,18 @@ def _rogue_sheet(name: str) -> dict:
              "damage": "1d6+5", "damage_type": "piercing",
              "range": "5 ft", "_slug": "nine-lives-stealer",
              "desc": "Very rare shortsword, attunement. +2 attack/damage; on a natural 20 against a creature with fewer than 100 HP, the target makes a DC 15 CON save or is slain (constructs and undead exempt). 1d8+1 charges (GM-tracked). RAW DMG p.183."},
+            # v2.343.0 — Dagger of Venom (RAW DMG p.161, rare, NO attunement).
+            # The +1 attack/damage is baked into this row (Pip DEX +3 + prof
+            # +3 + magic +1 = +7 / 1d4+4). On a hit the on_hit_save handler
+            # fires the new `damage_condition` effect: DC 15 CON save or 2d10
+            # poison AND poisoned for 1 minute. No attunement → the rider
+            # fires on slug match alone. The coat-the-blade action (1/min
+            # usage limit) is GM-narrated in v1. A venom-coated dagger is
+            # on-theme for a larcenous Halfling Rogue.
+            {"name": "Dagger of Venom", "attack_bonus": "+7",
+             "damage": "1d4+4", "damage_type": "piercing",
+             "range": "20/60 ft", "_slug": "dagger-of-venom",
+             "desc": "Rare dagger, no attunement. +1 attack/damage; on a hit, the target makes a DC 15 CON save or takes 2d10 poison and is poisoned for 1 minute (RAW DMG p.161). The coat-the-blade action (1/min) is GM-narrated."},
         ],
         "spells": [],
         # v2.4.13: rich inventory items (was bare strings). Weapons /
@@ -615,6 +627,17 @@ def _rogue_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 1,
              "_slug": "eversmoking-bottle",
              "desc": "Uncommon wondrous item, no attunement. A brass bottle. Action: remove the stopper — a cloud of thick smoke (heavily obscured) pours out in a 60-ft radius, growing 10 ft/round to that max, and lasting until the stopper is replaced. A moderate+ wind disperses it over rounds. RAW DMG p.168."},
+            # v2.343.0 — Dagger of Venom (RAW DMG p.161, rare, NO attunement).
+            # Paired with the attack entry above via `_slug`. No attunement →
+            # the on_hit_save (DC 15 CON or 2d10 poison + poisoned) fires on
+            # slug match alone, so it's seeded equipped (no PATCH-in-test).
+            # The coat-the-blade action (1/min usage limit) is GM-narrated.
+            {"name": "Dagger of Venom", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True,
+             "hands": 1, "damage": "1d4", "damage_type": "piercing",
+             "range": "20/60 ft", "properties": "finesse, light, thrown, magic",
+             "_slug": "dagger-of-venom", "weight_lb": 1,
+             "desc": "Rare dagger, no attunement. +1 attack/damage. You can coat the blade with poison as an action (lasts 1 min or until a hit). On a hit, the target makes a DC 15 CON save or takes 2d10 poison damage and is poisoned for 1 minute. RAW DMG p.161."},
         ],
         "feats": [],
         "resources": [

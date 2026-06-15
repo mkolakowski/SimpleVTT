@@ -31108,6 +31108,28 @@ async def _apply_magic_item_on_hit_save_effect(
             ],
             "source": f"item-{attack_slug}",
         }
+    elif effect == "damage_condition":
+        # v2.343.0 — Dagger of Venom (RAW DMG p.161): on a hit, the target
+        # makes a DC 15 CON save or takes 2d10 poison AND becomes poisoned
+        # for 1 minute (save negates both). Combines the "damage" path's
+        # save-negates damage (below, via save_for_half=False) with a
+        # condition install on a failed save — so we build the condition_buff
+        # here and let `_resolve_feature_save` install it on a fail, then the
+        # damage applies based on the same save result. The condition key /
+        # label / icon / effects all come from the catalog row.
+        ckey = str(save_spec.get("condition_key") or "poisoned").strip()
+        condition_buff = {
+            "key": ckey,
+            "name": save_spec.get("condition_label", ckey.title()),
+            "icon": save_spec.get("condition_icon", "☠️"),
+            "duration_rounds": duration_rounds,
+            "duration_max": duration_rounds,
+            "concentration": False,
+            "effects": save_spec.get("condition_effects") or [
+                "disadvantage on attack rolls and ability checks",
+            ],
+            "source": f"item-{attack_slug}",
+        }
     elif effect == "prone":
         # v2.338.0 — Giant Slayer (RAW DMG p.171): on a hit vs a giant, the
         # giant makes a DC 15 STR save or falls prone. Same install-on-fail
@@ -31167,13 +31189,15 @@ async def _apply_magic_item_on_hit_save_effect(
         )
         return None
 
-    # v2.159.1: for effect="damage", apply save-for-half damage now
-    # that the save has resolved. PC targets that prompt return
-    # `passed=None` (deferred) — we skip the immediate damage and
-    # rely on the prompt-respond handler (filed for Phase 8 polish).
+    # v2.159.1: for effect="damage" (+ v2.343.0 "damage_condition"), apply
+    # save-for-half damage now that the save has resolved. PC targets that
+    # prompt return `passed=None` (deferred) — we skip the immediate damage
+    # and rely on the prompt-respond handler (filed for Phase 8 polish). The
+    # condition (when present) was already installed on a fail by
+    # `_resolve_feature_save` via `condition_buff`.
     damage_dealt = 0
     consumed = False
-    if effect == "damage" and sr.get("passed") is not None:
+    if effect in ("damage", "damage_condition") and sr.get("passed") is not None:
         dice = save_spec.get("dice") or ""
         save_for_half = bool(save_spec.get("save_for_half"))
         damage_type = (
@@ -35074,6 +35098,38 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
             "damage_type": "piercing",
             "save_for_half": True,
             "label": "🏹 Arrow of Slaying (Giants)",
+        },
+    },
+    # v2.343.0 — Dagger of Venom (RAW DMG p.161, rare, NO attunement). The
+    # first on_hit_save item to use the NEW `effect: "damage_condition"`
+    # variant — damage AND a condition on the same failed save. RAW: a hit
+    # lets the target make a DC 15 CON save or take 2d10 poison AND become
+    # poisoned for 1 minute (save negates both). The damage rides the
+    # existing save-negates path (`save_for_half: False`), and the poisoned
+    # condition is built + installed-on-fail by `_resolve_feature_save` via
+    # the new branch. No `condition` predicate → fires on every hit. No
+    # attunement (RAW). The +1 attack/damage is baked onto the wielder's
+    # attack row; the RAW "coat the blade as an action (1/min)" usage limit
+    # is GM-narrated in v1 (the poison-save is treated as always-available,
+    # the Frost Brand / Sun Blade always-on-rider precedent).
+    "dagger-of-venom": {
+        "label": "Dagger of Venom",
+        "requires_attunement": False,
+        "on_hit_save": {
+            "effect": "damage_condition",
+            "dice": "2d10",
+            "damage_type": "poison",
+            "save_for_half": False,
+            "dc": 15,
+            "ability": "CON",
+            "duration_rounds": 10,  # 1 minute @ 6 s/round
+            "condition_key": "poisoned",
+            "condition_label": "Poisoned",
+            "condition_icon": "🤢",
+            "condition_effects": [
+                "disadvantage on attack rolls and ability checks",
+            ],
+            "label": "Dagger of Venom — Poison",
         },
     },
     # v2.318.0 — Sword of Life Stealing (RAW DMG p.206, rare, attunement).
