@@ -31041,6 +31041,27 @@ async def _apply_magic_item_on_hit_save_effect(
             ],
             "source": f"item-{attack_slug}",
         }
+    elif effect == "prone":
+        # v2.338.0 — Giant Slayer (RAW DMG p.171): on a hit vs a giant, the
+        # giant makes a DC 15 STR save or falls prone. Same install-on-fail
+        # shape as "frighten" but with the prone condition (a key the engine
+        # understands per the _resolve_feature_save condition map). The
+        # +2d6-vs-giant damage rides the separate condition-rider (section
+        # 6c); this handler only resolves the save-or-prone.
+        condition_buff = {
+            "key": "prone",
+            "name": "Prone",
+            "icon": "🪨",
+            "duration_rounds": duration_rounds,
+            "duration_max": duration_rounds,
+            "concentration": False,
+            "effects": [
+                "disadvantage on attack rolls",
+                "attackers within 5 ft have advantage; ranged attackers have disadvantage",
+                "must spend half movement to stand up",
+            ],
+            "source": f"item-{attack_slug}",
+        }
     elif effect == "damage":
         # No condition buff — the damage is applied below based on
         # the save result.
@@ -34949,6 +34970,37 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
             "save_ability": "CON",
             "max_target_hp": 100,
             "exempt_creature_types": ["construct", "undead"],
+        },
+    },
+    # v2.338.0 — Giant Slayer (RAW DMG p.171, rare, NO attunement, "any axe
+    # or sword"). Composes TWO existing substrates in one catalog row, both
+    # gated on the same giant-type `condition` predicate (RAW couples the
+    # extra damage + the save to the same hit vs a giant):
+    #   1. The v2.158.93 Dragon Slayer conditional damage rider — `dice:
+    #      "2d6"`, no `damage_type` (RAW "extra 2d6 damage of the weapon's
+    #      type" → falls back to the attack's type in section 6c).
+    #   2. The v2.158.102 Demon Slayer `on_hit_save` — DC 15 STR save or
+    #      prone (the NEW v2.338.0 `effect: "prone"` variant). The on_hit_save
+    #      handler reuses the same top-level `condition` lambda, so the save
+    #      only fires when the +2d6 also fires (giant target).
+    # No attunement (RAW): section 6c + the on_hit_save handler skip the
+    # equipped/attuned gate for `requires_attunement: False`, so the rider
+    # fires on slug match alone. "Giant" includes ettins and trolls per the
+    # RAW carve-out; the `_attacker_creature_type` helper resolves the type
+    # from the NPC stat block when the combatant dict omits it.
+    "giant-slayer": {
+        "label": "Giant Slayer",
+        "dice": "2d6",
+        "requires_attunement": False,
+        "condition": lambda tgt: bool(tgt) and (
+            (tgt.get("creature_type") or "").strip().lower() == "giant"
+        ),
+        "on_hit_save": {
+            "dc": 15,
+            "ability": "STR",
+            "effect": "prone",
+            "duration_rounds": 1,
+            "label": "Giant Slayer — Knockdown",
         },
     },
     # v2.319.0 — Mace of Disruption (RAW DMG p.179, rare, attunement). Sun

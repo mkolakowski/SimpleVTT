@@ -3840,6 +3840,20 @@ def _ranger_sheet(name: str) -> dict:
              "damage_type": "piercing", "range": "150/600 ft",
              "_slug": "arrow-of-slaying-giants",
              "desc": "Magic arrow fired through the longbow. RAW DMG p.151: on hit vs. a giant, the target makes a DC 17 CON save or takes +6d10 piercing (half on a pass). The arrow becomes nonmagical after dealing the extra damage. Each shot uses one of Rowan's Arrows of Slaying stash."},
+            # v2.338.0 — Giant Slayer Shortsword (RAW DMG p.171, rare, NO
+            # attunement, "any axe or sword"). The +1 attack/damage is baked
+            # into this attack row (Rowan's main-hand finesse Shortsword:
+            # DEX +4 + prof +3 + magic +1 = +8 / 1d6+5). On a hit vs a giant
+            # the v2.158.93 condition rider adds +2d6 (weapon-type fallback →
+            # piercing) AND the v2.158.102 on_hit_save fires a DC 15 STR save
+            # or prone (the new v2.338.0 "prone" effect). Pairs thematically
+            # with Rowan's Arrow of Slaying (Giants) — a dedicated
+            # giant-hunting Ranger. No attunement → the rider fires on slug
+            # match alone (equipped state irrelevant to the gate).
+            {"name": "Giant Slayer Shortsword", "attack_bonus": "+8",
+             "damage": "1d6+5", "damage_type": "piercing",
+             "range": "5 ft", "_slug": "giant-slayer",
+             "desc": "Rare shortsword, no attunement. +1 attack/damage; on a hit vs. a giant, +2d6 piercing and the giant makes a DC 15 STR save or falls prone (RAW DMG p.171). 'Giant' includes ettins and trolls."},
         ],
         # Hunter Ranger Lv 5: Lv 1-2 spells, 4/2 slots. Spells known is
         # the Ranger's known-not-prepared list (Lv 5 = 4 known).
@@ -4055,6 +4069,19 @@ def _ranger_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "attuned": False,
              "_slug": "cloak-of-the-manta-ray", "weight_lb": 1,
              "desc": "Uncommon wondrous item, no attunement. While wearing this cloak with its hood up, you can breathe underwater and you have a swimming speed of 60 feet. Pulling the hood up or down requires an action. RAW DMG p.158."},
+            # v2.338.0 — Giant Slayer Shortsword (RAW DMG p.171, rare, NO
+            # attunement). Paired with the attack entry above via `_slug`.
+            # No attunement → the +2d6-vs-giant rider + the DC 15 STR
+            # save-or-prone fire on slug match alone (equipped state
+            # irrelevant to the gate). Seeded equipped so it shows in
+            # Rowan's loadout as his dedicated melee giant-killer alongside
+            # the ranged Arrows of Slaying (Giants).
+            {"name": "Giant Slayer Shortsword", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "hands": 1,
+             "damage": "1d6", "damage_type": "piercing",
+             "properties": "finesse, light, magic",
+             "_slug": "giant-slayer", "weight_lb": 2,
+             "desc": "Rare shortsword, no attunement. +1 attack/damage. On a hit vs. a giant (including ettins and trolls), the giant takes an extra 2d6 piercing and must succeed on a DC 15 Strength save or fall prone. RAW DMG p.171."},
             # v2.332.0 — "The Elemental Conclave" bundle: Bowl of Commanding
             # Water Elementals (RAW DMG p.156, rare, no attunement). 6-lb
             # silver bowl. Action: fill with water and speak the command

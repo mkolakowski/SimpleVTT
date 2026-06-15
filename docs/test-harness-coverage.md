@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2960 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.337.0, 2026-06-15).
+**Total tests:** 2962 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.338.0, 2026-06-15).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3543,6 +3543,14 @@ v2.318.0 magic-items — Sword of Life Stealing +3d6 necrotic on natural 20 (RAW
 | `test_life_stealing_no_rider_on_construct` | Iterates seeds 0-199 to land d20=20 on a `creature_type: "construct"` target; asserts the `item-sword-of-life-stealing-nat20` broadcast did NOT fire (first exempt slot). |
 | `test_life_stealing_no_rider_on_undead` | Iterates seeds 0-199 to land d20=20 on a `creature_type: "undead"` target; asserts the broadcast did NOT fire (second exempt slot). |
 | `test_life_stealing_nat_20_extra_damage` | Iterates seeds 0-199 finding one that lands d20=20 vs. a humanoid; asserts `feature_used` with `source: "item-sword-of-life-stealing-nat20"` fires and `hp_dealt` is in [3, 18] (3d6 range). |
+
+### `test_giant_slayer.py`
+v2.338.0 magic-items — Giant Slayer (RAW DMG p.171, rare, NO attunement). Composes the v2.158.93 conditional damage rider (+2d6 weapon-type vs giant) + the v2.158.102 on_hit_save (DC 15 STR or prone — the new `effect: "prone"` variant), both gated on the same giant condition. Carrier: Rowan Quickbow at `attack_index 3`, equipped (no attunement). Hill Giant template target gives the NPC save an inline roll.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_giant_slayer_fires_on_giant` | Attack a Hill Giant → `auto_uplifts` carries `source: "item-giant-slayer"`, `expression: "2d6"`, `damage_type: "piercing"` (weapon fallback); a `feature_used` with `source: "item-giant-slayer-save"` (DC 15 STR) fires. |
+| `test_giant_slayer_silent_on_humanoid` | Vs. a humanoid Bandit → no `item-giant-slayer` uplift AND no `item-giant-slayer-save` feature_used (condition predicate blocks both). |
 
 ### `test_nine_lives_stealer.py`
 v2.335.0 magic-items — Nine Lives Stealer (RAW DMG p.183, very rare, attunement). The first `on_nat_20` `effect: "slay_save"` item: nat-20 vs a creature with < 100 HP → DC 15 CON save or slain instantly (constructs/undead exempt). Composes the nat-20 gate + `exempt_creature_types` + `_resolve_feature_save` + a new `max_target_hp` gate. Carrier: Pip Quickfingers at `attack_index 4`, seeded inert (PATCH-in-test). The slay broadcast (`item-nine-lives-stealer-nat20`) fires only on a failed save.

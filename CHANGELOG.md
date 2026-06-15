@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.338.0] - 2026-06-15 — "The Giant's Bane"
+
+**Schema version:** 69
+
+**Commit summary:** SRD magic-item drop-in — **Giant Slayer** (RAW DMG p.171, rare, NO attunement, "any axe or sword"). Composes TWO existing substrates in one catalog row, both gated on the same giant-type `condition`: the v2.158.93 conditional damage rider (+2d6 of the weapon's type vs a giant) AND the v2.158.102 Demon Slayer `on_hit_save` (DC 15 STR save or **prone**, the NEW `effect: "prone"` variant). Seeded equipped on Rowan Quickbow; two harness tests.
+
+**Description:** The +2d6-vs-giant half is the Dragon Slayer condition-rider with `damage_type` omitted (RAW "extra 2d6 damage of the weapon's type" → falls back to the attack's type, piercing for Rowan's Shortsword). The save half adds a new `effect: "prone"` branch to `_apply_magic_item_on_hit_save_effect` that builds a `prone` condition_buff (the engine understands the key) and lets `_resolve_feature_save` roll the giant's STR save + install prone on a fail — mirroring the existing `frighten` branch. Both halves reuse the same top-level `condition` lambda (giant), so they fire together on the same hit. No attunement (RAW): section 6c + the on_hit_save handler skip the equipped/attuned gate, so the rider fires on slug match alone. "Giant" includes ettins and trolls (the `_attacker_creature_type` helper resolves the type from NPC stat blocks). The +1 attack/damage is baked onto Rowan's seeded attack row; he's a dedicated giant-hunter (pairs with his ranged Arrows of Slaying). MINOR — additive substrate variant + content, no schema change.
+
+### Added
+- `effect: "prone"` branch in `_apply_magic_item_on_hit_save_effect` (`app/routes/tabletop_routes.py`) — builds a `prone` condition_buff installed on a failed save (the `frighten` branch shape).
+- `_MAGIC_ITEM_ATTACK_RIDERS["giant-slayer"]` — `{dice: "2d6", requires_attunement: False, condition: giant, on_hit_save: {dc: 15, ability: "STR", effect: "prone"}}`.
+- Demo seed: Rowan Quickbow gains a **Giant Slayer Shortsword** at `attack_index 3` + inventory tail, equipped (no attunement).
+- `tests/harness/test_giant_slayer.py` — 2 tests (fires vs Hill Giant: +2d6 piercing uplift + STR-save feature_used; silent vs humanoid).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2960 → 2962 (+2 Giant Slayer tests); new `test_giant_slayer.py` section.
+
 ## [2.337.0] - 2026-06-15 — "The Bottled Tempest"
 
 **Schema version:** 69
