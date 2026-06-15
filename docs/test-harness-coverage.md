@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2819 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.290.0, 2026-06-14).
+**Total tests:** 2822 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.291.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2833,6 +2833,15 @@ v2.290.0 — Armor of Invulnerability (RAW DMG p.152, legendary, attunement). Th
 | `test_armor_exposes_nonmagical_resistances` | On equip+attune, `derived.resistances.types` contains "nonmagical-bludgeoning" with "Armor of Invulnerability" in `sources`. |
 | `test_armor_halves_nonmagical_damage` | End-to-end: 20 nonmagical slashing drops HP by only 10 via `_resistance_halve` (is_magical=False sheet-fields path). |
 | `test_armor_baseline_has_no_resistance` | Inert (seed) state: no nonmagical-resistance projection — proving it's armor-sourced. |
+
+### `test_item_spellguard_shield.py`
+v2.291.0 — Spellguard Shield (RAW DMG p.201, very rare, attunement). The clean passive ("advantage on saves vs spells/magical effects") rides the v2.236.0 `spell_save_advantage` substrate — a verbatim clone of the Mantle of Spell Resistance payload on a new slug, folding the boolean-OR field that surfaces on `/sheet-json` as `derived.spell_save_advantage`. Advantage is descriptive in v1; the spell-attack-disadvantage half is GM-narrated. Seeded as inert spare loot on Sir Caelan Lightbringer; tests PATCH it equipped+attuned and restore on teardown.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_shield_grants_spell_save_advantage` | On equip+attune, `derived.spell_save_advantage` present with "Spellguard Shield" in `sources`. |
+| `test_shield_requires_attunement` | Equipped-but-unattuned: no spellguard-sourced advantage (attunement gate). |
+| `test_shield_baseline_has_no_advantage` | Inert (seed) state: no spellguard-sourced advantage — proving it's shield-sourced. |
 
 ### `test_item_amulet_of_proof_against_detection.py`
 v2.234.0 — Amulet of Proof against Detection (RAW DMG p.150, uncommon, attunement): hidden from divination magic + magical scrying while worn. Reuses the boolean-OR passive substrate (Sustenance / Awareness / Periapt of Health): the `scry_proof` flag rides the `amulet-of-proof-against-detection` catalog payload, aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.scry_proof = {sources}`. Kael Brightleaf (Monk Lv 7) wears it as his 2nd attuned item.

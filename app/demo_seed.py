@@ -1491,6 +1491,22 @@ def _paladin_sheet(name: str) -> dict:
              "weight_lb": 55,
              "_slug": "armor-of-resistance", "_resistance_type": "acid",
              "desc": "Rare armor (chain mail), attunement. You have resistance to acid damage while you wear this armor. RAW DMG p.152."},
+            # v2.291.0 — Spellguard Shield (RAW DMG p.201, very rare,
+            # attunement). RAW: "while holding this shield, you have advantage
+            # on saving throws against spells and other magical effects, and
+            # spell attacks have disadvantage against you." The clean passive
+            # half rides the v2.236.0 `spell_save_advantage` substrate (the
+            # Mantle of Spell Resistance flag) — folds into the boolean-OR
+            # field that surfaces on /sheet-json as derived.spell_save_advantage.
+            # The spell-attack-disadvantage half is GM-narrated in v1. Spare
+            # loot (equipped=False) so it doesn't replace Caelan's plain Shield
+            # (+2 AC) or change his attuned count; the harness PATCHes it
+            # equipped+attuned, reads the projection, then restores. A warded
+            # shield fits a frontline Devotion paladin who steps into spells.
+            {"name": "Spellguard Shield", "type": "shield", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "ac_value": 2, "weight_lb": 6, "_slug": "spellguard-shield",
+             "desc": "Very rare shield, attunement. While holding this shield, you have advantage on saving throws against spells and other magical effects, and spell attacks have disadvantage against you. RAW DMG p.201."},
         ],
         # v2.99.24 — Caelan is a Variant Human (RAW: free Lv 1 feat).
         # Sentinel fits his Paladin Devotion frontline-protector role:

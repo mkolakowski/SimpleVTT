@@ -32709,6 +32709,16 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "mantle-of-spell-resistance": [
         {"spell_save_advantage": True, "requires_attunement": True},
     ],
+    # v2.291.0 — Spellguard Shield (RAW DMG p.201, very rare, attunement).
+    # RAW: "while holding this shield, you have advantage on saving throws
+    # against spells and other magical effects, and spell attacks have
+    # disadvantage against you." The clean passive half rides the v2.236.0
+    # `spell_save_advantage` substrate (the same field the Mantle of Spell
+    # Resistance uses) — surfaced as a derived read. The spell-attack-
+    # disadvantage half is GM-narrated in v1.
+    "spellguard-shield": [
+        {"spell_save_advantage": True, "requires_attunement": True},
+    ],
     # v2.237.0 — Slippers of Spider Climbing (RAW DMG p.199, uncommon, no
     # attunement). RAW: "while you wear these slippers, you can move up,
     # down, and across vertical surfaces and upside down along ceilings,

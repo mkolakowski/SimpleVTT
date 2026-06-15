@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.291.0] - 2026-06-14 — "The Warded Bulwark"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item drop-in — **Spellguard Shield** (RAW DMG p.201, very rare, attunement) lands its clean passive ("advantage on saving throws against spells and other magical effects") on the v2.236.0 `spell_save_advantage` substrate with zero new engine code. A verbatim clone of the Mantle of Spell Resistance payload on a new slug; seeded as inert spare loot on Sir Caelan Lightbringer and exercised by three harness tests.
+
+**Description:** A pure data drop-in on a now-mature derived-read substrate. The Spellguard Shield's headline passive — advantage on saves vs. spells/magical effects while held — is exactly the v2.236.0 `spell_save_advantage` boolean already aggregated in `_equipped_item_effects` and surfaced on `/sheet-json` as `derived.spell_save_advantage = {sources}`. So this commit is a single registry entry (`{"spell_save_advantage": True, "requires_attunement": True}`), a demo-seed item, and tests. The advantage is descriptive in v1 (the save resolver doesn't yet fold it into rolls automatically — same as the Mantle); the "spell attacks have disadvantage against you" half is GM-narrated. The shield is seeded **unequipped/unattuned** as spare loot on Sir Caelan Lightbringer (the demo's Devotion Paladin frontliner — a warded shield fits a protector who steps into hostile magic), so it doesn't replace his plain Shield (+2 AC) or change his attuned count. The harness PATCHes it equipped+attuned, reads `derived.spell_save_advantage` and asserts the source attribution, then restores the seed inventory; an attunement-gate test and an inert-baseline control round it out. MINOR — additive demo content + a new registry entry + tests, no schema change.
+
+### Added
+- `spellguard-shield` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — one attunement-gated payload carrying `spell_save_advantage: True`, on the existing v2.236.0 substrate.
+- Demo seed: Sir Caelan Lightbringer gains a spare (unequipped/unattuned) **Spellguard Shield**.
+- `tests/harness/test_item_spellguard_shield.py` (3 tests): spell-save advantage surfaces with the shield named in sources on equip+attune; equipped-but-unattuned yields none (attunement gate); inert baseline has none. Inventory restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2819 → 2822 (+3 drop-in tests); added the `test_item_spellguard_shield.py` section.
+
 ## [2.290.0] - 2026-06-14 — "The Adamant Plate"
 
 **Schema version:** 69
