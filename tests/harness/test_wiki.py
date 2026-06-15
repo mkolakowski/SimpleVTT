@@ -94,6 +94,9 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/todone" in resp.text
     # v2.181.1: lair-actions + regional-effects catalog listed in available guides.
     assert "/wiki/lair-regional-catalog" in resp.text
+    # v2.316.0: SRD automation-coverage banner rendered at top of landing page.
+    assert "SRD 5e automation coverage" in resp.text
+    assert 'id="srd-coverage"' in resp.text
 
 
 async def test_wiki_guide_serves_roll_log():

@@ -17,11 +17,47 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 
 **Quick map of where to look:**
 
-- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (2026-06-14 refresh)](#srd-5e-audit-2026-06-14-refresh) for the current re-prioritisation, then [SRD 5e Audit (2026-06-13 refresh)](#srd-5e-audit-2026-06-13-refresh), [SRD 5e Audit (2026-06-11 refresh)](#srd-5e-audit-2026-06-11-refresh) and [SRD 5e Audit (2026-06-10)](#srd-5e-audit-2026-06-10) for the prior passes. The 2026-06-14 refresh records the **charged-items plan closing all phases** — wired magic items jumped from ~49 → **95 distinct slugs** (~32.5% of 292 SRD). The 2026-06-13 refresh closes the 2026-06-11 audit's **NEW #1 P1 (legendary actions + lair actions)** plus legendary resistance and most of the spell-validation suite as ✅ shipped, and records the **NEW ability-score override engine** (Belt/Amulet/Headband/Gauntlets/Potion of Giant Strength + Manuals & Tomes) as a fully-shipped surface that wasn't on any prior audit.
+- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (v2.315.0 refresh)](#srd-5e-audit-v23150-refresh) for the current per-category coverage table and re-prioritisation, then [SRD 5e Audit (2026-06-14 refresh)](#srd-5e-audit-2026-06-14-refresh), [SRD 5e Audit (2026-06-13 refresh)](#srd-5e-audit-2026-06-13-refresh), [SRD 5e Audit (2026-06-11 refresh)](#srd-5e-audit-2026-06-11-refresh) and [SRD 5e Audit (2026-06-10)](#srd-5e-audit-2026-06-10) for the prior passes. The v2.315.0 refresh **corrects two denominators** that all prior passes got wrong: magic items are **123 / 239 wired (~51%)** — the old "292" figure counted total equipment (239 magic + 37 mundane weapons + 18 mundane armor), so the percentage was understated; and class features are **222 per-row entries (~81%)**, not the stale "133". Overall SRD automation is **~75%**.
 - **Active class-feature automation backlog** → see [Full Class-Feature Automation — remaining backlog](#full-class-feature-automation--remaining-backlog) (just Phase 8 + a few per-feature Phase-2 finishers remain after v2.149.1).
 - **Design plans with deferred phases** → see [Design Plans Backlog](#design-plans-backlog) (every `docs/plans/*.md` indexed with a priority tag).
 - **One-off bugs + UI polish that don't have a design plan** → see [Manually Added](#manually-added).
 - **Big feature buckets that aren't tracked by a plan** → see the topic sections below (Character Sheet, GM Tools, Combat, Maps, Media, Player Features, UI/Mobile, Rules Reference, Legal & Compliance, Test Infrastructure, Integrations, Visual, Class Features (next cycle)). The priority legend doesn't apply to these — they're topic-grouped, not P-tagged.
+
+---
+
+## SRD 5e Audit (v2.315.0 refresh)
+
+**Audit scope.** Fifth pass against `app/data/local/dnd5e/`, recomputed directly from the content JSON + the three magic-item registry dicts in `app/routes/tabletop_routes.py` as of v2.315.0. This pass exists to answer one question — *what percentage of the SRD does SimpleVTT mechanically automate, per category* — and to **correct two denominators** that every prior audit carried forward incorrectly. Excludes setting-specific / post-SRD content (Tasha's, Xanathar's-beyond-SRD, Strixhaven) and homebrew, same as prior passes.
+
+### Per-category coverage (the headline numbers)
+
+| Category | SRD count | Automated | Notes |
+|---|---|---|---|
+| Races | 9 | **~90%** | Racial passives + speed + darkvision derived; a few flavor traits GM-narrated. |
+| Monsters | 322 | **~85%** | Stat blocks + attacks + legendary/lair actions + legendary resistance all engine-driven. |
+| Conditions | 15 | **~85%** | Mechanical conditions enforce; exhaustion ladder shipped. |
+| Class features | **222 rows** (179 ✅ / 19 🟡 / 24 ⚪) | **~81%** | Denominator corrected from the stale "133". Tail is Barbarian Lv 9–20, Monk capstones, Ranger Lv 10–20, Rogue Reliable Talent / Stroke of Luck. |
+| Spells | 319 | **~70%** | Catalog 319/319; 116 have save dispatch, 76 damage, 27 area, 29 upcast scaling. ~110 cast-and-broadcast-only spells still lack upcast scaling. |
+| Magic items | **123 / 239 wired** | **~51%** | Denominator corrected: 294 equipment rows = 239 magic + 37 mundane weapons + 18 mundane armor. Wiring across `_MAGIC_ITEM_ACTIONS` (47) + `_MAGIC_ITEM_PASSIVES` (71) + `_MAGIC_ITEM_ATTACK_RIDERS` (8); 123 distinct slugs (3 span two layers). |
+
+**Overall ~75%** automated across the SRD ruleset.
+
+### Denominator corrections (why the numbers moved up)
+
+- **Magic items: 292 → 239 denominator.** Prior passes divided the wired count by 292, which was the *total equipment* row count (it bundled 37 mundane weapons and 18 mundane armor that are not "magic items" and need no passive wiring). The honest denominator is the 239 magic-item rows. With 123 distinct slugs wired, coverage is **~51%**, not the ~34% the v2.314-era TODO reported.
+- **Class features: 133 → 222 denominator.** The "133" was a stale count from an early class-content snapshot. The living inventory in [`class-content-status.md`](docs/plans/class-content-status.md) now enumerates **222 per-row entries** (179 ✅ shipped / 19 🟡 partial / 24 ⚪ unstarted) = **~81%**.
+
+### Remaining gaps (priority order — toward full SRD automation)
+
+The engine substrate (actions / passives / attack-riders / ability-override / buff / save-dispatch / upcast) is complete. Every remaining item below is **content drop-in or scaling-data**, not new engine code.
+
+1. 🔴 **P1 — Magic-item content tail (116 items).** The single biggest lever on the overall %. 116 of 239 SRD magic items remain GM-narrated. Each fits an existing template (on-hit rider, charge-with-spell, passive buff, nat-20 hook, ability-override, boolean derived flag). Ship in ~10–15-item batches, each its own MINOR commit + 3 harness tests.
+2. 🟡 **P2 — Spell upcast scaling (~110 spells).** Add `damage_per_slot` / scaling data to the cast-and-broadcast-only spells so higher-slot casts scale automatically. Moves Spells from ~70% → ~90%+.
+3. 🟢 **P3 — Class-feature ⚪ tail (24 rows).** Barbarian Lv 9–20, Monk Deflect Missiles / Diamond Soul / Empty Body / Perfect Self, Ranger Lv 10–20 (minus Vanish), Rogue Reliable Talent / Slippery Mind / Elusive / Stroke of Luck.
+
+### Out-of-scope (unchanged)
+
+Tasha's, Xanathar's-beyond-SRD, Strixhaven, post-SRD feats, backgrounds beyond Acolyte stay future-3.x scope.
 
 ---
 

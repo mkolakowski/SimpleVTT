@@ -4,6 +4,21 @@ In-repo documentation hub for SimpleVTT — how-to guides, system explainers, de
 
 Guides land at `docs/wiki/<slug>.{md,html}`. Plans live at `docs/plans/<slug>.md`. References live at `docs/<slug>.md`. The top-level repo docs (`CHANGELOG.md`, `CLAUDE.md`, `TODO.md`, `CREDITS.md`, `README.md`) stay at the repo root but are surfaced through the wiki nav. Every wiki page carries the same nav strip via `app/templates/_wiki_nav.html` (Jinja includes) or via the server-side injector in `app/routes/wiki_routes.py::_inject_wiki_nav` (standalone HTML guides).
 
+## SRD 5e automation coverage
+
+How much of the SRD 5.1 ruleset SimpleVTT mechanically automates, by content category, as of **v2.315.0**. "Automated" means the engine derives or enforces the rule (saves, damage, passive item effects, class features) rather than leaving it to GM narration. Recomputed each audit pass; see [TODO](../../TODO.md) for the breakdown and gaps.
+
+| Category | Count | Automated |
+|----------|-------|-----------|
+| Races | 9 | ~90% |
+| Monsters | 322 | ~85% |
+| Conditions | 15 | ~85% |
+| Class features | 222 rows (179 ✅ / 19 🟡 / 24 ⚪) | ~81% |
+| Spells | 319 | ~70% |
+| Magic items | 123 / 239 wired | ~51% |
+
+**Overall ~75%.** Top automation gaps, in priority order: finish the magic-item content tail (116 SRD items still GM-narrated), then spell upcast scaling (~110 cast-and-broadcast-only spells), then the 24 ⚪ class-feature rows. Known defects are tracked in [TODO](../../TODO.md).
+
 ## Available guides
 
 | Guide | Format | Audience | Status |

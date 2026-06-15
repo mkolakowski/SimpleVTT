@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.316.0] - 2026-06-14 — "The Honest Denominator"
+
+**Schema version:** 69
+
+**Commit summary:** Full SRD 5e automation audit (v2.315.0 refresh) with per-category coverage percentages, surfaced at the top of the wiki landing page. Corrects two denominators every prior audit carried forward wrong: magic items are **123 / 239 wired (~51%)** — the old "292" figure counted total equipment (239 magic + 37 mundane weapons + 18 mundane armor) — and class features are **222 rows (~81%)**, not the stale "133". Overall SRD automation: **~75%**.
+
+**Description:** Recomputed coverage directly from `app/data/local/dnd5e/` JSON + the three magic-item registry dicts (`_MAGIC_ITEM_ACTIONS` 47, `_MAGIC_ITEM_PASSIVES` 71, `_MAGIC_ITEM_ATTACK_RIDERS` 8; 123 distinct slugs). Per-category: Races ~90% (9), Monsters ~85% (322), Conditions ~85% (15), Class features ~81% (222 rows: 179 ✅ / 19 🟡 / 24 ⚪), Spells ~70% (319), Magic items ~51% (123/239). Top automation gaps in priority order: the magic-item content tail (116 SRD items still GM-narrated), spell upcast scaling (~110 cast-and-broadcast-only spells), and the 24 ⚪ class-feature rows. The audit lands as a new `## SRD 5e Audit (v2.315.0 refresh)` section at the top of `TODO.md` and an `SRD 5e automation coverage` banner at the top of both wiki landing surfaces (`app/templates/wiki.html` + `docs/wiki/README.md`). MINOR — additive docs + wiki content + a test assertion, no schema/endpoint change.
+
+### Added
+- `TODO.md`: new top section **SRD 5e Audit (v2.315.0 refresh)** with the per-category coverage table, denominator corrections, and re-prioritized remaining-gaps list (P1 magic-item content tail → P2 spell upcast scaling → P3 class-feature tail).
+- `app/templates/wiki.html`: `SRD 5e automation coverage` banner (`id="srd-coverage"`) at the top of the landing page with the per-category table + overall %.
+- `docs/wiki/README.md`: mirror of the coverage banner.
+
+### Changed
+- `tests/harness/test_wiki.py::test_wiki_home_renders`: asserts the new coverage banner ("SRD 5e automation coverage" + `id="srd-coverage"`) renders.
+
 ## [2.315.0] - 2026-06-14 — "The Second Strike"
 
 **Schema version:** 69
