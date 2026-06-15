@@ -920,6 +920,21 @@ def _wizard_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "attuned": False, "weight_lb": 3,
              "_slug": "helm-of-telepathy",
              "desc": "Uncommon wondrous item, attunement. While wearing this helm, you can communicate telepathically with a creature you focus on, cast detect thoughts (action, save DC 13), and once per dawn cast suggestion (save DC 13) on a creature you are reading. RAW DMG p.169."},
+            # v2.313.0 — Tome of Clear Thought (RAW DMG p.208, very rare, no
+            # attunement). Reconciliation-plan Phase 2: completing the Tome
+            # trio on the `permanent_boost` path (the same archetype as Lyra's
+            # Tome of Leadership and Influence). Studying it for 48 hours over
+            # 6 days permanently raises INT by 2 (and its maximum). Read via
+            # /use_item_action's `read` action → _use_item_action_permanent_boost
+            # edits sheet.abilities.INT and consumes the book. Seeded on
+            # Thalindra (Wizard, INT 17 — her key stat); she carries NO INT
+            # override (the Headband of Intellect lives on Mira), so the read
+            # cleanly takes effective INT 17 → 19. Appended at END so existing
+            # inventory-index assertions stay valid.
+            {"name": "Tome of Clear Thought", "type": "magic",
+             "qty": 1, "consumable": True, "weight_lb": 5,
+             "_slug": "tome-of-clear-thought",
+             "desc": "Very rare wondrous item. Studying it for 48 hours over 6 days permanently increases your Intelligence score by 2 (and its maximum). The tome then loses its magic for a century. RAW DMG p.208."},
         ],
         "feats": [],
         # v2.16.1: Arcane Recovery counter (Wizard Lv 1 feature). Once per
@@ -1252,6 +1267,20 @@ def _cleric_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "attuned": False, "weight_lb": 0,
              "_slug": "robe-of-eyes",
              "desc": "Rare wondrous item, attunement. While wearing the robe you see in all directions and have advantage on Wisdom (Perception) checks that rely on sight; darkvision 120 ft; see invisible creatures/objects and into the Ethereal Plane out to 120 ft. A light/daylight spell on or near the robe blinds you (CON save to end). RAW DMG p.193."},
+            # v2.313.0 — Tome of Understanding (RAW DMG p.208, very rare, no
+            # attunement). Reconciliation-plan Phase 2: the third leg of the
+            # Tome trio on the `permanent_boost` path. Studying it for 48 hours
+            # over 6 days permanently raises WIS by 2 (and its maximum). Read
+            # via /use_item_action's `read` action → _use_item_action_permanent_boost
+            # edits sheet.abilities.WIS and consumes the book. Seeded on Tavik
+            # (Cleric, WIS 16 — his spellcasting stat); he carries no WIS
+            # override (the Robe of Eyes only grants Perception-check advantage,
+            # not a score set), so the read cleanly takes WIS 16 → 18. Appended
+            # at END so existing inventory-index assertions stay valid.
+            {"name": "Tome of Understanding", "type": "magic",
+             "qty": 1, "consumable": True, "weight_lb": 5,
+             "_slug": "tome-of-understanding",
+             "desc": "Very rare wondrous item. Studying it for 48 hours over 6 days permanently increases your Wisdom score by 2 (and its maximum). The tome then loses its magic for a century. RAW DMG p.208."},
         ],
         # v2.76.0 Phase 4c — War Caster feat for Tavik. RAW (PHB
         # p.170): the reaction part lets Tavik cast a 1-action

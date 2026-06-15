@@ -146,6 +146,100 @@ async def test_reading_bodily_health_raises_con_and_max_hp(gm_client, garrik):
         )
 
 
+_CLEAR_THOUGHT_SLUG = "tome-of-clear-thought"
+_UNDERSTANDING_SLUG = "tome-of-understanding"
+
+
+@pytest_asyncio.fixture
+async def thalindra(roster):
+    return roster["Thalindra Moonwhisper"]
+
+
+@pytest_asyncio.fixture
+async def tavik(roster):
+    return roster["Brother Tavik Stonebrow"]
+
+
+async def test_reading_clear_thought_permanently_raises_int(gm_client, thalindra):
+    """v2.313.0 — reconciliation Phase 2: the Tome of Clear Thought (INT +2)
+    completes the Tome trio on the permanent_boost path. Thalindra (Wizard)
+    reads it; her base INT rises by 2 permanently and the book is consumed.
+    She carries no INT override (the Headband of Intellect lives on Mira), so
+    INT must NOT appear in derived.effective_abilities."""
+    data = await _sheet_json(gm_client, thalindra["id"])
+    sheet = data.get("sheet") or {}
+    abilities_snapshot = dict(sheet.get("abilities") or {})
+    idx, inv_snapshot = _find_slug(sheet, _CLEAR_THOUGHT_SLUG)
+    assert idx is not None, "Thalindra has no Tome of Clear Thought"
+    old_int = int(abilities_snapshot.get("INT") or 0)
+    assert old_int > 0, "fixture precondition: Thalindra should have an INT score"
+    try:
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/use_item_action",
+            json={"inventory_index": idx, "action_key": "read"},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["ok"] is True
+        assert body["ability"] == "INT"
+        assert body["amount"] == 2
+        assert body["old_score"] == old_int
+        assert body["new_score"] == old_int + 2
+        assert body["consumed"] is True
+
+        after = await _sheet_json(gm_client, thalindra["id"])
+        after_sheet = after.get("sheet") or {}
+        assert int((after_sheet.get("abilities") or {}).get("INT") or 0) == old_int + 2
+        eff_map = (after.get("derived") or {}).get("effective_abilities") or {}
+        assert "INT" not in eff_map, (
+            f"permanent boost should not create an override entry; got {eff_map!r}"
+        )
+        gone_idx, _ = _find_slug(after_sheet, _CLEAR_THOUGHT_SLUG)
+        assert gone_idx is None, "the tome should be consumed on read"
+    finally:
+        await _restore(gm_client, thalindra["id"], abilities_snapshot, inv_snapshot)
+
+
+async def test_reading_understanding_permanently_raises_wis(gm_client, tavik):
+    """v2.313.0 — reconciliation Phase 2: the Tome of Understanding (WIS +2)
+    is the third leg of the Tome trio on the permanent_boost path. Tavik
+    (Cleric) reads it; his base WIS rises by 2 permanently and the book is
+    consumed. The Robe of Eyes only grants Perception-check advantage (not a
+    score set), so WIS must NOT appear in derived.effective_abilities."""
+    data = await _sheet_json(gm_client, tavik["id"])
+    sheet = data.get("sheet") or {}
+    abilities_snapshot = dict(sheet.get("abilities") or {})
+    idx, inv_snapshot = _find_slug(sheet, _UNDERSTANDING_SLUG)
+    assert idx is not None, "Tavik has no Tome of Understanding"
+    old_wis = int(abilities_snapshot.get("WIS") or 0)
+    assert old_wis > 0, "fixture precondition: Tavik should have a WIS score"
+    try:
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/use_item_action",
+            json={"inventory_index": idx, "action_key": "read"},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["ok"] is True
+        assert body["ability"] == "WIS"
+        assert body["amount"] == 2
+        assert body["old_score"] == old_wis
+        assert body["new_score"] == old_wis + 2
+        assert body["consumed"] is True
+
+        after = await _sheet_json(gm_client, tavik["id"])
+        after_sheet = after.get("sheet") or {}
+        assert int((after_sheet.get("abilities") or {}).get("WIS") or 0) == old_wis + 2
+        eff_map = (after.get("derived") or {}).get("effective_abilities") or {}
+        assert "WIS" not in eff_map, (
+            f"permanent boost should not create an override entry; got {eff_map!r}"
+        )
+        gone_idx, _ = _find_slug(after_sheet, _UNDERSTANDING_SLUG)
+        assert gone_idx is None, "the tome should be consumed on read"
+    finally:
+        await _restore(gm_client, tavik["id"], abilities_snapshot, inv_snapshot)
+
+
 async def test_wrong_action_key_on_tome_404s(gm_client, lyra):
     """Guard: the tome's only action is `read`; a mismatched action_key
     (`drink`) returns 404 without mutating the sheet."""

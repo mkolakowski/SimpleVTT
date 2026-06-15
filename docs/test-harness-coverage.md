@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2895 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.312.0, 2026-06-14).
+**Total tests:** 2897 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.313.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2429,6 +2429,9 @@ v2.222.0 Manuals & Tomes — permanent ability-score boost books (RAW DMG pp.180
 | Test | What it asserts |
 |------|-----------------|
 | `test_reading_tome_permanently_raises_cha` | Lyra reads the tome → response `ability=CHA, amount=2, new_score=old+2, consumed`; `/sheet-json` shows stored `abilities.CHA` is `old+2` and CHA is absent from derived `effective_abilities` (a permanent base edit is not a runtime override); the book is gone from inventory. Restores abilities + inventory on teardown. |
+| `test_reading_bodily_health_raises_con_and_max_hp` | v2.312.0 reconciliation Phase 1 — Garrik reads the Manual of Bodily Health via `/use_item_action`; response `ability=CON, new_score=old+2, hp_gain=mod_delta×level`; `/sheet-json` shows stored `abilities.CON` is `old+2` AND `hp.max` is `old+hp_gain` (RAW PHB p.173 CON max-HP recompute). Restores abilities + inventory + hp on teardown. |
+| `test_reading_clear_thought_permanently_raises_int` | v2.313.0 reconciliation Phase 2 — Thalindra (Wizard) reads the Tome of Clear Thought via `/use_item_action` → `ability=INT, amount=2, new_score=old+2, consumed`; stored `abilities.INT` is `old+2`, INT absent from derived `effective_abilities`, book consumed. Restores on teardown. |
+| `test_reading_understanding_permanently_raises_wis` | v2.313.0 reconciliation Phase 2 — Tavik (Cleric) reads the Tome of Understanding via `/use_item_action` → `ability=WIS, amount=2, new_score=old+2, consumed`; stored `abilities.WIS` is `old+2`, WIS absent from derived `effective_abilities`, book consumed. Restores on teardown. |
 | `test_wrong_action_key_on_tome_404s` | Guard: a mismatched `action_key` (`drink` vs the tome's `read`) returns 404 without mutating the sheet. |
 
 ### `test_amulet_health_rest_heal_paths.py`

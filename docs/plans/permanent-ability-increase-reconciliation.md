@@ -1,6 +1,6 @@
 # Permanent ability-increase reconciliation — design plan
 
-**Status:** 🟠 in progress — Option 2a chosen. Phase 0 (plan) ✅ v2.311.0. Phase 1 (port CON max-HP into `permanent_boost`) ✅ v2.312.0. Phase 2 (complete Tome trio on `permanent_boost`) + Phase 3 (retire the `/use_item` `ability_increase` path) filed.
+**Status:** 🟠 in progress — Option 2a chosen. Phase 0 (plan) ✅ v2.311.0. Phase 1 (port CON max-HP into `permanent_boost`) ✅ v2.312.0. Phase 2 (complete Tome trio on `permanent_boost`) ✅ v2.313.0. Phase 3 (retire the `/use_item` `ability_increase` path) filed.
 
 **Authors:** rolling
 **Last updated:** 2026-06-14

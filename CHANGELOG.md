@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.313.0] - 2026-06-14 — "The Completed Library"
+
+**Schema version:** 69
+
+**Commit summary:** Reconciliation Phase 2 (see [permanent-ability-increase-reconciliation.md](docs/plans/permanent-ability-increase-reconciliation.md)) — complete the **Tome trio** on the `permanent_boost` path: seed **Tome of Clear Thought** (INT +2) on Thalindra (Wizard) and **Tome of Understanding** (WIS +2) on Tavik (Cleric), each read via `/use_item_action`'s `read` action. The catalog + dispatch already covered both slugs (v2.222.0); this commit adds the demo carriers + tests so all six Manuals & Tomes are demoed on one mechanism. Two harness tests.
+
+**Description:** The three Tomes (Clear Thought/INT, Understanding/WIS, Leadership and Influence/CHA, RAW DMG pp.208–209) all share the v2.222.0 `permanent_boost` catalog + dispatch, but only Leadership (Lyra) was seeded + tested. This commit finishes the trio: Tome of Clear Thought lands on Thalindra (Wizard, her key stat INT, no INT override on her sheet — the Headband of Intellect lives on Mira), and Tome of Understanding on Brother Tavik Stonebrow (Cleric, his spellcasting stat WIS; the Robe of Eyes he carries grants only Perception-check advantage, not a score set). Both seeds carry `consumable: True` + the existing `_slug`, so reading via `action_key: "read"` routes through `_use_item_action_permanent_boost`, raises the stored base score by 2, and consumes the book. With this, all six permanent-ability-increase books are seeded + tested on the single surviving mechanism — the last step before Phase 3 retires the parallel `/use_item` `ability_increase` branch. MINOR — additive demo content + tests, no engine change, no schema change.
+
+### Added
+- Demo seed: Thalindra Moonwhisper gains a **Tome of Clear Thought** (`_slug: tome-of-clear-thought`, INT +2); Brother Tavik Stonebrow gains a **Tome of Understanding** (`_slug: tome-of-understanding`, WIS +2). Both appended at the end of their inventories so existing inventory-index assertions stay valid.
+- `tests/harness/test_item_manual_of_ability.py`: `test_reading_clear_thought_permanently_raises_int` (Thalindra) + `test_reading_understanding_permanently_raises_wis` (Tavik) — each reads the tome via `/use_item_action` `read`, asserts base score +2, the book consumed, and that the boost does NOT create a `derived.effective_abilities` override entry. Abilities + inventory restored on teardown.
+
+### Changed
+- `docs/plans/permanent-ability-increase-reconciliation.md`: Phase 2 marked shipped.
+- `docs/test-harness-coverage.md`: harness total 2895 → 2897 (+2 Tome-trio tests).
+
 ## [2.312.0] - 2026-06-14 — "The Mended Ledger"
 
 **Schema version:** 69
