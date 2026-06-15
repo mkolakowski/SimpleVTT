@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.349.0] - 2026-06-15 — "The Striking Staff"
+
+**Schema version:** 69
+
+**Commit summary:** Third magic-item-content commit off the v2.344.5 stub triage (Bucket C — on-hit weapon rider). **Staff of Striking** (RAW DMG p.202, very rare, attunement) promoted from a v2.344.0 "Armory's Remainder" catalog stub to a mechanical attack rider: on a hit it adds **+1d6 force**, riding the Frost Brand always-on dice-uplift (`_MAGIC_ITEM_ATTACK_RIDERS`, section 6c). Seeded as a +3 weapon attack on Magnus Hexbinder; two harness tests.
+
+**Description:** Zero new engine code — same `{dice, damage_type, requires_attunement}` shape as Staff of Withering / Frost Brand, surfacing in the /attack `auto_uplifts` with source `item-staff-of-striking`, gated on the inventory item being equipped+attuned. The RAW +3 to attack/damage is baked onto Magnus's weapon row (+4 base → +7 attack, 1d6+1 → 1d6+4); the staff adds +1d6 force on hit. **v1 simplifications (GM-narrated):** RAW the wielder may expend 1-3 of the staff's 10 charges for +1d6 force *each* — the engine models the 1-charge minimum (+1d6) always-on and GM-narrates spending more charges + the 10-charge/dawn recharge (same convention as Staff of Withering's charge limit). Removed the slug from the Armory's Remainder passive `setdefault` loop (it's an attack rider now). MINOR — additive item mechanic + content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ATTACK_RIDERS["staff-of-striking"]` — `{label, dice: "1d6", damage_type: "force", requires_attunement: True}`.
+- Demo seed: a "Staff of Striking" weapon attack row on Magnus Hexbinder (+3 baked, carries `_slug`); the inventory item stays inert spare loot (seeded v2.344.0).
+- `tests/harness/test_item_staff_of_striking.py` — 2 tests (the +1d6 force uplift fires on a hit when equipped+attuned; the attunement gate suppresses it when equipped-but-unattuned).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3004 → 3006 (+2 Staff of Striking tests); new `test_item_staff_of_striking.py` section.
+
 ## [2.348.0] - 2026-06-15 — "The Sapping Staff"
 
 **Schema version:** 69

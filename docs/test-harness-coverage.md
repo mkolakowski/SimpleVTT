@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3004 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.348.0, 2026-06-15).
+**Total tests:** 3006 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.349.0, 2026-06-15).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3558,6 +3558,14 @@ v2.347.0 engine — the `effects.disadvantage_on` roll intercept generalized fro
 | `test_con_save_disadvantage_fires` | `disadvantage_on=["con_save"]` → a CON save rolls `2d20kl1` + a `disadvantage-con_save` broadcast fires. |
 | `test_str_save_disadvantage_fires` | `disadvantage_on=["str_save"]` → a STR save rolls `2d20kl1` (saves were previously uncovered). |
 | `test_marker_specificity_control` | A `con_save`-only buff does NOT impose disadvantage on a `con_check` roll (marker specificity). |
+
+### `test_item_staff_of_striking.py`
+v2.349.0 magic-items — Staff of Striking (RAW DMG p.202, very rare, attunement), Bucket C on-hit rider. +1d6 force rides the Frost Brand always-on dice-uplift (section 6c, `auto_uplifts` source `item-staff-of-striking`); the +3 attack/damage is baked on Magnus's weapon row. Charge economy (1-3 of 10) GM-narrated.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_staff_of_striking_force_rider_fires` | Equipped+attuned → an attack surfaces a single `auto_uplifts`: label "Staff of Striking", expression "1d6", damage_type "force", total in [1,12]. |
+| `test_staff_of_striking_requires_attunement` | Equipped-but-unattuned → the force rider does not fire (attunement gate). |
 
 ### `test_item_staff_of_withering.py`
 v2.346.0 magic-items — Staff of Withering (RAW DMG p.202, rare, attunement), Bucket C on-hit rider. +2d10 necrotic rides the Frost Brand always-on dice-uplift (section 6c, `auto_uplifts` source `item-staff-of-withering`). Carrier: Magnus Hexbinder (weapon attack row); inventory item seeded inert, PATCHed equipped+attuned in-test. Charge limit + DC15 CON disadvantage GM-narrated in v1.

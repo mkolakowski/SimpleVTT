@@ -33849,11 +33849,11 @@ for _rem_slug, _rem_attune in [
     ("bead-of-force", False), ("berserker-axe", True),
     ("hammer-of-thunderbolts", False), ("oathbow", True),
     ("pipes-of-haunting", False), ("sword-of-wounding", True),
-    ("trident-of-fish-command", True), ("staff-of-striking", True),
+    ("trident-of-fish-command", True),
     ("staff-of-the-magi", True), ("staff-of-the-python", True),
     ("staff-of-the-woodlands", True),
-    # staff-of-withering promoted to a mechanical attack rider (+2d10
-    # necrotic) in v2.346.0 — registered via `_MAGIC_ITEM_ATTACK_RIDERS`.
+    # staff-of-withering (v2.346.0) + staff-of-striking (v2.349.0) promoted
+    # to mechanical attack riders — registered via `_MAGIC_ITEM_ATTACK_RIDERS`.
 ]:
     _MAGIC_ITEM_PASSIVES.setdefault(
         _rem_slug, [{"requires_attunement": _rem_attune}],
@@ -35192,6 +35192,19 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
                 "str_check", "con_check", "str_save", "con_save",
             ],
         },
+    },
+    # v2.349.0 — Staff of Striking (RAW DMG p.202, very rare, attunement).
+    # A +3 magic quarterstaff (the +3 attack/damage is baked onto the
+    # weapon row). On a hit the wielder may expend 1-3 of its 10 charges
+    # for +1d6 force per charge; v1 models the always-on 1-charge minimum
+    # (+1d6 force) via the Frost Brand dice-uplift, and GM-narrates
+    # spending 2-3 charges + the 10-charge/dawn economy (same convention
+    # as Staff of Withering's charge limit).
+    "staff-of-striking": {
+        "label": "Staff of Striking",
+        "dice": "1d6",
+        "damage_type": "force",
+        "requires_attunement": True,
     },
     # v2.159.1 — Phase 8a: first ammunition-shape catalog row. Arrow of
     # Slaying (RAW DMG p.151) is a magic arrow keyed to a specific

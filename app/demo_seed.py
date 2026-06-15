@@ -3229,6 +3229,16 @@ def _warlock_sheet(name: str) -> dict:
              "damage_type": "bludgeoning", "range": "5 ft",
              "_slug": "staff-of-withering",
              "desc": "Rare quarterstaff, attunement. On a hit, +2d10 necrotic (RAW: 1 of 3 charges; charge limit GM-narrated) AND the target makes a DC 15 CON save or is 'withered' — disadvantage on STR/CON checks + saves for 1 hour (v2.348.0; applies mechanically to a PC target's /roll checks/saves, installed + visible on NPC targets)."},
+            # v2.349.0 — Staff of Striking (RAW DMG p.202, very rare,
+            # attunement). A +3 magic quarterstaff: the +3 to attack/damage
+            # is baked here (Magnus +4 base → +7 attack, 1d6+1 → 1d6+4). On a
+            # hit it adds +1d6 force via the `_MAGIC_ITEM_ATTACK_RIDERS
+            # ["staff-of-striking"]` always-on rider (the 1-charge minimum;
+            # spending 2-3 charges + the 10-charge/dawn economy GM-narrated).
+            {"name": "Staff of Striking", "attack_bonus": "+7", "damage": "1d6+4",
+             "damage_type": "bludgeoning", "range": "5 ft",
+             "_slug": "staff-of-striking",
+             "desc": "Very rare quarterstaff, attunement. +3 to attack/damage (baked). On a hit, +1d6 force (RAW: 1 of up to 3 charges; spending more + the 10-charge/dawn economy GM-narrated)."},
         ],
         # Warlock spells: known list (not prepared). Lv 5 = 6 known
         # spells + 3 known cantrips. All slots at L3 (Pact Magic table).
