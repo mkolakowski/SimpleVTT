@@ -32866,6 +32866,22 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "ring-of-elemental-command": [
         {"requires_attunement": True},
     ],
+    # v2.306.0 — Armor of Vulnerability (RAW DMG p.152, rare, attunement,
+    # CURSED). RAW: resistance to one of bludgeoning/piercing/slashing, but —
+    # as the curse — vulnerability to the OTHER two. The demo's plate variant
+    # resists slashing and is vulnerable to bludgeoning + piercing. Composes
+    # two substrates in one payload: the v2.235.0 `resistance_to` fold (halves
+    # slashing via `_resistance_halve`) and the NEW v2.306.0 `vulnerability_to`
+    # fold (doubles bludgeoning/piercing via `_vulnerability_double`). The curse
+    # itself (can't doff without remove curse; attuning curses you) is GM-
+    # narrated in v1 — the mechanical teeth are the resist/vuln split.
+    "armor-of-vulnerability": [
+        {
+            "resistance_to": ["slashing"],
+            "vulnerability_to": ["bludgeoning", "piercing"],
+            "requires_attunement": True,
+        },
+    ],
     # v2.236.0 — Mantle of Spell Resistance (RAW DMG p.180, rare,
     # attunement). RAW: "you have advantage on saving throws against
     # spells while you wear this cloak." A descriptive-only advantage in
@@ -34627,6 +34643,15 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # rider on the shared `ring-of-resistance` slug.
         "resistance_to": [],
         "resistance_sources": [],
+        # v2.306.0 — damage-vulnerability passive (mirror of resistance_to).
+        # Aggregated list of damage types the wearer is VULNERABLE to across
+        # equipped+attuned items; consulted by `_vulnerability_double` (live
+        # damage pipeline, doubles matching damage) and surfaced on
+        # `/sheet-json` derived. Armor of Vulnerability (RAW DMG p.152, cursed)
+        # is the first entry — it resists one physical type and is vulnerable
+        # to the other two.
+        "vulnerability_to": [],
+        "vulnerability_sources": [],
         # v2.288.0 — damage/condition-immunity passive. Aggregated lists of
         # damage types + conditions made immune across equipped(+attuned)
         # items; the damage list is consulted by `_immunity_zero` (live damage
@@ -34993,6 +35018,19 @@ def _equipped_item_effects(sheet: dict) -> dict:
                 if _rt_norm and _rt_norm not in out["resistance_to"]:
                     out["resistance_to"].append(_rt_norm)
                     out["resistance_sources"].append(item_name)
+            # v2.306.0 — damage-vulnerability passive (Armor of Vulnerability,
+            # RAW DMG p.152, cursed). Mirror of the resistance fold above: the
+            # vulnerable type(s) ride the per-item `_vulnerability_type` rider
+            # (string) or a `vulnerability_to` payload list. Folded into the
+            # aggregated `vulnerability_to` list that `_vulnerability_double`
+            # consults in the live damage pipeline.
+            _vt_raw = item.get("_vulnerability_type") or p.get("vulnerability_to")
+            _vt_list = [_vt_raw] if isinstance(_vt_raw, str) else (_vt_raw or [])
+            for _vt in _vt_list:
+                _vt_norm = str(_vt or "").strip().lower()
+                if _vt_norm and _vt_norm not in out["vulnerability_to"]:
+                    out["vulnerability_to"].append(_vt_norm)
+                    out["vulnerability_sources"].append(item_name)
             # v2.288.0 — damage/condition-immunity passive (Periapt of Proof
             # against Poison, RAW DMG p.184). Folded into the aggregated
             # `immunity_to` list (consulted by `_immunity_zero` in the live
@@ -41347,6 +41385,18 @@ def _vulnerability_double(
             return damage_amount * 2, True
         if damage_type_l in normalized:
             return damage_amount * 2, True
+    # v2.306.0 — equipped-item vulnerability (Armor of Vulnerability, RAW DMG
+    # p.152). Aggregated from equipped+attuned inventory items via
+    # `_equipped_item_effects`; mirrors the v2.235.0 equipped-item resistance
+    # read in `_resistance_halve`. A plain "bludgeoning" entry doubles
+    # bludgeoning damage.
+    try:
+        _item_vulns = _equipped_item_effects(target_sheet).get("vulnerability_to") or []
+    except Exception:
+        _item_vulns = []
+    _item_vulns_norm = {(str(r) or "").strip().lower() for r in _item_vulns}
+    if "all" in _item_vulns_norm or damage_type_l in _item_vulns_norm:
+        return damage_amount * 2, True
     for b in (target_sheet or {}).get("_buffs_active") or []:
         if not isinstance(b, dict):
             continue
@@ -93081,6 +93131,15 @@ async def get_character_sheet_json(
                 derived["resistances"] = {
                     "types": _item_resist_types,
                     "sources": list(_item_eff.get("resistance_sources") or []),
+                }
+            # v2.306.0 — equipped-item damage vulnerability (Armor of
+            # Vulnerability). Only present when an equipped+attuned item makes
+            # the wearer vulnerable to at least one damage type.
+            _item_vuln_types = list(_item_eff.get("vulnerability_to") or [])
+            if _item_vuln_types:
+                derived["vulnerabilities"] = {
+                    "types": _item_vuln_types,
+                    "sources": list(_item_eff.get("vulnerability_sources") or []),
                 }
             # v2.288.0 — equipped-item damage/condition immunity (Periapt of
             # Proof against Poison). Only present when an equipped(+attuned)

@@ -1603,6 +1603,24 @@ def _paladin_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "attuned": False,
              "weight_lb": 1, "_slug": "boots-of-striding-and-springing",
              "desc": "Uncommon wondrous item, attunement. While you wear these boots, your walking speed becomes 30 ft (unless already higher), and your speed isn't reduced if you are encumbered or wearing heavy armor. In addition, you can jump three times the normal distance, though no farther than your remaining movement allows. RAW DMG p.156."},
+            # v2.306.0 — Armor of Vulnerability (RAW DMG p.152, rare,
+            # attunement, CURSED). The demo's plate variant resists slashing
+            # but — as the curse — is vulnerable to bludgeoning + piercing.
+            # Composes two substrates: the v2.235.0 `resistance_to` fold
+            # (slashing halved via `_resistance_halve`) and the NEW v2.306.0
+            # `vulnerability_to` fold (bludgeoning/piercing doubled via
+            # `_vulnerability_double`). Seeded inert (unequipped/unattuned) so
+            # it adds nothing to Caelan's baseline (he has no phys resistance or
+            # vulnerability) — the harness PATCHes it equipped+attuned, deals
+            # slashing/bludgeoning/piercing damage, asserts halve/double/double,
+            # then restores. The curse (can't doff without remove curse) is
+            # GM-narrated. A holy-looking plate that turns out cursed is a
+            # fitting trap for a trusting Devotion Paladin.
+            {"name": "Armor of Vulnerability", "type": "armor", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "armor_type": "heavy", "ac_value": 18, "weight_lb": 65,
+             "_slug": "armor-of-vulnerability",
+             "desc": "Rare armor (plate), attunement. CURSED. While wearing this armor you have resistance to slashing damage — but the curse gives you vulnerability to bludgeoning and piercing damage. Attuning curses you until targeted by remove curse; removing the armor doesn't end the curse. RAW DMG p.152."},
         ],
         # v2.99.24 — Caelan is a Variant Human (RAW: free Lv 1 feat).
         # Sentinel fits his Paladin Devotion frontline-protector role:

@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.306.0] - 2026-06-14 — "The Traitor's Plate"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item drop-in + engine extension — **Armor of Vulnerability** (RAW DMG p.152, rare, attunement, CURSED) lands BOTH a slashing resistance AND a bludgeoning/piercing vulnerability. The resistance rides the existing `_resistance_type`/`resistance_to` substrate (v2.235.0); the vulnerability needed a NEW mirror — `_vulnerability_double` now reads equipped-item effects, not just the sheet-level `damage_vulnerabilities` list + buffs. One registry entry, four small symmetric engine edits, a demo seed on Sir Caelan Lightbringer, and six harness tests.
+
+**Description:** The cursed plate has a symmetric, fully-testable RAW effect: "you have resistance to one of the following damage types: bludgeoning, piercing, or slashing" plus the curse's "vulnerability to the two damage types you aren't resistant to." The demo's fixed variant resists **slashing** and is vulnerable to **bludgeoning + piercing** (a fixed payload variant like Helm of Brilliance's fixed fire resistance). The resistance half was free — it rides the same `resistance_to` aggregation `_resistance_halve` already consults. The vulnerability half required engine work: `_vulnerability_double` previously read ONLY the sheet-level `damage_vulnerabilities` list (+ `"all"` wildcard) and buff-level `effects.vulnerability_to`, never equipped items. This commit mirrors the v2.235.0 resistance fold: the `_equipped_item_effects` walker now aggregates a `vulnerability_to` list (+ `vulnerability_sources`) from the per-item `_vulnerability_type` rider or a `vulnerability_to` payload list, `_vulnerability_double` consults it, and `/sheet-json` projects it as `derived.vulnerabilities = {types, sources}` mirroring `derived.resistances`. So equipping+attuning the armor halves slashing AND doubles bludgeoning/piercing in the live damage pipeline. Attunement-gated (the curse and both effects drop when worn-but-not-attuned). The "can't doff without remove curse" clause is GM-narrated in v1. Seeded **unequipped/unattuned** as spare loot on Sir Caelan Lightbringer (the demo's Devotion Paladin — cursed traitor's plate is on-theme for a foe-sworn knight). He has no physical resistance or vulnerability baseline, so the inert baseline takes full damage on all three physical types — cleanly proving the armor is the source of both the halving and the doubling. MINOR — additive engine code (the vulnerability mirror) + a new registry entry + demo content + tests, no schema change.
+
+### Added
+- `armor-of-vulnerability` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — `resistance_to: ["slashing"]`, `vulnerability_to: ["bludgeoning", "piercing"]`, attunement-gated.
+- `vulnerability_to` / `vulnerability_sources` aggregation in `_equipped_item_effects` — folds the per-item `_vulnerability_type` rider or a `vulnerability_to` payload list, mirroring the v2.235.0 `resistance_to` fold.
+- `derived.vulnerabilities = {types, sources}` on `/sheet-json`, mirroring `derived.resistances`.
+- Demo seed: Sir Caelan Lightbringer gains a spare (unequipped/unattuned) **Armor of Vulnerability**.
+- `tests/harness/test_item_armor_of_vulnerability.py` (6 tests): inert baseline takes full physical damage; equip+attune halves slashing; doubles bludgeoning; doubles piercing; attunement gate (un-attuned takes full damage); `derived.resistances`/`derived.vulnerabilities` both surface with the armor named.
+
+### Changed
+- `_vulnerability_double` now consults `_equipped_item_effects(target_sheet).get("vulnerability_to")` in addition to the sheet-level `damage_vulnerabilities` list + buff `effects.vulnerability_to`.
+- `docs/test-harness-coverage.md`: harness total 2878 → 2884 (+6 drop-in tests); added the `test_item_armor_of_vulnerability.py` section.
+
 ## [2.305.0] - 2026-06-14 — "The Ember Sovereign"
 
 **Schema version:** 69
