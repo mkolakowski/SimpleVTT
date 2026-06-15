@@ -32715,6 +32715,19 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
             "requires_attunement": True,
         },
     ],
+    # v2.299.0 — Ring of Spell Turning (RAW DMG p.193, legendary, attunement).
+    # Third carrier on the v2.297.0 `spell_save_advantage` substrate: "you have
+    # advantage on saving throws against any spell that targets only you (not in
+    # an area of effect)." Folded at /roll time by
+    # `_roll_item_spell_save_advantage` when the caller flags `vs_spell`. The
+    # spell-reflection clause (a natural 20 vs a 7th-level-or-lower spell turns
+    # the spell back on the caster) is GM-narrated in v1.
+    "ring-of-spell-turning": [
+        {
+            "spell_save_advantage": True,
+            "requires_attunement": True,
+        },
+    ],
     # v2.295.0 — Robe of Eyes (RAW DMG p.193, rare, attunement). Composes
     # THREE existing substrate fields in one payload: advantage on Wisdom
     # (Perception) checks (the v2.253.0 `check_advantage_on` substrate),

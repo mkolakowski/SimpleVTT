@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.299.0] - 2026-06-14 — "The Turned Spell"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item drop-in — **Ring of Spell Turning** (RAW DMG p.193, legendary, attunement) lands its spell-save benefit on the v2.297.0 `spell_save_advantage` roll effect, the third carrier (after Scarab of Protection and Robe of the Archmagi). One registry entry, a demo-seed item on Zara Emberfire, and five harness tests.
+
+**Description:** The ring's testable benefit — "you have advantage on saving throws against any spell that targets only you (not in an area of effect)" — rides the v2.297.0 `spell_save_advantage` roll effect: an attunement-gated `spell_save_advantage: True` payload that `_roll_item_spell_save_advantage` folds into the PHB p.173 composition at `/roll` time when the caller flags `vs_spell: true` (producing `2d20kh1` + `roll_state_applied: auto_advantage_ring_of_spell_turning`) and that `/sheet-json` surfaces as `derived.spell_save_advantage`. The ring's signature spell-reflection clause — a natural 20 on the save against a 7th-level-or-lower spell turns the spell back on the caster — is GM-narrated in v1 (the single-target "not in an area of effect" qualifier is likewise narrated, since the generic `/roll` save can't know the spell's targeting). Seeded **unequipped/unattuned** as spare loot on Zara Emberfire (the demo's Draconic Sorcerer — a legendary anti-magic ring is on-theme for a chaotic blaster), specifically on a carrier with no other spell-save-advantage item so the inert baseline cleanly proves the ring is the source. The harness PATCHes it equipped+attuned, rolls a `vs_spell` save, asserts the advantage breakdown + source, then restores the seed inventory; a `vs_spell`-gate test, an attunement-gate test, an inert-baseline control, and a `derived.spell_save_advantage` projection test round it out. MINOR — additive demo content + a new registry entry + tests, no schema change.
+
+### Added
+- `ring-of-spell-turning` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — `spell_save_advantage: True`, attunement-gated.
+- Demo seed: Zara Emberfire gains a spare (unequipped/unattuned) **Ring of Spell Turning**.
+- `tests/harness/test_item_ring_of_spell_turning.py` (5 tests): `vs_spell` save advantage `2d20kh1` + `auto_advantage_ring_of_spell_turning` on equip+attune; the `vs_spell` gate (same save without the flag is straight `1d20`); attunement gate; inert baseline control; `derived.spell_save_advantage` surfaces "Ring of Spell Turning" in sources. Inventory restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2852 → 2857 (+5 drop-in tests); added the `test_item_ring_of_spell_turning.py` section.
+
 ## [2.298.0] - 2026-06-14 — "The Silver Runes"
 
 **Schema version:** 69

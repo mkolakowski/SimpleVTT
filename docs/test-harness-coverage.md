@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2852 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.298.0, 2026-06-14).
+**Total tests:** 2857 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.299.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2890,6 +2890,17 @@ v2.296.0 — Rod of Alertness (RAW DMG p.193, very rare, attunement): advantage 
 | `test_rod_requires_attunement` | Equipped-but-unattuned → no `2d20kh1`, no `roll_state_applied` (the attunement gate). Restored on teardown. |
 | `test_rod_baseline_has_no_advantage` | Control: inert seed (equipped=False) → straight `1d20`, no advantage (proves it's rod-sourced). |
 | `test_rod_exposes_derived_flag` | Equipped+attuned → `GET /sheet-json` `derived.check_advantage_on` has "perception" in `skills` and "Rod of Alertness" in `sources`. Restored on teardown. |
+
+### `test_item_ring_of_spell_turning.py`
+v2.299.0 — Ring of Spell Turning (RAW DMG p.193, legendary, attunement): advantage on saving throws against any spell that targets only you, via the v2.297.0 `spell_save_advantage` roll effect (third carrier after the Scarab + Robe of the Archmagi; the nat-20 spell-reflection clause is GM-narrated). Seeded as inert spare loot (unequipped/unattuned) on Zara Emberfire (Sorcerer, no other spell-save item, so the baseline cleanly proves the source); tests PATCH it equipped+attuned, roll a `vs_spell` save, then restore.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_ring_grants_advantage_on_vs_spell_save` | Equipped+attuned via PATCH, battle seeded → `POST /roll` WIS save with `vs_spell: true` → breakdown contains `2d20kh1` and `roll_state_applied == auto_advantage_ring_of_spell_turning`. Restored on teardown. |
+| `test_ring_no_advantage_without_vs_spell_flag` | The `vs_spell` gate: same WIS save WITHOUT the flag → straight `1d20`, no `roll_state_applied`. Restored on teardown. |
+| `test_ring_requires_attunement` | Equipped-but-unattuned → no `2d20kh1`, no `roll_state_applied` (the attunement gate). Restored on teardown. |
+| `test_ring_baseline_has_no_advantage` | Control: inert seed (equipped=False) → `vs_spell` save is straight `1d20`, no advantage (proves it's ring-sourced). |
+| `test_ring_exposes_derived_flag` | Equipped+attuned → `GET /sheet-json` `derived.spell_save_advantage` names "Ring of Spell Turning" in `sources`. Restored on teardown. |
 
 ### `test_item_robe_of_the_archmagi.py`
 v2.298.0 — Robe of the Archmagi (RAW DMG p.193, legendary, attunement): advantage on saving throws against spells via the v2.297.0 `spell_save_advantage` roll effect (second carrier after the Scarab; base AC 15+Dex unarmored + spell DC/attack +2 GM-narrated). Seeded as inert spare loot (unequipped/unattuned) on Thalindra Moonshadow (Wizard, no other spell-save item, so the baseline cleanly proves the source); tests PATCH it equipped+attuned, roll a `vs_spell` save, then restore.

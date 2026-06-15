@@ -4573,6 +4573,20 @@ def _sorcerer_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "attuned": False,
              "_slug": "broom-of-flying", "weight_lb": 3,
              "desc": "Uncommon wondrous item, no attunement. Stand astride the broom and speak its command word to ride it in the air at a flying speed of 50 feet (30 feet while carrying over 200 lb; 400-lb max). It stops hovering when you land, and can be sent to or summoned from up to 1 mile away. RAW DMG p.156."},
+            # v2.299.0 — Ring of Spell Turning (RAW DMG p.193, legendary,
+            # attunement). Third carrier on the v2.297.0 `spell_save_advantage`
+            # roll effect: "advantage on saving throws against any spell that
+            # targets only you (not in an area of effect)." Spare loot
+            # (equipped=False / attuned=False): Zara carries no other
+            # spell-save-advantage item so her baseline cleanly proves the ring
+            # is the source — the harness PATCHes it equipped+attuned, rolls a
+            # vs_spell save and asserts the 2d20kh1 advantage + source, then
+            # restores. The nat-20 spell-reflection clause is GM-narrated. A
+            # legendary anti-magic ring is on-theme for a Draconic Sorcerer.
+            {"name": "Ring of Spell Turning", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "_slug": "ring-of-spell-turning", "weight_lb": 0,
+             "desc": "Legendary ring, attunement. While wearing this ring, you have advantage on saving throws against any spell that targets only you (not in an area of effect). If you roll a 20 for the save and the spell is 7th level or lower, the spell has no effect on you and instead targets the caster (GM-narrated). RAW DMG p.193."},
         ],
         "feats": [],
         # v2.18.1: Sorcerer Lv 5 resources. sorcery-points (max = sorcerer
