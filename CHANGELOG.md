@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.344.4] - 2026-06-15 — "The Updated Placard"
+
+**Schema version:** 69
+
+**Commit summary:** Sync the wiki landing-page **SRD 5e automation coverage** table to the v2.344.x audit corrections. The table (rendered in `app/templates/wiki.html` + mirrored in `docs/wiki/README.md`) still showed the stale v2.315.0 figures; updated to match the reconciled numbers.
+
+**Description:** Class features ~81% → **~99%** (only Aura of Courage ⚪, after the v2.344.3 reconciliation); Magic items 123/239 (~51%) → **235/239 (~98%)**; Spells ~70% → **~72%** (upcast dice/heal scaling effectively complete per v2.344.2); overall **~75% → ~88%**. Reworded the gaps paragraph: the magic-item tail, spell upcast scaling, and the class-feature ⚪ tail are all closed; the single remaining genuine class-feature gap is Aura of Courage, and the next spell lever is area-effect + utility automation. Bumped the "as of" version from v2.315.0 → v2.344.4. The `test_wiki_home_renders` harness test asserts the section heading + `id="srd-coverage"` (both unchanged), so no test edit needed. PATCH — doc/template content only, no code or schema change.
+
+### Changed
+- `app/templates/wiki.html`: SRD coverage table rows + overall figure + gaps paragraph + "as of" version updated to v2.344.4 numbers.
+- `docs/wiki/README.md`: same table + prose mirrored.
+
 ## [2.344.3] - 2026-06-15 — "The Mustering Roll"
 
 **Schema version:** 69

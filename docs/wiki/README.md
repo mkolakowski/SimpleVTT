@@ -6,18 +6,18 @@ Guides land at `docs/wiki/<slug>.{md,html}`. Plans live at `docs/plans/<slug>.md
 
 ## SRD 5e automation coverage
 
-How much of the SRD 5.1 ruleset SimpleVTT mechanically automates, by content category, as of **v2.315.0**. "Automated" means the engine derives or enforces the rule (saves, damage, passive item effects, class features) rather than leaving it to GM narration. Recomputed each audit pass; see [TODO](../../TODO.md) for the breakdown and gaps.
+How much of the SRD 5.1 ruleset SimpleVTT mechanically automates, by content category, as of **v2.344.4**. "Automated" means the engine derives or enforces the rule (saves, damage, passive item effects, class features) rather than leaving it to GM narration. Recomputed each audit pass; see [TODO](../../TODO.md) for the breakdown and gaps.
 
 | Category | Count | Automated |
 |----------|-------|-----------|
 | Races | 9 | ~90% |
 | Monsters | 322 | ~85% |
 | Conditions | 15 | ~85% |
-| Class features | 222 rows (179 ✅ / 19 🟡 / 24 ⚪) | ~81% |
-| Spells | 319 | ~70% |
-| Magic items | 123 / 239 wired | ~51% |
+| Class features | 222 rows (only Aura of Courage ⚪) | ~99% |
+| Spells | 319 | ~72% |
+| Magic items | 235 / 239 wired | ~98% |
 
-**Overall ~75%.** Top automation gaps, in priority order: finish the magic-item content tail (116 SRD items still GM-narrated), then spell upcast scaling (~110 cast-and-broadcast-only spells), then the 24 ⚪ class-feature rows. Known defects are tracked in [BUGS](../../BUGS.md).
+**Overall ~88%.** The magic-item content tail (v2.316–v2.344), spell upcast dice/heal scaling (parser-covered), and the class-feature ⚪ tail (reconciled v2.344.3) are all effectively closed. The single remaining genuine class-feature gap is **Aura of Courage** (Paladin Lv 10/18); the next spell lever is area-effect + utility automation. Known defects are tracked in [BUGS](../../BUGS.md).
 
 ## Available guides
 

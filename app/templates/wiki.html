@@ -108,7 +108,7 @@
   <h2 id="srd-coverage">SRD 5e automation coverage</h2>
   <p class="lede" style="margin-bottom:8px;">
     How much of the SRD 5.1 ruleset SimpleVTT mechanically automates, by content
-    category, as of <strong>v2.315.0</strong>. "Automated" means the engine
+    category, as of <strong>v2.344.4</strong>. "Automated" means the engine
     derives or enforces the rule (saves, damage, passive item effects, class
     features) rather than leaving it to GM narration. Recomputed each audit
     pass; see <a href="/wiki/doc/todo">TODO</a> for the breakdown and gaps.
@@ -121,16 +121,18 @@
       <tr><td>Races</td><td>9</td><td><span class="status-shipped">~90%</span></td></tr>
       <tr><td>Monsters</td><td>322</td><td><span class="status-shipped">~85%</span></td></tr>
       <tr><td>Conditions</td><td>15</td><td><span class="status-shipped">~85%</span></td></tr>
-      <tr><td>Class features</td><td>222 rows (179 ✅ / 19 🟡 / 24 ⚪)</td><td><span class="status-shipped">~81%</span></td></tr>
-      <tr><td>Spells</td><td>319</td><td><span class="status-partial">~70%</span></td></tr>
-      <tr><td>Magic items</td><td>123 / 239 wired</td><td><span class="status-partial">~51%</span></td></tr>
+      <tr><td>Class features</td><td>222 rows (only Aura of Courage ⚪)</td><td><span class="status-shipped">~99%</span></td></tr>
+      <tr><td>Spells</td><td>319</td><td><span class="status-shipped">~72%</span></td></tr>
+      <tr><td>Magic items</td><td>235 / 239 wired</td><td><span class="status-shipped">~98%</span></td></tr>
     </tbody>
   </table>
   <p class="lede" style="margin-top:0;">
-    <strong>Overall ~75%.</strong> Top automation gaps, in priority order:
-    finish the magic-item content tail (116 SRD items still GM-narrated), then
-    spell upcast scaling (~110 cast-and-broadcast-only spells), then the 24 ⚪
-    class-feature rows. Known defects are tracked in <a href="/wiki/doc/bugs">BUGS</a>.
+    <strong>Overall ~88%.</strong> The magic-item content tail (v2.316–v2.344),
+    spell upcast dice/heal scaling (parser-covered), and the class-feature ⚪ tail
+    (reconciled v2.344.3) are all effectively closed. The single remaining genuine
+    class-feature gap is <strong>Aura of Courage</strong> (Paladin Lv 10/18); the
+    next spell lever is area-effect + utility automation. Known defects are tracked
+    in <a href="/wiki/doc/bugs">BUGS</a>.
   </p>
 
   <h2 id="guides">Available guides</h2>
