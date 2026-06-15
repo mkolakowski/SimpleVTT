@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.323.0] - 2026-06-15 — "The Polished Lie"
+
+**Schema version:** 69
+
+**Commit summary:** SRD magic-item drop-in — **Glamoured Studded Leather** (RAW DMG p.172, rare, no attunement). Pure clone of v2.301.0 Elven Chain's `ac_bonus` substrate — +1 AC while worn, no attunement. Seeded inert on Lyra Sunstrider (Bard); three harness tests mirror `test_item_elven_chain.py`. The bonus-action illusory-disguise property is GM-narrated in v1. Zero new engine code.
+
+**Description:** Rides the existing `ac_bonus` substrate the Cloak/Ring of Protection and Bracers of Defense already feed into `_read_target_ac` at attack hit-determination time. The catalog payload omits `requires_attunement`, so the +1 applies while merely equipped — same contract as Elven Chain. The bonus-action illusion (the armor can assume the appearance of normal clothing or other armor) is GM-narrated in v1; this commit lands only the mechanical AC bonus. Lyra carries it as inert spare loot per the v2.318.1 pattern — pairs thematically with the v2.321.0 Hat of Disguise (also on Lyra) to form a "disguise loot" bundle for the College of Lore bard. The harness PATCHes equipped=True via `/sheet-fields` and measures the `target_ac` delta vs. Lyra's baseline studded-leather AC. MINOR — additive content drop-in, no engine change.
+
+### Added
+- `_MAGIC_ITEM_PASSIVES["glamoured-studded-leather"]` (`app/routes/tabletop_routes.py`) — `[{ac_bonus: 1}]`. Elven Chain clone with the studded-leather skin.
+- Demo seed: Lyra Sunstrider gains a **Glamoured Studded Leather** suit (`_slug: glamoured-studded-leather`) at the inventory tail, seeded inert (`equipped: False`).
+- `tests/harness/test_item_glamoured_studded_leather.py` — 3 tests (target_ac +1 delta, no-attunement contract, unequip drops bonus). Mirrors `test_item_elven_chain.py`.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2914 → 2917 (+3 Glamoured Studded Leather tests); new `test_item_glamoured_studded_leather.py` section.
+
 ## [2.322.0] - 2026-06-15 — "The Avenging Edge"
 
 **Schema version:** 69

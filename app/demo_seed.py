@@ -2388,6 +2388,21 @@ def _bard_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "attuned": False,
              "weight_lb": 0, "_slug": "hat-of-disguise",
              "desc": "Rare wondrous item, attunement. While wearing this hat, you can use an action to cast the disguise self spell from it at will. The spell ends if the hat is removed. RAW DMG p.173."},
+            # v2.323.0 — Glamoured Studded Leather (RAW DMG p.172, rare, NO
+            # attunement). Pure clone of the v2.301.0 Elven Chain ac_bonus
+            # substrate ("+1 AC while worn"), with the bonus-action illusory
+            # disguise property GM-narrated in v1. Seeded INERT (equipped=
+            # False, attuned=False — though attunement isn't required) as
+            # spare loot per the v2.318.1 pattern; the harness PATCHes
+            # equipped=True via /sheet-fields and measures the target_ac
+            # delta vs Lyra's baseline studded-leather AC. Thematic
+            # companion to Lyra's v2.321.0 Hat of Disguise — together they
+            # form a "disguise loot" bundle for the College of Lore bard.
+            {"name": "Glamoured Studded Leather", "type": "armor", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "armor_type": "light", "ac_value": 12,
+             "_slug": "glamoured-studded-leather", "weight_lb": 13,
+             "desc": "Rare light armor (studded leather), no attunement. You gain a +1 bonus to AC while wearing this armor. Bonus action: speak the command word to make the armor appear as a normal set of clothing or some other kind of armor (illusion, GM-narrated). RAW DMG p.172."},
         ],
         # v2.74.0 Phase 4a — Defensive Duelist feat for Lyra. RAW
         # (PHB p.166): reaction-based +PB AC against one melee hit

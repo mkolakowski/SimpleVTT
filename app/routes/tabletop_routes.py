@@ -32555,6 +32555,20 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
             "requires_no_shield": True,
         },
     ],
+    # v2.323.0 — Glamoured Studded Leather (RAW DMG p.172, rare, NO
+    # attunement). Studded-leather-base armor: "+1 bonus to AC while you wear
+    # this armor." Pure substrate clone of v2.301.0 Elven Chain — same
+    # `ac_bonus` payload that the Cloak/Ring of Protection and Bracers of
+    # Defense feed into `_read_target_ac` at attack hit-determination time,
+    # zero new engine code. No attunement (the payload omits
+    # `requires_attunement`), so the +1 applies while merely equipped. The
+    # bonus-action illusory-disguise property ("the armor's command word
+    # causes it to assume the appearance of a normal set of clothing or some
+    # other kind of armor") is GM-narrated in v1 — a flavor toggle on top of
+    # the always-on +1.
+    "glamoured-studded-leather": [
+        {"ac_bonus": 1},
+    ],
     # v2.301.0 — Elven Chain (RAW DMG p.150, rare, NO attunement). Armor
     # rather than a wondrous slot item: "+1 bonus to AC while you wear
     # this armor." Reuses the same `ac_bonus` field the Cloak/Ring/Bracers

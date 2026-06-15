@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2914 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.322.0, 2026-06-15).
+**Total tests:** 2917 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.323.0, 2026-06-15).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2945,6 +2945,15 @@ v2.301.0 — Elven Chain (RAW DMG p.150, rare, NO attunement): "+1 bonus to AC w
 | `test_elven_chain_adds_one_to_target_ac` | Inert baseline `target_ac` vs equipped → rises by exactly 1. Restored on teardown. |
 | `test_elven_chain_no_attunement_required` | Equipped while `attuned` stays False → the +1 still applies (no attunement gate). Restored on teardown. |
 | `test_elven_chain_unequip_drops_bonus` | Equip → +1; unequip → `target_ac` back to baseline. Restored on teardown. |
+
+### `test_item_glamoured_studded_leather.py`
+v2.323.0 — Glamoured Studded Leather (RAW DMG p.172, rare, NO attunement): "+1 bonus to AC while you wear this armor", riding the same `ac_bonus` substrate as Elven Chain. Seeded inert on Lyra Sunstrider (Bard); tests measure the *delta* on `target_ac` via `/attack`. The bonus-action illusory-disguise property is GM-narrated. Pairs thematically with the v2.321.0 Hat of Disguise (also on Lyra).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_glamoured_adds_one_to_target_ac` | Inert baseline `target_ac` vs equipped → rises by exactly 1. Restored on teardown. |
+| `test_glamoured_no_attunement_required` | Equipped while `attuned` stays False → the +1 still applies (no attunement gate). Restored on teardown. |
+| `test_glamoured_unequip_drops_bonus` | Equip → +1; unequip → `target_ac` back to baseline. Restored on teardown. |
 
 ### `test_item_dwarven_plate.py`
 v2.302.0 — Dwarven Plate (RAW DMG p.150, very rare, NO attunement): "+2 bonus to AC while you wear this armor", riding the same `ac_bonus` substrate as the Elven Chain (consumed by `_read_target_ac`). Seeded as inert spare loot (unequipped) on Garrik Ironside (Fighter, no other `ac_bonus` item); tests measure the *delta* — read `target_ac` inert, PATCH equipped, assert +2 — via `/attack` with `override: True`, then restore.
