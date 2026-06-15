@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2917 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.323.0, 2026-06-15).
+**Total tests:** 2920 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.324.0, 2026-06-15).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3351,6 +3351,15 @@ v2.277.0 charged-items Phase 1 (closes the plan) — Wand of Enemy Detection (RA
 |------|-----------------|
 | `test_wand_of_enemy_detection_installs_buff` | A detect with Pip in an active battle → 200 with `action_kind: "buff"`, `buff_key: "enemy-detection"`, `charges_spent: 1`, `buff_installed: True`, `duration_rounds: 10`, `resource.current: 6` (7→6); the `enemy-detection` buff lands on Pip's combatant (verified via `GET /battle`). |
 | `test_wand_of_enemy_detection_empty_returns_409` | Drain the wand to 0 charges via `/sheet-fields`, then detect → 409 with `error: "insufficient_charges"` + `current: 0`. Teardown restores the snapshot. |
+
+### `test_use_item_action_wand_of_magic_detection.py`
+v2.324.0 — Wand of Magic Detection (RAW DMG p.210, uncommon, NO attunement). Pure clone of v2.277.0 Wand of Enemy Detection — only buff_key (`magic-detection`) and duration_rounds (100 = 10 min, mirroring Detect Magic's concentration) differ. 3 charges, regain 1d3 at dawn. Seeded on **Thalindra Moonwhisper** (Wizard, equipped, no attunement) with a 3-charge / 1d3 resource row.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_wand_of_magic_detection_installs_buff` | A detect with Thalindra in an active battle → 200 with `action_kind: "buff"`, `buff_key: "magic-detection"`, `charges_spent: 1`, `buff_installed: True`, `duration_rounds: 100`, `resource.current: 2` (3→2); the `magic-detection` buff lands on Thalindra's combatant (verified via `GET /battle`). |
+| `test_wand_of_magic_detection_empty_returns_409` | Drain the wand to 0 charges via `/sheet-fields`, then detect → 409 with `error: "insufficient_charges"` + `current: 0`. Teardown restores the snapshot. |
+| `test_wand_of_magic_detection_no_attunement_required` | The seed inventory entry has `equipped: True` and no `attuned` flag — the action still fires, matching the RAW no-attunement contract. |
 
 ### `test_use_item_action_horn_of_blasting.py`
 v2.271.0 charged-items Phase 3 (closes the phase) — Horn of Blasting (RAW DMG p.174, uncommon, no attunement). The first charge-less item action: `_use_item_action_horn_of_blasting` resolves a 30-ft-cone DC 15 CON save → 5d6 thunder + deafened on a fail, half + no deafen on a pass (deafen installs only on a failed save). No resource row, no charge gate, no `resource_update`. Krieger Stonefist (Barbarian) carries an equipped Horn of Blasting (no attunement).

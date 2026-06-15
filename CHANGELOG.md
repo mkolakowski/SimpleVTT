@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.324.0] - 2026-06-15 — "The Aurahound"
+
+**Schema version:** 69
+
+**Commit summary:** SRD magic-item drop-in — **Wand of Magic Detection** (RAW DMG p.210, uncommon, no attunement). 3 charges, regain 1d3 at dawn. Action: expend 1 charge → cast Detect Magic (30-ft radius, 10-min concentration buff). Pure clone of v2.277.0 Wand of Enemy Detection's `action_kind: "buff"` substrate — only buff_key + duration_rounds + summary text differ. Seeded equipped on Thalindra Moonwhisper (Wizard); three harness tests. Zero new engine code.
+
+**Description:** Lands on `_MAGIC_ITEM_ACTIONS["wand-of-magic-detection"]` with `requires_attunement: False` (RAW: uncommon wand, no attunement), `resource_key: "wand-of-magic-detection"`, and a `detect` action that routes through the shared `_use_item_action_buff` handler. Identical mechanics to Wand of Enemy Detection: spend 1 charge → install a self-buff for the duration. The buff_key (`magic-detection` vs `enemy-detection`) and the duration (100 rounds = 10 minutes, mirroring Detect Magic's concentration window, vs Enemy Detection's 10 rounds = 1 minute) are the only catalog deltas. The "what magic auras are within 30 ft" detail is GM-narrated in v1 — the engine surfaces the buff and the chat-card announce, the GM narrates what's revealed. Thalindra (Wizard) is the canonical wielder, and the wand needs no attunement, so it doesn't bump her already-over-cap attuned roster. MINOR — additive content drop-in on the existing buff-action substrate + a new resource row, no engine change, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ACTIONS["wand-of-magic-detection"]` (`app/routes/tabletop_routes.py`) — `{requires_attunement: False, resource_key: "wand-of-magic-detection", actions: {detect: {action_kind: "buff", buff_key: "magic-detection", duration_rounds: 100, ...}}}`. Wand of Enemy Detection clone.
+- `magic-detection` buff template (`{key, name, icon, duration_rounds: 100, concentration: True, effects: {detect_magic_ft: 30}, desc: ...}`) — sister of the existing `enemy-detection` template; consumed by the `_use_item_action_buff` install path.
+- `/use_item_action` dispatch: `wand-of-magic-detection` added to the slug-tuple that routes through `_use_item_action_buff` (alongside `gem-of-seeing` + `wand-of-enemy-detection`).
+- Demo seed: Thalindra Moonwhisper gains a **Wand of Magic Detection** (`_slug: wand-of-magic-detection`) at the inventory tail + a 3-charge `wand-of-magic-detection` resource row (1d3 long-rest recharge).
+- `tests/harness/test_use_item_action_wand_of_magic_detection.py` — 3 tests (happy-path buff install + charge tick, drained-wand 409, no-attunement contract).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2917 → 2920 (+3 Wand of Magic Detection tests); new `test_use_item_action_wand_of_magic_detection.py` section.
+
 ## [2.323.0] - 2026-06-15 — "The Polished Lie"
 
 **Schema version:** 69

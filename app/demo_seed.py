@@ -976,6 +976,19 @@ def _wizard_sheet(name: str) -> dict:
              "qty": 1, "consumable": True, "weight_lb": 5,
              "_slug": "tome-of-clear-thought",
              "desc": "Very rare wondrous item. Studying it for 48 hours over 6 days permanently increases your Intelligence score by 2 (and its maximum). The tome then loses its magic for a century. RAW DMG p.208."},
+            # v2.324.0 — Wand of Magic Detection (RAW DMG p.210, uncommon, NO
+            # attunement). 3 charges, regain 1d3 at dawn (long rest). Action:
+            # expend 1 charge → cast Detect Magic (30-ft radius, 10 min
+            # concentration). Clean clone of v2.277.0 Wand of Enemy Detection's
+            # `action_kind: "buff"` substrate — only buff_key + summary differ.
+            # No attunement, so it adds nothing to Thalindra's already-past-cap
+            # roster (she's at 5+ seed-attuned). On theme for an Evoker who
+            # surveys arcane auras around her. Paired with the
+            # wand-of-magic-detection resource row below.
+            {"name": "Wand of Magic Detection", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 1,
+             "_slug": "wand-of-magic-detection",
+             "desc": "Uncommon wand, no attunement. 3 charges. Action: expend 1 charge to cast Detect Magic (30-ft radius, 10-min concentration). Regains 1d3 charges at dawn (long rest). RAW DMG p.210."},
         ],
         "feats": [],
         # v2.16.1: Arcane Recovery counter (Wizard Lv 1 feature). Once per
@@ -1095,6 +1108,21 @@ def _wizard_sheet(name: str) -> dict:
                 "charge_recovery": "2d8+4",
                 "source": "item-staff-of-power",
                 "desc": "20 charges. Cast Fireball / Lightning Bolt (5 each → 10d6, 5th-level, DEX save) or Cone of Cold (5 → 8d8 cold, CON save) at your spell save DC; plus Globe / Hold Monster / Levitate / Magic Missile / Ray of Enfeeblement / Wall of Force. Regains 2d8+4 charges on long rest.",
+                "manual": False,
+            },
+            # v2.324.0 — Wand of Magic Detection (RAW DMG p.210, uncommon, no
+            # attunement). 3 starting charges, regains 1d3 at dawn (long rest)
+            # via the standard dice-expression recharge path. The action
+            # decrements 1 per Detect Magic activation, installing the
+            # `magic-detection` buff (100-round / 10-min duration). Paired
+            # with the Wand of Magic Detection inventory entry above.
+            {
+                "key": "wand-of-magic-detection",
+                "name": "Wand of Magic Detection",
+                "current": 3, "max": 3, "reset": "long",
+                "charge_recovery": "1d3",
+                "source": "item-wand-of-magic-detection",
+                "desc": "3 charges. Spend 1 to cast Detect Magic (30-ft radius, 10-min concentration). Regains 1d3 charges on long rest.",
                 "manual": False,
             },
         ],

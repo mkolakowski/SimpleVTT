@@ -1295,6 +1295,25 @@ _SPELL_BUFF_MAP: dict[str, dict] = {
         },
         "desc": "Sense the direction (not distance) of the nearest creature hostile to you within 60 ft for 1 minute — even invisible, ethereal, disguised, or hidden ones. Blocked by 1 ft of stone / 1 in. of common metal / a thin sheet of lead / 3 ft of wood or dirt. RAW: sustained by a bonus action each turn (GM-narrated).",
     },
+    # v2.324.0 — Magic Detection buff (Wand of Magic Detection action; RAW
+    # Detect Magic spell, PHB p.231). Sister of `enemy-detection` above. RAW
+    # Detect Magic: 30-ft radius, 10-minute concentration. The marker effect
+    # `detect_magic_ft` rides the same sensory-payload shape as
+    # `detect_hostiles_ft`. The actual "what magic auras are within 30 ft" is
+    # GM-narrated in v1 — the surfaced effect is the buff badge + duration
+    # countdown.
+    "magic-detection": {
+        "key": "magic-detection",
+        "name": "Magic Detection",
+        "icon": "🔮",
+        "duration_rounds": 100,  # 10 minutes @ 6 s/round
+        "duration_max": 100,
+        "concentration": True,  # RAW Detect Magic concentration
+        "effects": {
+            "detect_magic_ft": 30,
+        },
+        "desc": "For the duration, you sense the presence of magic within 30 ft. If you sense magic in this way, you can use your action to see a faint aura around any visible creature or object in the area that bears magic, and you learn its school of magic, if any. RAW PHB p.231 (Detect Magic).",
+    },
     "bless": {
         "key": "bless",
         "name": "Bless",
@@ -33809,6 +33828,35 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
                 "buff_key": "enemy-detection",
                 "duration_rounds": 10,  # 1 minute @ 6 s/round
                 "summary_effect": "enemy detection out to 60 ft for 1 minute",
+                "summary_verb": "activates",
+                "min_charges": 1,
+                "max_charges": 1,
+            },
+        },
+    },
+    # v2.324.0 — Wand of Magic Detection (RAW DMG p.210, uncommon, NO
+    # attunement). Pure clone of the v2.277.0 Wand of Enemy Detection
+    # `action_kind: "buff"` substrate — only `buff_key` and `summary_effect`
+    # change. 3 charges (regains 1d3 at dawn — the resource row carries the
+    # `1d3` recovery expression). Cast Detect Magic on activation (RAW): 30-ft
+    # radius detection of magic auras and magical-effect schools, 10-minute
+    # concentration buff. The buff just announces the spell-effect via the
+    # `feature_used` broadcast and installs a 100-round `magic-detection`
+    # tracker on the caster (10 min @ 6 s/round); the actual "what's magical
+    # within 30 ft" is GM-narrated (the engine doesn't carry magic-aura
+    # metadata on the map yet). No attunement → no impact on the wielder's
+    # 3/3 cap, so a casting PC like Thalindra can carry it freely.
+    "wand-of-magic-detection": {
+        "requires_attunement": False,
+        "resource_key": "wand-of-magic-detection",
+        "actions": {
+            "detect": {
+                "name": "Detect Magic (30 ft, 10 min)",
+                "feature_name": "🔮 Wand of Magic Detection",
+                "action_kind": "buff",
+                "buff_key": "magic-detection",
+                "duration_rounds": 100,  # 10 minutes @ 6 s/round
+                "summary_effect": "magic detection out to 30 ft for 10 minutes",
                 "summary_verb": "activates",
                 "min_charges": 1,
                 "max_charges": 1,
@@ -82859,7 +82907,13 @@ async def use_item_action(
             prompt_user=user,
             slug=slug,
         )
-    if slug in ("gem-of-seeing", "wand-of-enemy-detection"):
+    if slug in (
+        "gem-of-seeing", "wand-of-enemy-detection",
+        # v2.324.0 — Wand of Magic Detection lands here via the same
+        # `_use_item_action_buff` handler (its `detect` action_kind: "buff"
+        # installs a 100-round magic-detection self-buff for 1 charge).
+        "wand-of-magic-detection",
+    ):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_buff(
             db, campaign_id, char, item, sheet, catalog,
