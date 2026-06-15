@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.345.0] - 2026-06-15 — "The Fortunate Edge"
+
+**Schema version:** 69
+
+**Commit summary:** First magic-item-content commit off the v2.344.5 stub triage (Bucket B — passive numeric buff). **Luck Blade** (RAW DMG p.179, legendary, attunement) promoted from a v2.342.0 "Vault" catalog stub to an explicit mechanical entry: its "+1 bonus to saving throws while the sword is on your person" now rides the v2.158.74 `save_bonus` substrate (same path as Cloak of Protection / Robe of Stars). Seeded inert on Quan Reelstep; three harness tests.
+
+**Description:** A pure data drop-in on the mature save-bonus engine — `_equipped_item_effects` aggregates the `save_bonus` and the `/roll` save path appends it + the item-name attribution to the breakdown. The +1 attack/damage is baked onto the weapon row; the Luck reroll (1/turn) and the 1d4−1 wish charges remain GM-narrated in v1. Removed `luck-blade` from the bulk-stub `setdefault` loop so the explicit entry is the sole registration. **Triage note:** while implementing this I found the Bucket B "resistance trio" (`armor-of-resistance`, `ring-of-resistance`, `dragon-scale-mail`) + `ring-of-elemental-command` were *already* mechanically live via the per-instance `_resistance_type` rider (seeded + tested) — the v2.344.5 triage mis-counted them because the stub detector only inspected the static catalog payload, not the per-instance seed riders. They are not re-touched here; a follow-up will correct the triage figure. MINOR — additive item mechanic + content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_PASSIVES["luck-blade"]` — `[{save_bonus: 1, requires_attunement: True}]` explicit mechanical entry (promoted out of the Vault bulk-stub loop).
+- `tests/harness/test_item_luck_blade.py` — 3 tests (grants +1 save with source attribution when equipped+attuned; inert baseline control; attunement gate).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2994 → 2997 (+3 Luck Blade tests); new `test_item_luck_blade.py` section.
+
 ## [2.344.5] - 2026-06-15 — "The Sorted Hoard"
 
 **Schema version:** 69

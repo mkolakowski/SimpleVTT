@@ -33003,6 +33003,16 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "robe-of-stars": [
         {"save_bonus": 1, "requires_attunement": True},
     ],
+    # v2.345.0 — Luck Blade (RAW DMG p.179, legendary, attunement). The clean
+    # passive — "while the sword is on your person, you gain a +1 bonus to
+    # saving throws" — rides the v2.158.74 `save_bonus` substrate (same path as
+    # Cloak of Protection / Robe of Stars). The +1 attack/damage is baked onto
+    # the weapon row; the Luck reroll (1/turn) and the 1d4-1 wish charges are
+    # GM-narrated in v1. Promoted out of the v2.342.0 "Vault" bulk-stub loop
+    # into an explicit mechanical entry.
+    "luck-blade": [
+        {"save_bonus": 1, "requires_attunement": True},
+    ],
     # v2.212.0 — Belt of Giant Strength (RAW DMG p.155, requires
     # attunement; see docs/plans/str-override.md). While worn, your STR
     # *changes* to the belt's score — but only if higher (RAW). The
@@ -33744,7 +33754,8 @@ for _vault_slug, _vault_attune in [
     ("helm-of-teleportation", True), ("horn-of-valhalla", False),
     ("horseshoes-of-a-zephyr", False), ("horseshoes-of-speed", False),
     ("immovable-rod", False), ("instant-fortress", False),
-    ("lantern-of-revealing", False), ("luck-blade", True),
+    ("lantern-of-revealing", False),
+    # luck-blade promoted to an explicit mechanical entry (save_bonus) v2.345.0.
     ("manual-of-golems", False), ("medallion-of-thoughts", True),
     ("mithral-armor", False), ("necklace-of-prayer-beads", True),
     ("oil-of-etherealness", False), ("oil-of-sharpness", False),
