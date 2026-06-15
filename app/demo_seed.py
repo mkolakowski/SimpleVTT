@@ -2645,6 +2645,19 @@ def _bard_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True, "weight_lb": 3,
              "_slug": "crystal-ball",
              "desc": "Very rare wondrous item, attunement by a spellcaster. 3-lb polished crystal sphere. Action: cast Scrying (DC 17) through the orb. Higher-rarity variants (legendary) add detect thoughts / telepathy / read thoughts modes. RAW DMG p.159."},
+            # v2.336.0 — "The Escapist's Kit" bundle: Cape of the Mountebank
+            # (RAW DMG p.157, rare, no attunement). A brimstone-scented
+            # cape. Action: cast Dimension Door from it (1/dawn). On
+            # disappearing you leave a cloud of smoke and appear in a
+            # matching cloud at your destination (lightly obscures both
+            # spaces, dissipates at end of your next turn). Stub catalog
+            # row; the teleport + smoke are GM-narrated. Thematic on Lyra
+            # (College of Lore Bard — a showman's vanish-and-reappear cape
+            # is the perfect stage-magician escape).
+            {"name": "Cape of the Mountebank", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 1,
+             "_slug": "cape-of-the-mountebank",
+             "desc": "Rare wondrous item, no attunement. A brimstone-scented cape. Action: cast Dimension Door from it (1/dawn). You leave a cloud of smoke and appear in a matching cloud at the destination — both spaces are lightly obscured until the end of your next turn. RAW DMG p.157."},
         ],
         # v2.74.0 Phase 4a — Defensive Duelist feat for Lyra. RAW
         # (PHB p.166): reaction-based +PB AC against one melee hit
@@ -4803,6 +4816,20 @@ def _monk_drunken_sheet(name: str) -> dict:
              "weight_lb": 0,
              "_slug": "feather-token",
              "desc": "Rare wondrous item, no attunement. A tiny stylized feather (one of six types: anchor, bird, fan, swan boat, tree, whip). Action: speak the command word — the token vanishes and triggers its one-shot effect (rooting a ship, calling a giant bird, summoning a wind gust, planting an oak, etc.). RAW DMG p.188."},
+            # v2.336.0 — "The Escapist's Kit" bundle: Dust of Disappearance
+            # (RAW DMG p.166, uncommon, no attunement). A pinch of fine
+            # powder in a small packet. Action: throw the dust into the air
+            # — you and everything within 10 ft of you become invisible for
+            # 2d4 minutes (the duration is shared; attacking or casting ends
+            # it for the attacker). Consumed on use. Stub catalog row; the
+            # invisibility burst is GM-narrated. Thematic on Quan (Drunken
+            # Master Monk — a vanishing-powder bolthole fits the elusive,
+            # improvisational Drunken style).
+            {"name": "Dust of Disappearance", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "consumable": True,
+             "weight_lb": 0,
+             "_slug": "dust-of-disappearance",
+             "desc": "Uncommon wondrous item, no attunement. A packet of fine powder. Action: throw the dust into the air — you and each creature/object within 10 ft become invisible for 2d4 minutes. The duration is shared; attacking or casting a spell ends the invisibility for that creature. Consumed on use. RAW DMG p.166."},
         ],
         "feats": [],
         "resources": [
@@ -4997,6 +5024,18 @@ def _monk_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 5,
              "_slug": "apparatus-of-the-crab",
              "desc": "Legendary wondrous item, no attunement. 5-lb sealed iron barrel (2 ft × 1 ft) that transforms via a rune-control surface into a 12 × 6 × 8-ft armored crab-walker submersible — AC 20, 200 HP, swim 30, walk 30, 11 levers for sealed propulsion / claws / lift / lights / hatch. Holds 2 medium creatures (10 days of air). RAW DMG p.151."},
+            # v2.336.0 — "The Escapist's Kit" bundle: Wind Fan (RAW DMG
+            # p.213, uncommon, no attunement). A woven-silk fan. Action:
+            # cast Gust of Wind (save DC 13) from it. Once used, shouldn't
+            # be used again until the next dawn; each extra use before then
+            # has a cumulative 20% chance of tearing into useless tatters.
+            # Stub catalog row; the cast + tatter-risk are GM-narrated.
+            # Thematic on Kael (Wood Elf Monk — a wind-fan disengage tool
+            # fits an acrobatic Open Hand monk who darts in and out).
+            {"name": "Wind Fan", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 1,
+             "_slug": "wind-fan",
+             "desc": "Uncommon wondrous item, no attunement. A woven-silk fan. Action: cast Gust of Wind (save DC 13) from it. Once used, shouldn't be used again until the next dawn; each extra use before then has a cumulative 20% chance to tear the fan into useless nonmagical tatters. RAW DMG p.213."},
         ],
         "feats": [],
         # v2.18.0: Ki counter (max = monk level). Refreshes on short rest.

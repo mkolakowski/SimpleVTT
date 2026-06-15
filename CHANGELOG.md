@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.336.0] - 2026-06-15 — "The Escapist's Kit"
+
+**Schema version:** 69
+
+**Commit summary:** Ninth SRD magic-item **bundle** — three escape/evasion wondrous items shipped together as catalog-stub passives: **Wind Fan** (DMG p.213), **Cape of the Mountebank** (DMG p.157), **Dust of Disappearance** (DMG p.166). Same minimal `requires_attunement: False` stub pattern, seeded on thematic carriers (Kael / Lyra / Quan); three smoke tests in `test_escapists_kit.py`.
+
+**Description:** Continues the bundling pattern. Each item carries a 1/day-cast or one-shot evasion mechanic (Gust of Wind, Dimension Door, group invisibility burst) GM-narrated in v1. Dust of Disappearance is seeded `consumable: True` (one-shot per RAW). Distribution: Kael's Wind Fan disengage gust, Lyra's stage-magician vanish cape, Quan's Drunken-Master vanishing dust. MINOR — additive content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`): three new stub catalog rows — `wind-fan`, `cape-of-the-mountebank`, `dust-of-disappearance`.
+- Demo seed: Kael Brightleaf gains a **Wind Fan**, Lyra Sunstrider gains a **Cape of the Mountebank**, Quan Reelstep gains a **Dust of Disappearance** (consumable) — each appended at the inventory tail.
+- `tests/harness/test_escapists_kit.py` — 3 smoke tests; the Dust test additionally asserts `consumable: True`.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2954 → 2957 (+3 Escapist's Kit tests); new `test_escapists_kit.py` section.
+
 ## [2.335.0] - 2026-06-15 — "The Soul Reaver"
 
 **Schema version:** 69

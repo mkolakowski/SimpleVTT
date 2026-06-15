@@ -32845,6 +32845,21 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "candle-of-invocation": [
         {"requires_attunement": True},
     ],
+    # v2.336.0 — "The Escapist's Kit" bundle (ninth stub bundle). Three SRD
+    # escape / evasion wondrous items shipped as catalog-stub passives:
+    # Wind Fan (1/day Gust of Wind), Cape of the Mountebank (1/day Dimension
+    # Door), Dust of Disappearance (one-shot invisibility burst). Their
+    # 1/day-cast / one-shot mechanics are GM-narrated in v1; the catalog
+    # rows register the slugs.
+    "wind-fan": [
+        {"requires_attunement": False},
+    ],
+    "cape-of-the-mountebank": [
+        {"requires_attunement": False},
+    ],
+    "dust-of-disappearance": [
+        {"requires_attunement": False},
+    ],
     # v2.209.0 — Stone of Good Luck (Luckstone, RAW DMG p.207,
     # uncommon, attunement). While the stone is on your person you gain
     # +1 to ability checks AND saving throws. The `save_bonus` rides the
