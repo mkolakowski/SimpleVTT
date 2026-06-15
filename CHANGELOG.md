@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.348.0] - 2026-06-15 — "The Sapping Staff"
+
+**Schema version:** 69
+
+**Commit summary:** Finish **Staff of Withering**'s save rider. A new `on_hit_save` effect variant `ability_disadvantage` installs a condition buff carrying dict-shaped `effects.disadvantage_on` on a failed save; Staff of Withering now points at it (DC 15 CON save or "withered" — disadvantage on STR/CON checks + saves for 1 hour). Builds on the v2.347.0 generalized `disadvantage_on` `/roll` intercept.
+
+**Description:** The dispatcher (`_apply_magic_item_on_hit_save_effect`) gains an `ability_disadvantage` branch that builds a `withered` condition buff whose `effects` is a DICT (`{disadvantage_on: [...]}`) — distinct from the frighten/prone buffs whose effects are display-only string lists — and lets `_resolve_feature_save` install it on a failed NPC save (no damage tied; the +2d10 necrotic rides the separate section-6c always-on rider). On a **PC** target the markers flow through the v2.347.0 generalized reader and impose disadvantage on its `/roll` STR/CON checks + saves; on an **NPC** target the buff is installed + visible for the GM (NPCs don't roll via `/roll`). The 3-charge usage limit stays GM-narrated. Closes Staff of Withering to RAW-ish on the `/roll` path. **Still filed:** wiring `disadvantage_on` into the `/cast_spell` save-construction sites so spell-prompted PC saves also roll at disadvantage. MINOR — additive on_hit_save variant + item completion + tests, no schema change.
+
+### Added
+- `effect: "ability_disadvantage"` branch in `_apply_magic_item_on_hit_save_effect` (`app/routes/tabletop_routes.py`) — installs a dict-`effects` `disadvantage_on` condition buff on a failed save.
+- `_MAGIC_ITEM_ATTACK_RIDERS["staff-of-withering"].on_hit_save` — `{effect: "ability_disadvantage", dc: 15, ability: "CON", condition_key: "withered", disadvantage_on: ["str_check","con_check","str_save","con_save"], duration_rounds: 600}`.
+- `tests/harness/test_item_staff_of_withering.py`: +2 tests (the DC 15 CON save feature_used fires on a hit vs a Bandit; a failed save installs the `withered` buff carrying the STR/CON disadvantage markers).
+
+### Changed
+- Demo seed: Magnus's Staff of Withering attack-row desc updated — the save rider is wired (was GM-narrated).
+- `docs/test-harness-coverage.md`: harness total 3002 → 3004 (+2 Staff of Withering save tests); section updated.
+
 ## [2.347.0] - 2026-06-15 — "The Wider Frailty"
 
 **Schema version:** 69

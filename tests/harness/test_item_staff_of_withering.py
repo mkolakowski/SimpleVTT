@@ -134,6 +134,138 @@ async def test_staff_of_withering_necrotic_rider_fires(gm_client, magnus):
         await _patch_inventory(gm_client, magnus["id"], snapshot)
 
 
+async def _seed_dice(gm_client, seed):
+    r = await gm_client.post("/api/test/dice/seed", json={"seed": seed})
+    assert r.status_code == 200, r.text
+
+
+async def _bandit_template_id(gm_client):
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    assert r.status_code == 200, r.text
+    bandit = next((t for t in r.json() if t.get("name") == "Bandit"), None)
+    assert bandit is not None, "Bandit template missing from the demo seed"
+    return bandit["id"]
+
+
+def _mkc_tpl(cid, name, template_id, hp=60):
+    c = _mkc(cid, None, name=name)
+    c["hp_current"] = c["hp_max"] = hp
+    c["token_template_id"] = template_id
+    return c
+
+
+def _save_msgs(gm_ws):
+    return [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "item-staff-of-withering-save"
+    ]
+
+
+async def test_staff_of_withering_save_fires_on_hit(gm_client, gm_ws, magnus):
+    """v2.348.0: a hit vs a Bandit triggers the DC 15 CON save feature_used
+    (source item-staff-of-withering-save), proving the ability_disadvantage
+    on_hit_save dispatch. The Bandit template makes the NPC save roll
+    inline."""
+    template_id = await _bandit_template_id(gm_client)
+    data = await _sheet_json(gm_client, magnus["id"])
+    inv = list((data.get("sheet") or {}).get("inventory") or [])
+    snapshot = [dict(it) if isinstance(it, dict) else it for it in inv]
+    idx = await _staff_attack_idx(gm_client, magnus["id"])
+    try:
+        await _patch_inventory(
+            gm_client, magnus["id"], _set_staff(inv, equipped=True, attuned=True)
+        )
+        await _seed_dice(gm_client, 7)
+        m_cid = f"tok_sow3_magnus_{magnus['id']}"
+        tgt_cid = "tok_sow3_target"
+        await _seed_battle(gm_client, [
+            _mkc(m_cid, magnus["id"], name=magnus["name"]),
+            _mkc_tpl(tgt_cid, "Bandit", template_id),
+        ])
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": magnus["id"],
+                "attack_index": idx,
+                "target_combatant_id": tgt_cid,
+                "override": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        msgs = _save_msgs(gm_ws)
+        assert msgs, (
+            "Staff of Withering CON-save feature_used did not fire on a hit. "
+            f"sources: {[(m.get('data') or {}).get('source') for m in gm_ws.buffered('feature_used')]}"
+        )
+        data2 = msgs[-1].get("data") or {}
+        assert data2.get("dc") == 15
+        assert data2.get("ability") == "CON"
+    finally:
+        await _seed_dice(gm_client, None)
+        await _patch_inventory(gm_client, magnus["id"], snapshot)
+
+
+async def test_staff_of_withering_withers_on_failed_save(gm_client, magnus):
+    """v2.348.0: on a FAILED save, the Bandit gains the `withered` buff
+    carrying `effects.disadvantage_on` with the STR/CON check+save markers
+    (the v2.347.0 generalized intercept reads these). Sweep seeds until a
+    Bandit (CON 11, +0) fails the DC 15 save, then verify via GET /battle."""
+    template_id = await _bandit_template_id(gm_client)
+    data = await _sheet_json(gm_client, magnus["id"])
+    inv = list((data.get("sheet") or {}).get("inventory") or [])
+    snapshot = [dict(it) if isinstance(it, dict) else it for it in inv]
+    idx = await _staff_attack_idx(gm_client, magnus["id"])
+    withered_found = False
+    try:
+        await _patch_inventory(
+            gm_client, magnus["id"], _set_staff(inv, equipped=True, attuned=True)
+        )
+        for seed in range(0, 200):
+            await _seed_dice(gm_client, seed)
+            m_cid = f"tok_sow4_magnus_{magnus['id']}_{seed}"
+            tgt_cid = f"tok_sow4_target_{seed}"
+            await _seed_battle(gm_client, [
+                _mkc(m_cid, magnus["id"], name=magnus["name"]),
+                _mkc_tpl(tgt_cid, "Bandit", template_id),
+            ])
+            resp = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/attack",
+                json={
+                    "character_id": magnus["id"],
+                    "attack_index": idx,
+                    "target_combatant_id": tgt_cid,
+                    "override": True,
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            battle = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/battle")
+            combatants = (
+                ((battle.json() or {}).get("battle") or {}).get("combatants") or []
+            )
+            me = next((c for c in combatants if c.get("id") == tgt_cid), None)
+            if me is None:
+                continue
+            wbuff = next(
+                (b for b in (me.get("buffs") or [])
+                 if isinstance(b, dict) and b.get("key") == "withered"),
+                None,
+            )
+            if wbuff is not None:
+                markers = ((wbuff.get("effects") or {}).get("disadvantage_on") or [])
+                assert "con_save" in markers and "str_check" in markers, (
+                    f"withered buff missing disadvantage markers: {wbuff!r}"
+                )
+                withered_found = True
+                break
+        assert withered_found, (
+            "Across seeds 0..199 the Bandit never failed the DC 15 CON save to "
+            "get withered — the ability_disadvantage install may be broken."
+        )
+    finally:
+        await _seed_dice(gm_client, None)
+        await _patch_inventory(gm_client, magnus["id"], snapshot)
+
+
 async def test_staff_of_withering_requires_attunement(gm_client, magnus):
     """Attunement gate: equipped-but-unattuned, the +2d10 necrotic rider
     does NOT fire. Restores the seed inventory on teardown."""

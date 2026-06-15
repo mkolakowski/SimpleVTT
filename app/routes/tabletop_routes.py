@@ -31171,6 +31171,34 @@ async def _apply_magic_item_on_hit_save_effect(
             ],
             "source": f"item-{attack_slug}",
         }
+    elif effect == "ability_disadvantage":
+        # v2.348.0 — Staff of Withering (RAW DMG p.202): on a hit (and a
+        # failed DC 15 CON save) the target has disadvantage on STR/CON
+        # ability checks AND saving throws for 1 hour. Installs a condition
+        # buff whose `effects` is a DICT carrying `disadvantage_on` (the
+        # markers the v2.347.0 generalized `_pc_has_ability_disadvantage`
+        # reader consults at /roll) — distinct from the frighten/prone
+        # buffs whose `effects` are display-only string lists. No damage is
+        # tied to the save; the +2d10 necrotic rides the separate section-6c
+        # always-on dice rider. On an NPC target the buff is installed +
+        # visible for the GM; a PC target gets the full mechanical
+        # disadvantage on its /roll checks/saves.
+        markers = [
+            str(m).strip().lower()
+            for m in (save_spec.get("disadvantage_on") or [])
+            if str(m).strip()
+        ]
+        ckey = str(save_spec.get("condition_key") or "withered").strip()
+        condition_buff = {
+            "key": ckey,
+            "name": save_spec.get("condition_label", ckey.title()),
+            "icon": save_spec.get("condition_icon", "🥀"),
+            "duration_rounds": duration_rounds,
+            "duration_max": duration_rounds,
+            "concentration": False,
+            "effects": {"disadvantage_on": markers},
+            "source": f"item-{attack_slug}",
+        }
     elif effect == "damage":
         # No condition buff — the damage is applied below based on
         # the save result.
@@ -35145,6 +35173,25 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
         "dice": "2d10",
         "damage_type": "necrotic",
         "requires_attunement": True,
+        # v2.348.0 — the DC 15 CON save-or-disadvantage rider, now that the
+        # v2.347.0 `disadvantage_on` intercept covers STR/CON checks AND
+        # saves. On a hit the target makes a DC 15 CON save or is "withered"
+        # (disadvantage on STR/CON checks + saves) for 1 hour (≈600 rounds).
+        # The +2d10 necrotic above (section 6c) is unconditional; the save
+        # only gates the debuff. The 3-charge usage limit stays GM-narrated.
+        "on_hit_save": {
+            "effect": "ability_disadvantage",
+            "dc": 15,
+            "ability": "CON",
+            "label": "Staff of Withering",
+            "duration_rounds": 600,
+            "condition_key": "withered",
+            "condition_label": "Withered",
+            "condition_icon": "🥀",
+            "disadvantage_on": [
+                "str_check", "con_check", "str_save", "con_save",
+            ],
+        },
     },
     # v2.159.1 — Phase 8a: first ammunition-shape catalog row. Arrow of
     # Slaying (RAW DMG p.151) is a magic arrow keyed to a specific

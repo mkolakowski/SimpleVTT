@@ -3228,7 +3228,7 @@ def _warlock_sheet(name: str) -> dict:
             {"name": "Staff of Withering", "attack_bonus": "+4", "damage": "1d6+1",
              "damage_type": "bludgeoning", "range": "5 ft",
              "_slug": "staff-of-withering",
-             "desc": "Rare quarterstaff, attunement. On a hit, +2d10 necrotic (RAW: 1 of 3 charges; charge limit GM-narrated). RAW the target also makes a DC 15 CON save or has disadvantage on STR/CON checks + saves for 1 hour — GM-narrated in v1."},
+             "desc": "Rare quarterstaff, attunement. On a hit, +2d10 necrotic (RAW: 1 of 3 charges; charge limit GM-narrated) AND the target makes a DC 15 CON save or is 'withered' — disadvantage on STR/CON checks + saves for 1 hour (v2.348.0; applies mechanically to a PC target's /roll checks/saves, installed + visible on NPC targets)."},
         ],
         # Warlock spells: known list (not prepared). Lv 5 = 6 known
         # spells + 3 known cantrips. All slots at L3 (Pact Magic table).
