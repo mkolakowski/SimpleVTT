@@ -33848,7 +33848,9 @@ for _vault_slug, _vault_attune in [
 for _rem_slug, _rem_attune in [
     ("bead-of-force", False), ("berserker-axe", True),
     ("hammer-of-thunderbolts", False), ("oathbow", True),
-    ("pipes-of-haunting", False), ("sword-of-wounding", True),
+    ("sword-of-wounding", True),
+    # pipes-of-haunting promoted to a charge-cast action (radius frighten)
+    # in v2.350.0 — registered via `_MAGIC_ITEM_ACTIONS`.
     ("trident-of-fish-command", True),
     ("staff-of-the-magi", True), ("staff-of-the-python", True),
     ("staff-of-the-woodlands", True),
@@ -34487,6 +34489,35 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
                     "must spend its turns trying to move away from you",
                 ],
                 "feature_name": "😱 Mace of Terror",
+            },
+        },
+    },
+    # v2.350.0 — Pipes of Haunting (RAW DMG p.184, uncommon, NO attunement).
+    # First Bucket-A charge-cast item off the v2.344.5 triage. A near-exact
+    # clone of the Mace of Terror radius-frighten action on the generalized
+    # Wand of Fear handler: 3 charges; an action plays an eerie tune — each
+    # creature within 30 ft makes a DC 15 WIS save or is frightened for 1
+    # minute. RAW requires proficiency with wind instruments (GM-narrated,
+    # no engine gate). No attunement.
+    "pipes-of-haunting": {
+        "requires_attunement": False,
+        "resource_key": "pipes-of-haunting",
+        "actions": {
+            "play-haunting-tune": {
+                "name": "Play Haunting Tune (30-ft radius)",
+                "save_dc": 15,
+                "save_ability": "WIS",
+                "min_charges": 1,
+                "max_charges": 1,
+                "duration_rounds": 10,
+                "condition_key": "frightened",
+                "condition_label": "Frightened",
+                "condition_icon": "😱",
+                "condition_effects": [
+                    "disadvantage on ability checks / attacks while it can see you",
+                    "must spend its turns trying to move away from you",
+                ],
+                "feature_name": "😱 Pipes of Haunting",
             },
         },
     },
@@ -83725,7 +83756,12 @@ async def use_item_action(
                 "gem-of-brightness",
                 # v2.340.0 — Mace of Terror — a Wand of Fear clone (WIS →
                 # frightened, 3 charges) on the same save-condition handler.
-                "mace-of-terror"):
+                "mace-of-terror",
+                # v2.350.0 — Pipes of Haunting — a Mace of Terror clone
+                # (30-ft radius WIS → frightened, 3 charges) but NO
+                # attunement (RAW needs wind-instrument proficiency, which
+                # is GM-narrated).
+                "pipes-of-haunting"):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_wand_of_fear(
             db, campaign_id, char, item, sheet, catalog,

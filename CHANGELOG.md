@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.350.0] - 2026-06-15 — "The Haunting Refrain"
+
+**Schema version:** 69
+
+**Commit summary:** First **Bucket-A** (charge-cast) magic-item commit off the v2.344.5 stub triage. **Pipes of Haunting** (RAW DMG p.184, uncommon, NO attunement) promoted from a v2.344.0 "Armory's Remainder" catalog stub to a charge-cast action through the generalized `_use_item_action_wand_of_fear` save-condition handler — a near-verbatim Mace of Terror clone (30-ft radius, DC 15 WIS save or frightened 1 min, 3 charges). Seeded on Lyra Sunstrider with a charge resource; two harness tests.
+
+**Description:** Zero new engine code — the action runs on the same `/use_item_action` → Wand of Fear handler path as Mace of Terror / Wand of Paralysis / Staff of Charming / Gem of Brightness. Added the `pipes-of-haunting` entry to `_MAGIC_ITEM_ACTIONS` (3-charge resource, WIS DC 15, frightened condition) and the slug to the handler's dispatch tuple. Promoted the slug out of the Armory's Remainder passive `setdefault` loop, and out of the bulk `_vault_loot` seed into an explicit equipped item on Lyra paired with a `pipes-of-haunting` charge resource (3/3, regain 1d3 at dawn). **v1 simplifications (GM-narrated):** RAW requires proficiency with wind instruments (no engine gate; Lyra is a Bard, proficient anyway); the 30-ft radius is cosmetic — the handler resolves a save per GM-picked `target_combatant_ids`. No attunement (the `/use_item_action` path doesn't gate on attuned). MINOR — additive item action + content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ACTIONS["pipes-of-haunting"]` — `{requires_attunement: False, resource_key: "pipes-of-haunting", actions: {play-haunting-tune: {save_dc: 15, save_ability: WIS, frightened, …}}}`; slug added to the Wand of Fear handler dispatch tuple.
+- Demo seed: explicit equipped **Pipes of Haunting** on Lyra Sunstrider + a `pipes-of-haunting` charge resource (3/3, 1d3/dawn).
+- `tests/harness/test_use_item_action_pipes_of_haunting.py` — 2 tests (haunting tune at 2 targets → DC 15 WIS, charges 3→2, both ids in results; empty pipes → 409 insufficient_charges).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3006 → 3008 (+2 Pipes of Haunting tests); new `test_use_item_action_pipes_of_haunting.py` section.
+
 ## [2.349.0] - 2026-06-15 — "The Striking Staff"
 
 **Schema version:** 69

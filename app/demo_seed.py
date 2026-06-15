@@ -2617,6 +2617,17 @@ def _bard_sheet(name: str) -> dict:
              "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
              "_slug": "potion-of-healing",
              "desc": "Drink to regain 2d4+2 HP. RAW: action. Campaign setting can flip to bonus action."},
+            # v2.350.0 — Pipes of Haunting (RAW DMG p.184, uncommon, NO
+            # attunement). Promoted out of the v2.344.0 Armory's Remainder
+            # bulk loot into an explicit equipped item paired with the
+            # `pipes-of-haunting` charge resource above. The radius-frighten
+            # action runs through the generalized Wand of Fear handler. RAW
+            # wind-instrument proficiency is GM-narrated (Lyra, a Bard, is
+            # proficient anyway). On-theme for a performer.
+            {"name": "Pipes of Haunting", "type": "wondrous", "qty": 1,
+             "equippable": True, "equipped": True,
+             "_slug": "pipes-of-haunting",
+             "desc": "Uncommon wondrous item, no attunement (wind-instrument proficiency, GM-narrated). 3 charges (regain 1d3 at dawn). Action: expend 1 to play an eerie tune — each creature within 30 ft makes a DC 15 WIS save or is frightened of you for 1 minute. RAW DMG p.184."},
             # v2.279.0 — Cloak of Arachnida (RAW DMG p.158, very rare,
             # attunement). Spare loot: equipped=False / attuned=False because
             # Lyra is already at the RAW 3-item attunement cap (Cloak of
@@ -2805,6 +2816,19 @@ def _bard_sheet(name: str) -> dict:
                 "source": "bard Lv 1 / Lv 5 (Font of Inspiration)",
                 "class_slug": "bard",
                 "desc": "Bonus action — pick an ally within 60 ft; they gain a Bardic Inspiration d8 for 10 minutes (add to one attack, check, or save). Refreshes on short rest from Lv 5.",
+                "manual": False,
+            },
+            # v2.350.0 — Pipes of Haunting charge pool (RAW DMG p.184): 3
+            # charges, regain 1d3 at dawn (long rest). The shared save-
+            # condition wand handler decrements 1 per Haunting Tune.
+            {
+                "key": "pipes-of-haunting",
+                "name": "Pipes of Haunting",
+                "current": 3, "max": 3, "reset": "long",
+                "charge_recovery": "1d3",
+                "source": "magic item — Pipes of Haunting",
+                "class_slug": "item",
+                "desc": "3 charges; expend 1 (action) to play an eerie tune — each creature within 30 ft makes a DC 15 WIS save or is frightened 1 min. Regain 1d3 at dawn. RAW needs wind-instrument proficiency (GM-narrated).",
                 "manual": False,
             },
             # v2.207.0 — Staff of Charming charge pool (RAW DMG p.201):
@@ -6767,7 +6791,6 @@ def seed_characters(
         ("Krieger Stonefist", "berserker-axe", "Berserker Axe", "weapon", "Rare, attunement (cursed). +1 attack/damage; while attuned your HP max increases by 1 per level. Cursed: on taking damage, DC 15 WIS save or go berserk (attack the nearest creature). RAW DMG p.155."),
         ("Garrik Ironside", "hammer-of-thunderbolts", "Hammer of Thunderbolts", "weapon", "Legendary. +1 maul; with a Belt of Giant Strength + Gauntlets of Ogre Power, STR becomes 20 and crits hurl a thunderclap (DC 17 CON or stunned). Throw to kill a giant (DC 17 CON). RAW DMG p.173."),
         ("Rowan Quickbow", "oathbow", "Oathbow", "weapon", "Very rare, attunement (longbow). Speak the command word to declare a sworn enemy; vs that enemy you have advantage on attacks, +3d6 piercing, and ignore their resistance — until it drops or you sleep. RAW DMG p.183."),
-        ("Lyra Sunstrider", "pipes-of-haunting", "Pipes of Haunting", "magic", "Uncommon (wind-instrument proficiency). 3 charges. Action: play an eerie tune — each chosen creature within 30 ft makes a DC 15 WIS save or is frightened for 1 min. RAW DMG p.184."),
         ("Sir Caelan Lightbringer", "sword-of-wounding", "Sword of Wounding", "weapon", "Rare, attunement (any sword). Once per turn on a hit you can wound the target: at the start of each of its turns it takes 1d4 necrotic (DC 15 CON to end), and HP lost this way returns only on a rest. RAW DMG p.207."),
         ("Mira Greenleaf", "trident-of-fish-command", "Trident of Fish Command", "weapon", "Uncommon, attunement. 3 charges. Action: expend 1 to cast dominate beast (DC 15) on a beast with an innate swimming speed. RAW DMG p.208."),
         ("Mira Greenleaf", "staff-of-the-python", "Staff of the Python", "weapon", "Very rare, attunement. Action: throw the staff to become a giant constrictor snake under your control for up to 1 hour (or until 0 HP); a command word reverts it. RAW DMG p.202."),
