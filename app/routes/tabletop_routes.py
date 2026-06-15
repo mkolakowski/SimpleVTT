@@ -16905,18 +16905,35 @@ async def roll_dice(
             expr = expr.replace("1d20", "2d20kh1", 1)
             _rage_str_check_fired = True
 
-    # v2.199.0 — Potion of Diminution STR-check disadvantage. The inverse
-    # of the rage/Growth STR-check advantage above: when the rolling PC
-    # carries a buff with `str_check` in its `effects.disadvantage_on`
-    # (the `diminution` template), swap 1d20 → 2d20kl1. RAW PHB p.173 —
-    # advantage and disadvantage cancel: if the advantage block just
-    # expanded the expr to 2d20kh1, revert to a straight 1d20 (and clear
-    # the advantage-fired flag so its broadcast doesn't fire either).
+    # v2.199.0 / generalized v2.347.0 — ability check/save disadvantage.
+    # The inverse of the rage/Growth advantage above, now for ANY ability
+    # marker (STR/CON/… checks AND saves) so items like Staff of Withering
+    # ("disadvantage on STR/CON checks and saves") and Diminution (STR
+    # checks + saves) compose through one intercept. Derive the marker
+    # from the roll's ability + check/save kind, then swap 1d20 → 2d20kl1
+    # when the rolling PC carries a buff with that marker in its
+    # `effects.disadvantage_on`. RAW PHB p.173 — advantage and
+    # disadvantage cancel: if the advantage block just expanded the expr
+    # to 2d20kh1, revert to a straight 1d20 (and clear the advantage-fired
+    # flag so its broadcast doesn't fire either).
+    _dis_marker = ""
+    if _char is not None:
+        if stat_key_lc.endswith("_save"):
+            _ab = stat_key_lc.split("_")[0]
+            if len(_ab) == 3:
+                _dis_marker = f"{_ab}_save"
+        elif stat_ability_raw and "attack" not in stat_key_lc:
+            _dis_marker = f"{stat_ability_raw.lower()}_check"
+        elif stat_key_lc.endswith("_check"):
+            _ab = stat_key_lc.split("_")[0]
+            if len(_ab) == 3:
+                _dis_marker = f"{_ab}_check"
     _str_check_dis_fired = False
+    _dis_marker_fired = ""
     if (
-        _is_str_check_roll
+        _dis_marker
         and _char is not None
-        and _pc_has_str_check_disadvantage(campaign_id, _char.id)
+        and _pc_has_ability_disadvantage(campaign_id, _char.id, _dis_marker)
     ):
         if "2d20kh1" in expr:
             expr = expr.replace("2d20kh1", "1d20", 1)
@@ -16924,6 +16941,7 @@ async def roll_dice(
         elif "1d20" in expr and "2d20kl1" not in expr:
             expr = expr.replace("1d20", "2d20kl1", 1)
             _str_check_dis_fired = True
+            _dis_marker_fired = _dis_marker
 
     # v2.158.46 — Tides of Chaos (Wild Magic Sorcerer Lv 1+, PHB
     # p.103) advantage consumer. Phase 2 read site for the v2.99.227
@@ -17502,9 +17520,11 @@ async def roll_dice(
     # roll result. The d20 swap happened pre-roll above.
     if _rage_str_check_fired and _char is not None:
         await _broadcast_rage_str_check_advantage(campaign_id, _char)
-    # v2.199.0 — Potion of Diminution STR-check disadvantage broadcast.
+    # v2.199.0 / v2.347.0 — ability check/save disadvantage broadcast.
     if _str_check_dis_fired and _char is not None:
-        await _broadcast_str_check_disadvantage(campaign_id, _char)
+        await _broadcast_ability_disadvantage(
+            campaign_id, _char, _dis_marker_fired,
+        )
     return {"ok": True, "total": rec.total, "breakdown": rec.breakdown,
             "roll_state_applied": roll_state_applied or None}
 
@@ -41429,17 +41449,21 @@ def _str_advantage_buff_label(
     return ("Rage", "🦬")
 
 
-def _pc_has_str_check_disadvantage(
-    campaign_id: int, char_id: "int | None",
+def _pc_has_ability_disadvantage(
+    campaign_id: int, char_id: "int | None", marker: str,
 ) -> bool:
-    """v2.199.0 — Potion of Diminution. Mirror of
-    `_pc_has_rage_str_check_advantage` but on the inverse marker:
-    returns True when the PC's combatant carries any active buff with
-    ``str_check`` in its ``effects.disadvantage_on`` list. Caller (the
-    `/roll` endpoint) gates this on the roll being a STR check before
-    calling. The reduce effect of enlarge/reduce is the first source.
+    """v2.347.0 — generic ability check/save disadvantage reader.
+    Returns True when the PC's combatant carries any active buff with
+    ``marker`` in its ``effects.disadvantage_on`` list, where ``marker``
+    is one of ``"{ability}_check"`` / ``"{ability}_save"`` (e.g.
+    ``"str_check"``, ``"con_save"``). Generalized from the v2.199.0
+    str-check-only reader so items like Staff of Withering
+    ("disadvantage on STR/CON checks AND saves") compose through one
+    intercept. The caller (the `/roll` endpoint) derives the marker
+    from the roll's ability + check/save kind before calling.
     """
-    if not char_id:
+    marker = (marker or "").strip().lower()
+    if not char_id or not marker:
         return False
     state = hub.get_battle(campaign_id)
     if not state:
@@ -41454,10 +41478,19 @@ def _pc_has_str_check_disadvantage(
             if not isinstance(effects, dict):
                 continue
             dis = effects.get("disadvantage_on") or []
-            if isinstance(dis, list) and "str_check" in dis:
+            if isinstance(dis, list) and marker in dis:
                 return True
         return False
     return False
+
+
+def _pc_has_str_check_disadvantage(
+    campaign_id: int, char_id: "int | None",
+) -> bool:
+    """v2.199.0 — back-compat wrapper (Potion of Diminution STR check).
+    Delegates to the v2.347.0 generic `_pc_has_ability_disadvantage`
+    with the ``str_check`` marker."""
+    return _pc_has_ability_disadvantage(campaign_id, char_id, "str_check")
 
 
 def _str_disadvantage_buff_label(
@@ -41490,32 +41523,50 @@ def _str_disadvantage_buff_label(
     return ("Diminution", "🤏")
 
 
-async def _broadcast_str_check_disadvantage(
-    campaign_id: int, char: "Character | None",
+_ABILITY_FULL_NAME = {
+    "str": "Strength", "dex": "Dexterity", "con": "Constitution",
+    "int": "Intelligence", "wis": "Wisdom", "cha": "Charisma",
+}
+
+
+async def _broadcast_ability_disadvantage(
+    campaign_id: int, char: "Character | None", marker: str,
 ) -> None:
-    """v2.199.0 — companion broadcast for
-    `_pc_has_str_check_disadvantage`. Names the source buff (Diminution,
-    …) in the chat card alongside the rolled result.
+    """v2.347.0 — generic companion broadcast for
+    `_pc_has_ability_disadvantage`. Names the source buff (Diminution,
+    Staff of Withering, …) and the affected roll (e.g. "disadvantage on
+    CON save") in the chat card. ``marker`` is ``"{ability}_check"`` /
+    ``"{ability}_save"``.
     """
     if not char:
         return
-    label, icon = _str_disadvantage_buff_label(
-        campaign_id, char.id, "str_check",
-    )
+    marker = (marker or "").strip().lower()
+    ability = marker.split("_")[0] if "_" in marker else marker
+    kind = "save" if marker.endswith("_save") else "check"
+    full = _ABILITY_FULL_NAME.get(ability, ability.upper())
+    label, icon = _str_disadvantage_buff_label(campaign_id, char.id, marker)
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
         "data": {
             "character_id": char.id,
             "character_name": char.name,
             "user_color": char.color,
-            "feature_name": f"{icon} {label} — disadvantage on STR check",
+            "feature_name": f"{icon} {label} — disadvantage on {full} {kind}",
             "feature_desc": (
-                f"{char.name} has {label}: disadvantage on the Strength "
-                f"ability / skill check."
+                f"{char.name} has {label}: disadvantage on the {full} "
+                f"{'saving throw' if kind == 'save' else 'ability / skill check'}."
             ),
-            "source": "diminution-str-check",
+            "source": f"disadvantage-{marker}",
         },
     })
+
+
+async def _broadcast_str_check_disadvantage(
+    campaign_id: int, char: "Character | None",
+) -> None:
+    """v2.199.0 — back-compat wrapper; delegates to the v2.347.0 generic
+    `_broadcast_ability_disadvantage` with the ``str_check`` marker."""
+    await _broadcast_ability_disadvantage(campaign_id, char, "str_check")
 
 
 def _target_condition_immune(

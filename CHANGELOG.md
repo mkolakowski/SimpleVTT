@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.347.0] - 2026-06-15 — "The Wider Frailty"
+
+**Schema version:** 69
+
+**Commit summary:** Engine generalization — the `effects.disadvantage_on` roll intercept now fires on **any ability check OR saving throw** (`{ability}_check` / `{ability}_save`), not just STR *checks* (the v2.199.0 Potion of Diminution path). This is the foundation for items like Staff of Withering ("disadvantage on STR/CON checks AND saves") and also corrects Diminution itself, which RAW imposes disadvantage on STR checks **and STR saves** but previously only applied to checks at `/roll`.
+
+**Description:** `_pc_has_str_check_disadvantage` is refactored into a marker-parameterized `_pc_has_ability_disadvantage(campaign_id, char_id, marker)` (old name kept as a back-compat wrapper). The `/roll` endpoint now derives the marker from the roll's ability + check/save kind — saves from the `{ab}_save` stat_key prefix, checks from `stat_ability` (covers ability-named skill rolls like Athletics) or an explicit `{ab}_check` — and swaps `1d20 → 2d20kl1` when the rolling PC carries a buff with that marker in `effects.disadvantage_on`. The PHB p.173 advantage/disadvantage cancellation is preserved. The companion broadcast is generalized to `_broadcast_ability_disadvantage` (source `disadvantage-{marker}`, e.g. `disadvantage-con_save`); attack rolls are excluded. **Scope:** this wires the `/roll` path (manual checks/saves). The spell-prompted save-construction sites (`/cast_spell` etc.) and the on-hit-save *installer* that lets Staff of Withering actually apply the debuff on a failed CON save are filed as the follow-up — so Staff of Withering's disadvantage rider remains GM-narrated until that lands. MINOR — additive engine capability + test, no schema change.
+
+### Changed
+- `_pc_has_ability_disadvantage` (new generic reader) + `_pc_has_str_check_disadvantage` (wrapper); `_broadcast_ability_disadvantage` (new generic broadcast) + `_broadcast_str_check_disadvantage` (wrapper); `/roll` disadvantage block derives + matches the ability marker (`app/routes/tabletop_routes.py`).
+- `docs/test-harness-coverage.md`: harness total 2999 → 3002 (+3 generalized-disadvantage tests); new `test_ability_disadvantage_generalized.py` section.
+
+### Added
+- `tests/harness/test_ability_disadvantage_generalized.py` — 3 tests (CON-save disadvantage fires + broadcast; STR-save disadvantage fires (previously uncovered); marker-specificity control — con_save marker doesn't affect a con_check roll).
+
 ## [2.346.0] - 2026-06-15 — "The Withering Touch"
 
 **Schema version:** 69

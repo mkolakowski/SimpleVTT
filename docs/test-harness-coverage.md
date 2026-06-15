@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2999 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.346.0, 2026-06-15).
+**Total tests:** 3002 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.347.0, 2026-06-15).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3549,6 +3549,15 @@ v2.158.103 magic-items-automation Phase 7c — Sword of Sharpness +4d6 slashing 
 |------|-----------------|
 | `test_sharpness_no_rider_when_detuned` | Detune the Sword of Sharpness → nat-20 rider suppressed even with d20=20 seeded. Re-attunes in teardown. |
 | `test_sharpness_nat_20_extra_damage` | Iterates seeds 0-199 finding one that lands d20=20 on Pip's first attack; asserts `feature_used` with `source: "item-sword-of-sharpness-nat20"` fires and `hp_dealt` is in [4, 24] (4d6 range). |
+
+### `test_ability_disadvantage_generalized.py`
+v2.347.0 engine — the `effects.disadvantage_on` roll intercept generalized from STR-checks-only to any `{ability}_check`/`{ability}_save` marker at `/roll`. Buff seeded on a PC combatant via PUT /battle, then `/roll` with the matching stat_key reveals the `2d20kl1` swap.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_con_save_disadvantage_fires` | `disadvantage_on=["con_save"]` → a CON save rolls `2d20kl1` + a `disadvantage-con_save` broadcast fires. |
+| `test_str_save_disadvantage_fires` | `disadvantage_on=["str_save"]` → a STR save rolls `2d20kl1` (saves were previously uncovered). |
+| `test_marker_specificity_control` | A `con_save`-only buff does NOT impose disadvantage on a `con_check` roll (marker specificity). |
 
 ### `test_item_staff_of_withering.py`
 v2.346.0 magic-items — Staff of Withering (RAW DMG p.202, rare, attunement), Bucket C on-hit rider. +2d10 necrotic rides the Frost Brand always-on dice-uplift (section 6c, `auto_uplifts` source `item-staff-of-withering`). Carrier: Magnus Hexbinder (weapon attack row); inventory item seeded inert, PATCHed equipped+attuned in-test. Charge limit + DC15 CON disadvantage GM-narrated in v1.
