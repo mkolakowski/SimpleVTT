@@ -1885,6 +1885,20 @@ def _paladin_sheet(name: str) -> dict:
              "properties": "versatile (1d10), magic",
              "_slug": "holy-avenger", "weight_lb": 3,
              "desc": "Legendary longsword, attunement. +3 attack/damage; +2d10 radiant on hit vs. fiends and undead (RAW DMG p.174). 10-ft aura grants advantage on saves vs spells/magical effects to you and friendly creatures within the radius (30 ft at Paladin Lv 17+ — GM-narrated in v1)."},
+            # v2.332.0 — "The Elemental Conclave" bundle: Brazier of
+            # Commanding Fire Elementals (RAW DMG p.156, rare, no
+            # attunement). 5-lb iron brazier. Action: light a fire in the
+            # brazier and speak the command word — a 5-HD fire elemental
+            # appears within 30 ft. The summoner makes a CHA check vs the
+            # elemental's CHA to control it for 1 hour (or until the fire
+            # goes out / the elemental drops to 0 HP). Stub catalog row;
+            # the summon + control check are GM-narrated. Thematic on
+            # Caelan (Devotion Paladin — sacred fire / divine wrath fits
+            # his Oath aesthetic).
+            {"name": "Brazier of Commanding Fire Elementals", "type": "magic",
+             "qty": 1, "equippable": True, "equipped": True, "weight_lb": 5,
+             "_slug": "brazier-of-commanding-fire-elementals",
+             "desc": "Rare wondrous item, no attunement. 5-lb iron brazier. Action: light a fire in the brazier and speak the command word — a fire elemental appears within 30 ft. Make a CHA check vs the elemental's CHA to command it (concentration, up to 1 hour). RAW DMG p.156."},
         ],
         # v2.99.24 — Caelan is a Variant Human (RAW: free Lv 1 feat).
         # Sentinel fits his Paladin Devotion frontline-protector role:
@@ -2157,6 +2171,19 @@ def _paladin_vengeance_sheet(name: str) -> dict:
              "armor_type": "heavy", "ac_value": 18, "weight_lb": 65,
              "_slug": "demon-armor",
              "desc": "Very rare armor (plate), attunement. While wearing this armor you gain a +1 bonus to AC, can understand and speak Abyssal, and your clawed gauntlets turn unarmed strikes into magic weapons dealing 1d8 slashing with a +1 bonus to attack and damage. Curse: once donned you can't doff it unless targeted by remove curse, and you have disadvantage on attack rolls against demons and on saves against their spells and abilities. RAW DMG p.158."},
+            # v2.332.0 — "The Elemental Conclave" bundle: Censer of
+            # Controlling Air Elementals (RAW DMG p.157, rare, no
+            # attunement). 1-lb brass censer. Action: burn incense and
+            # speak the command word — an air elemental appears within 30
+            # ft. CHA check vs the elemental's CHA to command it for 1
+            # hour. Stub catalog row; the summon + control mechanic is GM-
+            # narrated. Thematic on Seraphine (Vengeance Paladin — wind /
+            # wrath theme; commanding sky elementals fits a divine
+            # vengeance hunter who chases evil through the heavens).
+            {"name": "Censer of Controlling Air Elementals", "type": "magic",
+             "qty": 1, "equippable": True, "equipped": True, "weight_lb": 1,
+             "_slug": "censer-of-controlling-air-elementals",
+             "desc": "Rare wondrous item, no attunement. 1-lb brass censer. Action: burn incense and speak the command word — an air elemental appears within 30 ft. CHA check vs the elemental's CHA to command it (concentration, up to 1 hour). RAW DMG p.157."},
         ],
         "resources": [
             {
@@ -3890,6 +3917,18 @@ def _ranger_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "attuned": False,
              "_slug": "cloak-of-the-manta-ray", "weight_lb": 1,
              "desc": "Uncommon wondrous item, no attunement. While wearing this cloak with its hood up, you can breathe underwater and you have a swimming speed of 60 feet. Pulling the hood up or down requires an action. RAW DMG p.158."},
+            # v2.332.0 — "The Elemental Conclave" bundle: Bowl of Commanding
+            # Water Elementals (RAW DMG p.156, rare, no attunement). 6-lb
+            # silver bowl. Action: fill with water and speak the command
+            # word — a water elemental appears within 30 ft. CHA check vs
+            # the elemental's CHA to command it for 1 hour. Stub catalog
+            # row; the summon + control mechanic is GM-narrated. Thematic
+            # on Rowan (Hunter Ranger — outdoorsman commanding nature's
+            # forces, water as his alpine + river travel companion).
+            {"name": "Bowl of Commanding Water Elementals", "type": "magic",
+             "qty": 1, "equippable": True, "equipped": True, "weight_lb": 6,
+             "_slug": "bowl-of-commanding-water-elementals",
+             "desc": "Rare wondrous item, no attunement. 6-lb silver bowl. Action: fill with water and speak the command word — a water elemental appears within 30 ft. CHA check vs the elemental's CHA to command it (concentration, up to 1 hour). RAW DMG p.156."},
         ],
         # v2.18.3: Variant Human bonus feat = Sharpshooter. Captured as
         # a feats entry; mechanical effects (ignore long-range disadvantage,
@@ -4198,6 +4237,19 @@ def _barbarian_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 2,
              "_slug": "iron-bands-of-binding",
              "desc": "Rare wondrous item, no attunement. Small rusty iron sphere (2 lb). Action: hurl up to 60 ft at a Huge or smaller creature you can see. Treat as a proficient ranged attack. On a hit, the bands unfold and restrain the target until you end the effect as a bonus action (or the target escapes via DC 20 STR check or 25 STR magical effect). On a miss, the sphere returns. RAW DMG p.176."},
+            # v2.332.0 — "The Elemental Conclave" bundle: Stone of
+            # Controlling Earth Elementals (RAW DMG p.207, rare, no
+            # attunement). 5-lb heavy stone. Action: place stone on the
+            # ground and speak the command word — an earth elemental
+            # appears within 30 ft. CHA check vs the elemental's CHA to
+            # command it for 1 hour. Stub catalog row; the summon + control
+            # mechanic is GM-narrated. Thematic on Krieger (Half-Orc
+            # Barbarian — earthy raw strength + a literal stone for the
+            # earth element completes the conclave's four-corner thematic).
+            {"name": "Stone of Controlling Earth Elementals", "type": "magic",
+             "qty": 1, "equippable": True, "equipped": True, "weight_lb": 5,
+             "_slug": "stone-of-controlling-earth-elementals",
+             "desc": "Rare wondrous item, no attunement. 5-lb heavy stone. Action: place on the ground and speak the command word — an earth elemental appears within 30 ft. CHA check vs the elemental's CHA to command it (concentration, up to 1 hour). RAW DMG p.207."},
         ],
         # v2.75.0 Phase 4d — Mage Slayer feat for Krieger. RAW (PHB
         # p.168): reaction-based melee attack against a creature

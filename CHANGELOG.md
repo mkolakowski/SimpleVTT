@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.332.0] - 2026-06-15 — "The Elemental Conclave"
+
+**Schema version:** 69
+
+**Commit summary:** Sixth SRD magic-item **bundle** (after Wayfarer's / Inventor's / Captor's / Engineer's / Trickster's) — and the **first 4-item bundle** for thematic completeness, one item per element: **Brazier of Commanding Fire Elementals** (DMG p.156), **Bowl of Commanding Water Elementals** (DMG p.156), **Censer of Controlling Air Elementals** (DMG p.157), **Stone of Controlling Earth Elementals** (DMG p.207). All four share the same RAW shape: rare, no attunement, action to summon + CHA-check-to-command a matching elemental for 1 hour. Pure GM-narrated summon mechanics. Seeded one item per carrier (Caelan / Rowan / Seraphine / Krieger); four smoke tests in `test_elemental_conclave.py`.
+
+**Description:** Continues the bundling pattern, expanded to four items because the elemental-control quartet is a coherent design unit in the SRD. Each item registers its slug for the audit count and gives a thematically-matched PC a summon button the GM can adjudicate. The four-corner thematic places each item on a PC whose class aesthetic fits the element: Caelan's Devotion Paladin sacred fire, Rowan's outdoorsman water, Seraphine's Vengeance wind, Krieger's Half-Orc Barbarian earth. MINOR — additive content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`): four new stub catalog rows — `brazier-of-commanding-fire-elementals`, `bowl-of-commanding-water-elementals`, `censer-of-controlling-air-elementals`, `stone-of-controlling-earth-elementals`.
+- Demo seed: Caelan / Rowan / Seraphine / Krieger each gain their matching elemental-control item at the inventory tail.
+- `tests/harness/test_elemental_conclave.py` — 4 smoke tests verifying each carrier's `/sheet-json` surfaces the matching `_slug`.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2941 → 2945 (+4 Elemental Conclave tests); new `test_elemental_conclave.py` section.
+
 ## [2.331.0] - 2026-06-15 — "The Trickster's Pouch"
 
 **Schema version:** 69

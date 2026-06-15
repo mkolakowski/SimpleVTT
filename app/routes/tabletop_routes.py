@@ -32752,6 +32752,24 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "feather-token": [
         {"requires_attunement": False},
     ],
+    # v2.332.0 — "The Elemental Conclave" bundle (sixth stub bundle,
+    # expanded to FOUR items for thematic completeness — one per element).
+    # All four RAW SRD items follow the same shape: rare wondrous item, no
+    # attunement, action to summon and attempt to control an elemental of
+    # the matching element (action check + duration based on CHA / WIS).
+    # Pure GM-narrated summons in v1; catalog stubs register the slugs.
+    "brazier-of-commanding-fire-elementals": [
+        {"requires_attunement": False},
+    ],
+    "bowl-of-commanding-water-elementals": [
+        {"requires_attunement": False},
+    ],
+    "censer-of-controlling-air-elementals": [
+        {"requires_attunement": False},
+    ],
+    "stone-of-controlling-earth-elementals": [
+        {"requires_attunement": False},
+    ],
     # v2.209.0 — Stone of Good Luck (Luckstone, RAW DMG p.207,
     # uncommon, attunement). While the stone is on your person you gain
     # +1 to ability checks AND saving throws. The `save_bonus` rides the
