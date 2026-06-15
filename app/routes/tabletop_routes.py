@@ -33099,6 +33099,14 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "boots-of-elvenkind": [
         {"check_advantage_on": ["stealth"]},
     ],
+    # v2.293.0 — Cloak of the Bat (RAW DMG p.158, rare, attunement).
+    # "While wearing this cloak, you have advantage on Dexterity (Stealth)
+    # checks." Rides the same check_advantage_on substrate as Cloak/Boots
+    # of Elvenkind, keyed on the Stealth skill and attunement-gated. The
+    # dim-light flight + polymorph-to-bat clauses are GM-narrated in v1.
+    "cloak-of-the-bat": [
+        {"check_advantage_on": ["stealth"], "requires_attunement": True},
+    ],
 }
 
 

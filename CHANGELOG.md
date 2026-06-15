@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.293.0] - 2026-06-14 — "The Leather Wings"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item drop-in — **Cloak of the Bat** (RAW DMG p.158, rare, attunement) lands its headline passive ("advantage on Dexterity (Stealth) checks") on the v2.253.0 `check_advantage_on` substrate with zero new engine code. A one-line registry entry keyed on the Stealth skill (attunement-gated); seeded as inert spare loot on Magnus Shadowend and exercised by four harness tests.
+
+**Description:** Another consumer of the mature `check_advantage_on` substrate that already powers the Cloak/Boots of Elvenkind and the Eyes of the Eagle/Minute Seeing. The Cloak of the Bat's headline passive — advantage on Dexterity (Stealth) checks while worn — is exactly the `check_advantage_on` list field keyed on `stealth`, attunement-gated like the Eagle lenses. So this commit is a single registry entry (`{"check_advantage_on": ["stealth"], "requires_attunement": True}`), a demo-seed item, and tests. `_roll_item_check_advantage` reads the equipped+attuned union from `_equipped_item_effects` and folds an advantage source into the PHB p.173 composition at `/roll` time, producing a `2d20kh1` breakdown + `roll_state_applied: "auto_advantage_cloak_of_the_bat"`; the skill gate means only a Stealth check fires. The dim-light/darkness flight (40 ft) and the once-per-dawn polymorph-into-bat action are GM-narrated in v1. Seeded **unequipped/unattuned** as spare loot on Magnus Shadowend (the demo's Fiend Warlock — his Devil's Sight invocation, which lets him see in magical darkness, pairs naturally with a cloak that flies in darkness), so it adds no baseline Stealth advantage and disturbs no existing test. The harness PATCHes it equipped+attuned, rolls a Stealth check and asserts the advantage + source attribution, then restores the seed inventory; an attunement-gate test, an inert-baseline control, and a derived-flag projection round it out. MINOR — additive demo content + a new registry entry + tests, no schema change.
+
+### Added
+- `cloak-of-the-bat` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — one attunement-gated payload carrying `check_advantage_on: ["stealth"]`, on the existing v2.253.0 substrate.
+- Demo seed: Magnus Shadowend gains a spare (unequipped/unattuned) **Cloak of the Bat**.
+- `tests/harness/test_item_cloak_of_the_bat.py` (4 tests): Stealth check resolves `2d20kh1` + `roll_state_applied: auto_advantage_cloak_of_the_bat` on equip+attune; equipped-but-unattuned yields a straight 1d20 (attunement gate); inert baseline has no advantage; `derived.check_advantage_on` surfaces "stealth" with the cloak named in sources. Inventory restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2826 → 2830 (+4 drop-in tests); added the `test_item_cloak_of_the_bat.py` section.
+
 ## [2.292.0] - 2026-06-14 — "The Jeweller's Lenses"
 
 **Schema version:** 69

@@ -2664,6 +2664,22 @@ def _warlock_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "attuned": False,
              "_slug": "boots-of-levitation", "weight_lb": 1,
              "desc": "Rare wondrous item, attunement. While you wear these boots, you can use an action to cast the levitate spell on yourself at will. RAW DMG p.155."},
+            # v2.293.0 — Cloak of the Bat (RAW DMG p.158, rare, attunement).
+            # The headline passive — "while wearing this cloak, you have
+            # advantage on Dexterity (Stealth) checks" — rides the v2.253.0
+            # check_advantage_on substrate (Cloak of Elvenkind / Boots of
+            # Elvenkind / Eyes of the Eagle), keyed on the Stealth skill and
+            # attunement-gated. The dim-light/darkness flight (40 ft) and the
+            # polymorph-into-bat action are GM-narrated in v1. Seeded as inert
+            # spare loot (unequipped/unattuned) so it adds no advantage to
+            # Magnus's baseline and disturbs no existing test — the harness
+            # PATCHes it equipped+attuned, rolls a Stealth check, then restores.
+            # A Fiend-pact Warlock with Devil's Sight (sees in magical darkness)
+            # is the natural wielder of a cloak that flies in darkness.
+            {"name": "Cloak of the Bat", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "_slug": "cloak-of-the-bat", "weight_lb": 1,
+             "desc": "Rare wondrous item, attunement. While wearing this cloak, you have advantage on Dexterity (Stealth) checks. In dim light or darkness you can grip its edges to fly at 40 ft, and can use an action to cast polymorph on yourself to become a bat (once per dawn). RAW DMG p.158."},
         ],
         # v2.18.4: 3 known Eldritch Invocations at Lv 5 (Warlock gets
         # Lv 2: 2 known; Lv 5: 3 known; Lv 7: 4 known...). Magnus's

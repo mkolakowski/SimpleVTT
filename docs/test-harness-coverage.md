@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2826 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.292.0, 2026-06-14).
+**Total tests:** 2830 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.293.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2620,6 +2620,16 @@ v2.292.0 — Eyes of Minute Seeing (RAW DMG p.166, uncommon, NO attunement): the
 | `test_eyes_do_not_help_non_investigation_check` | Control: `POST /roll` (Perception, `stat_key: "perception"`) → no `2d20kh1`, no advantage label (the skill gate). |
 | `test_eyes_advantage_cancels_with_condition_disadvantage` | Wearer is Poisoned (ability-check disadvantage) → item adv + condition dis cancel to a straight `canceled_*` roll naming the lenses (PHB p.173). |
 | `test_eyes_expose_derived_flag` | `GET /sheet-json` → `derived.check_advantage_on` present with "investigation" in `skills` and "Eyes of Minute Seeing" in `sources`. |
+
+### `test_item_cloak_of_the_bat.py`
+v2.293.0 — Cloak of the Bat (RAW DMG p.158, rare, attunement): the wearer has advantage on Dexterity (Stealth) checks. Another consumer of the `check_advantage_on` substrate, keyed on `stealth` and attunement-gated (the `cloak-of-the-bat` `_MAGIC_ITEM_PASSIVES` payload carries `requires_attunement`). No new helper or `/roll` code. Seeded as inert spare loot (unequipped/unattuned) on Magnus Shadowend (Fiend Warlock with Devil's Sight); tests PATCH it equipped+attuned, roll, then restore. The dim-light flight + polymorph-to-bat clauses are GM-narrated.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cloak_grants_stealth_advantage` | Equipped+attuned via PATCH → `POST /roll` (Stealth) breakdown contains `2d20kh1` + `roll_state_applied == "auto_advantage_cloak_of_the_bat"`. Inventory restored on teardown. |
+| `test_cloak_requires_attunement` | Equipped-but-unattuned → straight 1d20, no advantage label (the attunement gate). Restored on teardown. |
+| `test_cloak_baseline_has_no_advantage` | Control: inert seed (equipped=False) → Stealth roll is a straight 1d20 (proves it's cloak-sourced). |
+| `test_cloak_exposes_derived_flag` | Equipped+attuned → `GET /sheet-json` `derived.check_advantage_on` has "stealth" in `skills` and "Cloak of the Bat" in `sources`. Restored on teardown. |
 
 ### `test_item_boots_of_elvenkind.py`
 v2.255.0 — Boots of Elvenkind (RAW DMG p.155, uncommon, NO attunement): the wearer has advantage on Dexterity (Stealth) checks that rely on moving silently. The no-attunement companion to Cloak of Elvenkind on the same `check_advantage_on: ["stealth"]` substrate — the `boots-of-elvenkind` `_MAGIC_ITEM_PASSIVES` payload omits `requires_attunement`, so the boots ride freely alongside a full 3/3 attunement loadout. No new helper or `/roll` code — the substrate generalizes over the skill key and the attunement gate. Seeded on Quan Reelstep (Drunken Master Monk) alongside his 3/3 attuned items (Belt of Dwarvenkind + Ioun Stone of Mastery + Mantle of Spell Resistance).
