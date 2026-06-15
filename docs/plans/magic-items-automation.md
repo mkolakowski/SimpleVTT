@@ -5,7 +5,76 @@
 **Content tail (Phase 9 — NEW).** ~42 of 292 items now carry non-empty `actions`/`passives`; 250 still have `actions: []`. The remaining work is content-only — each item is a small commit picking from the established Phase 1–8 templates. See the [SRD 5e Audit (2026-06-11 refresh)](../../TODO.md#srd-5e-audit-2026-06-11-refresh) for the magic-item action backfill prioritisation.
 
 **Authors:** rolling
-**Last updated:** 2026-06-11
+**Last updated:** 2026-06-15
+
+---
+
+## Phase 9.1 — stub triage (v2.344.5)
+
+After the v2.316–v2.344 content sprint, **235/239 SRD magic items are wired** (registered + collectible). 133 carry a real engine mechanic (51 actions + 17 attack riders + 68 mechanical passives); the other **108 are bare catalog stubs** (`requires_attunement` only — effect GM-narrated in v1). This triage buckets those 108 into "automatable via an existing Phase 1–8 template" vs "inherently GM-narrated." The actionable subset is **~26 items** across three buckets; the remaining **~82 stay announce-only by design** (archetype J — summons, planar travel, wish, one-shot consumables, containers, capture/imprison, exploration utility). Counts are approximate at the margins (a few items straddle two buckets).
+
+### Bucket A — charge-cast a save/attack spell → `_MAGIC_ITEM_ACTIONS` cast-spell template (~10)
+
+The strongest template (the Wand of Fear / charged-wand pattern already shipped). Each casts a defined spell with a fixed save DC or spell attack; wire the action + DC + condition/damage dispatch.
+
+| Slug | RAW effect | Wire as |
+|---|---|---|
+| `pipes-of-haunting` | DC 15 WIS or frightened 1 min (30 ft) | save → `frighten` |
+| `rod-of-rulership` | DC = 8+prof+CHA WIS save or charmed/obey 1 min | save → charmed condition |
+| `trident-of-fish-command` | dominate beast (DC 15) on a beast | cast-spell action (charge) |
+| `ring-of-animal-influence` | animal friendship / fear / speak-with-animals (charges) | cast-spell action |
+| `circlet-of-blasting` | scorching ray (3 × spell attack, 2d6 fire) | spell-attack action |
+| `ring-of-shooting-stars` | ranged radiant motes + dancing lights/light | spell-attack / damage action |
+| `robe-of-scintillating-colors` | DC 15 WIS or attackers gain advantage (dazzle) | save → debuff condition |
+| `rope-of-entanglement` | DC 15 STR or restrained | save → restrained |
+| `wind-fan` | gust of wind (DC 13) | cast-spell action |
+| `medallion-of-thoughts` | detect thoughts (DC 13) | cast-spell action (utility) |
+
+### Bucket B — passive numeric buff → mechanical `_MAGIC_ITEM_PASSIVES` (`effects.*`) (~9)
+
+Always-on bonuses the engine already reads (resistance via `_resistance_halve`, save/AC/stat passives). **Cleanest first batch** — the resistance trio especially.
+
+| Slug | RAW effect | Wire as |
+|---|---|---|
+| `armor-of-resistance` | resistance to one damage type | `effects.resistance_to` |
+| `ring-of-resistance` | resistance to one damage type | `effects.resistance_to` |
+| `dragon-scale-mail` | resistance to the dragon's damage type | `effects.resistance_to` |
+| `adamantine-armor` | crits against you become normal hits | `effects.crits_become_normal` (new) |
+| `luck-blade` | +1 to all saves (the +1 weapon is baked) | `effects.save_bonus` |
+| `staff-of-the-magi` | +2 spell attack & save DC | `effects.spell_attack_bonus` / `spell_dc_bonus` |
+| `staff-of-the-woodlands` | +2 spell attack & save DC | same |
+| `arrow-catching-shield` | +2 AC vs ranged attacks | conditional AC passive |
+| `shield-of-missile-attraction` | resistance to ranged-weapon damage + curse | `effects.resistance_to` (conditional) |
+
+### Bucket C — on-hit / crit weapon rider → `_MAGIC_ITEM_ATTACK_RIDERS` (~7)
+
+| Slug | RAW effect | Wire as |
+|---|---|---|
+| `staff-of-withering` | on hit: +2d10 necrotic + DC 15 CON or disadvantage | `on_hit_save: damage_condition` |
+| `staff-of-striking` | expend 1–3 charges → +1d6 force per charge on hit | on-hit `bonus_dice` |
+| `sword-of-wounding` | recurring 1d4 necrotic/turn, DC 15 CON to end | on-hit recurring-damage condition (new) |
+| `oathbow` | vs sworn enemy: +3d6 piercing + advantage | conditional rider (declared-enemy state) |
+| `berserker-axe` | +1 (baked); HP-max +level while attuned; berserk save | HP-max passive + on-damage WIS save |
+| `talisman-of-pure-good` | 6d6 radiant to non-good on touch | situational rider (low priority) |
+| `talisman-of-ultimate-evil` | 6d6 necrotic to non-evil on touch | situational rider (low priority) |
+
+### Bucket D — inherently GM-narrated (stays announce-only, archetype J) (~82)
+
+No clean engine template; the effect is narrative, out-of-combat, or needs systems SimpleVTT doesn't model. Grouped:
+
+- **Summons:** figurine-of-wondrous-power, horn-of-valhalla, ring-of-djinni-summoning, staff-of-the-python, bowl/brazier/censer-of-commanding-\*-elementals, stone-of-controlling-earth-elementals, elemental-gem, efreeti-bottle, dancing-sword, animated-shield
+- **Planar travel / teleport:** amulet-of-the-planes, cubic-gate, well-of-many-worlds, rod-of-security, helm-of-teleportation, plate-armor-of-etherealness, oil-of-etherealness, cape-of-the-mountebank
+- **Wish / fate / artifact:** ring-of-three-wishes, deck-of-many-things, deck-of-illusions, orb-of-dragonkind, sphere-of-annihilation, talisman-of-the-sphere
+- **Item / structure creation:** manual-of-golems, marvelous-pigments, bag-of-beans, feather-token, instant-fortress, folding-boat, robe-of-useful-items, bag-of-tricks
+- **Containers / extradimensional:** bag-of-holding, handy-haversack, efficient-quiver, portable-hole, bag-of-devouring
+- **One-shot consumables:** dust-of-disappearance, dust-of-dryness, dust-of-sneezing-and-choking, oil-of-slipperiness, oil-of-sharpness, philter-of-love, potion-of-poison, restorative-ointment, sovereign-glue, universal-solvent, decanter-of-endless-water, eversmoking-bottle
+- **Capture / imprison / bind:** iron-bands-of-binding, iron-flask, mirror-of-life-trapping, dimensional-shackles
+- **Exploration / utility:** chime-of-opening, immovable-rod, rope-of-climbing, horseshoes-of-a-zephyr, horseshoes-of-speed, lantern-of-revealing, rod-of-lordly-might, apparatus-of-the-crab, cube-of-force, crystal-ball, helm-of-comprehending-languages, pipes-of-the-sewers, candle-of-invocation, necklace-of-prayer-beads
+- **Reaction / spell-store / regen / misc:** rod-of-absorption, gloves-of-missile-snaring, ring-of-evasion, ring-of-spell-storing, ring-of-regeneration, ring-of-telekinesis, ring-of-invisibility, defender, hammer-of-thunderbolts, mithral-armor
+
+**Recommended batch order:** (1) Bucket B resistance trio (`armor-of-resistance` / `ring-of-resistance` / `dragon-scale-mail`) — one shared `effects.resistance_to` passive the engine already honors; (2) Bucket C `staff-of-withering` + `staff-of-striking` (the `damage_condition` / `bonus_dice` riders already shipped for Dagger of Venom / Dwarven Thrower); (3) Bucket A condition-casters (`pipes-of-haunting`, `rod-of-rulership`, `rope-of-entanglement`) reusing the `frighten` / save-to-condition dispatch.
+
+---
 
 A plan to give the 292 SRD magic items shipped under
 `app/data/local/dnd5e/items/` real mechanical wiring. Today every magic

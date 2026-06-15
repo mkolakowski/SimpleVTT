@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.344.5] - 2026-06-15 — "The Sorted Hoard"
+
+**Schema version:** 69
+
+**Commit summary:** Doc-only triage of the **108 bare catalog-stub magic items** (registered + collectible but GM-narrated) into automatable-via-template vs inherently-narrative buckets, added as a "Phase 9.1 — stub triage" section in [`magic-items-automation.md`](docs/plans/magic-items-automation.md). Answers "what's left to complete the magic items."
+
+**Description:** Of the 241 wired magic-item slugs, 133 carry a real engine mechanic and 108 are bare stubs. Cross-referenced each of the 108 against the item JSON descriptions and the shipped Phase 1–8 templates. **~26 are realistically automatable**, split into: Bucket A — charge-cast a save/attack spell (~10: pipes-of-haunting, rod-of-rulership, trident-of-fish-command, ring-of-animal-influence, circlet-of-blasting, ring-of-shooting-stars, robe-of-scintillating-colors, rope-of-entanglement, wind-fan, medallion-of-thoughts); Bucket B — passive numeric buff (~9: armor/ring/dragon-scale resistance, adamantine crit-negation, luck-blade saves, staff-of-the-magi/woodlands spell bonus, two shields); Bucket C — on-hit/crit weapon rider (~7: staff-of-withering, staff-of-striking, sword-of-wounding, oathbow, berserker-axe, two alignment talismans). The remaining **~82 stay announce-only by design** (summons, planar travel, wish/fate, item creation, containers, one-shot consumables, capture/imprison, exploration utility, reaction/regen miscellany). Recommended batch order leads with the resistance trio (shared `effects.resistance_to` passive the engine already honors), then the staff riders (reusing the `damage_condition`/`bonus_dice` paths from Dagger of Venom / Dwarven Thrower), then the save-to-condition casters. PATCH — doc-only; plan doc already wiki-surfaced (`plan-magic-items-automation`).
+
+### Changed
+- `docs/plans/magic-items-automation.md`: new "Phase 9.1 — stub triage (v2.344.5)" section with the four-bucket classification of all 108 stubs + recommended batch order; `Last updated` bumped to 2026-06-15.
+
 ## [2.344.4] - 2026-06-15 — "The Updated Placard"
 
 **Schema version:** 69
