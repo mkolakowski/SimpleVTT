@@ -33176,6 +33176,18 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "ring-of-mind-shielding": [
         {"mind_shield": True, "requires_attunement": True},
     ],
+    # v2.307.0 — Helm of Telepathy (RAW DMG p.169, uncommon, attunement).
+    # RAW: while worn you can cast detect thoughts (action), and while
+    # concentrating on it send/receive telepathic messages to a focused
+    # creature (bonus action), plus a 1/dawn suggestion. The detect
+    # thoughts / suggestion casts are GM-narrated in v1; the always-on
+    # passive surface is the `telepathy` boolean flag — the ability to
+    # communicate telepathically — surfaced on `/sheet-json` derived,
+    # mirroring the mind_shield / feather_fall flag substrate. Attunement-
+    # gated by the per-payload check.
+    "helm-of-telepathy": [
+        {"telepathy": True, "requires_attunement": True},
+    ],
     # v2.246.0 — Ring of Warmth (RAW DMG p.193, uncommon, attunement). RAW:
     # "while wearing this ring, you have resistance to cold damage. In
     # addition, you and everything you wear and carry are unharmed by
@@ -34782,6 +34794,12 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # ATTUNEMENT-gated, so the walker's attunement check filters it.
         "mind_shield": False,
         "mind_shield_sources": [],
+        # v2.307.0 — telepathic-communication passive (Helm of Telepathy,
+        # RAW DMG p.169). Boolean OR across equipped items carrying the
+        # field; surfaced on `/sheet-json` derived. ATTUNEMENT-gated, so the
+        # walker's attunement check filters it.
+        "telepathy": False,
+        "telepathy_sources": [],
         # v2.246.0 — cold-environment tolerance (Ring of Warmth). Boolean OR;
         # the cold *resistance* rides the shared `resistance_to` list, this
         # flag carries only the -50°F environmental tolerance. ATTUNEMENT-gated.
@@ -35178,6 +35196,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_mind_shield") or p.get("mind_shield"):
                 out["mind_shield"] = True
                 out["mind_shield_sources"].append(item_name)
+            # v2.307.0 — telepathic-communication passive (Helm of Telepathy,
+            # RAW DMG p.169). Boolean OR; the flag rides the item via the
+            # `telepathy` payload (or a per-item `_telepathy` rider).
+            # Attunement-gated by the per-payload check above.
+            if item.get("_telepathy") or p.get("telepathy"):
+                out["telepathy"] = True
+                out["telepathy_sources"].append(item_name)
             # v2.246.0 — cold-environment tolerance passive (Ring of Warmth,
             # RAW DMG p.193). Boolean OR; the flag rides the item via the
             # `cold_tolerance` payload (or a per-item `_cold_tolerance` rider).
@@ -93263,6 +93288,12 @@ async def get_character_sheet_json(
             if _item_eff.get("mind_shield"):
                 derived["mind_shield"] = {
                     "sources": list(_item_eff.get("mind_shield_sources") or []),
+                }
+            # v2.307.0 — telepathy (Helm of Telepathy). Only present when an
+            # equipped + attuned item sets the flag.
+            if _item_eff.get("telepathy"):
+                derived["telepathy"] = {
+                    "sources": list(_item_eff.get("telepathy_sources") or []),
                 }
             # v2.246.0 — cold-environment tolerance (Ring of Warmth). Only
             # present when an equipped + attuned item sets the flag. (The ring's

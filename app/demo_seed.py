@@ -906,6 +906,20 @@ def _wizard_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "attuned": False, "weight_lb": 0,
              "_slug": "robe-of-the-archmagi",
              "desc": "Legendary wondrous item, attunement. While wearing the robe: base AC 15 + your Dexterity modifier if unarmored; advantage on saving throws against spells and other magical effects; and your spell save DC and spell attack bonus each increase by 2. RAW DMG p.193."},
+            # v2.307.0 — Helm of Telepathy (RAW DMG p.169, uncommon,
+            # attunement). The always-on passive — the ability to communicate
+            # telepathically — rides the `telepathy` boolean substrate (the
+            # mind_shield / feather_fall flag path); it surfaces on /sheet-json
+            # as derived.telepathy, attunement-gated. The detect-thoughts (action)
+            # and 1/dawn suggestion casts are GM-narrated. Spare loot (equipped=
+            # False / attuned=False): Thalindra carries no other telepathy item
+            # so her baseline cleanly proves the helm is the source — the harness
+            # PATCHes it equipped+attuned, reads derived.telepathy, then restores.
+            # A mind-reading helm is on-theme for a calculating Evoker.
+            {"name": "Helm of Telepathy", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False, "weight_lb": 3,
+             "_slug": "helm-of-telepathy",
+             "desc": "Uncommon wondrous item, attunement. While wearing this helm, you can communicate telepathically with a creature you focus on, cast detect thoughts (action, save DC 13), and once per dawn cast suggestion (save DC 13) on a creature you are reading. RAW DMG p.169."},
         ],
         "feats": [],
         # v2.16.1: Arcane Recovery counter (Wizard Lv 1 feature). Once per

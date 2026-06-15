@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.307.0] - 2026-06-14 — "The Silent Word"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item drop-in — **Helm of Telepathy** (RAW DMG p.169, uncommon, attunement) lands its always-on telepathic-communication ability on the boolean-flag substrate that Ring of Mind Shielding (`mind_shield`) and Ring of Feather Falling (`feather_fall`) feed. A new `telepathy` flag aggregates in `_equipped_item_effects` and surfaces on `/sheet-json` as `derived.telepathy = {sources}`. One registry entry, the flag's four small symmetric wiring points, a demo seed on Thalindra Moonshadow, and three harness tests.
+
+**Description:** The helm's headline always-on benefit — communicating telepathically with a focused creature — rides the boolean-flag substrate already on the passive engine: an attunement-gated `telepathy: True` payload that aggregates in `_equipped_item_effects` (boolean OR into a new `telepathy` field + `telepathy_sources`) and surfaces on `/sheet-json` as `derived.telepathy = {sources}`, exactly mirroring the v2.245.0 `mind_shield` flag. The active casts — detect thoughts (action, save DC 13) and the 1/dawn suggestion on a creature you're reading — are GM-narrated in v1. Attunement-gated (the payload carries `requires_attunement`), so worn-but-not-attuned grants nothing. Seeded **unequipped/unattuned** as spare loot on Thalindra Moonshadow (the demo's Evoker Wizard — a mind-reading helm is on-theme for a calculating archmage), specifically on a carrier with no other `telepathy` item so the inert baseline cleanly proves the helm is the source. The harness PATCHes it equipped+attuned, asserts the derived flag names the helm, then restores the seed inventory; an attunement-gate test (equipped-but-un-attuned grants nothing) and an inert-baseline control round it out. MINOR — additive demo content + a new registry entry + the new `telepathy` flag wiring + tests, no schema change.
+
+### Added
+- `helm-of-telepathy` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — `telepathy: True`, attunement-gated.
+- `telepathy` / `telepathy_sources` boolean-flag aggregation in `_equipped_item_effects` (boolean OR across equipped items carrying the `telepathy` payload or a per-item `_telepathy` rider), mirroring the `mind_shield` substrate.
+- `derived.telepathy = {sources}` on `/sheet-json`, present only when an equipped + attuned item sets the flag.
+- Demo seed: Thalindra Moonshadow gains a spare (unequipped/unattuned) **Helm of Telepathy**.
+- `tests/harness/test_item_helm_of_telepathy.py` (3 tests): equip+attune surfaces `derived.telepathy` naming the helm; attunement gate (equipped-but-un-attuned grants no flag); inert baseline control (no flag). Inventory restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2884 → 2887 (+3 drop-in tests); added the `test_item_helm_of_telepathy.py` section.
+
 ## [2.306.0] - 2026-06-14 — "The Traitor's Plate"
 
 **Schema version:** 69
