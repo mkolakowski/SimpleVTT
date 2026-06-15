@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.322.0] - 2026-06-15 — "The Avenging Edge"
+
+**Schema version:** 69
+
+**Commit summary:** SRD magic-item drop-in — **Holy Avenger** (RAW DMG p.174, legendary, attunement, "any sword"). Pure substrate clone of the v2.319.0 Mace of Disruption multi-type conditional rider — same fiend-OR-undead predicate, `dice: "2d10"` instead of `2d6` per RAW. Seeded inert on Sir Caelan Lightbringer (Devotion Paladin); three harness tests. Zero new engine code.
+
+**Description:** The Holy Avenger is the iconic Paladin capstone weapon — `+3` to attack and damage, `+2d10` radiant on hit vs. fiend or undead, plus a 10-ft save-advantage aura (`30 ft` at Paladin Lv 17+). The `+3` lives on the wielder's attack row (Vorpal / Dragon Slayer / Scimitar of Speed precedent for magic +X bonuses), and the `+2d10` rider fires from the existing v2.158.93 conditional-rider substrate via a catalog row that is a verbatim clone of v2.319.0 Mace of Disruption with `2d10` instead of `2d6`. The save-advantage aura is a multi-target effect that doesn't fit the per-attacker rider shape; it stays GM-narrated in v1, along with the Paladin-Lv-17+ 30-ft aura radius (Caelan is at Lv 7 today). Caelan carries the sword at `attack_index 3` + inventory tail as inert spare loot per the v2.318.1 spare-loot precedent — the harness PATCHes equipped+attuned via `/sheet-fields` (bypasses the `/attune` 3-item cap, since Caelan is at 3 seed-attuned: Ioun Stone of Reserve + Ring of Feather Falling + Armor of Resistance), runs the rider assertion, then restores. MINOR — additive content drop-in on the existing multi-type substrate, no engine change.
+
+### Added
+- `_MAGIC_ITEM_ATTACK_RIDERS["holy-avenger"]` (`app/routes/tabletop_routes.py`) — `{dice: "2d10", damage_type: "radiant", requires_attunement: True, condition: lambda tgt: creature_type in ("fiend", "undead")}` — Mace of Disruption clone with different dice.
+- Demo seed: Sir Caelan Lightbringer gains a **Holy Avenger Longsword** (`_slug: holy-avenger`) at `attack_index 3` + inventory tail, seeded inert (`equipped: False, attuned: False`).
+- `tests/harness/test_holy_avenger_rider.py` — 3 tests (fires vs. fiend, fires vs. undead, silent vs. humanoid). PATCHes inventory via `/sheet-fields` per test + restores on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2911 → 2914 (+3 Holy Avenger tests); new `test_holy_avenger_rider.py` section.
+
 ## [2.321.0] - 2026-06-15 — "The Borrowed Face"
 
 **Schema version:** 69

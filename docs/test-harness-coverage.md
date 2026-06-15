@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2911 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.321.0, 2026-06-15).
+**Total tests:** 2914 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.322.0, 2026-06-15).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3425,6 +3425,15 @@ v2.319.0 magic-items — Mace of Disruption (RAW DMG p.179, rare, attunement). S
 | `test_mace_fires_on_fiend_target` | PATCH equipped+attuned; attack a `creature_type: "fiend"` Quasit → `auto_uplifts` carries one entry with `source: "item-mace-of-disruption"`, `expression: "2d6"`, `damage_type: "radiant"`, `total` in [2, 24] (crit-doubled). |
 | `test_mace_fires_on_undead_target` | Same shape vs. a `creature_type: "undead"` Skeleton — proves the lambda's `in (...)` membership check, not a single-type equality. |
 | `test_mace_silent_on_humanoid` | Vs. a humanoid Bandit → no `item-mace-of-disruption` uplift in `auto_uplifts`. |
+
+### `test_holy_avenger_rider.py`
+v2.322.0 magic-items — Holy Avenger (RAW DMG p.174, legendary, attunement, "any sword"). Pure substrate clone of v2.319.0 Mace of Disruption — same fiend-OR-undead predicate, +2d10 radiant (vs. Mace's 2d6) per RAW. Carrier: Sir Caelan Lightbringer at `attack_index 3` + inventory tail, seeded inert (v2.318.1 spare-loot pattern). The +3 attack/damage half lives on the seeded attack row; the save-advantage aura is GM-narrated.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_holy_avenger_fires_on_fiend_target` | PATCH equipped+attuned; attack a `creature_type: "fiend"` Quasit → `auto_uplifts` carries one entry with `source: "item-holy-avenger"`, `expression: "2d10"`, `damage_type: "radiant"`, `total` in [2, 40] (crit-doubled). |
+| `test_holy_avenger_fires_on_undead_target` | Same shape vs. a `creature_type: "undead"` Skeleton — proves the lambda's `in (...)` membership check. |
+| `test_holy_avenger_silent_on_humanoid` | Vs. a humanoid Bandit → no `item-holy-avenger` uplift in `auto_uplifts`. |
 
 ### `test_item_hat_of_disguise.py`
 v2.321.0 magic-items — Hat of Disguise (RAW DMG p.173, rare, attunement). New `disguise_self_at_will` boolean derived flag substrate (the at-will-casting analogue of `levitate_at_will`). Carrier: Lyra Sunstrider as inert spare loot; PATCH-then-restore via `/sheet-fields` (bypasses the `/attune` 3-item cap).

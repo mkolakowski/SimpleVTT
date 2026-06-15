@@ -1545,6 +1545,21 @@ def _paladin_sheet(name: str) -> dict:
              "damage": "1d8+4", "damage_type": "slashing",
              "range": "5 ft", "_slug": "dragon-slayer",
              "desc": "Rare longsword, attunement. +1 attack/damage; +3d6 slashing vs. dragons (DMG p.166)."},
+            # v2.322.0 — Magic-items: Holy Avenger Longsword (RAW DMG p.174,
+            # legendary, attunement, "any sword"). The +3 attack/damage is
+            # baked onto this attack row (Vorpal/Dragon Slayer precedent for
+            # magic +X swords) — Caelan's base +6/1d8+3 → +9/1d8+6 here. The
+            # +2d10 radiant rider vs fiend OR undead fires from the v2.319.0
+            # multi-type conditional substrate when the inventory item is
+            # equipped + attuned (a clone of Mace of Disruption with 2d10
+            # instead of 2d6). The save-advantage aura is GM-narrated in v1.
+            # The inventory item is seeded INERT (spare loot) — the harness
+            # PATCHes equipped+attuned per test, runs the rider assertion,
+            # then restores.
+            {"name": "Holy Avenger Longsword", "attack_bonus": "+9",
+             "damage": "1d8+6", "damage_type": "slashing",
+             "range": "5 ft", "_slug": "holy-avenger",
+             "desc": "Legendary longsword, attunement. +3 attack/damage; +2d10 radiant on hit vs. fiends and undead (RAW DMG p.174). 10-ft aura grants advantage on saves vs spells/magical effects to you and friendly creatures (GM-narrated)."},
         ],
         # Paladin spells per Oath of Devotion (always prepared) + a few
         # core picks. Slugs reference the shipped SRD JSON. Casting
@@ -1763,6 +1778,25 @@ def _paladin_sheet(name: str) -> dict:
              "properties": "finesse, light, magic", "weight_lb": 3,
              "_slug": "scimitar-of-speed",
              "desc": "Very rare scimitar, attunement. You gain a +2 bonus to attack and damage rolls made with this magic weapon. In addition, you can make one attack with it as a bonus action on each of your turns. RAW DMG p.197."},
+            # v2.322.0 — Holy Avenger Longsword (RAW DMG p.174, legendary,
+            # attunement, "any sword"). Paired with the attack entry above via
+            # `_slug`. Pure substrate reuse — the v2.319.0 multi-type
+            # conditional rider (Mace of Disruption clone) with 2d10 radiant
+            # instead of 2d6. Seeded INERT (equipped=False, attuned=False) per
+            # the v2.318.1 spare-loot pattern — the harness PATCHes
+            # equipped+attuned via /sheet-fields (bypasses the /attune 3-item
+            # cap, since Caelan is at 3 seed-attuned already: Ioun Reserve +
+            # Ring of Feather Falling + Armor of Resistance) and runs the
+            # rider assertions. On theme for a Devotion Paladin — Holy Avenger
+            # is the iconic Paladin-Lv-17+ capstone weapon (Caelan's only Lv 7
+            # today, so the larger 30-ft aura is GM-narrated as not yet
+            # active). The save-advantage aura is GM-narrated.
+            {"name": "Holy Avenger Longsword", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "hands": 1, "damage": "1d8", "damage_type": "slashing",
+             "properties": "versatile (1d10), magic",
+             "_slug": "holy-avenger", "weight_lb": 3,
+             "desc": "Legendary longsword, attunement. +3 attack/damage; +2d10 radiant on hit vs. fiends and undead (RAW DMG p.174). 10-ft aura grants advantage on saves vs spells/magical effects to you and friendly creatures within the radius (30 ft at Paladin Lv 17+ — GM-narrated in v1)."},
         ],
         # v2.99.24 — Caelan is a Variant Human (RAW: free Lv 1 feat).
         # Sentinel fits his Paladin Devotion frontline-protector role:

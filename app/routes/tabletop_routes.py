@@ -34609,6 +34609,29 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
             in ("fiend", "undead")
         ),
     },
+    # v2.322.0 — Holy Avenger (RAW DMG p.174, legendary, attunement, "any
+    # sword"). Pure substrate clone of v2.319.0 Mace of Disruption — same
+    # multi-type conditional rider (fiend OR undead) — with `dice: "2d10"`
+    # instead of `2d6` per RAW. The +3 attack/damage half is baked into the
+    # wielder's seeded attack entry (Vorpal / Dragon Slayer / Scimitar of
+    # Speed precedent — magic +X bonuses live on the attack row, not as a
+    # catalog rider). The save-advantage aura ("you and all creatures
+    # friendly to you in the aura have advantage on saving throws against
+    # spells and other magical effects") is a multi-target effect that
+    # doesn't fit the per-attacker rider substrate; it stays GM-narrated in
+    # v1, along with the Paladin-Lv-17+ 30-ft aura radius. Zero new engine
+    # code — every line composes on existing v2.158.93 (Dragon Slayer
+    # `condition`) + v2.319.0 (multi-type predicate) machinery.
+    "holy-avenger": {
+        "label": "Holy Avenger",
+        "dice": "2d10",
+        "damage_type": "radiant",
+        "requires_attunement": True,
+        "condition": lambda tgt: bool(tgt) and (
+            (tgt.get("creature_type") or "").strip().lower()
+            in ("fiend", "undead")
+        ),
+    },
     # v2.320.0 — Vicious Weapon (RAW DMG p.209, rare, NO attunement). The first
     # on_nat_20 item that (a) requires NO attunement (the rider gate skips the
     # equipped/attuned check for `requires_attunement: False` items — slug
