@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.344.2] - 2026-06-15 — "The Parser's Reach"
+
+**Schema version:** 69
+
+**Commit summary:** Doc-only correction in [`spell-upcasting.md`](docs/plans/spell-upcasting.md) + [`TODO.md`](TODO.md) recording that **spell upcast dice/heal scaling is effectively complete** — the "~110 spells lack upcast scaling" figure was a stale denominator. It counted spells lacking the *structured `damage_per_slot`/`healing_per_slot` field*, not spells lacking *scaling*: the v2.125.0 prose parser (`spell_upcast_parse.py`) derives per-slot dice from each spell's `higher_level` text at cast time, so a spell scales the moment it carries a parseable clause + a modeled base.
+
+**Description:** Recomputed directly from the spell JSON + the cast resolver. Of **73 leveled spells with a modeled base damage/healing expr, 39 dice-scale automatically** (32 structured field + 7 parser-derived); the other 34 carry no per-slot dice clause because RAW they don't dice-scale (Finger of Death, Meteor Swarm, Sunburst, …) or they scale by count/duration/area handled by separate fields (`extra_targets_/extra_beams_per_slot_above_base`, per-endpoint target math — Magic Missile, Scorching Ray, Chain Lightning, Web, Prismatic Spray). Only 3 leveled damaging spells lack a modeled base (Color Spray, Sleep, Glyph of Warding), and all three are special-mechanic (HP-pool / bespoke `upcast_pool_dice` / stored-glyph) where a plain `damage` base would *mis-scale*. So there is no clean dice/heal backfill batch left. Re-prioritized: the **class-feature ⚪ tail (24 rows) is the new P1**; spell-upcast dice/heal marked DONE; the bespoke +targets/HP-pool math generalization (Sleep, Hold Person/Monster) demoted to P3 as the last spell-upcast *engine* item. Spells coverage nudged ~70% → ~72%. PATCH — doc-only, no code or schema change. Both docs already wiki-surfaced (`todo` allowlist; spell-upcasting plan doc).
+
+### Changed
+- `docs/plans/spell-upcasting.md`: new v2.344.2 scope note correcting the "~110 spells" framing and documenting the 39/73 dice-scale breakdown.
+- `TODO.md`: SRD-audit Spells row + remaining-gaps priority list updated — spell-upcast dice/heal marked DONE, class-feature tail promoted to P1.
+
 ## [2.344.1] - 2026-06-15 — "The Honest Tally"
 
 **Schema version:** 69

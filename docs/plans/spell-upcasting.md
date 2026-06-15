@@ -9,9 +9,30 @@ distinct ways** to let users up-cast, with a recommended phased rollout.
 > **Scope note.** ✅ All three approaches shipped (Phase A v2.108.0 / v2.109.0,
 > Phase B v2.110.0, Phase C v2.108.0 — see the status table below). This doc is
 > retained as the design record; the "proposed file touches" in each section
-> describe what landed. Remaining work is content-only: the ~110
-> cast-and-broadcast-only spells still lack structured `upcast` scaling data
-> (tracked as P2 in the [SRD audit](../../TODO.md)).
+> describe what landed.
+>
+> **v2.344.2 — dice/heal scaling is effectively complete (audit correction).**
+> An earlier draft of this note (and the SRD audit) framed the remaining work
+> as "~110 cast-and-broadcast-only spells still lack structured `upcast`
+> scaling data." That figure counted spells lacking the *structured field*,
+> not spells lacking *scaling*: the v2.125.0 prose parser
+> ([`spell_upcast_parse.py`](../../app/content/spell_upcast_parse.py)) derives
+> per-slot dice from each spell's `higher_level` text at cast time, so a spell
+> scales the moment it carries a parseable clause + a modeled base — no manual
+> field needed. Recomputed v2.344.2: of **73 leveled spells with a modeled base
+> damage/healing expr, 39 dice-scale automatically** (32 structured field + 7
+> parser-derived); the other 34 carry **no per-slot dice clause** because RAW
+> they don't dice-scale (Finger of Death, Meteor Swarm, Sunburst, …) or they
+> scale by **count/duration/area** handled by separate fields
+> (`extra_targets_/extra_beams_per_slot_above_base`, per-endpoint target math —
+> Magic Missile, Scorching Ray, Chain Lightning, Web, Prismatic Spray). Only
+> **3** leveled damaging spells lack a modeled base (Color Spray, Sleep, Glyph
+> of Warding) and all three are special-mechanic (HP-pool / bespoke
+> `upcast_pool_dice` / stored-glyph), where a plain `damage` base would
+> *mis-scale*. **Conclusion: there is no clean dice/heal backfill batch left.**
+> The only remaining engine item is generalizing the bespoke +targets/HP-pool
+> math (Sleep, Hold Person/Monster) onto a shared structured field — a
+> refactor, not content (see the rollout section).
 
 ## Status snapshot
 

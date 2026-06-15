@@ -27,7 +27,7 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 
 ## SRD 5e Audit (v2.344.1 refresh)
 
-**Audit scope.** Recomputed directly from the content JSON (`app/data/local/dnd5e/items/`, 294 equipment files) + the three magic-item registry dicts in `app/routes/tabletop_routes.py` as of v2.344.1, after the v2.316.0→v2.344.0 magic-item content sprint (Sword of Life Stealing through "The Armory's Remainder"). This pass exists to record that **the P1 magic-item content tail is now closed** and to re-point the top SRD-automation lever at spell upcast scaling (the new P1).
+**Audit scope.** Recomputed directly from the content JSON (`app/data/local/dnd5e/items/`, 294 equipment files) + the three magic-item registry dicts in `app/routes/tabletop_routes.py` as of v2.344.1, after the v2.316.0→v2.344.0 magic-item content sprint (Sword of Life Stealing through "The Armory's Remainder"). This pass records that **the magic-item content tail is now closed**. A follow-up correction in **v2.344.2** found the spell upcast dice/heal scaling is *also* effectively complete (the prose parser covers it — see the Spells row), so the top remaining SRD-automation lever is now the **class-feature ⚪ tail** (24 rows).
 
 ### Per-category coverage (the headline numbers)
 
@@ -37,7 +37,7 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 | Monsters | 322 | **~85%** | Unchanged. |
 | Conditions | 15 | **~85%** | Unchanged. |
 | Class features | **222 rows** | **~81%** | Unchanged — Barbarian Lv 9–20, Monk capstones, Ranger Lv 10–20, Rogue Reliable Talent / Stroke of Luck still ⚪. |
-| Spells | 319 | **~70%** | Unchanged — ~110 cast-and-broadcast-only spells still lack upcast scaling. |
+| Spells | 319 | **~72%** | **Upcast scaling correction (v2.344.2):** the prior "~110 lack upcast scaling" figure counted spells lacking the *structured field*, not spells lacking *scaling* — the v2.125.0 prose parser derives per-slot dice from `higher_level` at cast time. Of 73 leveled spells with a modeled base, **39 dice-scale automatically** (32 structured + 7 parser); the other 34 carry no per-slot dice clause because RAW they don't dice-scale (Finger of Death, Meteor Swarm, Sunburst) or scale by count/duration/area handled elsewhere. **Dice/heal upcast scaling is effectively complete.** The remaining spell gap is area-effect automation + cast-and-broadcast utility spells, not upcast. |
 | Magic items | **235 / 239 wired** | **~98%** | **Up from 123/239 (~51%) at v2.315.0.** The v2.316–v2.344 content sprint wired the entire tail. The only 4 unwired are the generic/meta slugs (`potion-of-healing`, `spell-scroll`, `weapon-1-2-or-3`, `wand-of-the-war-mage-1-2-or-3`) — intentionally **not** discrete collectibles. Effectively **100% of discrete SRD magic items** are now wired. |
 
 **Overall ~83%** automated across the SRD ruleset (up from ~75% — the magic-item jump from ~51% → ~98% is the mover).
@@ -50,9 +50,11 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 
 The engine substrate is complete; everything below is content/scaling-data, not engine code.
 
-1. 🔴 **P1 — Spell upcast scaling (~110 spells).** *Promoted from P2 now that magic items are closed.* Add `damage_per_slot` / scaling data to the cast-and-broadcast-only spells so higher-slot casts scale automatically. Moves Spells from ~70% → ~90%+ and is now the single biggest lever on the overall %.
-2. 🟢 **P2 — Class-feature ⚪ tail (24 rows).** Barbarian Lv 9–20, Monk Deflect Missiles / Diamond Soul / Empty Body / Perfect Self, Ranger Lv 10–20 (minus Vanish), Rogue Reliable Talent / Slippery Mind / Elusive / Stroke of Luck.
-3. ✅ **DONE — Magic-item content tail.** Closed across v2.316.0–v2.344.0. Only the 4 generic/meta slugs remain, which are intentionally out of scope.
+1. 🔴 **P1 — Class-feature ⚪ tail (24 rows).** *Promoted from P2 now that both magic items and spell-upcast scaling are closed.* Barbarian Lv 9–20, Monk Deflect Missiles / Diamond Soul / Empty Body / Perfect Self, Ranger Lv 10–20 (minus Vanish), Rogue Reliable Talent / Slippery Mind / Elusive / Stroke of Luck.
+2. 🟡 **P2 — Spell area-effect + utility automation.** With dice/heal upcast scaling complete (below), the remaining spell lever is automating area-of-effect targeting and the cast-and-broadcast-only utility spells. Lower leverage than the class-feature tail.
+3. 🟢 **P3 — Generalize bespoke upcast +targets/HP-pool math.** Migrate Sleep / Hold Person / Hold Monster off per-endpoint constants onto a shared structured `upcast` param field (a refactor — the last spell-upcast *engine* item). See [`spell-upcasting.md`](plans/spell-upcasting.md).
+4. ✅ **DONE — Spell upcast dice/heal scaling.** Effectively complete via structured fields + the v2.125.0 prose parser (39/73 modeled-base leveled spells dice-scale; the rest are RAW non-scalers or count/duration scalers). Corrected v2.344.2 — see the Spells row above.
+5. ✅ **DONE — Magic-item content tail.** Closed across v2.316.0–v2.344.0. Only the 4 generic/meta slugs remain, which are intentionally out of scope.
 
 ### Out-of-scope (unchanged)
 
