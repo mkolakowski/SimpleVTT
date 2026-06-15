@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.339.0] - 2026-06-15 — "The Returning Hammer"
+
+**Schema version:** 69
+
+**Commit summary:** SRD magic-item drop-in — **Dwarven Thrower** (RAW DMG p.166, very rare, attunement by a dwarf). The first rider to use a NEW `bonus_dice_vs` field: an unconditional base `dice: "1d8"` bludgeoning rider (fires every hit, Frost Brand shape) PLUS an extra `1d8` vs a giant (= RAW +1d8 normally, +2d8 vs giant). Seeded inert on Brother Tavik Stonebrow (Hill Dwarf — the dwarf-only attunement is RAW-legal); three harness tests.
+
+**Description:** Section 6c of `_compute_attack_auto_uplifts` gains a `bonus_dice_vs` block that, after the unconditional base-dice push, layers an extra dice uplift when the target's (helper-resolved) `creature_type` matches `bonus_dice_vs.creature_type`. Surfaced as a distinct `source: "item-dwarven-thrower-bonus"` uplift so the chat card lists the giant-bane line separately from the base +1d8. The +3 attack/damage and the returns-to-hand-after-a-ranged-attack property are baked onto / GM-narrated on Tavik's seeded thrown attack row; the ranged-only restriction is GM-narrated in v1 (the demo seeds it as a thrown hammer). Attunement-gated (RAW); seeded inert per the v2.318.1 spare-loot pattern — the harness PATCHes equipped+attuned via `/sheet-fields`. MINOR — additive rider substrate field + content, no schema change.
+
+### Added
+- `bonus_dice_vs` rider field handled in `_compute_attack_auto_uplifts` section 6c (`app/routes/tabletop_routes.py`) — an extra creature-type-gated dice uplift layered on the unconditional base `dice`.
+- `_MAGIC_ITEM_ATTACK_RIDERS["dwarven-thrower"]` — `{dice: "1d8", damage_type: "bludgeoning", requires_attunement: True, bonus_dice_vs: {creature_type: "giant", dice: "1d8"}}`.
+- Demo seed: Brother Tavik Stonebrow gains a **Dwarven Thrower** at `attack_index 3` + inventory tail, seeded inert.
+- `tests/harness/test_dwarven_thrower.py` — 3 tests (vs giant: base +1d8 + giant +1d8 bonus; vs humanoid: base only; detuned: neither).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2962 → 2965 (+3 Dwarven Thrower tests); new `test_dwarven_thrower.py` section.
+
 ## [2.338.0] - 2026-06-15 — "The Giant's Bane"
 
 **Schema version:** 69

@@ -1331,6 +1331,18 @@ def _cleric_sheet(name: str) -> dict:
              "damage": "1d6+2", "damage_type": "bludgeoning",
              "range": "5 ft", "_slug": "mace-of-disruption",
              "desc": "Rare mace, attunement. 1d6+2 bludgeoning; +2d6 radiant on hit vs. fiends and undead (RAW DMG p.179). Sheds bright light in a 20-ft radius. The HP-25-destroy / fear save clauses are GM-narrated in v1."},
+            # v2.339.0 — Dwarven Thrower (RAW DMG p.166, very rare,
+            # attunement by a dwarf — Tavik is a Hill Dwarf, RAW-legal). A
+            # thrown warhammer: +3 attack/damage baked into this row (Tavik's
+            # STR +2 + prof +3 + magic +3 = +8 / 1d8+5). On a ranged hit it
+            # deals +1d8 bludgeoning (the unconditional `dice` rider), or +2d8
+            # vs a giant (base 1d8 + the `bonus_dice_vs` 1d8). The
+            # returns-to-hand property is GM-narrated. The inventory item
+            # below is seeded inert (PATCH-in-test) per the v2.318.1 pattern.
+            {"name": "Dwarven Thrower (thrown)", "attack_bonus": "+8",
+             "damage": "1d8+5", "damage_type": "bludgeoning",
+             "range": "20/60 ft", "_slug": "dwarven-thrower",
+             "desc": "Very rare warhammer, attunement (dwarf). +3 attack/damage; returns to hand after a ranged attack. On a ranged hit, +1d8 bludgeoning (or +2d8 vs. a giant). RAW DMG p.166."},
         ],
         # v2.4.15: Life Domain grants 6 domain spells unlocked by Cleric Lv 5
         # — Bless / Cure Wounds (L1), Lesser Restoration / Spiritual Weapon
@@ -1544,6 +1556,20 @@ def _cleric_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True, "weight_lb": 1,
              "_slug": "candle-of-invocation",
              "desc": "Very rare wondrous item, attunement. A taper keyed to a specific alignment. While burning, creatures of the matching alignment near it gain a benefit and the wielder can use the flame to cast Gate (consuming the candle). Spells / planar-ally effects are alignment-gated. RAW DMG p.157."},
+            # v2.339.0 — Dwarven Thrower (RAW DMG p.166, very rare,
+            # attunement by a dwarf). Paired with the attack entry above via
+            # `_slug`. Seeded INERT (equipped=False, attuned=False) per the
+            # v2.318.1 spare-loot precedent — the harness PATCHes it
+            # equipped+attuned via /sheet-fields (bypassing the /attune cap;
+            # Tavik is already at 4+ seed-attuned), then attacks a giant /
+            # humanoid to assert the base +1d8 rider and the giant +1d8 bonus.
+            # Tavik is a Hill Dwarf, so the dwarf-only attunement is RAW-legal.
+            {"name": "Dwarven Thrower", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "hands": 1, "damage": "1d8", "damage_type": "bludgeoning",
+             "range": "20/60 ft", "properties": "thrown, magic",
+             "_slug": "dwarven-thrower", "weight_lb": 5,
+             "desc": "Very rare warhammer, attunement by a dwarf. +3 attack/damage. It returns to your hand immediately after a ranged attack. On a ranged hit it deals an extra 1d8 bludgeoning damage, or an extra 2d8 if the target is a giant. RAW DMG p.166."},
         ],
         # v2.76.0 Phase 4c — War Caster feat for Tavik. RAW (PHB
         # p.170): the reaction part lets Tavik cast a 1-action

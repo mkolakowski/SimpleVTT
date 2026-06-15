@@ -28148,6 +28148,57 @@ def _compute_attack_auto_uplifts(
                 except dice_mod.DiceParseError:
                     pass
 
+            # v2.339.0 — Dwarven Thrower: an EXTRA dice rider vs a specific
+            # creature type, layered ON TOP of the unconditional base `dice`
+            # above. RAW DMG p.166: a ranged hit deals +1d8 bludgeoning, or
+            # +2d8 vs a giant — i.e. base 1d8 (the unconditional `dice` field)
+            # PLUS this 1d8 giant bonus. The base rider has no `condition`, so
+            # it fires every hit; this block adds the bonus only when the
+            # target's (helper-resolved) creature_type matches
+            # `bonus_dice_vs.creature_type`. Surfaced as a separate uplift with
+            # `source: "item-<slug>-bonus"` so the chat card lists the giant
+            # bane line distinctly.
+            bonus_spec = rider_spec.get("bonus_dice_vs")
+            if (
+                has_item_attuned and bonus_spec
+                and bonus_spec.get("dice")
+                and target_combatant is not None
+            ):
+                want_ct = str(
+                    bonus_spec.get("creature_type") or "",
+                ).strip().lower()
+                tgt_ct = (
+                    target_combatant.get("creature_type") or ""
+                ).strip().lower()
+                if not tgt_ct and db is not None:
+                    try:
+                        tgt_ct = (
+                            _attacker_creature_type(
+                                db, target_combatant.get("char_id"),
+                                target_combatant,
+                            ) or ""
+                        ).strip().lower()
+                    except Exception:
+                        tgt_ct = ""
+                if want_ct and tgt_ct == want_ct:
+                    try:
+                        br = dice_mod.roll(bonus_spec["dice"])
+                        uplifts.append({
+                            "label": bonus_spec.get(
+                                "label",
+                                rider_spec.get("label", attack_slug),
+                            ),
+                            "expression": bonus_spec["dice"],
+                            "total": br.total,
+                            "breakdown": br.breakdown,
+                            "damage_type": rider_spec.get(
+                                "damage_type",
+                                attack_damage_type or "bludgeoning"),
+                            "source": f"item-{attack_slug}-bonus",
+                        })
+                    except dice_mod.DiceParseError:
+                        pass
+
     # 6b. v2.158.49 — Absorb Elements next-melee rider (PHB p.211).
     #     The v2.71.0 reaction installs `absorb-elements-active`
     #     carrying `next_melee_bonus_dice` (an int count of d6) +
@@ -35001,6 +35052,28 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
             "effect": "prone",
             "duration_rounds": 1,
             "label": "Giant Slayer — Knockdown",
+        },
+    },
+    # v2.339.0 — Dwarven Thrower (RAW DMG p.166, very rare, attunement by a
+    # dwarf). The first rider to use the new `bonus_dice_vs` field: an
+    # unconditional base `dice: "1d8"` bludgeoning (Frost Brand shape — no
+    # `condition`, fires every hit) PLUS an extra `1d8` vs a giant (the
+    # `bonus_dice_vs` block in section 6c). RAW: a ranged hit deals +1d8, or
+    # +2d8 vs a giant (= base 1d8 + bonus 1d8). The +3 attack/damage and the
+    # returns-to-hand-after-a-ranged-attack property are baked onto / narrated
+    # on the wielder's seeded thrown attack row. The ranged-only restriction
+    # is GM-narrated in v1 (the demo seeds it as a thrown hammer). Attunement-
+    # gated (the dwarf-only RAW restriction is GM-narrated; Tavik is a Hill
+    # Dwarf so it's RAW-legal for him).
+    "dwarven-thrower": {
+        "label": "Dwarven Thrower",
+        "dice": "1d8",
+        "damage_type": "bludgeoning",
+        "requires_attunement": True,
+        "bonus_dice_vs": {
+            "creature_type": "giant",
+            "dice": "1d8",
+            "label": "Dwarven Thrower — Giant Bane",
         },
     },
     # v2.319.0 — Mace of Disruption (RAW DMG p.179, rare, attunement). Sun
