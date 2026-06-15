@@ -32575,6 +32575,16 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "dwarven-plate": [
         {"ac_bonus": 2},
     ],
+    # v2.304.0 — Demon Armor (RAW DMG p.158, very rare, attunement). Cursed
+    # plate that grants a +1 bonus to AC. Same `ac_bonus` field every other
+    # AC item feeds into `_read_target_ac`, so an equipped+attuned Demon Armor
+    # reads as `target_ac = base + 1`. Unlike Elven Chain / Dwarven Plate this
+    # one IS attunement-gated (RAW). The understand/speak-Abyssal, clawed-
+    # gauntlet magic unarmed strikes (1d8 +1), and the curse (can't doff
+    # without remove curse; disadvantage vs demons) are GM-narrated in v1.
+    "demon-armor": [
+        {"ac_bonus": 1, "requires_attunement": True},
+    ],
     # v2.159.24 — first sensory-passive item. Goggles of Night (RAW
     # DMG p.172, uncommon, no attunement). While worn, the wearer
     # has darkvision out to 60 ft — composes with `_pc_sees_in_darkness`

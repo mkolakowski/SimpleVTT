@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.304.0] - 2026-06-14 — "The Cursed Carapace"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item drop-in — **Demon Armor** (RAW DMG p.158, very rare, attunement) lands its "+1 bonus to AC" on the same `ac_bonus` substrate the Dwarven Plate (v2.302.0), Elven Chain (v2.301.0), and Cloak/Ring of Protection feed into `_read_target_ac`. One registry entry, a demo-seed item on Dame Seraphine Vael, and three harness tests.
+
+**Description:** The armor's headline testable benefit — "while wearing this armor, you gain a +1 bonus to AC" — rides the `ac_bonus` field already on the passive engine: `_read_target_ac` sums the `_equipped_item_effects` walker's `ac_bonus` into a target's AC at attack hit-determination time, so an equipped + attuned Demon Armor reads as `target_ac = base + 1`. So this commit needs no new engine code — a single one-field registry payload, a demo seed, and tests. Unlike the no-attunement Dwarven Plate / Elven Chain, this one IS attunement-gated (the payload carries `requires_attunement: True`, exactly as RAW), so the per-payload attunement check drops the +1 when worn-but-not-attuned. The other clauses — understand/speak Abyssal, clawed gauntlets that turn unarmed strikes into magic 1d8 weapons with a +1 to attack/damage, and the curse (can't doff without remove curse; disadvantage on attack rolls vs demons and on saves vs their spells/abilities) — are GM-narrated in v1. Seeded **unequipped/unattuned** as spare loot on Dame Seraphine Vael (the demo's Vengeance Paladin — cursed demonic plate is on-theme for a foe-sworn oathbreaker-hunter). She carries no other `ac_bonus` item (her Ring of Resistance is `_resistance_type`, her Scarab of Protection is `spell_save_advantage`), so the harness measures the *delta*: read `target_ac` inert, PATCH it equipped+attuned, read again, assert it rose by exactly 1. An attunement-gate test (equipped-but-un-attuned grants no +1, then attuning surfaces it) and an unequip-returns-to-baseline test round it out, with the inventory restored on teardown. MINOR — additive demo content + a new registry entry + tests, no schema change.
+
+### Added
+- `demon-armor` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — a one-field payload: `ac_bonus: 1`, attunement-gated.
+- Demo seed: Dame Seraphine Vael gains a spare (unequipped/unattuned) **Demon Armor**.
+- `tests/harness/test_item_demon_armor.py` (3 tests): equip+attune raises Seraphine's `target_ac` by exactly 1 vs the inert baseline (via `/attack` with `override: True`); attunement gate (equipped-but-un-attuned grants no +1, attuning surfaces it); unequip returns `target_ac` to baseline. Inventory restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2871 → 2874 (+3 drop-in tests); added the `test_item_demon_armor.py` section.
+
 ## [2.303.0] - 2026-06-14 — "The Springing Step"
 
 **Schema version:** 69

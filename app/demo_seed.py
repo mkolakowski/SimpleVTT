@@ -1860,6 +1860,21 @@ def _paladin_vengeance_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "attuned": False, "weight_lb": 0,
              "_slug": "scarab-of-protection",
              "desc": "Legendary wondrous item, attunement. While on your person you have advantage on saving throws against spells. The scarab has 12 charges: when you fail a save against a necromancy spell or a harmful undead effect you can use your reaction to expend 1 charge and turn the failure into a success; it crumbles to powder when the last charge is used. RAW DMG p.199."},
+            # v2.304.0 — Demon Armor (RAW DMG p.158, very rare, attunement).
+            # Lands on the `ac_bonus` substrate: equipped+attuned it reads as
+            # target_ac = base + 1 via `_read_target_ac`. Seeded as inert spare
+            # loot (unequipped/unattuned) so it adds nothing to Seraphine's
+            # baseline AC (she carries no other ac_bonus item) — the harness
+            # PATCHes it equipped+attuned, reads the delta, then restores. The
+            # Abyssal speech, clawed-gauntlet magic unarmed strikes (1d8 +1),
+            # and the curse (can't doff without remove curse; disadvantage vs
+            # demons) are GM-narrated in v1. Cursed demonic plate is thematic
+            # loot for a Vengeance paladin hunting the lower planes.
+            {"name": "Demon Armor", "type": "armor", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "armor_type": "heavy", "ac_value": 18, "weight_lb": 65,
+             "_slug": "demon-armor",
+             "desc": "Very rare armor (plate), attunement. While wearing this armor you gain a +1 bonus to AC, can understand and speak Abyssal, and your clawed gauntlets turn unarmed strikes into magic weapons dealing 1d8 slashing with a +1 bonus to attack and damage. Curse: once donned you can't doff it unless targeted by remove curse, and you have disadvantage on attack rolls against demons and on saves against their spells and abilities. RAW DMG p.158."},
         ],
         "resources": [
             {

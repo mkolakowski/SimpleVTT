@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2871 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.303.0, 2026-06-14).
+**Total tests:** 2874 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.304.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2928,6 +2928,15 @@ v2.303.0 — Boots of Striding and Springing (RAW DMG p.156, uncommon, attunemen
 | `test_boots_detune_drops_flag` | Attunement gate: equipped-but-un-attuned → no `jump_at_will`. Restored on teardown. |
 | `test_boots_baseline_has_no_flag` | Control: inert seed (equipped=False) → no `jump_at_will` (proves boots-sourced). |
 | `test_boots_unequip_drops_flag` | Equip+attune → flag present; unequip → removed. Restored on teardown. |
+
+### `test_item_demon_armor.py`
+v2.304.0 — Demon Armor (RAW DMG p.158, very rare, attunement): "+1 bonus to AC", riding the same `ac_bonus` substrate the Dwarven Plate / Elven Chain / Cloak of Protection feed into `_read_target_ac` (so equipped+attuned reads as `target_ac = base + 1`). Attunement-gated (the payload carries `requires_attunement`). Abyssal speech, magic clawed-gauntlet unarmed strikes, and the can't-doff curse are GM-narrated. Seeded as inert spare loot (unequipped/unattuned) on Dame Seraphine Vael (Vengeance Paladin, no other `ac_bonus` item); tests measure the inert-vs-equipped delta via `/attack` `target_ac`, then restore.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_demon_armor_adds_one_to_target_ac` | Equip+attune via PATCH → `target_ac` (from `/attack` with `override: True`) rises by exactly 1 vs the inert baseline. Restored on teardown. |
+| `test_demon_armor_requires_attunement` | Attunement gate: equipped-but-un-attuned → no +1; attuning → +1 appears. Restored on teardown. |
+| `test_demon_armor_unequip_drops_bonus` | Equip+attune → +1; unequip → `target_ac` back to baseline. Restored on teardown. |
 
 ### `test_item_ring_of_spell_turning.py`
 v2.299.0 — Ring of Spell Turning (RAW DMG p.193, legendary, attunement): advantage on saving throws against any spell that targets only you, via the v2.297.0 `spell_save_advantage` roll effect (third carrier after the Scarab + Robe of the Archmagi; the nat-20 spell-reflection clause is GM-narrated). Seeded as inert spare loot (unequipped/unattuned) on Zara Emberfire (Sorcerer, no other spell-save item, so the baseline cleanly proves the source); tests PATCH it equipped+attuned, roll a `vs_spell` save, then restore.
