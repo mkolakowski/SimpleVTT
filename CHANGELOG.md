@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.344.0] - 2026-06-15 — "The Armory's Remainder"
+
+**Schema version:** 69
+
+**Commit summary:** Bulk SRD magic-item stub push — the **last 12 mechanically-rich items** shipped together as catalog-stub passives in one commit, closing the magic-item content tail. Each is registered via a compact `setdefault` loop appended to `_MAGIC_ITEM_PASSIVES` (slug + `requires_attunement` only) and seeded as inert spare loot on a thematic carrier via the v2.344.0 block appended to `_vault_loot` in `demo_seed.py`. One parametrized harness test (8 carrier cases) guards the seeds.
+
+**Description:** These are the items deliberately excluded from "The Vault" (v2.342.0) because each has rich, distinctive mechanics that warrant dedicated wiring later — Bead of Force (DC 15 DEX burst + sphere of force), Berserker Axe (cursed HP-max boost + berserk save), Hammer of Thunderbolts (giant-slaying thunderclap combo), Oathbow (sworn-enemy +3d6 + advantage), Pipes of Haunting (DC 15 WIS frighten), Sword of Wounding (recurring 1d4 necrotic + DC 15 CON to end), Trident of Fish Command (dominate beast), and the four charged staves (Staff of the Magi, Staff of Striking, Staff of the Python, Staff of the Woodlands, Staff of Withering). Rather than leave them invisible on disk, they ship as catalog stubs now (so the slug resolves and the item is collectible) with mechanics GM-narrated until each gets its own handler. Each slug is flagged for future dedicated wiring in the seed comment. MINOR — additive catalog rows + demo content + tests, no schema change. This closes the discrete-collectible magic-item content tail to ~0 unwired (only the generic/meta slugs `weapon-1-2-or-3`, `wand-of-the-war-mage-1-2-or-3`, `spell-scroll`, `potion-of-healing` remain, which are intentionally not discrete items).
+
+### Added
+- `_MAGIC_ITEM_PASSIVES` remainder `setdefault` loop (`app/routes/tabletop_routes.py`) — 12 catalog rows (slug + `requires_attunement`), GM-narrated mechanics, each flagged for future dedicated wiring.
+- Demo seed: 12 remainder items appended to `_vault_loot`, injected as inert spare loot across 8 thematic carriers (Thalindra: bead-of-force + staff-of-the-magi; Krieger: berserker-axe; Garrik: hammer-of-thunderbolts; Rowan: oathbow; Lyra: pipes-of-haunting; Sir Caelan: sword-of-wounding; Mira: trident-of-fish-command + staff-of-the-python + staff-of-the-woodlands; Magnus: staff-of-striking + staff-of-withering).
+- `tests/harness/test_armorys_remainder.py` — parametrized smoke test (8 carrier cases) asserting every seeded remainder slug surfaces on each carrier's `/sheet-json`.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2986 → 2994 (+8 remainder carrier cases); new `test_armorys_remainder.py` section.
+
 ## [2.343.0] - 2026-06-15 — "The Envenomed Blade"
 
 **Schema version:** 69

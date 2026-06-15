@@ -6737,6 +6737,22 @@ def seed_characters(
         ("Quan Reelstep", "rod-of-security", "Rod of Security", "magic", "Very rare. Action: you + up to 199 others travel to an extradimensional paradise for up to 200 days (÷ travelers); return is unharmed + well-fed. RAW DMG p.193."),
         ("Quan Reelstep", "talisman-of-the-sphere", "Talisman of the Sphere", "magic", "Legendary, attunement. Double your proficiency on INT (Arcana) checks to control a sphere of annihilation, and levitate one you control. RAW DMG p.207."),
         ("Quan Reelstep", "well-of-many-worlds", "Well of Many Worlds", "magic", "Legendary. A black cloth that unfolds into a 6-ft planar portal to a random other plane/world; refold to close. RAW DMG p.213."),
+        # v2.344.0 — "The Armory's Remainder": the last 12 mechanically-rich
+        # SRD items, catalog-stubbed to close the tail (each flagged for
+        # future dedicated wiring in tabletop_routes.py). Mechanics
+        # GM-narrated until then.
+        ("Thalindra Moonwhisper", "bead-of-force", "Bead of Force", "consumable", "Rare. Throw up to 60 ft (action): a 10-ft-radius burst — DC 15 DEX save or 5d4 force; failed-save creatures fully inside are trapped in a sphere of force for 1 min. RAW DMG p.154."),
+        ("Thalindra Moonwhisper", "staff-of-the-magi", "Staff of the Magi", "weapon", "Legendary, attunement (sorcerer/warlock/wizard). 50 charges; +2 spell attack, absorb spells, and cast a large spell list (fireball, lightning bolt, web, passwall, etc.). Retributive strike on a break. RAW DMG p.202."),
+        ("Krieger Stonefist", "berserker-axe", "Berserker Axe", "weapon", "Rare, attunement (cursed). +1 attack/damage; while attuned your HP max increases by 1 per level. Cursed: on taking damage, DC 15 WIS save or go berserk (attack the nearest creature). RAW DMG p.155."),
+        ("Garrik Ironside", "hammer-of-thunderbolts", "Hammer of Thunderbolts", "weapon", "Legendary. +1 maul; with a Belt of Giant Strength + Gauntlets of Ogre Power, STR becomes 20 and crits hurl a thunderclap (DC 17 CON or stunned). Throw to kill a giant (DC 17 CON). RAW DMG p.173."),
+        ("Rowan Quickbow", "oathbow", "Oathbow", "weapon", "Very rare, attunement (longbow). Speak the command word to declare a sworn enemy; vs that enemy you have advantage on attacks, +3d6 piercing, and ignore their resistance — until it drops or you sleep. RAW DMG p.183."),
+        ("Lyra Sunstrider", "pipes-of-haunting", "Pipes of Haunting", "magic", "Uncommon (wind-instrument proficiency). 3 charges. Action: play an eerie tune — each chosen creature within 30 ft makes a DC 15 WIS save or is frightened for 1 min. RAW DMG p.184."),
+        ("Sir Caelan Lightbringer", "sword-of-wounding", "Sword of Wounding", "weapon", "Rare, attunement (any sword). Once per turn on a hit you can wound the target: at the start of each of its turns it takes 1d4 necrotic (DC 15 CON to end), and HP lost this way returns only on a rest. RAW DMG p.207."),
+        ("Mira Greenleaf", "trident-of-fish-command", "Trident of Fish Command", "weapon", "Uncommon, attunement. 3 charges. Action: expend 1 to cast dominate beast (DC 15) on a beast with an innate swimming speed. RAW DMG p.208."),
+        ("Mira Greenleaf", "staff-of-the-python", "Staff of the Python", "weapon", "Very rare, attunement. Action: throw the staff to become a giant constrictor snake under your control for up to 1 hour (or until 0 HP); a command word reverts it. RAW DMG p.202."),
+        ("Mira Greenleaf", "staff-of-the-woodlands", "Staff of the Woodlands", "weapon", "Rare, attunement (druid). +2 quarterstaff; 10 charges to cast animal friendship, awaken, barkskin, locate animals/plants, speak with animals/plants, wall of thorns; plant it to grow a tree. RAW DMG p.202."),
+        ("Magnus Hexbinder", "staff-of-striking", "Staff of Striking", "weapon", "Very rare, attunement. +3 quarterstaff; 10 charges — expend 1-3 on a hit to deal +1d6 force per charge. Regains 1d6+4 charges at dawn. RAW DMG p.202."),
+        ("Magnus Hexbinder", "staff-of-withering", "Staff of Withering", "weapon", "Rare, attunement (cleric/druid/warlock). 3 charges. On a hit, expend 1 to deal +2d10 necrotic and force a DC 15 CON save or the target has disadvantage on STR/CON checks + saves for 1 hour. RAW DMG p.202."),
     ]
     _pc_by_name = {
         c.name: c for c in (

@@ -33767,6 +33767,37 @@ for _vault_slug, _vault_attune in [
         _vault_slug, [{"requires_attunement": _vault_attune}],
     )
 
+# v2.344.0 — "The Armory's Remainder": the last 12 unwired SRD magic items,
+# registered as catalog stubs to CLOSE the magic-item content tail. Unlike
+# the v2.342.0 Vault (pure-narrative items), these are mechanically RICH —
+# each is flagged for future dedicated wiring with the substrate it would
+# use:
+#   - bead-of-force         → single-shot AoE save (Necklace-of-Fireballs)
+#   - berserker-axe         → max-HP-per-level passive + berserk save (NEW)
+#   - hammer-of-thunderbolts→ STR-set (ability_set) + on_nat_20 blast + giant
+#   - oathbow               → sworn-enemy target-marking + conditional rider
+#   - pipes-of-haunting     → radius fear save (Wand-of-Fear / Mace-of-Terror)
+#   - sword-of-wounding     → on-hit ongoing-DoT (start-of-turn tick, NEW)
+#   - trident-of-fish-command → charged dominate-beast save-condition
+#   - staff-of-striking     → charged melee force-damage rider
+#   - staff-of-the-magi     → legendary multi-spell charge staff
+#   - staff-of-the-python   → animate-to-giant-snake summon
+#   - staff-of-the-woodlands→ druid spell-list charge staff + tree shape
+#   - staff-of-withering    → charged necrotic + ability-drain save
+# Stubbed now so they're catalog-visible (audit-counted) + demo-seeded; the
+# mechanics are GM-narrated until each gets its dedicated commit.
+for _rem_slug, _rem_attune in [
+    ("bead-of-force", False), ("berserker-axe", True),
+    ("hammer-of-thunderbolts", False), ("oathbow", True),
+    ("pipes-of-haunting", False), ("sword-of-wounding", True),
+    ("trident-of-fish-command", True), ("staff-of-striking", True),
+    ("staff-of-the-magi", True), ("staff-of-the-python", True),
+    ("staff-of-the-woodlands", True), ("staff-of-withering", True),
+]:
+    _MAGIC_ITEM_PASSIVES.setdefault(
+        _rem_slug, [{"requires_attunement": _rem_attune}],
+    )
+
 
 # ── Magic-item active-action catalog (v2.158.82 — Phase 3 M2) ────────────────
 # Maps an SRD item slug to a dict describing the per-use action: the

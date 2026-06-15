@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2986 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.343.0, 2026-06-15).
+**Total tests:** 2994 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.344.0, 2026-06-15).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3549,6 +3549,13 @@ v2.158.103 magic-items-automation Phase 7c — Sword of Sharpness +4d6 slashing 
 |------|-----------------|
 | `test_sharpness_no_rider_when_detuned` | Detune the Sword of Sharpness → nat-20 rider suppressed even with d20=20 seeded. Re-attunes in teardown. |
 | `test_sharpness_nat_20_extra_damage` | Iterates seeds 0-199 finding one that lands d20=20 on Pip's first attack; asserts `feature_used` with `source: "item-sword-of-sharpness-nat20"` fires and `hp_dealt` is in [4, 24] (4d6 range). |
+
+### `test_armorys_remainder.py`
+v2.344.0 magic-items — "The Armory's Remainder" bulk-stub push. The last 12 mechanically-rich SRD items (Bead of Force, Berserker Axe, Hammer of Thunderbolts, Oathbow, Pipes of Haunting, Sword of Wounding, Trident of Fish Command, and the charged staves) shipped as catalog-stub passives, each flagged for future dedicated wiring. Seeded as inert spare loot across 8 thematic carriers via the v2.344.0 block in `_vault_loot`. Closes the discrete-collectible magic-item content tail.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_armorys_remainder_seeded[<carrier>]` | The named carrier's `/sheet-json` inventory contains every remainder stub slug seeded on them (8 parametrized cases covering all 12 items). |
 
 ### `test_dagger_of_venom.py`
 v2.343.0 magic-items — Dagger of Venom (RAW DMG p.161, rare, NO attunement). First on_hit_save item to use the new `effect: "damage_condition"` variant — DC 15 CON save or 2d10 poison + poisoned (save negates both). Carrier: Pip Quickfingers at `attack_index 5`, equipped. Bandit-template targets roll the NPC save inline.
