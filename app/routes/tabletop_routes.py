@@ -34276,6 +34276,38 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
     # install. The handler reuses the v2.99.409 / Conquering Presence
     # pattern: pass a ``condition_buff`` into ``_resolve_feature_save``
     # and let that helper install on NPC save-fail / prompt PC targets.
+    # v2.340.0 — Mace of Terror (RAW DMG p.180, rare, attunement). A
+    # near-verbatim Wand of Fear clone on the generalized
+    # `_use_item_action_wand_of_fear` save-condition handler — only the
+    # charge pool (3 vs 7), the radius framing (30-ft self-centered vs cone),
+    # and the label differ. RAW: expend 1 of 3 charges → each creature of
+    # your choice within 30 ft makes a DC 15 WIS save or is frightened of you
+    # for 1 minute. The handler resolves a save per GM-picked
+    # `target_combatant_ids` (no cone geometry needed), so the radius framing
+    # is cosmetic in v1. The mace is also a magic weapon (overcomes
+    # resistance) — that half is GM-narrated.
+    "mace-of-terror": {
+        "requires_attunement": True,
+        "resource_key": "mace-of-terror",
+        "actions": {
+            "wave-of-terror": {
+                "name": "Wave of Terror (30-ft radius)",
+                "save_dc": 15,
+                "save_ability": "WIS",
+                "min_charges": 1,
+                "max_charges": 1,
+                "duration_rounds": 10,
+                "condition_key": "frightened",
+                "condition_label": "Frightened",
+                "condition_icon": "😱",
+                "condition_effects": [
+                    "disadvantage on ability checks / attacks while it can see you",
+                    "must spend its turns trying to move away from you",
+                ],
+                "feature_name": "😱 Mace of Terror",
+            },
+        },
+    },
     "wand-of-fear": {
         "requires_attunement": True,
         "resource_key": "wand-of-fear",
@@ -83378,7 +83410,10 @@ async def use_item_action(
                 # single-target save-condition handler shape with Wand of
                 # Paralysis — the only knobs are the slug, the condition_key
                 # ("blinded" vs "paralyzed"), and the save ability (CON).
-                "gem-of-brightness"):
+                "gem-of-brightness",
+                # v2.340.0 — Mace of Terror — a Wand of Fear clone (WIS →
+                # frightened, 3 charges) on the same save-condition handler.
+                "mace-of-terror"):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_wand_of_fear(
             db, campaign_id, char, item, sheet, catalog,

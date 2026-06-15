@@ -118,14 +118,44 @@ async def test_sun_blade_silent_on_humanoid(gm_client, seraphine):
     )
 
 
+async def _patch_attuned_via_sheet_fields(gm_client, char_id, slug, attuned):
+    """v2.340.0 — toggle the `attuned` flag on the inventory item with the
+    given `_slug` via /sheet-fields PATCH instead of /attune. /sheet-fields
+    bypasses the RAW 3-item /attune cap, which silently 409s when the carrier
+    is seeded over-cap (Seraphine gained a 4th seed-attuned item — the Mace
+    of Terror — in v2.340.0, so a /attune detune-then-restore would leave the
+    Sun Blade detuned and break `test_sun_blade_fires_on_undead_target`). Same
+    class of fix as B15 (v2.320.3, Sharpness + Vorpal)."""
+    resp = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-json",
+    )
+    assert resp.status_code == 200, resp.text
+    inv = list((resp.json().get("sheet") or {}).get("inventory") or [])
+    new_inv = [dict(it) if isinstance(it, dict) else it for it in inv]
+    found = False
+    for it in new_inv:
+        if isinstance(it, dict) and it.get("_slug") == slug:
+            it["attuned"] = attuned
+            found = True
+    assert found, f"Seraphine has no {slug} item"
+    r = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-fields",
+        json={"inventory": new_inv},
+    )
+    assert r.status_code == 200, r.text
+
+
 async def test_sun_blade_suppressed_when_detuned(gm_client, seraphine):
     """v2.158.104: detuning the Sun Blade suppresses the rider even
-    on an undead target. Restores attunement in teardown."""
-    detune = await gm_client.post(
-        f"/api/campaign/{CAMPAIGN_ID}/character/{seraphine['id']}/attune",
-        json={"inventory_index": SERAPHINE_SUN_BLADE_INV_IDX, "attuned": False},
+    on an undead target. Restores attunement in teardown.
+
+    v2.340.0 — detune + restore go through /sheet-fields PATCH (bypasses the
+    /attune cap) instead of /attune POST, because Seraphine is now seeded at
+    4 attuned items (the v2.340.0 Mace of Terror) and a /attune restore would
+    409 on the 3-item cap (the B15 class of bug)."""
+    await _patch_attuned_via_sheet_fields(
+        gm_client, seraphine["id"], "sun-blade", False,
     )
-    assert detune.status_code == 200, detune.text
 
     try:
         seraphine_cid = f"tok_sun3_seraphine_{seraphine['id']}"
@@ -150,10 +180,8 @@ async def test_sun_blade_suppressed_when_detuned(gm_client, seraphine):
             f"got {ups!r}"
         )
     finally:
-        await gm_client.post(
-            f"/api/campaign/{CAMPAIGN_ID}/character/{seraphine['id']}/attune",
-            json={"inventory_index": SERAPHINE_SUN_BLADE_INV_IDX,
-                  "attuned": True},
+        await _patch_attuned_via_sheet_fields(
+            gm_client, seraphine["id"], "sun-blade", True,
         )
 
 

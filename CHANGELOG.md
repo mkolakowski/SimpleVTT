@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.340.0] - 2026-06-15 — "The Wave of Terror"
+
+**Schema version:** 69
+
+**Commit summary:** SRD magic-item drop-in — **Mace of Terror** (RAW DMG p.180, rare, attunement). A near-verbatim Wand of Fear clone on the generalized `_use_item_action_wand_of_fear` save-condition handler: 3 charges (regain 1d4+1 at dawn); expend 1 → each chosen creature within 30 ft makes a DC 15 WIS save or is frightened of the wielder for 1 minute. Seeded on Dame Seraphine Vael; two harness tests. Zero new engine code (handler + dispatcher gain the slug).
+
+**Description:** Lands as `_MAGIC_ITEM_ACTIONS["mace-of-terror"]` + a one-line addition to the dispatcher slug-tuple that routes through `_use_item_action_wand_of_fear`. The handler resolves a save per GM-picked `target_combatant_ids`, so the 30-ft self-centered radius is cosmetic in v1 (vs the Wand of Fear cone). Seeded **equipped but not attuned** — the `/use_item_action` path doesn't gate on the attuned flag (only the attack-rider paths do), and keeping Seraphine at her existing 3/3 seed-attuned count avoids tripping the `/attune` cap on her Sun Blade detune-restore test (the B15 class of bug). The RAW attunement + the magic-weapon-overcomes-resistance clause are GM-narrated. Wrath-fueled terror fits a Vengeance Paladin. MINOR — additive content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ACTIONS["mace-of-terror"]` (`app/routes/tabletop_routes.py`) — Wand of Fear clone (`wave-of-terror` action, WIS → frightened, 3 charges).
+- `/use_item_action` dispatch: `mace-of-terror` added to the `_use_item_action_wand_of_fear` slug-tuple.
+- Demo seed: Dame Seraphine Vael gains a **Mace of Terror** (`_slug: mace-of-terror`, equipped, not attuned) + a 3-charge `mace-of-terror` resource row (1d4+1 long-rest recharge).
+- `tests/harness/test_use_item_action_mace_of_terror.py` — 2 tests (wave at 2 targets + charge tick 3→2, drained-mace 409).
+
+### Changed
+- `tests/harness/test_sun_blade_rider.py::test_sun_blade_suppressed_when_detuned`: detune + restore swapped from `/attune` POST to a new `_patch_attuned_via_sheet_fields` helper (B15-class fix) — Seraphine is now seeded at 4 attuned (the Mace of Terror), so a `/attune` restore would 409 on the 3-item cap and leave the Sun Blade detuned. This was the last `/attune` detune-restore test still vulnerable to the cap after the v2.320.3 Sharpness/Vorpal fix.
+- `docs/test-harness-coverage.md`: harness total 2965 → 2967 (+2 Mace of Terror tests); new `test_use_item_action_mace_of_terror.py` section.
+
 ## [2.339.0] - 2026-06-15 — "The Returning Hammer"
 
 **Schema version:** 69

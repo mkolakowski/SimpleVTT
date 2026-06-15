@@ -2308,8 +2308,41 @@ def _paladin_vengeance_sheet(name: str) -> dict:
              "qty": 1, "equippable": True, "equipped": True, "weight_lb": 1,
              "_slug": "censer-of-controlling-air-elementals",
              "desc": "Rare wondrous item, no attunement. 1-lb brass censer. Action: burn incense and speak the command word — an air elemental appears within 30 ft. CHA check vs the elemental's CHA to command it (concentration, up to 1 hour). RAW DMG p.157."},
+            # v2.340.0 — Mace of Terror (RAW DMG p.180, rare, attunement). A
+            # near-verbatim Wand of Fear clone on the generalized save-
+            # condition handler: 3 charges (regain 1d4+1 at dawn); expend 1
+            # via /use_item_action (wave-of-terror) → each chosen creature
+            # within 30 ft makes a DC 15 WIS save or is frightened of you for
+            # 1 minute. Seeded equipped + attuned (the /use_item_action
+            # dispatcher enforces the RAW attunement gate, rejecting with
+            # "requires attunement" otherwise). This makes Seraphine a 4th
+            # seed-attuned item; her Sun Blade detune-restore test is
+            # converted to /sheet-fields in the same commit (v2.340.0,
+            # mirroring the v2.320.3 B15 fix) so the /attune cap doesn't bite.
+            # The magic-weapon-overcomes-resistance clause is GM-narrated.
+            # Wrath-fueled terror fits a Vengeance Paladin. Paired with the
+            # mace-of-terror resource row below.
+            {"name": "Mace of Terror", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "hands": 1, "damage": "1d6", "damage_type": "bludgeoning",
+             "properties": "magic", "weight_lb": 4,
+             "_slug": "mace-of-terror",
+             "desc": "Rare mace, attunement. 3 charges (regain 1d4+1 at dawn). Action: expend 1 charge to release a wave of terror — each creature of your choice within 30 ft makes a DC 15 WIS save or is frightened of you for 1 minute (must spend turns moving away). RAW DMG p.180."},
         ],
         "resources": [
+            # v2.340.0 — Mace of Terror charge pool (RAW DMG p.180): 3
+            # charges, regain 1d4+1 at dawn (long rest). The shared save-
+            # condition wand handler decrements 1 per Wave of Terror.
+            {
+                "key": "mace-of-terror",
+                "name": "Mace of Terror",
+                "current": 3, "max": 3, "reset": "long",
+                "charge_recovery": "1d4+1",
+                "source": "magic item — Mace of Terror",
+                "class_slug": "item",
+                "desc": "3 charges; expend 1 (action) to release a 30-ft wave of terror — DC 15 WIS save or frightened 1 min. Regain 1d4+1 at dawn.",
+                "manual": False,
+            },
             {
                 "key": "lay-on-hands",
                 "name": "Lay on Hands",

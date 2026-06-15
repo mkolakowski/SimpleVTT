@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2965 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.339.0, 2026-06-15).
+**Total tests:** 2967 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.340.0, 2026-06-15).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3305,6 +3305,14 @@ v2.327.0 — "The Wayfarer's Trio" bundle: three SRD wondrous items shipped toge
 | `test_garrik_carries_folding_boat` | Garrik's `/sheet-json` inventory carries `_slug: "folding-boat"`, type `magic`, no `attuned` flag. |
 | `test_pip_carries_rope_of_climbing` | Pip's `/sheet-json` inventory carries `_slug: "rope-of-climbing"`, `equipped: True`, no `attuned` flag. |
 | `test_krieger_carries_bag_of_devouring` | Krieger's `/sheet-json` inventory carries `_slug: "bag-of-devouring"`, type `magic`, no `attuned` flag. |
+
+### `test_use_item_action_mace_of_terror.py`
+v2.340.0 — Mace of Terror (RAW DMG p.180, rare, attunement). A Wand of Fear clone on the generalized `_use_item_action_wand_of_fear` handler — WIS → frightened, 3 charges (1d4+1 recharge), 30-ft radius. Carrier: Dame Seraphine Vael (equipped, NOT attuned — keeps her under the /attune cap; the use-item path ignores the attuned flag).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_mace_of_terror_wave_2_targets` | Wave at 2 NPC targets → 200; `save_dc: 15`, `save_ability: WIS`, `charges_spent: 1`, resource 3→2, both ids in `results`. |
+| `test_mace_of_terror_empty_returns_409` | Drain to 0 via /sheet-fields; invoke → 409 `insufficient_charges`, `current: 0`. Restores in teardown. |
 
 ### `test_use_item_action_gem_of_brightness.py`
 v2.326.0 — Gem of Brightness Mode 2 ("beam"; RAW DMG p.172, uncommon, NO attunement). Pure Wand of Paralysis substrate clone — only the slug, condition_key (`blinded`), and feature label/icon differ. 50 charges, no recharge (RAW: when depleted, becomes a non-magical 50 gp jewel — resource row carries `reset: "none"`). Mode 1 (no-charge bright-light radius) and Mode 3 (5-charge 30-ft cone) are GM-narrated in v1. Seeded on **Lyra Sunstrider** (Bard, no attunement gate) with a 50-charge `gem-of-brightness` resource row.
