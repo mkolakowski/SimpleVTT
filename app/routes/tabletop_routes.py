@@ -32670,6 +32670,23 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
             "requires_attunement": False,
         },
     ],
+    # v2.327.0 — "The Wayfarer's Trio" bundle (3 SRD wondrous items as pure-
+    # catalog-stub passives, GM-narrated mechanics). Each is a minimal
+    # `requires_attunement` declaration so the slug appears in the catalog
+    # (audit-counted) — actual mechanics (folding boat ↔ ship modes, animated
+    # 60-ft rope, extradimensional digestion bag) all live in the item desc
+    # and rely on GM adjudication. Same shape as bag-of-holding above, which
+    # is also a stub catalog row (the weight-skip lives on the per-item
+    # `_in_bag_of_holding` flag, not on the catalog payload).
+    "folding-boat": [
+        {"requires_attunement": False},
+    ],
+    "rope-of-climbing": [
+        {"requires_attunement": False},
+    ],
+    "bag-of-devouring": [
+        {"requires_attunement": False},
+    ],
     # v2.209.0 — Stone of Good Luck (Luckstone, RAW DMG p.207,
     # uncommon, attunement). While the stone is on your person you gain
     # +1 to ability checks AND saving throws. The `save_bonus` rides the

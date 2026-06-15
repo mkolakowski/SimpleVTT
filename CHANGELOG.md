@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.327.0] - 2026-06-15 — "The Wayfarer's Trio"
+
+**Schema version:** 69
+
+**Commit summary:** SRD magic-item **bundle** — three wondrous items shipped together as pure catalog-stub passives in `_MAGIC_ITEM_PASSIVES`: **Folding Boat** (DMG p.170), **Rope of Climbing** (DMG p.197), **Bag of Devouring** (DMG p.153). Each is a minimal `requires_attunement` declaration (same shape as the existing Bag of Holding stub) so the slug appears in the catalog and counts in the audit; actual mechanics (boat/ship mode-switching, animated 60-ft rope, extradimensional digestion bag) are GM-narrated. Seeded on thematic carriers (Garrik / Pip / Krieger); one smoke test per item verifying the seed loads and surfaces on `/sheet-json`.
+
+**Description:** User-requested bundle to reduce the per-commit cadence after the v2.318.0–v2.326.0 nine-item drumbeat. Each item's catalog row is a 3-line stub — three new entries plus three demo-seed inventory lines plus a single new harness file with three smoke tests. No new engine code, no new substrate, no new resource rows. The shipped items aren't mechanically rich in v1 (their RAW behaviour is action-mode switching, animated movement, or extradimensional storage — none of which fits cleanly on the current `_MAGIC_ITEM_PASSIVES` substrate), but they're now catalog-visible so future passes can extend each individually. Same pattern as the Bag of Holding entry (an empty `{requires_attunement: False}` stub that exists primarily to register the slug). MINOR — additive content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`): three stub catalog rows — `folding-boat`, `rope-of-climbing`, `bag-of-devouring`. Each carries only `requires_attunement: False`.
+- Demo seed: Garrik Ironside gains a **Folding Boat**, Pip Quickfingers gains a **Rope of Climbing**, Krieger Stonefist gains a **Bag of Devouring** — each appended at the inventory tail per the established pattern.
+- `tests/harness/test_wayfarers_trio.py` — 3 smoke tests verifying each carrier's `/sheet-json` surfaces the matching `_slug` with the RAW no-attunement contract.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2926 → 2929 (+3 Wayfarer's Trio tests); new `test_wayfarers_trio.py` section.
+
 ## [2.326.0] - 2026-06-15 — "The Blinding Beam"
 
 **Schema version:** 69

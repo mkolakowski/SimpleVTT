@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2926 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.326.0, 2026-06-15).
+**Total tests:** 2929 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.327.0, 2026-06-15).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3214,6 +3214,15 @@ v2.206.0 magic-items-automation content tail — Wand of Paralysis (RAW DMG p.21
 | `test_wand_of_paralysis_cast_2_targets` | Cast at 2 NPC targets → 200; `save_dc: 15`, `save_ability: CON`, `charges_spent: 1`, resource 7→6, both target ids in `results`. |
 | `test_wand_of_paralysis_over_cap_returns_400` | `charges: 2` when catalog max=1 → 400 (shared min/max charge validator). |
 | `test_wand_of_paralysis_empty_returns_409` | Drain the wand to 0 via /sheet-fields; invoke → 409 `insufficient_charges`, `current: 0`. Restores in teardown. |
+
+### `test_wayfarers_trio.py`
+v2.327.0 — "The Wayfarer's Trio" bundle: three SRD wondrous items shipped together as pure catalog-stub passives. Smoke tests verify each is seeded on its thematic carrier and surfaces via `/sheet-json`. Actual mechanics (boat/ship mode-switching, animated 60-ft rope, extradimensional digestion bag) are GM-narrated; this test layer just guards the catalog row + seed against regression.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_garrik_carries_folding_boat` | Garrik's `/sheet-json` inventory carries `_slug: "folding-boat"`, type `magic`, no `attuned` flag. |
+| `test_pip_carries_rope_of_climbing` | Pip's `/sheet-json` inventory carries `_slug: "rope-of-climbing"`, `equipped: True`, no `attuned` flag. |
+| `test_krieger_carries_bag_of_devouring` | Krieger's `/sheet-json` inventory carries `_slug: "bag-of-devouring"`, type `magic`, no `attuned` flag. |
 
 ### `test_use_item_action_gem_of_brightness.py`
 v2.326.0 — Gem of Brightness Mode 2 ("beam"; RAW DMG p.172, uncommon, NO attunement). Pure Wand of Paralysis substrate clone — only the slug, condition_key (`blinded`), and feature label/icon differ. 50 charges, no recharge (RAW: when depleted, becomes a non-magical 50 gp jewel — resource row carries `reset: "none"`). Mode 1 (no-charge bright-light radius) and Mode 3 (5-charge 30-ft cone) are GM-narrated in v1. Seeded on **Lyra Sunstrider** (Bard, no attunement gate) with a 50-charge `gem-of-brightness` resource row.

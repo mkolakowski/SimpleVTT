@@ -548,6 +548,18 @@ def _rogue_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 1,
              "_slug": "wand-of-secrets",
              "desc": "Uncommon wand, no attunement. 3 charges. Action: expend 1 charge — the wand whispers the distance and direction of any secret door or trap within 30 ft. Regains 1d3 charges on long rest. RAW DMG p.211."},
+            # v2.327.0 — "The Wayfarer's Trio" bundle: Rope of Climbing (RAW
+            # DMG p.197, uncommon, no attunement). 60-ft silk rope (3 lb,
+            # holds 3000 lb). Command word animates it; bonus action commands
+            # the other end to a destination (10 ft/turn). Knot mode adds
+            # advantage on climb checks (50 ft length). Pure GM-narrated
+            # mechanic; catalog row is a stub passive so the slug counts in
+            # the audit. Thematic on Pip (Halfling Rogue scout — climbing
+            # and stealth fit her toolkit).
+            {"name": "Rope of Climbing", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 3,
+             "_slug": "rope-of-climbing",
+             "desc": "Uncommon wondrous item, no attunement. 60-ft silk rope (holds 3000 lb). Command word animates the rope; bonus action commands the other end to a destination 10 ft/turn. The rope can also fasten, unfasten, knot (adds advantage on climb checks; rope shortens to 50 ft), unknot, or coil itself. AC 20, 20 HP, regenerates 1 HP per 5 min. RAW DMG p.197."},
         ],
         "feats": [],
         "resources": [
@@ -4075,6 +4087,21 @@ def _barbarian_sheet(name: str) -> dict:
              "properties": "heavy, two-handed, magic",
              "_slug": "vicious-weapon", "weight_lb": 8,
              "desc": "Rare greataxe, no attunement. When you roll a 20 on your attack roll with this magic weapon, your critical hit deals an extra 2d6 damage of the weapon's type (slashing). RAW DMG p.209 (Vicious Weapon variant)."},
+            # v2.327.0 — "The Wayfarer's Trio" bundle: Bag of Devouring (RAW
+            # DMG p.153, very rare, no attunement). Superficially resembles
+            # a Bag of Holding but is a feeding orifice for a gigantic
+            # extradimensional creature: living matter dropped in is
+            # devoured; reaching in has a 50% chance of pulling the
+            # creature inside. Inanimate objects are spat into another
+            # plane once per day. Pure GM-narrated mechanic; catalog row is
+            # a stub passive so the slug counts in the audit. Thematic on
+            # Krieger (Half-Orc Barbarian — a cursed horror-bag fits his
+            # raging adventurer aesthetic and pairs grimly with his
+            # Mariner's-ally Brooch of Shielding loot).
+            {"name": "Bag of Devouring", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 15,
+             "_slug": "bag-of-devouring",
+             "desc": "Very rare wondrous item, no attunement. Superficially resembles a Bag of Holding but is the feeding orifice of an extradimensional creature. Living matter placed inside is devoured. Reaching in has a 50% chance of pulling the creature inside (DC 15 STR check to escape; DC 20 STR check from outside to pull a creature out). Inanimate objects are spat into another plane once per day. If pierced or torn, contents transport to a random Astral Plane location. RAW DMG p.153."},
         ],
         # v2.75.0 Phase 4d — Mage Slayer feat for Krieger. RAW (PHB
         # p.168): reaction-based melee attack against a creature
@@ -5734,6 +5761,18 @@ def _fighter_sheet(name: str) -> dict:
              "armor_type": "heavy", "ac_value": 18,
              "_slug": "dwarven-plate", "weight_lb": 65,
              "desc": "Very rare heavy armor (plate), no attunement. While wearing this armor, you gain a +2 bonus to AC. In addition, if an effect moves you against your will along the ground, you can use your reaction to reduce the distance you are moved by up to 10 feet. RAW DMG p.150."},
+            # v2.327.0 — "The Wayfarer's Trio" bundle: Folding Boat (RAW DMG
+            # p.170, rare, no attunement). Wooden box (12×6×6 in., 4 lb)
+            # that unfolds into a 10-ft boat (action) or 24-ft ship (action)
+            # via spoken command words. Pure GM-narrated mechanic — the
+            # catalog row is a stub passive so the slug counts in the
+            # audit; the actual boat/ship state lives in the GM's narration.
+            # Thematic on Garrik (Fighter, Soldier background — a soldier
+            # who packs an emergency boat for river crossings is on theme).
+            {"name": "Folding Boat", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "weight_lb": 4,
+             "_slug": "folding-boat",
+             "desc": "Rare wondrous item, no attunement. A 12×6×6 in., 4-lb wooden box that unfolds via three command words into either a 10-ft boat (4 medium creatures) or a 24-ft ship (15 medium creatures), or folds back into the box. Vessel weight + contents are GM-narrated. RAW DMG p.170."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20
