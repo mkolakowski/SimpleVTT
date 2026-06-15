@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.329.0] - 2026-06-15 — "The Captor's Cache"
+
+**Schema version:** 69
+
+**Commit summary:** Third SRD magic-item **bundle** (after v2.327.0 Wayfarer's Trio + v2.328.0 Inventor's Trio) — three capture/trap wondrous items shipped together as pure catalog-stub passives: **Iron Bands of Binding** (DMG p.176), **Iron Flask** (DMG p.178), **Mirror of Life Trapping** (DMG p.181). Same minimal `requires_attunement: False` stub pattern, seeded on thematic carriers (Krieger / Magnus / Mira); three smoke tests in `test_captors_cache.py`. No new engine code.
+
+**Description:** Continues the bundling pattern — three catalog rows + three demo-seed inventory lines + one new harness file. Each item's actual capture mechanic (thrown restraining sphere, WIS-save creature-trapping flask, CHA-save life-trapping mirror) stays GM-narrated. The bundle is themed around imprisonment / restraint — Krieger's Iron Bands give him a non-Greataxe utility option, Magnus's Iron Flask fits his Fiend-pact dark-magic aesthetic, and Mira's Mirror of Life Trapping gives the Druid a way to catalogue beasts and spirits encountered in the wild. MINOR — additive content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`): three new stub catalog rows — `iron-bands-of-binding`, `iron-flask`, `mirror-of-life-trapping`. Each carries only `requires_attunement: False`.
+- Demo seed: Krieger Stonefist gains an **Iron Bands of Binding**, Magnus Hexbinder gains an **Iron Flask**, Mira Greenleaf gains a **Mirror of Life Trapping** — each appended at the inventory tail.
+- `tests/harness/test_captors_cache.py` — 3 smoke tests verifying each carrier's `/sheet-json` surfaces the matching `_slug` with the RAW no-attunement contract.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2932 → 2935 (+3 Captor's Cache tests); new `test_captors_cache.py` section.
+
 ## [2.328.0] - 2026-06-15 — "The Inventor's Trio"
 
 **Schema version:** 69

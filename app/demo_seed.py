@@ -2798,6 +2798,21 @@ def _druid_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "staff-of-swarming-insects", "weight_lb": 4,
              "desc": "Rare staff, attunement. 10 charges. Cast Insect Plague (5 charges → 4d10 piercing, CON save, 20-ft-radius sphere) or Giant Insect (4 charges) using your spell save DC. Regains 1d6+4 charges at dawn (long rest). RAW DMG p.202."},
+            # v2.329.0 — "The Captor's Cache" bundle: Mirror of Life Trapping
+            # (RAW DMG p.181, very rare, no attunement). 4-ft-tall framed
+            # mirror. When a creature other than the wielder comes within
+            # 30 ft, the mirror activates: target makes a DC 15 CHA save or
+            # is trapped inside one of the mirror's twelve cells (descrip-
+            # tive sub-pocket-plane). Wielder can use an action to extract
+            # a trapped creature; outside-the-mirror viewers can converse
+            # with the trapped occupant. Stub catalog row; the CHA save +
+            # cell management are GM-narrated. Thematic on Mira (Wood Elf
+            # Druid — she can use the mirror to catalogue beasts or hostile
+            # spirits encountered in the wild).
+            {"name": "Mirror of Life Trapping", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 50,
+             "_slug": "mirror-of-life-trapping",
+             "desc": "Very rare wondrous item, no attunement. 4-ft-tall framed mirror with twelve sub-pocket-plane cells. When a creature other than the wielder comes within 30 ft and the mirror is active, that creature makes a DC 15 CHA save or is trapped inside one of the cells (until released by the wielder's action). The wielder can converse with trapped creatures through the mirror. RAW DMG p.181."},
         ],
         "feats": [],
         # v2.14.2: Wild Shape uses = 2/short rest at Lv 2 (Lv 18 unlimited).
@@ -3159,6 +3174,20 @@ def _warlock_sheet(name: str) -> dict:
              "_slug": "ring-of-elemental-command", "_resistance_type": "fire",
              "weight_lb": 0,
              "desc": "Legendary ring, attunement. Linked to the Elemental Plane of Fire: you have advantage on attack rolls against fire elementals (and they have disadvantage against you), resistance to fire damage, and can speak Ignan. 5 charges (regain 1d4+1 at dawn): cast dominate monster on a fire elemental (2 charges), burning hands (1), fireball (2), or wall of fire (3). After helping slay a fire elemental you gain immunity to fire damage. RAW DMG p.190."},
+            # v2.329.0 — "The Captor's Cache" bundle: Iron Flask (RAW DMG
+            # p.178, legendary, no attunement). Brass flask stoppered by an
+            # iron plug. Action: target a creature you can see within 60 ft
+            # and speak the command word — the target makes a DC 17 WIS
+            # save or is trapped inside the flask. A creature already
+            # inside can be released by removing the plug; on release the
+            # creature is friendly to you for 1 hour and obeys your
+            # commands. Stub catalog row; the WIS-save trap + release are
+            # GM-narrated. Thematic on Magnus (Fiend-pact Warlock — a
+            # creature-capturing flask fits his dark-magic aesthetic).
+            {"name": "Iron Flask", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 1,
+             "_slug": "iron-flask",
+             "desc": "Legendary wondrous item, no attunement. Brass flask with an iron plug. Action: target a creature within 60 ft — DC 17 WIS save or the creature is trapped inside (only one creature at a time; demon lords, devil princes, archfey, and other very powerful beings are immune). On release the creature is charmed-friendly for 1 hour. RAW DMG p.178."},
         ],
         # v2.18.4: 3 known Eldritch Invocations at Lv 5 (Warlock gets
         # Lv 2: 2 known; Lv 5: 3 known; Lv 7: 4 known...). Magnus's
@@ -4127,6 +4156,22 @@ def _barbarian_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 15,
              "_slug": "bag-of-devouring",
              "desc": "Very rare wondrous item, no attunement. Superficially resembles a Bag of Holding but is the feeding orifice of an extradimensional creature. Living matter placed inside is devoured. Reaching in has a 50% chance of pulling the creature inside (DC 15 STR check to escape; DC 20 STR check from outside to pull a creature out). Inanimate objects are spat into another plane once per day. If pierced or torn, contents transport to a random Astral Plane location. RAW DMG p.153."},
+            # v2.329.0 — "The Captor's Cache" bundle: Iron Bands of Binding
+            # (RAW DMG p.176, rare, no attunement). Small rusty iron sphere
+            # (2-lb), action to hurl at a Huge or smaller target within 60
+            # ft. On a successful ranged attack roll (treat as proficient),
+            # the sphere unfolds into metal bands that restrain the target.
+            # On a fail, the sphere returns to its small form. The wielder
+            # ends the restraint as a bonus action; otherwise lasts until
+            # the target escapes via DC 20 STR check or 25 STR magical
+            # effect. Stub catalog row; the throw + restrain mechanic is
+            # GM-narrated. Thematic on Krieger (Half-Orc Barbarian — a
+            # brutal restraining throw fits his rage aesthetic and gives
+            # him a non-Greataxe utility option).
+            {"name": "Iron Bands of Binding", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 2,
+             "_slug": "iron-bands-of-binding",
+             "desc": "Rare wondrous item, no attunement. Small rusty iron sphere (2 lb). Action: hurl up to 60 ft at a Huge or smaller creature you can see. Treat as a proficient ranged attack. On a hit, the bands unfold and restrain the target until you end the effect as a bonus action (or the target escapes via DC 20 STR check or 25 STR magical effect). On a miss, the sphere returns. RAW DMG p.176."},
         ],
         # v2.75.0 Phase 4d — Mage Slayer feat for Krieger. RAW (PHB
         # p.168): reaction-based melee attack against a creature

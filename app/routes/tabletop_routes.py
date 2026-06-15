@@ -32703,6 +32703,22 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "universal-solvent": [
         {"requires_attunement": False},
     ],
+    # v2.329.0 — "The Captor's Cache" bundle (third stub bundle after v2.327.0
+    # Wayfarer's Trio + v2.328.0 Inventor's Trio). Three SRD capture/trap
+    # wondrous items shipped as catalog-stub passives — same minimal
+    # `requires_attunement: False` declaration. Each registers its slug so
+    # the audit counts it; the actual capture mechanic (thrown restrain
+    # sphere, creature-trapping flask, life-stealing scry mirror) is GM-
+    # narrated. Future passes can replace each stub with a real handler.
+    "iron-bands-of-binding": [
+        {"requires_attunement": False},
+    ],
+    "iron-flask": [
+        {"requires_attunement": False},
+    ],
+    "mirror-of-life-trapping": [
+        {"requires_attunement": False},
+    ],
     # v2.209.0 — Stone of Good Luck (Luckstone, RAW DMG p.207,
     # uncommon, attunement). While the stone is on your person you gain
     # +1 to ability checks AND saving throws. The `save_bonus` rides the
