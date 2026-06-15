@@ -33082,6 +33082,15 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "eyes-of-the-eagle": [
         {"check_advantage_on": ["perception"], "requires_attunement": True},
     ],
+    # v2.292.0 — Eyes of Minute Seeing (RAW DMG p.166, uncommon, NO
+    # attunement). "While wearing them ... you have advantage on Intelligence
+    # (Investigation) checks that rely on sight while searching an area or
+    # studying an object within [1 ft]." Rides the same check_advantage_on
+    # substrate as Eyes of the Eagle, keyed on the Investigation skill.
+    # No-attunement companion (Boots of Elvenkind precedent).
+    "eyes-of-minute-seeing": [
+        {"check_advantage_on": ["investigation"]},
+    ],
     # v2.255.0 — Boots of Elvenkind (RAW DMG p.155, uncommon, NO attunement).
     # "While you wear these boots ... you have advantage on Dexterity (Stealth)
     # checks that rely on moving silently." No-attunement companion to Cloak of

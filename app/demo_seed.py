@@ -437,6 +437,18 @@ def _rogue_sheet(name: str) -> dict:
              "equippable": True, "equipped": True,
              "_slug": "slippers-of-spider-climbing",
              "desc": "Uncommon wondrous item, no attunement. While you wear these light shoes, you can move up, down, and across vertical surfaces and upside down along ceilings, while leaving your hands free. You have a climbing speed equal to your walking speed. RAW DMG p.199."},
+            # v2.292.0 — Eyes of Minute Seeing (RAW DMG p.166, uncommon, no
+            # attunement). Lenses that grant advantage on Intelligence
+            # (Investigation) checks that rely on sight at close range. Rides
+            # the same check_advantage_on substrate as Eyes of the Eagle, keyed
+            # on Investigation. Seeded equipped (no-attunement, Boots of
+            # Elvenkind precedent) — composes freely alongside Pip's full 3/3
+            # attunement loadout. On-theme for a Rogue scouring rooms for traps
+            # and clues.
+            {"name": "Eyes of Minute Seeing", "type": "gear", "qty": 1,
+             "equippable": True, "equipped": True,
+             "_slug": "eyes-of-minute-seeing",
+             "desc": "Uncommon wondrous item, no attunement. While you wear these crystal lenses over your eyes, you have advantage on Intelligence (Investigation) checks that rely on sight while searching an area or studying an object within 1 foot of you. RAW DMG p.166."},
             # v2.277.0 — charged-items Phase 1 (closes the plan): Wand of
             # Enemy Detection (RAW DMG p.211, rare, attunement). The last
             # named plan item — a utility `action_kind: "buff"` charge action

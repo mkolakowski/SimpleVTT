@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.292.0] - 2026-06-14 — "The Jeweller's Lenses"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item drop-in — **Eyes of Minute Seeing** (RAW DMG p.166, uncommon, NO attunement) lands its passive ("advantage on Intelligence (Investigation) checks that rely on sight") on the v2.253.0/v2.254.0 `check_advantage_on` substrate with zero new engine code. A one-line registry clone of Eyes of the Eagle keyed on the Investigation skill; seeded equipped (no-attunement, Boots of Elvenkind precedent) on Pip Quickfingers and exercised by four harness tests.
+
+**Description:** The no-attunement companion to Eyes of the Eagle (v2.254.0), on the same `check_advantage_on` substrate that already powers the Cloak/Boots of Elvenkind and the Eagle lenses. The Eyes of Minute Seeing's headline passive — advantage on Intelligence (Investigation) checks that rely on sight at close range — is exactly the `check_advantage_on` list field, keyed on `investigation` instead of `perception`. So this commit is a single registry entry (`{"check_advantage_on": ["investigation"]}`, no `requires_attunement` since RAW the lenses need none), a demo-seed item, and tests. `_roll_item_check_advantage` reads the equipped union from `_equipped_item_effects` and folds an advantage source into the PHB p.173 composition at `/roll` time, producing a `2d20kh1` breakdown + `roll_state_applied: "auto_advantage_eyes_of_minute_seeing"`; the skill gate means only an Investigation check fires, and the adv-cancels-with-disadvantage logic comes for free. Seeded **equipped** (no-attunement items don't consume a slot — Boots of Elvenkind precedent) on Pip Quickfingers (the demo's Halfling Rogue, on-theme for a scout scouring rooms for traps and clues), composing freely alongside her full 3/3 attunement loadout. Four harness tests assert the Investigation advantage, the non-Investigation control, the disadvantage-cancel, and the `derived.check_advantage_on` projection. MINOR — additive demo content + a new registry entry + tests, no schema change.
+
+### Added
+- `eyes-of-minute-seeing` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — one no-attunement payload carrying `check_advantage_on: ["investigation"]`, on the existing v2.253.0/v2.254.0 substrate.
+- Demo seed: Pip Quickfingers gains an equipped **Eyes of Minute Seeing** (no-attunement).
+- `tests/harness/test_item_eyes_of_minute_seeing.py` (4 tests): Investigation check resolves `2d20kh1` + `roll_state_applied: auto_advantage_eyes_of_minute_seeing`; non-Investigation roll is a straight 1d20 (control); advantage cancels with a Poisoned-condition disadvantage; `derived.check_advantage_on` surfaces "investigation" with the lenses named in sources.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2822 → 2826 (+4 drop-in tests); added the `test_item_eyes_of_minute_seeing.py` section.
+
 ## [2.291.0] - 2026-06-14 — "The Warded Bulwark"
 
 **Schema version:** 69

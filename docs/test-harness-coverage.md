@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2822 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.291.0, 2026-06-14).
+**Total tests:** 2826 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.292.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2610,6 +2610,16 @@ v2.254.0 — Eyes of the Eagle (RAW DMG p.166, uncommon, attunement): the wearer
 | `test_eyes_advantage_cancels_with_condition_disadvantage` | Wearer is Poisoned (ability-check disadvantage) → item adv + condition dis cancel to a straight `canceled_*` roll naming the lenses (PHB p.173). |
 | `test_eyes_detuned_drop_perception_advantage` | Detuning the lenses via a cap-independent sheet-fields PATCH → the Perception roll reverts to a straight roll (`roll_state_applied` None); re-attunes on teardown. |
 | `test_eyes_expose_derived_flag` | `GET /sheet-json` → `derived.check_advantage_on` present with "perception" in `skills` and "Eyes of the Eagle" in `sources`. |
+
+### `test_item_eyes_of_minute_seeing.py`
+v2.292.0 — Eyes of Minute Seeing (RAW DMG p.166, uncommon, NO attunement): the wearer has advantage on Intelligence (Investigation) checks that rely on sight at close range. The no-attunement companion to Eyes of the Eagle on the same `check_advantage_on` substrate — only the skill key differs (`investigation`). The `eyes-of-minute-seeing` `_MAGIC_ITEM_PASSIVES` payload omits `requires_attunement` (Boots of Elvenkind precedent), so the lenses ride freely alongside a full 3/3 attunement loadout. No new helper or `/roll` code. Seeded equipped on Pip Quickfingers (Halfling Rogue).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_eyes_grant_investigation_advantage` | `POST /roll` (Investigation, `stat_key: "investigation"`) → breakdown contains `2d20kh1` + `roll_state_applied == "auto_advantage_eyes_of_minute_seeing"`. |
+| `test_eyes_do_not_help_non_investigation_check` | Control: `POST /roll` (Perception, `stat_key: "perception"`) → no `2d20kh1`, no advantage label (the skill gate). |
+| `test_eyes_advantage_cancels_with_condition_disadvantage` | Wearer is Poisoned (ability-check disadvantage) → item adv + condition dis cancel to a straight `canceled_*` roll naming the lenses (PHB p.173). |
+| `test_eyes_expose_derived_flag` | `GET /sheet-json` → `derived.check_advantage_on` present with "investigation" in `skills` and "Eyes of Minute Seeing" in `sources`. |
 
 ### `test_item_boots_of_elvenkind.py`
 v2.255.0 — Boots of Elvenkind (RAW DMG p.155, uncommon, NO attunement): the wearer has advantage on Dexterity (Stealth) checks that rely on moving silently. The no-attunement companion to Cloak of Elvenkind on the same `check_advantage_on: ["stealth"]` substrate — the `boots-of-elvenkind` `_MAGIC_ITEM_PASSIVES` payload omits `requires_attunement`, so the boots ride freely alongside a full 3/3 attunement loadout. No new helper or `/roll` code — the substrate generalizes over the skill key and the attunement gate. Seeded on Quan Reelstep (Drunken Master Monk) alongside his 3/3 attuned items (Belt of Dwarvenkind + Ioun Stone of Mastery + Mantle of Spell Resistance).
