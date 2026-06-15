@@ -5252,52 +5252,46 @@ def _fighter_sheet(name: str) -> dict:
              "consumable": True, "equipped": True,
              "_slug": "potion-of-gaseous-form",
              "desc": "Drink (action, /use_item_action drink) to enter gaseous form for up to 1 hour: resistance to nonmagical damage, advantage on STR/DEX/CON saves, 10-ft hover; can't attack or cast. RAW DMG p.187."},
-            # v2.308.0 — first permanent ability-increase consumable. Manual of
-            # Gainful Exercise (RAW DMG p.176, very rare, no attunement): study
-            # 48 hours over 6 days → your STR score increases by 2, as does its
-            # maximum, then the manual loses its magic for a century. Modeled as
-            # a /use_item consumable with the new `use_kind: "ability_increase"`
-            # dispatch — it permanently WRITES the stored STR (18 → 20), so
-            # every read site (effective_ability_score, /roll STR saves +
-            # Athletics, carry capacity) picks it up. Because the manual also
-            # raises the maximum, the +2 applies unconditionally (no RAW-20
-            # clamp). Seeded on Garrik (Fighter): his stored STR 18 → 20 on use;
-            # note his equipped Belt of Giant Strength still overrides effective
-            # STR to 21 (max(20,21)), proving the stored write is independent of
-            # the equipped override. The harness reads stored STR, uses the
-            # manual, asserts STR 20 + the row consumed, then restores.
-            {"name": "Manual of Gainful Exercise", "type": "consumable", "qty": 1,
-             "consumable": True, "equipped": True, "use_kind": "ability_increase",
-             "ability": "STR", "ability_increase": 2, "weight_lb": 5,
+            # Manual of Gainful Exercise (RAW DMG p.176, very rare, no
+            # attunement): study 48 hours over 6 days → your STR score increases
+            # by 2, as does its maximum, then the manual loses its magic for a
+            # century. v2.314.0 (reconciliation Phase 3) re-seated this onto the
+            # canonical `permanent_boost` path: read via /use_item_action's
+            # `read` action → _use_item_action_permanent_boost WRITES the stored
+            # STR (18 → 20) and consumes the book. Every read site
+            # (effective_ability_score, /roll STR saves + Athletics, carry
+            # capacity) picks it up; because the manual also raises the maximum,
+            # the +2 applies unconditionally (no RAW-20 clamp). Seeded on Garrik
+            # (Fighter): his equipped Belt of Giant Strength still overrides
+            # effective STR to 21 (max(20,21)), proving the stored write is
+            # independent of the equipped override.
+            {"name": "Manual of Gainful Exercise", "type": "magic", "qty": 1,
+             "consumable": True, "weight_lb": 5,
              "_slug": "manual-of-gainful-exercise",
-             "desc": "Study 48 hours over 6 days (/use_item) to permanently increase your Strength score by 2 — its maximum rises by 2 as well — then the manual loses its magic for a century. RAW DMG p.176."},
-            # v2.309.0 — Manual of Bodily Health (RAW DMG p.176, very rare,
-            # no attunement): study 48 hours over 6 days → CON +2, its maximum
-            # +2 too. Rides the same `use_kind: "ability_increase"` dispatch as
-            # the Gainful Exercise manual, but the CON branch ALSO recomputes
-            # max HP: a CON-modifier bump raises max HP by 1 per level (RAW PHB
-            # p.173). Seeded on Garrik (Fighter): stored CON + 2, and his max +
-            # current HP gain by mod_delta × level on use. The harness snapshots
-            # inventory + abilities + hp and restores all three.
-            {"name": "Manual of Bodily Health", "type": "consumable", "qty": 1,
-             "consumable": True, "equipped": True, "use_kind": "ability_increase",
-             "ability": "CON", "ability_increase": 2, "weight_lb": 5,
+             "desc": "Very rare wondrous item. Studying it for 48 hours over 6 days permanently increases your Strength score by 2 (and its maximum). The manual then loses its magic for a century. RAW DMG p.176."},
+            # Manual of Bodily Health (RAW DMG p.176, very rare, no attunement):
+            # study 48 hours over 6 days → CON +2, its maximum +2 too. Same
+            # `permanent_boost` `read` path as the Gainful Exercise manual; the
+            # CON branch in _use_item_action_permanent_boost ALSO recomputes max
+            # HP — a CON-modifier bump raises max HP by 1 per level (RAW PHB
+            # p.173, ported in v2.312.0). Seeded on Garrik (Fighter): stored CON
+            # +2, and his max + current HP gain by mod_delta × level on read.
+            {"name": "Manual of Bodily Health", "type": "magic", "qty": 1,
+             "consumable": True, "weight_lb": 5,
              "_slug": "manual-of-bodily-health",
-             "desc": "Study 48 hours over 6 days (/use_item) to permanently increase your Constitution score by 2 — its maximum rises by 2 as well, and your hit point maximum increases retroactively — then the manual loses its magic for a century. RAW DMG p.176."},
-            # v2.310.0 — Manual of Quickness of Action (RAW DMG p.176, very
-            # rare, no attunement): study 48 hours over 6 days → DEX +2, its
-            # maximum +2 too. Pure reuse of the v2.308.0 `ability_increase`
-            # dispatch — no DEX-specific branch needed: every DEX-derived read
-            # (AC, initiative, DEX saves, Stealth/Acrobatics) flows from the
-            # stored score via effective_ability_score, so the one-time write
-            # propagates automatically. Completes the three physical-ability
-            # manuals on Garrik (STR/CON/DEX). Harness snapshots + restores
-            # inventory + abilities.
-            {"name": "Manual of Quickness of Action", "type": "consumable", "qty": 1,
-             "consumable": True, "equipped": True, "use_kind": "ability_increase",
-             "ability": "DEX", "ability_increase": 2, "weight_lb": 5,
+             "desc": "Very rare wondrous item. Studying it for 48 hours over 6 days permanently increases your Constitution score by 2 (and its maximum); your hit point maximum increases retroactively. The manual then loses its magic for a century. RAW DMG p.176."},
+            # Manual of Quickness of Action (RAW DMG p.176, very rare, no
+            # attunement): study 48 hours over 6 days → DEX +2, its maximum +2
+            # too. Same `permanent_boost` `read` path — no DEX-specific branch
+            # needed: every DEX-derived read (AC, initiative, DEX saves,
+            # Stealth/Acrobatics) flows from the stored score via
+            # effective_ability_score, so the one-time write propagates
+            # automatically. Completes the three physical-ability manuals on
+            # Garrik (STR/CON/DEX).
+            {"name": "Manual of Quickness of Action", "type": "magic", "qty": 1,
+             "consumable": True, "weight_lb": 5,
              "_slug": "manual-of-quickness-of-action",
-             "desc": "Study 48 hours over 6 days (/use_item) to permanently increase your Dexterity score by 2 — its maximum rises by 2 as well — then the manual loses its magic for a century. RAW DMG p.176."},
+             "desc": "Very rare wondrous item. Studying it for 48 hours over 6 days permanently increases your Dexterity score by 2 (and its maximum). The manual then loses its magic for a century. RAW DMG p.176."},
             # v2.205.0 — third charge-tracked wand (RAW DMG p.213, rare,
             # attunement). Same template as the Wand of Fireballs (7
             # charges, base slot level 3, 1d6+1 recharge) but casts

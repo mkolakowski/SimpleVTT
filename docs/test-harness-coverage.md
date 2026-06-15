@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2897 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.313.0, 2026-06-14).
+**Total tests:** 2893 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.314.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2424,12 +2424,14 @@ v2.220.0 ability-score override engine, Phase 3 combat follow-up (docs/plans/str
 | `test_heal_at_stored_max_caps_without_amulet` | Guard: amulet unequipped → same heal at stored max → `auto_heal_applied == 0` (clamp falls back to `hp.max`). Restores inventory + full HP on teardown. |
 
 ### `test_item_manual_of_ability.py`
-v2.222.0 Manuals & Tomes — permanent ability-score boost books (RAW DMG pp.180/208). A new `permanent_boost` archetype on `/use_item_action`: reading the book edits `sheet.abilities[X] += 2` and consumes it (no 20-cap clamp — RAW the maximum rises too). Distinct from the timed self-buff potions and equipped-item runtime overrides; the boosted base composes via the existing `effective_ability_score` chain. Lyra Sunstrider (Bard, base CHA 17) carries a Tome of Leadership and Influence.
+v2.222.0 Manuals & Tomes — permanent ability-score boost books (RAW DMG pp.176/208). The `permanent_boost` archetype on `/use_item_action`: reading the book edits `sheet.abilities[X] += 2` and consumes it (no 20-cap clamp — RAW the maximum rises too). Distinct from the timed self-buff potions and equipped-item runtime overrides; the boosted base composes via the existing `effective_ability_score` chain. As of v2.314.0 (reconciliation Phase 3) this is the **single** mechanism for all six books — the parallel `/use_item` `ability_increase` branch was retired and the three Manuals re-seated here. Carriers: Lyra (Tome of Leadership/CHA), Thalindra (Tome of Clear Thought/INT), Tavik (Tome of Understanding/WIS), Garrik (all three Manuals — STR/CON/DEX).
 
 | Test | What it asserts |
 |------|-----------------|
 | `test_reading_tome_permanently_raises_cha` | Lyra reads the tome → response `ability=CHA, amount=2, new_score=old+2, consumed`; `/sheet-json` shows stored `abilities.CHA` is `old+2` and CHA is absent from derived `effective_abilities` (a permanent base edit is not a runtime override); the book is gone from inventory. Restores abilities + inventory on teardown. |
 | `test_reading_bodily_health_raises_con_and_max_hp` | v2.312.0 reconciliation Phase 1 — Garrik reads the Manual of Bodily Health via `/use_item_action`; response `ability=CON, new_score=old+2, hp_gain=mod_delta×level`; `/sheet-json` shows stored `abilities.CON` is `old+2` AND `hp.max` is `old+hp_gain` (RAW PHB p.173 CON max-HP recompute). Restores abilities + inventory + hp on teardown. |
+| `test_reading_gainful_exercise_permanently_raises_str` | v2.314.0 reconciliation Phase 3 — Garrik reads the Manual of Gainful Exercise via `/use_item_action` `read` → `ability=STR, amount=2, new_score=old+2, consumed`; stored `abilities.STR` is `old+2`, book consumed. (Garrik's equipped Belt of Giant Strength overrides effective STR, so the test asserts only the stored write + consume.) Restores on teardown. |
+| `test_reading_quickness_permanently_raises_dex` | v2.314.0 reconciliation Phase 3 — Garrik reads the Manual of Quickness of Action via `/use_item_action` `read` → `ability=DEX, amount=2, new_score=old+2, consumed`; stored `abilities.DEX` is `old+2`, DEX absent from derived `effective_abilities`, book consumed. Restores on teardown. |
 | `test_reading_clear_thought_permanently_raises_int` | v2.313.0 reconciliation Phase 2 — Thalindra (Wizard) reads the Tome of Clear Thought via `/use_item_action` → `ability=INT, amount=2, new_score=old+2, consumed`; stored `abilities.INT` is `old+2`, INT absent from derived `effective_abilities`, book consumed. Restores on teardown. |
 | `test_reading_understanding_permanently_raises_wis` | v2.313.0 reconciliation Phase 2 — Tavik (Cleric) reads the Tome of Understanding via `/use_item_action` → `ability=WIS, amount=2, new_score=old+2, consumed`; stored `abilities.WIS` is `old+2`, WIS absent from derived `effective_abilities`, book consumed. Restores on teardown. |
 | `test_wrong_action_key_on_tome_404s` | Guard: a mismatched `action_key` (`drink` vs the tome's `read`) returns 404 without mutating the sheet. |
@@ -2775,30 +2777,6 @@ v2.305.0 — Ring of Elemental Command (Fire) (RAW DMG p.190, legendary, attunem
 | `test_ring_halves_fire_damage_when_attuned` | Equip+attune → 20 fire drops HP by only 10 via `_resistance_halve`. Restores on teardown. |
 | `test_ring_requires_attunement` | Attunement gate: equipped-but-un-attuned → 20 fire applies in full (−20). Restores on teardown. |
 | `test_ring_exposes_resistances_on_sheet_json` | Equip+attune → `derived.resistances.types` contains "fire" with "Ring of Elemental Command" in `sources`. Restores on teardown. |
-
-### `test_item_manual_of_quickness_of_action.py`
-v2.310.0 — Manual of Quickness of Action (RAW DMG p.176, very rare, no attunement): the third permanent ability-increase consumable, completing the physical-ability manual trio (STR/CON/DEX). Pure reuse of the v2.308.0 `use_kind: "ability_increase"` dispatch — no DEX-specific branch, every DEX-derived read (AC, initiative, saves, Stealth/Acrobatics) flows from the stored score via `effective_ability_score`. Seeded on Garrik Ironside (Fighter) alongside the other two manuals; the fixture snapshots + restores inventory AND abilities.
-
-| Test | What it asserts |
-|------|-----------------|
-| `test_manual_raises_stored_dex_and_consumes` | POST `/use_item` (override) → body `ability_increase` = {ability:DEX, amount:2, new_score:before+2}; `character_update` WS; sheet stored DEX +2, manual row consumed. Restores inventory+abilities on teardown. |
-| `test_manual_baseline_dex_unchanged` | Control: before use, stored DEX equals the seed value — proving the bump is manual-sourced. |
-
-### `test_item_manual_of_bodily_health.py`
-v2.309.0 — Manual of Bodily Health (RAW DMG p.176, very rare, no attunement): the second permanent ability-increase consumable, riding the v2.308.0 `use_kind: "ability_increase"` dispatch. The CON branch ALSO recomputes max HP — a Constitution-modifier bump retroactively raises max HP by 1 per level (RAW PHB p.173), so the handler bumps both `hp.max` and `hp.current` by `mod_delta × level` and returns an `hp_gain` field. Seeded on Garrik Ironside (Fighter); the fixture snapshots + restores inventory, abilities, AND hp because the mutation is permanent.
-
-| Test | What it asserts |
-|------|-----------------|
-| `test_manual_raises_con_and_max_hp_and_consumes` | POST `/use_item` (override) → body `ability_increase` = {ability:CON, amount:2, new_score:before+2, hp_gain:mod_delta×level}; `character_update` WS; sheet stored CON +2, max HP +hp_gain, manual row consumed. Restores inventory+abilities+hp on teardown. |
-| `test_manual_baseline_con_unchanged` | Control: before use, stored CON + max HP equal the seed values — proving the bump is manual-sourced. |
-
-### `test_item_manual_of_gainful_exercise.py`
-v2.308.0 — Manual of Gainful Exercise (RAW DMG p.176, very rare, no attunement): the first PERMANENT ability-increase consumable, riding a new `use_kind: "ability_increase"` branch in `/use_item` that permanently WRITES the stored ability score (clamped to 30 — no RAW-20 clamp, the manual also raises the maximum). The stored write flows to every read site (`effective_ability_score`, `/roll` STR saves + Athletics, carry capacity). Seeded on Garrik Ironside (Fighter); his equipped Belt of Giant Strength still overrides EFFECTIVE STR to 21 (`max(20,21)`), proving the stored write is independent. The fixture snapshots + restores inventory AND abilities.
-
-| Test | What it asserts |
-|------|-----------------|
-| `test_manual_raises_stored_str_and_consumes` | POST `/use_item` (override) → body `ability_increase` = {ability:STR, amount:2, new_score:before+2}; `character_update` WS; sheet stored STR +2, manual row consumed. Restores inventory+abilities on teardown. |
-| `test_manual_baseline_str_unchanged` | Control: before use, stored STR equals the seed value — proving the bump is manual-sourced. |
 
 ### `test_item_helm_of_telepathy.py`
 v2.307.0 — Helm of Telepathy (RAW DMG p.169, uncommon, attunement): the always-on telepathic-communication ability rides the boolean-flag substrate (the v2.245.0 `mind_shield` / Ring of Feather Falling `feather_fall` path) — a `telepathy` flag aggregated in `_equipped_item_effects` and surfaced on `/sheet-json` as `derived.telepathy = {sources}`. The detect-thoughts / 1-per-dawn suggestion casts are GM-narrated in v1. Seeded inert (unequipped/unattuned) on Thalindra Moonshadow (Wizard), who carries no other telepathy item so the baseline cleanly proves the source; tests PATCH it equipped+attuned, read the projection, then restore the seed inventory.

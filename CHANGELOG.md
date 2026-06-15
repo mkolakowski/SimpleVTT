@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.314.0] - 2026-06-14 — "The Single Source"
+
+**Schema version:** 69
+
+**Commit summary:** Reconciliation Phase 3 — **retire System B**, closing the [permanent-ability-increase-reconciliation plan](docs/plans/permanent-ability-increase-reconciliation.md). The parallel `use_kind: "ability_increase"` branch on `/use_item` (this session's v2.308.0–v2.310.0 path) is removed; Garrik's three Manuals are re-seated onto the canonical v2.222.0 `permanent_boost` `read` action on `/use_item_action`. One mechanism now handles all six Manuals & Tomes.
+
+**Description:** With Phase 1 (CON max-HP port, v2.312.0) and Phase 2 (Tome trio, v2.313.0) landed on the `permanent_boost` path, the newer `/use_item` `ability_increase` branch was redundant — and a correctness trap, since it dual-dispatched with the slug-routed `permanent_boost` handler on the same items. This commit removes that branch entirely: the dispatch block, the `ability_increase_info` accumulator, the `📖 Studied …` feature-card branch, the `character_update` broadcast tied to it, and the `ability_increase` field on the `/use_item` response. Garrik's Manual of Gainful Exercise (STR), Manual of Bodily Health (CON), and Manual of Quickness of Action (DEX) are re-seeded as `type: "magic"` consumables carrying only their `_slug` (dropping `use_kind`/`ability`/`ability_increase`), so they read via `action_key: "read"` → `_use_item_action_permanent_boost`, which already handles the stored write, the consume, and the CON max-HP recompute. The three standalone `/use_item` test files (`test_item_manual_of_{gainful_exercise,bodily_health,quickness_of_action}.py`) are deleted; STR + DEX read-via-action tests are folded into `test_item_manual_of_ability.py` (CON was already covered there in v2.312.0). MINOR — retires a parallel dispatch path + a response field no client reads, and re-seeds demo content; no schema change.
+
+### Changed
+- Demo seed: Garrik Ironside's three Manuals re-seated onto the `permanent_boost` `read` path (`type: "magic"`, `_slug` only; `use_kind`/`ability`/`ability_increase` dropped).
+- `tests/harness/test_item_manual_of_ability.py`: added `test_reading_gainful_exercise_permanently_raises_str` + `test_reading_quickness_permanently_raises_dex` (Garrik, `/use_item_action` `read`).
+- `docs/plans/permanent-ability-increase-reconciliation.md`: Phase 3 marked shipped; plan closed.
+- `docs/test-harness-coverage.md`: harness total 2897 → 2893 (−6 deleted System B files, +2 folded read-via-action tests).
+
+### Removed
+- The `use_kind: "ability_increase"` branch on `/use_item` (`app/routes/tabletop_routes.py`) — dispatch block, `ability_increase_info` accumulator, `📖 Studied …` feature card, the `character_update` broadcast, and the `ability_increase` response field.
+- `tests/harness/test_item_manual_of_gainful_exercise.py`, `test_item_manual_of_bodily_health.py`, `test_item_manual_of_quickness_of_action.py` (folded into `test_item_manual_of_ability.py`).
+
 ## [2.313.0] - 2026-06-14 — "The Completed Library"
 
 **Schema version:** 69

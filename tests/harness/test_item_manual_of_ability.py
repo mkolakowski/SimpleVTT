@@ -146,6 +146,84 @@ async def test_reading_bodily_health_raises_con_and_max_hp(gm_client, garrik):
         )
 
 
+_GAINFUL_EXERCISE_SLUG = "manual-of-gainful-exercise"
+_QUICKNESS_SLUG = "manual-of-quickness-of-action"
+
+
+async def test_reading_gainful_exercise_permanently_raises_str(gm_client, garrik):
+    """v2.314.0 — reconciliation Phase 3: the Manual of Gainful Exercise (STR
+    +2) now reads via the canonical /use_item_action `read` path (System B's
+    /use_item ability_increase branch was retired). Garrik reads it; his
+    stored STR rises by 2 and the book is consumed. He has an equipped Belt of
+    Giant Strength that overrides effective STR, so STR MAY appear in
+    derived.effective_abilities — we assert only the stored write + consume."""
+    data = await _sheet_json(gm_client, garrik["id"])
+    sheet = data.get("sheet") or {}
+    abilities_snapshot = dict(sheet.get("abilities") or {})
+    idx, inv_snapshot = _find_slug(sheet, _GAINFUL_EXERCISE_SLUG)
+    assert idx is not None, "Garrik has no Manual of Gainful Exercise"
+    old_str = int(abilities_snapshot.get("STR") or 0)
+    assert old_str > 0, "fixture precondition: Garrik should have a STR score"
+    try:
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/use_item_action",
+            json={"inventory_index": idx, "action_key": "read"},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["ok"] is True
+        assert body["ability"] == "STR"
+        assert body["amount"] == 2
+        assert body["new_score"] == old_str + 2
+        assert body["consumed"] is True
+
+        after = await _sheet_json(gm_client, garrik["id"])
+        after_sheet = after.get("sheet") or {}
+        assert int((after_sheet.get("abilities") or {}).get("STR") or 0) == old_str + 2
+        gone_idx, _ = _find_slug(after_sheet, _GAINFUL_EXERCISE_SLUG)
+        assert gone_idx is None, "the manual should be consumed on read"
+    finally:
+        await _restore(gm_client, garrik["id"], abilities_snapshot, inv_snapshot)
+
+
+async def test_reading_quickness_permanently_raises_dex(gm_client, garrik):
+    """v2.314.0 — reconciliation Phase 3: the Manual of Quickness of Action
+    (DEX +2) reads via /use_item_action `read`. Garrik reads it; stored DEX
+    +2, book consumed, and (no DEX override on his sheet) DEX absent from
+    derived.effective_abilities."""
+    data = await _sheet_json(gm_client, garrik["id"])
+    sheet = data.get("sheet") or {}
+    abilities_snapshot = dict(sheet.get("abilities") or {})
+    idx, inv_snapshot = _find_slug(sheet, _QUICKNESS_SLUG)
+    assert idx is not None, "Garrik has no Manual of Quickness of Action"
+    old_dex = int(abilities_snapshot.get("DEX") or 0)
+    assert old_dex > 0, "fixture precondition: Garrik should have a DEX score"
+    try:
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/use_item_action",
+            json={"inventory_index": idx, "action_key": "read"},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["ok"] is True
+        assert body["ability"] == "DEX"
+        assert body["amount"] == 2
+        assert body["new_score"] == old_dex + 2
+        assert body["consumed"] is True
+
+        after = await _sheet_json(gm_client, garrik["id"])
+        after_sheet = after.get("sheet") or {}
+        assert int((after_sheet.get("abilities") or {}).get("DEX") or 0) == old_dex + 2
+        eff_map = (after.get("derived") or {}).get("effective_abilities") or {}
+        assert "DEX" not in eff_map, (
+            f"permanent boost should not create an override entry; got {eff_map!r}"
+        )
+        gone_idx, _ = _find_slug(after_sheet, _QUICKNESS_SLUG)
+        assert gone_idx is None, "the manual should be consumed on read"
+    finally:
+        await _restore(gm_client, garrik["id"], abilities_snapshot, inv_snapshot)
+
+
 _CLEAR_THOUGHT_SLUG = "tome-of-clear-thought"
 _UNDERSTANDING_SLUG = "tome-of-understanding"
 
