@@ -32770,6 +32770,20 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "stone-of-controlling-earth-elementals": [
         {"requires_attunement": False},
     ],
+    # v2.333.0 — "The Artisan's Spread" bundle (seventh stub bundle).
+    # Three SRD craft/utility wondrous items shipped as catalog-stub
+    # passives. Each has distinct GM-narrated mechanics (10-charge sonic
+    # unlock, paint-becomes-real, multi-item embroidered robe). Pure stub
+    # catalog rows for audit-counting; mechanical surfaces TBD.
+    "chime-of-opening": [
+        {"requires_attunement": False},
+    ],
+    "marvelous-pigments": [
+        {"requires_attunement": False},
+    ],
+    "robe-of-useful-items": [
+        {"requires_attunement": False},
+    ],
     # v2.209.0 — Stone of Good Luck (Luckstone, RAW DMG p.207,
     # uncommon, attunement). While the stone is on your person you gain
     # +1 to ability checks AND saving throws. The `save_bonus` rides the

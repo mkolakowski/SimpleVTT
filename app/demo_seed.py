@@ -560,6 +560,20 @@ def _rogue_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 3,
              "_slug": "rope-of-climbing",
              "desc": "Uncommon wondrous item, no attunement. 60-ft silk rope (holds 3000 lb). Command word animates the rope; bonus action commands the other end to a destination 10 ft/turn. The rope can also fasten, unfasten, knot (adds advantage on climb checks; rope shortens to 50 ft), unknot, or coil itself. AC 20, 20 HP, regenerates 1 HP per 5 min. RAW DMG p.197."},
+            # v2.333.0 — "The Artisan's Spread" bundle: Chime of Opening
+            # (RAW DMG p.158, rare, no attunement). 1-lb hollow metal
+            # tube. 10 charges (regain all at dawn). Action: hold + strike
+            # the chime within 120 ft of a locked / bound object (door,
+            # chest, manacles, knot) — the chime emits a clear tone that
+            # opens the target if its DC ≤ 10. Stub catalog row; the
+            # 10-charge counter + per-strike DC test are GM-narrated.
+            # Thematic on Pip (Halfling Rogue scout — silent unlock chimes
+            # pair nicely with her Wand of Secrets + Slippers of Spider
+            # Climbing toolkit).
+            {"name": "Chime of Opening", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 1,
+             "_slug": "chime-of-opening",
+             "desc": "Rare wondrous item, no attunement. 1-lb hollow metal tube. 10 charges (regain all at dawn). Action: strike the chime within 120 ft of a locked or bound object (door, chest, manacles, knot, padlock); the tone opens the target if its DC ≤ 10. RAW DMG p.158."},
         ],
         "feats": [],
         "resources": [
@@ -1035,6 +1049,20 @@ def _wizard_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 1,
              "_slug": "universal-solvent",
              "desc": "Legendary wondrous item, no attunement. 1 oz of strongly alcoholic liquid in a glass tube. Action: pour onto a surface within reach to dissolve up to 1 sq ft of any adhesive, including Sovereign Glue. RAW DMG p.209."},
+            # v2.333.0 — "The Artisan's Spread" bundle: Marvelous Pigments
+            # (Nolzur's Marvelous Pigments) (RAW DMG p.183, very rare, no
+            # attunement). 2-lb wooden box with 1d4 pots of paint + a fine
+            # brush. Action: paint a 2D image of any object on a flat
+            # surface (10 min/cubic foot, up to 1000 cubic feet over 10
+            # min); the painted object becomes a real 3D object the next
+            # round, persisting until destroyed normally. Stub catalog
+            # row; the paint→reality mechanic is GM-narrated. Thematic on
+            # Thalindra (Wizard Evoker — Pigments paired with her Universal
+            # Solvent for a "create then dissolve" alchemy demo).
+            {"name": "Marvelous Pigments", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 2,
+             "_slug": "marvelous-pigments",
+             "desc": "Very rare wondrous item, no attunement. 2-lb wooden box: 1d4 paint pots + a fine brush. Action over 10 min: paint a 2D image on a flat surface — up to 1000 cubic feet of representational content. Next round the painted object becomes real and persists until destroyed normally. RAW DMG p.183."},
         ],
         "feats": [],
         # v2.16.1: Arcane Recovery counter (Wizard Lv 1 feature). Once per
@@ -3241,6 +3269,20 @@ def _warlock_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 1,
              "_slug": "iron-flask",
              "desc": "Legendary wondrous item, no attunement. Brass flask with an iron plug. Action: target a creature within 60 ft — DC 17 WIS save or the creature is trapped inside (only one creature at a time; demon lords, devil princes, archfey, and other very powerful beings are immune). On release the creature is charmed-friendly for 1 hour. RAW DMG p.178."},
+            # v2.333.0 — "The Artisan's Spread" bundle: Robe of Useful
+            # Items (RAW DMG p.195, uncommon, no attunement). Patched
+            # cloth robe with 2d4+8 (10-16) cloth patches sewn onto it,
+            # each embroidered with a distinct image: dagger, lantern,
+            # mirror, pole, hempen rope, sack, etc. Action: pluck a patch
+            # — the embroidered item becomes the real object in the
+            # plucker's hand. Once plucked, that patch is gone for good.
+            # Stub catalog row; the per-patch contents + activation are
+            # GM-narrated. Thematic on Magnus (Fiend-pact Warlock — a
+            # robe-of-clever-tricks fits his arcane scholar aesthetic).
+            {"name": "Robe of Useful Items", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 4,
+             "_slug": "robe-of-useful-items",
+             "desc": "Uncommon wondrous item, no attunement. Patched cloth robe with 2d4+8 cloth patches (each embroidered with a distinct image: dagger, lantern, mirror, pole, hempen rope, sack, etc.). Action: pluck a patch — the embroidered item becomes a real object in your hand. Once plucked, the patch is gone. RAW DMG p.195."},
         ],
         # v2.18.4: 3 known Eldritch Invocations at Lv 5 (Warlock gets
         # Lv 2: 2 known; Lv 5: 3 known; Lv 7: 4 known...). Magnus's

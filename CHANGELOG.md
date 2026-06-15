@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.333.0] - 2026-06-15 — "The Artisan's Spread"
+
+**Schema version:** 69
+
+**Commit summary:** Seventh SRD magic-item **bundle** (after Wayfarer's / Inventor's / Captor's / Engineer's / Trickster's / Elemental Conclave) — three craft/utility wondrous items shipped together as catalog-stub passives: **Chime of Opening** (DMG p.158), **Marvelous Pigments** (DMG p.183), **Robe of Useful Items** (DMG p.195). Same minimal `requires_attunement: False` stub pattern, seeded on thematic carriers (Pip / Thalindra / Magnus); three smoke tests in `test_artisans_spread.py`.
+
+**Description:** Each item carries a distinct GM-narrated craft mechanic: 10-charge sonic unlocker, paint-becomes-real pots, multi-item embroidered robe. Thalindra's Marvelous Pigments pair with her v2.328.0 Universal Solvent for a "create then dissolve" alchemy demo arc; Pip's Chime of Opening complements her Wand of Secrets toolkit. MINOR — additive content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`): three new stub catalog rows — `chime-of-opening`, `marvelous-pigments`, `robe-of-useful-items`.
+- Demo seed: Pip Quickfingers gains a **Chime of Opening**, Thalindra Moonwhisper gains **Marvelous Pigments**, Magnus Hexbinder gains a **Robe of Useful Items** — each appended at the inventory tail.
+- `tests/harness/test_artisans_spread.py` — 3 smoke tests.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2945 → 2948 (+3 Artisan's Spread tests); new `test_artisans_spread.py` section.
+
 ## [2.332.0] - 2026-06-15 — "The Elemental Conclave"
 
 **Schema version:** 69
