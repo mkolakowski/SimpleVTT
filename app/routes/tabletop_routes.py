@@ -32735,6 +32735,23 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "portable-hole": [
         {"requires_attunement": False},
     ],
+    # v2.331.0 — "The Trickster's Pouch" bundle (fifth stub bundle after the
+    # Wayfarer's / Inventor's / Captor's / Engineer's collections). Three
+    # SRD random-effect wondrous items shipped as catalog-stub passives:
+    # Bag of Beans (random plant effects per bean), Bag of Tricks (random
+    # summoned animal per token), Feather Token (one of six magical effects
+    # depending on token type — descriptive). All three are pure GM-narrated
+    # random tables in v1; future commits could ship per-item handlers that
+    # roll on the appropriate table.
+    "bag-of-beans": [
+        {"requires_attunement": False},
+    ],
+    "bag-of-tricks": [
+        {"requires_attunement": False},
+    ],
+    "feather-token": [
+        {"requires_attunement": False},
+    ],
     # v2.209.0 — Stone of Good Luck (Luckstone, RAW DMG p.207,
     # uncommon, attunement). While the stone is on your person you gain
     # +1 to ability checks AND saving throws. The `save_bonus` rides the

@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.331.0] - 2026-06-15 — "The Trickster's Pouch"
+
+**Schema version:** 69
+
+**Commit summary:** Fifth SRD magic-item **bundle** (after Wayfarer's / Inventor's / Captor's / Engineer's) — three random-effect wondrous items shipped together as catalog-stub passives: **Bag of Beans** (DMG p.152), **Bag of Tricks** (DMG p.154), **Feather Token** (DMG p.188). Same minimal `requires_attunement: False` stub pattern, seeded on thematic carriers (Mira / Brakka / Quan); three smoke tests in `test_tricksters_pouch.py`.
+
+**Description:** Continues the bundling pattern. Each item's random-table mechanic (3d4 chaotic plant beans, three random animal summons, six per-type one-shot effects) stays GM-narrated — these are the kind of items a GM rolls behind the screen and narrates the outcome from a printed table. Feather Token is the second consumable stub item in the bundle series (Wayfarer's Folding Boat is not consumable; this token vanishes on activation per RAW). Distribution targets PCs who hadn't received a stub item yet: Mira (Druid — seeds), Brakka (Beast Barbarian — animal allies), Quan (Drunken Monk — featherweight tricks). MINOR — additive content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`): three new stub catalog rows — `bag-of-beans`, `bag-of-tricks`, `feather-token`.
+- Demo seed: Mira Greenleaf gains a **Bag of Beans**, Brakka Wildmane gains a **Bag of Tricks**, Quan Reelstep gains a **Feather Token** (consumable) — each appended at the inventory tail.
+- `tests/harness/test_tricksters_pouch.py` — 3 smoke tests; the Feather Token test additionally asserts `consumable: True` to confirm the RAW one-shot contract.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2938 → 2941 (+3 Trickster's Pouch tests); new `test_tricksters_pouch.py` section.
+
 ## [2.330.0] - 2026-06-15 — "The Engineer's Set"
 
 **Schema version:** 69

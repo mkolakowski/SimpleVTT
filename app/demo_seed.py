@@ -2827,6 +2827,18 @@ def _druid_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 50,
              "_slug": "mirror-of-life-trapping",
              "desc": "Very rare wondrous item, no attunement. 4-ft-tall framed mirror with twelve sub-pocket-plane cells. When a creature other than the wielder comes within 30 ft and the mirror is active, that creature makes a DC 15 CHA save or is trapped inside one of the cells (until released by the wielder's action). The wielder can converse with trapped creatures through the mirror. RAW DMG p.181."},
+            # v2.331.0 — "The Trickster's Pouch" bundle: Bag of Beans (RAW
+            # DMG p.152, rare, no attunement). Heavy cloth bag with 3d4
+            # dry beans. Plant a bean to roll d100 on a random table:
+            # possibilities range from a 5-ft-radius pit, a fire elemental,
+            # a treant, a wish-granting talking flower, or an 11d6 fire
+            # explosion. Stub catalog row; the random table is GM-narrated.
+            # Thematic on Mira (Wood Elf Druid — she'd be the one experimenting
+            # with planting strange seeds in the forest).
+            {"name": "Bag of Beans", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 0.5,
+             "_slug": "bag-of-beans",
+             "desc": "Rare wondrous item, no attunement. Heavy cloth bag containing 3d4 dry beans. Pour out all the beans (action) to roll on a chaotic burst table: 5-ft-radius pit, summoned monster, treant, plant grove, gp-spewing geyser, wishing flower, gas-cloud, 1-mile-tall stalk, or 11d6 fire explosion. RAW DMG p.152."},
         ],
         "feats": [],
         # v2.14.2: Wild Shape uses = 2/short rest at Lv 2 (Lv 18 unlimited).
@@ -4440,6 +4452,19 @@ def _barbarian_beast_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True, "weight_lb": 0,
              "_slug": "ring-of-warmth",
              "desc": "Uncommon ring, attunement. While wearing this ring, you have resistance to cold damage. In addition, you and everything you wear and carry are unharmed by temperatures as low as -50 degrees Fahrenheit. RAW DMG p.193."},
+            # v2.331.0 — "The Trickster's Pouch" bundle: Bag of Tricks (RAW
+            # DMG p.154, uncommon, no attunement). Small fur sack
+            # containing 3 fuzzy balls. Action: pull one out, throw it up to
+            # 20 ft, and it transforms into a random animal (size + CR
+            # determined by the bag's color: gray, rust, or tan). The
+            # animal acts as the wielder's ally for 10 minutes or until it
+            # drops to 0 HP. Stub catalog row; the random-animal table is
+            # GM-narrated. Thematic on Brakka (Goliath Beast Barbarian —
+            # summoning animal allies fits the Path of the Beast aesthetic).
+            {"name": "Bag of Tricks", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 0.5,
+             "_slug": "bag-of-tricks",
+             "desc": "Uncommon wondrous item, no attunement. Small fur sack with 3 fuzzy balls. Action: pull out + throw a ball up to 20 ft; on landing it transforms into a random animal (gray/rust/tan bag yields different size/CR pools). The animal acts as your ally for 10 min or until it drops to 0 HP. The bag refreshes its 3 balls at dawn (long rest). RAW DMG p.154."},
         ],
         "resources": [
             {
@@ -4598,6 +4623,21 @@ def _monk_drunken_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 1,
              "_slug": "boots-of-elvenkind",
              "desc": "Uncommon wondrous item, no attunement. While you wear these boots, your steps make no sound, and you have advantage on Dexterity (Stealth) checks that rely on moving silently. RAW DMG p.155."},
+            # v2.331.0 — "The Trickster's Pouch" bundle: Feather Token (RAW
+            # DMG p.188, rare, no attunement). Tiny stylized feather; the
+            # specific token type (anchor, bird, fan, swan boat, tree,
+            # whip) determines its one-shot magical effect: e.g., "tree"
+            # plants a fully-grown oak in 1 round, "fan" creates a wind
+            # gust, "swan boat" summons a guided swan boat for 24 hours.
+            # Token is consumed after activation. Stub catalog row; the
+            # six per-type effects are GM-narrated. Thematic on Quan
+            # (Drunken Master Monk — a feather-light trick item fits his
+            # acrobatic / improvised-trick aesthetic).
+            {"name": "Feather Token", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "consumable": True,
+             "weight_lb": 0,
+             "_slug": "feather-token",
+             "desc": "Rare wondrous item, no attunement. A tiny stylized feather (one of six types: anchor, bird, fan, swan boat, tree, whip). Action: speak the command word — the token vanishes and triggers its one-shot effect (rooting a ship, calling a giant bird, summoning a wind gust, planting an oak, etc.). RAW DMG p.188."},
         ],
         "feats": [],
         "resources": [
