@@ -2333,6 +2333,27 @@ def _bard_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "weight_lb": 0, "_slug": "ring-of-mind-shielding",
              "desc": "Uncommon ring, attunement. While wearing this ring, you are immune to magic that allows other creatures to read your thoughts, determine whether you are lying, know your alignment, or know your creature type. Creatures can communicate telepathically with you only if you allow it. RAW DMG p.192."},
+            # v2.321.0 — Hat of Disguise (RAW DMG p.173, rare, attunement). RAW:
+            # "While wearing this hat, you can use an action to cast the
+            # disguise self spell from it at will. The spell ends if the hat is
+            # removed." Modeled as an attunement-gated `disguise_self_at_will`
+            # boolean derived flag (the v2.284.0 Boots of Levitation
+            # substrate, but for an at-will *casting* trait rather than a
+            # movement one). Aggregates in `_equipped_item_effects` (boolean
+            # OR + sources) and surfaces on /sheet-json as
+            # `derived.disguise_self_at_will = {sources}`. The action cost +
+            # in-spell mechanics (concentration, 1-hour duration, illusion
+            # investigation check at advantage) are GM-narrated in v1. Seeded
+            # INERT (equipped=False, attuned=False) per the v2.318.1 spare-loot
+            # precedent — the harness PATCHes the inventory equipped+attuned
+            # via /sheet-fields (which bypasses the /attune 3-item cap, since
+            # Lyra is already at 4 seed-attuned items), reads the derived
+            # flag, then restores. On theme for a Bard who guards her true
+            # face alongside her thoughts (Ring of Mind Shielding above).
+            {"name": "Hat of Disguise", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "weight_lb": 0, "_slug": "hat-of-disguise",
+             "desc": "Rare wondrous item, attunement. While wearing this hat, you can use an action to cast the disguise self spell from it at will. The spell ends if the hat is removed. RAW DMG p.173."},
         ],
         # v2.74.0 Phase 4a — Defensive Duelist feat for Lyra. RAW
         # (PHB p.166): reaction-based +PB AC against one melee hit

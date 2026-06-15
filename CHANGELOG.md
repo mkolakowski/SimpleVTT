@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.321.0] - 2026-06-15 — "The Borrowed Face"
+
+**Schema version:** 69
+
+**Commit summary:** SRD magic-item drop-in — **Hat of Disguise** (RAW DMG p.173, rare, attunement). New `disguise_self_at_will` boolean derived flag — the at-will-casting analogue of the v2.284.0 Boots of Levitation movement-flag substrate. Seeded inert on Lyra Sunstrider (Bard) as spare loot; four harness tests on the standard PATCH-then-restore pattern.
+
+**Description:** Mirrors the levitate_at_will / jump_at_will / bonus_action_attack boolean-flag pattern verbatim — four touch points in `app/routes/tabletop_routes.py`: (1) a new `_MAGIC_ITEM_PASSIVES["hat-of-disguise"]` row with `{disguise_self_at_will: True, requires_attunement: True}`, (2) default `disguise_self_at_will: False, disguise_self_at_will_sources: []` keys in the `_equipped_item_effects` init dict, (3) walker boolean-OR aggregation block that flips the flag and appends the item name to sources when an equipped+attuned item carries the payload, and (4) `/sheet-json` derived projection block that surfaces `derived.disguise_self_at_will = {sources}` only when the flag is set. Attunement-gated by the per-payload check, so equipped-but-not-attuned drops the flag. The action cost + in-spell mechanics (concentration, 1-hour duration, illusion-investigation check at advantage) stay GM-narrated in v1; this commit surfaces the durable "this PC can disguise at will" predicate that future automation (and the sheet UI) can read. Lyra carries the hat as inert spare loot (`equipped: False, attuned: False`) — the harness PATCHes equipped+attuned via `/sheet-fields` (bypasses the `/attune` 3-item cap, since Lyra is at 4 seed-attuned), reads the flag, then restores. MINOR — additive substrate field + content drop-in, no schema change.
+
+### Added
+- `_MAGIC_ITEM_PASSIVES["hat-of-disguise"]` (`app/routes/tabletop_routes.py`) — `{disguise_self_at_will: True, requires_attunement: True}`.
+- `disguise_self_at_will` boolean substrate: default flag pair in `_equipped_item_effects`, boolean-OR aggregation if-block, and the `/sheet-json` derived surfacing if-block (`derived.disguise_self_at_will = {sources}`).
+- Demo seed: Lyra Sunstrider gains a **Hat of Disguise** (`_slug: hat-of-disguise`) as inert spare loot at the inventory tail.
+- `tests/harness/test_item_hat_of_disguise.py` — 4 tests (equipped+attuned exposes flag, detune drops flag, inert baseline absent, unequip drops flag). PATCH-then-restore via `/sheet-fields`.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2907 → 2911 (+4 Hat of Disguise tests); new `test_item_hat_of_disguise.py` section.
+
 ## [2.320.3] - 2026-06-15 — "The Loud Restore"
 
 **Schema version:** 69

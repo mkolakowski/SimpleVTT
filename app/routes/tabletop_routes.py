@@ -33188,6 +33188,19 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "helm-of-telepathy": [
         {"telepathy": True, "requires_attunement": True},
     ],
+    # v2.321.0 — Hat of Disguise (RAW DMG p.173, rare, attunement). RAW:
+    # "While wearing this hat, you can use an action to cast the disguise self
+    # spell from it at will. The spell ends if the hat is removed." Modeled as
+    # an attunement-gated `disguise_self_at_will` boolean derived flag —
+    # mirrors the v2.284.0 Boots of Levitation `levitate_at_will` substrate
+    # (boolean OR aggregation in `_equipped_item_effects` + /sheet-json
+    # projection). The action cost and the in-spell mechanics (concentration,
+    # 1-hour duration, illusion-investigation check at advantage) are
+    # GM-narrated in v1; the surfacing of "this PC can disguise at will" is
+    # the durable, testable bit.
+    "hat-of-disguise": [
+        {"disguise_self_at_will": True, "requires_attunement": True},
+    ],
     # v2.315.0 — Scimitar of Speed (RAW DMG p.197, very rare, attunement).
     # RAW: "you gain a +2 bonus to attack and damage rolls made with this
     # magic weapon. In addition, you can make one attack with it as a bonus
@@ -34888,6 +34901,11 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # walker's attunement check filters it.
         "bonus_action_attack": False,
         "bonus_action_attack_sources": [],
+        # v2.321.0 — disguise-self-at-will passive (Hat of Disguise, RAW DMG
+        # p.173). Boolean OR across equipped items carrying the field;
+        # surfaced on `/sheet-json` derived. ATTUNEMENT-gated.
+        "disguise_self_at_will": False,
+        "disguise_self_at_will_sources": [],
         # v2.246.0 — cold-environment tolerance (Ring of Warmth). Boolean OR;
         # the cold *resistance* rides the shared `resistance_to` list, this
         # flag carries only the -50°F environmental tolerance. ATTUNEMENT-gated.
@@ -35299,6 +35317,14 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_bonus_action_attack") or p.get("bonus_action_attack"):
                 out["bonus_action_attack"] = True
                 out["bonus_action_attack_sources"].append(item_name)
+            # v2.321.0 — disguise-self-at-will passive (Hat of Disguise, RAW
+            # DMG p.173). Boolean OR; the flag rides the item via the
+            # `disguise_self_at_will` payload (or a per-item
+            # `_disguise_self_at_will` rider). Attunement-gated by the
+            # per-payload check above.
+            if item.get("_disguise_self_at_will") or p.get("disguise_self_at_will"):
+                out["disguise_self_at_will"] = True
+                out["disguise_self_at_will_sources"].append(item_name)
             # v2.246.0 — cold-environment tolerance passive (Ring of Warmth,
             # RAW DMG p.193). Boolean OR; the flag rides the item via the
             # `cold_tolerance` payload (or a per-item `_cold_tolerance` rider).
@@ -93427,6 +93453,12 @@ async def get_character_sheet_json(
             if _item_eff.get("bonus_action_attack"):
                 derived["bonus_action_attack"] = {
                     "sources": list(_item_eff.get("bonus_action_attack_sources") or []),
+                }
+            # v2.321.0 — disguise-self-at-will (Hat of Disguise). Only present
+            # when an equipped + attuned item sets the flag.
+            if _item_eff.get("disguise_self_at_will"):
+                derived["disguise_self_at_will"] = {
+                    "sources": list(_item_eff.get("disguise_self_at_will_sources") or []),
                 }
             # v2.246.0 — cold-environment tolerance (Ring of Warmth). Only
             # present when an equipped + attuned item sets the flag. (The ring's
