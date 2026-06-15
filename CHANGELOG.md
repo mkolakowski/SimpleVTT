@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.308.0] - 2026-06-14 — "The Disciplined Body"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item drop-in + dispatch extension — **Manual of Gainful Exercise** (RAW DMG p.176, very rare, no attunement) is the first PERMANENT ability-increase consumable. It rides a new `use_kind: "ability_increase"` branch in the `/use_item` dispatch that permanently WRITES the stored ability score. One dispatch branch, a demo seed on Garrik Ironside, and two harness tests.
+
+**Description:** Unlike every prior ability item (Belt of Giant Strength / Ioun Stone / Gauntlets — all *equipped* read-time overrides via `effective_ability_score`), the manual permanently raises the stored score AND its maximum, then loses its magic. That's a one-time stored mutation, not a passive, so it rides the consumable `/use_item` dispatch with a new `use_kind: "ability_increase"`: the handler reads the item's `ability` + `ability_increase` (default 2), writes the stored ability score (clamped to the engine's hard 30 — no RAW-20 clamp, because the manual also raises the maximum so the +2 always lands), consumes the manual (qty decrement / row removal, generic), logs a `📖 Studied …` feature card, and broadcasts `character_update` so open sheets re-render. The stored write flows to every downstream read site automatically — `effective_ability_score`, `/roll` STR saves + Athletics checks, and carry capacity. The 48-hours-over-6-days study time is GM-narrated (no in-app timer). Seeded on Garrik Ironside (the demo's Champion Fighter): his stored STR 18 → 20 on use. His equipped Belt of Giant Strength still overrides EFFECTIVE STR to 21 (`max(20, 21)`), which neatly proves the stored write is independent of the equipped override. MINOR — additive dispatch branch + demo content + tests, no schema change.
+
+### Added
+- `use_kind: "ability_increase"` branch in `/use_item` (`app/routes/tabletop_routes.py`) — permanently writes the stored ability score (`ability` + `ability_increase`, clamped to 30), tolerant of the sheet's ability key shapes; returns an `ability_increase` payload and broadcasts `character_update`.
+- Demo seed: Garrik Ironside gains a **Manual of Gainful Exercise** (`use_kind: "ability_increase"`, `ability: "STR"`, `ability_increase: 2`).
+- `tests/harness/test_item_manual_of_gainful_exercise.py` (2 tests): using the manual writes stored STR +2, consumes the row, returns the payload, broadcasts `character_update`; a baseline control asserting STR is unchanged before use. Inventory + abilities restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2887 → 2889 (+2 drop-in tests); added the `test_item_manual_of_gainful_exercise.py` section.
+
 ## [2.307.0] - 2026-06-14 — "The Silent Word"
 
 **Schema version:** 69

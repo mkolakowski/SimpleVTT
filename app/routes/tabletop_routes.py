@@ -22672,6 +22672,10 @@ async def use_item(
     rolled = 0
     breakdown = ""
     new_hp_state = None
+    # v2.308.0 — permanent ability-score increase (Manual of Gainful
+    # Exercise et al.). Populated by the ability_increase branch; surfaces
+    # on the broadcast + return so the open sheet re-renders the new score.
+    ability_increase_info = None
     heal_dice = item.get("heal_dice", "2d4+2")
     if use_kind == "heal":
         try:
@@ -22690,6 +22694,41 @@ async def use_item(
         new_cur = min(hp_max, hp_cur + rolled) if hp_max > 0 else (hp_cur + rolled)
         result = _apply_hp_change(char, new_cur)
         new_hp_state = result["hp"]
+    elif use_kind == "ability_increase":
+        # v2.308.0 — permanent ability-score increase (Manual of Gainful
+        # Exercise, RAW DMG p.176: "your Strength score increases by 2, as
+        # does your maximum for that score"). Because the manual ALSO raises
+        # the maximum, the +2 applies unconditionally (no RAW-20 clamp); the
+        # engine's hard 30 clamp still bounds it. We mutate the STORED score
+        # so every read site (effective_ability_score, /roll, carry capacity)
+        # picks it up — this is a one-time write, not an equipped passive.
+        canon = _normalize_ability_key(item.get("ability") or "")
+        inc = int(item.get("ability_increase") or 2)
+        if canon:
+            abilities = dict(sheet.get("abilities") or {})
+            cur = _read_stored_ability(sheet, canon)
+            new_val = max(1, min(30, cur + inc))
+            long_name = {
+                "STR": "strength", "DEX": "dexterity", "CON": "constitution",
+                "INT": "intelligence", "WIS": "wisdom", "CHA": "charisma",
+            }[canon]
+            wrote = False
+            for k in (canon, canon.lower(), canon.capitalize(),
+                      long_name, long_name.capitalize()):
+                if k in abilities:
+                    if isinstance(abilities[k], dict):
+                        abilities[k] = {**abilities[k], "score": new_val}
+                    else:
+                        abilities[k] = new_val
+                    wrote = True
+                    break
+            if not wrote:
+                abilities[canon] = new_val
+            sheet["abilities"] = abilities
+            ability_increase_info = {
+                "ability": canon, "amount": inc, "new_score": new_val,
+            }
+        char.sheet = sheet
     else:
         char.sheet = sheet
 
@@ -22750,6 +22789,13 @@ async def use_item(
     if use_kind == "heal" and rolled > 0:
         feature_label = f"🧪 Drank {item_name}"
         feature_desc = f"Recovered {rolled} HP ({breakdown})"
+    elif use_kind == "ability_increase" and ability_increase_info:
+        feature_label = f"📖 Studied {item_name}"
+        feature_desc = (
+            f"{ability_increase_info['ability']} increased by "
+            f"{ability_increase_info['amount']} "
+            f"(now {ability_increase_info['new_score']})"
+        )
     else:
         feature_label = f"🧪 Used {item_name}"
         feature_desc = (item.get("desc") or "").strip()[:400]
@@ -22792,6 +22838,15 @@ async def use_item(
             },
         })
 
+    # v2.308.0 — an ability_increase mutates the stored sheet, so signal
+    # clients to re-fetch (the open sheet re-renders the new score). Same
+    # lightweight character_update the /sheet-fields PATCH broadcasts.
+    if ability_increase_info:
+        await hub.broadcast(campaign_id, {
+            "type": "character_update",
+            "data": {"id": char.id, "name": char.name},
+        })
+
     # Mark the economy slot last so the resulting economy_update
     # broadcast lands after the roll-log entry — matches the order in
     # cast_spell / use_attack / use_feature.
@@ -22807,6 +22862,7 @@ async def use_item(
         "slot": slot or "",
         "new_hp": new_hp_state,
         "cast_id": item_cast_id,
+        "ability_increase": ability_increase_info,
     }
 
 

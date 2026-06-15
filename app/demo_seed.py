@@ -5223,6 +5223,25 @@ def _fighter_sheet(name: str) -> dict:
              "consumable": True, "equipped": True,
              "_slug": "potion-of-gaseous-form",
              "desc": "Drink (action, /use_item_action drink) to enter gaseous form for up to 1 hour: resistance to nonmagical damage, advantage on STR/DEX/CON saves, 10-ft hover; can't attack or cast. RAW DMG p.187."},
+            # v2.308.0 — first permanent ability-increase consumable. Manual of
+            # Gainful Exercise (RAW DMG p.176, very rare, no attunement): study
+            # 48 hours over 6 days → your STR score increases by 2, as does its
+            # maximum, then the manual loses its magic for a century. Modeled as
+            # a /use_item consumable with the new `use_kind: "ability_increase"`
+            # dispatch — it permanently WRITES the stored STR (18 → 20), so
+            # every read site (effective_ability_score, /roll STR saves +
+            # Athletics, carry capacity) picks it up. Because the manual also
+            # raises the maximum, the +2 applies unconditionally (no RAW-20
+            # clamp). Seeded on Garrik (Fighter): his stored STR 18 → 20 on use;
+            # note his equipped Belt of Giant Strength still overrides effective
+            # STR to 21 (max(20,21)), proving the stored write is independent of
+            # the equipped override. The harness reads stored STR, uses the
+            # manual, asserts STR 20 + the row consumed, then restores.
+            {"name": "Manual of Gainful Exercise", "type": "consumable", "qty": 1,
+             "consumable": True, "equipped": True, "use_kind": "ability_increase",
+             "ability": "STR", "ability_increase": 2, "weight_lb": 5,
+             "_slug": "manual-of-gainful-exercise",
+             "desc": "Study 48 hours over 6 days (/use_item) to permanently increase your Strength score by 2 — its maximum rises by 2 as well — then the manual loses its magic for a century. RAW DMG p.176."},
             # v2.205.0 — third charge-tracked wand (RAW DMG p.213, rare,
             # attunement). Same template as the Wand of Fireballs (7
             # charges, base slot level 3, 1d6+1 recharge) but casts
