@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.320.2] - 2026-06-15 — "The Silent Restore"
+
+**Schema version:** 69
+
+**Commit summary:** Doc-only — file a new **B15** entry in `BUGS.md` for a pre-existing P1 regression discovered during the v2.318.x–v2.320.x magic-item sweep: `test_sword_of_sharpness.py::test_sharpness_nat_20_extra_damage` and `test_vorpal_decap.py::test_vorpal_decap_on_nat_20` fail because the file-mate detune-test's `/attune` re-attune call silently 409s on the 3-item cap (Pip / Mira are seeded over-cap), leaving the rider's item detuned for the subsequent nat-20 test.
+
+**Description:** Local reproduction on every version checked (v2.317.0 → v2.320.1) — the on_nat_20 dispatcher correctly suppresses the rider when its inventory item isn't attuned, but the detune-test's `finally` block doesn't assert on the restore call, so the silent 409 cascades into the next test as a phantom "rider never fired" failure. Documented with full root-cause, repro footprint, and four ranked fix paths (PATCH-via-sheet-fields is the cheapest; assert-the-restore-status-code is the second cheapest). PATCH — doc only.
+
+### Added
+- `BUGS.md` § Test infrastructure: new **B15** entry — Sharpness + Vorpal nat-20 silent-restore regression (P1, OPEN).
+
 ## [2.320.1] - 2026-06-15 — "The Untangled Field"
 
 **Schema version:** 69
