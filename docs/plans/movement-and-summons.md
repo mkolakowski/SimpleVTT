@@ -1,6 +1,6 @@
 # Forced movement, speed buffs & summons — Phase 6 sub-plan
 
-**Status:** ⚪ proposed (planning only)
+**Status:** ✅ shipped (v2.99.431–.446). The `_force_move` forced-movement primitive and `_summon_companion` summon-token primitive both shipped and live in `app/routes/tabletop_routes.py`; this doc is retained as the design record.
 **Parent:** [full-feature-automation.md](full-feature-automation.md) Phase 6 (P6 movement + P7 summons).
 **Goal:** Build the two heaviest remaining primitives — **server-side
 forced movement** (`_force_move`) + **speed buffs**, and a

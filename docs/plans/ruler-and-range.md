@@ -1,6 +1,6 @@
 # Ruler & Range Enforcement — Design Plan
 
-**Status:** Not started. This is a design document — no code has shipped.
+**Status:** ✅ shipped (Phases 1, 2, 3A–E; ruler tool live in `app/static/tabletop.js`, distance enforcement in `token_move`, AoE templates in the canvas picker — git history from v2.49.77). This doc is retained as the design record.
 **Filed across:** v2.49.55–v2.49.58 "20-ft radius enforcement" (Sleep), v2.49.57 "push_authorized cast-card UI" (Open Hand), v2.49.55 "Must follow a hit" (Stunning Strike — the related range check on melee Flurry hits).
 **Related code surfaces:** `app/static/tabletop.js` (canvas, AoE picker, pointer handlers), `app/routes/tabletop_routes.py::token_move` (distance calc), spell JSON `range` fields.
 

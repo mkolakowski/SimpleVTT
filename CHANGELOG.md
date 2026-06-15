@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.316.1] - 2026-06-14 — "The Reconciled Ledger"
+
+**Schema version:** 69
+
+**Commit summary:** Doc-only — sync stale plan-doc statuses against shipped work and re-prioritize the TODO Design Plans Backlog toward SRD automation. Three plan headers that still read "proposed / not started" are flipped to ✅ shipped (they shipped long ago); the P1 backlog now leads with the magic-item content tail (the biggest SRD-% lever) instead of the already-shipped legendary/lair-action work.
+
+**Description:** `movement-and-summons.md` (`_force_move` + `_summon_companion`, shipped v2.99.431–.446) and `ruler-and-range.md` (ruler tool + distance enforcement + AoE templates, shipped from v2.49.77) both still carried "⚪ proposed / Not started" headers despite the code being live — flipped to ✅ shipped with the shipping-version note. `spell-upcasting.md`'s body scope note ("Nothing here is implemented yet") is corrected to reflect that all three approaches shipped (Phase A/B/C), leaving only content-side upcast scaling data. In `TODO.md`, a new `v2.315.0 SRD-audit refresh` priority note marks the 2026-06-11 P1 list (legendary/lair actions + spell-validation) as shipped and promotes the **magic-item content tail (116 of 239 items)** to P1 as the single biggest lever on overall SRD automation %, with spell upcast scaling and the class-feature ⚪ tail behind it. PATCH — doc-only, no code/schema/endpoint change.
+
+### Changed
+- `docs/plans/movement-and-summons.md`: status ⚪ proposed → ✅ shipped (v2.99.431–.446).
+- `docs/plans/ruler-and-range.md`: status "Not started" → ✅ shipped (Phases 1, 2, 3A–E).
+- `docs/plans/spell-upcasting.md`: body scope note corrected — all three approaches shipped; remaining work is content-only upcast scaling data.
+- `TODO.md`: new `v2.315.0 SRD-audit refresh` priority note; Design Plans Backlog P1 re-led with the magic-item content tail + spell upcast scaling; the superseded magic-item P2 line points back at P1.
+
 ## [2.316.0] - 2026-06-14 — "The Honest Denominator"
 
 **Schema version:** 69

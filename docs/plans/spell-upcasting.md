@@ -6,10 +6,12 @@ Fireball at 4th deals 9d6 instead of 8d6, Cure Wounds at 2nd heals 2d8 + mod.
 This doc audits how SimpleVTT handles up-casting **today**, then proposes **three
 distinct ways** to let users up-cast, with a recommended phased rollout.
 
-> **Scope note.** This is a design doc (the [TODO](../../TODO.md) item asked to
-> "plan three ways"). Nothing here is implemented yet beyond the pieces called
-> out as already-shipped in the audit. Each approach below ends with concrete
-> file touches so a future commit can pick one up.
+> **Scope note.** ✅ All three approaches shipped (Phase A v2.108.0 / v2.109.0,
+> Phase B v2.110.0, Phase C v2.108.0 — see the status table below). This doc is
+> retained as the design record; the "proposed file touches" in each section
+> describe what landed. Remaining work is content-only: the ~110
+> cast-and-broadcast-only spells still lack structured `upcast` scaling data
+> (tracked as P2 in the [SRD audit](../../TODO.md)).
 
 ## Status snapshot
 
