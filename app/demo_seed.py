@@ -357,6 +357,19 @@ def _rogue_sheet(name: str) -> dict:
              "damage": "1d6+3", "damage_type": "piercing",
              "range": "5 ft", "_slug": "sword-of-life-stealing",
              "desc": "Rare shortsword, attunement. On a natural 20, deal +3d6 necrotic damage to the target (constructs and undead exempt) — RAW DMG p.206. Gain temp HP equal to the extra damage dealt (GM-narrated)."},
+            # v2.335.0 — Nine Lives Stealer (RAW DMG p.183, very rare,
+            # attunement). The first on_nat_20 `effect: "slay_save"` item: on
+            # a natural 20 against a creature with < 100 HP, the target makes
+            # a DC 15 CON save or is slain instantly (constructs/undead
+            # exempt). The +2 attack/damage is baked into this attack row
+            # (Vorpal / Holy Avenger precedent — Pip's Shortsword +6/1d6+3 →
+            # +8/1d6+5). The slug gates the rider; the inventory item below
+            # (seeded inert) must be PATCHed equipped+attuned by the harness
+            # for the dispatcher's attunement check to pass.
+            {"name": "Nine Lives Stealer", "attack_bonus": "+8",
+             "damage": "1d6+5", "damage_type": "piercing",
+             "range": "5 ft", "_slug": "nine-lives-stealer",
+             "desc": "Very rare shortsword, attunement. +2 attack/damage; on a natural 20 against a creature with fewer than 100 HP, the target makes a DC 15 CON save or is slain (constructs and undead exempt). 1d8+1 charges (GM-tracked). RAW DMG p.183."},
         ],
         "spells": [],
         # v2.4.13: rich inventory items (was bare strings). Weapons /
@@ -574,6 +587,22 @@ def _rogue_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 1,
              "_slug": "chime-of-opening",
              "desc": "Rare wondrous item, no attunement. 1-lb hollow metal tube. 10 charges (regain all at dawn). Action: strike the chime within 120 ft of a locked or bound object (door, chest, manacles, knot, padlock); the tone opens the target if its DC ≤ 10. RAW DMG p.158."},
+            # v2.335.0 — Nine Lives Stealer (RAW DMG p.183, very rare,
+            # attunement). Paired with the attack entry above via `_slug`.
+            # Seeded INERT (equipped=False, attuned=False) per the v2.318.1
+            # spare-loot precedent — the harness PATCHes it equipped+attuned
+            # via /sheet-fields (bypassing the /attune cap, since Pip is
+            # already at 4+ seed-attuned), seeds a nat-20 roll, and asserts
+            # the slay fires on a failed CON save. Pip's third on_nat_20
+            # sword (after Sharpness + Life Stealing) — each gated
+            # independently by its attack's `_slug`. A grim soul-stealing
+            # blade is fitting loot for a larcenous Halfling Rogue.
+            {"name": "Nine Lives Stealer", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "hands": 1, "damage": "1d6", "damage_type": "piercing",
+             "properties": "finesse, light, magic",
+             "_slug": "nine-lives-stealer", "weight_lb": 2,
+             "desc": "Very rare shortsword, attunement. +2 attack/damage. The sword has 1d8+1 charges. On a critical hit against a creature with fewer than 100 HP, that creature makes a DC 15 CON save or is slain instantly (a construct or undead is immune). The sword loses 1 charge per slay; when out of charges it loses this property. RAW DMG p.183."},
         ],
         "feats": [],
         "resources": [

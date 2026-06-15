@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2951 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.334.0, 2026-06-15).
+**Total tests:** 2954 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.335.0, 2026-06-15).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3525,6 +3525,15 @@ v2.318.0 magic-items — Sword of Life Stealing +3d6 necrotic on natural 20 (RAW
 | `test_life_stealing_no_rider_on_construct` | Iterates seeds 0-199 to land d20=20 on a `creature_type: "construct"` target; asserts the `item-sword-of-life-stealing-nat20` broadcast did NOT fire (first exempt slot). |
 | `test_life_stealing_no_rider_on_undead` | Iterates seeds 0-199 to land d20=20 on a `creature_type: "undead"` target; asserts the broadcast did NOT fire (second exempt slot). |
 | `test_life_stealing_nat_20_extra_damage` | Iterates seeds 0-199 finding one that lands d20=20 vs. a humanoid; asserts `feature_used` with `source: "item-sword-of-life-stealing-nat20"` fires and `hp_dealt` is in [3, 18] (3d6 range). |
+
+### `test_nine_lives_stealer.py`
+v2.335.0 magic-items — Nine Lives Stealer (RAW DMG p.183, very rare, attunement). The first `on_nat_20` `effect: "slay_save"` item: nat-20 vs a creature with < 100 HP → DC 15 CON save or slain instantly (constructs/undead exempt). Composes the nat-20 gate + `exempt_creature_types` + `_resolve_feature_save` + a new `max_target_hp` gate. Carrier: Pip Quickfingers at `attack_index 4`, seeded inert (PATCH-in-test). The slay broadcast (`item-nine-lives-stealer-nat20`) fires only on a failed save.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_nine_lives_slays_on_nat_20_failed_save` | Iterates seeds 0-399; PATCH equipped+attuned, attack a 60-HP bandit until a nat-20 + failed DC 15 CON save lands → the `item-nine-lives-stealer-nat20` slay broadcast fires (feature_name contains "Nine Lives Stealer"). |
+| `test_nine_lives_no_slay_on_construct` | Nat-20 vs a `creature_type: "construct"` (60 HP) → no slay broadcast (exempt gate short-circuits before the save). |
+| `test_nine_lives_no_slay_above_hp_gate` | Nat-20 vs a 200-HP humanoid → no slay broadcast (the <100-HP `max_target_hp` gate blocks it). |
 
 ### `test_mace_of_disruption.py`
 v2.319.0 magic-items — Mace of Disruption (RAW DMG p.179, rare, attunement). Sun Blade-shape conditional rider with TWO creature types in the predicate (fiend OR undead) — first multi-type conditional rider in the catalog. +2d6 radiant on hit when the target is a fiend or undead. Carrier: Brother Tavik Stonebrow at `attack_index 2` + inventory tail, seeded inert (v2.318.1 spare-loot pattern). The "destroy if HP ≤ 25" + fear-save-on-pass RAW clauses are GM-narrated.

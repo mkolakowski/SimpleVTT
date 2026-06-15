@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.335.0] - 2026-06-15 — "The Soul Reaver"
+
+**Schema version:** 69
+
+**Commit summary:** SRD magic-item drop-in — **Nine Lives Stealer** (RAW DMG p.183, very rare, attunement). The first `on_nat_20` item to use a NEW `effect: "slay_save"` variant: on a critical hit against a creature with fewer than 100 HP, the target makes a DC 15 CON save or is **slain instantly** (constructs/undead immune). Composes three existing substrate pieces — the nat-20 gate, the `exempt_creature_types` list (Vorpal / Life Stealing), and the `_resolve_feature_save` helper (Demon Slayer on_hit_save path) — plus a new `max_target_hp` HP gate. Seeded inert on Pip Quickfingers; three harness tests.
+
+**Description:** The `slay_save` branch is added to `_apply_magic_item_nat_20_effect`: it first checks the `max_target_hp` gate (target HP < 100), then resolves a CON save via `_resolve_feature_save` (NPC targets roll inline; PC targets prompt — deferred slays leave the target alive in v1), and on a definitively FAILED save sets `damage_amount = current_hp` so the shared apply path instakills the target (the Vorpal decap shape). To reach the save helper, the dispatcher signature gains `campaign` + `prompt_user` params, threaded through from the `/attack` handler (the same vars the on_hit_save path already uses). The construct/undead immunity reuses the existing `exempt_creature_types` gate, which short-circuits before the save. The +2 attack/damage is baked onto Pip's seeded attack row (Vorpal / Holy Avenger precedent); the sword's 1d8+1 charge limit is GM-narrated in v1 (the slay is always available while attuned). Pip carries it as inert spare loot at `attack_index 4` per the v2.318.1 pattern — her third on_nat_20 sword (after Sharpness + Life Stealing), each gated independently by its attack's `_slug`. MINOR — additive substrate variant + content, no schema change.
+
+### Added
+- `effect: "slay_save"` branch in `_apply_magic_item_nat_20_effect` (`app/routes/tabletop_routes.py`) — HP-gate + CON-save-resolved instant-slay; dispatcher signature gains `campaign`/`prompt_user`, threaded from the `/attack` call site; broadcast emitter gains a `slay_save` desc branch (sets `target_dead`).
+- `_MAGIC_ITEM_ATTACK_RIDERS["nine-lives-stealer"]` — `{requires_attunement: True, on_nat_20: {effect: "slay_save", save_dc: 15, save_ability: "CON", max_target_hp: 100, exempt_creature_types: ["construct", "undead"]}}`.
+- Demo seed: Pip Quickfingers gains a **Nine Lives Stealer** at `attack_index 4` + inventory tail, seeded inert (`equipped: False, attuned: False`).
+- `tests/harness/test_nine_lives_stealer.py` — 3 tests (nat-20 + failed-save slay fires, construct exempt, ≥100-HP gate).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2951 → 2954 (+3 Nine Lives Stealer tests); new `test_nine_lives_stealer.py` section.
+
 ## [2.334.0] - 2026-06-15 — "The Diviner's Hoard"
 
 **Schema version:** 69

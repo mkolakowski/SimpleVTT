@@ -30754,6 +30754,8 @@ async def _apply_magic_item_nat_20_effect(
     attack: dict,
     target_combatant: dict | None,
     attack_breakdown: str,
+    campaign=None,
+    prompt_user=None,
 ) -> dict | None:
     """v2.158.101 — Phase 7a: post-hit hook for magic items with an
     ``on_nat_20`` field in ``_MAGIC_ITEM_ATTACK_RIDERS`` (Vorpal Sword
@@ -30862,6 +30864,50 @@ async def _apply_magic_item_nat_20_effect(
             damage_amount = int(r.total)
         except dice_mod.DiceParseError:
             return None
+    elif effect == "slay_save":
+        # v2.335.0 — Nine Lives Stealer (RAW DMG p.183): on a crit against
+        # a creature with fewer than `max_target_hp` HP, the target makes a
+        # CON save (DC `save_dc`) or is slain instantly. Construct/undead
+        # immunity is already handled by the `exempt_creature_types` gate
+        # above. The save is resolved via the shared `_resolve_feature_save`
+        # helper (the same path the on_hit_save Demon Slayer frighten uses):
+        # NPC targets roll inline; PC targets prompt (deferred → no slay in
+        # v1). On a FAILED save we set damage_amount = current_hp so the
+        # shared apply path below instakills the target (decap shape). The
+        # sword's 1d8+1 charge limit is GM-narrated in v1.
+        max_hp_gate = int(on_nat_20.get("max_target_hp") or 100)
+        if current_hp >= max_hp_gate:
+            return None
+        save_dc = int(on_nat_20.get("save_dc") or 15)
+        save_ability = str(on_nat_20.get("save_ability") or "CON")
+        _label = on_nat_20.get("label", "Nine Lives Stealer")
+        try:
+            sr = await _resolve_feature_save(
+                db, campaign_id,
+                caster_char_id=int(char.id),
+                caster_char_name=str(char.name or ""),
+                target_combatant=target_combatant,
+                save_ability=save_ability,
+                dc=save_dc,
+                note_label=_label,
+                condition_buff=None,
+                repeated_save=False,
+                source=f"item-{attack_slug}-slay",
+                campaign=campaign,
+                prompt_user=prompt_user,
+                feature_name=_label,
+            )
+        except Exception:
+            logging.exception(
+                "Nine Lives Stealer slay-save resolve failed for "
+                "char_id=%s slug=%s", char.id, attack_slug,
+            )
+            return None
+        # Only a definitively FAILED save slays. A passed save OR a
+        # deferred PC prompt (passed is None) leaves the target alive.
+        if sr.get("passed") is not False:
+            return None
+        damage_amount = current_hp
     else:
         logging.warning(
             "Unknown on_nat_20 effect %r for slug %r",
@@ -34850,6 +34896,29 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
             "label": "🩸 Sword of Life Stealing",
             "dice": "3d6",
             "damage_type": "necrotic",
+            "exempt_creature_types": ["construct", "undead"],
+        },
+    },
+    # v2.335.0 — Nine Lives Stealer (RAW DMG p.183, very rare, attunement).
+    # The first on_nat_20 item to use the NEW `effect: "slay_save"` variant:
+    # on a critical hit against a creature with fewer than 100 HP, the target
+    # makes a DC 15 CON save or is slain instantly. Composes the existing
+    # `exempt_creature_types` gate (construct/undead immune — the Vorpal /
+    # Life Stealing field) with a save resolved via `_resolve_feature_save`
+    # (the Demon Slayer on_hit_save path), and the `max_target_hp` gate (the
+    # RAW "fewer than 100 HP" clause). The +2 attack/damage is baked onto the
+    # wielder's seeded attack row (Vorpal / Holy Avenger precedent for magic
+    # +X swords). The sword's 1d8+1 charge limit is GM-narrated in v1 — the
+    # slay is always available while attuned (the GM tracks the charge pool).
+    "nine-lives-stealer": {
+        "label": "Nine Lives Stealer",
+        "requires_attunement": True,
+        "on_nat_20": {
+            "effect": "slay_save",
+            "label": "💀 Nine Lives Stealer",
+            "save_dc": 15,
+            "save_ability": "CON",
+            "max_target_hp": 100,
             "exempt_creature_types": ["construct", "undead"],
         },
     },
@@ -87539,6 +87608,8 @@ async def use_attack(
                 vorpal_result = await _apply_magic_item_nat_20_effect(
                     db, campaign_id, char, sheet, attack,
                     target_combatant, attack_breakdown,
+                    campaign=campaign,
+                    prompt_user=user,
                 )
                 if vorpal_result is not None:
                     # v2.158.103 — Phase 7c: per-effect desc + target
@@ -87551,6 +87622,19 @@ async def use_attack(
                             f"{char.name} rolls a natural 20 and "
                             f"cleaves {vorpal_result['target_name']}'s "
                             f"head clean off. (Vorpal Sword, RAW DMG p.209.)"
+                        )
+                        target_dead = True
+                    elif _eff == "slay_save":
+                        # v2.335.0 — Nine Lives Stealer: the slay only
+                        # reaches the broadcast when the target FAILED its
+                        # CON save (the helper returns None otherwise), so
+                        # by the time we're here the target is slain.
+                        _desc = (
+                            f"{char.name} rolls a natural 20 — the sword "
+                            f"tears the life force from "
+                            f"{vorpal_result['target_name']}, who fails the "
+                            f"DC 15 Constitution save and is slain instantly. "
+                            f"(Nine Lives Stealer, RAW DMG p.183.)"
                         )
                         target_dead = True
                     elif _eff == "damage":
