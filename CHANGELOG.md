@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.318.0] - 2026-06-15 — "The Hungering Blade"
+
+**Schema version:** 69
+
+**Commit summary:** SRD magic-item drop-in — **Sword of Life Stealing** (RAW DMG p.206, rare, attunement). On a natural 20 attack roll the target takes an extra 3d6 necrotic damage, provided the target isn't a construct or undead. Third item on the `_MAGIC_ITEM_ATTACK_RIDERS` `on_nat_20` `effect: "damage"` branch (Sword of Sharpness precedent), and the first to compose `exempt_creature_types` with a damage rider — Vorpal Sword carries the same exempt list with `effect: "decap"`. Seeded equipped + attuned on Pip Quickfingers; three harness tests.
+
+**Description:** Pure substrate reuse — zero new engine code. The catalog row hooks into the existing `_apply_magic_item_nat_20_effect` dispatcher at `app/routes/tabletop_routes.py`: it gates on (a) attack `_slug == "sword-of-life-stealing"`, (b) the d20 landing natural 20 (re-parsed from `attack_breakdown`), (c) the wielder having the matching item equipped + attuned, and (d) the target's `creature_type` not being in `["construct", "undead"]`. On a pass the dispatcher rolls `3d6` necrotic via `dice_mod.roll` and routes the damage through `_apply_damage_to_combatant` (so death-save + resistance + UD all fire normally), then broadcasts `feature_used` with `source: "item-sword-of-life-stealing-nat20"`. The RAW temp-HP-equal-to-extra-damage clause is GM-narrated in v1 (matches the v1 simplification pattern shared with Vorpal's RAW "creature can survive without a head" branch). Pip wears it as her 5th attuned item — seed-load bypasses the RAW 3-item cap (enforced only at the `/attune` runtime endpoint), following the Lyra/Garrik precedent; her existing Sword of Sharpness rider stays independently gated by the attack's own `_slug`, so each swing fires only its matching rider. MINOR — first commit of the v2.315.0 SRD-audit P1 push to close the 116-item magic-item content tail (overall % +1 lever). Schema unchanged.
+
+### Added
+- `_MAGIC_ITEM_ATTACK_RIDERS["sword-of-life-stealing"]` (`app/routes/tabletop_routes.py`) — `{requires_attunement: True, on_nat_20: {effect: "damage", label: "🩸 Sword of Life Stealing", dice: "3d6", damage_type: "necrotic", exempt_creature_types: ["construct", "undead"]}}`.
+- Demo seed: Pip Quickfingers gains a **Sword of Life Stealing** Shortsword (`_slug: sword-of-life-stealing`) at `attack_index 3` + inventory tail, equipped + attuned.
+- `tests/harness/test_sword_of_life_stealing.py` — 3 tests (construct exempt, undead exempt, nat-20 happy path with `hp_dealt` in [3, 18]).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2898 → 2901 (+3 Sword of Life Stealing tests); new `test_sword_of_life_stealing.py` section right after Sharpness.
+
 ## [2.317.0] - 2026-06-14 — "The Glass Jar"
 
 **Schema version:** 69

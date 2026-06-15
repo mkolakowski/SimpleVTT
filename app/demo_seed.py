@@ -342,6 +342,21 @@ def _rogue_sheet(name: str) -> dict:
              "damage": "1d6+4", "damage_type": "slashing",
              "range": "5 ft", "_slug": "sword-of-sharpness",
              "desc": "Very rare shortsword, attunement. +1 attack/damage; on a natural 20, deal +4d6 slashing (RAW DMG p.206). Magical glow at command."},
+            # v2.318.0 — Magic-items: Sword of Life Stealing (RAW DMG p.206,
+            # rare, attunement). Extends the on_nat_20 effect="damage" substrate
+            # (Sword of Sharpness precedent above) with the
+            # `exempt_creature_types: ["construct", "undead"]` gate. On a nat 20
+            # the +3d6 necrotic rider fires unless the target is a construct or
+            # undead. Stacks with Pip's existing Sneak Attack 4d6 on crit (both
+            # the SA dice AND the rider land — massive single-swing burst). The
+            # base attack is a Shortsword line (no +X magic bonus baked in — RAW
+            # Sword of Life Stealing doesn't grant a hit/damage bonus, unlike
+            # Vorpal or Sun Blade). The temp-HP-equal-to-extra-damage clause is
+            # GM-narrated in v1.
+            {"name": "Sword of Life Stealing", "attack_bonus": "+6",
+             "damage": "1d6+3", "damage_type": "piercing",
+             "range": "5 ft", "_slug": "sword-of-life-stealing",
+             "desc": "Rare shortsword, attunement. On a natural 20, deal +3d6 necrotic damage to the target (constructs and undead exempt) — RAW DMG p.206. Gain temp HP equal to the extra damage dealt (GM-narrated)."},
         ],
         "spells": [],
         # v2.4.13: rich inventory items (was bare strings). Weapons /
@@ -496,6 +511,26 @@ def _rogue_sheet(name: str) -> dict:
              "armor_type": "medium", "ac_value": 14,
              "_slug": "elven-chain", "weight_lb": 20,
              "desc": "Rare medium armor (chain shirt), no attunement. You gain a +1 bonus to AC while you wear this armor. You are considered proficient with this armor even if you lack proficiency with medium armor. RAW DMG p.150."},
+            # v2.318.0 — Sword of Life Stealing (RAW DMG p.206, rare,
+            # attunement). Paired with the attack entry above via `_slug`. The
+            # nat-20 +3d6 necrotic rider fires from the v2.158.101 on_nat_20
+            # post-hit handler when (a) the d20 lands natural 20, (b) the item
+            # is equipped + attuned, and (c) the target isn't a construct or
+            # undead. Pip now wears 5 attuned items (Cloak of Protection + Ring
+            # of Protection + Sword of Sharpness + Wand of Enemy Detection +
+            # this) — seed-load bypasses the RAW 3-item cap (enforced only at
+            # /attune runtime, per the Lyra/Garrik/Carpet seed-load precedent).
+            # Two on_nat_20 swords on one PC stress the catalog's per-slug
+            # dispatch — Sharpness fires its +4d6 slashing on a Sharpness swing,
+            # Life Stealing fires its +3d6 necrotic on a Life Stealing swing,
+            # and each is gated independently by the wielder's matching attuned
+            # inventory item via the attack's `_slug`.
+            {"name": "Sword of Life Stealing", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "hands": 1, "damage": "1d6", "damage_type": "piercing",
+             "properties": "finesse, light, magic",
+             "_slug": "sword-of-life-stealing", "weight_lb": 2,
+             "desc": "Rare shortsword, attunement. When you attack a creature with this magic weapon and roll a 20 on the attack roll, that target takes an extra 3d6 necrotic damage, provided the target isn't a construct or undead. You also gain temporary hit points equal to the extra damage dealt (GM-narrated). RAW DMG p.206."},
         ],
         "feats": [],
         "resources": [

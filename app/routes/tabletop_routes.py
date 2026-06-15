@@ -34550,6 +34550,28 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
             "label": "🏹 Arrow of Slaying (Giants)",
         },
     },
+    # v2.318.0 — Sword of Life Stealing (RAW DMG p.206, rare, attunement).
+    # Third item on the on_nat_20 effect="damage" branch (Sword of Sharpness
+    # v2.158.103 precedent), and the first to compose `exempt_creature_types`
+    # with `effect: "damage"` — Vorpal Sword (v2.158.101) carries the same
+    # exempt list but with `effect: "decap"`. RAW: on a natural 20 attack roll,
+    # the target takes an extra 3d6 necrotic damage, provided the target isn't
+    # a construct or undead. The temp-HP-equal-to-extra-damage clause is
+    # GM-narrated in v1 (matches the Vorpal "creature can survive without a
+    # head" RAW-branch v1-simplification pattern). The dispatcher's exempt
+    # check runs before the damage roll, so construct/undead targets short-
+    # circuit cleanly with no broadcast.
+    "sword-of-life-stealing": {
+        "label": "Sword of Life Stealing",
+        "requires_attunement": True,
+        "on_nat_20": {
+            "effect": "damage",
+            "label": "🩸 Sword of Life Stealing",
+            "dice": "3d6",
+            "damage_type": "necrotic",
+            "exempt_creature_types": ["construct", "undead"],
+        },
+    },
 }
 
 
