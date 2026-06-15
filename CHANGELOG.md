@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.342.0] - 2026-06-15 — "The Vault"
+
+**Schema version:** 69
+
+**Commit summary:** Bulk SRD magic-item stub push — **60 remaining pure-narrative items** shipped together as catalog-stub passives in one commit (the "knock out all the stub bundles at once" pass). Each is registered via a compact `setdefault` loop appended to `_MAGIC_ITEM_PASSIVES` (slug + `requires_attunement` only) and seeded as inert spare loot on a thematic carrier via a data-driven `_VAULT_STUB_LOOT` block in `demo_seed.py` (rather than 60 inline inventory edits). One parametrized harness test (15 carrier cases) guards the seeds.
+
+**Description:** Closes the catalog-stub long tail in a single batch. The 60 items span planar travel (Amulet of the Planes, Well of Many Worlds, Cubic-Gate-likes), summons (Figurine of Wondrous Power, Horn of Valhalla, Ring of Djinni Summoning), wishes (Ring of Three Wishes, Deck of Many Things, Luck Blade), teleports (Helm of Teleportation, Ring of Evasion), one-shot oils/dusts/potions (Oil of Sharpness/Etherealness/Slipperiness, Dust of Dryness/Sneezing, Potion of Poison, Restorative Ointment), defensive gear (Adamantine/Mithral Armor, Animated/Arrow-Catching/Missile-Attraction Shields, Defender, Plate Armor of Etherealness), rings (Invisibility, Regeneration, Telekinesis, Spell Storing, Shooting Stars, Animal Influence), rods (Absorption, Lordly Might, Rulership, Security), talismans (Pure Good, Ultimate Evil, the Sphere), and assorted utility (Immovable Rod, Instant Fortress, Handy Haversack, Efficient Quiver, Sphere of Annihilation, Dimensional Shackles, etc.). All mechanics are GM-narrated in v1 — none fits a clean existing handler. **Deliberately excluded** (left for dedicated mechanical wiring): Bead of Force, Berserker Axe, Dagger of Venom, Hammer of Thunderbolts, Oathbow, Pipes of Haunting, Sword of Wounding, Trident of Fish Command, and the charged staves; plus the generic/meta slugs (`weapon-1-2-or-3`, `wand-of-the-war-mage-1-2-or-3`, `spell-scroll`, `potion-of-healing`). MINOR — additive catalog rows + demo content + tests, no schema change. This vaults the magic-item content tail from ~71 to ~11 unwired (mostly the deliberately-excluded mechanical leftovers).
+
+### Added
+- `_MAGIC_ITEM_PASSIVES` bulk-stub loop (`app/routes/tabletop_routes.py`) — 60 `setdefault` catalog rows (slug + `requires_attunement`), GM-narrated mechanics.
+- Demo seed: `_VAULT_STUB_LOOT` (60 items) injected as inert spare loot across all 15 demo PCs at their inventory tails, via a data-driven loop in `seed_characters`.
+- `tests/harness/test_vault_stub_loot.py` — parametrized smoke test (15 carrier cases) asserting every seeded Vault slug surfaces on each carrier's `/sheet-json`.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2969 → 2984 (+15 Vault carrier cases); new `test_vault_stub_loot.py` section.
+
 ## [2.341.0] - 2026-06-15 — "The Construct's Doom"
 
 **Schema version:** 69

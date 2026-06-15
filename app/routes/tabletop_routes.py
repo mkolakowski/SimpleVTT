@@ -33694,6 +33694,56 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
 }
 
 
+# v2.342.0 — "The Vault" bulk-stub catalog rows. 60 remaining pure-narrative
+# SRD magic items registered here as minimal `requires_attunement`-only
+# passives so each slug is catalog-visible (audit-counted). Their RAW
+# mechanics (planar travel, summons, wishes, teleports, one-shot oils,
+# golem-craft, etc.) are GM-narrated in v1 — none fits a clean existing
+# mechanical handler, so they ship as stubs. Mechanically-rich leftovers
+# (Bead of Force, Berserker Axe, Dagger of Venom, Hammer of Thunderbolts,
+# Oathbow, Pipes of Haunting, Sword of Wounding, Trident of Fish Command, the
+# charged staves) are deliberately EXCLUDED — they warrant dedicated wiring.
+# Each is seeded as inert spare loot on a thematic carrier in demo_seed.py's
+# `_VAULT_STUB_LOOT`. The `setdefault` guard means a future commit that
+# promotes any slug to a real passive simply replaces the literal entry
+# above and this loop becomes a no-op for it.
+for _vault_slug, _vault_attune in [
+    ("adamantine-armor", False), ("amulet-of-the-planes", True),
+    ("animated-shield", True), ("arrow-catching-shield", True),
+    ("arrow-of-slaying", False), ("circlet-of-blasting", False),
+    ("dancing-sword", True), ("deck-of-illusions", False),
+    ("deck-of-many-things", False), ("defender", True),
+    ("dimensional-shackles", False), ("dust-of-dryness", False),
+    ("dust-of-sneezing-and-choking", False), ("efficient-quiver", False),
+    ("figurine-of-wondrous-power", False), ("gloves-of-missile-snaring", True),
+    ("handy-haversack", False), ("helm-of-comprehending-languages", False),
+    ("helm-of-teleportation", True), ("horn-of-valhalla", False),
+    ("horseshoes-of-a-zephyr", False), ("horseshoes-of-speed", False),
+    ("immovable-rod", False), ("instant-fortress", False),
+    ("lantern-of-revealing", False), ("luck-blade", True),
+    ("manual-of-golems", False), ("medallion-of-thoughts", True),
+    ("mithral-armor", False), ("necklace-of-prayer-beads", True),
+    ("oil-of-etherealness", False), ("oil-of-sharpness", False),
+    ("oil-of-slipperiness", False), ("orb-of-dragonkind", True),
+    ("philter-of-love", False), ("pipes-of-the-sewers", True),
+    ("plate-armor-of-etherealness", True), ("potion-of-poison", False),
+    ("restorative-ointment", False), ("ring-of-animal-influence", False),
+    ("ring-of-djinni-summoning", True), ("ring-of-evasion", True),
+    ("ring-of-invisibility", True), ("ring-of-regeneration", True),
+    ("ring-of-shooting-stars", True), ("ring-of-spell-storing", True),
+    ("ring-of-telekinesis", True), ("ring-of-three-wishes", False),
+    ("robe-of-scintillating-colors", True), ("rod-of-absorption", True),
+    ("rod-of-lordly-might", True), ("rod-of-rulership", True),
+    ("rod-of-security", False), ("rope-of-entanglement", False),
+    ("shield-of-missile-attraction", True), ("sphere-of-annihilation", False),
+    ("talisman-of-pure-good", True), ("talisman-of-the-sphere", True),
+    ("talisman-of-ultimate-evil", True), ("well-of-many-worlds", False),
+]:
+    _MAGIC_ITEM_PASSIVES.setdefault(
+        _vault_slug, [{"requires_attunement": _vault_attune}],
+    )
+
+
 # ── Magic-item active-action catalog (v2.158.82 — Phase 3 M2) ────────────────
 # Maps an SRD item slug to a dict describing the per-use action: the
 # action_key the client sends to /use_item_action, the resource row

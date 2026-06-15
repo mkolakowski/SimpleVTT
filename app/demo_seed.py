@@ -6646,6 +6646,96 @@ def seed_characters(
         sheet=_monk_drunken_sheet("Quan Reelstep"),
         color="#6b2d3c",
     )
+    # v2.342.0 — "The Vault" bulk-stub loot. 60 remaining pure-narrative SRD
+    # magic items, each seeded as inert spare loot (equipped=False) on a
+    # thematic carrier. Data-driven (rather than 60 inline inventory edits):
+    # the catalog rows live in `_MAGIC_ITEM_PASSIVES` (tabletop_routes.py's
+    # bulk-stub loop); mechanics are GM-narrated. Appended at each carrier's
+    # inventory tail so existing inventory-index assertions stay valid.
+    _vault_loot = [
+        # (carrier_name, slug, name, type, desc)
+        ("Pip Quickfingers", "dust-of-sneezing-and-choking", "Dust of Sneezing and Choking", "consumable", "Uncommon. Thrown into the air (action): each creature in a 30-ft cube makes a DC 15 CON save or can't breathe + is incapacitated (sneezing) while choking, repeating the save each round. RAW DMG p.166."),
+        ("Pip Quickfingers", "lantern-of-revealing", "Lantern of Revealing", "magic", "Uncommon. While lit (hooded lantern, 30-ft bright + 30-ft dim), it reveals invisible creatures and objects in the bright light. RAW DMG p.178."),
+        ("Pip Quickfingers", "oil-of-slipperiness", "Oil of Slipperiness", "consumable", "Uncommon. Apply to a creature/object (10 min): the freedom-of-movement effect for 8 hours, or coat the floor as a grease spell. RAW DMG p.184."),
+        ("Pip Quickfingers", "potion-of-poison", "Potion of Poison", "consumable", "Uncommon (cursed). Disguised as a beneficial potion; on a drink, DC 13 CON save or take 3d6 poison + poisoned 1 hour (half + no poisoned on a pass). RAW DMG p.187."),
+        ("Pip Quickfingers", "ring-of-invisibility", "Ring of Invisibility", "magic", "Legendary, attunement. While worn, action to turn invisible (ends when you attack, cast, or use a bonus action to become visible). RAW DMG p.191."),
+        ("Thalindra Moonwhisper", "amulet-of-the-planes", "Amulet of the Planes", "magic", "Very rare, attunement. Action: name a location on another plane + make a DC 15 INT check — on a success, cast plane shift; on a fail, you + each creature within 15 ft travel to a random plane. RAW DMG p.150."),
+        ("Thalindra Moonwhisper", "helm-of-teleportation", "Helm of Teleportation", "magic", "Rare, attunement. 3 charges (regain 1d3 at dawn). Action: expend 1 to cast teleport. RAW DMG p.169."),
+        ("Thalindra Moonwhisper", "manual-of-golems", "Manual of Golems", "magic", "Very rare. A tome with the procedure to build one kind of golem (clay/flesh/iron/stone) over weeks of work + materials. RAW DMG p.180."),
+        ("Thalindra Moonwhisper", "ring-of-spell-storing", "Ring of Spell Storing", "magic", "Rare, attunement. Stores up to 5 levels of spells cast into it; you (or anyone wearing it) can later cast a stored spell at the original level. RAW DMG p.192."),
+        ("Brother Tavik Stonebrow", "helm-of-comprehending-languages", "Helm of Comprehending Languages", "magic", "Uncommon. While worn, action to cast comprehend languages at will. RAW DMG p.169."),
+        ("Brother Tavik Stonebrow", "necklace-of-prayer-beads", "Necklace of Prayer Beads", "magic", "Rare, attunement (cleric/druid/paladin). 1d6+24 beads, several special — each a stored spell (bless, cure wounds, etc.) castable as a bonus action 1/dawn. RAW DMG p.183."),
+        ("Brother Tavik Stonebrow", "restorative-ointment", "Restorative Ointment", "consumable", "Uncommon. A jar of 1d4+1 doses; one dose (action) heals 2d8+2 HP and ends one poison or disease. RAW DMG p.180."),
+        ("Sir Caelan Lightbringer", "arrow-catching-shield", "Arrow-Catching Shield", "shield", "Rare, attunement. +2 AC vs ranged attacks (on top of the shield's AC); ranged attacks vs targets within 5 ft of you are redirected to you. RAW DMG p.152."),
+        ("Sir Caelan Lightbringer", "defender", "Defender", "weapon", "Legendary, attunement (any sword). +3 attack/damage; on each turn you may transfer some/all of the bonus to AC instead. RAW DMG p.164."),
+        ("Sir Caelan Lightbringer", "instant-fortress", "Daern's Instant Fortress", "magic", "Rare. A 1-in. metal cube; speak the command word (action) to grow it into a 20-ft-square, 30-ft-tall adamantine tower (AC 20, 100 HP per wall). RAW DMG p.161."),
+        ("Sir Caelan Lightbringer", "plate-armor-of-etherealness", "Plate Armor of Etherealness", "armor", "Legendary, attunement. While worn, command word (action) → etherealness for 10 min (1/dawn). RAW DMG p.187."),
+        ("Sir Caelan Lightbringer", "talisman-of-pure-good", "Talisman of Pure Good", "magic", "Legendary, attunement (good-aligned). 7 charges: expend 1 to deal 6d6 radiant + scour an evil creature into a fiery pit. A good cleric/paladin gains +2 spell attack. RAW DMG p.207."),
+        ("Lyra Sunstrider", "dancing-sword", "Dancing Sword", "weapon", "Very rare, attunement (any sword). Bonus action: toss it to hover and attack a target on its own for up to 4 turns (your attack bonus), then it returns. RAW DMG p.161."),
+        ("Lyra Sunstrider", "deck-of-illusions", "Deck of Illusions", "magic", "Uncommon. 34 cards; action to draw + throw one → a 3D illusion of the depicted creature appears (INT-investigation DC 15 to discern). RAW DMG p.162."),
+        ("Lyra Sunstrider", "philter-of-love", "Philter of Love", "consumable", "Uncommon. Drink → charmed for 1 hour by the first creature you see within 10 min (if humanoid + opposite-of-indifferent). RAW DMG p.184."),
+        ("Lyra Sunstrider", "robe-of-scintillating-colors", "Robe of Scintillating Colors", "magic", "Very rare, attunement. 3 charges. Action: expend 1 to dazzle — until your next turn end, advantage to be seen, attackers have disadvantage, and creatures within 30 ft that can see make a DC 15 WIS save or be blinded 1 min. RAW DMG p.194."),
+        ("Mira Greenleaf", "figurine-of-wondrous-power", "Figurine of Wondrous Power (Silver Raven)", "magic", "By figurine. A statuette that becomes a living creature (silver raven → a raven messenger) on the command word; reverts to a figurine after its duration. RAW DMG p.169."),
+        ("Mira Greenleaf", "horseshoes-of-a-zephyr", "Horseshoes of a Zephyr", "magic", "Very rare. Four horseshoes; the shod creature moves normally while floating 4 in. above the ground (ignores difficult terrain, can't leave tracks, etc.). RAW DMG p.175."),
+        ("Mira Greenleaf", "oil-of-etherealness", "Oil of Etherealness", "consumable", "Rare. Apply over 10 min → the etherealness effect for 1 hour. RAW DMG p.184."),
+        ("Mira Greenleaf", "ring-of-animal-influence", "Ring of Animal Influence", "magic", "Rare. 3 charges (regain 1d3 at dawn). Expend 1 to cast animal friendship (DC 13), fear on beasts (DC 13), or speak with animals. RAW DMG p.190."),
+        ("Garrik Ironside", "adamantine-armor", "Adamantine Armor", "armor", "Uncommon (medium/heavy). While worn, any critical hit against you becomes a normal hit. RAW DMG p.150."),
+        ("Garrik Ironside", "handy-haversack", "Heward's Handy Haversack", "magic", "Rare. A backpack with extradimensional pouches; weighs 5 lb regardless of contents; retrieving a specific item is always a swift action. RAW DMG p.174."),
+        ("Garrik Ironside", "immovable-rod", "Immovable Rod", "magic", "Uncommon. A flat iron rod; press the button (action) to fix it in place (holds 8,000 lb; DC 30 STR to move). RAW DMG p.176."),
+        ("Garrik Ironside", "mithral-armor", "Mithral Armor", "armor", "Uncommon (medium/heavy). Light + flexible — if the base armor imposes disadvantage on Stealth or has a STR requirement, the mithral version doesn't. RAW DMG p.182."),
+        ("Garrik Ironside", "oil-of-sharpness", "Oil of Sharpness", "consumable", "Very rare. Coat one slashing/piercing weapon (or 5 pieces of ammo); for 1 hour the item is magical with +3 attack/damage. RAW DMG p.184."),
+        ("Kael Brightleaf", "dust-of-dryness", "Dust of Dryness", "consumable", "Uncommon. A packet of 1d6+4 pinches; one pinch absorbs a 15-ft cube of water into a marble-sized pellet (shatter to release). RAW DMG p.166."),
+        ("Kael Brightleaf", "gloves-of-missile-snaring", "Gloves of Missile Snaring", "magic", "Uncommon, attunement. Reaction when hit by a ranged weapon attack: reduce the damage by 1d10 + DEX mod; if reduced to 0 and you have a free hand, you catch the missile. RAW DMG p.171."),
+        ("Kael Brightleaf", "ring-of-evasion", "Ring of Evasion", "magic", "Rare, attunement. 3 charges (regain 1d3 at dawn). Reaction when you fail a DEX save: expend 1 charge to succeed instead. RAW DMG p.191."),
+        ("Kael Brightleaf", "rope-of-entanglement", "Rope of Entanglement", "magic", "Rare. 30-ft rope; action to command it to entangle a creature within 20 ft (DC 15 DEX save or restrained; DC 15 STR to break free). AC 20, 20 HP. RAW DMG p.197."),
+        ("Zara Emberfire", "circlet-of-blasting", "Circlet of Blasting", "magic", "Uncommon. Action: cast scorching ray (3 rays, +5 to hit, 2d6 fire each) from it (1/dawn). RAW DMG p.158."),
+        ("Zara Emberfire", "orb-of-dragonkind", "Orb of Dragonkind", "magic", "Artifact, attunement. Advantage on saves vs dragon Frightful Presence/breath; while holding it you can cast a charge-fueled spell + attempt to dominate a dragon within 1 mile. RAW DMG p.156."),
+        ("Zara Emberfire", "ring-of-djinni-summoning", "Ring of Djinni Summoning", "magic", "Legendary, attunement. Action: summon a specific djinni (1/dawn) that serves + obeys you for up to 1 hour. RAW DMG p.190."),
+        ("Zara Emberfire", "ring-of-shooting-stars", "Ring of Shooting Stars", "magic", "Very rare, attunement (worn in dim light/darkness). Charges fuel faerie fire, ball lightning, light spheres, and a shooting-stars burst (DC 15 DEX, up to 12d6 fire across targets). RAW DMG p.192."),
+        ("Krieger Stonefist", "horn-of-valhalla", "Horn of Valhalla (Silver)", "magic", "Rare. Blow the horn (action) to summon 2d4+2 berserker spirits that fight for you for 1 hour (1/short-or-long rest). Higher-metal horns need martial proficiency. RAW DMG p.175."),
+        ("Krieger Stonefist", "ring-of-regeneration", "Ring of Regeneration", "magic", "Very rare, attunement. While worn, regain 1d6 HP every 10 min if you have ≥1 HP; severed body parts regrow over 1d6+1 days. RAW DMG p.192."),
+        ("Krieger Stonefist", "rod-of-lordly-might", "Rod of Lordly Might", "magic", "Legendary, attunement. A mace +3 with six buttons (blade, climbing pole, battering ram, paralysis/fear/drain strikes) + several daily powers. RAW DMG p.193."),
+        ("Krieger Stonefist", "sphere-of-annihilation", "Sphere of Annihilation", "magic", "Legendary. A 2-ft black void that annihilates matter it touches; control it with an INT (Arcana) check (action). RAW DMG p.201."),
+        ("Rowan Quickbow", "animated-shield", "Animated Shield", "shield", "Very rare, attunement. Bonus action: speak the command word to make it float + protect you (its AC bonus) for 1 min without using a hand. RAW DMG p.151."),
+        ("Rowan Quickbow", "arrow-of-slaying", "Arrow of Slaying", "ammunition", "Very rare. A magic arrow keyed to a creature kind; on a hit vs that kind, +6d10 piercing (DC 17 CON save for half). RAW DMG p.151."),
+        ("Rowan Quickbow", "efficient-quiver", "Efficient Quiver", "magic", "Uncommon. Three compartments, each an extradimensional space (arrows, bow-length items, scrolls/wands); draw any stored item as part of an attack. RAW DMG p.167."),
+        ("Rowan Quickbow", "horseshoes-of-speed", "Horseshoes of Speed", "magic", "Rare. Four horseshoes; while all four are worn by a mount, its walking speed increases by 30 ft. RAW DMG p.175."),
+        ("Magnus Hexbinder", "deck-of-many-things", "Deck of Many Things", "magic", "Legendary. Draw cards to invoke wildly powerful boons or catastrophes (wishes, planar imprisonment, level loss, etc.). RAW DMG p.162."),
+        ("Magnus Hexbinder", "medallion-of-thoughts", "Medallion of Thoughts", "magic", "Uncommon, attunement. 3 charges (regain 1d3 at dawn). Action: expend 1 to cast detect thoughts (DC 13). RAW DMG p.182."),
+        ("Magnus Hexbinder", "ring-of-telekinesis", "Ring of Telekinesis", "magic", "Very rare, attunement. While worn, cast telekinesis at will (objects only, not worn/carried). RAW DMG p.193."),
+        ("Magnus Hexbinder", "rod-of-absorption", "Rod of Absorption", "magic", "Very rare, attunement. Reaction: absorb a single-target spell aimed at you (up to 50 levels stored); later spend stored levels to power your own spells. RAW DMG p.193."),
+        ("Magnus Hexbinder", "talisman-of-ultimate-evil", "Talisman of Ultimate Evil", "magic", "Legendary, attunement (evil-aligned). 6 charges: expend 1 to deal 8d6 necrotic + scour a good creature into a fiery pit. An evil cleric/paladin gains +2 spell attack. RAW DMG p.207."),
+        ("Dame Seraphine Vael", "ring-of-three-wishes", "Ring of Three Wishes", "magic", "Legendary. 3 charges; expend 1 to cast wish. When the last charge is used, there's a chance the ring vanishes. RAW DMG p.193."),
+        ("Dame Seraphine Vael", "rod-of-rulership", "Rod of Rulership", "magic", "Rare, attunement. Action (1/dawn): each creature of your choice within 120 ft makes a DC 15 WIS save or is charmed by you for 8 hours. RAW DMG p.193."),
+        ("Dame Seraphine Vael", "shield-of-missile-attraction", "Shield of Missile Attraction", "shield", "Rare, attunement (cursed). Resistance to ranged-weapon damage; the curse redirects ranged attacks aimed within 10 ft of you to you instead. RAW DMG p.199."),
+        ("Brakka Wildmane", "dimensional-shackles", "Dimensional Shackles", "magic", "Rare. Apply to an incapacitated creature (action): the shackles prevent all extradimensional movement (teleport, planar travel) while bound. RAW DMG p.165."),
+        ("Brakka Wildmane", "pipes-of-the-sewers", "Pipes of the Sewers", "magic", "Uncommon, attunement (wind-instrument proficiency). 3 charges; play to attract + command swarms of rats within 60 ft. RAW DMG p.184."),
+        ("Quan Reelstep", "luck-blade", "Luck Blade", "weapon", "Legendary, attunement (any sword). +1 attack/damage; +1 to saving throws; reroll one attack/check/save per dawn; 1d4-1 charges of wish. RAW DMG p.179."),
+        ("Quan Reelstep", "rod-of-security", "Rod of Security", "magic", "Very rare. Action: you + up to 199 others travel to an extradimensional paradise for up to 200 days (÷ travelers); return is unharmed + well-fed. RAW DMG p.193."),
+        ("Quan Reelstep", "talisman-of-the-sphere", "Talisman of the Sphere", "magic", "Legendary, attunement. Double your proficiency on INT (Arcana) checks to control a sphere of annihilation, and levitate one you control. RAW DMG p.207."),
+        ("Quan Reelstep", "well-of-many-worlds", "Well of Many Worlds", "magic", "Legendary. A black cloth that unfolds into a 6-ft planar portal to a random other plane/world; refold to close. RAW DMG p.213."),
+    ]
+    _pc_by_name = {
+        c.name: c for c in (
+            alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc,
+            fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc,
+            warlock_pc, vengeance_pc, beast_barbarian_pc, drunken_monk_pc,
+        )
+    }
+    for _carrier, _slug, _iname, _itype, _idesc in _vault_loot:
+        _pc = _pc_by_name.get(_carrier)
+        if _pc is None:
+            continue
+        _sheet = _pc.sheet or {}
+        _inv = list(_sheet.get("inventory") or [])
+        _inv.append({
+            "name": _iname, "type": _itype, "qty": 1,
+            "equippable": True, "equipped": False,
+            "_slug": _slug, "desc": _idesc,
+        })
+        _sheet["inventory"] = _inv
+        _pc.sheet = _sheet
+
     db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc, warlock_pc, vengeance_pc, beast_barbarian_pc, drunken_monk_pc])
     db.flush()
     return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc, warlock_pc, vengeance_pc, beast_barbarian_pc, drunken_monk_pc]
