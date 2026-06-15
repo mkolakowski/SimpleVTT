@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2957 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.336.0, 2026-06-15).
+**Total tests:** 2960 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.337.0, 2026-06-15).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3214,6 +3214,15 @@ v2.206.0 magic-items-automation content tail — Wand of Paralysis (RAW DMG p.21
 | `test_wand_of_paralysis_cast_2_targets` | Cast at 2 NPC targets → 200; `save_dc: 15`, `save_ability: CON`, `charges_spent: 1`, resource 7→6, both target ids in `results`. |
 | `test_wand_of_paralysis_over_cap_returns_400` | `charges: 2` when catalog max=1 → 400 (shared min/max charge validator). |
 | `test_wand_of_paralysis_empty_returns_409` | Drain the wand to 0 via /sheet-fields; invoke → 409 `insufficient_charges`, `current: 0`. Restores in teardown. |
+
+### `test_bottled_tempest.py`
+v2.337.0 — "The Bottled Tempest" bundle (tenth): three SRD sealed-vessel summon/release wondrous items as catalog-stub passives. Smoke tests verify carrier seeds; the Elemental Gem test asserts `consumable: True`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_zara_carries_efreeti_bottle` | Zara carries `efreeti-bottle`, equipped, no attunement. |
+| `test_pip_carries_eversmoking_bottle` | Pip carries `eversmoking-bottle`, equipped, no attunement. |
+| `test_brakka_carries_elemental_gem` | Brakka carries `elemental-gem`, equipped, no attunement, `consumable: True`. |
 
 ### `test_escapists_kit.py`
 v2.336.0 — "The Escapist's Kit" bundle (ninth): three SRD escape/evasion wondrous items as catalog-stub passives. Smoke tests verify carrier seeds; the Dust test asserts `consumable: True`.

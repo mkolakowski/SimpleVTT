@@ -603,6 +603,18 @@ def _rogue_sheet(name: str) -> dict:
              "properties": "finesse, light, magic",
              "_slug": "nine-lives-stealer", "weight_lb": 2,
              "desc": "Very rare shortsword, attunement. +2 attack/damage. The sword has 1d8+1 charges. On a critical hit against a creature with fewer than 100 HP, that creature makes a DC 15 CON save or is slain instantly (a construct or undead is immune). The sword loses 1 charge per slay; when out of charges it loses this property. RAW DMG p.183."},
+            # v2.337.0 — "The Bottled Tempest" bundle: Eversmoking Bottle
+            # (RAW DMG p.168, uncommon, no attunement). A brass bottle. Action:
+            # remove the stopper — a 60-ft-radius cloud of thick smoke
+            # (heavily obscured) billows out, growing 10 ft/round up to 60 ft
+            # and lasting until the stopper is replaced (a wind disperses it
+            # over rounds). Stub catalog row; the smoke cloud + obscure
+            # mechanic are GM-narrated. Thematic on Pip (Halfling Rogue scout
+            # — an instant smoke-screen escape pairs with her stealth kit).
+            {"name": "Eversmoking Bottle", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 1,
+             "_slug": "eversmoking-bottle",
+             "desc": "Uncommon wondrous item, no attunement. A brass bottle. Action: remove the stopper — a cloud of thick smoke (heavily obscured) pours out in a 60-ft radius, growing 10 ft/round to that max, and lasting until the stopper is replaced. A moderate+ wind disperses it over rounds. RAW DMG p.168."},
         ],
         "feats": [],
         "resources": [
@@ -4643,6 +4655,21 @@ def _barbarian_beast_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 0.5,
              "_slug": "bag-of-tricks",
              "desc": "Uncommon wondrous item, no attunement. Small fur sack with 3 fuzzy balls. Action: pull out + throw a ball up to 20 ft; on landing it transforms into a random animal (gray/rust/tan bag yields different size/CR pools). The animal acts as your ally for 10 min or until it drops to 0 HP. The bag refreshes its 3 balls at dawn (long rest). RAW DMG p.154."},
+            # v2.337.0 — "The Bottled Tempest" bundle: Elemental Gem (RAW DMG
+            # p.167, uncommon, no attunement). A small gem keyed to one
+            # element (blue sapphire = air, yellow diamond = earth, red
+            # corundum = fire, emerald = water). Action: crush the gem —
+            # a CR 5 elemental of the matching type appears and obeys you
+            # for 1 hour (or until it or you drop). The gem is destroyed on
+            # use. Stub catalog row; the summon is GM-narrated. Thematic on
+            # Brakka (Goliath Beast Barbarian — an elemental ally complements
+            # the Path of the Beast summon aesthetic, alongside his Bag of
+            # Tricks).
+            {"name": "Elemental Gem", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "consumable": True,
+             "weight_lb": 0,
+             "_slug": "elemental-gem",
+             "desc": "Uncommon wondrous item, no attunement. A gem keyed to one element (sapphire=air, diamond=earth, corundum=fire, emerald=water). Action: crush the gem — a CR 5 elemental of that type appears and obeys you for 1 hour (or until reduced to 0 HP). The gem is destroyed on use. RAW DMG p.167."},
         ],
         "resources": [
             {
@@ -5399,6 +5426,18 @@ def _sorcerer_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True, "weight_lb": 1,
              "_slug": "cube-of-force",
              "desc": "Rare wondrous item, attunement. 1-in. metal cube. Bonus action: speak one of six face-keyed command words to project an invisible 5-ft cube barrier around yourself selectively blocking solids / incorporeals / spells / etc. 36 charges (regain 1d20 at dawn); each command spends a per-face cost. Energy-dispersal interactions are GM-narrated. RAW DMG p.165."},
+            # v2.337.0 — "The Bottled Tempest" bundle: Efreeti Bottle (RAW DMG
+            # p.167, very rare, no attunement). A brass bottle. Action: pull
+            # the stopper — smoke pours out and (per a d100 roll) the efreeti
+            # inside may attack, grant 3 wishes, or serve for 1 hour before
+            # vanishing. Stub catalog row; the d100 release table + efreeti
+            # service are GM-narrated. Thematic on Zara (Tiefling Draconic
+            # Sorcerer — a fire-genie bottle pairs with her Red-Dragon-
+            # ancestry fire aesthetic).
+            {"name": "Efreeti Bottle", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 1,
+             "_slug": "efreeti-bottle",
+             "desc": "Very rare wondrous item, no attunement. A painted brass bottle (1 lb). Action: pull the stopper — a cloud of smoke flows out and, per a d100 roll, the efreeti within may attack you, grant 3 wishes, or serve you for 1 hour before disappearing. Once opened, can't be used again for 24 hours. RAW DMG p.167."},
         ],
         "feats": [],
         # v2.18.1: Sorcerer Lv 5 resources. sorcery-points (max = sorcerer

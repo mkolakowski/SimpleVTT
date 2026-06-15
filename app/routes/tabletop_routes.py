@@ -32860,6 +32860,20 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "dust-of-disappearance": [
         {"requires_attunement": False},
     ],
+    # v2.337.0 — "The Bottled Tempest" bundle (tenth stub bundle). Three SRD
+    # sealed-vessel summon/release items shipped as catalog-stub passives:
+    # Efreeti Bottle (release a genie), Eversmoking Bottle (smoke cloud),
+    # Elemental Gem (shatter to summon an elemental). Their summon / cloud
+    # mechanics are GM-narrated in v1; the catalog rows register the slugs.
+    "efreeti-bottle": [
+        {"requires_attunement": False},
+    ],
+    "eversmoking-bottle": [
+        {"requires_attunement": False},
+    ],
+    "elemental-gem": [
+        {"requires_attunement": False},
+    ],
     # v2.209.0 — Stone of Good Luck (Luckstone, RAW DMG p.207,
     # uncommon, attunement). While the stone is on your person you gain
     # +1 to ability checks AND saving throws. The `save_bonus` rides the

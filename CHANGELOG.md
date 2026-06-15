@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.337.0] - 2026-06-15 — "The Bottled Tempest"
+
+**Schema version:** 69
+
+**Commit summary:** Tenth SRD magic-item **bundle** — three sealed-vessel summon/release wondrous items shipped together as catalog-stub passives: **Efreeti Bottle** (DMG p.167), **Eversmoking Bottle** (DMG p.168), **Elemental Gem** (DMG p.167). Same minimal `requires_attunement: False` stub pattern, seeded on thematic carriers (Zara / Pip / Brakka); three smoke tests in `test_bottled_tempest.py`.
+
+**Description:** Continues the bundling pattern. Each item releases something — a genie (d100 table), a 60-ft smoke cloud, or a CR 5 elemental — GM-narrated in v1. Elemental Gem is seeded `consumable: True` (crushed on use). Distribution: Zara's fire-genie bottle (Draconic Red ancestry), Pip's smoke-screen escape, Brakka's elemental ally (alongside his Bag of Tricks). MINOR — additive content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`): three new stub catalog rows — `efreeti-bottle`, `eversmoking-bottle`, `elemental-gem`.
+- Demo seed: Zara Emberfire gains an **Efreeti Bottle**, Pip Quickfingers gains an **Eversmoking Bottle**, Brakka Wildmane gains an **Elemental Gem** (consumable) — each appended at the inventory tail.
+- `tests/harness/test_bottled_tempest.py` — 3 smoke tests; the Elemental Gem test additionally asserts `consumable: True`.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2957 → 2960 (+3 Bottled Tempest tests); new `test_bottled_tempest.py` section.
+
 ## [2.336.0] - 2026-06-15 — "The Escapist's Kit"
 
 **Schema version:** 69
