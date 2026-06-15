@@ -32687,6 +32687,22 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "bag-of-devouring": [
         {"requires_attunement": False},
     ],
+    # v2.328.0 — "The Inventor's Trio" bundle (sequel to v2.327.0's
+    # Wayfarer's Trio). Three utility-themed SRD wondrous items shipped as
+    # catalog-stub passives. Same minimal `requires_attunement: False`
+    # declaration that registers each slug so the audit counts it; actual
+    # mechanics (water-output mode-switching, adhesive bond, universal
+    # solvent dissolve) are GM-narrated. Future passes can replace each stub
+    # with a real handler if a mechanical surface emerges.
+    "decanter-of-endless-water": [
+        {"requires_attunement": False},
+    ],
+    "sovereign-glue": [
+        {"requires_attunement": False},
+    ],
+    "universal-solvent": [
+        {"requires_attunement": False},
+    ],
     # v2.209.0 — Stone of Good Luck (Luckstone, RAW DMG p.207,
     # uncommon, attunement). While the stone is on your person you gain
     # +1 to ability checks AND saving throws. The `save_bonus` rides the

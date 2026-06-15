@@ -1024,6 +1024,17 @@ def _wizard_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 1,
              "_slug": "wand-of-magic-detection",
              "desc": "Uncommon wand, no attunement. 3 charges. Action: expend 1 charge to cast Detect Magic (30-ft radius, 10-min concentration). Regains 1d3 charges at dawn (long rest). RAW DMG p.210."},
+            # v2.328.0 — "The Inventor's Trio" bundle: Universal Solvent (RAW
+            # DMG p.209, legendary, no attunement). 1-oz tube of strongly-
+            # alcoholic liquid. Action: pour onto a surface within reach to
+            # dissolve up to 1 sq ft of adhesive (including Sovereign Glue).
+            # Catalog stub passive — the dissolve mechanic is GM-narrated.
+            # Thematic on Thalindra (Wizard — alchemy / lab-experiment fits
+            # an Evoker scholar).
+            {"name": "Universal Solvent", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 1,
+             "_slug": "universal-solvent",
+             "desc": "Legendary wondrous item, no attunement. 1 oz of strongly alcoholic liquid in a glass tube. Action: pour onto a surface within reach to dissolve up to 1 sq ft of any adhesive, including Sovereign Glue. RAW DMG p.209."},
         ],
         "feats": [],
         # v2.16.1: Arcane Recovery counter (Wizard Lv 1 feature). Once per
@@ -1421,6 +1432,20 @@ def _cleric_sheet(name: str) -> dict:
              "properties": "magic",
              "_slug": "mace-of-disruption", "weight_lb": 4,
              "desc": "Rare mace, attunement. When you hit a fiend or an undead with this magic weapon, that creature takes an extra 2d6 radiant damage. If the target has 25 HP or fewer after taking this damage, it must succeed on a DC 15 WIS save or be destroyed; on a successful save, the creature becomes frightened of you until the end of your next turn (GM-narrated in v1). While held, sheds bright light in a 20-ft radius and dim light 20 ft beyond. RAW DMG p.179."},
+            # v2.328.0 — "The Inventor's Trio" bundle: Decanter of Endless
+            # Water (RAW DMG p.161, uncommon, no attunement). 2-lb stoppered
+            # flask. Action: speak one of three command words to produce
+            # water — "stream" (1 gallon per round), "fountain" (5-ft-long
+            # stream, 5 gallons per round), "geyser" (20-ft long × 1-ft
+            # wide, 30 gallons per round; counts as a melee attack — DEX
+            # save DC 13 vs 30 gallons, knocked prone). Mode-switching +
+            # geyser-attack are GM-narrated in v1; catalog row is a stub
+            # passive. Thematic on Tavik (Cleric — sacred-water vessel
+            # symbolism for a Life Domain healer).
+            {"name": "Decanter of Endless Water", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 2,
+             "_slug": "decanter-of-endless-water",
+             "desc": "Uncommon wondrous item, no attunement. 2-lb stoppered flask. Action: speak one of three command words to produce water — `stream` (1 gallon/round, 10 ft), `fountain` (5-ft length, 5 gallons/round), or `geyser` (30-ft × 1-ft, 30 gallons/round, knockdown attack). RAW DMG p.161."},
         ],
         # v2.76.0 Phase 4c — War Caster feat for Tavik. RAW (PHB
         # p.170): the reaction part lets Tavik cast a 1-action
@@ -5773,6 +5798,18 @@ def _fighter_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "weight_lb": 4,
              "_slug": "folding-boat",
              "desc": "Rare wondrous item, no attunement. A 12×6×6 in., 4-lb wooden box that unfolds via three command words into either a 10-ft boat (4 medium creatures) or a 24-ft ship (15 medium creatures), or folds back into the box. Vessel weight + contents are GM-narrated. RAW DMG p.170."},
+            # v2.328.0 — "The Inventor's Trio" bundle: Sovereign Glue (RAW
+            # DMG p.200, legendary, no attunement). 1-oz milky-white adhesive
+            # (stored in oil-of-slipperiness-coated flask) that forms a
+            # permanent bond between any two objects in contact for 1
+            # minute. Catalog stub passive — the bond mechanic + the
+            # Universal Solvent counter-interaction is GM-narrated.
+            # Thematic on Garrik (Fighter, Soldier — improvised field
+            # repair adhesive fits his frontline kit).
+            {"name": "Sovereign Glue", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 1,
+             "_slug": "sovereign-glue",
+             "desc": "Legendary wondrous item, no attunement. 1 oz of milky-white adhesive in a glass flask. Application bonds any two surfaces within 1 round permanently — only Universal Solvent or oil of etherealness can release the bond. RAW DMG p.200."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20

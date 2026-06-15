@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.328.0] - 2026-06-15 — "The Inventor's Trio"
+
+**Schema version:** 69
+
+**Commit summary:** Second SRD magic-item **bundle** (sequel to v2.327.0's Wayfarer's Trio) — three utility-themed wondrous items shipped together as pure catalog-stub passives: **Decanter of Endless Water** (DMG p.161), **Sovereign Glue** (DMG p.200), **Universal Solvent** (DMG p.209). Same minimal `requires_attunement: False` stub pattern, seeded on thematic carriers (Tavik / Garrik / Thalindra); three smoke tests in `test_inventors_trio.py`. No new engine code.
+
+**Description:** Continues the user-requested bundling pattern — three catalog rows + three demo-seed inventory lines + one new harness file. Each item's actual mechanic (water-output mode-switching, permanent adhesive bond, universal dissolve) stays GM-narrated. The Sovereign Glue ↔ Universal Solvent counter-interaction is a fun emergent pair across two PCs in the demo party (Garrik bonds, Thalindra dissolves). Decanter on Tavik (Cleric — sacred-water vessel symbolism for a Life Domain healer). MINOR — additive content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`): three new stub catalog rows — `decanter-of-endless-water`, `sovereign-glue`, `universal-solvent`. Each carries only `requires_attunement: False`.
+- Demo seed: Brother Tavik Stonebrow gains a **Decanter of Endless Water**, Garrik Ironside gains a **Sovereign Glue**, Thalindra Moonwhisper gains a **Universal Solvent** — each appended at the inventory tail.
+- `tests/harness/test_inventors_trio.py` — 3 smoke tests verifying each carrier's `/sheet-json` surfaces the matching `_slug` with the RAW no-attunement contract.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2929 → 2932 (+3 Inventor's Trio tests); new `test_inventors_trio.py` section.
+
 ## [2.327.0] - 2026-06-15 — "The Wayfarer's Trio"
 
 **Schema version:** 69
