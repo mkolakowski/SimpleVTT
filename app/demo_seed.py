@@ -1343,6 +1343,19 @@ def _cleric_sheet(name: str) -> dict:
              "damage": "1d8+5", "damage_type": "bludgeoning",
              "range": "20/60 ft", "_slug": "dwarven-thrower",
              "desc": "Very rare warhammer, attunement (dwarf). +3 attack/damage; returns to hand after a ranged attack. On a ranged hit, +1d8 bludgeoning (or +2d8 vs. a giant). RAW DMG p.166."},
+            # v2.341.0 — Mace of Smiting (RAW DMG p.179, rare, NO attunement).
+            # +1 attack/damage baked into this row (Tavik's STR +2 + prof +3 +
+            # magic +1 = +6 / 1d6+3); the +3-vs-construct upgrade is
+            # GM-narrated. On a natural 20 the on_nat_20 handler rolls +2d6
+            # bludgeoning, or +4d6 vs a construct (base 2d6 + the
+            # bonus_dice_vs 2d6). The destroy-construct-at-≤25-HP clause is
+            # GM-narrated. No attunement → the rider fires on slug match alone.
+            # A construct-smashing mace fits a frontline Life Cleric (golems,
+            # animated armor, and the like are classic dungeon foes).
+            {"name": "Mace of Smiting", "attack_bonus": "+6",
+             "damage": "1d6+3", "damage_type": "bludgeoning",
+             "range": "5 ft", "_slug": "mace-of-smiting",
+             "desc": "Rare mace, no attunement. +1 attack/damage (+3 vs. constructs). On a natural 20, deal +2d6 bludgeoning (or +4d6 vs. a construct); a construct reduced to ≤25 HP is destroyed (GM-narrated). RAW DMG p.179."},
         ],
         # v2.4.15: Life Domain grants 6 domain spells unlocked by Cleric Lv 5
         # — Bless / Cure Wounds (L1), Lesser Restoration / Spiritual Weapon
@@ -1570,6 +1583,19 @@ def _cleric_sheet(name: str) -> dict:
              "range": "20/60 ft", "properties": "thrown, magic",
              "_slug": "dwarven-thrower", "weight_lb": 5,
              "desc": "Very rare warhammer, attunement by a dwarf. +3 attack/damage. It returns to your hand immediately after a ranged attack. On a ranged hit it deals an extra 1d8 bludgeoning damage, or an extra 2d8 if the target is a giant. RAW DMG p.166."},
+            # v2.341.0 — Mace of Smiting (RAW DMG p.179, rare, NO attunement).
+            # Paired with the attack entry above via `_slug`. No attunement →
+            # the on_nat_20 +2d6 (/+4d6 vs construct) rider fires on slug
+            # match alone, so it's seeded equipped (no PATCH-in-test needed).
+            # A second mace on Tavik (the mace-wielding Life Cleric) alongside
+            # his Mace of Disruption — showcasing the on_nat_20 bonus_dice_vs
+            # construct path next to the every-hit conditional rider.
+            {"name": "Mace of Smiting", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True,
+             "hands": 1, "damage": "1d6", "damage_type": "bludgeoning",
+             "properties": "magic", "weight_lb": 4,
+             "_slug": "mace-of-smiting",
+             "desc": "Rare mace, no attunement. +1 attack/damage (+3 vs. constructs). On a natural 20, the target takes an extra 2d6 bludgeoning, or 4d6 if it's a construct; a construct reduced to 25 HP or fewer after this damage is destroyed. RAW DMG p.179."},
         ],
         # v2.76.0 Phase 4c — War Caster feat for Tavik. RAW (PHB
         # p.170): the reaction part lets Tavik cast a 1-action

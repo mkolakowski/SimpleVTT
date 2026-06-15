@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.341.0] - 2026-06-15 — "The Construct's Doom"
+
+**Schema version:** 69
+
+**Commit summary:** SRD magic-item drop-in — **Mace of Smiting** (RAW DMG p.179, rare, NO attunement). The first `on_nat_20` `effect: "damage"` item to use `bonus_dice_vs` (the field built for Dwarven Thrower, now wired on the nat-20 path too): a natural 20 deals +2d6 bludgeoning, or +4d6 vs a construct (base 2d6 + bonus 2d6). Seeded equipped on Brother Tavik Stonebrow; two harness tests. Zero new catalog-shape needed beyond extending the on_nat_20 damage branch.
+
+**Description:** The `_apply_magic_item_nat_20_effect` `effect: "damage"` branch now folds an optional `bonus_dice_vs` into the same `damage_amount` when the target's resolved `creature_type` matches (reusing `target_ct`, already computed for the exempt check). So the construct bonus reports as a single combined nat-20 broadcast. No attunement (RAW): the rider fires on slug match alone. The +1/+3-vs-construct attack bonus is baked onto Tavik's attack row (the +3-vs-construct upgrade GM-narrated), and the destroy-construct-at-≤25-HP clause is GM-narrated. A second mace on Tavik (the mace-wielding Life Cleric) alongside his Mace of Disruption. MINOR — additive on_nat_20 bonus-dice support + content, no schema change.
+
+### Added
+- `bonus_dice_vs` support in the `_apply_magic_item_nat_20_effect` `effect: "damage"` branch (`app/routes/tabletop_routes.py`) — an extra creature-type-gated dice total folded into the nat-20 damage.
+- `_MAGIC_ITEM_ATTACK_RIDERS["mace-of-smiting"]` — `{requires_attunement: False, on_nat_20: {effect: "damage", dice: "2d6", damage_type: "bludgeoning", bonus_dice_vs: {creature_type: "construct", dice: "2d6"}}}`.
+- Demo seed: Brother Tavik Stonebrow gains a **Mace of Smiting** at `attack_index 4` + inventory tail, equipped (no attunement).
+- `tests/harness/test_mace_of_smiting.py` — 2 tests: construct nat-20 hp_dealt MAX > 12 (proves the +2d6 construct bonus, impossible with only 2d6); humanoid nat-20 hp_dealt ALL ≤ 12 (proves no bonus leak).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2967 → 2969 (+2 Mace of Smiting tests); new `test_mace_of_smiting.py` section.
+
 ## [2.340.0] - 2026-06-15 — "The Wave of Terror"
 
 **Schema version:** 69

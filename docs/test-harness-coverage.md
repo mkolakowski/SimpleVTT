@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2967 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.340.0, 2026-06-15).
+**Total tests:** 2969 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.341.0, 2026-06-15).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3551,6 +3551,14 @@ v2.318.0 magic-items — Sword of Life Stealing +3d6 necrotic on natural 20 (RAW
 | `test_life_stealing_no_rider_on_construct` | Iterates seeds 0-199 to land d20=20 on a `creature_type: "construct"` target; asserts the `item-sword-of-life-stealing-nat20` broadcast did NOT fire (first exempt slot). |
 | `test_life_stealing_no_rider_on_undead` | Iterates seeds 0-199 to land d20=20 on a `creature_type: "undead"` target; asserts the broadcast did NOT fire (second exempt slot). |
 | `test_life_stealing_nat_20_extra_damage` | Iterates seeds 0-199 finding one that lands d20=20 vs. a humanoid; asserts `feature_used` with `source: "item-sword-of-life-stealing-nat20"` fires and `hp_dealt` is in [3, 18] (3d6 range). |
+
+### `test_mace_of_smiting.py`
+v2.341.0 magic-items — Mace of Smiting (RAW DMG p.179, rare, NO attunement). First on_nat_20 `effect: "damage"` item to use `bonus_dice_vs`: nat-20 → +2d6 bludgeoning, +4d6 vs a construct. Carrier: Brother Tavik Stonebrow at `attack_index 4`, equipped. The construct/humanoid distinction is verified statistically across a seed sweep.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_mace_of_smiting_bonus_vs_construct` | Sweep seeds; the construct nat-20 `hp_dealt` MAX exceeds 12 (impossible with only 2d6 → proves the +2d6 construct bonus); all samples in [4, 24]. |
+| `test_mace_of_smiting_base_only_vs_humanoid` | Sweep seeds; every humanoid nat-20 `hp_dealt` is in [2, 12] (no construct bonus leak). |
 
 ### `test_dwarven_thrower.py`
 v2.339.0 magic-items — Dwarven Thrower (RAW DMG p.166, very rare, attunement by a dwarf). First rider to use `bonus_dice_vs`: an unconditional base +1d8 bludgeoning + an extra +1d8 vs a giant. Carrier: Brother Tavik Stonebrow (Hill Dwarf) at `attack_index 3`, seeded inert (PATCH-in-test). Base source `item-dwarven-thrower`; giant-bonus source `item-dwarven-thrower-bonus`.

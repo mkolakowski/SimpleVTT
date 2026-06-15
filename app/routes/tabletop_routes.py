@@ -30915,6 +30915,22 @@ async def _apply_magic_item_nat_20_effect(
             damage_amount = int(r.total)
         except dice_mod.DiceParseError:
             return None
+        # v2.341.0 — Mace of Smiting: an EXTRA dice bonus vs a specific
+        # creature type, ADDED to the base nat-20 damage. RAW DMG p.179:
+        # +2d6 bludgeoning on a crit, or +4d6 vs a construct (= base 2d6 +
+        # bonus 2d6). Mirrors the section-6c `bonus_dice_vs` field (Dwarven
+        # Thrower) but on the on_nat_20 path; the bonus folds into the same
+        # `damage_amount` so the single broadcast reports the full crit. The
+        # destroy-construct-at-≤25-HP clause is GM-narrated in v1.
+        bonus = on_nat_20.get("bonus_dice_vs")
+        if bonus and bonus.get("dice"):
+            want_ct = str(bonus.get("creature_type") or "").strip().lower()
+            if want_ct and target_ct == want_ct:
+                try:
+                    br = dice_mod.roll(bonus["dice"])
+                    damage_amount += int(br.total)
+                except dice_mod.DiceParseError:
+                    pass
     elif effect == "slay_save":
         # v2.335.0 — Nine Lives Stealer (RAW DMG p.183): on a crit against
         # a creature with fewer than `max_target_hp` HP, the target makes a
@@ -35084,6 +35100,24 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
             "effect": "prone",
             "duration_rounds": 1,
             "label": "Giant Slayer — Knockdown",
+        },
+    },
+    # v2.341.0 — Mace of Smiting (RAW DMG p.179, rare, NO attunement). The
+    # first on_nat_20 `effect: "damage"` item to use `bonus_dice_vs`: on a
+    # natural 20 it deals +2d6 bludgeoning, or +4d6 vs a construct (= base
+    # 2d6 + bonus 2d6). No attunement (RAW): the rider fires on slug match
+    # alone. The +1/+3-vs-construct attack/damage bonus is baked onto the
+    # wielder's attack row (the +3-vs-construct upgrade GM-narrated), and the
+    # destroy-construct-at-≤25-HP clause is GM-narrated in v1.
+    "mace-of-smiting": {
+        "label": "Mace of Smiting",
+        "requires_attunement": False,
+        "on_nat_20": {
+            "effect": "damage",
+            "label": "🔨 Mace of Smiting",
+            "dice": "2d6",
+            "damage_type": "bludgeoning",
+            "bonus_dice_vs": {"creature_type": "construct", "dice": "2d6"},
         },
     },
     # v2.339.0 — Dwarven Thrower (RAW DMG p.166, very rare, attunement by a
