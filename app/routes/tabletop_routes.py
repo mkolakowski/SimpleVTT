@@ -32851,6 +32851,21 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "dragon-scale-mail": [
         {"requires_attunement": True},
     ],
+    # v2.305.0 — Ring of Elemental Command (RAW DMG p.190, legendary,
+    # attunement). The ring is linked to one Elemental Plane; the Fire variant
+    # is the only one whose damage resistance kicks in immediately on
+    # attunement (RAW: "Ring of Fire Elemental Command ... you have resistance
+    # to fire damage" — no slay-an-elemental gate, unlike the Air/Earth/Water
+    # resistances). So this lands on the same `_resistance_type` rider as Ring
+    # of Resistance / Dragon Scale Mail: the resisted type rides the inventory
+    # item (`_resistance_type: "fire"`) on the shared slug, and the walker
+    # folds it into `resistance_to` for `_resistance_halve`. The 5-charge
+    # spell list, the advantage-vs-plane-elementals clause, the dominate-
+    # monster expenditure, the plane-specific movement/senses (Ignan speech),
+    # and the post-slay upgrades (fire immunity) are GM-narrated in v1.
+    "ring-of-elemental-command": [
+        {"requires_attunement": True},
+    ],
     # v2.236.0 — Mantle of Spell Resistance (RAW DMG p.180, rare,
     # attunement). RAW: "you have advantage on saving throws against
     # spells while you wear this cloak." A descriptive-only advantage in

@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.305.0] - 2026-06-14 — "The Ember Sovereign"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item drop-in — **Ring of Elemental Command (Fire)** (RAW DMG p.190, legendary, attunement) lands its fire-damage resistance on the same `_resistance_type` substrate Ring of Resistance (v2.235.0) and Dragon Scale Mail (v2.279.0) feed into `_resistance_halve`. One registry entry, a demo-seed item on Magnus Hexbinder, and four harness tests.
+
+**Description:** The Fire variant of the ring is the only one whose damage resistance applies the moment you attune — RAW gates the Air/Earth/Water resistances behind "help slay an elemental," but "Ring of Fire Elemental Command ... you have resistance to fire damage" is immediate. So the ring's clean, immediately-testable benefit rides the `_resistance_type` rider already on the passive engine: the resisted type rides the inventory item (`_resistance_type: "fire"`) on the shared `ring-of-elemental-command` slug, the `_equipped_item_effects` walker folds it into the aggregated `resistance_to` list, and `_resistance_halve` halves matching fire damage in the live damage pipeline (it also surfaces on `/sheet-json` as `derived.resistances`). So this commit needs no new engine code — a one-field registry payload (`requires_attunement: True`), a demo seed carrying the `_resistance_type` rider, and tests. Attunement-gated. The 5-charge spell list (dominate monster / burning hands / fireball / wall of fire), the advantage-vs-fire-elementals clause, the Ignan speech, and the post-slay fire-immunity upgrade are GM-narrated in v1. Seeded **unequipped/unattuned** as spare loot on Magnus Hexbinder (the demo's Fiend-pact Warlock — a planar ring binding him to the Elemental Plane of Fire is on-theme). His Bronze Dragonborn racial resistance is LIGHTNING, not fire, so the inert baseline takes full fire damage — cleanly proving the ring is the fire-resistance source. The harness PATCHes it equipped+attuned, deals 20 fire damage, asserts it dropped HP by only 10, then restores inventory + HP; an attunement-gate test (equipped-but-un-attuned takes full damage), an inert-baseline control, and a `derived.resistances` sheet-json assertion round it out. MINOR — additive demo content + a new registry entry + tests, no schema change.
+
+### Added
+- `ring-of-elemental-command` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — `requires_attunement: True`; the resisted type rides the per-item `_resistance_type` rider, like Ring of Resistance / Dragon Scale Mail.
+- Demo seed: Magnus Hexbinder gains a spare (unequipped/unattuned) **Ring of Elemental Command (Fire)** carrying `_resistance_type: "fire"`.
+- `tests/harness/test_item_ring_of_elemental_command.py` (4 tests): inert baseline takes full 20 fire (no resistance); equip+attune halves 20 fire to 10 (via `_resistance_halve`); attunement gate (equipped-but-un-attuned takes full damage); `derived.resistances` lists fire with the ring named in sources. Inventory + HP restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2874 → 2878 (+4 drop-in tests); added the `test_item_ring_of_elemental_command.py` section.
+
 ## [2.304.0] - 2026-06-14 — "The Cursed Carapace"
 
 **Schema version:** 69

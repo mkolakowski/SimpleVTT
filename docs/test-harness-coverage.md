@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2874 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.304.0, 2026-06-14).
+**Total tests:** 2878 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.305.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2762,6 +2762,16 @@ v2.235.0 — Ring of Resistance (RAW DMG p.192, rare, attunement): resistance to
 | `test_ring_exposes_resistances_on_sheet_json` | `GET /sheet-json` → `derived.resistances.types` contains "fire" with "Ring of Resistance" in `sources`. |
 | `test_ring_halves_matching_damage` | 20 fire damage to the fire-resisted wearer drops HP by only 10 — `_resistance_halve` halves it; restores HP on teardown. |
 | `test_ring_does_not_halve_other_types` | Control: 20 cold damage applies in full (−20) — the resistance is type-specific; restores HP on teardown. |
+
+### `test_item_ring_of_elemental_command.py`
+v2.305.0 — Ring of Elemental Command (Fire) (RAW DMG p.190, legendary, attunement): the Fire variant grants fire-damage resistance immediately on attunement (Air/Earth/Water gate theirs behind slaying an elemental). Rides the same `_resistance_type` substrate as Ring of Resistance / Dragon Scale Mail — `_resistance_halve` halves matching fire damage, surfaced on `/sheet-json` as `derived.resistances`. Seeded inert (unequipped/unattuned) on Magnus Hexbinder (Fiend Warlock, whose Bronze Dragonborn racial resistance is LIGHTNING not fire, so the baseline cleanly proves the source); tests PATCH it equipped+attuned, deal fire damage, then restore inventory + HP.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_ring_baseline_takes_full_fire_damage` | Control: inert seed (equipped=False) → 20 fire lands in full (−20), proving no fire-resistance baseline. Restores on teardown. |
+| `test_ring_halves_fire_damage_when_attuned` | Equip+attune → 20 fire drops HP by only 10 via `_resistance_halve`. Restores on teardown. |
+| `test_ring_requires_attunement` | Attunement gate: equipped-but-un-attuned → 20 fire applies in full (−20). Restores on teardown. |
+| `test_ring_exposes_resistances_on_sheet_json` | Equip+attune → `derived.resistances.types` contains "fire" with "Ring of Elemental Command" in `sources`. Restores on teardown. |
 
 ### `test_item_cloak_of_arachnida.py`
 v2.279.0 — Cloak of Arachnida (RAW DMG p.158, very rare, attunement): resistance to poison damage AND a climbing speed equal to walking speed. Two existing substrates compose in one passive payload — the poison `resistance_to` folds into the aggregated list `_resistance_halve` consults (surfaced as `derived.resistances`), and `spider_climb` surfaces as `derived.spider_climb` (the Slippers substrate). Seeded as inert spare loot on Lyra Sunstrider (already at the 3-item attunement cap); tests PATCH it equipped+attuned, then restore inventory/HP on teardown.

@@ -2796,6 +2796,25 @@ def _warlock_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "attuned": False,
              "_slug": "cloak-of-the-bat", "weight_lb": 1,
              "desc": "Rare wondrous item, attunement. While wearing this cloak, you have advantage on Dexterity (Stealth) checks. In dim light or darkness you can grip its edges to fly at 40 ft, and can use an action to cast polymorph on yourself to become a bat (once per dawn). RAW DMG p.158."},
+            # v2.305.0 — Ring of Elemental Command (Fire) (RAW DMG p.190,
+            # legendary, attunement). The Fire variant grants resistance to
+            # fire damage the moment you attune (the Air/Earth/Water resistances
+            # are gated behind slaying an elemental — only Fire is immediate).
+            # Lands on the `_resistance_type` substrate (Ring of Resistance /
+            # Dragon Scale Mail): the resisted type rides this item, the walker
+            # folds it into `resistance_to`, and `_resistance_halve` halves
+            # matching damage. Seeded inert (unequipped/unattuned) so it adds no
+            # resistance to Magnus's baseline (his Bronze Dragonborn resistance
+            # is LIGHTNING, not fire) — the harness PATCHes it equipped+attuned,
+            # deals fire damage, asserts the halving, then restores. The 5-charge
+            # spell list, dominate-monster, advantage-vs-fire-elementals, Ignan
+            # speech, and post-slay fire immunity are GM-narrated in v1. A Fiend-
+            # pact Warlock attuned to the Elemental Plane of Fire is on-theme.
+            {"name": "Ring of Elemental Command (Fire)", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "_slug": "ring-of-elemental-command", "_resistance_type": "fire",
+             "weight_lb": 0,
+             "desc": "Legendary ring, attunement. Linked to the Elemental Plane of Fire: you have advantage on attack rolls against fire elementals (and they have disadvantage against you), resistance to fire damage, and can speak Ignan. 5 charges (regain 1d4+1 at dawn): cast dominate monster on a fire elemental (2 charges), burning hands (1), fireball (2), or wall of fire (3). After helping slay a fire elemental you gain immunity to fire damage. RAW DMG p.190."},
         ],
         # v2.18.4: 3 known Eldritch Invocations at Lv 5 (Warlock gets
         # Lv 2: 2 known; Lv 5: 3 known; Lv 7: 4 known...). Magnus's
