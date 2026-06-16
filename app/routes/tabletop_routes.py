@@ -19322,6 +19322,36 @@ async def cast_spell(
                 apex_half_angle_deg=_half_angle,
                 faction=_faction_in,
             )
+        elif _shape == "line":
+            # v2.376.0 — line variant. Closes sphere/cone/line parity
+            # with the v2.373.0/.1/.374/.375 helper arc. RAW line spells
+            # (Lightning Bolt 100 ft × 5 ft, Wall of Fire line-mode) run
+            # from the caster's token center through the target's token
+            # center, catching everyone within `width_ft/2` of the
+            # segment out to `max_length_ft`. Both caster + target are
+            # always excluded (target is the line's geometric anchor).
+            _width_raw = target_set.get("width_ft")
+            try:
+                _width_ft = float(_width_raw) if _width_raw is not None else 5.0
+            except (TypeError, ValueError):
+                raise HTTPException(400, "target_set.width_ft must be a number")
+            _max_len_raw = target_set.get("max_length_ft")
+            try:
+                _max_len_ft = (
+                    float(_max_len_raw) if _max_len_raw is not None else 120.0
+                )
+            except (TypeError, ValueError):
+                raise HTTPException(400, "target_set.max_length_ft must be a number")
+            _caster_in = (target_set.get("caster_combatant_id") or "").strip() or None
+            _target_in_for_line = (target_set.get("target_combatant_id") or "").strip() or None
+            target_combatant_ids_in = _resolve_line_aoe_combatant_ids(
+                db, campaign,
+                caster_combatant_id=_caster_in,
+                target_combatant_id=_target_in_for_line,
+                width_ft=_width_ft,
+                max_length_ft=_max_len_ft,
+                faction=_faction_in,
+            )
         if target_combatant_ids_in and not target_combatant_id_in:
             target_combatant_id_in = target_combatant_ids_in[0]
 
@@ -93184,6 +93214,112 @@ async def get_battle(
     row = db.get(Battle, campaign_id)
     state = row.state if (row is not None and isinstance(row.state, dict)) else None
     return {"battle": state}
+
+
+def _resolve_line_aoe_combatant_ids(
+    db: Session,
+    campaign: Campaign,
+    *,
+    caster_combatant_id: str | None,
+    target_combatant_id: str | None,
+    width_ft: float = 5.0,
+    max_length_ft: float = 120.0,
+    faction: str = "all",
+) -> list[str]:
+    """v2.376.0 — shared line-AoE id resolver used by `/cast_spell`'s
+    ``target_set`` branch (shape: "line"). Mirrors the geometry +
+    faction filter from `/battle/line-targets` but returns the bare id
+    list the cast pipeline's `target_combatant_ids` flow needs.
+
+    Caster + target are both combatant ids — the line runs from the
+    caster's token center through the target's token center, extending
+    ``max_length_ft`` from the caster. Combatants within ``width_ft/2``
+    of that segment are caught by the line. Both caster + target are
+    always excluded from the result list (mirrors the picker endpoint's
+    contract — the target is the line's geometric anchor, not a
+    member of the affected set).
+
+    Raises HTTPException(400/404) on invalid inputs so the caller can
+    surface validation errors directly.
+    """
+    if not caster_combatant_id:
+        raise HTTPException(400, "target_set line requires caster_combatant_id")
+    if not target_combatant_id:
+        raise HTTPException(400, "target_set line requires target_combatant_id")
+    if width_ft <= 0 or max_length_ft <= 0:
+        raise HTTPException(400, "target_set line requires positive width_ft + max_length_ft")
+    if faction not in ("all", "allies", "enemies"):
+        raise HTTPException(400, "target_set faction must be one of: all, allies, enemies")
+    state = hub.get_battle(int(campaign.id))
+    if not state:
+        raise HTTPException(404, "No active battle")
+    if not campaign.active_map_id:
+        raise HTTPException(400, "Campaign has no active map")
+    map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
+    if not map_row or not map_row.grid_size_px:
+        raise HTTPException(400, "Active map has no grid_size_px")
+    grid_px = int(map_row.grid_size_px)
+    grid_type = (
+        map_row.grid_type.value if map_row.grid_type else "square"
+    ).lower()
+    combatants = state.get("combatants") or []
+    by_id = {str(c.get("id")): c for c in combatants if isinstance(c, dict)}
+    caster = by_id.get(caster_combatant_id)
+    target = by_id.get(target_combatant_id)
+    if not caster or not target:
+        raise HTTPException(404, "target_set line caster/target combatant not in battle")
+
+    def _xy_for(combatant: dict) -> "tuple[float, float] | None":
+        tok_id = combatant.get("source_token_id")
+        if not tok_id:
+            return None
+        tok = db.query(Token).filter(
+            Token.id == int(tok_id), Token.map_id == map_row.id,
+        ).first()
+        if not tok:
+            return None
+        size = int(tok.size or 1)
+        cx = float(tok.x or 0) + (size * grid_px) / 2.0
+        cy = float(tok.y or 0) + (size * grid_px) / 2.0
+        return (cx, cy)
+
+    caster_xy = _xy_for(caster)
+    target_xy = _xy_for(target)
+    if caster_xy is None or target_xy is None:
+        raise HTTPException(400, "target_set line caster/target has no token position")
+    ax, ay = caster_xy
+    bx, by = target_xy
+    caster_is_pc: bool | None = None
+    if faction != "all":
+        caster_is_pc = bool(caster.get("char_id"))
+    half_width = width_ft / 2.0
+    ids: list[str] = []
+    for c in combatants:
+        if not isinstance(c, dict):
+            continue
+        cid = str(c.get("id") or "")
+        if not cid or cid == caster_combatant_id or cid == target_combatant_id:
+            continue
+        xy = _xy_for(c)
+        if xy is None:
+            continue
+        px, py = xy
+        dist_seg = _segment_to_point_min_ft(grid_px, ax, ay, bx, by, px, py)
+        if dist_seg > half_width:
+            continue
+        dist_from_caster = _distance_ft_between_points(
+            grid_px, grid_type, ax, ay, px, py,
+        )
+        if dist_from_caster > max_length_ft:
+            continue
+        if caster_is_pc is not None:
+            subj_is_pc = bool(c.get("char_id"))
+            if faction == "allies" and subj_is_pc != caster_is_pc:
+                continue
+            if faction == "enemies" and subj_is_pc == caster_is_pc:
+                continue
+        ids.append(cid)
+    return ids
 
 
 @router.post("/api/campaign/{campaign_id}/battle/line-targets")

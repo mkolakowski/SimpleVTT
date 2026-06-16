@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.376.0] - 2026-06-16 — "The Caster's Eye, Line"
+
+**Schema version:** 69
+
+**Commit summary:** Closes the AoE auto-targeting parity arc — `/cast_spell` now accepts all three shapes (`sphere` v2.374.0, `cone` v2.375.0, `line` here). Caller names a caster + a target combatant + optional `width_ft` (RAW default 5 — Lightning Bolt / Javelin of Lightning) + optional `max_length_ft` (default 120) + faction filter. The server runs the segment from caster's token center through target's token center, catches everyone within `width_ft/2` of that segment out to `max_length_ft`, applies the faction filter, and feeds the resulting id list into the existing `target_combatant_ids` save+damage loop. Three harness tests via Thalindra + 2 inline bandits.
+
+**Description:** Mirrors the v2.374.0 sphere + v2.375.0 cone factoring: a new private `_resolve_line_aoe_combatant_ids` helper extracts the line geometry from `/battle/line-targets` and returns the bare id list `/cast_spell` needs. Together with the sphere + cone variants, this closes server-side AoE auto-targeting for **every** SRD AoE damage spell (Fireball, Spirit Guardians, Shatter, Aid, Bless, Mass Healing Word, Burning Hands, Cone of Cold, Lightning Bolt, Wall of Fire line-mode, every dragon breath weapon).
+
+Subtle exclusion (same shape as cone): both caster AND target are excluded from the resolved list. The target combatant is the line's geometric anchor (defining which direction the line points), not necessarily a target of the spell itself. RAW Lightning Bolt obviously hits whoever the caster is pointing at, but the line picker uses target-as-anchor — a caster wanting to include the line-target either picks a different geometric anchor (a wall, a non-combatant terrain feature) or adds the target id explicitly via `target_combatant_ids`.
+
+This completes the post-v2.373.0 AoE arc:
+- **v2.373.0** — `/battle/sphere-targets` faction filter
+- **v2.373.1** — `/battle/cone-targets` + `/battle/line-targets` faction filter (sphere/cone/line parity on the pickers)
+- **v2.374.0** — `/cast_spell target_set` shape:"sphere"
+- **v2.374.1** — Python 3.9 collection-error fix on the new test
+- **v2.375.0** — `/cast_spell target_set` shape:"cone"
+- **v2.376.0** — `/cast_spell target_set` shape:"line" (this commit, closes the arc)
+
+MINOR — additive shape variant + new shared helper, no schema change, no behavior change for callers that don't pass `target_set: {shape: "line"}`.
+
+### Added
+- `target_set: {shape: "line", caster_combatant_id, target_combatant_id, width_ft?, max_length_ft?, faction?}` on `/cast_spell` — derives the AoE target ids via the new shared line helper.
+- `_resolve_line_aoe_combatant_ids` helper in `app/routes/tabletop_routes.py` (just above `/battle/line-targets`) — shared geometry between the picker endpoint and `/cast_spell`'s line branch.
+- `tests/harness/test_cast_spell_target_set_line.py` — 3 tests: line picks inline bandit downrange (caster + target excluded); missing `target_combatant_id` → 400; `width_ft=0` → 400.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3086 → 3089 (+3 line-shape target_set tests); new section.
+
 ## [2.375.0] - 2026-06-16 — "The Caster's Eye, Cone"
 
 **Schema version:** 69

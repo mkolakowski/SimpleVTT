@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3086 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.375.0, 2026-06-16).
+**Total tests:** 3089 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.376.0, 2026-06-16).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4290,6 +4290,15 @@ v2.56.0 — Fighter Lv 9+ Indomitable. Arm-then-consume single-use save-advantag
 | `test_use_indomitable_out_of_uses` | First call burns the only use; second call → 409 `out_of_uses` with `label=Indomitable`. |
 | `test_indomitable_consumes_on_save` | Arm + cast Suggestion at Garrik → save `base_expression="2d20kh1"`, buff removed from Garrik's combatant, consume-side `feature_used(source=indomitable)` broadcast. |
 | `test_indomitable_one_save_only` | After consume, a second save in the same round has `base_expression="1d20"` (no kh1; buff already consumed). |
+
+### `test_cast_spell_target_set_line.py`
+v2.376.0 — extends `/cast_spell` `target_set` to `shape: "line"` — closes sphere/cone/line parity with the picker endpoints. Caller names caster + target combatants (+ optional `width_ft` / `max_length_ft` / faction); server runs the segment from caster→target token centers, catches combatants within `width_ft/2` out to `max_length_ft`. Both caster + target are excluded (target is the line's geometric anchor, not a target).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_target_set_line_picks_inline_bandit` | Thalindra caster + bandit-target + bandit-inline-downrange placed on the active map; cast with line target_set returns 1 outcome row (inline bandit) — caster + target excluded. |
+| `test_target_set_line_missing_target_400` | Missing `target_combatant_id` → 400 validation. |
+| `test_target_set_line_invalid_width_400` | `width_ft=0` → 400 validation. |
 
 ### `test_cast_spell_target_set_cone.py`
 v2.375.0 — extends `/cast_spell` `target_set` to `shape: "cone"`. Caller names apex + direction combatants + `length_ft` (+ optional half-angle + faction); server walks the active map's tokens, filters by the cone's angular span + length + faction, feeds the resulting ids into the Phase T.5 multi-target loop. Apex AND direction are both excluded (mirrors the `/battle/cone-targets` picker contract).
