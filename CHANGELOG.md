@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.363.2] - 2026-06-16 — "The Audit Switch"
+
+**Schema version:** 69
+
+**Commit summary:** Test-only patch on the v2.363.1 Berserker Axe harness. `test_berserk_save_does_not_fire_without_attunement` was asserting on the sheet's `_buffs_active` state — but lingering berserk buffs from prior runs in the shared harness DB were leaking across tests and tripping the assertion even when the v2.363.0 attunement gate was working correctly. Rewrote the assertion to read the `feature_used` broadcast stream (presence of the `item-berserker-axe-on-damage-save` source = save fired) — the broadcast is per-test (via `gm_ws.mark()`), so prior-test contamination doesn't poison the signal.
+
+**Description:** Pure test fix; no engine change. The 2-test berserk-save suite now passes cleanly against the live container. PATCH — test-correctness fix, no schema change.
+
+### Fixed
+- `tests/harness/test_item_berserker_axe_save.py::test_berserk_save_does_not_fire_without_attunement` — reads `gm_ws.buffered("feature_used")` and filters by `source == "item-berserker-axe-on-damage-save"` instead of inspecting `_buffs_active`. The broadcast signal is per-test (via `gm_ws.mark()`) so cross-test sheet contamination doesn't confuse the assertion. The first test (`test_berserk_save_installs_buff_on_failed_save`) keeps its sheet-buffs assertion since it does seed-sweep to deliberately install a buff.
+
 ## [2.363.1] - 2026-06-16 — "The Mirror's Polish"
 
 **Schema version:** 69

@@ -98,6 +98,34 @@ def _buffs(sheet):
     ]
 
 
+async def _clear_berserk(gm_client, char_id):
+    """Drop any lingering `berserk` buff (cross-test contamination)
+    by force-clearing `_buffs_active` on the sheet. Sheet PATCH works
+    whether or not Krieger is in an active battle (the v2.363.1
+    end-of-`_maybe_item_on_damage_save` mirror lands buffs on the
+    sheet's `_buffs_active`, so the sheet is the canonical pre-test
+    state to reset)."""
+    try:
+        r = await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-json",
+        )
+        if r.status_code != 200:
+            return
+        sheet = (r.json() or {}).get("sheet") or {}
+        active = list(sheet.get("_buffs_active") or [])
+        new_active = [
+            b for b in active
+            if not (isinstance(b, dict) and b.get("key") == _BERSERK_BUFF_KEY)
+        ]
+        if len(new_active) != len(active):
+            await gm_client.patch(
+                f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-fields",
+                json={"_buffs_active": new_active},
+            )
+    except Exception:
+        pass
+
+
 @pytest_asyncio.fixture
 async def krieger(roster):
     return roster["Krieger Stonefist"]
@@ -107,6 +135,7 @@ async def test_berserk_save_installs_buff_on_failed_save(gm_client, krieger):
     """Krieger attuned to the Berserker Axe, takes 10 damage via PATCH
     /sheet-fields (hp_change_reason=damage). Sweep seeds until the DC 15
     WIS save fails → the `berserk` buff appears on his sheet."""
+    await _clear_berserk(gm_client, krieger["id"])
     inv_snap, hp_snap = await _patch_inv(
         gm_client, krieger["id"], equipped=True, attuned=True,
     )
@@ -158,7 +187,9 @@ async def test_berserk_save_installs_buff_on_failed_save(gm_client, krieger):
         assert eff.get("berserk_attack_nearest") is True
         assert berserk.get("source") == "item-berserker-axe"
     finally:
-        # Restore HP + inventory.
+        # Drop the lingering berserk buff so the next test isn't
+        # contaminated; restore HP + inventory.
+        await _clear_berserk(gm_client, krieger["id"])
         await gm_client.patch(
             f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/sheet-fields",
             json={"hp": hp_snap},
@@ -166,38 +197,36 @@ async def test_berserk_save_installs_buff_on_failed_save(gm_client, krieger):
         await _restore_inv(gm_client, krieger["id"], inv_snap)
 
 
-async def test_berserk_save_does_not_fire_without_attunement(gm_client, krieger):
-    """Equipped-but-NOT-attuned axe → on-damage save is gated off and the
-    `berserk` buff never installs (across an aggressive seed sweep)."""
+async def test_berserk_save_does_not_fire_without_attunement(gm_client, gm_ws, krieger):
+    """Equipped-but-NOT-attuned axe → on-damage save is gated off: the
+    `_maybe_item_on_damage_save` helper never broadcasts the
+    `item-berserker-axe-on-damage-save` feature_used audit entry. The
+    broadcast presence (not the sheet state) is the canonical signal
+    here so prior-test contamination of `_buffs_active` doesn't
+    confuse the assertion."""
     inv_snap, hp_snap = await _patch_inv(
         gm_client, krieger["id"], equipped=True, attuned=False,
     )
     try:
-        for seed in range(0, 50):
-            await gm_client.patch(
-                f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/sheet-fields",
-                json={"hp": {"current": int(hp_snap.get("max") or 75)}},
+        gm_ws.mark()
+        await _seed_dice(gm_client, 0)
+        try:
+            resp = await _damage(
+                gm_client, krieger["id"],
+                new_current=max(0, int(hp_snap.get("max") or 75) - 10),
+                amount=10,
             )
-            await _seed_dice(gm_client, seed)
-            try:
-                resp = await _damage(
-                    gm_client, krieger["id"],
-                    new_current=max(0, int(hp_snap.get("max") or 75) - 10),
-                    amount=10,
-                )
-                assert resp.status_code == 200, resp.text
-            finally:
-                await _seed_dice(gm_client, None)
-            data = await _sheet_json(gm_client, krieger["id"])
-            sheet = data.get("sheet") or {}
-            if any(
-                isinstance(b, dict) and b.get("key") == _BERSERK_BUFF_KEY
-                for b in _buffs(sheet)
-            ):
-                raise AssertionError(
-                    f"berserk buff installed without attunement (seed {seed}); "
-                    f"buffs={_buffs(sheet)!r}"
-                )
+            assert resp.status_code == 200, resp.text
+        finally:
+            await _seed_dice(gm_client, None)
+        fired = [
+            m for m in gm_ws.buffered("feature_used")
+            if (m.get("data") or {}).get("source") == _SAVE_SOURCE
+        ]
+        assert fired == [], (
+            f"berserk on-damage save broadcast fired without attunement: "
+            f"{fired!r}"
+        )
     finally:
         await gm_client.patch(
             f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/sheet-fields",
