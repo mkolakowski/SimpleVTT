@@ -33817,7 +33817,9 @@ for _vault_slug, _vault_attune in [
     ("ring-of-invisibility", True), ("ring-of-regeneration", True),
     ("ring-of-shooting-stars", True), ("ring-of-spell-storing", True),
     ("ring-of-telekinesis", True), ("ring-of-three-wishes", False),
-    ("robe-of-scintillating-colors", True), ("rod-of-absorption", True),
+    # robe-of-scintillating-colors promoted to a charge-cast action
+    # (radius stunned) in v2.354.0 — registered via `_MAGIC_ITEM_ACTIONS`.
+    ("rod-of-absorption", True),
     ("rod-of-lordly-might", True),
     # rod-of-rulership promoted to a charge-cast action (radius charm) in
     # v2.351.0 — registered via `_MAGIC_ITEM_ACTIONS`.
@@ -34615,6 +34617,37 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
                     "RAW: works only on a beast",
                 ],
                 "feature_name": "🐾 Ring of Animal Influence",
+            },
+        },
+    },
+    # v2.354.0 — Robe of Scintillating Colors (RAW DMG p.194, very rare,
+    # attunement). Fifth Bucket-A item on the generalized Wand of Fear
+    # handler — radius `stunned` (DC 15 WIS). 3 charges (regain 1d3 at
+    # dawn): an action makes the robe display dazzling colors — each
+    # creature within 30 ft that can see you makes a DC 15 WIS save or is
+    # stunned until the end of your next turn (~1 round). The companion
+    # "attackers have disadvantage against you" self-buff for that round is
+    # GM-narrated (the Cloak of Displacement precedent).
+    "robe-of-scintillating-colors": {
+        "requires_attunement": True,
+        "resource_key": "robe-of-scintillating-colors",
+        "actions": {
+            "dazzling-display": {
+                "name": "Dazzling Display (30-ft radius)",
+                "save_dc": 15,
+                "save_ability": "WIS",
+                "min_charges": 1,
+                "max_charges": 1,
+                "duration_rounds": 1,
+                "condition_key": "stunned",
+                "condition_label": "Stunned",
+                "condition_icon": "🌈",
+                "condition_effects": [
+                    "incapacitated — can't move, can speak only falteringly",
+                    "auto-fail STR and DEX saving throws",
+                    "attack rolls against it have advantage",
+                ],
+                "feature_name": "🌈 Robe of Scintillating Colors",
             },
         },
     },
@@ -83867,7 +83900,10 @@ async def use_item_action(
                 "trident-of-fish-command",
                 # v2.353.0 — Ring of Animal Influence — single-target
                 # animal-friendship (charmed), 3 charges, no attunement.
-                "ring-of-animal-influence"):
+                "ring-of-animal-influence",
+                # v2.354.0 — Robe of Scintillating Colors — radius stunned
+                # (DC 15 WIS), 3 charges.
+                "robe-of-scintillating-colors"):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_wand_of_fear(
             db, campaign_id, char, item, sheet, catalog,

@@ -36,7 +36,8 @@ _VAULT_BY_CARRIER = {
     ],
     "Lyra Sunstrider": [
         "dancing-sword", "deck-of-illusions", "philter-of-love",
-        "robe-of-scintillating-colors",
+        # robe-of-scintillating-colors promoted to a charge-cast action
+        # (v2.354.0) — now an explicit equipped item, no longer a Vault stub.
     ],
     "Mira Greenleaf": [
         "figurine-of-wondrous-power", "horseshoes-of-a-zephyr",

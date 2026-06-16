@@ -2652,6 +2652,18 @@ def _bard_sheet(name: str) -> dict:
              "equippable": True, "equipped": True,
              "_slug": "pipes-of-haunting",
              "desc": "Uncommon wondrous item, no attunement (wind-instrument proficiency, GM-narrated). 3 charges (regain 1d3 at dawn). Action: expend 1 to play an eerie tune — each creature within 30 ft makes a DC 15 WIS save or is frightened of you for 1 minute. RAW DMG p.184."},
+            # v2.354.0 — Robe of Scintillating Colors (RAW DMG p.194, very
+            # rare, attunement). Promoted out of the v2.342.0 Vault bulk loot
+            # into an explicit equipped+attuned item paired with the
+            # `robe-of-scintillating-colors` 3-charge resource above. Runs
+            # through the generalized Wand of Fear handler with the stunned
+            # condition. Seeded attuned (the /use_item_action path gates on
+            # `attuned`); seed-load bypasses the RAW 3-item cap (enforced at
+            # /attune runtime only, per the Cloak of Arachnida precedent).
+            {"name": "Robe of Scintillating Colors", "type": "wondrous", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "robe-of-scintillating-colors",
+             "desc": "Very rare robe, attunement. 3 charges (regain 1d3 at dawn). Action: expend 1 to display dazzling colors until the end of your next turn — you shed bright light + attackers have disadvantage (GM-narrated), and each creature within 30 ft that can see you makes a DC 15 WIS save or is stunned until the effect ends. RAW DMG p.194."},
             # v2.279.0 — Cloak of Arachnida (RAW DMG p.158, very rare,
             # attunement). Spare loot: equipped=False / attuned=False because
             # Lyra is already at the RAW 3-item attunement cap (Cloak of
@@ -2853,6 +2865,19 @@ def _bard_sheet(name: str) -> dict:
                 "source": "magic item — Pipes of Haunting",
                 "class_slug": "item",
                 "desc": "3 charges; expend 1 (action) to play an eerie tune — each creature within 30 ft makes a DC 15 WIS save or is frightened 1 min. Regain 1d3 at dawn. RAW needs wind-instrument proficiency (GM-narrated).",
+                "manual": False,
+            },
+            # v2.354.0 — Robe of Scintillating Colors charge pool (RAW DMG
+            # p.194): 3 charges, regain 1d3 at dawn (long rest). The shared
+            # save-condition wand handler decrements 1 per Dazzling Display.
+            {
+                "key": "robe-of-scintillating-colors",
+                "name": "Robe of Scintillating Colors",
+                "current": 3, "max": 3, "reset": "long",
+                "charge_recovery": "1d3",
+                "source": "magic item — Robe of Scintillating Colors",
+                "class_slug": "item",
+                "desc": "3 charges; expend 1 (action) to dazzle — each creature within 30 ft that can see you makes a DC 15 WIS save or is stunned until the end of your next turn. Regain 1d3 at dawn.",
                 "manual": False,
             },
             # v2.207.0 — Staff of Charming charge pool (RAW DMG p.201):
@@ -6817,7 +6842,6 @@ def seed_characters(
         ("Lyra Sunstrider", "dancing-sword", "Dancing Sword", "weapon", "Very rare, attunement (any sword). Bonus action: toss it to hover and attack a target on its own for up to 4 turns (your attack bonus), then it returns. RAW DMG p.161."),
         ("Lyra Sunstrider", "deck-of-illusions", "Deck of Illusions", "magic", "Uncommon. 34 cards; action to draw + throw one → a 3D illusion of the depicted creature appears (INT-investigation DC 15 to discern). RAW DMG p.162."),
         ("Lyra Sunstrider", "philter-of-love", "Philter of Love", "consumable", "Uncommon. Drink → charmed for 1 hour by the first creature you see within 10 min (if humanoid + opposite-of-indifferent). RAW DMG p.184."),
-        ("Lyra Sunstrider", "robe-of-scintillating-colors", "Robe of Scintillating Colors", "magic", "Very rare, attunement. 3 charges. Action: expend 1 to dazzle — until your next turn end, advantage to be seen, attackers have disadvantage, and creatures within 30 ft that can see make a DC 15 WIS save or be blinded 1 min. RAW DMG p.194."),
         ("Mira Greenleaf", "figurine-of-wondrous-power", "Figurine of Wondrous Power (Silver Raven)", "magic", "By figurine. A statuette that becomes a living creature (silver raven → a raven messenger) on the command word; reverts to a figurine after its duration. RAW DMG p.169."),
         ("Mira Greenleaf", "horseshoes-of-a-zephyr", "Horseshoes of a Zephyr", "magic", "Very rare. Four horseshoes; the shod creature moves normally while floating 4 in. above the ground (ignores difficult terrain, can't leave tracks, etc.). RAW DMG p.175."),
         ("Mira Greenleaf", "oil-of-etherealness", "Oil of Etherealness", "consumable", "Rare. Apply over 10 min → the etherealness effect for 1 hour. RAW DMG p.184."),

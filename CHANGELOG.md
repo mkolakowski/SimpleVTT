@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.354.0] - 2026-06-16 — "The Dazzling Weave"
+
+**Schema version:** 69
+
+**Commit summary:** Fifth **Bucket-A** (charge-cast) magic-item commit off the v2.344.5 stub triage. **Robe of Scintillating Colors** (RAW DMG p.194, very rare, attunement) promoted from a v2.342.0 "Vault" catalog stub to a charge-cast action through the generalized `_use_item_action_wand_of_fear` handler — the radius `stunned` shape, 3 charges, DC 15 WIS. Seeded equipped+attuned on Lyra Sunstrider with a 3-charge resource; two harness tests. **First item on the shared handler to install the `stunned` condition.**
+
+**Description:** Zero new engine code — runs on the same `/use_item_action` → Wand of Fear handler path as Mace of Terror / Pipes of Haunting / Rod of Rulership. Added `robe-of-scintillating-colors` to `_MAGIC_ITEM_ACTIONS` (3-charge resource, WIS DC 15, `stunned` condition, 30-ft radius, 1-round duration) and the slug to the handler dispatch tuple. Promoted the slug out of the Vault passive `setdefault` loop and out of the bulk `_vault_loot` seed into an explicit equipped+attuned robe on Lyra paired with a `robe-of-scintillating-colors` 3-charge resource. Also **corrected a RAW error** in the old Vault loot desc (it said "blinded 1 min" — RAW is *stunned* until the end of your next turn). **v1 simplifications (GM-narrated):** the companion "you shed bright light + attackers have disadvantage against you" self-buff for that round (the Cloak of Displacement precedent); the 30-ft radius is cosmetic (the handler resolves a save per GM-picked `target_combatant_ids`). MINOR — additive item action + content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ACTIONS["robe-of-scintillating-colors"]` — `{requires_attunement: True, resource_key, actions: {dazzling-display: {save_dc: 15, save_ability: WIS, stunned, duration_rounds: 1, …}}}`; slug added to the Wand of Fear handler dispatch tuple.
+- Demo seed: explicit equipped+attuned **Robe of Scintillating Colors** on Lyra Sunstrider + a `robe-of-scintillating-colors` 3-charge resource.
+- `tests/harness/test_use_item_action_robe_of_scintillating_colors.py` — 2 tests (dazzling display at 2 targets → DC 15 WIS, charges 3→2, both ids in results; empty robe → 409 insufficient_charges).
+
+### Changed
+- `tests/harness/test_vault_stub_loot.py`: removed `robe-of-scintillating-colors` from Lyra's Vault-stub assertion list (it's an explicit equipped item now).
+- `docs/test-harness-coverage.md`: harness total 3014 → 3016 (+2 Robe of Scintillating Colors tests); new section.
+
 ## [2.353.0] - 2026-06-16 — "The Beast-Whisperer"
 
 **Schema version:** 69
