@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.376.2] - 2026-06-16 — "The State of the Realm, Reconciled"
+
+**Schema version:** 69
+
+**Commit summary:** Corrects the v2.376.1 audit refresh — Legendary + Lair Actions were promoted to P1 on the strength of the older 2026-06-11 audit text, but `docs/plans/legendary-actions.md` shows **Phases 1+2+3 are ALL shipped end-to-end (v2.159.32 → v2.181.0, closed 2026-06-12)** including the full lair-action arc (data + engine + GM UI + chromatic backfill + no-repeat / once-per-round guards + init-20 server broadcast + roll-log card + regional effects + player visibility + fade tracker). Same stale-doc pattern that hit the magic-item tail (v2.344.1 reconciliation) and the class-feature ⚪ tail (v2.344.3). Eight harness test files + 8 endpoint references confirm the shipped state.
+
+**Description:** Per-category re-baseline after the reconciliation:
+- **Monsters** flipped from ~85% (carried forward stale from v2.344.1) → **~98%** (Legendary actions Phase 1 + Legendary resistance Phase 2 with auto-prompt + Lair actions full Phase 3 arc all live). Remaining ~2% is the metallic-dragon / Lich / Kraken lair-action JSON data backfill — engine-supported, drop-in JSON, no code change.
+- **Overall** flipped from ~90% → **~93%** (Monsters +13 pts on the recompute).
+- The "Remaining gaps" priority list is now genuinely small: P2 cast-and-broadcast utility-spell upcast, P2 lair-action data backfill (engine ready), P3 Sleep/Hold Person/Hold Monster constant refactor.
+
+The v2.376.1 promotion mistake is itself the lesson worth flagging: **before-recommending-from-memory** is a real rule. The plan doc is the source of truth; the TODO.md audit text is the source of intent. When the two diverge, recheck the plan doc first.
+
+PATCH — pure doc edit; no runtime code change.
+
+### Fixed
+- `TODO.md` SRD 5e Audit (v2.376.0 refresh): removed bogus "P1 — Legendary actions + lair actions" entry (item is shipped, not unstarted); promoted Monsters category coverage from ~85% to ~98%; added a v2.376.2 reconciliation note at the top of the section explaining what the v2.376.1 first cut got wrong; revised overall % from ~90% to ~93%.
+- `TODO.md` "Quick map" pointer: updated header summary to reflect overall ~93% (was ~90%) and to surface the v2.376.2 reconciliation.
+
 ## [2.376.1] - 2026-06-16 — "The State of the Realm"
 
 **Schema version:** 69
