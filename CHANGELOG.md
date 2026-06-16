@@ -10,6 +10,15 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.368.2] - 2026-06-16 — "The Punch-List Tick"
+
+**Schema version:** 69
+
+**Commit summary:** Doc-only flip on the v2.368.1 work. Marks the seed-drift capstone-test fix as ✅ in [`TODO.md`](TODO.md)'s P3 row. Pure book-keeping. PATCH — no engine, test, or schema change.
+
+### Changed
+- `TODO.md`: P3 class-feature test-hygiene row (a) capstone seed-drift now marked ✅ shipped v2.368.1; (b) Sleep/Hold-Person/Hold-Monster shared-upcast refactor still open.
+
 ## [2.368.1] - 2026-06-16 — "The Idempotent Reset"
 
 **Schema version:** 69
