@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.379.2] - 2026-06-16 — "The Catalog, Refreshed"
+
+**Schema version:** 69
+
+**Commit summary:** Refreshes [`docs/wiki/lair-regional-catalog.md`](docs/wiki/lair-regional-catalog.md) to v2.379.1 — the existing GM-facing catalog was last written for v2.181.1 (just the 5 chromatic dragons) and explicitly noted "Metallic dragons + Lich/Kraken are a filed follow-up." The v2.377.0–v2.378.0 backfills landed those 12 missing slugs; this commit catches the catalog up. Adds two new sections — "Metallic dragon lairs (v2.377.0 backfill)" with all 5 metallic dragons + tables, and "Non-dragon lairs (v2.378.0 backfill)" with Lich + Kraken. Also surfaces the v2.379.0 condition-map closure in the Coverage section (every lair-action condition now auto-installs; no GM-narrate fallbacks left).
+
+**Description:** This is the wiki side of the v2.377.0 → v2.379.0 lair-action arc closure. The catalog now reflects the shipped state:
+- **22 lair slugs** authored (chromatic ×10 + metallic ×10 + Lich + Kraken) — full SRD legendary lair coverage.
+- **Regional effects** still 10 slugs (chromatic only); metallic + non-dragon regional-effects backfill remains a filed follow-up (engine + UI + fade tracker are ready).
+- **Condition map** at 8 keys — every lair-action condition installs on a failed save automatically (prone / poisoned / blinded / restrained / charmed + v2.379.0 unconscious / silenced / frightened).
+
+Updates the wiki landing-page table (`app/templates/wiki.html`) and the on-disk wiki index (`docs/wiki/README.md`) to mark the catalog as "refreshed v2.379.1" so a reader scanning either index sees that the page is current.
+
+Per CLAUDE.md "Every doc must be surfaced through the wiki" rule: `docs/wiki/<slug>.md` is served by `/wiki/<slug>` directly (no allowlist needed); only the landing-page table + the on-disk index entries need an update for a refresh.
+
+PATCH — pure doc-content refresh; no allowlist / endpoint / runtime change.
+
+### Changed
+- `docs/wiki/lair-regional-catalog.md`: refreshed top banner to v2.379.1; rewrote the "Coverage" section to show the full 22-slug lair-action count + the v2.379.0 condition-map closure; added "Metallic dragon lairs" + "Non-dragon lairs" sections with per-creature lair-action tables; expanded the "See also" footer with the condition-map cite.
+- `app/templates/wiki.html`: landing-page row for the catalog now reads "✅ shipped (refreshed v2.379.1)".
+- `docs/wiki/README.md`: on-disk index row carries the same refresh note.
+
 ## [2.379.1] - 2026-06-16 — "The Maturity Snapshot"
 
 **Schema version:** 69

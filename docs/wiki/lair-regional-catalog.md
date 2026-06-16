@@ -1,6 +1,6 @@
 # Lair actions & regional effects catalog
 
-*Audience: GMs + contributors. Written for v2.181.1.*
+*Audience: GMs + contributors. Refreshed for v2.379.1 — metallic-dragon + Lich + Kraken lair-action backfill (v2.377.0 / v2.378.0) + condition-map closure (v2.379.0). Lair-action arc is now end-to-end complete; regional-effects backfill for metallic + non-dragons is the one remaining filed follow-up.*
 
 A reader-facing catalog of every lair's **lair actions** (initiative-count-20
 effects) and **regional effects** (passive zone-wide flavor) currently
@@ -27,12 +27,24 @@ GM-driven fade tracker (`POST /set_regional_fade`, v2.181.0) models the RAW
 
 ## Coverage
 
-All five **chromatic** dragons (black, blue, green, red, white). Lair actions
-and regional effects are tied to the lair, not the creature's age, so each
-color's `adult-*` and `ancient-*` slugs share the same set. Young dragons and
-wyrmlings have no lair, so no entries. Metallic dragons + the Lich / Kraken are
-a filed follow-up data backfill (they drop into the two `*_BY_SLUG` dicts with
-no code change).
+**Lair actions (`LAIR_ACTIONS_BY_SLUG`, 22 slugs):**
+- 5 **chromatic** dragons (black, blue, green, red, white) — adult + ancient.
+- 5 **metallic** dragons (brass, bronze, copper, gold, silver) — adult + ancient. *(v2.377.0)*
+- **Lich** (phylactery / necromantic lair) + **Kraken** (submerged ocean lair) — single slug each, no age variants. *(v2.378.0)*
+
+Dragons of every lair-bearing age (adult + ancient) share the lair-action set per color (RAW: lair actions are tied to the LAIR, not the creature's age). Young dragons and wyrmlings have no lair, so no entries.
+
+**Regional effects (`REGIONAL_EFFECTS_BY_SLUG`, 10 slugs):**
+- 5 chromatic dragons only.
+- Metallic + Lich + Kraken regional effects are a **filed follow-up backfill** — the engine + UI + fade tracker are all ready; the data is drop-in with no code change. Coming in a future commit.
+
+**Condition map (`_LAIR_ACTION_CONDITION_BUFFS`, 8 keys):**
+
+v2.379.0 closed the condition-map gap — every condition any lair action installs now auto-installs on a failed save:
+- v1 chromatic: `prone` / `poisoned` / `blinded` / `restrained` / `charmed`.
+- v2.379.0 closure: `unconscious` (Brass Slumberous Magic) / `silenced` (Lich Memory Shred) / `frightened` (Gold Shimmering Visions).
+
+No lair-action condition still falls back to GM-narrate.
 
 ---
 
@@ -136,7 +148,92 @@ no code change).
 
 ---
 
+---
+
+# Metallic dragon lairs (v2.377.0 backfill)
+
+The five metallic dragons share the chromatic data shape (3 lair actions each, keyed to `adult-*` + `ancient-*`) but currently have **no regional effects authored** — the entries below cover lair actions only. RAW MM citations per dragon.
+
+## Brass Dragon — desert / canyon lair
+
+*Slugs: `adult-brass-dragon`, `ancient-brass-dragon`. RAW MM p.107.*
+
+| Action | Save | Effect |
+|---|---|---|
+| **Magical Gust** | STR DC 15 | 60-ft line, 5 ft wide; pushed 30 ft + prone on a fail. |
+| **Blinding Sandstorm** | CON DC 15 | 20-ft-radius sphere; blinded until the dragon takes another lair action. |
+| **Slumberous Magic** | WIS DC 15 | Single target; unconscious for 1 minute on a fail (wakes on damage/shake). |
+
+## Bronze Dragon — coastal / sea lair
+
+*Slugs: `adult-bronze-dragon`, `ancient-bronze-dragon`. RAW MM p.110.*
+
+| Action | Save | Effect |
+|---|---|---|
+| **Rolling Fog** | — | 20-ft-radius fog sphere; heavily obscured, lingers. (GM places it.) |
+| **Lightning Strike** | DEX DC 15 | Up to 3 targets in 120 ft; 4d6 lightning (half on save). |
+| **Ocean Currents** | STR DC 15 | Single target; pulled 30 ft into water + prone on a fail. |
+
+## Copper Dragon — rocky highland lair
+
+*Slugs: `adult-copper-dragon`, `ancient-copper-dragon`. RAW MM p.113.*
+
+| Action | Save | Effect |
+|---|---|---|
+| **Rock Storm** | DEX DC 15 | 20-ft-radius sphere; 3d6 bludgeoning (half on save). |
+| **Slippery Earth** | DEX DC 15 | 20-ft-radius sphere; ground becomes slick — prone on a fail. |
+| **Hilarious Magic** | WIS DC 15 | Up to 2 targets; charmed (harmless, laughing) until start of next turn. |
+
+## Gold Dragon — auric lair
+
+*Slugs: `adult-gold-dragon`, `ancient-gold-dragon`. RAW MM p.116.*
+
+| Action | Save | Effect |
+|---|---|---|
+| **Burning Veil** | DEX DC 15 | 20-ft-radius sphere; 3d6 fire (half on save). |
+| **Calming Aura** | WIS DC 15 | 20-ft radius around dragon; can't attack (charmed/pacified) on a fail. |
+| **Shimmering Visions** | WIS DC 15 | Single target; frightened until the dragon takes another lair action. |
+
+## Silver Dragon — mountain lair
+
+*Slugs: `adult-silver-dragon`, `ancient-silver-dragon`. RAW MM p.119.*
+
+| Action | Save | Effect |
+|---|---|---|
+| **Rolling Mist** | — | 20-ft-radius mist sphere; heavily obscured, lingers. (GM places it.) |
+| **Treacherous Ice** | DEX DC 15 | 20-ft radius becomes difficult terrain (ice); prone on a fail. |
+| **Wintry Blast** | CON DC 15 | 20-ft-radius sphere; 3d6 cold (half on save). |
+
+---
+
+# Non-dragon lairs (v2.378.0 backfill)
+
+Single-slug entries (no age variants, unlike dragons). Same lair-action data shape as dragons; **no regional effects authored** for these yet (filed follow-up).
+
+## Lich — phylactery / necromantic lair
+
+*Slug: `lich`. RAW MM p.202.*
+
+| Action | Save | Effect |
+|---|---|---|
+| **Spectral Grasp** | WIS DC 18 | Single target within 30 ft; 3d6 necrotic + restrained until end of lich's next turn. |
+| **Necrotic Surge** | CON DC 18 | 30-ft-radius sphere around lich; 4d6 necrotic (half on save). |
+| **Memory Shred** | WIS DC 18 | Single target within 60 ft; silenced (no verbal-component casting) until end of target's next turn. |
+
+## Kraken — submerged ocean lair
+
+*Slug: `kraken`. RAW MM p.197.*
+
+| Action | Save | Effect |
+|---|---|---|
+| **Stormy Currents** | STR DC 15 | 60-ft sphere around kraken; pushed 30 ft + prone on a fail. |
+| **Lightning Storm** | DEX DC 15 | Up to 3 targets in 120 ft; 3d6 lightning (half on save). |
+| **Black Ink Cloud** | — | 30-ft-radius ink sphere; heavily obscured, lingers (underwater). (GM places it.) |
+
+---
+
 ## See also
 
-- [Legendary actions + lair actions design plan](../plans/legendary-actions.md) — the full implementation roadmap (Phases 1–3 + regional effects + fade tracker).
+- [Legendary actions + lair actions design plan](../plans/legendary-actions.md) — the full implementation roadmap (Phases 1–3 + regional effects + fade tracker + the v2.377.0/.378.0/.379.0 closure).
 - `app/content/lair_actions.py` / `app/content/regional_effects.py` — the source of truth this catalog mirrors. Edit those, then refresh this page.
+- `_LAIR_ACTION_CONDITION_BUFFS` in `app/routes/tabletop_routes.py` — the condition-key → buff template map the v2.379.0 closure extended.
