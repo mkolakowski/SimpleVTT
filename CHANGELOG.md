@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.352.1] - 2026-06-15 — "The Updated Ledger"
+
+**Schema version:** 69
+
+**Commit summary:** Doc-only refresh of the v2.344.5 stub-triage in [`magic-items-automation.md`](docs/plans/magic-items-automation.md) after a six-item wiring run (v2.345.0 → v2.352.0). Marks the newly-shipped items ✅ in the bucket tables, recomputes the functional/stub split, and updates the recommended batch order.
+
+**Description:** Six items completed off the triage since the last refresh: `luck-blade` (B), `staff-of-withering` + `staff-of-striking` (C), `pipes-of-haunting` + `rod-of-rulership` + `trident-of-fish-command` (A). Recomputed live counts (post-v2.352.0): of 241 wired slugs, **143 are functional** (139 catalog-mechanical + 4 rider-only) and **98 are genuinely-bare GM-narrated stubs** (was 138 / 103 at v2.345.1). The actionable subset drops **~21 → ~15**. Added a Status column to the Bucket A + C tables, a progress banner, and a reordered next-batch recommendation (the remaining Wand-of-Fear-handler condition-casters first, since they're near-zero-code clones). PATCH — doc-only; plan doc already wiki-surfaced.
+
+### Changed
+- `docs/plans/magic-items-automation.md`: Phase 9.1 progress banner + current-count recompute (143 functional / 98 bare); Status columns on Bucket A + C marking the six shipped items; recommended batch order updated.
+
 ## [2.352.0] - 2026-06-15 — "The Tide-Caller"
 
 **Schema version:** 69

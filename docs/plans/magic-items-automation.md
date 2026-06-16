@@ -13,24 +13,28 @@
 
 After the v2.316–v2.344 content sprint, **235/239 SRD magic items are wired** (registered + collectible).
 
-> **Count correction (v2.345.1).** The original v2.344.5 figures ("133 mechanical / 108 bare stubs / ~26 automatable") were computed by inspecting only the *static* `_MAGIC_ITEM_PASSIVES` catalog payload. That under-counted the items wired via a **per-instance seed rider** — where the catalog entry is intentionally generic (`requires_attunement` only) and the specifics ride the inventory item (`_resistance_type`, `_ability_set`, `_ac_bonus`, …). Four items flagged as "bare stubs" are in fact already mechanically live + tested via the `_resistance_type` rider: **`armor-of-resistance`, `ring-of-resistance`, `dragon-scale-mail`, `ring-of-elemental-command`** (each has a `test_item_<slug>.py`). Plus **`luck-blade`** was wired in v2.345.0 (Bucket B). Corrected counts (post-v2.345.0): of 241 wired slugs, **138 are functional** (134 catalog-mechanical + 4 rider-only) and **103 are genuinely-bare GM-narrated stubs**. The actionable subset drops to **~21 items**; the remaining **~82 stay announce-only by design** (archetype J — summons, planar travel, wish, one-shot consumables, containers, capture/imprison, exploration utility). Counts are approximate at the margins (a few items straddle two buckets).
+> **Count correction (v2.345.1).** The original v2.344.5 figures ("133 mechanical / 108 bare stubs / ~26 automatable") were computed by inspecting only the *static* `_MAGIC_ITEM_PASSIVES` catalog payload. That under-counted the items wired via a **per-instance seed rider** — where the catalog entry is intentionally generic (`requires_attunement` only) and the specifics ride the inventory item (`_resistance_type`, `_ability_set`, `_ac_bonus`, …). Four items flagged as "bare stubs" are in fact already mechanically live + tested via the `_resistance_type` rider: **`armor-of-resistance`, `ring-of-resistance`, `dragon-scale-mail`, `ring-of-elemental-command`** (each has a `test_item_<slug>.py`).
+>
+> **Progress (v2.345.0 → v2.352.0).** Six items wired off this triage: **`luck-blade`** (B, v2.345.0 — `save_bonus`); **`staff-of-withering`** (C, v2.346.0 — +2d10 necrotic + the new `ability_disadvantage` on-hit-save rider, built on the v2.347.0 generalized `disadvantage_on` intercept); **`staff-of-striking`** (C, v2.349.0 — +1d6 force); **`pipes-of-haunting`** (A, v2.350.0 — radius frighten), **`rod-of-rulership`** (A, v2.351.0 — radius charm, 1/dawn), **`trident-of-fish-command`** (A, v2.352.0 — single-target dominate beast) all on the generalized Wand of Fear handler.
+>
+> **Current counts (post-v2.352.0):** of 241 wired slugs, **143 are functional** (139 catalog-mechanical + 4 rider-only) and **98 are genuinely-bare GM-narrated stubs**. The actionable subset is now **~15 items**; the remaining **~82 stay announce-only by design** (archetype J — summons, planar travel, wish, one-shot consumables, containers, capture/imprison, exploration utility). Counts are approximate at the margins (a few items straddle two buckets).
 
 ### Bucket A — charge-cast a save/attack spell → `_MAGIC_ITEM_ACTIONS` cast-spell template (~10)
 
 The strongest template (the Wand of Fear / charged-wand pattern already shipped). Each casts a defined spell with a fixed save DC or spell attack; wire the action + DC + condition/damage dispatch.
 
-| Slug | RAW effect | Wire as |
-|---|---|---|
-| `pipes-of-haunting` | DC 15 WIS or frightened 1 min (30 ft) | save → `frighten` |
-| `rod-of-rulership` | DC = 8+prof+CHA WIS save or charmed/obey 1 min | save → charmed condition |
-| `trident-of-fish-command` | dominate beast (DC 15) on a beast | cast-spell action (charge) |
-| `ring-of-animal-influence` | animal friendship / fear / speak-with-animals (charges) | cast-spell action |
-| `circlet-of-blasting` | scorching ray (3 × spell attack, 2d6 fire) | spell-attack action |
-| `ring-of-shooting-stars` | ranged radiant motes + dancing lights/light | spell-attack / damage action |
-| `robe-of-scintillating-colors` | DC 15 WIS or attackers gain advantage (dazzle) | save → debuff condition |
-| `rope-of-entanglement` | DC 15 STR or restrained | save → restrained |
-| `wind-fan` | gust of wind (DC 13) | cast-spell action |
-| `medallion-of-thoughts` | detect thoughts (DC 13) | cast-spell action (utility) |
+| Slug | RAW effect | Wire as | Status |
+|---|---|---|---|
+| `pipes-of-haunting` | DC 15 WIS or frightened 1 min (30 ft) | Wand of Fear handler → frightened | ✅ shipped v2.350.0 |
+| `rod-of-rulership` | DC 15 WIS save or charmed/obey 1 min (120 ft) | Wand of Fear handler → charmed, 1/dawn | ✅ shipped v2.351.0 |
+| `trident-of-fish-command` | dominate beast (DC 15) on a beast | Wand of Fear handler → charmed, single | ✅ shipped v2.352.0 |
+| `ring-of-animal-influence` | animal friendship / fear / speak-with-animals (charges) | Wand of Fear handler (charmed/frightened) | ⚪ |
+| `circlet-of-blasting` | scorching ray (3 × spell attack, 2d6 fire) | spell-attack action (new shape) | ⚪ |
+| `ring-of-shooting-stars` | ranged radiant motes + dancing lights/light | spell-attack / damage action | ⚪ |
+| `robe-of-scintillating-colors` | DC 15 WIS or attackers gain advantage (dazzle) | save → debuff condition | ⚪ |
+| `rope-of-entanglement` | DC 15 STR or restrained | Wand of Fear handler → restrained | ⚪ |
+| `wind-fan` | gust of wind (DC 13) | cast-spell action | ⚪ |
+| `medallion-of-thoughts` | detect thoughts (DC 13) | cast-spell action (utility) | ⚪ |
 
 ### Bucket B — passive numeric buff → mechanical `_MAGIC_ITEM_PASSIVES` (`effects.*`) (~9)
 
@@ -50,15 +54,15 @@ Always-on bonuses the engine already reads (resistance via `_resistance_halve`, 
 
 ### Bucket C — on-hit / crit weapon rider → `_MAGIC_ITEM_ATTACK_RIDERS` (~7)
 
-| Slug | RAW effect | Wire as |
-|---|---|---|
-| `staff-of-withering` | on hit: +2d10 necrotic + DC 15 CON or disadvantage | `on_hit_save: damage_condition` |
-| `staff-of-striking` | expend 1–3 charges → +1d6 force per charge on hit | on-hit `bonus_dice` |
-| `sword-of-wounding` | recurring 1d4 necrotic/turn, DC 15 CON to end | on-hit recurring-damage condition (new) |
-| `oathbow` | vs sworn enemy: +3d6 piercing + advantage | conditional rider (declared-enemy state) |
-| `berserker-axe` | +1 (baked); HP-max +level while attuned; berserk save | HP-max passive + on-damage WIS save |
-| `talisman-of-pure-good` | 6d6 radiant to non-good on touch | situational rider (low priority) |
-| `talisman-of-ultimate-evil` | 6d6 necrotic to non-evil on touch | situational rider (low priority) |
+| Slug | RAW effect | Wire as | Status |
+|---|---|---|---|
+| `staff-of-withering` | on hit: +2d10 necrotic + DC 15 CON or disadvantage | always-on `dice` rider + `ability_disadvantage` on-hit-save | ✅ shipped v2.346.0 / v2.348.0 |
+| `staff-of-striking` | expend 1–3 charges → +1d6 force per charge on hit | always-on `dice` rider (+1d6) | ✅ shipped v2.349.0 |
+| `sword-of-wounding` | recurring 1d4 necrotic/turn, DC 15 CON to end | on-hit recurring-damage condition (new) | ⚪ |
+| `oathbow` | vs sworn enemy: +3d6 piercing + advantage | conditional rider (declared-enemy state) | ⚪ |
+| `berserker-axe` | +1 (baked); HP-max +level while attuned; berserk save | HP-max passive + on-damage WIS save | ⚪ |
+| `talisman-of-pure-good` | 6d6 radiant to non-good on touch | situational rider (low priority) | ⚪ |
+| `talisman-of-ultimate-evil` | 6d6 necrotic to non-evil on touch | situational rider (low priority) | ⚪ |
 
 ### Bucket D — inherently GM-narrated (stays announce-only, archetype J) (~82)
 
@@ -74,7 +78,7 @@ No clean engine template; the effect is narrative, out-of-combat, or needs syste
 - **Exploration / utility:** chime-of-opening, immovable-rod, rope-of-climbing, horseshoes-of-a-zephyr, horseshoes-of-speed, lantern-of-revealing, rod-of-lordly-might, apparatus-of-the-crab, cube-of-force, crystal-ball, helm-of-comprehending-languages, pipes-of-the-sewers, candle-of-invocation, necklace-of-prayer-beads
 - **Reaction / spell-store / regen / misc:** rod-of-absorption, gloves-of-missile-snaring, ring-of-evasion, ring-of-spell-storing, ring-of-regeneration, ring-of-telekinesis, ring-of-invisibility, defender, hammer-of-thunderbolts, mithral-armor
 
-**Recommended batch order (updated v2.345.1):** ~~Bucket B resistance trio~~ (already live via `_resistance_type`) and ~~`luck-blade`~~ (shipped v2.345.0) are done. Next: (1) Bucket C `staff-of-withering` + `staff-of-striking` (the `damage_condition` / `bonus_dice` riders already shipped for Dagger of Venom / Dwarven Thrower); (2) Bucket A condition-casters (`pipes-of-haunting`, `rod-of-rulership`, `rope-of-entanglement`) reusing the `frighten` / save-to-condition dispatch; (3) Bucket B `adamantine-armor` (needs a new `crits_become_normal` passive) + the two `staff-of-the-*` spell-DC items (need a new `spell_attack_bonus`/`spell_dc_bonus` passive).
+**Recommended batch order (updated v2.352.1):** Done so far — Bucket B resistance trio (already live), `luck-blade` (v2.345.0), Bucket C `staff-of-withering` (v2.346.0/.348.0) + `staff-of-striking` (v2.349.0), Bucket A `pipes-of-haunting` (v2.350.0) + `rod-of-rulership` (v2.351.0) + `trident-of-fish-command` (v2.352.0). **~15 actionable items remain.** Next, cheapest first: (1) the rest of Bucket A's Wand-of-Fear-handler condition-casters — `ring-of-animal-influence` (charmed/frightened), `rope-of-entanglement` (restrained), `robe-of-scintillating-colors` (debuff) — same near-zero-code clone path; (2) Bucket C `sword-of-wounding` (needs a recurring-damage condition) + `oathbow` (declared-enemy conditional rider); (3) Bucket B `adamantine-armor` (new `crits_become_normal` passive) + the two `staff-of-the-*` spell-DC items (new `spell_attack_bonus`/`spell_dc_bonus` passive); (4) the spell-attack-shape Bucket A items (`circlet-of-blasting`, `ring-of-shooting-stars`) which need a new attack-spell action shape.
 
 ---
 
