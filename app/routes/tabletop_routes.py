@@ -20057,15 +20057,14 @@ async def cast_spell(
     if save_ability in {"STR", "DEX", "CON", "INT", "WIS", "CHA"} and (
         target_combatant_id or target_character_id_in
     ):
-        # Spell save DC = 8 + caster proficiency + spellcasting mod.
+        # Spell save DC = 8 + caster proficiency + spellcasting mod, plus any
+        # equipped-item spell-DC bonus. v2.359.0 — route through the shared
+        # `_compute_spell_save_dc_from_sheet` so the Staff of the Woodlands /
+        # Magi `spell_dc_bonus` (+2) applies to real spellcasting, not just
+        # the item-action "spell"-sentinel path (was computed inline here,
+        # bypassing the item bonus).
         caster_sheet = char.sheet or {}
-        caster_prof = int(caster_sheet.get("proficiency_bonus") or 2)
-        caster_spc = (caster_sheet.get("spellcasting_ability") or "").strip().upper()[:3]
-        if caster_spc not in {"STR", "DEX", "CON", "INT", "WIS", "CHA"}:
-            caster_spc = "WIS"  # safe fallback for non-spellcaster casts (shouldn't happen)
-        caster_ab = int((caster_sheet.get("abilities") or {}).get(caster_spc, 10))
-        caster_spc_mod = (caster_ab - 10) // 2
-        auto_save_dc = 8 + caster_prof + caster_spc_mod
+        auto_save_dc = _compute_spell_save_dc_from_sheet(caster_sheet)
 
         target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
         if not target_combatant and target_character_id_in:
@@ -33081,6 +33080,16 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "staff-of-the-woodlands": [
         {"spell_dc_bonus": 2, "requires_attunement": True},
     ],
+    # v2.359.0 — Staff of the Magi (RAW DMG p.202, legendary, attunement by
+    # a sorcerer/warlock/wizard). Reuses the v2.358.0 `spell_dc_bonus`
+    # passive: "you gain a +2 bonus to spell attack rolls and spell saving
+    # throw DCs." v1 wires the +2 spell save DC (the +2 spell attack bonus
+    # is GM-narrated). The 50-charge spell list (fireball, lightning bolt,
+    # web, passwall, dispel magic, …), spell absorption, and retributive
+    # strike are GM-narrated; the +2 quarterstaff is baked.
+    "staff-of-the-magi": [
+        {"spell_dc_bonus": 2, "requires_attunement": True},
+    ],
     # v2.212.0 — Belt of Giant Strength (RAW DMG p.155, requires
     # attunement; see docs/plans/str-override.md). While worn, your STR
     # *changes* to the belt's score — but only if higher (RAW). The
@@ -33885,9 +33894,10 @@ for _rem_slug, _rem_attune in [
     # in v2.350.0 — registered via `_MAGIC_ITEM_ACTIONS`.
     # trident-of-fish-command promoted to a charge-cast action (dominate
     # beast) in v2.352.0 — registered via `_MAGIC_ITEM_ACTIONS`.
-    ("staff-of-the-magi", True), ("staff-of-the-python", True),
-    # staff-of-the-woodlands promoted to a mechanical passive (+2 spell save
-    # DC) in v2.358.0 — explicit `_MAGIC_ITEM_PASSIVES` entry.
+    ("staff-of-the-python", True),
+    # staff-of-the-magi (v2.359.0) + staff-of-the-woodlands (v2.358.0)
+    # promoted to mechanical passives (+2 spell save DC) — explicit
+    # `_MAGIC_ITEM_PASSIVES` entries.
     # staff-of-withering (v2.346.0) + staff-of-striking (v2.349.0) promoted
     # to mechanical attack riders — registered via `_MAGIC_ITEM_ATTACK_RIDERS`.
 ]:

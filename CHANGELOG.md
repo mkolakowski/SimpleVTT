@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.359.0] - 2026-06-16 — "The Archmage's Staff"
+
+**Schema version:** 69
+
+**Commit summary:** **Staff of the Magi** (RAW DMG p.202, legendary, attunement) promoted from an "Armory's Remainder" catalog stub to a mechanical passive — the one-line follow-up the v2.358.0 `spell_dc_bonus` substrate set up: while equipped+attuned it grants **+2 to the wielder's spell save DC**. One harness test via Thalindra Moonwhisper (Fireball's `auto_save_dc`).
+
+**Description:** A near-pure data drop-in on the v2.358.0 `spell_dc_bonus` engine — `_MAGIC_ITEM_PASSIVES["staff-of-the-magi"] = [{spell_dc_bonus: 2, requires_attunement: True}]`, promoted out of the Armory's Remainder passive `setdefault` loop. **Plus a substrate fix:** `/cast_spell` computed its `auto_save_dc` *inline* (duplicating the DC formula) and so bypassed the equipped-item bonus — meaning the v2.358.0 Woodlands wiring only applied to item-action `"spell"`-sentinel DCs, not to actual spellcasting. v2.359.0 routes `/cast_spell` through the now-bonus-aware `_compute_spell_save_dc_from_sheet`, so **both staffs' +2 now applies to real save-spell casts** (Fireball, etc.), not just item actions. No demo-seed change (the staff stays inert Armory loot; the test uses the seed-inert + PATCH-equipped+attuned pattern + a long rest to refresh the spell slot between the baseline and boosted casts). **v1 simplifications (GM-narrated):** the +2 spell *attack* bonus, the 50-charge spell list (fireball, lightning bolt, web, passwall, dispel magic, …), spell absorption, and retributive strike. The +2 quarterstaff is baked. MINOR — additive content + a save-DC chokepoint fix + test, no schema change.
+
+### Added
+- `_MAGIC_ITEM_PASSIVES["staff-of-the-magi"]` — `[{spell_dc_bonus: 2, requires_attunement: True}]` (promoted out of the Armory bulk-stub loop).
+- `tests/harness/test_item_staff_of_the_magi.py` — 1 test (Fireball's `auto_save_dc` is exactly +2 with the staff equipped+attuned vs inert).
+
+### Fixed
+- `/cast_spell` `auto_save_dc` now routes through `_compute_spell_save_dc_from_sheet` instead of an inline duplicate of the DC formula, so equipped-item `spell_dc_bonus` (Staff of the Woodlands / Magi) applies to real spellcasting — completing the v2.358.0 wiring (which previously only affected item-action spell-sentinel DCs).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3024 → 3025 (+1 Staff of the Magi test); new section.
+
 ## [2.358.0] - 2026-06-16 — "The Druid's Focus"
 
 **Schema version:** 69
