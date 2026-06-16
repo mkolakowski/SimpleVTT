@@ -138,20 +138,53 @@ async def test_aid_base_l2_grants_5_hp(gm_client, caelan, pip):
     await _end_aid(gm_client, pip["id"])
 
 
+async def _patch_slot(gm_client, char_id, class_slug, level, total=1):
+    """PATCH a temporary spell slot of the given level onto the
+    caster — Caelan (Paladin Lv 7) natively has only L1/L2 slots, so
+    upcast tests need to seed a higher-level slot. Returns the
+    original spell_slots dict for finally-restore."""
+    sheet_r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-json",
+    )
+    sheet = (sheet_r.json() or {}).get("sheet") or {}
+    snap = dict(sheet.get("spell_slots") or {})
+    new_slots = {**snap}
+    new_slots.setdefault(class_slug, {})
+    new_slots[class_slug] = dict(new_slots[class_slug])
+    new_slots[class_slug][str(level)] = {"total": total, "used": 0}
+    await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-fields",
+        json={"spell_slots": new_slots},
+    )
+    return snap
+
+
+async def _restore_slots(gm_client, char_id, snap):
+    await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-fields",
+        json={"spell_slots": snap},
+    )
+
+
 async def test_aid_l3_upcast_grants_10_hp(gm_client, caelan, pip):
     """Cast at L3 → installed buff carries `aid_hp_bonus: 10` (RAW: +5
-    per slot level above 2nd)."""
+    per slot level above 2nd). PATCHes a temp L3 slot onto Caelan
+    since Paladin Lv 7 natively only has L1/L2."""
     await _end_aid(gm_client, pip["id"])
-    pip_tok, _ = await _seed_battle(gm_client, caelan, pip)
-    resp = await _cast_aid(gm_client, caelan, pip, pip_tok, slot_level=3)
-    assert resp.status_code == 200, resp.text
-    buff = await _pip_aid_buff(gm_client, pip["id"])
-    assert buff is not None, "Aid not installed"
-    assert (buff.get("effects") or {}).get("aid_hp_bonus") == 10, (
-        f"L3 Aid should grant +10 (5 base + 5 per upcast level); "
-        f"got {(buff.get('effects') or {}).get('aid_hp_bonus')!r}"
-    )
-    await _end_aid(gm_client, pip["id"])
+    slot_snap = await _patch_slot(gm_client, caelan["id"], "paladin", 3)
+    try:
+        pip_tok, _ = await _seed_battle(gm_client, caelan, pip)
+        resp = await _cast_aid(gm_client, caelan, pip, pip_tok, slot_level=3)
+        assert resp.status_code == 200, resp.text
+        buff = await _pip_aid_buff(gm_client, pip["id"])
+        assert buff is not None, "Aid not installed"
+        assert (buff.get("effects") or {}).get("aid_hp_bonus") == 10, (
+            f"L3 Aid should grant +10 (5 base + 5 per upcast level); "
+            f"got {(buff.get('effects') or {}).get('aid_hp_bonus')!r}"
+        )
+    finally:
+        await _end_aid(gm_client, pip["id"])
+        await _restore_slots(gm_client, caelan["id"], slot_snap)
 
 
 async def test_aid_l5_upcast_grants_20_hp(gm_client, caelan, pip):

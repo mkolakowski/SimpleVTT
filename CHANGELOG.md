@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.371.1] - 2026-06-16 — "The Borrowed Slot"
+
+**Schema version:** 69
+
+**Commit summary:** Test-only fix on the v2.371.0 Aid upcast harness. `test_aid_l3_upcast_grants_10_hp` cast Aid at L3 from Caelan but Paladin Lv 7 only natively has L1/L2 spell slots, so the cast returned 409 `no_slot`. Added a `_patch_slot` helper that mirrors the v2.371.0 L5 test's pattern: PATCH a temporary L3 slot onto Caelan, run the cast, restore the original `spell_slots` dict in finally.
+
+PATCH — test-correctness fix, no engine or schema change.
+
+### Fixed
+- `tests/harness/test_cast_aid_upcast.py::test_aid_l3_upcast_grants_10_hp` — PATCHes a temporary L3 spell slot onto Caelan via a shared `_patch_slot`/`_restore_slots` helper pair. Symmetric with the L5 test's existing slot-PATCH.
+
 ## [2.371.0] - 2026-06-16 — "The Layered Blessing"
 
 **Schema version:** 69
