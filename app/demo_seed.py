@@ -5266,6 +5266,17 @@ def _monk_sheet(name: str) -> dict:
              "desc": "Hermit background — pouches, mortar + pestle, dried herbs."},
             {"name": "Scroll case with prayers", "type": "gear", "qty": 1,
              "desc": "Hermit background trinket — Kael's reflections from years in the wilderness."},
+            # v2.355.0 — Rope of Entanglement (RAW DMG p.198, rare, NO
+            # attunement). Promoted out of the v2.342.0 Vault bulk loot into
+            # an explicit equipped item. Runs through the generalized Wand of
+            # Fear handler with the restrained condition; the catalog flags
+            # it `unlimited: True` so it needs NO charge resource (RAW: at-
+            # will command word, limited only by the rope's own AC 20/20 HP,
+            # GM-narrated). Thematic on Kael (a Monk who fights to restrain).
+            {"name": "Rope of Entanglement", "type": "wondrous", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 3,
+             "_slug": "rope-of-entanglement",
+             "desc": "Rare wondrous item, no attunement. 30-ft rope. Action (command word): the rope darts to entangle a creature within 20 ft — DC 15 DEX save or restrained until you release it (bonus action). At-will (no charges); the rope has AC 20, 20 HP. RAW DMG p.198."},
             {"name": "Potion of Healing", "type": "consumable", "qty": 1,
              "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
              "_slug": "potion-of-healing",
@@ -6853,7 +6864,6 @@ def seed_characters(
         ("Kael Brightleaf", "dust-of-dryness", "Dust of Dryness", "consumable", "Uncommon. A packet of 1d6+4 pinches; one pinch absorbs a 15-ft cube of water into a marble-sized pellet (shatter to release). RAW DMG p.166."),
         ("Kael Brightleaf", "gloves-of-missile-snaring", "Gloves of Missile Snaring", "magic", "Uncommon, attunement. Reaction when hit by a ranged weapon attack: reduce the damage by 1d10 + DEX mod; if reduced to 0 and you have a free hand, you catch the missile. RAW DMG p.171."),
         ("Kael Brightleaf", "ring-of-evasion", "Ring of Evasion", "magic", "Rare, attunement. 3 charges (regain 1d3 at dawn). Reaction when you fail a DEX save: expend 1 charge to succeed instead. RAW DMG p.191."),
-        ("Kael Brightleaf", "rope-of-entanglement", "Rope of Entanglement", "magic", "Rare. 30-ft rope; action to command it to entangle a creature within 20 ft (DC 15 DEX save or restrained; DC 15 STR to break free). AC 20, 20 HP. RAW DMG p.197."),
         ("Zara Emberfire", "circlet-of-blasting", "Circlet of Blasting", "magic", "Uncommon. Action: cast scorching ray (3 rays, +5 to hit, 2d6 fire each) from it (1/dawn). RAW DMG p.158."),
         ("Zara Emberfire", "orb-of-dragonkind", "Orb of Dragonkind", "magic", "Artifact, attunement. Advantage on saves vs dragon Frightful Presence/breath; while holding it you can cast a charge-fueled spell + attempt to dominate a dragon within 1 mile. RAW DMG p.156."),
         ("Zara Emberfire", "ring-of-djinni-summoning", "Ring of Djinni Summoning", "magic", "Legendary, attunement. Action: summon a specific djinni (1/dawn) that serves + obeys you for up to 1 hour. RAW DMG p.190."),

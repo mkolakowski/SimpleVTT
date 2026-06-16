@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3016 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.354.0, 2026-06-16).
+**Total tests:** 3018 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.355.0, 2026-06-16).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3558,6 +3558,14 @@ v2.347.0 engine — the `effects.disadvantage_on` roll intercept generalized fro
 | `test_con_save_disadvantage_fires` | `disadvantage_on=["con_save"]` → a CON save rolls `2d20kl1` + a `disadvantage-con_save` broadcast fires. |
 | `test_str_save_disadvantage_fires` | `disadvantage_on=["str_save"]` → a STR save rolls `2d20kl1` (saves were previously uncovered). |
 | `test_marker_specificity_control` | A `con_save`-only buff does NOT impose disadvantage on a `con_check` roll (marker specificity). |
+
+### `test_use_item_action_rope_of_entanglement.py`
+v2.355.0 magic-items — Rope of Entanglement (RAW DMG p.198, rare, no attunement), sixth Bucket A item and the first `unlimited` (no-charge) item on the shared Wand of Fear handler. DC 15 DEX save or restrained, at will. Carrier: Kael Brightleaf (equipped, NO charge resource).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_rope_entangle_one_target` | Entangle at 1 NPC target → 200, item_name "Rope of Entanglement", save_dc 15, save_ability DEX, charges_spent 0, resource None, id in results. |
+| `test_rope_is_unlimited` | A second invocation also returns 200 (resource None) — the unlimited path never depletes (no `insufficient_charges`). |
 
 ### `test_use_item_action_robe_of_scintillating_colors.py`
 v2.354.0 magic-items — Robe of Scintillating Colors (RAW DMG p.194, very rare, attunement), fifth Bucket A charge-cast item; first to install `stunned` via the shared handler. Runs on `/use_item_action` → Wand of Fear handler (30-ft radius, DC 15 WIS save or stunned 1 round, 3 charges). Carrier: Lyra Sunstrider (equipped+attuned + `robe-of-scintillating-colors` resource).

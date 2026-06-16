@@ -33823,7 +33823,9 @@ for _vault_slug, _vault_attune in [
     ("rod-of-lordly-might", True),
     # rod-of-rulership promoted to a charge-cast action (radius charm) in
     # v2.351.0 — registered via `_MAGIC_ITEM_ACTIONS`.
-    ("rod-of-security", False), ("rope-of-entanglement", False),
+    ("rod-of-security", False),
+    # rope-of-entanglement promoted to an unlimited charge-cast action
+    # (restrained) in v2.355.0 — registered via `_MAGIC_ITEM_ACTIONS`.
     ("shield-of-missile-attraction", True), ("sphere-of-annihilation", False),
     ("talisman-of-pure-good", True), ("talisman-of-the-sphere", True),
     ("talisman-of-ultimate-evil", True), ("well-of-many-worlds", False),
@@ -34648,6 +34650,39 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
                     "attack rolls against it have advantage",
                 ],
                 "feature_name": "🌈 Robe of Scintillating Colors",
+            },
+        },
+    },
+    # v2.355.0 — Rope of Entanglement (RAW DMG p.198, rare, NO attunement).
+    # Sixth Bucket-A item on the generalized Wand of Fear handler, and the
+    # first **`unlimited`** (no-charge) item: a command-word action sends
+    # the rope to entangle a creature within 20 ft → DC 15 DEX save or
+    # restrained until released (RAW: no daily charges — the only limit is
+    # the rope's own AC 20 / 20 HP, GM-narrated). The `unlimited: True`
+    # flag tells the handler to skip the resource lookup + decrement. The
+    # bonus-action release is GM-narrated; v1 installs `restrained` for a
+    # long duration.
+    "rope-of-entanglement": {
+        "requires_attunement": False,
+        "unlimited": True,
+        "actions": {
+            "entangle": {
+                "name": "Entangle (20 ft)",
+                "save_dc": 15,
+                "save_ability": "DEX",
+                "min_charges": 1,
+                "max_charges": 1,
+                "duration_rounds": 100,
+                "target_shape": "single",
+                "condition_key": "restrained",
+                "condition_label": "Restrained",
+                "condition_icon": "🪢",
+                "condition_effects": [
+                    "speed 0; can't benefit from any bonus to speed",
+                    "attack rolls against it have advantage; its attacks have disadvantage",
+                    "disadvantage on DEX saving throws",
+                ],
+                "feature_name": "🪢 Rope of Entanglement",
             },
         },
     },
@@ -83903,7 +83938,10 @@ async def use_item_action(
                 "ring-of-animal-influence",
                 # v2.354.0 — Robe of Scintillating Colors — radius stunned
                 # (DC 15 WIS), 3 charges.
-                "robe-of-scintillating-colors"):
+                "robe-of-scintillating-colors",
+                # v2.355.0 — Rope of Entanglement — single-target restrained
+                # (DC 15 DEX), unlimited (no-charge).
+                "rope-of-entanglement"):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_wand_of_fear(
             db, campaign_id, char, item, sheet, catalog,
@@ -86029,6 +86067,11 @@ async def _use_item_action_wand_of_fear(
     reproduce the original Wand of Fear (WIS → frightened) verbatim.
     """
     res_key = str(catalog.get("resource_key") or slug)
+    # v2.355.0 — `unlimited` items (Rope of Entanglement) have no charge
+    # pool: they're command-word usable at will (RAW limit is the item's
+    # own HP, not a daily charge). Skip the resource lookup + decrement
+    # entirely when the catalog flags `unlimited: True`.
+    unlimited = bool(catalog.get("unlimited"))
 
     # Charge validation (v1: always 1, but kept symmetric with the
     # necklace so a future "spend N charges to upcast" upgrade is a
@@ -86048,28 +86091,32 @@ async def _use_item_action_wand_of_fear(
 
     resources = list(sheet.get("resources") or [])
     res_idx = -1
-    for i, r in enumerate(resources):
-        if isinstance(r, dict) and (r.get("key") or "").lower() == res_key:
-            res_idx = i
-            break
-    if res_idx < 0:
-        raise HTTPException(
-            409,
-            f"No {res_key!r} resource row on sheet — item not bootstrapped",
-        )
-    res_row = dict(resources[res_idx])
-    cur = int(res_row.get("current") or 0)
-    res_max = int(res_row.get("max") or 0)
-    if cur < n_charges:
-        return JSONResponse(
-            status_code=409,
-            content={
-                "error": "insufficient_charges",
-                "current": cur,
-                "requested": n_charges,
-                "label": item.get("name") or slug,
-            },
-        )
+    res_row = None
+    cur = 0
+    res_max = 0
+    if not unlimited:
+        for i, r in enumerate(resources):
+            if isinstance(r, dict) and (r.get("key") or "").lower() == res_key:
+                res_idx = i
+                break
+        if res_idx < 0:
+            raise HTTPException(
+                409,
+                f"No {res_key!r} resource row on sheet — item not bootstrapped",
+            )
+        res_row = dict(resources[res_idx])
+        cur = int(res_row.get("current") or 0)
+        res_max = int(res_row.get("max") or 0)
+        if cur < n_charges:
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "error": "insufficient_charges",
+                    "current": cur,
+                    "requested": n_charges,
+                    "label": item.get("name") or slug,
+                },
+            )
 
     if not isinstance(target_combatant_ids, list):
         raise HTTPException(400, "target_combatant_ids must be a list")
@@ -86141,27 +86188,31 @@ async def _use_item_action_wand_of_fear(
             "passed": sr.get("passed"),
         })
 
-    res_row["current"] = cur - n_charges
-    resources[res_idx] = res_row
-    sheet["resources"] = resources
-    from sqlalchemy.orm.attributes import flag_modified
-    char.sheet = sheet
-    flag_modified(char, "sheet")
-    db.commit()
-
-    try:
-        await hub.broadcast(campaign_id, {
-            "type": "resource_update",
-            "data": {
-                "character_id": char.id,
-                "key": res_key,
-                "current": res_row["current"],
-                "max": res_max,
-            },
-        })
-    except Exception:
-        pass
+    if not unlimited and res_idx >= 0 and res_row is not None:
+        res_row["current"] = cur - n_charges
+        resources[res_idx] = res_row
+        sheet["resources"] = resources
+        from sqlalchemy.orm.attributes import flag_modified
+        char.sheet = sheet
+        flag_modified(char, "sheet")
+        db.commit()
+        try:
+            await hub.broadcast(campaign_id, {
+                "type": "resource_update",
+                "data": {
+                    "character_id": char.id,
+                    "key": res_key,
+                    "current": res_row["current"],
+                    "max": res_max,
+                },
+            })
+        except Exception:
+            pass
     shape = str(action_def.get("target_shape") or "cone")
+    _charges_clause = (
+        "(at will.)" if unlimited
+        else f"({res_row['current']}/{res_max} charges left.)"
+    )
     try:
         await hub.broadcast(campaign_id, {
             "type": "feature_used",
@@ -86173,8 +86224,7 @@ async def _use_item_action_wand_of_fear(
                 "summary": (
                     f"{char.name} unleashes the {item_name} — "
                     f"DC {save_dc} {save_ability} {shape} against "
-                    f"{len(results)} target(s). "
-                    f"({res_row['current']}/{res_max} charges left.)"
+                    f"{len(results)} target(s). {_charges_clause}"
                 ),
             },
         })
@@ -86185,11 +86235,11 @@ async def _use_item_action_wand_of_fear(
         "ok": True,
         "item_name": item.get("name") or slug,
         "action_key": action_key,
-        "charges_spent": n_charges,
+        "charges_spent": 0 if unlimited else n_charges,
         "save_dc": save_dc,
         "save_ability": save_ability,
         "results": results,
-        "resource": {
+        "resource": None if unlimited else {
             "key": res_key,
             "current": res_row["current"],
             "max": res_max,

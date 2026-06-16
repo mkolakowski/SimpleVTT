@@ -51,7 +51,8 @@ _VAULT_BY_CARRIER = {
     ],
     "Kael Brightleaf": [
         "dust-of-dryness", "gloves-of-missile-snaring", "ring-of-evasion",
-        "rope-of-entanglement",
+        # rope-of-entanglement promoted to an unlimited charge-cast action
+        # (v2.355.0) — now an explicit equipped item, no longer a Vault stub.
     ],
     "Zara Emberfire": [
         "circlet-of-blasting", "orb-of-dragonkind",

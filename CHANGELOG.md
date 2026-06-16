@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.355.0] - 2026-06-16 — "The Binding Cord"
+
+**Schema version:** 69
+
+**Commit summary:** Sixth **Bucket-A** magic-item commit off the v2.344.5 stub triage, and the **first `unlimited` (no-charge) item** on the shared Wand of Fear handler. **Rope of Entanglement** (RAW DMG p.198, rare, NO attunement) promoted from a v2.342.0 "Vault" catalog stub to a command-word action: DC 15 DEX save or restrained, usable at will (no daily charges). Seeded equipped on Kael Brightleaf; two harness tests. Small engine addition: an `unlimited` catalog flag that bypasses the handler's charge-pool lookup/decrement.
+
+**Description:** `_use_item_action_wand_of_fear` gains an `unlimited` path — when the catalog flags `unlimited: True`, the handler skips the resource-row lookup, the `insufficient_charges` gate, and the decrement + `resource_update` broadcast; the response reports `charges_spent: 0` and `resource: None`. This models RAW items whose only "limit" isn't a charge pool (Rope of Entanglement is bounded by its own AC 20 / 20 HP, GM-narrated). Rope of Entanglement uses it with the `restrained` condition (DC 15 DEX, single target within 20 ft). Promoted the slug out of the Vault passive `setdefault` loop and out of the bulk `_vault_loot` seed into an explicit equipped rope on Kael (no resource row needed). The bonus-action release is GM-narrated; v1 installs `restrained` for a long duration. MINOR — additive `unlimited` handler capability + item + tests, no schema change.
+
+### Added
+- `unlimited` flag support in `_use_item_action_wand_of_fear` (`app/routes/tabletop_routes.py`) — skips the charge resource lookup/decrement; `charges_spent: 0`, `resource: None`.
+- `_MAGIC_ITEM_ACTIONS["rope-of-entanglement"]` — `{requires_attunement: False, unlimited: True, actions: {entangle: {save_dc: 15, save_ability: DEX, restrained, target_shape: single, …}}}`; slug added to the handler dispatch tuple.
+- Demo seed: explicit equipped **Rope of Entanglement** on Kael Brightleaf (no charge resource).
+- `tests/harness/test_use_item_action_rope_of_entanglement.py` — 2 tests (entangle at 1 target → DC 15 DEX, charges_spent 0, resource None, id in results; a second invocation also succeeds — proves the unlimited path never depletes).
+
+### Changed
+- `tests/harness/test_vault_stub_loot.py`: removed `rope-of-entanglement` from Kael's Vault-stub assertion list (it's an explicit equipped item now).
+- `docs/test-harness-coverage.md`: harness total 3016 → 3018 (+2 Rope of Entanglement tests); new section.
+
 ## [2.354.0] - 2026-06-16 — "The Dazzling Weave"
 
 **Schema version:** 69
