@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3040 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.363.0, 2026-06-16).
+**Total tests:** 3042 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.364.0, 2026-06-16).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3640,6 +3640,14 @@ v2.346.0 magic-items — Staff of Withering (RAW DMG p.202, rare, attunement), B
 | `test_staff_of_withering_save_fires_on_hit` | A hit vs a Bandit → `feature_used` source `item-staff-of-withering-save`, dc 15, ability CON (v2.348.0 `ability_disadvantage` dispatch). |
 | `test_staff_of_withering_withers_on_failed_save` | Sweep seeds until the Bandit fails → the `withered` buff is installed carrying `effects.disadvantage_on` with the STR/CON check+save markers. |
 | `test_staff_of_withering_requires_attunement` | Equipped-but-unattuned → the necrotic rider does not fire (attunement gate). |
+
+### `test_item_adamantine_armor.py`
+v2.364.0 magic-items — Adamantine Armor (RAW DMG p.150, uncommon, NO attunement), Bucket B passive on the new `crits_become_normal` substrate. The /attack + /npc_attack pipelines call `_target_wearer_crits_become_normal` after the is_crit determination; when True, `is_crit` is flipped back to False (suppressing the damage-dice doubling + rider-crit handling) and a `feature_used` audit broadcast fires with source `item-adamantine-armor-crit-suppressed`. Garrik Ironside carries the armor inert; the harness PATCHes equipped. Sir Caelan attacks Garrik on a sweep-found nat-20 seed.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_adamantine_suppresses_crit` | Armor equipped → nat-20 attack → `is_crit: False`, `adamantine_crit_suppressed: True`, `adamantine_crit_suppressor: "Adamantine Armor"`, suppression `feature_used` broadcast fires. |
+| `test_no_suppression_without_armor` | Armor inert → nat-20 attack → `is_crit: True`, no suppression broadcast (the gate is armor-sourced, not baked). |
 
 ### `test_item_berserker_axe_save.py`
 v2.363.0 magic-items — Berserker Axe cursed berserk save (RAW DMG p.155). Closes the v2.362.0 partial: a new `on_damage_save` payload on `_MAGIC_ITEM_PASSIVES` + the `_maybe_item_on_damage_save` helper, fired from both `_apply_damage_to_combatant` (PC path, next to concentration-save) AND PATCH /sheet-fields's damage branch. On a failed DC 15 WIS save the `berserk` buff installs with `berserk_active: True` + `berserk_attack_nearest: True` markers (the auto-attack-nearest AI is GM-narrated in v1).

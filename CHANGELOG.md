@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.364.0] - 2026-06-16 — "The Star-Forged Plate"
+
+**Schema version:** 69
+
+**Commit summary:** Last engine-net-new Bucket-B magic-item commit off the v2.344.5 stub triage. **Adamantine Armor** (RAW DMG p.150, uncommon, NO attunement) promoted from a vault-stub passive to a mechanical passive: while worn, any critical hit against the wearer becomes a normal hit. New `crits_become_normal` field on `_equipped_item_effects` + new `_target_wearer_crits_become_normal` helper (mirror of v2.252.0 Cloak of Displacement reader) called from BOTH the /attack and /npc_attack pipelines after the is_crit determination. On detection, flips `is_crit` back to False BEFORE the damage-dice doubling + the `_compute_attack_auto_uplifts` uplift-crit handling — so the post-suppression damage matches a non-crit baseline (RAW: "becomes a normal hit"). Two harness tests via Sir Caelan attacking Garrik Ironside.
+
+**Description:** A clean substrate, not an Adamantine-Armor-only hook. Any future item carrying `crits_become_normal: True` plugs in via the same catalog row + zero new code. The suppression flips the boolean `is_crit` at the source, which naturally cascades through:
+
+- The base damage-dice doubling at line 88858 / 90491
+- The `_compute_attack_auto_uplifts` rider crit handling (Brutal Critical / Sneak Attack / etc.)
+- The `is_crit` flag on the `weapon_attack` broadcast payload + the chat-card crit badge
+
+The attack roll itself is unchanged — the d20 breakdown still shows the literal nat-20. The suppression is announced via a companion `feature_used` audit broadcast with source `item-adamantine-armor-crit-suppressed` so the chat card + the harness have a broadcast-keyed audit trail. Both the /attack response and the broadcast carry new `adamantine_crit_suppressed: bool` + `adamantine_crit_suppressor: str` fields.
+
+The catalog entry is `[{crits_become_normal: True, requires_attunement: False}]` — RAW says no attunement, so the inventory walker only requires equipped=True. Promoted the slug out of the vault-stub `setdefault` loop. The inventory item stays inert in the vault loot (seeded on Garrik Ironside, the Champion Fighter); the harness PATCHes equipped=True. **v1 simplifications (GM-narrated):** the RAW "medium or heavy, but not hide" armor-type restriction (v1 fires whenever the slug is equipped — the GM is trusted to swap to a compatible base armor). MINOR — additive `crits_become_normal` substrate + content + tests, no schema change.
+
+### Added
+- `crits_become_normal` + `crits_become_normal_sources` fields in `_equipped_item_effects` (`app/routes/tabletop_routes.py`) — boolean OR across equipped items.
+- `_target_wearer_crits_become_normal` helper (mirror of v2.252.0 `_target_wearer_imposes_attack_disadvantage`) — combatant → character → sheet → walker read, returns source item name or None.
+- `_MAGIC_ITEM_PASSIVES["adamantine-armor"]` — `[{crits_become_normal: True, requires_attunement: False}]`; promoted out of the vault bulk-stub loop.
+- /attack + /npc_attack: crit-suppression check immediately after the is_crit determination + `adamantine_crit_suppressed` / `adamantine_crit_suppressor` fields on the response/broadcast payload + a companion `feature_used` audit broadcast with source `item-adamantine-armor-crit-suppressed`.
+- `tests/harness/test_item_adamantine_armor.py` — 2 tests (Caelan attacks Garrik with armor equipped on a nat-20 seed → is_crit flipped to False + suppression broadcast fires; without armor → is_crit stays True + no suppression).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3040 → 3042 (+2 Adamantine Armor tests); new section.
+- `docs/plans/magic-items-automation.md`: Bucket B `adamantine-armor` row marked ✅; recommended batch order trimmed to ~3 remaining actionable items (alignment talismans + two conditional-AC shields).
+
 ## [2.363.2] - 2026-06-16 — "The Audit Switch"
 
 **Schema version:** 69

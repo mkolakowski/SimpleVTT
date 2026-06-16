@@ -50,7 +50,7 @@ Always-on bonuses the engine already reads (resistance via `_resistance_halve`, 
 | `ring-of-resistance` | resistance to one damage type | `_resistance_type` rider | ✅ already live (mis-counted) |
 | `dragon-scale-mail` | resistance to the dragon's damage type | `_resistance_type` rider | ✅ already live (mis-counted) |
 | `luck-blade` | +1 to all saves (the +1 weapon is baked) | `effects.save_bonus` | ✅ shipped v2.345.0 |
-| `adamantine-armor` | crits against you become normal hits | `effects.crits_become_normal` (new) | ⚪ |
+| `adamantine-armor` | crits against you become normal hits | `effects.crits_become_normal` (new) | ✅ shipped v2.364.0 |
 | `staff-of-the-magi` | +2 spell attack & save DC | `effects.spell_attack_bonus` / `spell_dc_bonus` (new) | ⚪ |
 | `staff-of-the-woodlands` | +2 spell attack & save DC | same | ⚪ |
 | `arrow-catching-shield` | +2 AC vs ranged attacks | conditional AC passive | ⚪ |
@@ -82,7 +82,7 @@ No clean engine template; the effect is narrative, out-of-combat, or needs syste
 - **Exploration / utility:** chime-of-opening, immovable-rod, rope-of-climbing, horseshoes-of-a-zephyr, horseshoes-of-speed, lantern-of-revealing, rod-of-lordly-might, apparatus-of-the-crab, cube-of-force, crystal-ball, helm-of-comprehending-languages, pipes-of-the-sewers, candle-of-invocation, necklace-of-prayer-beads
 - **Reaction / spell-store / regen / misc:** rod-of-absorption, gloves-of-missile-snaring, ring-of-evasion, ring-of-spell-storing, ring-of-regeneration, ring-of-telekinesis, ring-of-invisibility, defender, hammer-of-thunderbolts, mithral-armor
 
-**Recommended batch order (updated v2.363.0):** **Bucket A is effectively complete** (all 8 damage/save-condition/attack items shipped v2.350.0–v2.357.0; only `wind-fan` + `medallion-of-thoughts` remain, both inherently GM-narrated). Bucket B `luck-blade` + the resistance trio + the two `staff-of-the-*` spell-DC items are done. Bucket C `sword-of-wounding` (v2.360.0 — `on_hit_install` + start-of-turn tick), `oathbow` (v2.361.0 — `condition_sworn_enemy` + declare endpoint), and `berserker-axe` (v2.362.0 HP-max passive substrate + v2.363.0 `on_damage_save` substrate) are done — Bucket C is closed. **~4 actionable items remain**, all needing new engine work: (1) Bucket B `adamantine-armor` (new `crits_become_normal` passive + a crit-pipeline read site); (2) the two alignment talismans (situational on-touch riders, low priority); plus the two conditional-AC shields (`arrow-catching-shield`, `shield-of-missile-attraction`).
+**Recommended batch order (updated v2.364.0):** **Bucket A is effectively complete** (all 8 damage/save-condition/attack items shipped v2.350.0–v2.357.0; only `wind-fan` + `medallion-of-thoughts` remain, both inherently GM-narrated). Bucket B `luck-blade` + the resistance trio + the two `staff-of-the-*` spell-DC items + `adamantine-armor` (v2.364.0 — new `crits_become_normal` passive + /attack + /npc_attack crit-pipeline read sites) are done. Bucket C `sword-of-wounding` (v2.360.0), `oathbow` (v2.361.0), and `berserker-axe` (v2.362.0 + v2.363.0) are done — Bucket C is closed. **~3 actionable items remain**, all needing new engine work: (1) the two conditional-AC shields (`arrow-catching-shield` — conditional +2 AC vs ranged; `shield-of-missile-attraction` — ranged-attack redirect + curse); (2) the two alignment talismans (situational on-touch riders, low priority).
 
 ---
 

@@ -29433,6 +29433,41 @@ def _target_wearer_imposes_attack_disadvantage(
     return sources[0] if sources else "Cloak of Displacement"
 
 
+def _target_wearer_crits_become_normal(
+    db: Session, campaign_id: int, target_combatant_id: str | None,
+) -> str | None:
+    """v2.364.0 — Adamantine Armor crit suppression (RAW DMG p.150,
+    uncommon, NO attunement). Returns the source item name if the
+    target combatant is a PC wearing an equipped item whose passive
+    sets `crits_become_normal: True`, else None.
+
+    Mirror of `_target_wearer_imposes_attack_disadvantage` (v2.252.0)
+    — combatant → character → sheet → `_equipped_item_effects` walker
+    read. NPC combatants don't carry PC inventory items so they
+    return None.
+    """
+    if not target_combatant_id:
+        return None
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return None
+    char_id = None
+    for c in state.get("combatants") or []:
+        if c.get("id") == target_combatant_id:
+            char_id = c.get("char_id")
+            break
+    if not char_id:
+        return None
+    char = db.query(Character).filter(Character.id == int(char_id)).first()
+    if not char:
+        return None
+    eff = _equipped_item_effects(char.sheet or {})
+    if not eff.get("crits_become_normal"):
+        return None
+    sources = eff.get("crits_become_normal_sources") or []
+    return sources[0] if sources else "Adamantine Armor"
+
+
 def _attacker_sacred_weapon_attack_bonus(
     campaign_id: int, attacker_char_id: int, attacker_sheet: dict,
 ) -> int:
@@ -33476,6 +33511,22 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     # strip. The "you can't voluntarily un-attune" cursed clause is
     # GM-narrated. The +1 magic battleaxe attack/damage bonus is
     # GM-narrated (no attack row seeded on Krieger).
+    # v2.364.0 — Adamantine Armor (RAW DMG p.150, uncommon, NO
+    # attunement). "While you're wearing this armor, any critical hit
+    # against you becomes a normal hit." Read by the /attack pipeline
+    # via the new `crits_become_normal` field — when the target's
+    # `_equipped_item_effects` returns True, the `is_crit` flag is
+    # flipped back to False BEFORE the damage-dice doubling and the
+    # `_compute_attack_auto_uplifts` uplift-crit handling, so the
+    # post-suppression damage matches a non-crit baseline (RAW: "becomes
+    # a normal hit"). No attunement gate — the catalog payload carries
+    # `requires_attunement: False`, so `_equipped_item_effects` honors
+    # the equipped-only check. The crit-attack roll is still LITERALLY
+    # a nat 20 / 19 / etc. in the log; the suppression is announced via
+    # a `feature_used` audit entry on the chat card.
+    "adamantine-armor": [
+        {"crits_become_normal": True, "requires_attunement": False},
+    ],
     "berserker-axe": [
         {
             "hp_max_bonus_per_level": 1,
@@ -34203,7 +34254,10 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
 # promotes any slug to a real passive simply replaces the literal entry
 # above and this loop becomes a no-op for it.
 for _vault_slug, _vault_attune in [
-    ("adamantine-armor", False), ("amulet-of-the-planes", True),
+    # adamantine-armor promoted to a mechanical passive (crits-become-
+    # normal-hits via the new `crits_become_normal` field) in v2.364.0
+    # — explicit `_MAGIC_ITEM_PASSIVES` entry above.
+    ("amulet-of-the-planes", True),
     ("animated-shield", True), ("arrow-catching-shield", True),
     ("arrow-of-slaying", False),
     # circlet-of-blasting promoted to a spell-attack action (Scorching Ray)
@@ -36445,6 +36499,15 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # attuned. ATTUNEMENT-gated.
         "hp_max_bonus_per_level": 0,
         "hp_max_bonus_per_level_sources": [],
+        # v2.364.0 — crit-suppression passive. Boolean OR across equipped
+        # items carrying the field; read by the /attack pipeline (after
+        # the is_crit determination) — when True on the target's sheet,
+        # the attack's crit is downgraded to a normal hit (no double
+        # dice). Adamantine Armor (RAW DMG p.150, uncommon, NO
+        # attunement) is the first entry: "When you wear this armor,
+        # any critical hit against you becomes a normal hit."
+        "crits_become_normal": False,
+        "crits_become_normal_sources": [],
         # v2.242.0 — swim-speed passive. Boolean OR across equipped items
         # carrying the field; surfaced on `/sheet-json` derived. Ring of
         # Swimming (RAW DMG p.193) is the first entry — a swimming speed of
@@ -36885,6 +36948,16 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if _hpb:
                 out["hp_max_bonus_per_level"] += _hpb
                 out["hp_max_bonus_per_level_sources"].append(item_name)
+            # v2.364.0 — crit-suppression passive (Adamantine Armor, RAW
+            # DMG p.150). Boolean OR across equipped items carrying the
+            # field; read by the /attack pipeline to downgrade crits to
+            # normal hits when the target wears this armor. NO attunement
+            # required RAW — the gate above honors the per-payload
+            # `requires_attunement` flag (Adamantine Armor's catalog row
+            # carries `requires_attunement: False`).
+            if item.get("_crits_become_normal") or p.get("crits_become_normal"):
+                out["crits_become_normal"] = True
+                out["crits_become_normal_sources"].append(item_name)
             # v2.242.0 — swim-speed passive (Ring of Swimming, RAW DMG
             # p.193). Boolean OR; the flag rides the item via the
             # `swim_speed` payload (or a per-item `_swim_speed` rider).
@@ -88849,6 +88922,34 @@ async def use_attack(
     if not is_save and target_surprised and _pc_has_assassin_subclass(sheet, 3):
         is_crit = True
 
+    # v2.364.0 — Adamantine Armor crit suppression (RAW DMG p.150). When
+    # the target wears Adamantine Armor (an equipped item carrying the
+    # new `crits_become_normal: True` passive), flip the crit flag back
+    # to False so the damage-dice doubling + uplift-crit handling treat
+    # the attack as a normal hit. The attack roll itself is unchanged
+    # (still a literal nat 20 in the log); the suppression is announced
+    # via a `feature_used` audit entry after the damage broadcast lands
+    # below. Composes with Brutal Critical / Sneak Attack / etc. —
+    # suppressing `is_crit` at the source naturally suppresses all
+    # downstream crit dice.
+    adamantine_crit_suppressed = False
+    adamantine_armor_source = ""
+    if is_crit and target_combatant_id:
+        try:
+            adamantine_armor_source = (
+                _target_wearer_crits_become_normal(
+                    db, campaign_id, target_combatant_id,
+                ) or ""
+            )
+            if adamantine_armor_source:
+                is_crit = False
+                adamantine_crit_suppressed = True
+        except Exception:
+            logging.exception(
+                "adamantine crit-suppression check failed for target=%s",
+                target_combatant_id,
+            )
+
     # Pre-roll damage if a dice expression is provided. v2.24.0 Phase
     # T.2: on a crit, double the dice (not the flat modifier) — RAW
     # "all the damage dice of a critical hit are doubled" (PHB 196).
@@ -89753,8 +89854,41 @@ async def use_attack(
         # v2.99.75 — OA hint propagated from the body. Client renders
         # the weapon-attack card chrome with "⚔ OA — {weapon}" when set.
         "is_oa": is_oa,
+        # v2.364.0 — Adamantine Armor crit suppression: surface a
+        # `crit_suppressed` flag + source name so the chat card can
+        # render an audit badge ("crit → normal: Adamantine Armor")
+        # next to the existing crit-pip.
+        "adamantine_crit_suppressed": adamantine_crit_suppressed,
+        "adamantine_crit_suppressor": adamantine_armor_source or "",
     }
     await hub.broadcast(campaign_id, {"type": "weapon_attack", "data": payload})
+    # v2.364.0 — companion `feature_used` for the Adamantine crit
+    # suppression so the chat-card log + the test harness have a
+    # broadcast-source-keyed audit entry next to the weapon_attack.
+    if adamantine_crit_suppressed:
+        try:
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "source": "item-adamantine-armor-crit-suppressed",
+                    "feature_name": (
+                        f"🛡 {adamantine_armor_source or 'Adamantine Armor'} "
+                        f"suppresses crit"
+                    ),
+                    "feature_desc": (
+                        f"{char.name}'s natural-20 hit becomes a normal hit "
+                        f"— the target's adamantine armor absorbs the crit "
+                        f"(RAW DMG p.150)."
+                    ),
+                    "char_name": char.name,
+                    "target_combatant_id": target_combatant_id,
+                    "armor_source": adamantine_armor_source or "Adamantine Armor",
+                },
+            })
+        except Exception:
+            logging.exception(
+                "adamantine crit-suppression broadcast failed",
+            )
     # v2.99.21 — Halfling Lucky attack-roll companion broadcast. Fires
     # when the primary attack's d20 was 1 and the reroll consumed it.
     if _hl_old_d20 == 1 and _hl_new_d20 is not None:
@@ -90349,6 +90483,29 @@ async def use_npc_attack(
         if _crit_m and int(_crit_m.group(1)) == 20:
             is_crit = True
 
+    # v2.364.0 — Adamantine Armor crit suppression. Mirror of the
+    # /attack-side block: when the PC target wears Adamantine Armor
+    # (`crits_become_normal: True` passive), flip is_crit to False so
+    # the damage-dice doubling treats the attack as a normal hit. See
+    # the RAW citation + the broader comment in the /attack block.
+    adamantine_crit_suppressed = False
+    adamantine_armor_source = ""
+    if is_crit and target_combatant_id:
+        try:
+            adamantine_armor_source = (
+                _target_wearer_crits_become_normal(
+                    db, campaign_id, target_combatant_id,
+                ) or ""
+            )
+            if adamantine_armor_source:
+                is_crit = False
+                adamantine_crit_suppressed = True
+        except Exception:
+            logging.exception(
+                "adamantine crit-suppression (npc_attack) failed for target=%s",
+                target_combatant_id,
+            )
+
     # Roll damage. Crit doubles the dice (not the flat modifier) per
     # RAW PHB p. 196. ``_double_dice_for_crit`` is the shared helper.
     damage_total = None
@@ -90460,8 +90617,38 @@ async def use_npc_attack(
         "npc_action_id": action_id,
         # v2.99.75 — OA hint propagated from the body.
         "is_oa": is_oa,
+        # v2.364.0 — Adamantine Armor crit suppression flags (mirror of
+        # the /attack-side broadcast).
+        "adamantine_crit_suppressed": adamantine_crit_suppressed,
+        "adamantine_crit_suppressor": adamantine_armor_source or "",
     }
     await hub.broadcast(campaign_id, {"type": "weapon_attack", "data": payload})
+    # v2.364.0 — companion `feature_used` for Adamantine crit suppression
+    # (mirror of the /attack-side broadcast).
+    if adamantine_crit_suppressed:
+        try:
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "source": "item-adamantine-armor-crit-suppressed",
+                    "feature_name": (
+                        f"🛡 {adamantine_armor_source or 'Adamantine Armor'} "
+                        f"suppresses crit"
+                    ),
+                    "feature_desc": (
+                        f"{attacker_name}'s natural-20 hit becomes a normal "
+                        f"hit — the target's adamantine armor absorbs the "
+                        f"crit (RAW DMG p.150)."
+                    ),
+                    "char_name": attacker_name,
+                    "target_combatant_id": target_combatant_id,
+                    "armor_source": adamantine_armor_source or "Adamantine Armor",
+                },
+            })
+        except Exception:
+            logging.exception(
+                "adamantine crit-suppression broadcast (npc_attack) failed",
+            )
     # v2.66.6 — Sentinel feat advisory for NPC attacks. Mirrors the
     # v2.66.5 hook on /attack. Fires when a Sentinel watcher (PC) is
     # within 5 ft of the NPC attacker and isn't the target.
