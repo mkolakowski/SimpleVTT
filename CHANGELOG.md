@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.370.1] - 2026-06-16 — "The Cleansing Palm" (class-feature 100% milestone)
+
+**Schema version:** 69
+
+**Commit summary:** Doc-only flip on a stale class-content-status.md row. **Cleansing Touch (Paladin Lv 14+) was already fully wired in v2.99.157** — `/use_cleansing_touch` endpoint with Lv 14+ gate, `cleansing-touch-uses` resource decrement, target combatant + buff lookup, buff strip, broadcasts. Harness `test_use_cleansing_touch.py` (5 tests) passes. The doc row had been ⚪/🟢 since the v2.15.6 announce-only stub and was never flipped after the endpoint shipped.
+
+**🎉 Milestone:** with this flip, **every row on `docs/plans/class-content-status.md` is strictly ✅**. The auditable SRD class-feature coverage is now **100%** by the strict-symbol definition.
+
+After the v2.360.0 → v2.370.1 sweep (28 commits this session):
+
+- v2.344.5 magic-items stub triage closed (9 items + 8 substrates, v2.360.0 → v2.367.0).
+- Aura of Courage shipped — last genuine ⚪ class feature (v2.368.0).
+- Capstone seed-drift fixed (v2.368.1 → v2.368.2).
+- Unarmored Defense auto-AC engine + 4 doc flips (v2.369.0 → v2.369.2).
+- Deflect Missiles auto-reduction (v2.370.0).
+- Cleansing Touch doc reconciliation (this commit).
+
+PATCH — doc-only flip; the endpoint + tests were already shipped in v2.99.157.
+
+### Changed
+- `docs/plans/class-content-status.md`: Paladin Lv 14 Cleansing Touch 🟢 → ✅. Class features now strictly-✅ 100%.
+
 ## [2.370.0] - 2026-06-16 — "The Caught Arrow"
 
 **Schema version:** 69
