@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.377.0] - 2026-06-16 — "The Metallic Five"
+
+**Schema version:** 69
+
+**Commit summary:** Backfills lair-action data for the five metallic dragons (Brass / Bronze / Copper / Gold / Silver) into `app/content/lair_actions.py`, mirroring the v2.171.0 chromatic backfill pattern. Engine + UI + roll-log card + regional effects + fade tracker all shipped at v2.181.0, so this is a **JSON-only drop-in** — no engine change, no schema change. Eight new pure-Python unit tests (`tests/harness/test_lair_actions.py`) bring `LAIR_ACTIONS_BY_SLUG` from 10 slugs (5 chromatic × adult+ancient) to **20 slugs** (10 dragons × adult+ancient). Closes Remaining-gaps row #2 in the v2.376.0 SRD audit refresh.
+
+**Description:** Per-color lair-action sets (3 actions each, mirroring the chromatic shape):
+
+- **Brass (desert)** — Magical Gust (STR DC15 → prone, line) / Blinding Sandstorm (CON DC15 → blinded, 20-ft sphere) / Slumberous Magic (WIS DC15 → unconscious, single target).
+- **Bronze (coastal)** — Rolling Fog (descriptive, 20-ft sphere) / Lightning Strike (DEX DC15 → 4d6 lightning save-half, 3 targets) / Ocean Currents (STR DC15 → prone, single target).
+- **Copper (highland)** — Rock Storm (DEX DC15 → 3d6 bludgeoning save-half, 20-ft sphere) / Slippery Earth (DEX DC15 → prone, 20-ft sphere) / Hilarious Magic (WIS DC15 → charmed, 2 targets).
+- **Gold (auric)** — Burning Veil (DEX DC15 → 3d6 fire save-half, 20-ft sphere) / Calming Aura (WIS DC15 → charmed/pacified, 20-ft sphere) / Shimmering Visions (WIS DC15 → frightened, single target).
+- **Silver (mountain)** — Rolling Mist (descriptive, 20-ft sphere) / Treacherous Ice (DEX DC15 → prone, 20-ft sphere) / Wintry Blast (CON DC15 → 3d6 cold save-half, 20-ft sphere).
+
+All keyed in `LAIR_ACTIONS_BY_SLUG` under `adult-<metal>-dragon` + `ancient-<metal>-dragon` (RAW MM: lair actions tied to the lair, not the dragon's age — adult and ancient share the same set per color, mirroring the chromatic pattern). The descriptive-only entries (Bronze fog, Silver mist) mirror the chromatic descriptive entries (Black magical-darkness, White ice-wall + jagged-ice) — the engine broadcasts them, the GM resolves the geometry.
+
+This was Remaining-gaps row #2 in the v2.376.0 audit refresh (corrected v2.376.2) and was explicitly filed as "drop-in JSON, no engine change" in the legendary-actions plan's chromatic backfill section. Closing it pushes the Monsters category from ~98% → effectively 99%+ (the remaining metallic-lair-action gap is the only residual). Lich + Kraken lair actions remain a filed follow-up (same drop-in pattern, smaller scope).
+
+MINOR — additive content backfill + new tests, no engine change.
+
+### Added
+- 5 metallic-dragon lair-action sets in `app/content/lair_actions.py` (Brass / Bronze / Copper / Gold / Silver, 3 actions each, keyed for adult + ancient ages → 10 new `LAIR_ACTIONS_BY_SLUG` entries).
+- 8 new unit tests in `tests/harness/test_lair_actions.py` — keyed-slug count, adult-ancient parity, per-color lair shape (save abilities / damage / effect / area), and a `len(LAIR_ACTIONS_BY_SLUG) == 20` guard.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3089 → 3097 (+8 metallic lair tests).
+
 ## [2.376.2] - 2026-06-16 — "The State of the Realm, Reconciled"
 
 **Schema version:** 69

@@ -179,6 +179,113 @@ def test_white_arctic_lair_shape():
         assert d["effect"] == ""
 
 
+# ── metallic backfill (v2.377.0) ─────────────────────────────────────────────
+
+
+def test_all_ten_metallic_slugs_are_keyed():
+    """Adult + ancient × brass/bronze/copper/gold/silver = 10 lair slugs."""
+    metals = ("brass", "bronze", "copper", "gold", "silver")
+    for metal in metals:
+        for age in ("adult", "ancient"):
+            slug = f"{age}-{metal}-dragon"
+            assert slug in LAIR_ACTIONS_BY_SLUG, slug
+            assert len(lair_actions_for_slug(slug)) == 3
+
+
+def test_each_metallic_color_shares_adult_and_ancient():
+    for metal in ("brass", "bronze", "copper", "gold", "silver"):
+        adult = lair_actions_for_slug(f"adult-{metal}-dragon")
+        ancient = lair_actions_for_slug(f"ancient-{metal}-dragon")
+        assert adult == ancient
+        assert [a["id"] for a in adult] == [a["id"] for a in ancient]
+
+
+def test_brass_desert_lair_shape():
+    la = lair_actions_for_slug("adult-brass-dragon")
+    ids = {a["id"] for a in la}
+    assert ids == {"magical-gust", "blinding-sandstorm", "slumberous-magic"}
+    gust = next(a for a in la if a["id"] == "magical-gust")
+    assert gust["save_ability"] == "STR"
+    assert gust["effect"] == "prone"
+    assert gust["area"]["shape"] == "line"
+    sand = next(a for a in la if a["id"] == "blinding-sandstorm")
+    assert sand["save_ability"] == "CON"
+    assert sand["effect"] == "blinded"
+    sleep = next(a for a in la if a["id"] == "slumberous-magic")
+    assert sleep["save_ability"] == "WIS"
+    assert sleep["effect"] == "unconscious"
+
+
+def test_bronze_coastal_lair_shape():
+    la = lair_actions_for_slug("adult-bronze-dragon")
+    ids = {a["id"] for a in la}
+    assert ids == {"fog-cloud", "lightning-strike", "ocean-currents"}
+    # Rolling fog is a no-save descriptive entry.
+    fog = next(a for a in la if a["id"] == "fog-cloud")
+    assert fog["save_ability"] == ""
+    assert fog["save_dc"] == 0
+    assert fog["damage"] == ""
+    # Lightning strike is a save-for-half multi-target damage AoE.
+    light = next(a for a in la if a["id"] == "lightning-strike")
+    assert light["save_ability"] == "DEX"
+    assert light["damage"] == "4d6"
+    assert light["damage_type"] == "lightning"
+    assert light["half_on_save"] is True
+    # Ocean currents drag + prone.
+    cur = next(a for a in la if a["id"] == "ocean-currents")
+    assert cur["save_ability"] == "STR"
+    assert cur["effect"] == "prone"
+
+
+def test_copper_highland_lair_shape():
+    la = lair_actions_for_slug("adult-copper-dragon")
+    ids = {a["id"] for a in la}
+    assert ids == {"rock-storm", "slippery-earth", "hilarious-magic"}
+    rocks = next(a for a in la if a["id"] == "rock-storm")
+    assert rocks["save_ability"] == "DEX"
+    assert rocks["damage"] == "3d6"
+    assert rocks["damage_type"] == "bludgeoning"
+    earth = next(a for a in la if a["id"] == "slippery-earth")
+    assert earth["effect"] == "prone"
+    mirth = next(a for a in la if a["id"] == "hilarious-magic")
+    assert mirth["save_ability"] == "WIS"
+    assert mirth["effect"] == "charmed"
+
+
+def test_gold_auric_lair_shape():
+    la = lair_actions_for_slug("adult-gold-dragon")
+    ids = {a["id"] for a in la}
+    assert ids == {"burning-veil", "calming-aura", "shimmering-visions"}
+    veil = next(a for a in la if a["id"] == "burning-veil")
+    assert veil["damage"] == "3d6"
+    assert veil["damage_type"] == "fire"
+    assert veil["half_on_save"] is True
+    visions = next(a for a in la if a["id"] == "shimmering-visions")
+    assert visions["save_ability"] == "WIS"
+    assert visions["effect"] == "frightened"
+
+
+def test_silver_mountain_lair_shape():
+    la = lair_actions_for_slug("adult-silver-dragon")
+    ids = {a["id"] for a in la}
+    assert ids == {"rolling-mist", "treacherous-ice", "wintry-blast"}
+    # Rolling mist is a no-save descriptive entry (mirror of bronze
+    # fog-cloud + black/white descriptive lairs).
+    mist = next(a for a in la if a["id"] == "rolling-mist")
+    assert mist["save_ability"] == ""
+    assert mist["damage"] == ""
+    ice = next(a for a in la if a["id"] == "treacherous-ice")
+    assert ice["effect"] == "prone"
+    blast = next(a for a in la if a["id"] == "wintry-blast")
+    assert blast["damage"] == "3d6"
+    assert blast["damage_type"] == "cold"
+
+
+def test_total_lair_slug_count_is_twenty():
+    """All five chromatic + all five metallic × adult + ancient = 20."""
+    assert len(LAIR_ACTIONS_BY_SLUG) == 20
+
+
 # ── lair_action_by_id ────────────────────────────────────────────────────────
 
 

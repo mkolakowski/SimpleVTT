@@ -302,6 +302,256 @@ _WHITE_DRAGON_ARCTIC_LAIR: list[dict] = [
     },
 ]
 
+# RAW MM p.107 — Brass Dragon, "Lair Actions" (desert / canyon lair).
+# v2.377.0 metallic-dragon backfill.
+_BRASS_DRAGON_DESERT_LAIR: list[dict] = [
+    {
+        "id": "magical-gust",
+        "name": "Magical Gust",
+        "desc": ("A strong wind blows from the dragon along a 60-ft line "
+                 "5 ft wide. Each creature in the line makes a DC 15 "
+                 "Strength save or is pushed 30 ft away and knocked prone."),
+        "save_ability": "STR",
+        "save_dc": 15,
+        "damage": "",
+        "damage_type": "",
+        "half_on_save": False,
+        "effect": "prone",
+        "area": {"shape": "line", "size_ft": 60},
+    },
+    {
+        "id": "blinding-sandstorm",
+        "name": "Blinding Sandstorm",
+        "desc": ("Sand swirls in a 20-ft-radius sphere centered on a point "
+                 "the dragon can see within 120 ft. Each creature there "
+                 "must succeed on a DC 15 Constitution save or be blinded "
+                 "until the dragon takes another lair action."),
+        "save_ability": "CON",
+        "save_dc": 15,
+        "damage": "",
+        "damage_type": "",
+        "half_on_save": False,
+        "effect": "blinded",
+        "area": {"shape": "sphere", "size_ft": 20},
+    },
+    {
+        "id": "slumberous-magic",
+        "name": "Slumberous Magic",
+        "desc": ("The dragon targets one creature it can see within 120 ft. "
+                 "The target must succeed on a DC 15 Wisdom save or fall "
+                 "unconscious for 1 minute (waking on damage or shake)."),
+        "save_ability": "WIS",
+        "save_dc": 15,
+        "damage": "",
+        "damage_type": "",
+        "half_on_save": False,
+        "effect": "unconscious",
+        "area": {"shape": "single", "size_ft": 0},
+    },
+]
+
+# RAW MM p.110 — Bronze Dragon, "Lair Actions" (coastal / sea lair).
+# v2.377.0 metallic-dragon backfill.
+_BRONZE_DRAGON_COASTAL_LAIR: list[dict] = [
+    {
+        "id": "fog-cloud",
+        "name": "Rolling Fog",
+        "desc": ("Fog rolls in around the dragon's lair, filling a 20-ft-"
+                 "radius sphere centered on a point the dragon can see "
+                 "within 120 ft. The fog heavily obscures the area and "
+                 "lingers until the dragon uses this action again or dies. "
+                 "(No save — GM places the fog.)"),
+        "save_ability": "",
+        "save_dc": 0,
+        "damage": "",
+        "damage_type": "",
+        "half_on_save": False,
+        "effect": "",
+        "area": {"shape": "sphere", "size_ft": 20},
+    },
+    {
+        "id": "lightning-strike",
+        "name": "Lightning Strike",
+        "desc": ("Lightning strikes up to three creatures the dragon can "
+                 "see within 120 ft. Each target makes a DC 15 Dexterity "
+                 "save, taking 14 (4d6) lightning damage on a fail, or "
+                 "half on a success."),
+        "save_ability": "DEX",
+        "save_dc": 15,
+        "damage": "4d6",
+        "damage_type": "lightning",
+        "half_on_save": True,
+        "effect": "",
+        "area": {"shape": "multi", "size_ft": 0},
+    },
+    {
+        "id": "ocean-currents",
+        "name": "Ocean Currents",
+        "desc": ("Strong currents surge around a creature the dragon can "
+                 "see within 120 ft. The target makes a DC 15 Strength "
+                 "save or is pulled 30 ft into the nearest body of water "
+                 "and knocked prone."),
+        "save_ability": "STR",
+        "save_dc": 15,
+        "damage": "",
+        "damage_type": "",
+        "half_on_save": False,
+        "effect": "prone",
+        "area": {"shape": "single", "size_ft": 0},
+    },
+]
+
+# RAW MM p.113 — Copper Dragon, "Lair Actions" (rocky highland lair).
+# v2.377.0 metallic-dragon backfill.
+_COPPER_DRAGON_HIGHLAND_LAIR: list[dict] = [
+    {
+        "id": "rock-storm",
+        "name": "Rock Storm",
+        "desc": ("Rocks and pebbles whirl in a 20-ft-radius sphere centered "
+                 "on a point the dragon can see within 120 ft. Each creature "
+                 "there makes a DC 15 Dexterity save, taking 10 (3d6) "
+                 "bludgeoning damage on a fail, or half on a success."),
+        "save_ability": "DEX",
+        "save_dc": 15,
+        "damage": "3d6",
+        "damage_type": "bludgeoning",
+        "half_on_save": True,
+        "effect": "",
+        "area": {"shape": "sphere", "size_ft": 20},
+    },
+    {
+        "id": "slippery-earth",
+        "name": "Slippery Earth",
+        "desc": ("The ground in a 20-ft-radius around a point the dragon "
+                 "can see within 120 ft becomes slick as ice. Each creature "
+                 "there must succeed on a DC 15 Dexterity save or be "
+                 "knocked prone."),
+        "save_ability": "DEX",
+        "save_dc": 15,
+        "damage": "",
+        "damage_type": "",
+        "half_on_save": False,
+        "effect": "prone",
+        "area": {"shape": "sphere", "size_ft": 20},
+    },
+    {
+        "id": "hilarious-magic",
+        "name": "Hilarious Magic",
+        "desc": ("The dragon targets up to two creatures it can see within "
+                 "120 ft. Each target must succeed on a DC 15 Wisdom save "
+                 "or be charmed by the dragon's mirth (laughing, harmless) "
+                 "until the start of its next turn."),
+        "save_ability": "WIS",
+        "save_dc": 15,
+        "damage": "",
+        "damage_type": "",
+        "half_on_save": False,
+        "effect": "charmed",
+        "area": {"shape": "multi", "size_ft": 0},
+    },
+]
+
+# RAW MM p.116 — Gold Dragon, "Lair Actions" (any lair the dragon claims).
+# v2.377.0 metallic-dragon backfill.
+_GOLD_DRAGON_AURIC_LAIR: list[dict] = [
+    {
+        "id": "burning-veil",
+        "name": "Burning Veil",
+        "desc": ("A wall of fire forms in a 20-ft-radius sphere centered "
+                 "on a point the dragon can see within 120 ft. Each "
+                 "creature there makes a DC 15 Dexterity save, taking 10 "
+                 "(3d6) fire damage on a fail, or half on a success."),
+        "save_ability": "DEX",
+        "save_dc": 15,
+        "damage": "3d6",
+        "damage_type": "fire",
+        "half_on_save": True,
+        "effect": "",
+        "area": {"shape": "sphere", "size_ft": 20},
+    },
+    {
+        "id": "calming-aura",
+        "name": "Calming Aura",
+        "desc": ("A pacifying mist seeps from the dragon in a 20-ft radius. "
+                 "Each creature there (other than the dragon) must succeed "
+                 "on a DC 15 Wisdom save or be unable to attack until the "
+                 "start of its next turn (still defends if attacked)."),
+        "save_ability": "WIS",
+        "save_dc": 15,
+        "damage": "",
+        "damage_type": "",
+        "half_on_save": False,
+        "effect": "charmed",
+        "area": {"shape": "sphere", "size_ft": 20},
+    },
+    {
+        "id": "shimmering-visions",
+        "name": "Shimmering Visions",
+        "desc": ("The dragon flashes glimpses of the past and future "
+                 "around one creature it can see within 120 ft. The target "
+                 "must succeed on a DC 15 Wisdom save or be frightened "
+                 "until the dragon takes another lair action."),
+        "save_ability": "WIS",
+        "save_dc": 15,
+        "damage": "",
+        "damage_type": "",
+        "half_on_save": False,
+        "effect": "frightened",
+        "area": {"shape": "single", "size_ft": 0},
+    },
+]
+
+# RAW MM p.119 — Silver Dragon, "Lair Actions" (mountain lair).
+# v2.377.0 metallic-dragon backfill.
+_SILVER_DRAGON_MOUNTAIN_LAIR: list[dict] = [
+    {
+        "id": "rolling-mist",
+        "name": "Rolling Mist",
+        "desc": ("Fog rolls in around the dragon, filling a 20-ft-radius "
+                 "sphere centered on a point the dragon can see within "
+                 "120 ft. The mist heavily obscures the area and lingers "
+                 "until the dragon takes another lair action. (No save — "
+                 "GM places the mist.)"),
+        "save_ability": "",
+        "save_dc": 0,
+        "damage": "",
+        "damage_type": "",
+        "half_on_save": False,
+        "effect": "",
+        "area": {"shape": "sphere", "size_ft": 20},
+    },
+    {
+        "id": "treacherous-ice",
+        "name": "Treacherous Ice",
+        "desc": ("Ice and frost spread across the ground in a 20-ft radius "
+                 "around a point the dragon can see within 120 ft. The "
+                 "area becomes difficult terrain. Each creature there must "
+                 "succeed on a DC 15 Dexterity save or be knocked prone."),
+        "save_ability": "DEX",
+        "save_dc": 15,
+        "damage": "",
+        "damage_type": "",
+        "half_on_save": False,
+        "effect": "prone",
+        "area": {"shape": "sphere", "size_ft": 20},
+    },
+    {
+        "id": "wintry-blast",
+        "name": "Wintry Blast",
+        "desc": ("A freezing wind blasts in a 20-ft-radius sphere centered "
+                 "on a point the dragon can see within 120 ft. Each "
+                 "creature there makes a DC 15 Constitution save, taking "
+                 "10 (3d6) cold damage on a fail, or half on a success."),
+        "save_ability": "CON",
+        "save_dc": 15,
+        "damage": "3d6",
+        "damage_type": "cold",
+        "half_on_save": True,
+        "effect": "",
+        "area": {"shape": "sphere", "size_ft": 20},
+    },
+]
+
 # Keyed by monster slug (the `slug` field on the shipped SRD monster
 # JSON). Dragons of every lair-bearing age (adult + ancient) share their
 # color's lair-action set.
@@ -316,6 +566,17 @@ LAIR_ACTIONS_BY_SLUG: dict[str, list[dict]] = {
     "ancient-red-dragon": _RED_DRAGON_VOLCANIC_LAIR,
     "adult-white-dragon": _WHITE_DRAGON_ARCTIC_LAIR,
     "ancient-white-dragon": _WHITE_DRAGON_ARCTIC_LAIR,
+    # v2.377.0 metallic-dragon backfill — 5 dragons × 2 ages each.
+    "adult-brass-dragon": _BRASS_DRAGON_DESERT_LAIR,
+    "ancient-brass-dragon": _BRASS_DRAGON_DESERT_LAIR,
+    "adult-bronze-dragon": _BRONZE_DRAGON_COASTAL_LAIR,
+    "ancient-bronze-dragon": _BRONZE_DRAGON_COASTAL_LAIR,
+    "adult-copper-dragon": _COPPER_DRAGON_HIGHLAND_LAIR,
+    "ancient-copper-dragon": _COPPER_DRAGON_HIGHLAND_LAIR,
+    "adult-gold-dragon": _GOLD_DRAGON_AURIC_LAIR,
+    "ancient-gold-dragon": _GOLD_DRAGON_AURIC_LAIR,
+    "adult-silver-dragon": _SILVER_DRAGON_MOUNTAIN_LAIR,
+    "ancient-silver-dragon": _SILVER_DRAGON_MOUNTAIN_LAIR,
 }
 
 

@@ -421,6 +421,19 @@ combatant.legendary_resistance = {
   descriptive entries the GM resolves manually. 6 new unit tests +
   1 new trigger harness test. **Filed follow-up:** metallic dragons +
   Lich + Kraken (same drop-in path).
+- Metallic backfill (✅ **shipped v2.377.0** "The Metallic Five"): the
+  five metallic dragons added to `LAIR_ACTIONS_BY_SLUG` with no engine
+  change — Brass (desert, MM p.107), Bronze (coastal, p.110), Copper
+  (highland, p.113), Gold (auric, p.116), Silver (mountain, p.119),
+  each 3 RAW lair actions keyed to adult + ancient (mirror of the
+  v2.171.0 chromatic shape). Descriptive entries (Bronze fog, Silver
+  mist) mirror the chromatic descriptive pattern; condition entries use
+  the existing `_LAIR_ACTION_CONDITION_BUFFS` table (no new conditions
+  needed beyond the v2.171.0 set + the new `unconscious` for Brass's
+  Slumberous Magic, which was already in the buff catalog). 8 new
+  unit tests in `tests/harness/test_lair_actions.py`. `LAIR_ACTIONS_BY_SLUG`
+  is now **20 slugs** (10 dragons × adult+ancient). **Filed follow-up:**
+  Lich phylactery lair + Kraken submerged lair (same drop-in path).
 - No-repeat guard (✅ **shipped v2.172.0** "No Encore"): RAW MM p.11 —
   a lair action can't be used two rounds in a row. `trigger_lair_action`
   parks the fired action id as `state["last_lair_action_id"]` and
