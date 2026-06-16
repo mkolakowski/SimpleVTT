@@ -1676,6 +1676,36 @@ for _rdt, _rdi in _RESISTANCE_DAMAGE_ICONS.items():
 # ALL damage for 1 minute. Reuses the v2.99.121 `resistance_to: ["all"]`
 # wildcard that `_resistance_halve` already honours, so no new intercept is
 # needed — the damage pipeline halves every type while this buff is active.
+# v2.381.0 — generalized target-count cap for /cast_spell. Keyed by
+# spell slug. The cap-reader at the top of /cast_spell looks up the slug
+# here and rejects 400 too_many_targets when the caller passes more
+# combatant ids than `max_targets + max(0, slot_level - base_level) *
+# extra_targets_per_slot_above_base`. Distinct from the v2.372.1
+# `_SPELL_BUFF_MAP` cap (which only fires for buff-install spells like
+# Aid + Bless) — this dict covers spells whose multi-target dispatch
+# goes through the heal loop (Mass Healing Word, Mass Cure Wounds) or
+# any other non-buff path. Bless + Aid stay in `_SPELL_BUFF_MAP` to
+# avoid double-firing; future commit can consolidate.
+_SPELL_TARGET_CAPS: dict[str, dict] = {
+    # RAW PHB p.258: "up to six creatures of your choice that you can
+    # see within range." Healing scales per slot above 3rd (handled by
+    # the v2.125.0 prose parser), but the 6-target cap is fixed RAW.
+    "mass-healing-word": {
+        "max_targets": 6,
+        "base_level": 3,
+        # No extra_targets_per_slot_above_base — RAW count is fixed.
+    },
+    # RAW PHB p.258: "Up to six creatures of your choice that you can
+    # see within range each regain hit points equal to 3d8 + your
+    # spellcasting ability modifier." Healing dice scale per slot
+    # above 5th; target count fixed.
+    "mass-cure-wounds": {
+        "max_targets": 6,
+        "base_level": 5,
+    },
+}
+
+
 _SPELL_BUFF_MAP["resistance-all"] = {
     "key": "resistance-all",
     "name": "Invulnerability (All Damage)",
@@ -19403,6 +19433,43 @@ async def cast_spell(
     slot_level = int(slot_level_raw) if slot_level_raw is not None and str(slot_level_raw).strip() else spell_level
     if slot_level < spell_level:
         slot_level = spell_level
+
+    # v2.381.0 — generalized target-count cap. Fires for any spell
+    # registered in `_SPELL_TARGET_CAPS` (Mass Healing Word /
+    # Mass Cure Wounds — the heal-loop spells that don't have a
+    # corresponding `_SPELL_BUFF_MAP` cap). Matches the v2.380.0
+    # extension math: effective_cap = max_targets + max(0, slot_level -
+    # base_level) * extra_targets_per_slot_above_base. Returns 400
+    # too_many_targets BEFORE slot consumption so a blocked cast doesn't
+    # burn a slot (same contract as the no_slot + over-budget gates
+    # below). Aid + Bless keep their existing `_SPELL_BUFF_MAP` caps —
+    # this dict is the parallel path for spells that don't go through
+    # the buff-install branch.
+    if target_combatant_ids_in:
+        _cap_entry = _SPELL_TARGET_CAPS.get(spell_slug)
+        if _cap_entry:
+            try:
+                _cap_max = int(_cap_entry.get("max_targets") or 0)
+            except (TypeError, ValueError):
+                _cap_max = 0
+            try:
+                _cap_base = int(_cap_entry.get("base_level") or 1)
+            except (TypeError, ValueError):
+                _cap_base = 1
+            try:
+                _cap_extra = int(
+                    _cap_entry.get("extra_targets_per_slot_above_base") or 0
+                )
+            except (TypeError, ValueError):
+                _cap_extra = 0
+            _cap_eff = _cap_max + max(0, slot_level - _cap_base) * _cap_extra
+            if _cap_eff > 0 and len(target_combatant_ids_in) > _cap_eff:
+                return JSONResponse(status_code=400, content={
+                    "error": "too_many_targets",
+                    "spell": spell_slug,
+                    "limit": _cap_eff,
+                    "received": len(target_combatant_ids_in),
+                })
 
     # Determine which class's slots to deduct from.  Body may pass
     # ``class_slug`` explicitly; otherwise fall back to the spell's tagged

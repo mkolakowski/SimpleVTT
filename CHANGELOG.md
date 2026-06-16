@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.381.0] - 2026-06-16 — "The Wider Heal"
+
+**Schema version:** 69
+
+**Commit summary:** Adds a `_SPELL_TARGET_CAPS` dict for spells whose multi-target dispatch goes through `/cast_spell`'s heal loop (Mass Healing Word, Mass Cure Wounds) — the v2.380.0 Bless cap lives on `_SPELL_BUFF_MAP` and only fires for buff-install spells, so heal-loop spells previously had no max-target enforcement. The new top-level cap-check in `/cast_spell` reads `_SPELL_TARGET_CAPS[spell_slug]`, computes `effective_cap = max_targets + max(0, slot_level - base_level) * extra_targets_per_slot_above_base`, and returns 400 `too_many_targets` when the caller passes more combatant ids than the cap. Wires Mass Healing Word (RAW PHB p.258: 6 base, count fixed across upcasts — only the healing dice scale) + Mass Cure Wounds (same shape, base_level=5). Three harness tests cover the L3 6-target happy path, L3 7-target reject, and L4 7-target still-rejects (proves the cap stays fixed for spells without the upcast scaling field).
+
+**Description:** Closes the asymmetry from v2.380.0 — Bless got a cap via `_SPELL_BUFF_MAP` because its install path was already the cap-check site; Mass Healing Word doesn't install a buff, it just heals, so it needed a parallel substrate. The two could be consolidated later (lift the cap check above both branches into a single shared helper) — for v1 the two-dict shape ships cleanly without touching the existing v2.372.1 Aid + v2.380.0 Bless contracts.
+
+The shared cap math (`max + max(0, slot - base) * extra_per_slot`) is identical between the two; only the data source differs. Mass Healing Word's RAW shape is "fixed 6 targets, dice scale per slot" — represented by setting `max_targets: 6 / base_level: 3` with no `extra_targets_per_slot_above_base` field. Mass Cure Wounds mirrors this with `base_level: 5`.
+
+**v1 simplifications:**
+- The cap check fires BEFORE slot consumption (mirrors the v2.372.1 Aid cap + v2.49.75 range gate contract). A blocked cast doesn't burn a slot.
+- The healing dice scaling (Mass Healing Word: +1d4/slot above 3rd; Mass Cure Wounds: +1d8/slot above 5th) is handled separately by the v2.125.0 prose parser — this commit only adds the target-count enforcement.
+- Aid + Bless keep their `_SPELL_BUFF_MAP` caps. Consolidating onto a single shared dict is a filed follow-up refactor.
+
+MINOR — additive engine dict + cap check + new tests; no behavior change for spells not in `_SPELL_TARGET_CAPS`.
+
+### Added
+- `_SPELL_TARGET_CAPS: dict[str, dict]` in `app/routes/tabletop_routes.py` — keyed by spell slug. v1 ships entries for `mass-healing-word` (max=6, base=3) and `mass-cure-wounds` (max=6, base=5).
+- Top-level cap-check in `/cast_spell` (right after `slot_level` is finalised) — 400 `too_many_targets` with `{spell, limit, received}`.
+- `tests/harness/test_cast_mass_healing_word_target_cap.py` — 3 tests via Tavik (Cleric Lv 8): 6 targets succeeds, 7 targets returns 400 limit=6, L4 7 targets also returns 400 limit=6 (cap stays fixed across upcast).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3109 → 3112 (+3 Mass Healing Word tests).
+
 ## [2.380.0] - 2026-06-16 — "The Wider Bless"
 
 **Schema version:** 69
