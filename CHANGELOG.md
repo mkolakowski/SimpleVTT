@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.381.1] - 2026-06-16 — "The Second Witness"
+
+**Schema version:** 69
+
+**Commit summary:** Adds dedicated harness tests for Mass Cure Wounds — the second entry in `_SPELL_TARGET_CAPS` shipped in v2.381.0 — which previously had no explicit coverage despite getting enforcement for free from the new substrate. Tavik (Cleric Lv 8) doesn't have Mass Cure Wounds on his spell list or L5 slots natively, so the test PATCHes both onto his sheet, runs the assertions, and restores in a `finally` clause so the demo seed stays clean. Three tests mirror the Mass Healing Word coverage shape: L5 with 6 targets succeeds, L5 with 7 returns 400 (limit=6), L6 with 7 still returns 400 (cap stays fixed across upcasts because no `extra_targets_per_slot_above_base` is set).
+
+PATCH — test-only addition; no runtime code change. The Mass Cure Wounds entry in `_SPELL_TARGET_CAPS` already shipped in v2.381.0; this commit only adds the explicit test witness.
+
+### Added
+- `tests/harness/test_cast_mass_cure_wounds_target_cap.py` — 3 tests covering L5 6-target happy, L5 7-target reject, L6 7-target still-rejects.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3112 → 3115 (+3 Mass Cure Wounds tests).
+
 ## [2.381.0] - 2026-06-16 — "The Wider Heal"
 
 **Schema version:** 69
