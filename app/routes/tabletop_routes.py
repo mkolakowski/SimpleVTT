@@ -19276,21 +19276,52 @@ async def cast_spell(
     if (
         isinstance(target_set, dict)
         and not target_combatant_ids_in
-        and (target_set.get("shape") or "").strip().lower() == "sphere"
     ):
-        _radius_raw = target_set.get("radius_ft")
-        try:
-            _radius_ft = float(_radius_raw) if _radius_raw is not None else 0.0
-        except (TypeError, ValueError):
-            raise HTTPException(400, "target_set.radius_ft must be a number")
-        _center_in = (target_set.get("center_combatant_id") or "").strip() or None
+        _shape = (target_set.get("shape") or "").strip().lower()
         _faction_in = (target_set.get("faction") or "all").strip().lower()
-        target_combatant_ids_in = _resolve_sphere_aoe_combatant_ids(
-            db, campaign,
-            center_combatant_id=_center_in,
-            radius_ft=_radius_ft,
-            faction=_faction_in,
-        )
+        if _shape == "sphere":
+            _radius_raw = target_set.get("radius_ft")
+            try:
+                _radius_ft = float(_radius_raw) if _radius_raw is not None else 0.0
+            except (TypeError, ValueError):
+                raise HTTPException(400, "target_set.radius_ft must be a number")
+            _center_in = (target_set.get("center_combatant_id") or "").strip() or None
+            target_combatant_ids_in = _resolve_sphere_aoe_combatant_ids(
+                db, campaign,
+                center_combatant_id=_center_in,
+                radius_ft=_radius_ft,
+                faction=_faction_in,
+            )
+        elif _shape == "cone":
+            # v2.375.0 — cone variant. Same factoring as sphere; the
+            # caller names an apex combatant (typically the caster) and
+            # a direction combatant the cone is pointed at. RAW cones
+            # use the half-angle = arctan(0.5) ≈ 26.57° default (PHB
+            # p.204 "width = distance from origin"); callers can
+            # override via `apex_half_angle_deg` for narrower / wider
+            # variants but the default covers every SRD cone spell.
+            _length_raw = target_set.get("length_ft")
+            try:
+                _length_ft = float(_length_raw) if _length_raw is not None else 0.0
+            except (TypeError, ValueError):
+                raise HTTPException(400, "target_set.length_ft must be a number")
+            _apex_in = (target_set.get("apex_combatant_id") or "").strip() or None
+            _direction_in = (target_set.get("direction_combatant_id") or "").strip() or None
+            _half_angle_raw = target_set.get("apex_half_angle_deg")
+            try:
+                _half_angle = (
+                    float(_half_angle_raw) if _half_angle_raw is not None else 26.57
+                )
+            except (TypeError, ValueError):
+                _half_angle = 26.57
+            target_combatant_ids_in = _resolve_cone_aoe_combatant_ids(
+                db, campaign,
+                apex_combatant_id=_apex_in,
+                direction_combatant_id=_direction_in,
+                length_ft=_length_ft,
+                apex_half_angle_deg=_half_angle,
+                faction=_faction_in,
+            )
         if target_combatant_ids_in and not target_combatant_id_in:
             target_combatant_id_in = target_combatant_ids_in[0]
 
@@ -93530,6 +93561,125 @@ async def battle_sphere_targets(
         "faction": faction,
         "results": results,
     }
+
+
+def _resolve_cone_aoe_combatant_ids(
+    db: Session,
+    campaign: Campaign,
+    *,
+    apex_combatant_id: str | None,
+    direction_combatant_id: str | None,
+    length_ft: float,
+    apex_half_angle_deg: float = 26.57,
+    faction: str = "all",
+) -> list[str]:
+    """v2.375.0 — shared cone-AoE id resolver used by `/cast_spell`'s
+    ``target_set`` branch (shape: "cone"). Mirrors the geometry +
+    faction filter from `/battle/cone-targets` but returns the bare id
+    list the cast pipeline's `target_combatant_ids` flow needs.
+
+    Apex + direction are both combatant ids — the apex is the cone's
+    point of origin (typically the caster) and direction is any
+    combatant the cone is pointed at. Both are always excluded from
+    the result list (RAW: a self-anchored cone picker doesn't include
+    the caster, and the direction combatant is the geometric anchor,
+    not a member of the cone's affected set).
+
+    Raises HTTPException(400/404) on invalid inputs so the caller can
+    surface validation errors directly.
+    """
+    if not apex_combatant_id:
+        raise HTTPException(400, "target_set cone requires apex_combatant_id")
+    if not direction_combatant_id:
+        raise HTTPException(400, "target_set cone requires direction_combatant_id")
+    if length_ft <= 0:
+        raise HTTPException(400, "target_set cone requires positive length_ft")
+    if faction not in ("all", "allies", "enemies"):
+        raise HTTPException(400, "target_set faction must be one of: all, allies, enemies")
+    state = hub.get_battle(int(campaign.id))
+    if not state:
+        raise HTTPException(404, "No active battle")
+    if not campaign.active_map_id:
+        raise HTTPException(400, "Campaign has no active map")
+    map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
+    if not map_row or not map_row.grid_size_px:
+        raise HTTPException(400, "Active map has no grid_size_px")
+    grid_px = int(map_row.grid_size_px)
+    grid_type = (
+        map_row.grid_type.value if map_row.grid_type else "square"
+    ).lower()
+    combatants = state.get("combatants") or []
+    by_id = {str(c.get("id")): c for c in combatants if isinstance(c, dict)}
+    apex_c = by_id.get(apex_combatant_id)
+    direction_c = by_id.get(direction_combatant_id)
+    if not apex_c or not direction_c:
+        raise HTTPException(404, "target_set cone apex/direction combatant not in battle")
+
+    def _xy_for_combatant(c: dict) -> "tuple[float, float] | None":
+        tok_id = c.get("source_token_id")
+        if not tok_id:
+            return None
+        tok = db.query(Token).filter(
+            Token.id == int(tok_id), Token.map_id == map_row.id,
+        ).first()
+        if not tok:
+            return None
+        size = int(tok.size or 1)
+        cx = float(tok.x or 0) + (size * grid_px) / 2.0
+        cy = float(tok.y or 0) + (size * grid_px) / 2.0
+        return (cx, cy)
+
+    apex_xy = _xy_for_combatant(apex_c)
+    direction_xy = _xy_for_combatant(direction_c)
+    if apex_xy is None or direction_xy is None:
+        raise HTTPException(400, "target_set cone apex/direction has no token position")
+    import math as _math_cone
+    ax, ay = apex_xy
+    dx, dy = direction_xy
+    vec_dir_x = dx - ax
+    vec_dir_y = dy - ay
+    vec_dir_len = (vec_dir_x ** 2 + vec_dir_y ** 2) ** 0.5
+    if vec_dir_len == 0:
+        raise HTTPException(400, "target_set cone apex + direction share a position; direction undefined")
+    half_angle_rad = _math_cone.radians(max(0.0, min(89.9, apex_half_angle_deg)))
+    cos_half = _math_cone.cos(half_angle_rad)
+    apex_is_pc: bool | None = None
+    if faction != "all":
+        apex_is_pc = bool(apex_c.get("char_id"))
+    ids: list[str] = []
+    for c in combatants:
+        if not isinstance(c, dict):
+            continue
+        cid = str(c.get("id") or "")
+        if not cid or cid == apex_combatant_id or cid == direction_combatant_id:
+            continue
+        xy = _xy_for_combatant(c)
+        if xy is None:
+            continue
+        px, py = xy
+        dist_ft = _distance_ft_between_points(grid_px, grid_type, ax, ay, px, py)
+        if dist_ft > length_ft:
+            continue
+        if apex_is_pc is not None:
+            subj_is_pc = bool(c.get("char_id"))
+            if faction == "allies" and subj_is_pc != apex_is_pc:
+                continue
+            if faction == "enemies" and subj_is_pc == apex_is_pc:
+                continue
+        vec_pt_x = px - ax
+        vec_pt_y = py - ay
+        vec_pt_len = (vec_pt_x ** 2 + vec_pt_y ** 2) ** 0.5
+        if vec_pt_len == 0:
+            ids.append(cid)
+            continue
+        cos_pt = (
+            (vec_pt_x * vec_dir_x + vec_pt_y * vec_dir_y)
+            / (vec_pt_len * vec_dir_len)
+        )
+        if cos_pt < cos_half:
+            continue
+        ids.append(cid)
+    return ids
 
 
 @router.post("/api/campaign/{campaign_id}/battle/cone-targets")

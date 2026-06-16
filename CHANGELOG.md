@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.375.0] - 2026-06-16 — "The Caster's Eye, Cone"
+
+**Schema version:** 69
+
+**Commit summary:** Extends the v2.374.0 `/cast_spell` `target_set` AoE auto-targeting from sphere-only to a `shape: "cone"` variant. The caller names an apex combatant (typically the caster) + a direction combatant the cone is pointed at + `length_ft` + optional `apex_half_angle_deg` (RAW default 26.57° = `arctan(0.5)`, per PHB p.204 "width = distance from origin") + faction filter. The server walks the active map's tokens, filters by the cone's angular span + length + faction, and feeds the resulting id list into the existing `target_combatant_ids` save+damage loop. Three harness tests via Thalindra + 2 bandits (apex, direction, downrange).
+
+**Description:** Mirrors the v2.374.0 sphere factoring: a new private `_resolve_cone_aoe_combatant_ids` helper extracts the cone geometry from `/battle/cone-targets` and returns the bare id list `/cast_spell` needs. Cone shape covers Burning Hands (15 ft), Cone of Cold (60 ft), Breath Weapons, and any homebrew narrow-cone spell — together with the v2.374.0 sphere variant, this closes the bulk of SRD's AoE damage spells under server-side auto-targeting. The remaining `shape: "line"` variant (Lightning Bolt, Wall of Fire line-mode) lands as the matching follow-up.
+
+A subtle exclusion rule worth flagging: the **direction combatant is excluded** from the resolved target list. This matches the picker endpoint's contract (`/battle/cone-targets` also excludes both apex AND direction) — the direction combatant is the geometric anchor for "which way is the cone pointed," not a member of the cone's affected set. RAW Burning Hands obviously includes whoever is directly in front of the caster, but the cone picker is a targeting helper: the GM picks the direction-anchor first (often the closest visible enemy), then the helper returns everyone *else* the cone catches. A caster wanting to include the direction combatant either picks a different direction-anchor (a corner of the room, a non-combatant terrain feature) or adds the direction id explicitly via `target_combatant_ids`.
+
+**v1 simplifications (unchanged from v2.374.0):**
+- Cone uses the RAW PHB 26.57° half-angle by default; callers can override via `apex_half_angle_deg` but every SRD cone matches the default.
+- `target_set` is ignored when `target_combatant_ids` is non-empty (explicit ids win).
+- Apex + direction must both be combatant ids; arbitrary (x, y) cone origins aren't supported (the picker endpoint also requires combatant ids).
+
+MINOR — additive shape variant + new shared helper, no schema change, no behavior change for callers that don't pass `target_set: {shape: "cone"}`.
+
+### Added
+- `target_set: {shape: "cone", apex_combatant_id, direction_combatant_id, length_ft, apex_half_angle_deg?, faction?}` on `/cast_spell` — derives the AoE target ids via the new shared cone helper.
+- `_resolve_cone_aoe_combatant_ids` helper in `app/routes/tabletop_routes.py` (just above `/battle/cone-targets`) — shared geometry between the picker endpoint and `/cast_spell`'s cone branch.
+- `tests/harness/test_cast_spell_target_set_cone.py` — 3 tests: cone with faction="enemies" resolves the downrange bandit (apex + direction excluded); missing `direction_combatant_id` → 400; `length_ft=0` → 400.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3083 → 3086 (+3 cone-shape target_set tests); new section.
+
 ## [2.374.1] - 2026-06-16 — "The Caster's Eye, Compiled"
 
 **Schema version:** 69
