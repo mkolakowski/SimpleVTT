@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3051 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.367.0, 2026-06-16).
+**Total tests:** 3054 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.368.0, 2026-06-16).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4290,6 +4290,15 @@ v2.56.0 — Fighter Lv 9+ Indomitable. Arm-then-consume single-use save-advantag
 | `test_use_indomitable_out_of_uses` | First call burns the only use; second call → 409 `out_of_uses` with `label=Indomitable`. |
 | `test_indomitable_consumes_on_save` | Arm + cast Suggestion at Garrik → save `base_expression="2d20kh1"`, buff removed from Garrik's combatant, consume-side `feature_used(source=indomitable)` broadcast. |
 | `test_indomitable_one_save_only` | After consume, a second save in the same round has `base_expression="1d20"` (no kh1; buff already consumed). |
+
+### `test_aura_of_courage.py`
+v2.368.0 — Paladin Aura of Courage (base Paladin Lv 10+). Mirror of the v2.55.0 Aura of Devotion gate but oath-agnostic (Lv 10 is the base AURA-OF-X tier) and keyed on Frightened (not Charmed). Install gate lives in `_install_buff` rather than the /respond handler — so every Frightened-install path (failed save, Demon Slayer on_hit_save, Wand of Fear cone, future fear effects) is gated uniformly. Sir Caelan is Lv 7 by default; the harness PATCHes him to Lv 10 for the happy path and uses Lyra's Fear (spell_index 19) → Krieger as the failed-save driver.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_aoc_blocks_frightened_install_at_lv10` | Caelan PATCH'd to Lv 10 + in init → Lyra casts Fear at Krieger; loop until save fails → no `frightened` buff on Krieger AND `feature_used(source=aura-of-courage)` broadcast names Caelan. |
+| `test_aoc_does_not_fire_at_lv9_or_below` | Control: Caelan at seed Lv 7 → failed Wis save installs Frightened normally; no AoC broadcast. |
+| `test_aoc_disabled_when_paladin_unconscious` | Caelan Lv 10 but HP 0 → AoC suspends → Frightened installs; no broadcast. |
 
 ### `test_aura_of_devotion.py`
 v2.55.0 — Paladin Oath of Devotion Lv 7+ Aura of Devotion. First **condition-install immunity gate** — when a failed Wis save would install Charmed on a PC ally, and any Paladin Lv 7+ with subclass `devotion` is in init, the install is BLOCKED and a `feature_used(source=aura-of-devotion)` broadcast surfaces the immunity. Distinct from Aura of Protection (save modifier): AoD acts AFTER the save resolves to bypass the consequence.

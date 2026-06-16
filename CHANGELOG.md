@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.368.0] - 2026-06-16 — "The Steadfast Heart"
+
+**Schema version:** 69
+
+**Commit summary:** Closes the last genuine ⚪ class feature on the v2.344.3 reconciliation. **Aura of Courage** (base Paladin Lv 10+, RAW PHB p.85): you and friendly creatures within 10 ft can't be frightened while you are conscious (range increases to 30 ft at Lv 18). New `_ally_has_aura_of_courage` reader mirrors the v2.55.0 Aura of Devotion shape (oath-agnostic this time — base Paladin feature, not Devotion-only). Install gate lives in `_install_buff` (not the /respond handler), so EVERY Frightened-install path is covered uniformly: failed-save respond, Demon Slayer on_hit_save, future fear effects. Three harness tests via Sir Caelan (PATCH'd to Lv 10) + Lyra Fear → Krieger.
+
+**Description:** RAW: "Starting at 10th level, you and friendly creatures within 10 feet of you can't be frightened while you are conscious. At 18th level, the range of this aura increases to 30 feet." Distinct from Aura of Devotion (v2.55.0) in two ways:
+
+1. **Oath-agnostic** — Lv 10 is the base Paladin AURA-OF-X tier, available to every oath. No subclass gate.
+2. **Frightened, not Charmed** — pre-install gate fires on the Frightened condition key.
+
+Distinct from the v2.55.0 AoD wiring in WHERE the gate lives: AoD's pre-install short-circuit lives in `/roll_request/{id}/respond`'s save-fail branch, so it ONLY catches Frightened from failed PC saves. AoC's gate lives in `_install_buff` itself — so a Demon Slayer on_hit_save against a Lv-10+-paladin-adjacent PC, a Wand of Fear cone catching the same PC, a Dragon's Frightful Presence, etc., all flow through the same single gate. Mirrors the v2.99.128 condition-immunity gate's placement.
+
+Demo seed: Sir Caelan Lightbringer's class_features list gains an `aura-of-courage` row (descriptive only; the gate enforces Lv 10+, and Caelan is Lv 7 by default). The harness PATCHes Caelan to Lv 10 for the happy-path test and leaves the seed Lv 7 for the control. **v1 simplifications (already filed for AoP/AoD):** the 10/30-ft radius gate uses `_distance_ft_between_chars` and falls back to "any paladin in init" when token positions aren't available (off-grid scenes, summoned combatants without map presence). MINOR — additive condition-immunity gate + content + tests, no schema change.
+
+### Added
+- `_ally_has_aura_of_courage` helper (`app/routes/tabletop_routes.py`) — mirrors `_ally_has_aura_of_devotion` shape (Lv 10+ gate, oath-agnostic, range 10/30 ft, conscious check).
+- `_broadcast_aura_of_courage` — companion `feature_used(source="aura-of-courage")` event naming the paladin when AoC blocks a Frightened install.
+- Pre-install gate in `_install_buff` (`app/routes/tabletop_routes.py`) — when the buff key is `frightened` AND `_ally_has_aura_of_courage` matches, broadcast + return False (no install).
+- Demo seed: `aura-of-courage` row on Sir Caelan's `class_features` list (descriptive only; Lv-10 threshold enforced server-side).
+- `tests/harness/test_aura_of_courage.py` — 3 tests (Caelan Lv 10 blocks Frightened install + AoC broadcast fires; Caelan Lv 7 baseline → install succeeds; Caelan Lv 10 unconscious → install succeeds).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3051 → 3054 (+3 Aura of Courage tests); new section.
+
 ## [2.367.1] - 2026-06-16 — "The Plan's Polish"
 
 **Schema version:** 69

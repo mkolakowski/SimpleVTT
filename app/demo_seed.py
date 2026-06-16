@@ -2211,6 +2211,17 @@ def _paladin_sheet(name: str) -> dict:
                 "name": "Aura of Devotion",
                 "desc": "Passive (Oath of Devotion, Lv 7+) — allies within 10 ft are immune to being charmed. Fires automatically server-side when a failed save would install Charmed (e.g. Suggestion, Charm Person).",
             },
+            # v2.368.0 — Aura of Courage (base Paladin, Lv 10+). Listed
+            # unconditionally so the picker surfaces the feature as a
+            # discoverable Lv-10+ unlock; the v2.368.0 install gate at
+            # `_install_buff` enforces the Lv-10 threshold. Caelan is
+            # currently Lv 7 so the gate doesn't fire mechanically until
+            # he's PATCH-bumped to Lv 10 (the harness fixture flow).
+            {
+                "key": "aura-of-courage",
+                "name": "Aura of Courage (Lv 10+)",
+                "desc": "Passive (Paladin Lv 10+) — you and friendly creatures within 10 ft can't be frightened while you are conscious. Range increases to 30 ft at Lv 18. Fires server-side as a pre-install gate in `_install_buff`: when a failed save would install Frightened on an ally, AoC blocks the install and broadcasts `feature_used(source=aura-of-courage)`. Currently gated off for Caelan (Lv 7); bump to Lv 10+ to unlock.",
+            },
         ],
     }
 

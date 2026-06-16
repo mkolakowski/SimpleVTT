@@ -772,6 +772,35 @@ async def _install_buff(
                 return False
     except Exception:
         pass
+    # v2.368.0 — Aura of Courage pre-install gate. Mirrors the v2.55.0
+    # Aura of Devotion gate that lives in the /roll_request/{id}/respond
+    # handler — but installed at `_install_buff` rather than the
+    # respond site so EVERY frightened install path (failed save via
+    # /respond, Demon Slayer on_hit_save, future fear effects) is
+    # gated uniformly when the target stands within an AoC radius.
+    # Gate fires when (a) the buff key is `frightened`, (b) a Lv 10+
+    # paladin (any oath) is conscious + in radius in the active
+    # battle. Broadcasts and returns False (no install).
+    if str(buff.get("key") or "").strip().lower() == "frightened":
+        try:
+            from app.database import SessionLocal as _AOCSessionLocal
+            with _AOCSessionLocal() as _aoc_db:
+                _aoc_applies, _aoc_paladin = _ally_has_aura_of_courage(
+                    _aoc_db, campaign_id, int(character_id),
+                )
+                if _aoc_applies and _aoc_paladin is not None:
+                    _aoc_target = _aoc_db.query(Character).filter(
+                        Character.id == int(character_id),
+                    ).first()
+                    await _broadcast_aura_of_courage(
+                        campaign_id, _aoc_paladin, _aoc_target,
+                    )
+                    return False
+        except Exception:
+            logging.exception(
+                "Aura of Courage gate check failed for char_id=%s",
+                character_id,
+            )
     target = None
     for c in state.get("combatants") or []:
         if c.get("char_id") == character_id:
@@ -42102,6 +42131,93 @@ def _ally_has_aura_of_devotion(
             continue
         return True, char
     return False, None
+
+
+def _ally_has_aura_of_courage(
+    db: Session, campaign_id: int, saving_char_id: int | None,
+) -> "tuple[bool, Character | None]":
+    """v2.368.0 — Paladin Aura of Courage (base Paladin Lv 10+).
+    RAW (PHB p.85): "Starting at 10th level, you and friendly
+    creatures within 10 feet of you can't be frightened while you
+    are conscious. At 18th level, the range of this aura increases
+    to 30 feet."
+
+    Returns ``(applies, paladin_char)`` where ``applies`` is True
+    when ANY Paladin Lv 10+ (any oath — base class feature, not
+    subclass-gated) is in the active battle's init tracker, in
+    radius, and conscious. The paladin's own aura applies to
+    themselves.
+
+    Distinct from Aura of Devotion (v2.55.0) in two ways:
+      1. **Oath-agnostic** — Lv 10 is the base Paladin AURA-OF-X
+         tier, available to every oath. No subclass gate.
+      2. **Frightened, not Charmed** — pre-install gate fires on
+         the Frightened condition key.
+
+    Mirrors AoP/AoD's range gate (10 ft Lv 10-17, 30 ft Lv 18+) +
+    conscious check + saver-must-be-in-battle precondition.
+    """
+    if not saving_char_id:
+        return False, None
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False, None
+    combatants = state.get("combatants") or []
+    saver_in_battle = any(
+        c.get("char_id") == saving_char_id for c in combatants
+    )
+    if not saver_in_battle:
+        return False, None
+    for c in combatants:
+        char_id = c.get("char_id")
+        if not char_id:
+            continue
+        char = db.query(Character).filter(Character.id == int(char_id)).first()
+        if not char:
+            continue
+        sheet = char.sheet or {}
+        paladin_lv = _paladin_level_from_sheet(sheet)
+        if paladin_lv < 10:
+            continue
+        if not _paladin_is_conscious(char):
+            continue
+        aura_radius_ft = 30.0 if paladin_lv >= 18 else 10.0
+        distance_ft = _distance_ft_between_chars(
+            db, campaign_id, int(char_id), int(saving_char_id),
+        )
+        if distance_ft is not None and distance_ft > aura_radius_ft:
+            continue
+        return True, char
+    return False, None
+
+
+async def _broadcast_aura_of_courage(
+    campaign_id: int, paladin: "Character", saving_char: "Character | None",
+) -> None:
+    """v2.368.0 — Companion broadcast for ``_ally_has_aura_of_courage``.
+    Mirror of ``_broadcast_aura_of_devotion`` — emits a
+    ``feature_used(source="aura-of-courage")`` event naming the
+    paladin when AoC blocks a Frightened install on an ally."""
+    if not paladin:
+        return
+    target_name = saving_char.name if saving_char else "ally"
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": paladin.id,
+            "character_name": paladin.name,
+            "user_color": paladin.color,
+            "feature_name": (
+                f"🛡️ Aura of Courage → {target_name} immune to frighten"
+            ),
+            "feature_desc": (
+                f"You and friendly creatures within 10 ft of {paladin.name} "
+                f"(Paladin Lv 10+) can't be frightened while {paladin.name} "
+                f"is conscious. (RAW PHB p.85)"
+            ),
+            "source": "aura-of-courage",
+        },
+    })
 
 
 def _pc_has_rage_active_from_sheet(sheet: "dict | None") -> bool:
