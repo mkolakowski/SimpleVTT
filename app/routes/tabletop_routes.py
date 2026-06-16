@@ -31489,7 +31489,14 @@ def _compute_spell_save_dc_from_sheet(sheet: dict) -> int:
         spc = "WIS"
     ab = int((sheet.get("abilities") or {}).get(spc, 10))
     mod = (ab - 10) // 2
-    return 8 + prof + mod
+    # v2.358.0 — equipped-item spell save-DC bonus (Staff of the Woodlands /
+    # Magi, +2). Folded into every spell save DC since this is the single
+    # source for the caster's DC (10 call sites route through here).
+    try:
+        item_dc_bonus = int(_equipped_item_effects(sheet).get("spell_dc_bonus") or 0)
+    except Exception:
+        item_dc_bonus = 0
+    return 8 + prof + mod + item_dc_bonus
 
 
 def _feature_save_dc(sheet: dict, ability: str) -> int:
@@ -33061,6 +33068,19 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "luck-blade": [
         {"save_bonus": 1, "requires_attunement": True},
     ],
+    # v2.358.0 — Staff of the Woodlands (RAW DMG p.202, rare, attunement by
+    # a druid). The clean passive — "while holding it you have a +2 bonus
+    # to spell attack rolls and to the saving throw DCs of your druid
+    # spells" — wires the +2 spell save DC via the v2.358.0 `spell_dc_bonus`
+    # substrate (folded into `_compute_spell_save_dc_from_sheet`). The +2
+    # quarterstaff is baked on the wielder's attack row; the +2 spell ATTACK
+    # bonus, the 10 charges of nature spells (animal friendship, awaken,
+    # barkskin, locate/speak, wall of thorns), and the plant-a-tree power
+    # are GM-narrated. RAW restricts the bonus to druid spells; v1 applies
+    # it to all the wielder's spells (Mira is a Druid anyway).
+    "staff-of-the-woodlands": [
+        {"spell_dc_bonus": 2, "requires_attunement": True},
+    ],
     # v2.212.0 — Belt of Giant Strength (RAW DMG p.155, requires
     # attunement; see docs/plans/str-override.md). While worn, your STR
     # *changes* to the belt's score — but only if higher (RAW). The
@@ -33866,7 +33886,8 @@ for _rem_slug, _rem_attune in [
     # trident-of-fish-command promoted to a charge-cast action (dominate
     # beast) in v2.352.0 — registered via `_MAGIC_ITEM_ACTIONS`.
     ("staff-of-the-magi", True), ("staff-of-the-python", True),
-    ("staff-of-the-woodlands", True),
+    # staff-of-the-woodlands promoted to a mechanical passive (+2 spell save
+    # DC) in v2.358.0 — explicit `_MAGIC_ITEM_PASSIVES` entry.
     # staff-of-withering (v2.346.0) + staff-of-striking (v2.349.0) promoted
     # to mechanical attack riders — registered via `_MAGIC_ITEM_ATTACK_RIDERS`.
 ]:
@@ -35739,6 +35760,15 @@ def _equipped_item_effects(sheet: dict) -> dict:
         "save_bonus": 0,
         "ac_bonus_sources": [],
         "save_bonus_sources": [],
+        # v2.358.0 — spell save-DC passive. Summed bonus to the wielder's
+        # spell save DC across equipped+attuned items; read by
+        # `_compute_spell_save_dc_from_sheet`. Staff of the Woodlands /
+        # Staff of the Magi (+2) are the first entries. (RAW the Woodlands
+        # bonus is druid-spells-only; v1 applies it to all the wielder's
+        # spells — same simplification convention as other class-flavoured
+        # item riders.)
+        "spell_dc_bonus": 0,
+        "spell_dc_bonus_sources": [],
         # v2.209.0 — ability-check passive. `check_bonus` is the flat
         # bonus applied to ability checks (and ability-based skill
         # checks) by the /roll endpoint. Stone of Good Luck (Luckstone)
@@ -36065,6 +36095,14 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if sv:
                 out["save_bonus"] += sv
                 out["save_bonus_sources"].append(item_name)
+            # v2.358.0 — spell save-DC bonus (Staff of the Woodlands / Magi).
+            try:
+                sdc = int(p.get("spell_dc_bonus") or 0)
+            except (TypeError, ValueError):
+                sdc = 0
+            if sdc:
+                out["spell_dc_bonus"] += sdc
+                out["spell_dc_bonus_sources"].append(item_name)
             try:
                 ck = int(p.get("check_bonus") or 0)
             except (TypeError, ValueError):

@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.358.0] - 2026-06-16 — "The Druid's Focus"
+
+**Schema version:** 69
+
+**Commit summary:** First **Bucket-B engine** item off the v2.344.5 triage — a new `spell_dc_bonus` equipped-item passive. **Staff of the Woodlands** (RAW DMG p.202, rare, attunement by a druid) promoted from an "Armory's Remainder" catalog stub to a mechanical passive: while equipped+attuned it grants **+2 to the wielder's spell save DC**. Folded into `_compute_spell_save_dc_from_sheet` (the single source for the caster's DC, 10 call sites). Two harness tests via Mira Greenleaf.
+
+**Description:** `_equipped_item_effects` gains a `spell_dc_bonus` field (summed across equipped+attuned items, with a sources list), and `_compute_spell_save_dc_from_sheet` adds it to every spell save DC — so every save-spell cast, every `"spell"`-sentinel item action, etc. picks up the +2 with one chokepoint change. Staff of the Woodlands is the first entry (`{spell_dc_bonus: 2, requires_attunement: True}`); Staff of the Magi (also +2) is now a one-line follow-up on the same field. Promoted the slug out of the Armory's Remainder passive `setdefault` loop into an explicit `_MAGIC_ITEM_PASSIVES` entry. No demo-seed change — the staff stays inert Armory loot (the tests use the seed-inert + PATCH-equipped+attuned pattern, so the demo's attunement count is unchanged). **v1 simplifications (GM-narrated):** the +2 spell *attack* bonus, the 10 charges of nature spells, the plant-a-tree power, and the RAW druid-spells-only restriction (v1 applies the +2 to all the wielder's spells; Mira is a Druid). The +2 quarterstaff is baked. MINOR — additive `spell_dc_bonus` passive substrate + content + tests, no schema change.
+
+### Added
+- `spell_dc_bonus` field in `_equipped_item_effects` + read in `_compute_spell_save_dc_from_sheet` (`app/routes/tabletop_routes.py`).
+- `_MAGIC_ITEM_PASSIVES["staff-of-the-woodlands"]` — `[{spell_dc_bonus: 2, requires_attunement: True}]` (promoted out of the Armory bulk-stub loop).
+- `tests/harness/test_item_staff_of_the_woodlands.py` — 2 tests (Woodlands staff equipped+attuned → Insect Plague spell-DC sentinel reports 16; inert → 14).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3022 → 3024 (+2 Staff of the Woodlands tests); new section.
+
 ## [2.357.1] - 2026-06-16 — "The Closed Armory"
 
 **Schema version:** 69
