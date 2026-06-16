@@ -1373,6 +1373,18 @@ _SPELL_BUFF_MAP: dict[str, dict] = {
             "bless_attack_bonus": "d4",
             "bless_save_bonus": "d4",
         },
+        # v2.380.0 — multi-target cap + per-slot upcast scaling. RAW PHB
+        # p.219: "Choose up to three creatures within range. … When you
+        # cast this spell using a spell slot of 2nd level or higher, you
+        # can target one additional creature for each slot level above
+        # 1st." The v2.372.1 `max_targets` gate enforces the base cap;
+        # the new `extra_targets_per_slot_above_base` extends the cap
+        # by `(slot_level - base_level)` so L2 = 4, L3 = 5, etc. Bless
+        # mirrors Aid's gate-via-_SPELL_BUFF_MAP pattern with the new
+        # upcast field doing the scaling work.
+        "max_targets": 3,
+        "base_level": 1,
+        "extra_targets_per_slot_above_base": 1,
         "desc": "Add 1d4 to one attack roll or saving throw before the spell ends (RAW: each affected target's roll).",
     },
     # v2.217.0 — Giant Strength (the timed half of the ability-score
@@ -22047,12 +22059,38 @@ async def cast_spell(
         # more than the cap. Upcasting doesn't raise the count for
         # spells where RAW caps it (Aid's +5 HP per upcast is on each
         # target, not on the count).
+        #
+        # v2.380.0 — per-slot upcast extension. When the template ALSO
+        # carries `extra_targets_per_slot_above_base` + `base_level`,
+        # the effective cap grows with the cast's slot_level. RAW
+        # Bless: 3 base @ L1, +1 per slot above 1st → L2 = 4, L3 = 5.
+        # Aid keeps its hard 3-cap (no extra field set), so the
+        # v2.372.1 contract is preserved for spells that don't scale.
         _max_targets = spell_buff_template.get("max_targets")
         if _max_targets is not None:
             try:
                 _cap = int(_max_targets)
             except (TypeError, ValueError):
                 _cap = 0
+            _extra_per = spell_buff_template.get(
+                "extra_targets_per_slot_above_base"
+            )
+            if _cap > 0 and _extra_per is not None:
+                try:
+                    _extra = int(_extra_per)
+                except (TypeError, ValueError):
+                    _extra = 0
+                try:
+                    _base = int(
+                        spell_buff_template.get("base_level") or 1
+                    )
+                except (TypeError, ValueError):
+                    _base = 1
+                try:
+                    _slot = int(slot_level or _base)
+                except (TypeError, ValueError):
+                    _slot = _base
+                _cap = _cap + max(0, _slot - _base) * _extra
             if _cap > 0 and len(_bless_target_char_ids) > _cap:
                 return JSONResponse(status_code=400, content={
                     "error": "too_many_targets",

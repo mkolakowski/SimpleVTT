@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.380.0] - 2026-06-16 — "The Wider Bless"
+
+**Schema version:** 69
+
+**Commit summary:** Extends the v2.372.1 `_SPELL_BUFF_MAP` `max_targets` gate with a new per-slot upcast field: `extra_targets_per_slot_above_base` + `base_level`. When the buff template carries them, the cap grows by `(slot_level - base_level) * extra_per_slot` so a higher-slot cast hits more targets. Bless is the first consumer — gains `max_targets: 3 / base_level: 1 / extra_targets_per_slot_above_base: 1`, matching RAW PHB p.219 ("up to three creatures" base + "one additional creature for each slot level above 1st"). Aid's hard 3-cap is preserved (no upcast field set — RAW Aid scales HP per slot, not target count). Four harness tests cover L1/3 happy, L1/4 reject (limit=3), L2/4 happy, L2/5 reject (limit=4 — proves the new field is being honored).
+
+**Description:** First slice of the v2.379.0 audit refresh's P2 "cast-and-broadcast utility-spell upcast" surface. Mirrors the Aid 3-target gate pattern (v2.372.1) which already enforces a hard cap; this commit adds the scaling vector for spells where RAW caps grow with the slot. The reader at the cap-gate site does the arithmetic only when both fields are present, so existing single-cap spells (Aid) keep their v2.372.1 behavior unchanged.
+
+The upcast extension is a substrate that other spells can drop into:
+- **Bless** (this commit): 3 base @ L1, +1/slot.
+- **Bane**: would mirror Bless, but Bane uses `_SPELL_CONDITION_MAP` (different install path); filed as a follow-up if the v1 substrate is extended to cover condition-installs the same way.
+- **Mass Healing Word** (when implemented): 6 base @ L3, +1/slot above 3rd → `max_targets: 6, base_level: 3, extra_targets_per_slot_above_base: 1`.
+- **Telekinesis / Mass Cure Wounds / etc.**: similar shape when their install paths land.
+
+MINOR — additive engine field + new spell-template entries + new tests. No behavior change for any spell that doesn't set the new fields.
+
+### Added
+- `_SPELL_BUFF_MAP["bless"]` gains `max_targets: 3`, `base_level: 1`, `extra_targets_per_slot_above_base: 1` (RAW PHB p.219 upcast scaling).
+- `/cast_spell` `max_targets` gate reads `extra_targets_per_slot_above_base` + `base_level` and extends the cap by `(slot_level - base_level) * extra_per_slot` when both fields are set.
+- `tests/harness/test_cast_bless_target_cap_upcast.py` — 4 tests covering L1 cap (3 = OK, 4 = 400), L2 extension (4 = OK, 5 = 400 with limit=4).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3105 → 3109 (+4 Bless upcast tests).
+
 ## [2.379.2] - 2026-06-16 — "The Catalog, Refreshed"
 
 **Schema version:** 69
