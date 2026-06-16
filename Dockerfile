@@ -34,6 +34,10 @@ COPY docs/multi-system-refactor.md /app/docs/multi-system-refactor.md
 COPY docs/roll-log-card-layout.md /app/docs/roll-log-card-layout.md
 COPY docs/test-harness-coverage.md /app/docs/test-harness-coverage.md
 COPY docs/automation-coverage.md /app/docs/automation-coverage.md
+# v2.384.1 — condition-enforcement audit doc (v2.384.0 shipped the file
+# + the allowlist entry but the COPY line was missing, so /wiki/doc/
+# condition-enforcement-audit returned 404 in the rebuilt container).
+COPY docs/condition-enforcement-audit.md /app/docs/condition-enforcement-audit.md
 
 # v2.49.9: repo-root docs surfaced through /wiki/doc/<slug>.
 COPY README.md /app/README.md

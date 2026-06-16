@@ -10,6 +10,19 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.384.1] - 2026-06-16 — "The Missing COPY"
+
+**Schema version:** 69
+
+**Commit summary:** Hotfix to v2.384.0 — the new `docs/condition-enforcement-audit.md` doc shipped + the allowlist entry shipped, but the Dockerfile only COPYs explicitly-listed docs into the container image (`/app/docs/<file>.md` per `COPY` directive), and the new doc was missing from the list. The rebuilt container's `/wiki/doc/condition-enforcement-audit` endpoint returned 404 because the file wasn't inside the image. Adds the missing COPY line; v2.384.1 container rebuild puts the doc in place.
+
+Caught immediately by the v2.384.0 harness test (`test_wiki_doc_serves_condition_enforcement_audit`) which failed with 404 against the rebuilt container — exactly the safety net the per-slug test exists for.
+
+PATCH — Dockerfile-only fix; no source-code change.
+
+### Fixed
+- `Dockerfile`: missing `COPY docs/condition-enforcement-audit.md /app/docs/condition-enforcement-audit.md` line that the v2.384.0 doc-write commit needed but didn't include. Container rebuild propagates the doc to `/app/docs/`.
+
 ## [2.384.0] - 2026-06-16 — "The Audit Surface"
 
 **Schema version:** 69
