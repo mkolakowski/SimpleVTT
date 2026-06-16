@@ -3119,6 +3119,21 @@ def _druid_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "staff-of-swarming-insects", "weight_lb": 4,
              "desc": "Rare staff, attunement. 10 charges. Cast Insect Plague (5 charges → 4d10 piercing, CON save, 20-ft-radius sphere) or Giant Insect (4 charges) using your spell save DC. Regains 1d6+4 charges at dawn (long rest). RAW DMG p.202."},
+            # v2.352.0 — Trident of Fish Command (RAW DMG p.205, uncommon,
+            # attunement). Promoted out of the v2.344.0 Armory's Remainder
+            # bulk loot into an explicit equipped+attuned item paired with
+            # the `trident-of-fish-command` 3-charge resource above. Runs
+            # through the generalized Wand of Fear handler with the charmed
+            # (dominate-beast) condition. Seeded attuned (the /use_item_action
+            # path gates on `attuned`). Thematic on Mira (Wood Elf Druid with
+            # an aquatic kit). The beast-only gate + control concentration
+            # are GM-narrated.
+            {"name": "Trident of Fish Command", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "hands": 1, "damage": "1d6", "damage_type": "piercing",
+             "properties": "magic, thrown", "weight_lb": 4,
+             "_slug": "trident-of-fish-command",
+             "desc": "Uncommon magic trident, attunement. 3 charges (regain 1d3 at dawn). Action: expend 1 to cast dominate beast (DC 15 WIS) on a beast you can see within range. RAW: only a beast with an innate swimming speed (GM-narrated). RAW DMG p.205."},
             # v2.329.0 — "The Captor's Cache" bundle: Mirror of Life Trapping
             # (RAW DMG p.181, very rare, no attunement). 4-ft-tall framed
             # mirror. When a creature other than the wielder comes within
@@ -3177,6 +3192,19 @@ def _druid_sheet(name: str) -> dict:
                 "charge_recovery": "1d6+4",
                 "source": "item-staff-of-swarming-insects",
                 "desc": "10 charges. Cast Insect Plague (5 charges → 4d10 piercing, CON save) or Giant Insect (4). Regains 1d6+4 charges on long rest.",
+                "manual": False,
+            },
+            # v2.352.0 — Trident of Fish Command charge pool (RAW DMG p.205):
+            # 3 charges, regain 1d3 at dawn (long rest). The shared save-
+            # condition wand handler decrements 1 per Dominate Beast cast.
+            {
+                "key": "trident-of-fish-command",
+                "name": "Trident of Fish Command",
+                "current": 3, "max": 3, "reset": "long",
+                "charge_recovery": "1d3",
+                "source": "item-trident-of-fish-command",
+                "class_slug": "item",
+                "desc": "3 charges; expend 1 (action) to cast dominate beast (DC 15 WIS) on a beast. Regains 1d3 charges at dawn.",
                 "manual": False,
             },
         ],
@@ -6815,7 +6843,6 @@ def seed_characters(
         ("Garrik Ironside", "hammer-of-thunderbolts", "Hammer of Thunderbolts", "weapon", "Legendary. +1 maul; with a Belt of Giant Strength + Gauntlets of Ogre Power, STR becomes 20 and crits hurl a thunderclap (DC 17 CON or stunned). Throw to kill a giant (DC 17 CON). RAW DMG p.173."),
         ("Rowan Quickbow", "oathbow", "Oathbow", "weapon", "Very rare, attunement (longbow). Speak the command word to declare a sworn enemy; vs that enemy you have advantage on attacks, +3d6 piercing, and ignore their resistance — until it drops or you sleep. RAW DMG p.183."),
         ("Sir Caelan Lightbringer", "sword-of-wounding", "Sword of Wounding", "weapon", "Rare, attunement (any sword). Once per turn on a hit you can wound the target: at the start of each of its turns it takes 1d4 necrotic (DC 15 CON to end), and HP lost this way returns only on a rest. RAW DMG p.207."),
-        ("Mira Greenleaf", "trident-of-fish-command", "Trident of Fish Command", "weapon", "Uncommon, attunement. 3 charges. Action: expend 1 to cast dominate beast (DC 15) on a beast with an innate swimming speed. RAW DMG p.208."),
         ("Mira Greenleaf", "staff-of-the-python", "Staff of the Python", "weapon", "Very rare, attunement. Action: throw the staff to become a giant constrictor snake under your control for up to 1 hour (or until 0 HP); a command word reverts it. RAW DMG p.202."),
         ("Mira Greenleaf", "staff-of-the-woodlands", "Staff of the Woodlands", "weapon", "Rare, attunement (druid). +2 quarterstaff; 10 charges to cast animal friendship, awaken, barkskin, locate animals/plants, speak with animals/plants, wall of thorns; plant it to grow a tree. RAW DMG p.202."),
         ("Magnus Hexbinder", "staff-of-striking", "Staff of Striking", "weapon", "Very rare, attunement. +3 quarterstaff; 10 charges — expend 1-3 on a hit to deal +1d6 force per charge. Regains 1d6+4 charges at dawn. RAW DMG p.202."),

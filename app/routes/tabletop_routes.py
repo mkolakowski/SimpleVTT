@@ -33853,7 +33853,8 @@ for _rem_slug, _rem_attune in [
     ("sword-of-wounding", True),
     # pipes-of-haunting promoted to a charge-cast action (radius frighten)
     # in v2.350.0 — registered via `_MAGIC_ITEM_ACTIONS`.
-    ("trident-of-fish-command", True),
+    # trident-of-fish-command promoted to a charge-cast action (dominate
+    # beast) in v2.352.0 — registered via `_MAGIC_ITEM_ACTIONS`.
     ("staff-of-the-magi", True), ("staff-of-the-python", True),
     ("staff-of-the-woodlands", True),
     # staff-of-withering (v2.346.0) + staff-of-striking (v2.349.0) promoted
@@ -34551,6 +34552,37 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
                     "ends if harmed by you/allies or commanded against its nature",
                 ],
                 "feature_name": "👑 Rod of Rulership",
+            },
+        },
+    },
+    # v2.352.0 — Trident of Fish Command (RAW DMG p.205, uncommon,
+    # attunement). Third Bucket-A item on the generalized Wand of Fear
+    # handler — single-target charmed (Staff of Charming shape). 3 charges
+    # (regain 1d3 at dawn): an action casts dominate beast (DC 15 WIS) on
+    # one beast → charmed for the concentration duration. RAW "only a beast
+    # with an innate swimming speed" gate + the you-control-its-actions
+    # concentration are GM-narrated; v1 installs the charmed condition on a
+    # failed save.
+    "trident-of-fish-command": {
+        "requires_attunement": True,
+        "resource_key": "trident-of-fish-command",
+        "actions": {
+            "cast-dominate-beast": {
+                "name": "Cast Dominate Beast (DC 15)",
+                "save_dc": 15,
+                "save_ability": "WIS",
+                "min_charges": 1,
+                "max_charges": 1,
+                "duration_rounds": 10,
+                "target_shape": "single",
+                "condition_key": "charmed",
+                "condition_label": "Dominated",
+                "condition_icon": "🔱",
+                "condition_effects": [
+                    "charmed by you; you control its actions while you concentrate",
+                    "can repeat the save each time it takes damage",
+                ],
+                "feature_name": "🔱 Trident of Fish Command",
             },
         },
     },
@@ -83797,7 +83829,10 @@ async def use_item_action(
                 "pipes-of-haunting",
                 # v2.351.0 — Rod of Rulership — charmed condition (Staff of
                 # Charming) on the radius-target shape; a single 1/dawn use.
-                "rod-of-rulership"):
+                "rod-of-rulership",
+                # v2.352.0 — Trident of Fish Command — single-target
+                # dominate-beast (charmed), 3 charges.
+                "trident-of-fish-command"):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_wand_of_fear(
             db, campaign_id, char, item, sheet, catalog,

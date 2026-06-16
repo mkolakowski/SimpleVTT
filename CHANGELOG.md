@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.352.0] - 2026-06-15 — "The Tide-Caller"
+
+**Schema version:** 69
+
+**Commit summary:** Third **Bucket-A** (charge-cast) magic-item commit off the v2.344.5 stub triage. **Trident of Fish Command** (RAW DMG p.205, uncommon, attunement) promoted from a v2.344.0 "Armory's Remainder" catalog stub to a charge-cast action through the generalized `_use_item_action_wand_of_fear` handler — the Staff of Charming single-target `charmed` shape (dominate beast), 3 charges. Seeded equipped+attuned on Mira Greenleaf with a 3-charge resource; two harness tests.
+
+**Description:** Zero new engine code — runs on the same `/use_item_action` → Wand of Fear handler path as Mace of Terror / Pipes of Haunting / Rod of Rulership / Staff of Charming. Added `trident-of-fish-command` to `_MAGIC_ITEM_ACTIONS` (3-charge resource, WIS DC 15, `charmed` condition, single target) and the slug to the handler dispatch tuple. Promoted the slug out of the Armory's Remainder passive `setdefault` loop and out of the bulk `_vault_loot` seed into an explicit equipped+attuned magic trident on Mira paired with a `trident-of-fish-command` 3-charge resource (regain 1d3 at dawn). **v1 simplifications (GM-narrated):** the RAW "only a beast with an innate swimming speed" target gate and the dominate-beast "you control its actions while you concentrate" — v1 installs the `charmed` condition on a failed save. MINOR — additive item action + content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ACTIONS["trident-of-fish-command"]` — `{requires_attunement: True, resource_key: "trident-of-fish-command", actions: {cast-dominate-beast: {save_dc: 15, save_ability: WIS, charmed, target_shape: single, …}}}`; slug added to the Wand of Fear handler dispatch tuple.
+- Demo seed: explicit equipped+attuned **Trident of Fish Command** on Mira Greenleaf + a `trident-of-fish-command` 3-charge resource.
+- `tests/harness/test_use_item_action_trident_of_fish_command.py` — 2 tests (dominate beast at 1 target → DC 15 WIS, charges 3→2, id in results; empty trident → 409 insufficient_charges).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3010 → 3012 (+2 Trident of Fish Command tests); new `test_use_item_action_trident_of_fish_command.py` section.
+
 ## [2.351.0] - 2026-06-15 — "The Crowned Command"
 
 **Schema version:** 69
