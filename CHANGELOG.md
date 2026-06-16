@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.360.1] - 2026-06-16 — "The Tester's Stitch"
+
+**Schema version:** 69
+
+**Commit summary:** Test-only patch on the v2.360.0 Sword of Wounding harness. `test_turn_start_ticks_damage` was asserting that the post-attack target HP equaled the seed `target_hp` (60) before the turn-advance — but the attack itself deals 1d8+3 slashing damage on the install hit, so `hp_before` is correctly lower than 60. Fixed the baseline to capture `hp_before` after the attack and assert the **additional** 1..4 drop from the start-of-turn tick.
+
+**Description:** Pure test fix; no engine change. The 5-test sword-of-wounding suite now passes cleanly against the live container. PATCH — test-correctness fix, no schema change.
+
+### Fixed
+- `tests/harness/test_item_sword_of_wounding.py::test_turn_start_ticks_damage` — baselines `hp_before` after the install-time attack damage (the attack itself deals 1d8+3) instead of comparing against the seed `target_hp`. Assertion now correctly isolates the start-of-turn 1d4 tick.
+
 ## [2.360.0] - 2026-06-16 — "The Bleeding Edge"
 
 **Schema version:** 69

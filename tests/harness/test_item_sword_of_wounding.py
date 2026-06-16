@@ -309,21 +309,29 @@ async def test_turn_start_ticks_damage(gm_client, caelan):
         finally:
             await _seed_dice(gm_client, None)
 
-        # Capture the current battle state and bump turn_index to the
-        # wounded bandit's turn. The PUT-/battle turn-advance hook
-        # fires the start-of-turn damage + save.
+        # Capture the post-attack battle state. The bandit's HP already
+        # dropped by the attack's slashing damage (1d8+3); we want to
+        # assert the ADDITIONAL drop from the start-of-turn tick (1d4
+        # per stack), so we baseline off this hp_before.
         battle = await _get_battle(gm_client)
         target = next(
             (c for c in battle.get("combatants") or []
              if c.get("id") == target_cid), None)
         assert target is not None
-        hp_before = int(target.get("hp_current") or 0)
-        assert hp_before == target_hp, (
-            f"sword-of-wounding hit damage already dropped HP (expected {target_hp}, "
-            f"got {hp_before}); check the wound-install path isn't double-dipping."
+        assert _wounded_buff(target) is not None, (
+            "wound install missed before tick assertion"
         )
-        # Force the save to FAIL so the buff stays for the assertion.
-        # Bandit CON +0, DC 15 → seed 0 (likely a low d20).
+        hp_before = int(target.get("hp_current") or 0)
+        assert hp_before < target_hp, (
+            f"the install-time attack itself should have dealt damage; "
+            f"got hp_before={hp_before} (target_hp={target_hp})"
+        )
+
+        # Bump turn_index to the wounded bandit's turn. The PUT-/battle
+        # turn-advance hook fires the start-of-turn damage + save. Use
+        # a seed that's likely to FAIL the DC 15 CON save so the buff
+        # (and the tick assertion baseline) stays intact for the next
+        # GET. Bandit CON +0 → needs nat 15+ to pass.
         await _seed_dice(gm_client, 0)
         try:
             battle["turn_index"] = 1  # bandit's turn
