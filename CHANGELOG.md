@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.360.0] - 2026-06-16 — "The Bleeding Edge"
+
+**Schema version:** 69
+
+**Commit summary:** First **Bucket-C on-hit-install** magic-item commit off the v2.344.5 stub triage. **Sword of Wounding** (RAW DMG p.207, rare, attunement, any sword) promoted from an "Armory's Remainder" catalog stub to a mechanical attack rider: each hit appends a "wounded" stack to the target; at the start of each of the wounded creature's turns the engine ticks 1d4 necrotic per stack, then resolves a DC 15 CON save — pass ends all wounds. New `on_hit_install` rider substrate + a generalized start-of-turn-tick hook on PUT /battle. Five harness tests via Sir Caelan Lightbringer.
+
+**Description:** Two new pieces of engine substrate, both reusable for future stacking-DoT items:
+
+1. **`on_hit_install` post-hit rider**, dispatched from a new `_apply_magic_item_on_hit_install_effect` helper that fires after the existing `on_hit_save` hook in the `/attack` pipeline. Different shape from `on_hit_save` (which always rolls a save at install time): this fires on every hit and installs OR increments a stacking condition buff on the target. The buff carries the start-of-turn tick + save markers (`start_of_turn_tick_dice_per_stack`, `start_of_turn_tick_damage_type`, `start_of_turn_save_ability`, `start_of_turn_save_dc`) the PUT /battle hook reads.
+2. **Start-of-turn tick hook in PUT /battle** (next to the v2.97.58 Heroism precedent). When initiative advances to a new combatant, walks their buffs for any carrying `start_of_turn_tick_dice_per_stack`; for each, rolls N independent dice (one per stack), applies the sum via `_apply_damage_to_combatant` (PC + NPC paths), then resolves a DC 15 CON save via `_resolve_repeated_save_for_buff` — on pass, drops the buff (clearing all stacks).
+
+Sword of Wounding's catalog entry adds an explicit attack-row on Sir Caelan (`"Sword of Wounding Longsword"`, +6 / 1d8+3 slashing — RAW has NO magical attack/damage bonus) carrying `_slug: "sword-of-wounding"`. The inventory item stays inert (the seed-inert + PATCH-equipped+attuned pattern, Holy Avenger precedent — keeps the demo's attunement count unchanged). Promoted the slug out of the Armory's Remainder passive `setdefault` loop. **v1 simplifications (GM-narrated):** the RAW "once per turn" cap on adding new stacks (no per-turn-of-wielder state tracking in v1 — the rider fires on every hit), the ally-can-end-via-Medicine-DC-15 alternative, and the "HP lost this way only returns on a rest" clause (the necrotic damage is applied straight; the rest-only-heal restriction stays GM-narrated). MINOR — additive `on_hit_install` rider + start-of-turn tick substrate + content + tests, no schema change.
+
+### Added
+- `_apply_magic_item_on_hit_install_effect` (`app/routes/tabletop_routes.py`) — install-without-save on-hit rider helper for stacking-DoT items (attunement gate + buff stack/install).
+- `_MAGIC_ITEM_ATTACK_RIDERS["sword-of-wounding"]` — `{on_hit_install: {effect: "wound_stack", tick_dice_per_stack: "1d4", tick_damage_type: "necrotic", save_ability: "CON", save_dc: 15, …}}`; promoted out of the Armory bulk-stub loop.
+- Start-of-turn wound-tick hook in PUT /battle (next to Heroism) — walks the newly-active combatant's buffs for `start_of_turn_tick_dice_per_stack` and dispatches the per-stack damage roll + DC 15 CON save (drops the buff on pass).
+- Demo seed: a new `"Sword of Wounding Longsword"` attack entry on Sir Caelan (attack_index 4) carrying `_slug: "sword-of-wounding"`. Inventory item stays inert.
+- `tests/harness/test_item_sword_of_wounding.py` — 5 tests (hit installs `wound_stacks: 1` with start-of-turn markers; second hit stacks to 2; no-attunement gate blocks install; turn-advance ticks 1..4 HP damage on a failed save; across seeds, a passing CON save clears the buff).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3025 → 3030 (+5 Sword of Wounding tests); new section.
+- `docs/plans/magic-items-automation.md`: Bucket C `sword-of-wounding` row marked ✅; recommended batch order trimmed.
+
 ## [2.359.0] - 2026-06-16 — "The Archmage's Staff"
 
 **Schema version:** 69

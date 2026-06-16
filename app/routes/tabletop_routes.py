@@ -31330,6 +31330,150 @@ async def _apply_magic_item_on_hit_save_effect(
     }
 
 
+async def _apply_magic_item_on_hit_install_effect(
+    db: Session,
+    campaign_id: int,
+    char,
+    attacker_sheet: dict,
+    attack: dict,
+    target_combatant: dict | None,
+) -> dict | None:
+    """v2.360.0 — install-without-save on-hit rider for stacking-DoT items.
+
+    Different shape from `_apply_magic_item_on_hit_save_effect` (which
+    rolls a save at install time): this fires on every hit and installs
+    OR increments a stacking condition buff on the target. There is no
+    save at install time — the save (and the per-stack damage tick)
+    happens at the START of the wounded creature's own turn, dispatched
+    from PUT /battle's turn-advance hook.
+
+    Sword of Wounding (RAW DMG p.207) is the first item: every hit adds
+    one Wound stack; at the start of the wounded creature's turn it
+    takes 1d4 necrotic per stack, then makes a DC 15 CON save — pass
+    ends all stacks. Gates on the rider's `on_hit_install` field +
+    attunement (same as the other riders). Returns a summary or None
+    on a gate miss.
+    """
+    if not target_combatant:
+        return None
+    attack_slug = (attack.get("_slug") or "").strip().lower()
+    if not attack_slug:
+        return None
+    rider_spec = _MAGIC_ITEM_ATTACK_RIDERS.get(attack_slug)
+    if not rider_spec:
+        return None
+    install_spec = rider_spec.get("on_hit_install")
+    if not install_spec:
+        return None
+
+    # Attunement gate (same convention as the other riders).
+    requires_attune = bool(rider_spec.get("requires_attunement"))
+    if requires_attune:
+        has_attuned = False
+        for inv in (attacker_sheet or {}).get("inventory") or []:
+            if not isinstance(inv, dict):
+                continue
+            if (inv.get("_slug") or "") != attack_slug:
+                continue
+            if not inv.get("equipped") or not inv.get("attuned"):
+                continue
+            has_attuned = True
+            break
+        if not has_attuned:
+            return None
+
+    # Re-fetch the target from hub state so the buff mutation lands in
+    # the canonical state (the `target_combatant` arg is a snapshot
+    # built earlier in the attack pipeline — mutating it directly
+    # would only update the local dict).
+    state = hub.get_battle(campaign_id) or {}
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("id") == target_combatant.get("id"):
+            target = c
+            break
+    if target is None:
+        return None
+
+    ckey = str(install_spec.get("condition_key") or "wounded").strip().lower()
+    stack_field = str(install_spec.get("stacking_field") or "wound_stacks")
+    src = f"item-{attack_slug}"
+    buffs = list(target.get("buffs") or [])
+    found_idx = -1
+    for i, b in enumerate(buffs):
+        if not isinstance(b, dict):
+            continue
+        if b.get("key") == ckey and b.get("source") == src:
+            found_idx = i
+            break
+    if found_idx >= 0:
+        # Increment the stack counter (mutate in place; replace dict to
+        # avoid sharing nested refs across the snapshot vs hub state).
+        existing = dict(buffs[found_idx])
+        eff = dict(existing.get("effects") or {})
+        try:
+            eff[stack_field] = int(eff.get(stack_field) or 0) + 1
+        except (TypeError, ValueError):
+            eff[stack_field] = 1
+        existing["effects"] = eff
+        buffs[found_idx] = existing
+        stacks_after = int(eff[stack_field])
+    else:
+        # First wound — install a fresh buff carrying the start-of-turn
+        # tick + save markers the PUT /battle hook reads.
+        try:
+            save_dc = int(install_spec.get("save_dc") or 15)
+        except (TypeError, ValueError):
+            save_dc = 15
+        new_buff = {
+            "key": ckey,
+            "name": str(install_spec.get("condition_name") or ckey.title()),
+            "icon": str(install_spec.get("condition_icon") or "🩸"),
+            # Long duration — the buff persists until the target saves
+            # off (or all stacks are otherwise cleared). Duration ticks
+            # in the client buff-tick loop are a no-op at this scale.
+            "duration_rounds": 999,
+            "duration_max": 999,
+            "concentration": False,
+            "source": src,
+            "effects": {
+                stack_field: 1,
+                "start_of_turn_tick_dice_per_stack": str(
+                    install_spec.get("tick_dice_per_stack") or "1d4"
+                ),
+                "start_of_turn_tick_damage_type": str(
+                    install_spec.get("tick_damage_type") or "necrotic"
+                ),
+                "start_of_turn_save_ability": str(
+                    install_spec.get("save_ability") or "CON"
+                ).upper()[:3],
+                "start_of_turn_save_dc": save_dc,
+                "start_of_turn_save_source_char_id": int(char.id),
+                "start_of_turn_save_source_char_name": str(char.name or ""),
+                "start_of_turn_save_label": str(
+                    install_spec.get("label") or "Wounded"
+                ),
+            },
+        }
+        buffs.append(new_buff)
+        stacks_after = 1
+    target["buffs"] = buffs
+    hub.set_battle(campaign_id, state)
+    await hub.broadcast(campaign_id, {
+        "type": "battle_update",
+        "data": state,
+        "force_gm_sync": True,
+    })
+    return {
+        "target_combatant_id": target_combatant.get("id"),
+        "target_name": target_combatant.get("name") or "Target",
+        "slug": attack_slug,
+        "label": str(install_spec.get("label") or "On-Hit Install"),
+        "condition_key": ckey,
+        "stacks_after": stacks_after,
+    }
+
+
 async def _apply_lance_of_lethargy(
     campaign_id: int, attacker_char_id: int, attacker_name: str,
     attacker_sheet: dict, attack: dict, target_combatant: dict | None,
@@ -33889,7 +34033,10 @@ for _vault_slug, _vault_attune in [
 for _rem_slug, _rem_attune in [
     ("bead-of-force", False), ("berserker-axe", True),
     ("hammer-of-thunderbolts", False), ("oathbow", True),
-    ("sword-of-wounding", True),
+    # sword-of-wounding promoted to a mechanical on-hit-install attack
+    # rider (wounded condition stack — start-of-turn 1d4 necrotic + DC
+    # 15 CON save to end) in v2.360.0 — registered via
+    # `_MAGIC_ITEM_ATTACK_RIDERS`.
     # pipes-of-haunting promoted to a charge-cast action (radius frighten)
     # in v2.350.0 — registered via `_MAGIC_ITEM_ACTIONS`.
     # trident-of-fish-command promoted to a charge-cast action (dominate
@@ -35552,6 +35699,38 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
                 "disadvantage on attack rolls and ability checks",
             ],
             "label": "Dagger of Venom — Poison",
+        },
+    },
+    # v2.360.0 — Sword of Wounding (RAW DMG p.207, rare, attunement, any
+    # sword). The first item on the NEW `on_hit_install` substrate: on
+    # every hit append a "wounded" stack to the target; at the start of
+    # the wounded creature's turn it takes 1d4 necrotic per stack, then
+    # makes a DC 15 CON save — pass ends all wounds. The install fires
+    # from a dedicated post-hit hook (no save at install time, unlike
+    # `on_hit_save`), and the start-of-turn tick + save is dispatched
+    # from PUT /battle's turn-advance hook (the v2.97.58 Heroism
+    # precedent, generalized to the dynamic "saver = newly-active
+    # combatant" case). **v1 simplifications (GM-narrated):** the RAW
+    # "once per turn" cap on adding new stacks (no per-turn-of-wielder
+    # state tracking in v1), the ally-can-end-via-Medicine-DC-15
+    # alternative, and the "HP lost this way only returns on a rest"
+    # clause (we apply the necrotic damage straight; the rest-only-heal
+    # clause is GM-narrated). The +1/etc bonus is GM-narrated (Sword of
+    # Wounding RAW has no magical attack/damage bonus).
+    "sword-of-wounding": {
+        "label": "Sword of Wounding",
+        "requires_attunement": True,
+        "on_hit_install": {
+            "effect": "wound_stack",
+            "label": "Sword of Wounding",
+            "condition_key": "wounded",
+            "condition_name": "Wounded",
+            "condition_icon": "🩸",
+            "stacking_field": "wound_stacks",
+            "tick_dice_per_stack": "1d4",
+            "tick_damage_type": "necrotic",
+            "save_ability": "CON",
+            "save_dc": 15,
         },
     },
     # v2.318.0 — Sword of Life Stealing (RAW DMG p.206, rare, attunement).
@@ -88753,6 +88932,44 @@ async def use_attack(
                     char.id,
                 )
 
+        # v2.360.0 — Sword of Wounding on-hit install. Different from
+        # the on_hit_save hook above (which always rolls a save at
+        # install time): this fires on every hit and stacks a "wounded"
+        # condition on the target with no save. The per-stack damage
+        # tick + DC 15 CON save happens at the START of the wounded
+        # creature's turn, dispatched from PUT /battle's turn-advance
+        # hook. Skipped on dead targets (already-resolved kills).
+        if hit and not target_dead:
+            try:
+                wound_result = await _apply_magic_item_on_hit_install_effect(
+                    db, campaign_id, char, sheet, attack,
+                    target_combatant,
+                )
+                if wound_result is not None:
+                    await hub.broadcast(campaign_id, {
+                        "type": "feature_used",
+                        "data": {
+                            "character_id": char.id,
+                            "character_name": char.name,
+                            "feature_name": wound_result["label"],
+                            "feature_desc": (
+                                f"{char.name} wounds "
+                                f"{wound_result['target_name']} "
+                                f"(stack {wound_result['stacks_after']})."
+                            ),
+                            "source": f"item-{wound_result['slug']}-install",
+                            "target_combatant_id": wound_result["target_combatant_id"],
+                            "target_name": wound_result["target_name"],
+                            "condition_key": wound_result["condition_key"],
+                            "stacks_after": wound_result["stacks_after"],
+                        },
+                    })
+            except Exception:
+                logging.exception(
+                    "on_hit_install resolve failed for char_id=%s",
+                    char.id,
+                )
+
         # v2.99.90 — Repelling Blast invocation. On a successful
         # Eldritch Blast hit, push the target up to 10 ft away in
         # a straight line. RAW says "you can push" (optional); v1
@@ -92287,6 +92504,172 @@ async def update_battle(
                         },
                     })
                 break  # one Heroism buff per character RAW
+
+        # v2.360.0 — Sword of Wounding start-of-turn tick. Walks the new
+        # active combatant's buffs for any carrying the wound-stack
+        # markers stamped by `_apply_magic_item_on_hit_install_effect`
+        # (`start_of_turn_tick_dice_per_stack` + `start_of_turn_save_*`).
+        # For each, rolls N × the per-stack dice and applies it as
+        # necrotic damage; then resolves a DC 15 CON save — on pass,
+        # drops the buff (clearing all stacks). Works for both PC and
+        # NPC targets (`_apply_damage_to_combatant` handles both, and
+        # the save resolution uses the same PC-vs-NPC sheet lookup as
+        # `_resolve_repeated_save_for_buff`). RAW DMG p.207: "At the
+        # start of each of the wounded creature's turns, it takes 1d4
+        # necrotic damage for each time you've wounded it, and it can
+        # then make a DC 15 Constitution saving throw, ending the
+        # effect of all such wounds on itself on a success."
+        if _active is not None:
+            _wound_buffs = list(_active.get("buffs") or [])
+            for _wb in _wound_buffs:
+                if not isinstance(_wb, dict):
+                    continue
+                _wb_eff = _wb.get("effects")
+                if not isinstance(_wb_eff, dict):
+                    continue
+                _tick_dice = str(
+                    _wb_eff.get("start_of_turn_tick_dice_per_stack") or ""
+                ).strip()
+                if not _tick_dice:
+                    continue
+                try:
+                    _stack_count = int(_wb_eff.get("wound_stacks") or 0)
+                except (TypeError, ValueError):
+                    _stack_count = 0
+                if _stack_count <= 0:
+                    continue
+                _tick_dmg_type = str(
+                    _wb_eff.get("start_of_turn_tick_damage_type") or "necrotic"
+                )
+                _save_ab = str(
+                    _wb_eff.get("start_of_turn_save_ability") or "CON"
+                ).upper()[:3]
+                try:
+                    _save_dc = int(_wb_eff.get("start_of_turn_save_dc") or 15)
+                except (TypeError, ValueError):
+                    _save_dc = 15
+                _save_label = str(
+                    _wb_eff.get("start_of_turn_save_label") or "Wounded"
+                )
+                try:
+                    _src_char_id = int(
+                        _wb_eff.get("start_of_turn_save_source_char_id") or 0
+                    )
+                except (TypeError, ValueError):
+                    _src_char_id = 0
+                _src_char_name = str(
+                    _wb_eff.get("start_of_turn_save_source_char_name") or ""
+                )
+
+                # 1) Roll the per-stack damage as N independent rolls of
+                # the catalog's dice expression and sum them. Iterating
+                # (rather than rewriting "1d4" → "Nd4") keeps the
+                # arithmetic straight if a future item carries a
+                # per-stack expression like "1d4+1" where the flat
+                # bonus should also apply per-stack.
+                _dmg_total = 0
+                for _ in range(_stack_count):
+                    try:
+                        _r_one = dice_mod.roll(_tick_dice)
+                        _dmg_total += int(_r_one.total)
+                    except dice_mod.DiceParseError:
+                        pass
+                if _dmg_total > 0:
+                    try:
+                        await _apply_damage_to_combatant(
+                            db, campaign_id, _active,
+                            damage_amount=_dmg_total,
+                            damage_type=_tick_dmg_type,
+                            is_attack=False, is_magical=True,
+                            attacker_char_id=(
+                                _src_char_id if _src_char_id > 0 else None
+                            ),
+                        )
+                    except Exception:
+                        logging.exception(
+                            "wound start-of-turn damage apply failed"
+                        )
+                    await hub.broadcast(campaign_id, {
+                        "type": "feature_used",
+                        "data": {
+                            "source": f"{_wb.get('source') or 'item'}-tick",
+                            "feature_name": (
+                                f"🩸 {_wb.get('name') or 'Wounded'} — "
+                                f"{_stack_count} stack"
+                                f"{'s' if _stack_count != 1 else ''}"
+                            ),
+                            "feature_desc": (
+                                f"{_active.get('name') or 'Target'} takes "
+                                f"{_dmg_total} {_tick_dmg_type} damage at "
+                                f"start of turn "
+                                f"({_stack_count}×{_tick_dice})."
+                            ),
+                            "char_name": _active.get("name") or "Target",
+                            "target_combatant_id": _active.get("id"),
+                            "damage_amount": _dmg_total,
+                            "damage_type": _tick_dmg_type,
+                            "wound_stacks": _stack_count,
+                        },
+                    })
+
+                # 2) Roll the DC 15 CON save (PC or NPC saver). On a pass,
+                # drop the wounded buff via `_resolve_repeated_save_for_buff`
+                # — we temporarily stamp the `repeated_save_*` markers on
+                # a copy of the buff so the shared helper rolls + drops
+                # exactly as it does for end-of-turn saves. The
+                # `start_of_turn_save_*` markers are kept separately so a
+                # future end-of-turn save hook doesn't double-fire on this
+                # same buff.
+                _saver = None
+                if _active.get("char_id"):
+                    _act_char = db.query(Character).filter(
+                        Character.id == int(_active["char_id"]),
+                    ).first()
+                    if _act_char and _act_char.sheet:
+                        _saver = {
+                            "kind": "pc",
+                            "char_id": int(_active["char_id"]),
+                            "char_name": _act_char.name,
+                            "sheet": dict(_act_char.sheet),
+                        }
+                else:
+                    _tmpl_id = _active.get("token_template_id")
+                    if _tmpl_id:
+                        _tmpl = db.query(TokenTemplate).filter(
+                            TokenTemplate.id == int(_tmpl_id),
+                        ).first()
+                        if _tmpl:
+                            try:
+                                _npc_sheet = _monster_template_to_sheet(
+                                    _tmpl, campaign_id,
+                                )
+                                _saver = {
+                                    "kind": "npc",
+                                    "char_name": (
+                                        _active.get("name")
+                                        or _tmpl.name or "Creature"
+                                    ),
+                                    "sheet": _npc_sheet,
+                                    "combatant": _active,
+                                }
+                            except Exception:
+                                _saver = None
+                if _saver is not None:
+                    _wb_for_save = dict(_wb)
+                    _wb_for_save["repeated_save_ability"] = _save_ab
+                    _wb_for_save["repeated_save_dc"] = _save_dc
+                    try:
+                        await _resolve_repeated_save_for_buff(
+                            campaign_id, db, _saver, _wb_for_save,
+                            note_prefix=f"🩸 Start-of-turn save vs {_save_label}",
+                            feature_used_source=(
+                                f"{_wb.get('source') or 'item'}-save-passed"
+                            ),
+                        )
+                    except Exception:
+                        logging.exception(
+                            "wound start-of-turn save resolve failed"
+                        )
 
         # v2.99.425 — Phase 5.1: aura tick. Apply any aura emitted by the
         # new active combatant (owner-turn-start model) to the creatures

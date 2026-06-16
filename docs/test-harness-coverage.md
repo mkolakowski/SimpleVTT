@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3025 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.359.0, 2026-06-16).
+**Total tests:** 3030 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.360.0, 2026-06-16).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3640,6 +3640,17 @@ v2.346.0 magic-items — Staff of Withering (RAW DMG p.202, rare, attunement), B
 | `test_staff_of_withering_save_fires_on_hit` | A hit vs a Bandit → `feature_used` source `item-staff-of-withering-save`, dc 15, ability CON (v2.348.0 `ability_disadvantage` dispatch). |
 | `test_staff_of_withering_withers_on_failed_save` | Sweep seeds until the Bandit fails → the `withered` buff is installed carrying `effects.disadvantage_on` with the STR/CON check+save markers. |
 | `test_staff_of_withering_requires_attunement` | Equipped-but-unattuned → the necrotic rider does not fire (attunement gate). |
+
+### `test_item_sword_of_wounding.py`
+v2.360.0 magic-items — Sword of Wounding (RAW DMG p.207, rare, attunement, any sword), Bucket C on-hit-install attack rider. The first item on the new `on_hit_install` substrate: each hit appends a `wounded` stack to the target; at the start of the wounded creature's turn the engine ticks 1d4 necrotic per stack via the new PUT /battle start-of-turn hook, then resolves a DC 15 CON save — pass clears all wounds. Sir Caelan carries it at attack_index 4; the inventory item is seed-inert (PATCH-equipped+attuned per test). Bandits make the NPC save inline.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_attack_installs_wound_stack` | A hit installs a `wounded` buff carrying `wound_stacks: 1` plus the start-of-turn tick + save markers (1d4 necrotic, DC 15 CON). |
+| `test_second_hit_stacks_wounds` | Two consecutive hits on the same target increment `wound_stacks` from 1 → 2 on a single buff entry (no second buff appended). |
+| `test_no_attunement_no_install` | Equipped-but-unattuned → no wound install (attunement gate). |
+| `test_turn_start_ticks_damage` | A turn-advance to the wounded combatant's turn drops their HP by 1..4 (one stack × 1d4) via the new start-of-turn hook. |
+| `test_passing_save_clears_wounds` | Across seeds the DC 15 CON save eventually passes and the `wounded` buff is dropped (`_resolve_repeated_save_for_buff` NPC drop path). |
 
 ### `test_item_staff_of_the_magi.py`
 v2.359.0 magic-items — Staff of the Magi (RAW DMG p.202, legendary, attunement), Bucket B passive reusing the v2.358.0 `spell_dc_bonus` substrate (+2 spell save DC). Observed through Thalindra casting Fireball at a Bandit (`auto_save_dc`). Seed-inert + PATCH-equipped+attuned + long rest between casts.

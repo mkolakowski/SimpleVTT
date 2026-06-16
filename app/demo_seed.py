@@ -1821,6 +1821,24 @@ def _paladin_sheet(name: str) -> dict:
              "damage": "1d8+6", "damage_type": "slashing",
              "range": "5 ft", "_slug": "holy-avenger",
              "desc": "Legendary longsword, attunement. +3 attack/damage; +2d10 radiant on hit vs. fiends and undead (RAW DMG p.174). 10-ft aura grants advantage on saves vs spells/magical effects to you and friendly creatures (GM-narrated)."},
+            # v2.360.0 — Magic-items: Sword of Wounding Longsword (RAW DMG
+            # p.207, rare, attunement, any sword). RAW gives NO magical
+            # attack/damage bonus, so the row mirrors Caelan's base
+            # longsword (+6 / 1d8+3). The wound-stack install + per-turn
+            # 1d4 necrotic tick + DC 15 CON save fire from the
+            # `_apply_magic_item_on_hit_install_effect` post-hit hook
+            # when the inventory item is equipped + attuned (the
+            # `_slug` field is the rider gate). The inventory item is
+            # seeded INERT (spare loot, attunement-cap-friendly) — the
+            # harness PATCHes equipped+attuned per test, runs the rider
+            # assertion, then restores. The "once per turn" cap, the
+            # ally-can-end-via-Medicine-DC-15 alternative, and the
+            # "HP lost this way only returns on a rest" clause are
+            # GM-narrated in v1.
+            {"name": "Sword of Wounding Longsword", "attack_bonus": "+6",
+             "damage": "1d8+3", "damage_type": "slashing",
+             "range": "5 ft", "_slug": "sword-of-wounding",
+             "desc": "Rare longsword, attunement. On each hit, append a Wound stack to the target; at the start of each of its turns it takes 1d4 necrotic per stack, then makes a DC 15 CON save — pass ends all wounds (RAW DMG p.207)."},
         ],
         # Paladin spells per Oath of Devotion (always prepared) + a few
         # core picks. Slugs reference the shipped SRD JSON. Casting
