@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.364.2] - 2026-06-16 — "The Initiative Anchor"
+
+**Schema version:** 69
+
+**Commit summary:** Test-only follow-up on the v2.363.x Berserker Axe save harness. `test_berserk_save_installs_buff_on_failed_save` was relying on a leftover battle state to put Krieger in init — when other tests ran first and cleared the battle, `_install_buff` failed (the helper requires the character to be in init) and the buff never landed despite the save firing. Fix: explicitly seed a battle with Krieger as a combatant before the damage loop, AND switch the inner assertion to the `feature_used` broadcast (mirror of the test 2 pattern from v2.363.2).
+
+**Description:** Pure test fix; no engine change. The on-damage berserk save itself was working correctly — the harness was assuming an environmental precondition (Krieger in init) that didn't hold consistently. Now the test explicitly establishes it. PATCH — test stability fix, no schema change.
+
+### Fixed
+- `tests/harness/test_item_berserker_axe_save.py::test_berserk_save_installs_buff_on_failed_save` — explicitly seeds a battle with Krieger as a combatant + switches the per-iteration check to the `feature_used` broadcast filtering on `passed: False` (the broadcast signal is per-test via `gm_ws.mark()`). The post-loop sheet sanity check stays for the buff-markers assertion.
+
 ## [2.364.1] - 2026-06-16 — "The HTTP Echo"
 
 **Schema version:** 69

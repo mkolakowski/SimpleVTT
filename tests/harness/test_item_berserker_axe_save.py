@@ -36,6 +36,25 @@ async def _seed_dice(gm_client, seed):
     assert r.status_code == 200, r.text
 
 
+def _mkc(cid, char_id=None, name="X", hp_max=200):
+    return {
+        "id": cid, "char_id": char_id, "name": name,
+        "initiative": 10, "hp_current": hp_max, "hp_max": hp_max,
+        "ac": 1, "buffs": [], "creature_type": "humanoid",
+        "speed_walk": 30,
+        "economy": {"action": False, "bonus": False,
+                    "reaction": False, "movement": 0},
+    }
+
+
+async def _seed_battle(gm_client, combatants):
+    return await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": combatants, "turn_index": 0,
+              "round": 1, "active": True},
+    )
+
+
 async def _sheet_json(gm_client, char_id):
     r = await gm_client.get(
         f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-json",
@@ -131,16 +150,30 @@ async def krieger(roster):
     return roster["Krieger Stonefist"]
 
 
-async def test_berserk_save_installs_buff_on_failed_save(gm_client, krieger):
-    """Krieger attuned to the Berserker Axe, takes 10 damage via PATCH
-    /sheet-fields (hp_change_reason=damage). Sweep seeds until the DC 15
-    WIS save fails → the `berserk` buff appears on his sheet."""
+async def test_berserk_save_installs_buff_on_failed_save(
+    gm_client, gm_ws, krieger,
+):
+    """Krieger attuned + in init, takes 10 damage via PATCH /sheet-fields.
+    Sweep seeds until the DC 15 WIS save fails — assert via the
+    `feature_used` broadcast that the on_damage_save (a) fired and (b)
+    landed on `passed: False` at least once. The broadcast signal is
+    per-test (via `gm_ws.mark()`) so cross-test contamination of
+    `_buffs_active` is irrelevant. When the save fails, the buff is
+    installed (via `_install_buff` → mirrored to sheet); we sanity-check
+    the post-loop sheet too."""
     await _clear_berserk(gm_client, krieger["id"])
     inv_snap, hp_snap = await _patch_inv(
         gm_client, krieger["id"], equipped=True, attuned=True,
     )
+    # Seed a battle so the install can reach the combatant in hub state
+    # (`_install_buff` requires the character to be in init).
+    krieger_cid = f"tok_baxe_save_krieger_{krieger['id']}"
+    await _seed_battle(gm_client, [
+        _mkc(krieger_cid, krieger["id"], name=krieger["name"]),
+    ])
     try:
-        installed = False
+        gm_ws.mark()
+        failed_seed = None
         for seed in range(0, 200):
             # Reset HP each iteration so the damage trigger keeps firing.
             await gm_client.patch(
@@ -158,30 +191,35 @@ async def test_berserk_save_installs_buff_on_failed_save(gm_client, krieger):
             finally:
                 await _seed_dice(gm_client, None)
 
-            data = await _sheet_json(gm_client, krieger["id"])
-            sheet = data.get("sheet") or {}
-            buffs = _buffs(sheet)
-            if any(
-                isinstance(b, dict) and b.get("key") == _BERSERK_BUFF_KEY
-                for b in buffs
-            ):
-                installed = True
+            this_seed_saves = [
+                m for m in gm_ws.buffered("feature_used")
+                if (m.get("data") or {}).get("source") == _SAVE_SOURCE
+            ]
+            failed = [
+                m for m in this_seed_saves
+                if (m.get("data") or {}).get("passed") is False
+            ]
+            if failed:
+                failed_seed = seed
                 break
-            # Clear any berserk install (none expected — pass case);
-            # also clear concentration buffs not relevant here.
-        assert installed, (
+        assert failed_seed is not None, (
             "Across seeds 0..199 the DC 15 WIS save never failed — "
             "the on-damage berserk save may not be firing. Krieger's "
             "WIS save is +1, so seeds with a low d20 should fail."
         )
-        # Verify the buff's markers.
+        # Sanity-check the buff lands on the sheet via the v2.363.1
+        # mirror.
         sheet = (await _sheet_json(gm_client, krieger["id"])).get("sheet") or {}
         berserk = next(
             (b for b in _buffs(sheet)
              if isinstance(b, dict) and b.get("key") == _BERSERK_BUFF_KEY),
             None,
         )
-        assert berserk is not None
+        assert berserk is not None, (
+            f"berserk save broadcast fired with passed=False but the buff "
+            f"didn't land on the sheet via the v2.363.1 mirror; "
+            f"_buffs_active={_buffs(sheet)!r}"
+        )
         eff = berserk.get("effects") or {}
         assert eff.get("berserk_active") is True
         assert eff.get("berserk_attack_nearest") is True
