@@ -17,11 +17,46 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 
 **Quick map of where to look:**
 
-- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (v2.344.1 refresh)](#srd-5e-audit-v23441-refresh) for the current per-category coverage table and re-prioritisation (magic-item content tail **closed**), then [SRD 5e Audit (v2.315.0 refresh)](#srd-5e-audit-v23150-refresh) for the prior pass, then [SRD 5e Audit (2026-06-14 refresh)](#srd-5e-audit-2026-06-14-refresh), [SRD 5e Audit (2026-06-13 refresh)](#srd-5e-audit-2026-06-13-refresh), [SRD 5e Audit (2026-06-11 refresh)](#srd-5e-audit-2026-06-11-refresh) and [SRD 5e Audit (2026-06-10)](#srd-5e-audit-2026-06-10) for the prior passes. The v2.315.0 refresh **corrects two denominators** that all prior passes got wrong: magic items are **123 / 239 wired (~51%)** — the old "292" figure counted total equipment (239 magic + 37 mundane weapons + 18 mundane armor), so the percentage was understated; and class features are **222 per-row entries (~81%)**, not the stale "133". Overall SRD automation is **~75%**.
+- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (v2.376.0 refresh)](#srd-5e-audit-v23760-refresh) for the current per-category coverage (overall **~90%** — AoE auto-targeting arc closed, class features strictly-✅ 100%, magic items effectively 100%; remaining ~10% dominated by Legendary + Lair Actions). Prior passes: [v2.344.1](#srd-5e-audit-v23441-refresh), [v2.315.0](#srd-5e-audit-v23150-refresh), [2026-06-14](#srd-5e-audit-2026-06-14-refresh), [2026-06-13](#srd-5e-audit-2026-06-13-refresh), [2026-06-11](#srd-5e-audit-2026-06-11-refresh), [2026-06-10](#srd-5e-audit-2026-06-10). The v2.315.0 refresh **corrects two denominators** that all prior passes got wrong: magic items are now **235 / 239 wired (~98%)** — the old "292" figure counted total equipment (239 magic + 37 mundane weapons + 18 mundane armor); and class features are **222 per-row entries (now strictly-✅ 100%)**, not the stale "133".
 - **Active class-feature automation backlog** → see [Full Class-Feature Automation — remaining backlog](#full-class-feature-automation--remaining-backlog) (just Phase 8 + a few per-feature Phase-2 finishers remain after v2.149.1).
 - **Design plans with deferred phases** → see [Design Plans Backlog](#design-plans-backlog) (every `docs/plans/*.md` indexed with a priority tag).
 - **One-off bugs + UI polish that don't have a design plan** → see [Manually Added](#manually-added).
 - **Big feature buckets that aren't tracked by a plan** → see the topic sections below (Character Sheet, GM Tools, Combat, Maps, Media, Player Features, UI/Mobile, Rules Reference, Legal & Compliance, Test Infrastructure, Integrations, Visual, Class Features (next cycle)). The priority legend doesn't apply to these — they're topic-grouped, not P-tagged.
+
+---
+
+## SRD 5e Audit (v2.376.0 refresh)
+
+**Audit scope.** Recomputed against the codebase as of v2.376.0, after the **v2.345.0 → v2.376.0 sweep** that landed (a) Aura of Courage + Unarmored Defense + Deflect Missiles + Cleansing Touch (closing the class-feature ⚪ tail to **strictly-✅ 100%**), (b) Aid upcast + Dispel Magic + Aid 3-target cap (closing the named-spell P2 gap), and (c) the **AoE auto-targeting arc** (v2.373.0 sphere-targets faction filter → v2.373.1 cone+line picker parity → v2.374.0/.375.0/.376.0 `/cast_spell target_set` sphere+cone+line — server-side AoE target id resolution for every SRD AoE damage spell). The single biggest un-planned SRD surface left is **Legendary + Lair Actions** (was P1 in the 2026-06-11 audit, never moved through any subsequent refresh).
+
+### Per-category coverage (the headline numbers)
+
+| Category | SRD count | Automated | Notes |
+|---|---|---|---|
+| Races | 9 | **~90%** | Unchanged. |
+| Monsters | 322 | **~85%** | Stat blocks + attacks + legendary-resistance pool + legendary-action data shipped, but the **engine `/use_legendary_action` dispatch + lair-action infrastructure still doesn't exist** — see Remaining gaps #1. |
+| Conditions | 15 | **~85%** | Unchanged. |
+| Class features | **222 rows** | **✅ 100%** | **Aura of Courage flipped v2.368.0**, closing the last genuine ⚪ row noted in the v2.344.3 reconciliation. Auto-AC engine for Unarmored Defense v2.369.0; Deflect Missiles v2.370.0; Cleansing Touch picker v2.370.1. Class-feature SRD coverage is now strictly-✅ across every per-row entry. |
+| Spells | 319 | **~78%** | **+6 pts vs. v2.344.1 (~72% → ~78%):** server-side AoE auto-targeting closed the "area-effect automation" lever (was the P2 spell gap). `/cast_spell` now resolves AoE target ids for sphere (v2.374.0), cone (v2.375.0), and line (v2.376.0) shapes with optional faction filtering. Dice/heal upcast scaling remains effectively complete (39/73 modeled-base leveled spells dice-scale via the v2.125.0 parser + structured fields; rest are RAW non-scalers). Remaining: 3 utility spells with non-dice upcast (Bestow Curse / Geas duration; Chain Lightning extra-beams — already wired) + ~250 cast-and-broadcast utility spells (no damage/healing base = nothing TO upcast). |
+| Magic items | **235 / 239 wired** | **~98%** | Unchanged from v2.344.1. The 4 unwired remain generic/meta slugs intentionally out-of-scope. |
+
+**Overall ~90%** automated across the SRD ruleset (up from ~88% at v2.344.1 — the Spells jump from ~72% → ~78% via AoE auto-targeting + the class-feature flip from ~99% → strictly-✅ 100% are the movers). The remaining ~10% is dominated by Legendary + Lair Actions (~5 pts on the Monsters denominator) + cast-and-broadcast utility spells (the ~250 base-less spells that have nothing to mechanize beyond broadcast).
+
+### Remaining gaps (priority order — toward full SRD automation)
+
+The engine substrate is complete for every shipped category; the remaining items below are content/engine-code gaps that need new substrates, not data drops.
+
+1. 🔴 **P1 — Legendary actions + lair actions (Phase 0 — no plan doc).** 15 SRD monsters carry `legendary_actions` data arrays (ancient dragons, lich, vampire, tarrasque, kraken, mummy lord, solar, androsphinx, unicorn) but the engine has no `/use_legendary_action` dispatch, no per-round action-point budget (RAW: 3 points / round, refresh at end of each non-legendary turn), no legendary-resistance pool (RAW: 3/day auto-pass on a failed save), and zero monsters carry `lair_actions` data despite the SRD specifying them on the same roster (initiative count 20 trigger; thematic environmental effect each round in lair). Today a GM running an ancient dragon adjudicates these by hand. **Single biggest un-planned SRD surface.** Suggested approach: write `docs/plans/legendary-actions.md`; Phase 1 plumbs the action-point budget + `/use_legendary_action` dispatch reusing the `/npc_attack` pipeline for attack-shape actions; defer save-shape actions (Frightful Presence, Detect) until on-monster reactions land; lair actions ship as a separate Phase 2 once the monster data layer carries them.
+2. 🟡 **P2 — Cast-and-broadcast utility-spell upcast.** ~250 SRD spells (Detect Magic, Divination, Counterspell, Comprehend Languages, etc.) have no damage/healing base, so they have nothing to upcast-scale in the dice/heal sense — but a subset (Bless / Bane already wired; Aid already wired v2.372.0; True Strike; Identify) could gain richer per-slot effect modeling (extra targets / longer durations / wider AoE). Pick the next 3–5 highest-leverage spells and ship per-spell substrates.
+3. 🟢 **P3 — Sleep / Hold Person / Hold Monster bespoke-constant refactor.** Migrate the three off per-endpoint constants (Hold Person uses a hardcoded `slot_level - 1` for max targets) onto a shared structured `upcast` param field per [`spell-upcasting.md`](plans/spell-upcasting.md). Pure cleanup; no behavior change.
+4. ✅ **DONE — Class-feature ⚪ tail.** Closed v2.368.0–v2.370.1 (Aura of Courage / Unarmored Defense / Deflect Missiles / Cleansing Touch). Strictly-✅ 100%.
+5. ✅ **DONE — Spell area-effect automation.** Closed v2.373.0–v2.376.0 (sphere + cone + line picker faction filter + `/cast_spell target_set` parity).
+6. ✅ **DONE — Spell upcast dice/heal scaling.** Effectively complete (v2.344.2 reconciliation).
+7. ✅ **DONE — Magic-item content tail.** Closed v2.316.0–v2.344.0. 235/239 wired; 4 generic/meta slugs intentionally out-of-scope.
+
+### Out-of-scope (unchanged)
+
+Tasha's, Xanathar's-beyond-SRD, Strixhaven, post-SRD feats, backgrounds beyond Acolyte stay future-3.x scope.
 
 ---
 

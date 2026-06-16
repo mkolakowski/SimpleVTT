@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.376.1] - 2026-06-16 — "The State of the Realm"
+
+**Schema version:** 69
+
+**Commit summary:** Refreshes the [`TODO.md`](TODO.md) SRD 5e audit to v2.376.0. The prior v2.344.1 refresh predates the v2.345.0 → v2.376.0 sweep that landed Aura of Courage + Unarmored Defense + Deflect Missiles + Cleansing Touch (closing class features to strictly-✅ 100%), Aid upcast + Dispel Magic + Aid 3-target cap, and the entire AoE auto-targeting arc (v2.373.0 → v2.376.0). After all that, overall SRD automation is **~90%** (up from ~88% at v2.344.1); the headline gap is now **Legendary + Lair Actions** (15 SRD monsters carry the data but the engine `/use_legendary_action` dispatch doesn't exist) — Phase 0 (no plan doc) since the 2026-06-11 refresh first flagged it as P1.
+
+**Description:** Per-category re-baseline:
+- **Class features** flipped from ~99% (v2.344.3) → **strictly-✅ 100%** (Aura of Courage v2.368.0 closed the lone genuine ⚪).
+- **Spells** up from ~72% → **~78%** — the AoE auto-targeting arc (`/cast_spell target_set` for sphere/cone/line) closed the "area-effect automation" lever that was the P2 spell gap.
+- **Monsters** still ~85% — legendary-action *data* shipped, but the engine dispatch is the missing piece. Now P1.
+- **Magic items**, Races, Conditions unchanged (already at their respective ceilings).
+
+The audit also re-prioritizes: Legendary + Lair Actions promotes to P1; cast-and-broadcast utility-spell upcast (Bless / Bane already wired; Aid already shipped) is now P2; the Sleep / Hold Person / Hold Monster bespoke-constant refactor stays P3 (pure cleanup, no behavior change).
+
+PATCH — pure doc-edit; no runtime code change.
+
+### Changed
+- `TODO.md`: new SRD 5e Audit (v2.376.0 refresh) section prepended above the v2.344.1 entry — re-baselines per-category coverage to ~90% overall + re-prioritizes Legendary + Lair Actions to P1.
+- `TODO.md`: "Quick map" pointer at top updated to point at the new v2.376.0 audit (was the v2.344.1 audit).
+
 ## [2.376.0] - 2026-06-16 — "The Caster's Eye, Line"
 
 **Schema version:** 69
