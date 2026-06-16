@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.379.1] - 2026-06-16 — "The Maturity Snapshot"
+
+**Schema version:** 69
+
+**Commit summary:** Refreshes the [`TODO.md`](TODO.md) SRD 5e audit to v2.379.0. The v2.377.0–v2.379.0 lair-action arc closure (data backfill metallic + non-dragon + condition-map closure) bumps Monsters category from ~98% to ~99%, overall SRD coverage from ~93% to **~94%**. The refresh also reframes the audit's "what's left" section: the SRD ruleset is now mature enough that the next substantive surfaces are either cleanup (no behavior change) or scope expansion (post-SRD). The "what's next for the project?" question is now a scope decision, not a backlog drain.
+
+**Description:** Per-category re-baseline after the lair-action arc closure:
+- **Monsters** flipped from ~98% (v2.376.2) → **~99%** (lair-action data + condition map + engine all complete; 22 SRD legendary lair slugs authored, every condition auto-installs).
+- **Overall** flipped from ~93% → **~94%** (Monsters +1 pt on the recompute).
+- The "Remaining gaps" priority list now shows just two non-✅ items: P2 cast-and-broadcast utility-spell upcast (the long tail of spells with no damage/healing base to scale) + P3 Hold Person / Hold Monster bespoke-constant refactor (pure cleanup).
+
+A new closing section "What's left to ship in SimpleVTT 2.x?" frames the next-arc inflection: 3.0 scope expansion (post-SRD content, 2024 PHB rule changes, Mythic Actions, custom AoE shapes) vs. polish + UX vs. test-infrastructure hardening. The SRD-completionist arc that has driven the v2.x sweep is now ~94% done.
+
+PATCH — pure doc edit; no runtime code change.
+
+### Changed
+- `TODO.md`: new SRD 5e Audit (v2.379.0 refresh) section prepended above the v2.376.0 entry — re-baselines Monsters ~98% → ~99%, overall ~93% → ~94%; reframes "what's left" with the maturity snapshot.
+- `TODO.md` "Quick map" pointer updated to point at the v2.379.0 audit (was v2.376.0).
+
 ## [2.379.0] - 2026-06-16 — "The Closed Condition Map"
 
 **Schema version:** 69

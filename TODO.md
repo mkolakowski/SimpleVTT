@@ -17,11 +17,56 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 
 **Quick map of where to look:**
 
-- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (v2.376.0 refresh)](#srd-5e-audit-v23760-refresh) for the current per-category coverage (overall **~93%** — Legendary + Lair Actions full arc shipped, AoE auto-targeting arc closed, class features strictly-✅ 100%, magic items effectively 100%; **v2.376.2 reconciliation** caught the v2.376.1 first cut promoting an already-shipped item to P1). Prior passes: [v2.344.1](#srd-5e-audit-v23441-refresh), [v2.315.0](#srd-5e-audit-v23150-refresh), [2026-06-14](#srd-5e-audit-2026-06-14-refresh), [2026-06-13](#srd-5e-audit-2026-06-13-refresh), [2026-06-11](#srd-5e-audit-2026-06-11-refresh), [2026-06-10](#srd-5e-audit-2026-06-10). The v2.315.0 refresh **corrects two denominators** that all prior passes got wrong: magic items are now **235 / 239 wired (~98%)** — the old "292" figure counted total equipment (239 magic + 37 mundane weapons + 18 mundane armor); and class features are **222 per-row entries (now strictly-✅ 100%)**, not the stale "133".
+- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (v2.379.0 refresh)](#srd-5e-audit-v23790-refresh) for the current per-category coverage (overall **~94%** — lair-action arc fully closed end-to-end, Monsters category at ~99%, AoE auto-targeting arc closed, class features strictly-✅ 100%, magic items effectively 100%; the SRD is now ~94% automated and the next-arc inflection is 3.0 scope expansion, not backlog drain). Prior passes: [v2.376.0](#srd-5e-audit-v23760-refresh), [v2.344.1](#srd-5e-audit-v23441-refresh), [v2.315.0](#srd-5e-audit-v23150-refresh), [2026-06-14](#srd-5e-audit-2026-06-14-refresh), [2026-06-13](#srd-5e-audit-2026-06-13-refresh), [2026-06-11](#srd-5e-audit-2026-06-11-refresh), [2026-06-10](#srd-5e-audit-2026-06-10). The v2.315.0 refresh **corrects two denominators** that all prior passes got wrong: magic items are now **235 / 239 wired (~98%)** — the old "292" figure counted total equipment (239 magic + 37 mundane weapons + 18 mundane armor); and class features are **222 per-row entries (now strictly-✅ 100%)**, not the stale "133".
 - **Active class-feature automation backlog** → see [Full Class-Feature Automation — remaining backlog](#full-class-feature-automation--remaining-backlog) (just Phase 8 + a few per-feature Phase-2 finishers remain after v2.149.1).
 - **Design plans with deferred phases** → see [Design Plans Backlog](#design-plans-backlog) (every `docs/plans/*.md` indexed with a priority tag).
 - **One-off bugs + UI polish that don't have a design plan** → see [Manually Added](#manually-added).
 - **Big feature buckets that aren't tracked by a plan** → see the topic sections below (Character Sheet, GM Tools, Combat, Maps, Media, Player Features, UI/Mobile, Rules Reference, Legal & Compliance, Test Infrastructure, Integrations, Visual, Class Features (next cycle)). The priority legend doesn't apply to these — they're topic-grouped, not P-tagged.
+
+---
+
+## SRD 5e Audit (v2.379.0 refresh)
+
+**Audit scope.** Recomputed against the codebase as of v2.379.0, after the **v2.377.0 → v2.379.0 lair-action arc closure** that landed (a) the 5 metallic dragon lairs (v2.377.0 "The Metallic Five"), (b) Lich + Kraken lairs (v2.378.0 "The Phylactery and the Deep" — every SRD legendary lair-bearing creature now has authored data), and (c) the condition-map closure mapping `unconscious` / `silenced` / `frightened` so the engine auto-installs the buff on failed lair-action saves (v2.379.0 "The Closed Condition Map"). After this sweep **the lair-action arc is end-to-end complete** — data + engine dispatch + UI + cadence guards (once-per-round + no-repeat + init-20 broadcast) + roll-log card + regional effects + fade tracker + condition closure. **Filed-follow-ups list on `legendary-actions.md` is empty.**
+
+### Per-category coverage (the headline numbers)
+
+| Category | SRD count | Automated | Notes |
+|---|---|---|---|
+| Races | 9 | **~90%** | Unchanged. |
+| Monsters | 322 | **~99%** | **+1 pt vs. v2.376.0 (~98% → ~99%).** Lair-action data backfill arc closed (v2.377.0–v2.378.0 = +12 slugs to `LAIR_ACTIONS_BY_SLUG` for 22 total) + condition map closure (v2.379.0 maps the last 3 unmapped condition keys). The remaining ~1% is non-SRD post-2024 mythic actions + per-monster custom AoE shapes (half-cylinder, donut) for homebrew lair actions — out of scope per the legendary-actions plan's non-goals. |
+| Conditions | 15 | **~85%** | Unchanged. The lair-action condition map closure (v2.379.0) is independent of the broader condition substrate — it shipped new lair-specific condition templates, not new core conditions. |
+| Class features | **222 rows** | **✅ 100%** | Unchanged from v2.376.0 refresh. Strictly-✅ across every per-row entry. |
+| Spells | 319 | **~78%** | Unchanged from v2.376.0 refresh. AoE auto-targeting arc closed; dice/heal upcast scaling effectively complete. Remaining: cast-and-broadcast utility spells (the long tail of spells with no damage/healing base to scale). |
+| Magic items | **235 / 239 wired** | **~98%** | Unchanged. The 4 unwired remain generic/meta slugs intentionally out-of-scope. |
+
+**Overall ~94%** automated across the SRD ruleset (up from ~93% at v2.376.2 — the Monsters bump from ~98% → ~99% via the lair-action arc closure is the mover).
+
+### Remaining gaps (priority order — toward full SRD automation)
+
+The SRD ruleset is now mature enough that the next substantive surfaces are either cleanup (no behavior change) or scope expansion (post-SRD).
+
+1. 🟡 **P2 — Cast-and-broadcast utility-spell upcast.** Unchanged from v2.376.0. ~250 SRD spells (Detect Magic, Divination, Counterspell, Comprehend Languages, etc.) have no damage/healing base — but a subset (True Strike / Identify / Magic Weapon / etc.) could gain richer per-slot effect modeling (extra targets / longer durations / wider AoE). Pick 3–5 highest-leverage spells per commit. The single largest *engine-shaped* remaining surface.
+2. 🟢 **P3 — Sleep / Hold Person / Hold Monster bespoke-constant refactor.** Unchanged. Migrate the three off per-endpoint constants (Hold Person uses a hardcoded `slot_level - 1` for max targets) onto a shared structured `upcast` param field per [`spell-upcasting.md`](plans/spell-upcasting.md). Pure cleanup; no behavior change.
+3. ✅ **DONE — Class-feature ⚪ tail.** Closed v2.368.0–v2.370.1.
+4. ✅ **DONE — Spell area-effect automation.** Closed v2.373.0–v2.376.0.
+5. ✅ **DONE — Spell upcast dice/heal scaling.** Effectively complete (v2.344.2 reconciliation).
+6. ✅ **DONE — Magic-item content tail.** Closed v2.316.0–v2.344.0.
+7. ✅ **DONE — Legendary + Lair Actions (v2.376.2 reconciliation).** Phases 1+2+3 shipped end-to-end across v2.159.32 → v2.181.0. The v2.377.0–v2.378.0 lair-action data backfills extended `LAIR_ACTIONS_BY_SLUG` from 10 to 22 slugs (all SRD legendary lair-bearing creatures). The v2.379.0 condition-map closure auto-installs the last 3 unmapped condition keys. **Arc fully closed; filed-follow-ups list empty.**
+
+### Out-of-scope (unchanged)
+
+Tasha's, Xanathar's-beyond-SRD, Strixhaven, post-SRD feats, backgrounds beyond Acolyte stay future-3.x scope. **2024 rules + Mythic Actions** likewise stay future-3.x scope.
+
+### What's left to ship in SimpleVTT 2.x?
+
+The SRD ruleset is now ~94% automated end-to-end. The remaining ~6% is dominated by **content-layer utility-spell upcast** (P2 above) and one **engine-cleanup refactor** (P3). Neither is user-visible work — the game runs strictly-RAW for every shipped category. The natural next-arc inflection is:
+
+- **3.0 scope expansion** — post-SRD content (Tasha's class features, Xanathar's tools / racial feats, 2024-PHB rule changes, Mythic Actions, custom AoE shapes for homebrew lairs).
+- **Polish + UX** — see the [Manually Added](#manually-added) section for `🟢 P3` UI nits + the Combat / GM Tools sections below for big-feature buckets that don't have a plan doc yet.
+- **Test-infrastructure hardening** — see the [Test Infrastructure](#test-infrastructure) section for the harness-suite stability + the spell-validation suite Phase 5 + the pytest-xdist parallelization filed work.
+
+The "what's the SRD missing?" question is now a small list. The "what's next for the project?" question is now a scope decision, not a backlog drain.
 
 ---
 
