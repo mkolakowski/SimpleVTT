@@ -33282,6 +33282,23 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "amulet-of-health": [
         {"ability_set": {"CON": 19}, "requires_attunement": True},
     ],
+    # v2.362.0 — Berserker Axe (RAW DMG p.155, rare, attunement, cursed).
+    # The clean mechanical part: while attuned, the wielder's HP max
+    # increases by +1 per character level. Folded into
+    # `_effective_max_hp_for_sheet` via the new `hp_max_bonus_per_level`
+    # field — surfaces on /sheet-json derived (`effective_max_hp`) AND
+    # raises `_sheet_heal_ceiling` so combat heals / long rest / Second
+    # Wind can clamp to the boosted pool. **v1 simplifications (GM-
+    # narrated):** the RAW cursed berserk save ("when you take damage
+    # you must make a DC 15 WIS save or go berserk and attack the
+    # nearest creature") — needs a damage-pipeline `on_damage_save`
+    # hook + a berserk-AI auto-attack model neither of which is in v1.
+    # The "you can't voluntarily un-attune" cursed clause is GM-
+    # narrated. The +1 magic battleaxe attack/damage bonus is baked
+    # into the wielder's seeded attack row.
+    "berserker-axe": [
+        {"hp_max_bonus_per_level": 1, "requires_attunement": True},
+    ],
     # v2.218.0 — Headband of Intellect (RAW DMG p.173, uncommon,
     # attunement; see docs/plans/str-override.md). While worn, your INT
     # *becomes* 19 if not already higher — same `ability_set` substrate as
@@ -34053,7 +34070,10 @@ for _vault_slug, _vault_attune in [
 # Stubbed now so they're catalog-visible (audit-counted) + demo-seeded; the
 # mechanics are GM-narrated until each gets its dedicated commit.
 for _rem_slug, _rem_attune in [
-    ("bead-of-force", False), ("berserker-axe", True),
+    ("bead-of-force", False),
+    # berserker-axe promoted to a mechanical passive (+1 HP per level
+    # while attuned via the new `hp_max_bonus_per_level` field) in
+    # v2.362.0 — explicit `_MAGIC_ITEM_PASSIVES` entry above.
     ("hammer-of-thunderbolts", False),
     # oathbow promoted to a mechanical conditional attack rider
     # (+3d6 piercing + advantage on attack rolls vs declared sworn
@@ -36215,6 +36235,15 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # +1/+2/+3 to spell attack rolls. ATTUNEMENT-gated.
         "spell_attack_bonus": 0,
         "spell_attack_bonus_sources": [],
+        # v2.362.0 — HP-max-per-level passive. Summed (not OR'd) across
+        # equipped+attuned items carrying the field; folded into
+        # `_effective_max_hp_for_sheet` so the per-level bonus
+        # contributes a `bonus_per_level * total_level` delta on top of
+        # any Amulet-of-Health CON-mod delta. Berserker Axe (RAW DMG
+        # p.155) is the first entry — +1 HP per character level while
+        # attuned. ATTUNEMENT-gated.
+        "hp_max_bonus_per_level": 0,
+        "hp_max_bonus_per_level_sources": [],
         # v2.242.0 — swim-speed passive. Boolean OR across equipped items
         # carrying the field; surfaced on `/sheet-json` derived. Ring of
         # Swimming (RAW DMG p.193) is the first entry — a swimming speed of
@@ -36637,6 +36666,24 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if _sab:
                 out["spell_attack_bonus"] += _sab
                 out["spell_attack_bonus_sources"].append(item_name)
+            # v2.362.0 — HP-max-per-level passive (Berserker Axe, RAW DMG
+            # p.155). Summed across equipped+attuned items; the bonus
+            # rides the item via the `hp_max_bonus_per_level` payload
+            # (or a per-item `_hp_max_bonus_per_level` rider).
+            # Attunement-gated by the per-payload check above. Folded
+            # into `_effective_max_hp_for_sheet` so the per-level bonus
+            # contributes `bonus_per_level × total_level` to the
+            # display + heal-ceiling delta.
+            _hpb = item.get("_hp_max_bonus_per_level")
+            if _hpb is None:
+                _hpb = p.get("hp_max_bonus_per_level")
+            try:
+                _hpb = int(_hpb or 0)
+            except (TypeError, ValueError):
+                _hpb = 0
+            if _hpb:
+                out["hp_max_bonus_per_level"] += _hpb
+                out["hp_max_bonus_per_level_sources"].append(item_name)
             # v2.242.0 — swim-speed passive (Ring of Swimming, RAW DMG
             # p.193). Boolean OR; the flag rides the item via the
             # `swim_speed` payload (or a per-item `_swim_speed` rider).
@@ -37045,27 +37092,60 @@ def _effective_max_hp_for_sheet(sheet: dict) -> dict | None:
     in docs/plans/str-override.md): the stored `hp.max` is left untouched;
     this returns the effective figure for the sheet/sheet-json to show.
 
-    Returns `{base, effective, delta, level, source}` only when an equipped
-    item overrides CON above its base; otherwise None."""
+    v2.362.0 — composes the CON-mod delta with the v2.362.0 Berserker-Axe
+    style `hp_max_bonus_per_level` item passive (summed × total level).
+    A sheet with EITHER an Amulet-of-Health CON override OR an equipped
+    `hp_max_bonus_per_level` item now produces a non-None result. The
+    `delta` field is the combined delta both consumers (heal-ceiling +
+    /sheet-json derived) read.
+
+    Returns `{base, effective, delta, level, source, sources}` when any
+    contributing effect applies; otherwise None.
+    """
     try:
-        base_con = _read_stored_ability(sheet, "CON")
-        eff_con = effective_ability_score(sheet, "CON")
-        if eff_con <= base_con:
-            return None
-        mod_delta = _ability_score_modifier(eff_con) - _ability_score_modifier(base_con)
-        if mod_delta == 0:
-            return None
         level = _sheet_total_level(sheet)
         hp = sheet.get("hp") if isinstance(sheet.get("hp"), dict) else {}
         base_max = int(hp.get("max") or 0)
-        delta = mod_delta * level
-        srcs = _ability_override_sources(sheet)
+
+        # CON-mod delta (Amulet of Health and friends).
+        con_delta = 0
+        con_source = None
+        base_con = _read_stored_ability(sheet, "CON")
+        eff_con = effective_ability_score(sheet, "CON")
+        if eff_con > base_con:
+            mod_delta = (
+                _ability_score_modifier(eff_con)
+                - _ability_score_modifier(base_con)
+            )
+            if mod_delta != 0:
+                con_delta = mod_delta * level
+                con_source = _ability_override_sources(sheet).get("CON")
+
+        # v2.362.0 — item HP-max-per-level delta (Berserker Axe etc.).
+        item_eff = _equipped_item_effects(sheet)
+        try:
+            per_level_bonus = int(item_eff.get("hp_max_bonus_per_level") or 0)
+        except (TypeError, ValueError):
+            per_level_bonus = 0
+        item_delta = per_level_bonus * level
+        item_sources = list(item_eff.get("hp_max_bonus_per_level_sources") or [])
+
+        total_delta = con_delta + item_delta
+        if total_delta == 0:
+            return None
+
+        sources: list = []
+        if con_source:
+            sources.append(con_source)
+        sources.extend(item_sources)
+
         return {
             "base": base_max,
-            "effective": base_max + delta,
-            "delta": delta,
+            "effective": base_max + total_delta,
+            "delta": total_delta,
             "level": level,
-            "source": srcs.get("CON"),
+            "source": sources[0] if sources else None,
+            "sources": sources,
         }
     except Exception:
         return None

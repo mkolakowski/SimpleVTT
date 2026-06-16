@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.362.0] - 2026-06-16 — "The Cursed Crown"
+
+**Schema version:** 69
+
+**Commit summary:** Third **Bucket-C** magic-item commit off the v2.344.5 stub triage. **Berserker Axe** (RAW DMG p.155, rare, attunement, cursed) HP-max half promoted from an "Armory's Remainder" catalog stub to a mechanical passive on the NEW `hp_max_bonus_per_level` substrate. While attuned, the wielder's effective max HP rises by +1 × character level — folded into `_effective_max_hp_for_sheet` so it composes with any Amulet-of-Health CON-mod delta, surfaces on /sheet-json derived, AND raises `_sheet_heal_ceiling` (heals + long rest + Second Wind clamp to the boosted pool). Three harness tests via Krieger Stonefist. The cursed berserk save is GM-narrated in v1.
+
+**Description:** Closes the clean mechanical half of Berserker Axe — RAW: "While you are attuned to this axe, your hit point maximum increases by 1 for each of your levels." Krieger (Lv 7, HP 75/75) attuned → effective max 82. Substrate additions:
+
+1. NEW field `hp_max_bonus_per_level` in `_equipped_item_effects` — summed across equipped+attuned items carrying the field (the v2.261.0 `ranged_bow_damage_bonus` summing shape, ATTUNEMENT-gated). Tracks `hp_max_bonus_per_level_sources` for /sheet-json attribution.
+2. `_effective_max_hp_for_sheet` rewritten to COMPOSE the CON-mod delta (Amulet of Health) with the new per-level item bonus, returning a single `delta = con_delta + item_delta` that both `/sheet-json` and `_sheet_heal_ceiling` already consume. Adds a `sources` list (back-compat with the existing single `source` field — first non-empty source wins). A PC with EITHER override now produces a non-None result; both override types compose additively for the rare composite case.
+
+`_MAGIC_ITEM_PASSIVES["berserker-axe"]` promoted out of the Armory's Remainder bulk-stub loop into an explicit `[{hp_max_bonus_per_level: 1, requires_attunement: True}]` entry. The inventory item stays inert in the vault loot per the seed-inert + PATCH-equipped+attuned pattern (Sword of Wounding / Oathbow / Holy Avenger precedent) — keeps the demo's attunement count unchanged.
+
+**v1 simplifications (GM-narrated):** the cursed berserk save ("on taking damage from a creature, DC 15 WIS save or go berserk and attack the nearest creature on each of your turns") needs a damage-pipeline `on_damage_save` hook + a berserk-AI auto-attack model — neither is in v1. The "you can't voluntarily un-attune" cursed clause is GM-narrated. The +1 magic battleaxe attack/damage bonus is GM-narrated (no attack row seeded on Krieger; can be added in a follow-up when the berserk save lands and the axe needs a live attack target). MINOR — additive `hp_max_bonus_per_level` substrate + content + tests, no schema change.
+
+### Added
+- `hp_max_bonus_per_level` + `hp_max_bonus_per_level_sources` fields in `_equipped_item_effects` (`app/routes/tabletop_routes.py`) — summed across equipped+attuned items, attunement-gated.
+- `_MAGIC_ITEM_PASSIVES["berserker-axe"]` — `[{hp_max_bonus_per_level: 1, requires_attunement: True}]`; promoted out of the Armory bulk-stub loop.
+- `tests/harness/test_item_berserker_axe.py` — 3 tests (axe equipped+attuned → `effective_max_hp.delta` = +7 for Krieger Lv 7; inert → no `effective_max_hp`; equipped-but-unattuned → no `effective_max_hp`).
+
+### Changed
+- `_effective_max_hp_for_sheet` composes CON-mod delta (Amulet of Health) AND item per-level delta (Berserker Axe) — single `delta` field both `_sheet_heal_ceiling` and `/sheet-json derived` already read. Adds a `sources` list (back-compat with the existing `source` field).
+- `docs/test-harness-coverage.md`: harness total 3035 → 3038 (+3 Berserker Axe tests); new section.
+- `docs/plans/magic-items-automation.md`: Bucket C `berserker-axe` row marked 🟠 partial (HP-max passive shipped; berserk save filed); recommended batch order trimmed.
+
 ## [2.361.0] - 2026-06-16 — "The Sworn Arrow"
 
 **Schema version:** 69
