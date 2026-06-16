@@ -164,8 +164,9 @@ async def test_barbarian_unarmored_defense_tracks_con_bump(
 
 async def test_monk_unarmored_defense_baseline(gm_client, caelan, kael):
     """Kael (Wood Elf Monk Lv 7, DEX 18 / WIS 15, no armor / no shield) →
-    Unarmored Defense AC = 10 + 4 + 2 = 16. Matches the seeded
-    `sheet.ac: 16`."""
+    Unarmored Defense AC = 10 + 4 + 2 = 16, PLUS Kael's seeded Bracers
+    of Defense (+2 AC, requires_no_armor + requires_no_shield) → total
+    18. Baseline matches `sheet.ac: 16` + Bracers +2."""
     kael_cid = f"tok_ud_kael_baseline_{kael['id']}"
     caelan_cid = f"tok_ud_caelan_kael_{caelan['id']}"
     await _seed_battle(gm_client, [
@@ -173,17 +174,18 @@ async def test_monk_unarmored_defense_baseline(gm_client, caelan, kael):
         _mkc(kael_cid, kael["id"], name=kael["name"]),
     ])
     ac = await _read_target_ac_via_attack(gm_client, caelan, kael_cid)
-    assert ac == 16, (
-        f"baseline Unarmored Defense AC for Kael should be 16 "
-        f"(10 + DEX +4 + WIS +2); got {ac!r}"
+    assert ac == 18, (
+        f"baseline Kael AC should be 18 (UD 16 + Bracers of Defense +2); "
+        f"got {ac!r}"
     )
 
 
 async def test_monk_unarmored_defense_tracks_wis_bump(
     gm_client, caelan, kael,
 ):
-    """PATCH Kael WIS 15 → 19 → AC auto-rises from 16 → 18
-    (WIS mod +2 → +4). Restores in finally."""
+    """PATCH Kael WIS 15 → 19 (WIS mod +2 → +4) → Unarmored Defense
+    formula rises from 16 → 18, plus Bracers of Defense +2 = 20.
+    Restores in finally."""
     snap = await _patch_abilities(gm_client, kael["id"], {"WIS": 19})
     try:
         kael_cid = f"tok_ud_kael_wisbump_{kael['id']}"
@@ -193,9 +195,8 @@ async def test_monk_unarmored_defense_tracks_wis_bump(
             _mkc(kael_cid, kael["id"], name=kael["name"]),
         ])
         ac = await _read_target_ac_via_attack(gm_client, caelan, kael_cid)
-        assert ac == 18, (
-            f"Kael WIS 19 → Unarmored Defense AC should be 18 "
-            f"(10 + DEX +4 + WIS +4); got {ac!r}"
+        assert ac == 20, (
+            f"Kael WIS 19 → UD formula 18 + Bracers +2 = 20; got {ac!r}"
         )
     finally:
         await _restore_abilities(gm_client, kael["id"], snap)

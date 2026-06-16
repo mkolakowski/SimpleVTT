@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.369.1] - 2026-06-16 — "The Bracer's Boost"
+
+**Schema version:** 69
+
+**Commit summary:** Test-only fix on the v2.369.0 Unarmored Defense harness. The Monk baseline assertions didn't account for Kael's seeded Bracers of Defense (+2 AC, requires_no_armor + requires_no_shield) — both gates pass for Kael by default, so his actual AC is UD-formula 16 + Bracers +2 = 18, not 16. Updated the two monk-formula tests to assert 18 baseline / 20 with WIS bump.
+
+The shield-disables test was already correct: PATCHing Kael's inventory to ONLY a shield removes the Bracers entirely, so AC drops to the formula-bypassed stored 16. PATCH — test-correctness fix, no engine or schema change.
+
+### Fixed
+- `tests/harness/test_unarmored_defense.py::test_monk_unarmored_defense_baseline` — assert AC = 18 (UD 16 + Bracers +2).
+- `tests/harness/test_unarmored_defense.py::test_monk_unarmored_defense_tracks_wis_bump` — assert AC = 20 with WIS 19 (UD formula 18 + Bracers +2).
+
 ## [2.369.0] - 2026-06-16 — "The Bare Skin Stand"
 
 **Schema version:** 69
