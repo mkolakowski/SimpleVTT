@@ -30,6 +30,8 @@ Tests:
   - Invalid `faction` → 400.
   - Explicit `target_combatant_ids` wins over `target_set` (back-compat).
 """
+from __future__ import annotations
+
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID

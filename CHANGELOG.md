@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.374.1] - 2026-06-16 — "The Caster's Eye, Compiled"
+
+**Schema version:** 69
+
+**Commit summary:** Adds `from __future__ import annotations` to `tests/harness/test_cast_spell_target_set.py` so the PEP-604 `int | None` return annotation in the `_active_map_id` helper parses under Python 3.9 (the host pytest runner). Python 3.10+ supports the bare-union syntax at module level; 3.9 needs the future-import to defer annotation evaluation. The new test file was the only collection error after v2.374.0 — caught immediately when the test suite was run against the live 2.374.0 container.
+
+PATCH — test-only one-line fix; no runtime behavior change.
+
+### Fixed
+- `tests/harness/test_cast_spell_target_set.py`: collection error under Python 3.9 (`TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'`). Added `from __future__ import annotations` so the `int | None` annotation defers.
+
 ## [2.374.0] - 2026-06-16 — "The Caster's Eye"
 
 **Schema version:** 69
