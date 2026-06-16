@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.384.0] - 2026-06-16 — "The Audit Surface"
+
+**Schema version:** 69
+
+**Commit summary:** Captures the v2.383.0 ground-truth SRD audit's per-clause findings for the three partially-enforced conditions (Charmed / Grappled / Incapacitated) in a new reference doc at `docs/condition-enforcement-audit.md`. The TODO.md "Conditions ~85%" headline papers over a more nuanced state: all 15 SRD conditions have buff templates + at least one read site, but per-clause RAW enforcement varies. The new doc walks each clause for the three top-cited conditions, cites the existing enforcement points + filed gaps, and suggests a per-clause shipping order for subsequent commits (Incapacitated → opportunity-attack gate; Incapacitated → general action gate; Grappled → ends-on-grappler-incapacitated; Charmed → can't-target-charmer).
+
+**Description:** This is an audit-only commit per CLAUDE.md scope discipline — no engine change. The doc's value is making the per-clause gaps grep-able so future commits can pick a specific clause off the suggested-shipping-order list and ship narrow per-clause fixes. Per the "Every doc must be surfaced through the wiki" rule (`docs/<slug>.md` references): allowlist + landing-page row + on-disk README + per-slug harness test + landing-page assertion update all land in this commit.
+
+The audit also confirms one finding from the v2.383.0 survey: **Grappled clause 1 (speed becomes 0) is correctly enforced** via `effects.speed_reduction_ft = base_speed` in `_make_grappled_buff`. The other grappled clauses (ends-on-incapacitated, ends-on-out-of-reach) are filed gaps. So the agent's "Grappled needs wiring" claim was partial — Grappled clause 1 is shipped; clauses 2-3 are the actual gaps.
+
+**Suggested per-clause shipping order (in the doc):**
+1. Incapacitated → opportunity-attack gate (~30 lines, 2 tests). Closes the explicit filed comment at `tabletop_routes.py:3260`.
+2. Incapacitated → general action gate (~50 lines, 3-4 tests). Adds the `_combatant_is_incapacitated()` helper.
+3. Grappled → ends on grappler incapacitated (~40 lines, 2 tests). Install-side-effect sweep.
+4. Charmed → can't target charmer (~60 lines, 3 tests). New structured `effects.charmer_char_id` field.
+
+Total estimate: 4 commits, ~180 lines net, ~11 harness tests.
+
+PATCH-or-MINOR? **MINOR** — new wiki-surfaced reference doc + new harness test + allowlist entry. No runtime code change, but the wiki surface is additive.
+
+### Added
+- `docs/condition-enforcement-audit.md` — per-clause review of Charmed / Grappled / Incapacitated enforcement, with cited file:line read sites and the suggested per-clause shipping order.
+- `_DOC_ALLOWLIST` entry `condition-enforcement-audit` in `app/routes/wiki_routes.py`.
+- Wiki landing-page row in `app/templates/wiki.html` + `docs/wiki/README.md` references table.
+- `tests/harness/test_wiki.py::test_wiki_doc_serves_condition_enforcement_audit` — per-slug smoke test.
+- New assertion in `test_wiki_home_renders` confirming the landing-page row is present.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3127 → 3128 (+1 wiki test).
+
 ## [2.383.0] - 2026-06-16 — "The Wider Bane"
 
 **Schema version:** 69

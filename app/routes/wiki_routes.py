@@ -63,6 +63,10 @@ _DOC_ALLOWLIST: dict[str, Path] = {
     "test-harness-coverage": Path("docs") / "test-harness-coverage.md",
     "automation-coverage": Path("docs") / "automation-coverage.md",
     "image-prompts": Path("docs") / "demo" / "image-prompts.md",
+    # v2.384.0 — Condition-enforcement audit (Charmed / Grappled /
+    # Incapacitated partial-clause review). Surfaced via /wiki for
+    # contributors planning to close the per-clause gaps.
+    "condition-enforcement-audit": Path("docs") / "condition-enforcement-audit.md",
     # docs/plans/ design docs
     "plan-advantage-disadvantage": Path("docs") / "plans" / "advantage-disadvantage.md",
     "plan-class-content-status": Path("docs") / "plans" / "class-content-status.md",
