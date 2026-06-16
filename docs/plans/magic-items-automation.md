@@ -63,7 +63,7 @@ Always-on bonuses the engine already reads (resistance via `_resistance_halve`, 
 | `staff-of-withering` | on hit: +2d10 necrotic + DC 15 CON or disadvantage | always-on `dice` rider + `ability_disadvantage` on-hit-save | ✅ shipped v2.346.0 / v2.348.0 |
 | `staff-of-striking` | expend 1–3 charges → +1d6 force per charge on hit | always-on `dice` rider (+1d6) | ✅ shipped v2.349.0 |
 | `sword-of-wounding` | recurring 1d4 necrotic/turn, DC 15 CON to end | on-hit recurring-damage condition (new) | ✅ shipped v2.360.0 |
-| `oathbow` | vs sworn enemy: +3d6 piercing + advantage | conditional rider (declared-enemy state) | ⚪ |
+| `oathbow` | vs sworn enemy: +3d6 piercing + advantage | conditional rider (declared-enemy state) | ✅ shipped v2.361.0 |
 | `berserker-axe` | +1 (baked); HP-max +level while attuned; berserk save | HP-max passive + on-damage WIS save | ⚪ |
 | `talisman-of-pure-good` | 6d6 radiant to non-good on touch | situational rider (low priority) | ⚪ |
 | `talisman-of-ultimate-evil` | 6d6 necrotic to non-evil on touch | situational rider (low priority) | ⚪ |
@@ -82,7 +82,7 @@ No clean engine template; the effect is narrative, out-of-combat, or needs syste
 - **Exploration / utility:** chime-of-opening, immovable-rod, rope-of-climbing, horseshoes-of-a-zephyr, horseshoes-of-speed, lantern-of-revealing, rod-of-lordly-might, apparatus-of-the-crab, cube-of-force, crystal-ball, helm-of-comprehending-languages, pipes-of-the-sewers, candle-of-invocation, necklace-of-prayer-beads
 - **Reaction / spell-store / regen / misc:** rod-of-absorption, gloves-of-missile-snaring, ring-of-evasion, ring-of-spell-storing, ring-of-regeneration, ring-of-telekinesis, ring-of-invisibility, defender, hammer-of-thunderbolts, mithral-armor
 
-**Recommended batch order (updated v2.360.0):** **Bucket A is effectively complete** (all 8 damage/save-condition/attack items shipped v2.350.0–v2.357.0; only `wind-fan` + `medallion-of-thoughts` remain, both inherently GM-narrated). Bucket B `luck-blade` + the resistance trio + the two `staff-of-the-*` spell-DC items are done. Bucket C `sword-of-wounding` shipped v2.360.0 (the new `on_hit_install` rider substrate + a generalized start-of-turn tick hook on PUT /battle). **~7 actionable items remain**, all needing new engine work: (1) Bucket B `adamantine-armor` (new `crits_become_normal` passive + a crit-pipeline read site); (2) Bucket C `oathbow` (declared-enemy conditional rider) + `berserker-axe` (HP-max passive + on-damage WIS save); (3) the two alignment talismans (situational on-touch riders, low priority); plus the two conditional-AC shields (`arrow-catching-shield`, `shield-of-missile-attraction`).
+**Recommended batch order (updated v2.361.0):** **Bucket A is effectively complete** (all 8 damage/save-condition/attack items shipped v2.350.0–v2.357.0; only `wind-fan` + `medallion-of-thoughts` remain, both inherently GM-narrated). Bucket B `luck-blade` + the resistance trio + the two `staff-of-the-*` spell-DC items are done. Bucket C `sword-of-wounding` (v2.360.0 — `on_hit_install` + start-of-turn tick) and `oathbow` (v2.361.0 — `condition_sworn_enemy` + declare endpoint) are done. **~6 actionable items remain**, all needing new engine work: (1) Bucket B `adamantine-armor` (new `crits_become_normal` passive + a crit-pipeline read site); (2) Bucket C `berserker-axe` (HP-max passive + on-damage WIS save); (3) the two alignment talismans (situational on-touch riders, low priority); plus the two conditional-AC shields (`arrow-catching-shield`, `shield-of-missile-attraction`).
 
 ---
 

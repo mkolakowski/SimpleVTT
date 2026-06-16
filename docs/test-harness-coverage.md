@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3030 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.360.0, 2026-06-16).
+**Total tests:** 3035 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.361.0, 2026-06-16).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3640,6 +3640,17 @@ v2.346.0 magic-items — Staff of Withering (RAW DMG p.202, rare, attunement), B
 | `test_staff_of_withering_save_fires_on_hit` | A hit vs a Bandit → `feature_used` source `item-staff-of-withering-save`, dc 15, ability CON (v2.348.0 `ability_disadvantage` dispatch). |
 | `test_staff_of_withering_withers_on_failed_save` | Sweep seeds until the Bandit fails → the `withered` buff is installed carrying `effects.disadvantage_on` with the STR/CON check+save markers. |
 | `test_staff_of_withering_requires_attunement` | Equipped-but-unattuned → the necrotic rider does not fire (attunement gate). |
+
+### `test_item_oathbow.py`
+v2.361.0 magic-items — Oathbow (RAW DMG p.183, very rare, attunement, longbow), Bucket C conditional attack rider on the new `condition_sworn_enemy` predicate. A `/declare_oathbow_sworn_enemy` endpoint installs an `oathbow-sworn-enemy` buff on the wielder carrying both `attack_advantage_vs_target_combatant_id` (rides the v2.158.53 Vow-of-Enmity attack-adv reader) and `oathbow_sworn_enemy_id` (the new dice-rider gate); on a hit vs that combatant the rider deals +3d6 piercing and the d20 attack roll gets advantage. Rowan Quickbow carries it at attack_index 4; seed-inert + PATCH-equipped+attuned per test.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_declare_installs_sworn_enemy_buff` | POST /declare_oathbow_sworn_enemy installs the `oathbow-sworn-enemy` buff with `oathbow_sworn_enemy_id` AND `attack_advantage_vs_target_combatant_id` both pointing at the target combatant id. |
+| `test_rider_fires_on_sworn_enemy` | A hit vs the declared sworn enemy surfaces a single `item-oathbow` uplift: 3d6 piercing, total in [3, 36] (non-crit through crit-doubled). |
+| `test_rider_silent_on_non_sworn_target` | A hit vs a NON-sworn target does not produce an `item-oathbow` uplift (the `condition_sworn_enemy` predicate gates correctly). |
+| `test_attack_has_advantage_vs_sworn_enemy` | The d20 attack roll vs the sworn enemy uses 2d20kh1 (existing `_attacker_has_vow_of_enmity_vs_target` reader fires on the generic adv marker). |
+| `test_declare_without_equipped_attuned_returns_409` | Declaring while the Oathbow inventory item is equipped-but-unattuned returns 409 `oathbow_not_equipped_attuned`. |
 
 ### `test_item_sword_of_wounding.py`
 v2.360.0 magic-items — Sword of Wounding (RAW DMG p.207, rare, attunement, any sword), Bucket C on-hit-install attack rider. The first item on the new `on_hit_install` substrate: each hit appends a `wounded` stack to the target; at the start of the wounded creature's turn the engine ticks 1d4 necrotic per stack via the new PUT /battle start-of-turn hook, then resolves a DC 15 CON save — pass clears all wounds. Sir Caelan carries it at attack_index 4; the inventory item is seed-inert (PATCH-equipped+attuned per test). Bandits make the NPC save inline.

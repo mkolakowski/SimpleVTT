@@ -4125,6 +4125,24 @@ def _ranger_sheet(name: str) -> dict:
              "damage": "1d6+5", "damage_type": "piercing",
              "range": "5 ft", "_slug": "giant-slayer",
              "desc": "Rare shortsword, no attunement. +1 attack/damage; on a hit vs. a giant, +2d6 piercing and the giant makes a DC 15 STR save or falls prone (RAW DMG p.171). 'Giant' includes ettins and trolls."},
+            # v2.361.0 — Magic-items: Oathbow (RAW DMG p.183, very rare,
+            # attunement, longbow). RAW gives NO magical attack/damage
+            # bonus to the bow itself — the +3d6 piercing + advantage
+            # only fire vs the wielder's declared sworn enemy, via the
+            # new `condition_sworn_enemy` predicate (section 6c) +
+            # `_attacker_has_vow_of_enmity_vs_target` reuse for the d20
+            # advantage. So the attack row mirrors Rowan's base Longbow
+            # (+7 / 1d8+4 piercing). The inventory item is seeded INERT
+            # (spare loot, attunement-cap-friendly) — the harness
+            # PATCHes equipped+attuned per test + POSTs
+            # `/declare_oathbow_sworn_enemy`, then restores. The
+            # disadvantage-on-other-weapons + ignore-resistance +
+            # 7-day duration clauses are GM-narrated in v1 (the buff
+            # lasts 1 minute like Vow of Enmity).
+            {"name": "Oathbow", "attack_bonus": "+7", "damage": "1d8+4",
+             "damage_type": "piercing", "range": "150/600 ft",
+             "_slug": "oathbow",
+             "desc": "Very rare longbow, attunement. Speak the command word to designate a sworn enemy; vs that target you have advantage on attack rolls + deal +3d6 piercing on a hit (RAW DMG p.183)."},
         ],
         # Hunter Ranger Lv 5: Lv 1-2 spells, 4/2 slots. Spells known is
         # the Ranger's known-not-prepared list (Lv 5 = 4 known).

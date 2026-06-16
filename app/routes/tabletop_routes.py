@@ -28143,6 +28143,28 @@ def _compute_attack_auto_uplifts(
                     condition_passed = bool(condition(tgt_for_predicate))
                 except Exception:
                     condition_passed = False
+            # v2.361.0 — Oathbow (RAW DMG p.183): the +3d6 piercing rider
+            # only fires vs the wielder's declared sworn enemy. The
+            # rider catalog row flags this via `condition_sworn_enemy:
+            # True`; the gate reads the attacker's combatant buffs for
+            # the `oathbow-sworn-enemy` marker stamped by the
+            # /declare_oathbow_sworn_enemy endpoint and matches its
+            # carried `effects.oathbow_sworn_enemy_id` against the
+            # current target's combatant id. Composes AND-style with
+            # any existing per-target lambda (none today on Oathbow,
+            # but kept consistent for future composites).
+            if rider_spec.get("condition_sworn_enemy"):
+                sworn_match = False
+                if target_combatant is not None:
+                    _t_cid = str(target_combatant.get("id") or "")
+                    for b in attacker_buffs:
+                        if not isinstance(b, dict):
+                            continue
+                        _eff = b.get("effects") or {}
+                        if str(_eff.get("oathbow_sworn_enemy_id") or "") == _t_cid:
+                            sworn_match = True
+                            break
+                condition_passed = condition_passed and sworn_match
             # v2.158.101 — Phase 7a: some rider catalog rows declare
             # only a post-hit hook (``on_nat_20`` for Vorpal Sword)
             # and carry no ``dice`` field — those are pure recipe
@@ -34032,7 +34054,11 @@ for _vault_slug, _vault_attune in [
 # mechanics are GM-narrated until each gets its dedicated commit.
 for _rem_slug, _rem_attune in [
     ("bead-of-force", False), ("berserker-axe", True),
-    ("hammer-of-thunderbolts", False), ("oathbow", True),
+    ("hammer-of-thunderbolts", False),
+    # oathbow promoted to a mechanical conditional attack rider
+    # (+3d6 piercing + advantage on attack rolls vs declared sworn
+    # enemy via the `condition_sworn_enemy` predicate) in v2.361.0 —
+    # registered via `_MAGIC_ITEM_ATTACK_RIDERS`.
     # sword-of-wounding promoted to a mechanical on-hit-install attack
     # rider (wounded condition stack — start-of-turn 1d4 necrotic + DC
     # 15 CON save to end) in v2.360.0 — registered via
@@ -35700,6 +35726,31 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
             ],
             "label": "Dagger of Venom — Poison",
         },
+    },
+    # v2.361.0 — Oathbow (RAW DMG p.183, very rare, attunement, longbow).
+    # The first item on the NEW `condition_sworn_enemy` predicate (special-
+    # cased in `_compute_attack_auto_uplifts` section 6c next to the
+    # existing per-target creature-type lambda). On a hit vs the wielder's
+    # declared sworn enemy: +3d6 piercing. The advantage on attack rolls
+    # vs the sworn enemy is granted via the existing `_attacker_has_vow_
+    # of_enmity_vs_target` reader (the helper isn't buff-key gated — it
+    # walks for the generic `attack_advantage_vs_target_combatant_id`
+    # marker), so installing the Oathbow buff with that field lights up
+    # advantage on the d20 attack roll with zero new attack-roll code.
+    # The sworn enemy is declared via a new `/declare_oathbow_sworn_enemy`
+    # endpoint that installs the `oathbow-sworn-enemy` buff carrying both
+    # markers. **v1 simplifications (GM-narrated):** the RAW "you have
+    # disadvantage on attack rolls with other weapons" while a sworn
+    # enemy is declared; the "sworn enemy ignores damage resistance"
+    # clause; the "lasts until target drops to 0 HP or you go 7 days
+    # without seeing/attacking" duration (v1 lasts 1 minute / 10 rounds
+    # like Vow of Enmity, or until manually removed).
+    "oathbow": {
+        "label": "Oathbow",
+        "dice": "3d6",
+        "damage_type": "piercing",
+        "requires_attunement": True,
+        "condition_sworn_enemy": True,
     },
     # v2.360.0 — Sword of Wounding (RAW DMG p.207, rare, attunement, any
     # sword). The first item on the NEW `on_hit_install` substrate: on
@@ -60757,6 +60808,164 @@ async def use_vow_of_enmity(
         "uses_remaining": cd_cur - 1,
         "buff_installed": True,
         "over_budget": was_used,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/character/{char_id}/declare_oathbow_sworn_enemy")
+async def declare_oathbow_sworn_enemy(
+    campaign_id: int,
+    char_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.361.0 — Oathbow sworn-enemy declare endpoint (RAW DMG p.183,
+    very rare, attunement, longbow).
+
+    RAW: "you can speak its command word and designate a target you can
+    see within 30 feet of you as your sworn enemy. You have advantage
+    on attack rolls against your sworn enemy with this weapon. If you
+    hit your sworn enemy with this weapon, the target takes an extra
+    3d6 piercing damage."
+
+    Body: ``{target_combatant_id, inventory_index?}``.
+
+    Validates: the wielder has Oathbow equipped + attuned in inventory
+    (the rider gate is the same — `_compute_attack_auto_uplifts` block
+    6c only fires when the inventory item is equipped + attuned). The
+    target combatant must exist in the active battle (so the rider has
+    something to match against).
+
+    Installs an `oathbow-sworn-enemy` buff on the wielder's combatant
+    carrying TWO effects in one stamp:
+      1. `attack_advantage_vs_target_combatant_id` — the generic
+         marker the v2.158.53 `_attacker_has_vow_of_enmity_vs_target`
+         reader walks (not key-gated), so the d20 attack roll gets
+         advantage with zero new attack-roll code.
+      2. `oathbow_sworn_enemy_id` — the new marker the v2.361.0
+         section-6c `condition_sworn_enemy` predicate reads for the
+         +3d6 piercing dice uplift.
+
+    Buff key is `oathbow-sworn-enemy` (distinct from
+    `vow-of-enmity-active`) so the two effects coexist on a wielder.
+    1-minute duration (10 rounds @ 6 s) — v1 simplification of the
+    RAW "lasts until target drops to 0 HP or 7 days without seeing
+    or attacking it" clause. No action-economy gate (RAW: speaking
+    the command word is a free action). No charges (RAW: can re-
+    designate after the curse ends).
+    """
+    body = await request.json()
+    target_combatant_id = (str(body.get("target_combatant_id") or "")).strip()
+    if not target_combatant_id:
+        raise HTTPException(400, "target_combatant_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "character_not_found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    # Validate the wielder has Oathbow equipped + attuned. The
+    # /attack-time rider gate enforces the same constraint, but
+    # gating at declare time prevents a player from marking a
+    # sworn enemy without the bow.
+    sheet = dict(char.sheet or {})
+    has_equipped_attuned = False
+    for inv in (sheet.get("inventory") or []):
+        if not isinstance(inv, dict):
+            continue
+        if (inv.get("_slug") or "") != "oathbow":
+            continue
+        if inv.get("equipped") and inv.get("attuned"):
+            has_equipped_attuned = True
+            break
+    if not has_equipped_attuned:
+        return JSONResponse(status_code=409, content={
+            "error": "oathbow_not_equipped_attuned",
+            "label": "Oathbow",
+            "char_name": char.name,
+        })
+
+    state = hub.get_battle(campaign_id) or {}
+    target_name = ""
+    found = False
+    for c in (state.get("combatants") or []):
+        if c.get("id") == target_combatant_id:
+            target_name = c.get("name") or ""
+            found = True
+            break
+    if not found:
+        return JSONResponse(status_code=404, content={
+            "error": "target_not_in_battle",
+            "target_combatant_id": target_combatant_id,
+        })
+
+    sworn_buff = {
+        "key": "oathbow-sworn-enemy",
+        "name": f"Oathbow: Sworn Enemy — {target_name or 'target'}",
+        "icon": "🏹",
+        # 1-minute duration (RAW lasts much longer; v1 simplification).
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "source": "item-oathbow",
+        "source_char_id": char.id,
+        "effects": {
+            "attack_advantage_vs_target_combatant_id": target_combatant_id,
+            "oathbow_sworn_enemy_id": target_combatant_id,
+        },
+        "desc": (
+            f"Advantage on attack rolls + +3d6 piercing on hit against "
+            f"{target_name or 'the marked target'} with this bow "
+            f"(RAW DMG p.183)."
+        ),
+    }
+    await _install_buff(campaign_id, char.id, sworn_buff)
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🏹 Oathbow: Sworn Enemy — {target_name or 'target'}"
+            ),
+            "feature_desc": (
+                f"{char.name} speaks the Oathbow's command word and "
+                f"designates {target_name or 'the marked target'} as a "
+                f"sworn enemy. Advantage on attack rolls + +3d6 piercing "
+                f"on hit with this bow (RAW DMG p.183)."
+            ),
+            "source": "item-oathbow-declare",
+            "target_combatant_id": target_combatant_id,
+            "target_name": target_name,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "oathbow-sworn-enemy",
+        "target_combatant_id": target_combatant_id,
+        "target_name": target_name,
+        "buff_installed": True,
     }
 
 

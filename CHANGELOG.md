@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.361.0] - 2026-06-16 — "The Sworn Arrow"
+
+**Schema version:** 69
+
+**Commit summary:** Second **Bucket-C** magic-item commit off the v2.344.5 stub triage. **Oathbow** (RAW DMG p.183, very rare, attunement, longbow) promoted from an "Armory's Remainder" catalog stub to a mechanical conditional attack rider. New `condition_sworn_enemy` predicate (special-cased in `_compute_attack_auto_uplifts` section 6c) + a new `/declare_oathbow_sworn_enemy` endpoint that installs the sworn-enemy buff on the wielder. The d20 attack-roll advantage rides the existing v2.158.53 `_attacker_has_vow_of_enmity_vs_target` reader (the helper walks for the generic `attack_advantage_vs_target_combatant_id` marker — not buff-key gated — so zero new attack-roll code). Five harness tests via Rowan Quickbow.
+
+**Description:** RAW: "Speak the command word and designate a target you can see within 30 feet as your sworn enemy. You have advantage on attack rolls against your sworn enemy with this weapon. If you hit your sworn enemy with this weapon, the target takes an extra 3d6 piercing damage." Both clauses ship in v1: the advantage on the attack roll uses a single Oathbow buff carrying TWO effect markers in one stamp (`attack_advantage_vs_target_combatant_id` for the existing Vow-of-Enmity attack-adv reader + the new `oathbow_sworn_enemy_id` for the section-6c +3d6 piercing dice rider). The buff key is `oathbow-sworn-enemy` (distinct from `vow-of-enmity-active`), so a wielder can stack both for the rare composite case.
+
+Substrate additions:
+1. New rider field `condition_sworn_enemy: True` on `_MAGIC_ITEM_ATTACK_RIDERS["oathbow"]`. The `_compute_attack_auto_uplifts` section 6c reads it after the existing per-target `condition` lambda (composes AND-style, so future composites work cleanly).
+2. New endpoint `POST /api/campaign/{campaign_id}/character/{char_id}/declare_oathbow_sworn_enemy` with body `{target_combatant_id}`. Validates the wielder has Oathbow equipped + attuned (409 `oathbow_not_equipped_attuned` otherwise) and the target is in the active battle (404 `target_not_in_battle` otherwise). No action-economy gate (RAW: speaking the command word is a free action).
+
+Rowan Quickbow carries a new `"Oathbow"` attack row (attack_index 4, +7 / 1d8+4 — RAW has no magical attack/damage bonus). Inventory item stays inert (seed-inert + PATCH-equipped+attuned pattern; Holy Avenger / Sword of Wounding precedent). Promoted the slug out of the Armory's Remainder passive `setdefault` loop. **v1 simplifications (GM-narrated):** the RAW "you have disadvantage on attack rolls with other weapons" while a sworn enemy is declared; the "sworn enemy ignores damage resistance" clause; the "lasts until target drops to 0 HP or 7 days without seeing/attacking" duration (v1 lasts 10 rounds = 1 minute, matching Vow of Enmity). MINOR — additive `condition_sworn_enemy` predicate + endpoint + content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ATTACK_RIDERS["oathbow"]` — `{dice: "3d6", damage_type: "piercing", requires_attunement: True, condition_sworn_enemy: True}`; promoted out of the Armory bulk-stub loop.
+- `condition_sworn_enemy` predicate in `_compute_attack_auto_uplifts` section 6c — reads the attacker's buffs for `effects.oathbow_sworn_enemy_id` and matches against the current target's combatant id.
+- `POST /api/campaign/{campaign_id}/character/{char_id}/declare_oathbow_sworn_enemy` — installs an `oathbow-sworn-enemy` buff on the wielder carrying both `attack_advantage_vs_target_combatant_id` (lights up the existing d20 attack-adv reader) and `oathbow_sworn_enemy_id` (lights up the new dice-rider predicate). 1-minute duration v1.
+- Demo seed: a new `"Oathbow"` attack entry on Rowan Quickbow (attack_index 4) carrying `_slug: "oathbow"`. Inventory item stays inert.
+- `tests/harness/test_item_oathbow.py` — 5 tests (declare endpoint installs buff with both markers; rider fires on sworn enemy; rider silent on non-sworn target; d20 attack roll uses 2d20kh1 advantage vs sworn enemy; declare without equipped+attuned → 409).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3030 → 3035 (+5 Oathbow tests); new section.
+- `docs/plans/magic-items-automation.md`: Bucket C `oathbow` row marked ✅; recommended batch order trimmed.
+
 ## [2.360.1] - 2026-06-16 — "The Tester's Stitch"
 
 **Schema version:** 69
