@@ -5579,6 +5579,16 @@ def _sorcerer_sheet(name: str) -> dict:
             {"name": "Component pouch", "type": "gear", "qty": 1,
              "weight_lb": 2,
              "desc": "Required spellcasting focus for spells with material components."},
+            # v2.356.0 — Circlet of Blasting (RAW DMG p.159, uncommon, NO
+            # attunement). Promoted out of the v2.342.0 Vault bulk loot into
+            # an explicit equipped item paired with the `circlet-of-blasting`
+            # 1/dawn resource above. Runs through the NEW spell-attack item
+            # handler (Scorching Ray: 3 ranged spell attacks at +5, 2d6 fire
+            # each). On-theme for a fire Sorcerer.
+            {"name": "Circlet of Blasting", "type": "wondrous", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 0,
+             "_slug": "circlet-of-blasting",
+             "desc": "Uncommon wondrous item, no attunement. 1/dawn — action: cast scorching ray from it (3 ranged spell attacks at +5 to hit, 2d6 fire each on a hit). RAW DMG p.159."},
             {"name": "Dungeoneer's pack", "type": "gear", "qty": 1,
              "weight_lb": 61.5,
              "desc": "Backpack, crowbar, hammer, 10 pitons, 10 torches, tinderbox, 10 days rations, waterskin, 50 ft hempen rope."},
@@ -5745,6 +5755,18 @@ def _sorcerer_sheet(name: str) -> dict:
                 "source": "sorcerer Lv 2 / Font of Magic",
                 "class_slug": "sorcerer",
                 "desc": "Spend to fuel Metamagic + convert to/from spell slots via Font of Magic. Refreshes on long rest. (Lv 20 Sorcerous Restoration refills 4 SP on short rest — not yet at Lv 5.)",
+                "manual": False,
+            },
+            # v2.356.0 — Circlet of Blasting 1/dawn use (RAW DMG p.159): a
+            # single "charge" that refills on a long rest. The spell-attack
+            # item handler decrements it per Scorching Ray cast.
+            {
+                "key": "circlet-of-blasting",
+                "name": "Circlet of Blasting",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "magic item — Circlet of Blasting",
+                "class_slug": "item",
+                "desc": "1/dawn — action: cast scorching ray (3 ranged spell attacks at +5, 2d6 fire each). Recharges at dawn.",
                 "manual": False,
             },
             {
@@ -6864,7 +6886,6 @@ def seed_characters(
         ("Kael Brightleaf", "dust-of-dryness", "Dust of Dryness", "consumable", "Uncommon. A packet of 1d6+4 pinches; one pinch absorbs a 15-ft cube of water into a marble-sized pellet (shatter to release). RAW DMG p.166."),
         ("Kael Brightleaf", "gloves-of-missile-snaring", "Gloves of Missile Snaring", "magic", "Uncommon, attunement. Reaction when hit by a ranged weapon attack: reduce the damage by 1d10 + DEX mod; if reduced to 0 and you have a free hand, you catch the missile. RAW DMG p.171."),
         ("Kael Brightleaf", "ring-of-evasion", "Ring of Evasion", "magic", "Rare, attunement. 3 charges (regain 1d3 at dawn). Reaction when you fail a DEX save: expend 1 charge to succeed instead. RAW DMG p.191."),
-        ("Zara Emberfire", "circlet-of-blasting", "Circlet of Blasting", "magic", "Uncommon. Action: cast scorching ray (3 rays, +5 to hit, 2d6 fire each) from it (1/dawn). RAW DMG p.158."),
         ("Zara Emberfire", "orb-of-dragonkind", "Orb of Dragonkind", "magic", "Artifact, attunement. Advantage on saves vs dragon Frightful Presence/breath; while holding it you can cast a charge-fueled spell + attempt to dominate a dragon within 1 mile. RAW DMG p.156."),
         ("Zara Emberfire", "ring-of-djinni-summoning", "Ring of Djinni Summoning", "magic", "Legendary, attunement. Action: summon a specific djinni (1/dawn) that serves + obeys you for up to 1 hour. RAW DMG p.190."),
         ("Zara Emberfire", "ring-of-shooting-stars", "Ring of Shooting Stars", "magic", "Very rare, attunement (worn in dim light/darkness). Charges fuel faerie fire, ball lightning, light spheres, and a shooting-stars burst (DC 15 DEX, up to 12d6 fire across targets). RAW DMG p.192."),

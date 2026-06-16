@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.356.0] - 2026-06-16 — "The Searing Diadem"
+
+**Schema version:** 69
+
+**Commit summary:** New **spell-attack item-action handler** + the first item on it. **Circlet of Blasting** (RAW DMG p.159, uncommon, NO attunement) promoted from a v2.342.0 "Vault" catalog stub to a charge-cast action: an action casts **Scorching Ray** — 3 ranged spell attacks at a fixed **+5**, **2d6 fire** each on a hit — once per dawn. Unlike the save-condition Wand of Fear handler, this resolves attack rolls vs AC (not saves). Seeded equipped on Zara Emberfire with a 1/dawn resource; two harness tests.
+
+**Description:** Added `_use_item_action_spell_attack` — a sibling to the save-condition wand handler. For each "beam" it rolls `1d20 + attack_bonus` vs the target's AC (`_read_target_ac`), treats a natural 20 as a crit (doubled dice) and a natural 1 as an auto-miss, and on a hit rolls the action's damage dice and applies it via `_apply_damage_to_combatant` (`is_attack=True`). The beam count, attack bonus, dice, damage type, and feature label all come from the catalog `action_def`, and it honours the same charge-pool / `unlimited` semantics as the wand handler — so a future spell-attack item (Ring of Shooting Stars' motes, Gem-beam variants) is a pure catalog entry + a one-line dispatch. The caller passes one target id per beam (repeats allowed to stack rays). Circlet of Blasting routes through it via a dedicated dispatch branch; promoted out of the Vault passive `setdefault` loop + bulk `_vault_loot` seed into an explicit equipped circlet on Zara + a `circlet-of-blasting` 1/dawn resource. MINOR — additive spell-attack handler + item + tests, no schema change.
+
+### Added
+- `_use_item_action_spell_attack` handler (`app/routes/tabletop_routes.py`) — multi-beam ranged-spell-attack resolution vs AC with crit/auto-miss + damage apply; charge-pool/`unlimited`-aware.
+- `_MAGIC_ITEM_ACTIONS["circlet-of-blasting"]` — `{requires_attunement: False, resource_key, spell_attack: True, actions: {cast-scorching-ray: {attack_bonus: 5, dice: "2d6", damage_type: "fire", beams: 3, …}}}`; dedicated dispatch branch.
+- Demo seed: explicit equipped **Circlet of Blasting** on Zara Emberfire + a `circlet-of-blasting` 1/dawn resource.
+- `tests/harness/test_use_item_action_circlet_of_blasting.py` — 2 tests (Scorching Ray at 3 AC-1 dummies → attack_bonus 5, beams 3, charges 1→0, ≥1 hit dealing fire damage; empty circlet → 409 insufficient_charges).
+
+### Changed
+- `tests/harness/test_vault_stub_loot.py`: removed `circlet-of-blasting` from Zara's Vault-stub assertion list (it's an explicit equipped item now).
+- `docs/test-harness-coverage.md`: harness total 3018 → 3020 (+2 Circlet of Blasting tests); new section.
+
 ## [2.355.0] - 2026-06-16 — "The Binding Cord"
 
 **Schema version:** 69

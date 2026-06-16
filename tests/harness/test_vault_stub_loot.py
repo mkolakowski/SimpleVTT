@@ -55,7 +55,9 @@ _VAULT_BY_CARRIER = {
         # (v2.355.0) — now an explicit equipped item, no longer a Vault stub.
     ],
     "Zara Emberfire": [
-        "circlet-of-blasting", "orb-of-dragonkind",
+        # circlet-of-blasting promoted to a spell-attack action (v2.356.0) —
+        # now an explicit equipped item, no longer a Vault stub.
+        "orb-of-dragonkind",
         "ring-of-djinni-summoning", "ring-of-shooting-stars",
     ],
     "Krieger Stonefist": [

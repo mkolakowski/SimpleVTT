@@ -33792,7 +33792,9 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
 for _vault_slug, _vault_attune in [
     ("adamantine-armor", False), ("amulet-of-the-planes", True),
     ("animated-shield", True), ("arrow-catching-shield", True),
-    ("arrow-of-slaying", False), ("circlet-of-blasting", False),
+    ("arrow-of-slaying", False),
+    # circlet-of-blasting promoted to a spell-attack action (Scorching Ray)
+    # in v2.356.0 — registered via `_MAGIC_ITEM_ACTIONS`.
     ("dancing-sword", True), ("deck-of-illusions", False),
     ("deck-of-many-things", False), ("defender", True),
     ("dimensional-shackles", False), ("dust-of-dryness", False),
@@ -34683,6 +34685,30 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
                     "disadvantage on DEX saving throws",
                 ],
                 "feature_name": "🪢 Rope of Entanglement",
+            },
+        },
+    },
+    # v2.356.0 — Circlet of Blasting (RAW DMG p.159, uncommon, NO
+    # attunement). First item on the NEW spell-ATTACK item-action handler
+    # (`_use_item_action_spell_attack`): an action casts Scorching Ray —
+    # 3 ranged spell attacks at a fixed +5 bonus, each dealing 2d6 fire on
+    # a hit — usable once per dawn. No save (attack rolls vs AC). Routed
+    # via the dispatch's `circlet-of-blasting` branch (not the save-
+    # condition tuple).
+    "circlet-of-blasting": {
+        "requires_attunement": False,
+        "resource_key": "circlet-of-blasting",
+        "spell_attack": True,
+        "actions": {
+            "cast-scorching-ray": {
+                "name": "Cast Scorching Ray (3 rays, +5)",
+                "attack_bonus": 5,
+                "dice": "2d6",
+                "damage_type": "fire",
+                "beams": 3,
+                "min_charges": 1,
+                "max_charges": 1,
+                "feature_name": "🔥 Circlet of Blasting",
             },
         },
     },
@@ -83952,6 +83978,21 @@ async def use_item_action(
             prompt_user=user,
             slug=slug,
         )
+    if slug in (
+            # v2.356.0 — spell-ATTACK item-action handler (ranged spell
+            # attack vs AC + damage, multi-beam). Circlet of Blasting
+            # (Scorching Ray, 3 rays at +5, 2d6 fire each, 1/dawn).
+            "circlet-of-blasting",):
+        action_def = catalog["actions"][action_key]
+        return await _use_item_action_spell_attack(
+            db, campaign_id, char, item, sheet, catalog,
+            action_key, action_def,
+            target_combatant_ids=body.get("target_combatant_ids") or [],
+            charges=body.get("charges"),
+            campaign=campaign,
+            prompt_user=user,
+            slug=slug,
+        )
     if slug == "potion-of-fire-breath":
         action_def = catalog["actions"][action_key]
         return await _use_item_action_potion_of_fire_breath(
@@ -86238,6 +86279,187 @@ async def _use_item_action_wand_of_fear(
         "charges_spent": 0 if unlimited else n_charges,
         "save_dc": save_dc,
         "save_ability": save_ability,
+        "results": results,
+        "resource": None if unlimited else {
+            "key": res_key,
+            "current": res_row["current"],
+            "max": res_max,
+        },
+    }
+
+
+async def _use_item_action_spell_attack(
+    db, campaign_id, char, item, sheet, catalog,
+    action_key, action_def,
+    target_combatant_ids: list,
+    charges=None,
+    campaign=None,
+    prompt_user=None,
+    slug="",
+):
+    """v2.356.0 — spell-ATTACK item-action handler (sibling to the save-
+    condition Wand of Fear handler). Instead of a save, each "beam" is a
+    ranged spell attack: roll ``1d20 + attack_bonus`` vs the target's AC
+    (``_read_target_ac``); on a hit (or a natural 20) roll the action's
+    damage dice (doubled on a crit) and apply it via
+    ``_apply_damage_to_combatant``. Circlet of Blasting (RAW DMG p.159 —
+    Scorching Ray, 3 rays at +5, 2d6 fire each, 1/dawn) is the first
+    entry. The beam count, attack bonus, dice, damage type, and feature
+    label all come from the ``action_def`` so a new spell-attack item is a
+    pure catalog entry. Honours the same charge-pool / ``unlimited``
+    semantics as the save-condition handler.
+
+    Beam→target assignment: the caller passes one target id per beam in
+    ``target_combatant_ids`` (repeats allowed to stack rays on one
+    target); the handler resolves one attack per id, capped at the
+    action's ``beams``.
+    """
+    res_key = str(catalog.get("resource_key") or slug)
+    unlimited = bool(catalog.get("unlimited"))
+
+    resources = list(sheet.get("resources") or [])
+    res_idx = -1
+    res_row = None
+    cur = 0
+    res_max = 0
+    if not unlimited:
+        for i, r in enumerate(resources):
+            if isinstance(r, dict) and (r.get("key") or "").lower() == res_key:
+                res_idx = i
+                break
+        if res_idx < 0:
+            raise HTTPException(
+                409,
+                f"No {res_key!r} resource row on sheet — item not bootstrapped",
+            )
+        res_row = dict(resources[res_idx])
+        cur = int(res_row.get("current") or 0)
+        res_max = int(res_row.get("max") or 0)
+        if cur < 1:
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "error": "insufficient_charges",
+                    "current": cur,
+                    "requested": 1,
+                    "label": item.get("name") or slug,
+                },
+            )
+
+    if not isinstance(target_combatant_ids, list):
+        raise HTTPException(400, "target_combatant_ids must be a list")
+
+    attack_bonus = int(action_def.get("attack_bonus") or 0)
+    dice = str(action_def.get("dice") or "2d6")
+    damage_type = str(action_def.get("damage_type") or "fire")
+    beams = int(action_def.get("beams") or 1)
+    feature_name = str(action_def.get("feature_name") or item.get("name") or slug)
+    item_name = item.get("name") or slug
+
+    results = []
+    for tid in target_combatant_ids[:beams]:
+        if not isinstance(tid, str) or not tid:
+            continue
+        target_c = _lookup_combatant(campaign_id, tid)
+        if not target_c:
+            results.append({"combatant_id": tid, "reason": "not_found"})
+            continue
+        target_ac = int(_read_target_ac(db, campaign_id, target_c) or 0)
+        atk_expr = f"1d20{attack_bonus:+d}"
+        try:
+            _ar = dice_mod.roll(atk_expr)
+            atk_total = int(_ar.total)
+            atk_breakdown = _ar.breakdown
+        except dice_mod.DiceParseError:
+            atk_total = 0
+            atk_breakdown = ""
+        _nat_match = _re.search(r"\[(\d+)\]", atk_breakdown)
+        nat = int(_nat_match.group(1)) if _nat_match else (atk_total - attack_bonus)
+        crit = (nat == 20)
+        if nat == 1:
+            hit = False
+        elif crit:
+            hit = True
+        else:
+            hit = atk_total >= target_ac
+        damage_dealt = 0
+        if hit:
+            roll_expr = _double_dice_for_crit(dice) if crit else dice
+            try:
+                _dr = dice_mod.roll(roll_expr)
+                damage_dealt = max(0, int(_dr.total))
+            except dice_mod.DiceParseError:
+                damage_dealt = 0
+            if damage_dealt > 0:
+                try:
+                    await _apply_damage_to_combatant(
+                        db, campaign_id, target_c,
+                        damage_amount=damage_dealt,
+                        damage_type=damage_type,
+                        is_attack=True, is_magical=True,
+                        attacker_char_id=char.id,
+                    )
+                except Exception:
+                    logging.exception(
+                        "%s beam damage apply failed for tid=%s", item_name, tid,
+                    )
+        results.append({
+            "combatant_id": tid,
+            "name": target_c.get("name") or "Target",
+            "attack_total": atk_total,
+            "target_ac": target_ac,
+            "hit": hit,
+            "crit": crit,
+            "damage_dealt": damage_dealt,
+        })
+
+    if not unlimited and res_idx >= 0 and res_row is not None:
+        res_row["current"] = cur - 1
+        resources[res_idx] = res_row
+        sheet["resources"] = resources
+        from sqlalchemy.orm.attributes import flag_modified
+        char.sheet = sheet
+        flag_modified(char, "sheet")
+        db.commit()
+        try:
+            await hub.broadcast(campaign_id, {
+                "type": "resource_update",
+                "data": {
+                    "character_id": char.id,
+                    "key": res_key,
+                    "current": res_row["current"],
+                    "max": res_max,
+                },
+            })
+        except Exception:
+            pass
+    _hits = sum(1 for r in results if r.get("hit"))
+    _total_dmg = sum(int(r.get("damage_dealt") or 0) for r in results)
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "caster_char_name": char.name,
+                "source": f"item-{slug}",
+                "label": feature_name,
+                "summary": (
+                    f"{char.name} fires the {item_name} — {len(results)} ray(s), "
+                    f"{_hits} hit for {_total_dmg} {damage_type}."
+                ),
+            },
+        })
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "item_name": item_name,
+        "action_key": action_key,
+        "charges_spent": 0 if unlimited else 1,
+        "attack_bonus": attack_bonus,
+        "beams": beams,
+        "damage_type": damage_type,
         "results": results,
         "resource": None if unlimited else {
             "key": res_key,
