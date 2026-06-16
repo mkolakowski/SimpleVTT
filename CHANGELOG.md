@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.366.0] - 2026-06-16 — "The Cursed Aegis"
+
+**Schema version:** 69
+
+**Commit summary:** Second of two Bucket-B shield commits this push. **Shield of Missile Attraction** (RAW DMG p.199, rare, attunement, cursed) promoted from a vault-stub passive to a mechanical resistance: while equipped+attuned, the wielder has resistance to damage from ranged weapon attacks. New `resistance_to_ranged_weapon` boolean on `_equipped_item_effects` + new `is_ranged_weapon_attack` kwarg on `_resistance_halve` (also threaded through `_apply_damage_to_combatant`). Both /attack and /npc_attack compute the flag via `_attack_is_ranged_weapon(attack)` and pass it through. Three harness tests via Rowan Quickbow attacking Dame Seraphine Vael. Bucket B is now closed.
+
+**Description:** RAW: "While holding this shield, you have resistance to damage from ranged weapon attacks." The existing `resistance_to` substrate keys on damage TYPE (fire, cold, …) — but "ranged weapon damage" spans piercing/slashing/bludgeoning depending on weapon, so it doesn't fit the type list cleanly. The new boolean `resistance_to_ranged_weapon` is the right shape: `_equipped_item_effects` OR's it across equipped+attuned items, `_resistance_halve` reads it gated on the new `is_ranged_weapon_attack` kwarg, and the kwarg is threaded from /attack + /npc_attack via `_attack_is_ranged_weapon(attack)` → `_apply_damage_to_combatant` → `_resistance_halve`.
+
+**v1 simplifications (GM-narrated):** the cursed redirect ("any ranged weapon attack made within 10 feet of you must target you") — needs an attacker-side target-coercion hook + 10-ft adjacency check; filed as a follow-up alongside Arrow-Catching Shield's reaction-redirect. The "can't voluntarily un-attune" cursed clause is GM-narrated. MINOR — additive `resistance_to_ranged_weapon` substrate + content + tests, no schema change.
+
+### Added
+- `resistance_to_ranged_weapon` + `resistance_to_ranged_weapon_sources` fields in `_equipped_item_effects`; per-item fold (boolean OR, attunement-gated).
+- `is_ranged_weapon_attack: bool = False` kwarg on `_resistance_halve` — when True AND the target's `_equipped_item_effects` returns the boolean True, halves damage.
+- `is_ranged_weapon_attack: bool = False` kwarg on `_apply_damage_to_combatant` — threaded down to `_resistance_halve`.
+- `_MAGIC_ITEM_PASSIVES["shield-of-missile-attraction"]` — `[{resistance_to_ranged_weapon: True, requires_attunement: True}]`; promoted out of the vault bulk-stub loop.
+- /attack + /npc_attack: thread `is_ranged_weapon_attack=_attack_is_ranged_weapon(attack)` through to the damage-apply call.
+- `tests/harness/test_item_shield_of_missile_attraction.py` — 3 tests (ranged attack → resistance applied; melee → no resistance; equipped-but-unattuned → no resistance).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3045 → 3048 (+3 Shield of Missile Attraction tests); new section.
+- `docs/plans/magic-items-automation.md`: Bucket B `shield-of-missile-attraction` row marked ✅; **Bucket B is now closed**. Recommended batch order narrows to the two alignment talismans (low priority).
+
 ## [2.365.0] - 2026-06-16 — "The Arrow's Halt"
 
 **Schema version:** 69

@@ -7919,6 +7919,7 @@ async def _apply_damage_to_combatant(
     is_magical: bool = False,
     is_spell: bool = False,
     attacker_char_id: int | None = None,
+    is_ranged_weapon_attack: bool = False,
 ) -> dict:
     """Apply ``damage_amount`` damage to the target combatant. Two
     paths:
@@ -8052,6 +8053,7 @@ async def _apply_damage_to_combatant(
             _, resistance_applied = _resistance_halve(
                 damage_amount, damage_type, sheet,
                 is_spell=is_spell, is_magical=is_magical,
+                is_ranged_weapon_attack=is_ranged_weapon_attack,
             )
             if vulnerability_applied and resistance_applied:
                 # Cancel: damage taken normally.
@@ -33530,6 +33532,22 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     # strip. The "you can't voluntarily un-attune" cursed clause is
     # GM-narrated. The +1 magic battleaxe attack/damage bonus is
     # GM-narrated (no attack row seeded on Krieger).
+    # v2.366.0 — Shield of Missile Attraction (RAW DMG p.199, rare,
+    # attunement, cursed). "While holding this shield, you have
+    # resistance to damage from ranged weapon attacks." Folded into
+    # `_equipped_item_effects` via the new `resistance_to_ranged_weapon`
+    # boolean. `_resistance_halve` reads it when called with
+    # `is_ranged_weapon_attack=True`. The /attack + /npc_attack
+    # pipelines compute the flag via `_attack_is_ranged_weapon(attack)`
+    # and thread it through `_apply_damage_to_combatant`.
+    # **v1 simplifications (GM-narrated):** the cursed redirect ("any
+    # ranged weapon attack made within 10 ft of you must target you")
+    # — needs an attacker-side target-coercion hook + 10-ft adjacency
+    # check; filed as a follow-up. The "can't voluntarily un-attune"
+    # cursed clause is GM-narrated.
+    "shield-of-missile-attraction": [
+        {"resistance_to_ranged_weapon": True, "requires_attunement": True},
+    ],
     # v2.365.0 — Arrow-Catching Shield (RAW DMG p.152, rare, attunement).
     # "You gain a +2 bonus to AC against ranged attacks while you wield
     # this shield. This bonus is in addition to the shield's normal
@@ -34337,7 +34355,10 @@ for _vault_slug, _vault_attune in [
     ("rod-of-security", False),
     # rope-of-entanglement promoted to an unlimited charge-cast action
     # (restrained) in v2.355.0 — registered via `_MAGIC_ITEM_ACTIONS`.
-    ("shield-of-missile-attraction", True), ("sphere-of-annihilation", False),
+    # shield-of-missile-attraction promoted to a mechanical ranged-weapon
+    # damage-resistance passive (cursed) in v2.366.0 — explicit
+    # `_MAGIC_ITEM_PASSIVES` entry above.
+    ("sphere-of-annihilation", False),
     ("talisman-of-pure-good", True), ("talisman-of-the-sphere", True),
     ("talisman-of-ultimate-evil", True), ("well-of-many-worlds", False),
 ]:
@@ -36556,6 +36577,17 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # of the shield's base AC. ATTUNEMENT-gated.
         "conditional_ac_bonus_vs_ranged": 0,
         "conditional_ac_bonus_vs_ranged_sources": [],
+        # v2.366.0 — ranged-weapon damage resistance (Shield of Missile
+        # Attraction, RAW DMG p.199). Boolean OR across equipped+attuned
+        # items carrying the field; read by `_resistance_halve` when
+        # called with `is_ranged_weapon_attack=True`. The /attack +
+        # /npc_attack pipelines compute the flag via
+        # `_attack_is_ranged_weapon(attack)` and thread it through
+        # `_apply_damage_to_combatant`. Distinct from `resistance_to`
+        # (which keys on damage TYPE — ranged-weapon damage spans
+        # piercing/slashing/bludgeoning depending on weapon).
+        "resistance_to_ranged_weapon": False,
+        "resistance_to_ranged_weapon_sources": [],
         # v2.242.0 — swim-speed passive. Boolean OR across equipped items
         # carrying the field; surfaced on `/sheet-json` derived. Ring of
         # Swimming (RAW DMG p.193) is the first entry — a swimming speed of
@@ -37023,6 +37055,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if _cab:
                 out["conditional_ac_bonus_vs_ranged"] += _cab
                 out["conditional_ac_bonus_vs_ranged_sources"].append(item_name)
+            # v2.366.0 — ranged-weapon damage resistance (Shield of
+            # Missile Attraction, RAW DMG p.199). Boolean OR across
+            # equipped+attuned items.
+            if (item.get("_resistance_to_ranged_weapon")
+                    or p.get("resistance_to_ranged_weapon")):
+                out["resistance_to_ranged_weapon"] = True
+                out["resistance_to_ranged_weapon_sources"].append(item_name)
             # v2.242.0 — swim-speed passive (Ring of Swimming, RAW DMG
             # p.193). Boolean OR; the flag rides the item via the
             # `swim_speed` payload (or a per-item `_swim_speed` rider).
@@ -43112,6 +43151,7 @@ def _dragonborn_ancestry_resistance(sheet: "dict | None") -> str:
 def _resistance_halve(
     damage_amount: int, damage_type: str, target_sheet: dict,
     *, is_spell: bool = False, is_magical: bool = False,
+    is_ranged_weapon_attack: bool = False,
 ) -> tuple[int, bool]:
     """If the target's ``_buffs_active`` has resistance to
     ``damage_type``, return (halved, True). Otherwise (damage_amount,
@@ -43177,14 +43217,25 @@ def _resistance_halve(
     # short-circuit, but before buffs so an equipped ring halves even
     # without an active buff.
     try:
-        _item_resists = _equipped_item_effects(target_sheet).get("resistance_to") or []
+        _item_eff_for_resist = _equipped_item_effects(target_sheet)
     except Exception:
-        _item_resists = []
+        _item_eff_for_resist = {}
+    _item_resists = _item_eff_for_resist.get("resistance_to") or []
     for r in _item_resists:
         if isinstance(r, str) and _resistance_matches_damage(
             r, damage_type_l, is_magical=is_magical,
         ):
             return damage_amount // 2, True
+    # v2.366.0 — Shield of Missile Attraction (RAW DMG p.199): resistance
+    # to damage from ranged weapon attacks. Boolean flag set by
+    # `_equipped_item_effects` for any equipped+attuned item carrying
+    # `resistance_to_ranged_weapon`; the caller signals via the new
+    # `is_ranged_weapon_attack` kwarg (computed via
+    # `_attack_is_ranged_weapon(attack)` in the /attack pipelines).
+    if is_ranged_weapon_attack and bool(
+        _item_eff_for_resist.get("resistance_to_ranged_weapon")
+    ):
+        return damage_amount // 2, True
     # v2.99.196 — Dragonborn ancestry fallback. When the sheet has
     # `dragonborn_ancestry` set (e.g. "bronze") but the explicit
     # damage_resistances list doesn't carry the derived type, halve
@@ -89296,6 +89347,7 @@ async def use_attack(
                 is_crit=is_crit, is_attack=True, attack_id=attack_id,
                 is_magical=attack_is_magical,
                 attacker_char_id=char.id,
+                is_ranged_weapon_attack=_attack_is_ranged_weapon(attack),
             )
             damage_applied = apply_result["applied"]
             target_hp_before = apply_result["hp_before"]
@@ -90625,6 +90677,9 @@ async def use_npc_attack(
                 db, campaign_id, target_combatant,
                 int(damage_total or 0), damage_type,
                 is_crit=is_crit, is_attack=True, attack_id=attack_id,
+                is_ranged_weapon_attack=_attack_is_ranged_weapon(
+                    {"range": range_str},
+                ),
             )
             damage_applied = apply_result["applied"]
             target_hp_before = apply_result["hp_before"]
