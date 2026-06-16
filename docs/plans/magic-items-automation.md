@@ -53,7 +53,7 @@ Always-on bonuses the engine already reads (resistance via `_resistance_halve`, 
 | `adamantine-armor` | crits against you become normal hits | `effects.crits_become_normal` (new) | ✅ shipped v2.364.0 |
 | `staff-of-the-magi` | +2 spell attack & save DC | `effects.spell_attack_bonus` / `spell_dc_bonus` (new) | ⚪ |
 | `staff-of-the-woodlands` | +2 spell attack & save DC | same | ⚪ |
-| `arrow-catching-shield` | +2 AC vs ranged attacks | conditional AC passive | ⚪ |
+| `arrow-catching-shield` | +2 AC vs ranged attacks | conditional AC passive | ✅ shipped v2.365.0 |
 | `shield-of-missile-attraction` | resistance to ranged-weapon damage + curse | `_resistance_type` rider (conditional) | ⚪ |
 
 ### Bucket C — on-hit / crit weapon rider → `_MAGIC_ITEM_ATTACK_RIDERS` (~7)

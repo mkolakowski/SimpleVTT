@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.365.0] - 2026-06-16 — "The Arrow's Halt"
+
+**Schema version:** 69
+
+**Commit summary:** First of two Bucket-B shield commits this push. **Arrow-Catching Shield** (RAW DMG p.152, rare, attunement) promoted from a vault-stub passive to a mechanical conditional-AC passive: while equipped+attuned, the wielder gains **+2 AC vs ranged attacks**. New `conditional_ac_bonus_vs_ranged` field on `_equipped_item_effects` + new `is_ranged_attack` kwarg on `_read_target_ac` (default False, back-compat). Both /attack and /npc_attack thread the flag through via the existing `_attack_is_ranged_weapon` helper. Three harness tests via Sir Caelan (wearer) + Rowan Quickbow (Longbow attacker).
+
+**Description:** RAW: "You gain a +2 bonus to AC against ranged attacks while you wield this shield. This bonus is in addition to the shield's normal bonus to AC." The new passive surfaces on `_read_target_ac` only when the caller passes `is_ranged_attack=True` (the back-compat default is False, so legacy callers that lack attack context simply skip the conditional bonus). The two combat dispatch sites — /attack (PC attacker) and /npc_attack (NPC attacker) — compute the flag from the attack's `range` string via `_attack_is_ranged_weapon` and thread it through, so the +2 only applies to true ranged-weapon attacks.
+
+**v1 simplifications (GM-narrated):** the RAW reaction-to-redirect half ("when another creature within 5 ft of you is targeted by a ranged attack, you can use your reaction to become the target of the attack instead") — needs a target-selection reaction hook + 5-ft-adjacency check; filed as a Phase 6 reactions follow-up alongside Brooch of Shielding. MINOR — additive `conditional_ac_bonus_vs_ranged` substrate + content + tests, no schema change.
+
+### Added
+- `conditional_ac_bonus_vs_ranged` + `conditional_ac_bonus_vs_ranged_sources` fields in `_equipped_item_effects`; per-item fold (summed, attunement-gated).
+- `is_ranged_attack: bool = False` kwarg on `_read_target_ac` — when True on a PC target, adds the conditional AC bonus.
+- `_MAGIC_ITEM_PASSIVES["arrow-catching-shield"]` — `[{conditional_ac_bonus_vs_ranged: 2, requires_attunement: True}]`; promoted out of the vault bulk-stub loop.
+- /attack + /npc_attack: thread `is_ranged_attack=_attack_is_ranged_weapon(attack)` through to the AC read.
+- `tests/harness/test_item_arrow_catching_shield.py` — 3 tests (ranged attack → +2; melee attack → baseline; equipped-but-unattuned → no bonus).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3042 → 3045 (+3 Arrow-Catching Shield tests); new section.
+- `docs/plans/magic-items-automation.md`: Bucket B `arrow-catching-shield` row marked ✅; recommended batch order trimmed.
+
 ## [2.364.2] - 2026-06-16 — "The Initiative Anchor"
 
 **Schema version:** 69

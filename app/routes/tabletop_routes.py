@@ -7106,6 +7106,7 @@ def _resolve_target_token_pos(
 
 def _read_target_ac(
     db: Session, campaign_id: int, combatant: dict | None,
+    is_ranged_attack: bool = False,
 ) -> int:
     """v2.24.0 Phase T.2: read the target's AC for hit determination.
 
@@ -7126,6 +7127,14 @@ def _read_target_ac(
     Haste, etc. fold in the same way. PCs read their buff list via
     ``_get_buffs(campaign_id, char_id)``; NPCs read directly from the
     combatant dict's ``buffs`` field.
+
+    v2.365.0 — ``is_ranged_attack`` (default False): when True, the
+    PC walker also adds the target's `conditional_ac_bonus_vs_ranged`
+    passive (Arrow-Catching Shield's +2 AC vs ranged, RAW DMG p.152).
+    Call sites that have the attack dict in scope pass
+    ``is_ranged_attack=_attack_is_ranged_weapon(attack)``; legacy
+    callers (no attack context) default to False (= no conditional
+    bonus applied, matching pre-v2.365.0 behavior).
     """
     if not combatant:
         return 10
@@ -7188,13 +7197,23 @@ def _read_target_ac(
     # style. Cloak of Protection (+1 AC) is the first catalog entry;
     # NPCs don't carry inventory so the walker is PC-only.
     item_ac_bonus = 0
+    item_ranged_ac_bonus = 0
     if char_id and char_sheet:
-        item_ac_bonus = int(_equipped_item_effects(char_sheet).get("ac_bonus") or 0)
+        _item_eff = _equipped_item_effects(char_sheet)
+        item_ac_bonus = int(_item_eff.get("ac_bonus") or 0)
+        if is_ranged_attack:
+            # v2.365.0 — Arrow-Catching Shield (RAW DMG p.152): +2 AC
+            # vs ranged attacks while equipped+attuned. Conditional on
+            # the caller passing `is_ranged_attack=True`.
+            item_ranged_ac_bonus = int(
+                _item_eff.get("conditional_ac_bonus_vs_ranged") or 0
+            )
     return (
         base_ac
         + buff_ac_bonus
         + _pc_defense_ac_bonus(char_sheet)
         + item_ac_bonus
+        + item_ranged_ac_bonus
     )
 
 
@@ -33511,6 +33530,23 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     # strip. The "you can't voluntarily un-attune" cursed clause is
     # GM-narrated. The +1 magic battleaxe attack/damage bonus is
     # GM-narrated (no attack row seeded on Krieger).
+    # v2.365.0 — Arrow-Catching Shield (RAW DMG p.152, rare, attunement).
+    # "You gain a +2 bonus to AC against ranged attacks while you wield
+    # this shield. This bonus is in addition to the shield's normal
+    # bonus to AC." Folded into `_equipped_item_effects` via the new
+    # `conditional_ac_bonus_vs_ranged` field; read by `_read_target_ac`
+    # when called with `is_ranged_attack=True`. /attack and /npc_attack
+    # both compute the is_ranged flag from the attack's `range` field
+    # (via `_attack_is_ranged_weapon`) and pass it through, so the +2
+    # AC only applies to ranged-weapon attacks against the wielder.
+    # **v1 simplifications (GM-narrated):** the RAW reaction-to-redirect
+    # half ("when another creature within 5 ft of you is targeted by a
+    # ranged attack, you can use your reaction to become the target of
+    # the attack instead") — needs a target-selection reaction hook +
+    # 5-ft-adjacency check; filed as a Phase 6 reactions follow-up.
+    "arrow-catching-shield": [
+        {"conditional_ac_bonus_vs_ranged": 2, "requires_attunement": True},
+    ],
     # v2.364.0 — Adamantine Armor (RAW DMG p.150, uncommon, NO
     # attunement). "While you're wearing this armor, any critical hit
     # against you becomes a normal hit." Read by the /attack pipeline
@@ -34258,7 +34294,11 @@ for _vault_slug, _vault_attune in [
     # normal-hits via the new `crits_become_normal` field) in v2.364.0
     # — explicit `_MAGIC_ITEM_PASSIVES` entry above.
     ("amulet-of-the-planes", True),
-    ("animated-shield", True), ("arrow-catching-shield", True),
+    ("animated-shield", True),
+    # arrow-catching-shield promoted to a mechanical conditional-AC
+    # passive (+2 AC vs ranged attacks via the new
+    # `conditional_ac_bonus_vs_ranged` field) in v2.365.0 — explicit
+    # `_MAGIC_ITEM_PASSIVES` entry above.
     ("arrow-of-slaying", False),
     # circlet-of-blasting promoted to a spell-attack action (Scorching Ray)
     # in v2.356.0 — registered via `_MAGIC_ITEM_ACTIONS`.
@@ -36508,6 +36548,14 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # any critical hit against you becomes a normal hit."
         "crits_become_normal": False,
         "crits_become_normal_sources": [],
+        # v2.365.0 — conditional AC bonus vs ranged attacks. Summed
+        # (not OR'd) across equipped+attuned items carrying the field;
+        # read by `_read_target_ac` when called with
+        # `is_ranged_attack=True`. Arrow-Catching Shield (RAW DMG
+        # p.152) is the first entry — +2 AC vs ranged attacks on top
+        # of the shield's base AC. ATTUNEMENT-gated.
+        "conditional_ac_bonus_vs_ranged": 0,
+        "conditional_ac_bonus_vs_ranged_sources": [],
         # v2.242.0 — swim-speed passive. Boolean OR across equipped items
         # carrying the field; surfaced on `/sheet-json` derived. Ring of
         # Swimming (RAW DMG p.193) is the first entry — a swimming speed of
@@ -36958,6 +37006,23 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_crits_become_normal") or p.get("crits_become_normal"):
                 out["crits_become_normal"] = True
                 out["crits_become_normal_sources"].append(item_name)
+            # v2.365.0 — conditional AC bonus vs ranged attacks
+            # (Arrow-Catching Shield, RAW DMG p.152). Summed across
+            # equipped+attuned items; the bonus rides the item via the
+            # `conditional_ac_bonus_vs_ranged` payload (or per-item
+            # `_conditional_ac_bonus_vs_ranged` rider). Attunement-gated
+            # by the per-payload check above. Read by `_read_target_ac`
+            # when called with `is_ranged_attack=True`.
+            _cab = item.get("_conditional_ac_bonus_vs_ranged")
+            if _cab is None:
+                _cab = p.get("conditional_ac_bonus_vs_ranged")
+            try:
+                _cab = int(_cab or 0)
+            except (TypeError, ValueError):
+                _cab = 0
+            if _cab:
+                out["conditional_ac_bonus_vs_ranged"] += _cab
+                out["conditional_ac_bonus_vs_ranged_sources"].append(item_name)
             # v2.242.0 — swim-speed passive (Ring of Swimming, RAW DMG
             # p.193). Boolean OR; the flag rides the item via the
             # `swim_speed` payload (or a per-item `_swim_speed` rider).
@@ -89154,7 +89219,10 @@ async def use_attack(
     target_dead = False
     target_combatant = _lookup_combatant(campaign_id, target_combatant_id) if target_combatant_id else None
     if target_combatant and not is_save and attack_total is not None:
-        target_ac = _read_target_ac(db, campaign_id, target_combatant)
+        target_ac = _read_target_ac(
+            db, campaign_id, target_combatant,
+            is_ranged_attack=_attack_is_ranged_weapon(attack),
+        )
         hit = is_crit or (attack_total >= target_ac)
         # v2.60.0 — on-hit-only uplift bookkeeping. Strip Colossus
         # Slayer + Divine Strike from auto_uplifts on a miss (those
@@ -90540,7 +90608,13 @@ async def use_npc_attack(
     target_dying = False
     target_dead = False
     if target_combatant and attack_total is not None:
-        target_ac = _read_target_ac(db, campaign_id, target_combatant)
+        # v2.365.0 — Arrow-Catching Shield conditional AC vs ranged.
+        # Construct a tiny attack dict so `_attack_is_ranged_weapon`
+        # can read the range string the body passed in.
+        target_ac = _read_target_ac(
+            db, campaign_id, target_combatant,
+            is_ranged_attack=_attack_is_ranged_weapon({"range": range_str}),
+        )
         hit = is_crit or (attack_total >= target_ac)
         if (
             hit
