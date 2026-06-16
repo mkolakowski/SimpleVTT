@@ -283,6 +283,15 @@ async def test_turn_start_ticks_damage(gm_client, caelan):
     snap = await _patch_inv(
         gm_client, caelan["id"], equipped=True, attuned=True,
     )
+    # v2.366.1 — ensure auto-apply-damage is ON so the install-time
+    # attack damage actually lands on the bandit (prior tests may
+    # have toggled it off in their teardown). The hp_before
+    # assertion below relies on the post-attack HP being < the seed
+    # `target_hp`.
+    await gm_client.post(
+        f"/api/test/campaign/{CAMPAIGN_ID}/flags",
+        json={"auto_apply_damage": True},
+    )
     try:
         template_id = await _bandit_template_id(gm_client)
         caelan_cid = f"tok_sow_tick_caelan_{caelan['id']}"

@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.366.1] - 2026-06-16 — "The Auto-Apply Pin"
+
+**Schema version:** 69
+
+**Commit summary:** Test-only patch fixing a cross-test contamination on the v2.360.0 Sword of Wounding turn-start test. `test_turn_start_ticks_damage` depended on `auto_apply_damage=True` for the install-time attack damage to land on the bandit, but the v2.366.0 Shield of Missile Attraction tests toggle that flag on/off in their setup/teardown — so the sword test would fail when run after them. PATCH: explicitly pin `auto_apply_damage=True` at the start of the sword turn-start test.
+
+**Description:** Pure test resilience fix; no engine change. PATCH — test-correctness fix, no schema change.
+
+### Fixed
+- `tests/harness/test_item_sword_of_wounding.py::test_turn_start_ticks_damage` — explicitly POSTs `auto_apply_damage: True` via `/api/test/campaign/.../flags` at start so the install-time attack damage actually lands (the hp_before < target_hp assertion below it depends on this).
+
 ## [2.366.0] - 2026-06-16 — "The Cursed Aegis"
 
 **Schema version:** 69
