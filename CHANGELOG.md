@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.357.1] - 2026-06-16 — "The Closed Armory"
+
+**Schema version:** 69
+
+**Commit summary:** Doc-only refresh of the v2.344.5 stub-triage in [`magic-items-automation.md`](docs/plans/magic-items-automation.md) after the Bucket-A wiring run (v2.353.0 → v2.357.0). Marks the five new items ✅, recomputes counts, and records that **Bucket A is effectively complete**.
+
+**Description:** Five more items completed since the v2.352.1 refresh — `ring-of-animal-influence`, `robe-of-scintillating-colors`, `rope-of-entanglement` (the first `unlimited`/no-charge item), `circlet-of-blasting` (the new `_use_item_action_spell_attack` handler), `ring-of-shooting-stars` (save-for-half Necklace handler) — bringing the session total to **11 items + 3 reusable engine additions** (generalized `disadvantage_on`, the `unlimited` no-charge flag, the spell-attack handler). Recomputed live counts (post-v2.357.0): of 241 wired slugs, **148 are functional** (144 catalog-mechanical + 4 rider-only) and **93 are genuinely-bare GM-narrated stubs** (was 143 / 98 at v2.352.1). Bucket A's only remaining items (`wind-fan`, `medallion-of-thoughts`) are inherently GM-narrated. The actionable subset drops **~15 → ~10** (the Bucket B passives + Bucket C riders, all of which need new engine work). PATCH — doc-only; plan doc already wiki-surfaced.
+
+### Changed
+- `docs/plans/magic-items-automation.md`: Phase 9.1 progress banner (11 items + 3 engine additions) + current-count recompute (148 functional / 93 bare); Bucket A table marked complete (5 new ✅, 2 inherently-GM-narrated); recommended batch order re-pointed at the remaining Bucket B/C engine items.
+
 ## [2.357.0] - 2026-06-16 — "The Falling Stars"
 
 **Schema version:** 69
