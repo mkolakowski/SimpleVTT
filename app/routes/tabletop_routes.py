@@ -90097,6 +90097,10 @@ async def use_attack(
         # response list populated by ``_broadcast_sentinel_attack_triggers``
         # called above.
         "sentinel_triggers": _sentinel_triggers_for_response,
+        # v2.364.0 — Adamantine Armor crit suppression flags (mirror of
+        # the broadcast payload above).
+        "adamantine_crit_suppressed": adamantine_crit_suppressed,
+        "adamantine_crit_suppressor": adamantine_armor_source or "",
     }
 
 

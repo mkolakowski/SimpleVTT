@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.364.1] - 2026-06-16 — "The HTTP Echo"
+
+**Schema version:** 69
+
+**Commit summary:** Closes the v2.364.0 Adamantine Armor HTTP-echo gap. The /attack endpoint constructs a `payload` dict for the WebSocket `weapon_attack` broadcast AND a SEPARATE return dict for the HTTP response (the rolling player's local toast can fire without WS lag). v2.364.0 added `adamantine_crit_suppressed` + `adamantine_crit_suppressor` to the broadcast payload but missed the return-dict mirror — so the harness test reading `response.json()` saw the suppression's effect on `is_crit` but not the new fields. PATCH: add the two fields to the return dict.
+
+**Description:** Pure follow-up; the suppression behavior itself was working correctly in v2.364.0 (the is_crit flip + the `feature_used` broadcast both fire). This adds the two flag fields to the /attack HTTP response so the test harness — and any client that prefers the HTTP echo over the WS broadcast — sees the same audit fields. PATCH — bug fix on the v2.364.0 substrate; no schema change.
+
+### Fixed
+- /attack return dict mirrors the broadcast payload's `adamantine_crit_suppressed` + `adamantine_crit_suppressor` fields (was missing on the HTTP return path).
+
 ## [2.364.0] - 2026-06-16 — "The Star-Forged Plate"
 
 **Schema version:** 69
