@@ -94,6 +94,14 @@ async def test_select_signature_spells_level_gate(
 ):
     """Control: Thalindra at Lv 7 → 409 level_too_low."""
     thalindra = roster["Thalindra Moonwhisper"]
+    # v2.368.1 — explicitly restore Thalindra to her seed Lv 7 so a
+    # prior `thalindra_lv20` (or sibling `thalindra_lv18`) fixture
+    # whose teardown failed mid-flight doesn't poison this control.
+    # Idempotent — no effect when Thalindra is already at Lv 7.
+    await _patch_sheet(
+        gm_client, thalindra["id"], {"level": 7},
+        class_slug="wizard",
+    )
     r = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/select_signature_spells",
         json={

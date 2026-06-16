@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.368.1] - 2026-06-16 — "The Idempotent Reset"
+
+**Schema version:** 69
+
+**Commit summary:** Closes the v2.344.3-filed P3 test-hygiene item. Three capstone tests (`test_persistent_rage`, `test_select_spell_mastery`, `test_select_signature_spells`) passed in CI but went red against a persistent local DB after sibling tests drifted PC state. Adds idempotent setup steps:
+
+- **Persistent rage** — long-rest Krieger at the start of each test so a prior test that depleted his rage resource doesn't 409-out the `/use_rage` call.
+- **Spell mastery / Signature spells level-gates** — explicitly PATCH Thalindra to her seed Lv 7 before the assertion, so a prior `thalindra_lv18` / `thalindra_lv20` fixture whose teardown failed mid-flight doesn't poison the 409-baseline expectation.
+
+PATCH — test-correctness fixes only, no engine or schema change.
+
+### Fixed
+- `tests/harness/test_persistent_rage.py` — long-rest at the start of both Lv-15 rage tests via a new `_long_rest` helper.
+- `tests/harness/test_select_spell_mastery.py::test_select_spell_mastery_level_gate` — explicit `level: 7` PATCH before the 409 assertion.
+- `tests/harness/test_select_signature_spells.py::test_select_signature_spells_level_gate` — same idempotent baseline-restore.
+
 ## [2.368.0] - 2026-06-16 — "The Steadfast Heart"
 
 **Schema version:** 69

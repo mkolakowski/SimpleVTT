@@ -50,6 +50,17 @@ async def _use_rage(gm_client, char_id):
     )
 
 
+async def _long_rest(gm_client, char_id):
+    """v2.368.1 — refresh the rage resource between iterations so a
+    prior test that depleted Krieger's rage uses doesn't poison the
+    /use_rage call below. Mirrors the `*_rested` fixture convention
+    used elsewhere in the harness."""
+    return await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/rest",
+        json={"type": "long"},
+    )
+
+
 async def test_persistent_rage_helper_gates_at_lv15(
     gm_client, gm_ws, roster,
 ):
@@ -60,6 +71,9 @@ async def test_persistent_rage_helper_gates_at_lv15(
     """
     krieger = roster["Krieger Stonefist"]
     pre_level = 7
+    # v2.368.1 — long-rest before /use_rage so a prior test that
+    # depleted the rage resource doesn't 409-out here.
+    await _long_rest(gm_client, krieger["id"])
     await _patch_sheet(
         gm_client, krieger["id"], {"level": 15},
         class_slug="barbarian",
@@ -86,6 +100,9 @@ async def test_persistent_rage_descriptive_at_lv15(
     """
     krieger = roster["Krieger Stonefist"]
     pre_level = 7
+    # v2.368.1 — long-rest so /use_rage below doesn't fail with
+    # `out_of_uses` against a persistent local DB.
+    await _long_rest(gm_client, krieger["id"])
     await _patch_sheet(
         gm_client, krieger["id"], {"level": 15},
         class_slug="barbarian",
