@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3079 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.373.1, 2026-06-16).
+**Total tests:** 3083 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.374.0, 2026-06-16).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4290,6 +4290,16 @@ v2.56.0 — Fighter Lv 9+ Indomitable. Arm-then-consume single-use save-advantag
 | `test_use_indomitable_out_of_uses` | First call burns the only use; second call → 409 `out_of_uses` with `label=Indomitable`. |
 | `test_indomitable_consumes_on_save` | Arm + cast Suggestion at Garrik → save `base_expression="2d20kh1"`, buff removed from Garrik's combatant, consume-side `feature_used(source=indomitable)` broadcast. |
 | `test_indomitable_one_save_only` | After consume, a second save in the same round has `base_expression="1d20"` (no kh1; buff already consumed). |
+
+### `test_cast_spell_target_set.py`
+v2.374.0 — `/cast_spell` accepts an optional `target_set: {shape: "sphere", center_combatant_id, radius_ft, faction}` body param that derives the AoE target id list server-side via the same geometry as `/battle/sphere-targets`. When set AND `target_combatant_ids` is empty, the resolved ids feed the Phase T.5 multi-target save+damage loop. Explicit `target_combatant_ids` win when both are passed. Sphere shape only in v1.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_target_set_sphere_enemies_picks_bandits` | Thalindra + 3 bandits placed on the active map; Fireball cast with `target_set` sphere/enemies resolves all 3 bandits and loops save+damage for each (`auto_save_targets` length matches). |
+| `test_target_set_invalid_radius_400` | `radius_ft=0` → 400 validation. |
+| `test_target_set_invalid_faction_400` | `faction="bogus"` → 400 validation. |
+| `test_explicit_ids_win_over_target_set` | When `target_combatant_ids` is non-empty, `target_set` is ignored (even if invalid — proves the early-exit on the explicit branch). |
 
 ### `test_cone_line_targets_faction_filter.py`
 v2.373.1 — mirrors the v2.373.0 sphere-targets faction filter onto `/battle/cone-targets` and `/battle/line-targets`. Same shape: optional `faction` body param ("all" | "allies" | "enemies"), PC-vs-NPC heuristic relative to apex (cone) or caster (line).

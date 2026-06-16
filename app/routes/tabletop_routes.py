@@ -19260,6 +19260,40 @@ async def cast_spell(
     if not campaign or not _user_can_view_campaign(db, user, campaign):
         raise HTTPException(403, "Not a member")
 
+    # v2.374.0 — server-side AoE auto-targeting. When no
+    # `target_combatant_ids` are supplied AND the caller passes a
+    # `target_set: {shape: "sphere", center_combatant_id, radius_ft,
+    # faction}` block, derive the target id list via the same geometry
+    # the `/battle/sphere-targets` helper uses. The resolver excludes
+    # the center combatant (RAW self-centered AoE pickers don't include
+    # the caster) and respects the same `allies|enemies|all` faction
+    # filter the helpers added in v2.373.0/.1. Sphere shape only for
+    # v1 — covers Fireball / Spirit Guardians / Shatter / Aid / Bless /
+    # Mass Healing Word, which is the bulk of the SRD's AoE surface;
+    # cone + line variants can land in follow-ups once a real cast
+    # workflow needs them.
+    target_set = body.get("target_set")
+    if (
+        isinstance(target_set, dict)
+        and not target_combatant_ids_in
+        and (target_set.get("shape") or "").strip().lower() == "sphere"
+    ):
+        _radius_raw = target_set.get("radius_ft")
+        try:
+            _radius_ft = float(_radius_raw) if _radius_raw is not None else 0.0
+        except (TypeError, ValueError):
+            raise HTTPException(400, "target_set.radius_ft must be a number")
+        _center_in = (target_set.get("center_combatant_id") or "").strip() or None
+        _faction_in = (target_set.get("faction") or "all").strip().lower()
+        target_combatant_ids_in = _resolve_sphere_aoe_combatant_ids(
+            db, campaign,
+            center_combatant_id=_center_in,
+            radius_ft=_radius_ft,
+            faction=_faction_in,
+        )
+        if target_combatant_ids_in and not target_combatant_id_in:
+            target_combatant_id_in = target_combatant_ids_in[0]
+
     char = db.query(Character).filter(
         Character.id == char_id,
         Character.campaign_id == campaign_id,
@@ -93263,6 +93297,99 @@ async def battle_line_targets(
         "faction": faction,
         "results": results,
     }
+
+
+def _resolve_sphere_aoe_combatant_ids(
+    db: Session,
+    campaign: Campaign,
+    *,
+    center_combatant_id: str | None,
+    radius_ft: float,
+    faction: str = "all",
+) -> list[str]:
+    """v2.374.0 — shared sphere-AoE id resolver used by `/cast_spell`'s
+    new ``target_set`` branch. Mirrors the geometry + faction filter from
+    `/battle/sphere-targets` (which returns id + name + distance metadata
+    for a target-picker UI) but returns the bare id list that the cast
+    pipeline's `target_combatant_ids` flow needs.
+
+    Center is required to be a combatant id for the /cast_spell branch —
+    the caster typically centers AoEs on themselves or on a marked
+    combatant; raw (x, y) centers would need explicit map coordinates
+    that the cast endpoint doesn't currently accept. Center combatant is
+    always excluded from the result list (RAW: a self-centered AoE
+    picker doesn't include the caster).
+
+    Raises HTTPException(400/404) on invalid inputs so the caller can
+    surface validation errors directly.
+    """
+    if not center_combatant_id:
+        raise HTTPException(400, "target_set sphere requires center_combatant_id")
+    if radius_ft <= 0:
+        raise HTTPException(400, "target_set sphere requires positive radius_ft")
+    if faction not in ("all", "allies", "enemies"):
+        raise HTTPException(400, "target_set faction must be one of: all, allies, enemies")
+    state = hub.get_battle(int(campaign.id))
+    if not state:
+        raise HTTPException(404, "No active battle")
+    if not campaign.active_map_id:
+        raise HTTPException(400, "Campaign has no active map")
+    map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
+    if not map_row or not map_row.grid_size_px:
+        raise HTTPException(400, "Active map has no grid_size_px")
+    grid_px = int(map_row.grid_size_px)
+    grid_type = (
+        map_row.grid_type.value if map_row.grid_type else "square"
+    ).lower()
+    combatants = state.get("combatants") or []
+    by_id = {str(c.get("id")): c for c in combatants if isinstance(c, dict)}
+    center_c = by_id.get(center_combatant_id)
+    if not center_c:
+        raise HTTPException(404, "target_set center combatant not in battle")
+
+    def _xy_for_combatant(c: dict) -> "tuple[float, float] | None":
+        tok_id = c.get("source_token_id")
+        if not tok_id:
+            return None
+        tok = db.query(Token).filter(
+            Token.id == int(tok_id), Token.map_id == map_row.id,
+        ).first()
+        if not tok:
+            return None
+        size = int(tok.size or 1)
+        cx = float(tok.x or 0) + (size * grid_px) / 2.0
+        cy = float(tok.y or 0) + (size * grid_px) / 2.0
+        return (cx, cy)
+
+    center_xy = _xy_for_combatant(center_c)
+    if center_xy is None:
+        raise HTTPException(400, "target_set center combatant has no token position")
+    ax, ay = center_xy
+    center_is_pc: bool | None = None
+    if faction != "all":
+        center_is_pc = bool(center_c.get("char_id"))
+    ids: list[str] = []
+    for c in combatants:
+        if not isinstance(c, dict):
+            continue
+        cid = str(c.get("id") or "")
+        if not cid or cid == center_combatant_id:
+            continue
+        xy = _xy_for_combatant(c)
+        if xy is None:
+            continue
+        px, py = xy
+        dist = _distance_ft_between_points(grid_px, grid_type, ax, ay, px, py)
+        if dist > radius_ft:
+            continue
+        if center_is_pc is not None:
+            subj_is_pc = bool(c.get("char_id"))
+            if faction == "allies" and subj_is_pc != center_is_pc:
+                continue
+            if faction == "enemies" and subj_is_pc == center_is_pc:
+                continue
+        ids.append(cid)
+    return ids
 
 
 @router.post("/api/campaign/{campaign_id}/battle/sphere-targets")

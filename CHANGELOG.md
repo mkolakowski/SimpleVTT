@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.374.0] - 2026-06-16 — "The Caster's Eye"
+
+**Schema version:** 69
+
+**Commit summary:** Wires the v2.373.0/.1 server-side AoE geometry helpers into `/cast_spell` itself. A new `target_set: {shape: "sphere", center_combatant_id, radius_ft, faction}` body param lets the caller name an AoE shape + center + faction filter, and the cast endpoint resolves the affected combatant ids server-side instead of requiring the client to enumerate `target_combatant_ids` after a separate `/battle/sphere-targets` round-trip. Sphere shape only in v1 — covers Fireball / Spirit Guardians / Shatter / Aid / Bless / Mass Healing Word; cone + line variants land in follow-ups once a real cast workflow needs them. Four harness tests via Thalindra + 3 bandits.
+
+**Description:** This closes the "Phase 2" the user explicitly scoped out of v2.373.0 ("Server-side AoE helper only (1 commit, harness-testable)"). With sphere-targets + cone-targets + line-targets all carrying the faction filter, the natural next step is to let `/cast_spell` consume that geometry directly: a Cleric casting Spirit Guardians can pass `target_set: {shape:"sphere", center_combatant_id: <self>, radius_ft: 15, faction: "enemies"}` and the server walks the active map's tokens, finds the enemies in radius, and feeds the resulting id list into the existing `target_combatant_ids` save+damage loop (Phase T.5, v2.44.0). The same param works for `faction: "allies"` (Aid / Bless / Mass Healing Word) and `faction: "all"` (Fireball).
+
+A new private helper `_resolve_sphere_aoe_combatant_ids` factors out the sphere geometry that `/battle/sphere-targets` uses, returning just the bare id list (the picker endpoint still returns id + name + distance metadata for its own response shape). The helper raises HTTPException(400/404) on invalid inputs (missing center, radius ≤ 0, invalid faction, no active battle/map) so the `/cast_spell` caller surfaces validation errors the same way the picker does.
+
+**v1 simplifications:**
+- Sphere shape only. Cone / line variants would each be a 50-ish-line helper following the same factoring; deferred until a cast workflow needs them.
+- `target_set` is ignored when `target_combatant_ids` is non-empty (explicit ids win — preserves the Phase T.5 contract). The caller must clear `target_combatant_ids` to use `target_set`.
+- Center must be a combatant id. The picker endpoint also accepts raw `(center_x, center_y)`; `/cast_spell` doesn't (the cast pipeline already binds the caster to a combatant id, so the natural center is either that combatant or a marked target combatant — not an arbitrary map point).
+- Center combatant is always excluded from the resolved list (RAW: a self-centered AoE picker doesn't include the caster).
+
+PATCH-or-MINOR? **MINOR** — additive endpoint param + new shared helper, no schema change, no behavior change for callers that don't pass `target_set`.
+
+### Added
+- `target_set` optional body param on `/cast_spell` — `{shape: "sphere", center_combatant_id, radius_ft, faction}`. When set AND `target_combatant_ids` is empty, the server resolves the AoE target ids via the shared sphere helper and feeds them into the existing Phase T.5 multi-target save+damage loop.
+- `_resolve_sphere_aoe_combatant_ids` helper in `app/routes/tabletop_routes.py` (just above `/battle/sphere-targets`) — shared geometry between the picker endpoint and `/cast_spell`'s `target_set` branch.
+- `tests/harness/test_cast_spell_target_set.py` — 4 tests: target_set sphere/enemies picks bandits in radius; invalid `radius_ft` → 400; invalid `faction` → 400; explicit `target_combatant_ids` wins over `target_set`.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3079 → 3083 (+4 target_set tests); new section.
+
 ## [2.373.1] - 2026-06-16 — "The Lens Extended"
 
 **Schema version:** 69
