@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.382.1] - 2026-06-16 — "The Final Pass"
+
+**Schema version:** 69
+
+**Commit summary:** Refreshes the [`TODO.md`](TODO.md) SRD 5e audit to v2.382.0 + catches a second stale-doc audit promotion: the **P3 Sleep / Hold Person / Hold Monster bespoke-constant refactor** carried forward from v2.379.0 is **already done** — both endpoints use the shared `upcast_target_count` helper extracted in v2.127.0. Same stale-doc pattern that hit Aura of Courage and Legendary + Lair Actions in prior refreshes; corrected here. Per-category re-baseline: Monsters effectively at strictly-✅ 100%, Spells nudges from ~78% → ~79% via the v2.380.0/v2.381.0 cap substrates, overall ~94% → **~95%**.
+
+**Description:** With the lair-action arc closed end-to-end at v2.382.0 + the P3 spell-upcast refactor verified as already-done, the SRD ruleset is now **~95% automated**. The remaining gaps fit on a single short list:
+
+- **P2** — Cast-and-broadcast utility-spell upcast extension to a handful more spells (Bane needs install-path refactor; the high-leverage targets like Mass Suggestion / Mass Polymorph / Heroes' Feast are substantial per-spell work, not engine).
+- **✅ DONE** — Hold Person / Hold Monster / Sleep refactor (already shipped v2.127.0).
+- **✅ DONE** — Everything else from prior audits (class features, lair actions, magic items, AoE auto-targeting, spell upcast scaling).
+
+The "what's the SRD missing?" question is essentially closed; the natural next-arc inflection is 3.0 scope expansion (post-SRD content, 2024 rules, Mythic Actions) or polish/UX work, not backlog drain.
+
+**Stale-audit lesson reinforced.** This is the third stale-doc reconciliation in the session: v2.376.2 (Legendary + Lair Actions stale-listed as P1), v2.344.2/v2.344.3 (magic-item and class-feature tails were already done), and now v2.382.1 (P3 refactor stale-listed). Each one was caught by reading the plan doc / verifying the code before promoting an audit gap. The [check-plan-doc-before-promoting-audit-P1 memory](https://github.com/anthropics/claude-code/issues) is paying off.
+
+PATCH — pure doc edit; no runtime code change.
+
+### Changed
+- `TODO.md`: new SRD 5e Audit (v2.382.0 refresh) section prepended above the v2.379.0 entry — re-baselines Monsters ~99% → effectively ~100%, Spells ~78% → ~79%, overall ~94% → ~95%; drops the stale-listed P3 row with a reconciliation note pointing at `upcast_target_count`.
+- `TODO.md` "Quick map" pointer updated to point at the v2.382.0 audit.
+
 ## [2.382.0] - 2026-06-16 — "The Living Map"
 
 **Schema version:** 69

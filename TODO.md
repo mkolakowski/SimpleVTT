@@ -25,6 +25,57 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 
 ---
 
+## SRD 5e Audit (v2.382.0 refresh)
+
+**Audit scope.** Recomputed against the codebase as of v2.382.0, after the **v2.380.0 → v2.382.0 utility-spell + regional-effects close-out** sweep:
+- **v2.380.0 "The Wider Bless"** — new `extra_targets_per_slot_above_base` / `base_level` fields on `_SPELL_BUFF_MAP` so per-slot target scaling can ride the existing v2.372.1 cap gate. Bless first consumer (3 base @ L1, +1/slot).
+- **v2.381.0 "The Wider Heal"** — parallel `_SPELL_TARGET_CAPS` dict for heal-loop spells. Mass Healing Word + Mass Cure Wounds wired (both 6 base, fixed across upcast).
+- **v2.381.1 "The Second Witness"** — Mass Cure Wounds dedicated harness coverage (PATCH sheet + L5 slot pattern).
+- **v2.382.0 "The Living Map"** — 7 metallic + Lich + Kraken regional effects backfilled; `REGIONAL_EFFECTS_BY_SLUG` grows 10 → 22 slugs matching `LAIR_ACTIONS_BY_SLUG`'s coverage.
+
+**Headline:** the **lair-action arc is fully closed end-to-end** — 22 lair-action slugs + 22 regional-effect slugs + 8 mapped condition-buff keys + every endpoint / UI / cadence guard / roll-log card / regional panel / fade tracker shipped v2.169.0–v2.382.0. The legendary-actions plan's filed-follow-ups list is **genuinely empty**.
+
+**v2.382.1 reconciliation.** Verifying audit text before promoting — the **P3 Sleep / Hold Person / Hold Monster bespoke-constant refactor** carried forward from v2.379.0 is **already done**. Both endpoints (lines 82597, 83250 in `app/routes/tabletop_routes.py`) use the shared `upcast_target_count` helper from `app/content/spell_upcast_parse.py` (per the v2.127.0 extraction); the Sleep endpoint uses a separate but similarly-shared helper. Same stale-audit pattern that hit Aura of Courage (v2.376.2) and Legendary + Lair Actions (v2.376.2) — corrected here. The P3 row is dropped.
+
+### Per-category coverage (the headline numbers)
+
+| Category | SRD count | Automated | Notes |
+|---|---|---|---|
+| Races | 9 | **~90%** | Unchanged. |
+| Monsters | 322 | **✅ ~100%** | **+1 pt vs. v2.379.0 (~99% → effectively 100%).** Lair-action arc end-to-end complete: 22 lair-action slugs + 22 regional-effect slugs + every condition auto-installs + every endpoint / UI / cadence guard / roll-log / regional panel / fade tracker shipped. The remaining ~0% is non-SRD post-2024 mythic actions + custom AoE shapes for homebrew lairs (out-of-scope per the legendary-actions plan's non-goals). |
+| Conditions | 15 | **~85%** | Unchanged. |
+| Class features | **222 rows** | **✅ 100%** | Unchanged. Strictly-✅ across every per-row entry. |
+| Spells | 319 | **~79%** | **+1 pt vs. v2.379.0 (~78% → ~79%).** The v2.380.0/v2.381.0 cap substrates added per-slot target scaling to Bless + Mass Healing Word + Mass Cure Wounds (3 spells gained mechanically-enforced caps). Dice/heal upcast scaling remains effectively complete. Remaining: per-slot extras on a handful more utility spells (Bane needs the buff-vs-condition install-path refactor; True Strike / Identify / etc. could gain richer per-slot effect modeling). |
+| Magic items | **235 / 239 wired** | **~98%** | Unchanged. The 4 unwired remain generic/meta slugs intentionally out-of-scope. |
+
+**Overall ~95%** automated across the SRD ruleset (up from ~94% at v2.379.0 — the Monsters bump from ~99% → effectively 100% via the regional-effects close-out + the small Spells nudge from the cap substrates are the movers).
+
+### Remaining gaps (priority order — toward full SRD automation)
+
+After the v2.380.0–v2.382.0 close-out + the v2.382.1 P3 reconciliation, the remaining gaps are genuinely small and content-shaped.
+
+1. 🟡 **P2 — Cast-and-broadcast utility-spell upcast (substrate-extended).** The v2.380.0/v2.381.0 substrates now exist; remaining work is wiring more spells onto them. Next-up candidates: Bane (target scaling + condition install — needs the install-path refactor that lets the buff-cap gate fire on condition spells), Telekinesis (no scaling RAW — skip), True Strike (cantrip — no upcast), Identify (no upcast RAW). The high-leverage targets are Mass Suggestion / Mass Polymorph / Heroes' Feast which have rich per-slot effects; their install pipelines are also more substantial.
+2. ✅ **DONE — Hold Person / Hold Monster / Sleep bespoke-constant refactor (v2.382.1 reconciliation).** Verified — both endpoints already use the shared `upcast_target_count` helper (extracted in v2.127.0). The audit row was stale.
+3. ✅ **DONE — Class-feature ⚪ tail.** Closed v2.368.0–v2.370.1.
+4. ✅ **DONE — Spell area-effect automation.** Closed v2.373.0–v2.376.0.
+5. ✅ **DONE — Spell upcast dice/heal scaling.** Effectively complete (v2.344.2 reconciliation).
+6. ✅ **DONE — Magic-item content tail.** Closed v2.316.0–v2.344.0.
+7. ✅ **DONE — Legendary + Lair Actions arc.** Closed end-to-end v2.159.32–v2.382.0.
+
+### Out-of-scope (unchanged)
+
+Tasha's, Xanathar's-beyond-SRD, Strixhaven, post-SRD feats, backgrounds beyond Acolyte stay future-3.x scope. **2024 rules + Mythic Actions** likewise stay future-3.x scope.
+
+### What's left to ship in SimpleVTT 2.x?
+
+The SRD ruleset is now ~95% automated end-to-end. The remaining ~5% is dominated by **content-layer utility-spell upcast extension** to a handful more spells (P2 above), which is incremental per-spell work on the substrates that already exist. The "what's the SRD missing?" question is essentially closed; the natural next-arc inflection is:
+
+- **3.0 scope expansion** — post-SRD content (Tasha's class features, Xanathar's tools / racial feats, 2024-PHB rule changes, Mythic Actions, custom AoE shapes for homebrew lairs).
+- **Polish + UX** — see the [Manually Added](#manually-added) section + the Combat / GM Tools sections below.
+- **Test-infrastructure hardening** — see the [Test Infrastructure](#test-infrastructure) section.
+
+---
+
 ## SRD 5e Audit (v2.379.0 refresh)
 
 **Audit scope.** Recomputed against the codebase as of v2.379.0, after the **v2.377.0 → v2.379.0 lair-action arc closure** that landed (a) the 5 metallic dragon lairs (v2.377.0 "The Metallic Five"), (b) Lich + Kraken lairs (v2.378.0 "The Phylactery and the Deep" — every SRD legendary lair-bearing creature now has authored data), and (c) the condition-map closure mapping `unconscious` / `silenced` / `frightened` so the engine auto-installs the buff on failed lair-action saves (v2.379.0 "The Closed Condition Map"). After this sweep **the lair-action arc is end-to-end complete** — data + engine dispatch + UI + cadence guards (once-per-round + no-repeat + init-20 broadcast) + roll-log card + regional effects + fade tracker + condition closure. **Filed-follow-ups list on `legendary-actions.md` is empty.**
