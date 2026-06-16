@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.373.1] - 2026-06-16 — "The Lens Extended"
+
+**Schema version:** 69
+
+**Commit summary:** Mirrors the v2.373.0 sphere-targets `faction` filter onto `/battle/cone-targets` and `/battle/line-targets`. Same shape: optional `faction: "all" | "allies" | "enemies"` body param, PC-vs-NPC heuristic relative to the apex (cone) or caster (line), 400 validation on bad values. Closes the v2.373.0 "filter applies to sphere-targets only; cone/line variants would be the same 5-line per-endpoint addition" filed item. Four harness tests covering validation + default-faction echo across both endpoints.
+
+PATCH — additive filter on two existing endpoints + tests, no schema change, back-compat preserved.
+
+### Added
+- `faction` optional body param on `/battle/cone-targets` — filters by the APEX combatant's faction; echoes `faction` on the response.
+- `faction` optional body param on `/battle/line-targets` — filters by the CASTER combatant's faction; echoes `faction` on the response.
+- `tests/harness/test_cone_line_targets_faction_filter.py` — 4 tests (validation rejects invalid faction values on both endpoints; default `"all"` echoes correctly).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3075 → 3079 (+4 cone/line faction-filter tests); new section.
+
 ## [2.373.0] - 2026-06-16 — "The Friend-Foe Lens"
 
 **Schema version:** 69

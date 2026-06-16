@@ -93164,6 +93164,13 @@ async def battle_line_targets(
         raise HTTPException(400, "max_length_ft must be a number")
     if width_ft <= 0 or max_length_ft <= 0:
         raise HTTPException(400, "width_ft + max_length_ft must be positive")
+    # v2.373.1 — optional faction filter (mirror of v2.373.0
+    # sphere-targets). When set ("allies" | "enemies"), filter results
+    # to combatants of the matching faction relative to the CASTER
+    # (PC ↔ PC; NPC ↔ NPC). Default "all" preserves back-compat.
+    faction = (body.get("faction") or "all").strip().lower()
+    if faction not in ("all", "allies", "enemies"):
+        raise HTTPException(400, "faction must be one of: all, allies, enemies")
 
     state = hub.get_battle(campaign_id)
     if not state:
@@ -93174,6 +93181,8 @@ async def battle_line_targets(
     target = by_id.get(target_id)
     if not caster or not target:
         raise HTTPException(404, "Caster or target combatant not in battle")
+    # v2.373.1 — caster faction context for the filter.
+    caster_is_pc = bool(caster.get("char_id")) if faction != "all" else None
 
     if not campaign.active_map_id:
         raise HTTPException(400, "Campaign has no active map")
@@ -93232,6 +93241,13 @@ async def battle_line_targets(
         )
         if dist_from_caster > max_length_ft:
             continue
+        # v2.373.1 — faction filter.
+        if caster_is_pc is not None:
+            subj_is_pc = bool(c.get("char_id"))
+            if faction == "allies" and subj_is_pc != caster_is_pc:
+                continue
+            if faction == "enemies" and subj_is_pc == caster_is_pc:
+                continue
         results.append({
             "combatant_id": cid,
             "name": c.get("name") or "",
@@ -93244,6 +93260,7 @@ async def battle_line_targets(
         "target_id": target_id,
         "width_ft": width_ft,
         "max_length_ft": max_length_ft,
+        "faction": faction,
         "results": results,
     }
 
@@ -93431,6 +93448,12 @@ async def battle_cone_targets(
         apex_half_angle_deg = float(body.get("apex_half_angle_deg") or 26.57)
     except (TypeError, ValueError):
         apex_half_angle_deg = 26.57
+    # v2.373.1 — optional faction filter (mirror of v2.373.0
+    # sphere-targets + v2.373.1 line-targets). When set, filter
+    # results relative to the APEX combatant's PC-vs-NPC faction.
+    faction = (body.get("faction") or "all").strip().lower()
+    if faction not in ("all", "allies", "enemies"):
+        raise HTTPException(400, "faction must be one of: all, allies, enemies")
 
     state = hub.get_battle(campaign_id)
     if not state:
@@ -93469,6 +93492,8 @@ async def battle_cone_targets(
     direction_xy = _xy_for_combatant(direction_c)
     if apex_xy is None or direction_xy is None:
         raise HTTPException(400, "apex or direction combatant has no token position")
+    # v2.373.1 — apex faction context for the filter.
+    apex_is_pc = bool(apex_c.get("char_id")) if faction != "all" else None
 
     import math as _math_cone
     ax, ay = apex_xy
@@ -93500,6 +93525,14 @@ async def battle_cone_targets(
         vec_pt_x = px - ax
         vec_pt_y = py - ay
         vec_pt_len = (vec_pt_x ** 2 + vec_pt_y ** 2) ** 0.5
+        # v2.373.1 — faction filter (applied after geometry, before
+        # the result push). Mirror of sphere/line variants.
+        if apex_is_pc is not None:
+            subj_is_pc = bool(c.get("char_id"))
+            if faction == "allies" and subj_is_pc != apex_is_pc:
+                continue
+            if faction == "enemies" and subj_is_pc == apex_is_pc:
+                continue
         if vec_pt_len == 0:
             # Combatant sits exactly on the apex — include.
             results.append({
@@ -93526,6 +93559,7 @@ async def battle_cone_targets(
         "direction_id": direction_id,
         "length_ft": length_ft,
         "apex_half_angle_deg": apex_half_angle_deg,
+        "faction": faction,
         "results": results,
     }
 
