@@ -7179,6 +7179,19 @@ def _read_target_ac(
                 base_ac = int(ac) if ac is not None else 10
             except (TypeError, ValueError):
                 base_ac = 10
+            # v2.369.0 — Unarmored Defense auto-compute (Barbarian /
+            # Monk Lv 1+). Take max(stored, computed) so seeded ACs
+            # that happen to match the formula stay intact, but
+            # PATCHing an ability score auto-flows here without a
+            # second `sheet.ac` PATCH. Closes Barbarian Lv 1 + Monk
+            # Lv 1 Unarmored Defense rows on the v2.344.3
+            # class-content-status.md reconciliation.
+            try:
+                _ud_ac = _pc_unarmored_defense_ac(char_sheet)
+            except Exception:
+                _ud_ac = None
+            if _ud_ac is not None and _ud_ac > base_ac:
+                base_ac = _ud_ac
     else:
         tmpl_id = combatant.get("token_template_id")
         if tmpl_id:
@@ -33193,6 +33206,57 @@ def _pc_defense_ac_bonus(sheet: dict) -> int:
     if _pc_fighting_style(sheet) != "defense":
         return 0
     return 1 if _pc_is_wearing_armor(sheet) else 0
+
+
+def _pc_unarmored_defense_ac(sheet: dict) -> int | None:
+    """v2.369.0 — Unarmored Defense (Barbarian Lv 1+ / Monk Lv 1+).
+
+    RAW:
+    - Barbarian (PHB p.48): "While you are not wearing any armor, your
+      Armor Class equals 10 + your Dexterity modifier + your
+      Constitution modifier. You can use a shield and still gain this
+      benefit."
+    - Monk (PHB p.78): "Beginning at 1st level, while you are wearing
+      no armor and not wielding a shield, your AC equals 10 + your
+      Dexterity modifier + your Wisdom modifier."
+
+    Returns the computed AC when the class gate + no-armor (+ no-
+    shield for Monk) gates fire, else None. The caller takes
+    max(stored_ac, computed_ac) so seeded ACs that happen to match the
+    formula stay intact, but PATCHing an ability score auto-flows to
+    the read site (no second `sheet.ac` PATCH needed).
+
+    Uses `effective_ability_score` (the v2.212.0 ability-override
+    substrate) so Belt of Giant Strength / Amulet of Health override
+    values flow through to the AC formula.
+    """
+    if not isinstance(sheet, dict):
+        return None
+    klass = (sheet.get("class") or "").strip().lower()
+    if klass not in ("barbarian", "monk"):
+        return None
+    try:
+        level = int(sheet.get("level") or 0)
+    except (TypeError, ValueError):
+        level = 0
+    if level < 1:
+        return None
+    if _pc_is_wearing_armor(sheet):
+        return None
+    if klass == "monk" and _pc_is_wearing_shield(sheet):
+        return None
+    try:
+        dex = effective_ability_score(sheet, "DEX")
+        secondary = effective_ability_score(
+            sheet, "CON" if klass == "barbarian" else "WIS",
+        )
+    except Exception:
+        return None
+    return (
+        10
+        + _ability_score_modifier(dex)
+        + _ability_score_modifier(secondary)
+    )
 
 
 # ── Magic-item passives walker (v2.158.74 — Phase 1a M1) ─────────────────────

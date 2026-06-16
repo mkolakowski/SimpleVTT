@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.369.0] - 2026-06-16 — "The Bare Skin Stand"
+
+**Schema version:** 69
+
+**Commit summary:** Closes 4 of the 6 remaining non-✅ rows on the class-content-status.md tail in one substrate commit. New `_pc_unarmored_defense_ac(sheet)` helper computes the RAW formula (Barbarian: 10 + DEX + CON; Monk: 10 + DEX + WIS while no shield); `_read_target_ac` takes max(stored, computed) so PATCHing ability scores auto-flows to attack-time AC reads. Also flips two stale 🟢 doc rows (Fighter Lv 2 + Ranger Lv 2 Fighting Style) to ✅ — Defense's +1 AC has been wired via `_pc_defense_ac_bonus` since v2.99.95; the rows were just never flipped. Four harness tests via Krieger (Barb) + Kael (Monk).
+
+**Description:** RAW:
+
+- **Barbarian Unarmored Defense (PHB p.48):** "While you are not wearing any armor, your Armor Class equals 10 + your Dexterity modifier + your Constitution modifier. You can use a shield and still gain this benefit."
+- **Monk Unarmored Defense (PHB p.78):** "Beginning at 1st level, while you are wearing no armor and not wielding a shield, your AC equals 10 + your Dexterity modifier + your Wisdom modifier."
+
+The helper composes with the v2.212.0 `effective_ability_score` substrate so Belt of Giant Strength / Amulet of Health overrides flow through to the AC formula. The `max(stored, computed)` semantics keep seeded ACs intact (Krieger's `sheet.ac: 15` and Kael's `sheet.ac: 16` both equal the formula at their default stats) but a PATCH to an ability score raises AC automatically without a second `sheet.ac` PATCH.
+
+After this commit the remaining non-✅ rows on `class-content-status.md` are: **Monk Lv 3 Deflect Missiles** 🟢 (reactions-panel entry shipped; the `1d10 + DEX + Monk Lv` damage-reduction is GM-applied in v1) + **Paladin Lv 14 Cleansing Touch** 🟢 (resource counter wired; the "end one spell" target-picker UI deferred). MINOR — additive `_pc_unarmored_defense_ac` substrate + `_read_target_ac` hook + 4 doc flips + tests, no schema change.
+
+### Added
+- `_pc_unarmored_defense_ac(sheet)` helper (`app/routes/tabletop_routes.py`) — Barbarian + Monk Unarmored Defense formula. Gates: class match, Lv 1+, no armor, no shield (Monk only). Composes with `effective_ability_score` so override items flow through.
+- `_read_target_ac` hook — `max(stored_ac, computed_ud_ac)` for PCs with Unarmored Defense.
+- `tests/harness/test_unarmored_defense.py` — 5 tests (Krieger baseline 15; Krieger CON 16→20 raises AC 15→17; Kael baseline 16; Kael WIS 15→19 raises AC 16→18; Kael with shield equipped → formula bypassed even with WIS bumped to 25).
+
+### Changed
+- `docs/plans/class-content-status.md`: Barbarian Lv 1 Unarmored Defense 🟡 → ✅; Monk Lv 1 Unarmored Defense 🟡 → ✅; Fighter Lv 2 Fighting Style 🟢 → ✅ (stale doc — Defense already wired); Ranger Lv 2 Fighting Style 🟢 → ✅ (same). Net 4 rows flip; remaining non-✅ tail is Deflect Missiles + Cleansing Touch.
+- `docs/test-harness-coverage.md`: harness total 3054 → 3059 (+5 Unarmored Defense tests); new section.
+
 ## [2.368.2] - 2026-06-16 — "The Punch-List Tick"
 
 **Schema version:** 69

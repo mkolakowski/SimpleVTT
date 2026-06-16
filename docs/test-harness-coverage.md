@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3054 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.368.0, 2026-06-16).
+**Total tests:** 3059 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.369.0, 2026-06-16).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4290,6 +4290,17 @@ v2.56.0 — Fighter Lv 9+ Indomitable. Arm-then-consume single-use save-advantag
 | `test_use_indomitable_out_of_uses` | First call burns the only use; second call → 409 `out_of_uses` with `label=Indomitable`. |
 | `test_indomitable_consumes_on_save` | Arm + cast Suggestion at Garrik → save `base_expression="2d20kh1"`, buff removed from Garrik's combatant, consume-side `feature_used(source=indomitable)` broadcast. |
 | `test_indomitable_one_save_only` | After consume, a second save in the same round has `base_expression="1d20"` (no kh1; buff already consumed). |
+
+### `test_unarmored_defense.py`
+v2.369.0 — Barbarian + Monk Unarmored Defense auto-AC engine (`_pc_unarmored_defense_ac` helper + `_read_target_ac` hook). `max(stored, computed)` semantics — seeded ACs stay intact, but PATCHing an ability score auto-flows to attack-time AC reads. Closes Barbarian Lv 1 + Monk Lv 1 Unarmored Defense rows on the v2.344.3 class-content-status.md reconciliation.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_barbarian_unarmored_defense_baseline` | Krieger (Barb Lv 7, DEX 14 / CON 16) → `target_ac` reads 15 (10 + 2 + 3). |
+| `test_barbarian_unarmored_defense_tracks_con_bump` | PATCH Krieger CON 16 → 20 → AC auto-rises 15 → 17 (CON mod +3 → +5). |
+| `test_monk_unarmored_defense_baseline` | Kael (Monk Lv 7, DEX 18 / WIS 15) → `target_ac` reads 16 (10 + 4 + 2). |
+| `test_monk_unarmored_defense_tracks_wis_bump` | PATCH Kael WIS 15 → 19 → AC auto-rises 16 → 18 (WIS mod +2 → +4). |
+| `test_monk_shield_disables_unarmored_defense` | Kael wielding a shield + WIS bumped to 25 → formula gate skips (Monk RAW: no shield); AC stays at the seeded 16 (the floor). |
 
 ### `test_aura_of_courage.py`
 v2.368.0 — Paladin Aura of Courage (base Paladin Lv 10+). Mirror of the v2.55.0 Aura of Devotion gate but oath-agnostic (Lv 10 is the base AURA-OF-X tier) and keyed on Frightened (not Charmed). Install gate lives in `_install_buff` rather than the /respond handler — so every Frightened-install path (failed save, Demon Slayer on_hit_save, Wand of Fear cone, future fear effects) is gated uniformly. Sir Caelan is Lv 7 by default; the harness PATCHes him to Lv 10 for the happy path and uses Lyra's Fear (spell_index 19) → Krieger as the failed-save driver.
