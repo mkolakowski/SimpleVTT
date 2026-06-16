@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3065 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.371.0, 2026-06-16).
+**Total tests:** 3069 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.372.0, 2026-06-16).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4290,6 +4290,16 @@ v2.56.0 — Fighter Lv 9+ Indomitable. Arm-then-consume single-use save-advantag
 | `test_use_indomitable_out_of_uses` | First call burns the only use; second call → 409 `out_of_uses` with `label=Indomitable`. |
 | `test_indomitable_consumes_on_save` | Arm + cast Suggestion at Garrik → save `base_expression="2d20kh1"`, buff removed from Garrik's combatant, consume-side `feature_used(source=indomitable)` broadcast. |
 | `test_indomitable_one_save_only` | After consume, a second save in the same round has `base_expression="1d20"` (no kh1; buff already consumed). |
+
+### `test_cast_dispel_magic.py`
+v2.372.0 — Dispel Magic endpoint (`/cast_dispel_magic`). Resolves auto-end (buff source-spell-level ≤ slot_level) vs ability check (`1d20 + spc_mod + prof` vs DC `10 + buff_source_level`). Slot consumed up front; buff drop on auto-end or check-success via `_remove_buff` (PC) or hub-state mutation (NPC). Lyra Sunstrider (Bard Lv 6, Dispel Magic on her list) → Krieger Stonefist driver.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_dispel_magic_auto_ends_low_level_buff` | L3 cast vs L1 Bless → `auto_end: True`, buff dropped from Krieger, slot consumed (≥1 used). |
+| `test_dispel_magic_check_path_high_level_buff` | L3 cast vs L5 Hold-Monster → `auto_end: False`, `check_total` populated, `check_dc: 15`; buff persistence matches `check_passed`. |
+| `test_dispel_magic_no_slot_returns_409` | Lyra's L3 slots PATCH'd to 3/3 used → cast returns 409 `no_slot`. |
+| `test_dispel_magic_buff_not_found_returns_409` | Target has no buff with the named key → 409 `buff_not_found`. |
 
 ### `test_cast_aid_upcast.py`
 v2.371.0 — Aid upcast scaling (RAW PHB p.211). Base L2 grants +5 HP-max + +5 current HP; "At Higher Levels: a target's hit points increase by an additional 5 for each slot level above 2nd." The /cast_spell handler now materializes `aid_hp_bonus = 5 + 5 * max(0, slot_level - 2)` on the installed buff (next to the v2.97.52 Sanctuary DC + v2.97.58 Heroism stamps); both the install-time heal + the `_buff_hp_max_bonus` ceiling walk read the upcast value uniformly.

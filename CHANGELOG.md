@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.372.0] - 2026-06-16 — "The Banishing Word"
+
+**Schema version:** 69
+
+**Commit summary:** Wires Dispel Magic (L3 abjuration, RAW PHB p.234) — `/cast_dispel_magic` endpoint. Target a buff by key on a creature combatant; auto-end if buff source-spell-level ≤ slot_level, else roll `1d20 + spellcasting mod + prof` vs DC `10 + buff_source_level`. Consumes the L3+ spell slot. Composes on the existing `_remove_buff` (PC) + hub-state mutation (NPC) precedents. Four harness tests via Lyra Sunstrider → Krieger.
+
+**Description:** New endpoint focused on Dispel Magic's mechanical core. Body: `{character_id, target_combatant_id, buff_key, slot_level, class_slug, buff_source_level?}`. The caller passes `buff_source_level` explicitly (the GM / UI reads the spell catalog to surface "Bless was cast at L1, Hold Person at L2, Hold Monster at L5"); a missing/0 value is treated as L0 (always auto-ends).
+
+Resolution path:
+
+- Slot consumed up front (RAW: slot is spent whether the check succeeds or fails).
+- If `buff_source_level ≤ slot_level`: auto_end fires; buff dropped via `_remove_buff` (PC path) or hub-state mutation (NPC). The response carries `auto_end: True, check_total: null, check_passed: True, ended: True`.
+- Else: rolls `1d20 + spellcasting mod + prof_bonus` vs DC `10 + buff_source_level`. Broadcasts the roll as a `roll` event. On success, drops the buff. On fail, the buff persists. Response carries `auto_end: False, check_total: <N>, check_dc: <DC>, check_passed: <bool>, ended: <bool>`.
+
+A `feature_used(source="dispel-magic")` audit broadcast surfaces the cast in the chat log with the auto-end vs check breakdown.
+
+**v1 simplifications (GM-narrated):**
+
+- The RAW "any spell on the target" semantics (multi-buff cascade where Dispel Magic ends ALL spells of slot-level-or-lower on the target). v1 picks ONE named buff per cast; the GM re-invokes the endpoint per buff to chain the cascade.
+- The "creature, object, or magical effect" target range. v1 only dispels combatant buffs, not standing ground-effect spells (Wall of Fire, Spike Growth, etc.). Filed for follow-up alongside the AoE-auto-target UX work.
+- The `buff_source_level` lookup. v1 expects the caller to send it (the UI surfaces a picker with "L1 / L2 / L3+ check" options). A future commit could stamp `source_spell_level` on the buff at install time so the engine derives it.
+
+MINOR — additive `/cast_dispel_magic` endpoint + tests, no schema change.
+
+### Added
+- `POST /api/campaign/{campaign_id}/cast_dispel_magic` endpoint (`app/routes/tabletop_routes.py`) — Dispel Magic dispatch with auto-end vs check resolution.
+- `tests/harness/test_cast_dispel_magic.py` — 4 tests (auto-end L1 buff at L3 cast; check path L5 buff at L3 cast; no_slot 409; buff_not_found 409).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3065 → 3069 (+4 Dispel Magic tests); new section.
+
 ## [2.371.1] - 2026-06-16 — "The Borrowed Slot"
 
 **Schema version:** 69

@@ -15134,6 +15134,279 @@ async def use_cleansing_touch(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_dispel_magic")
+async def cast_dispel_magic(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.372.0 — Dispel Magic (L3 abjuration, RAW PHB p.234).
+
+    "Choose any creature, object, or magical effect within range. Any
+    spell of 3rd level or lower on the target ends. For each spell of
+    4th level or higher on the target, make an ability check using your
+    spellcasting ability. The DC equals 10 + the spell's level. On a
+    successful check, the spell ends."
+
+    At Higher Levels: cast at 4th+ → auto-end spells of slot level or
+    lower without a check.
+
+    Body: ``{character_id, target_combatant_id, buff_key, slot_level,
+    class_slug, buff_source_level?}``.
+
+      - `slot_level` defaults to 3 (the spell's base level).
+      - `buff_source_level` — explicit RAW level of the buff being
+        dispelled. The caller looks this up in the spell catalog
+        (e.g. Hold Person = L2, Greater Invisibility = L4) and sends
+        it in the body. v1 simplification: a missing/0 value is
+        treated as "auto-end" (the buff has no level info → assume
+        L0 effect, always dispelled).
+
+    Mechanics:
+      - Validates: Lv check, has the spell, has the slot, target +
+        buff exist.
+      - Consumes the slot (mirror of /cast_spell's slot-consume
+        block at v2.49.124).
+      - If `buff_source_level <= slot_level` → auto-end (no roll).
+      - Else → roll `1d20 + spellcasting mod + proficiency` vs DC
+        `10 + buff_source_level`. On success, end the buff. On fail,
+        the buff persists.
+      - Removes the buff via `_remove_buff` (PC) or hub state
+        mutation (NPC).
+      - Broadcasts `feature_used(source="dispel-magic")` with the
+        roll result.
+
+    **v1 simplifications (GM-narrated):**
+
+      - The RAW "any spell on the target" wording — v1 picks ONE
+        named buff per cast (the multi-buff cascade where Dispel
+        Magic ends ALL spells of slot-level-or-lower on the target
+        is GM-narrated: the GM repeats the call once per buff).
+      - The "creature, object, or magical effect" range; we only
+        dispel combatant buffs, not standing ground-effect spells
+        (Wall of Fire, etc.).
+      - The buff_source_level lookup — the caller passes it in
+        explicitly. A future commit can stamp `source_spell_level`
+        on the buff at install time so the engine derives it.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_combatant_id = (body.get("target_combatant_id") or "").strip()
+    buff_key = (body.get("buff_key") or "").strip().lower()
+    class_slug = (body.get("class_slug") or "").strip().lower()
+    try:
+        slot_level = int(body.get("slot_level") or 3)
+    except (TypeError, ValueError):
+        slot_level = 3
+    try:
+        buff_source_level = int(body.get("buff_source_level") or 0)
+    except (TypeError, ValueError):
+        buff_source_level = 0
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not target_combatant_id:
+        raise HTTPException(400, "target_combatant_id is required")
+    if not buff_key:
+        raise HTTPException(400, "buff_key is required")
+    if slot_level < 3:
+        raise HTTPException(400, "slot_level must be >= 3 (Dispel Magic is L3)")
+    if not class_slug:
+        raise HTTPException(400, "class_slug is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+
+    # Validate the caster knows dispel-magic on their spells list.
+    spells = sheet.get("spells") or []
+    knows_dispel = any(
+        (s.get("_slug") or "").strip().lower() == "dispel-magic"
+        for s in spells if isinstance(s, dict)
+    )
+    if not knows_dispel:
+        return JSONResponse(status_code=409, content={
+            "error": "spell_not_known",
+            "spell_slug": "dispel-magic",
+        })
+
+    # Consume a slot (mirror of /cast_spell's slot-consume block).
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get(class_slug) or {})
+    slot_key = str(slot_level)
+    slot_dict = dict(per_class.get(slot_key) or {"total": 0, "used": 0})
+    total = int(slot_dict.get("total") or 0)
+    used = int(slot_dict.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": class_slug,
+        })
+
+    # Locate target combatant + the buff to dispel.
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return JSONResponse(status_code=409, content={
+            "error": "no_active_battle",
+        })
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("id") == target_combatant_id:
+            target = c
+            break
+    if target is None:
+        return JSONResponse(status_code=404, content={
+            "error": "target_not_found",
+            "target_combatant_id": target_combatant_id,
+        })
+    buffs = list(target.get("buffs") or [])
+    matched_idx = next(
+        (i for i, b in enumerate(buffs)
+         if isinstance(b, dict)
+         and (b.get("key") or "").lower() == buff_key),
+        -1,
+    )
+    if matched_idx < 0:
+        return JSONResponse(status_code=409, content={
+            "error": "buff_not_found",
+            "target_combatant_id": target_combatant_id,
+            "buff_key": buff_key,
+        })
+
+    # Spend the slot up front (RAW: the spell is cast even if the
+    # check fails; the slot is consumed either way).
+    slot_dict["used"] = used + 1
+    per_class[slot_key] = slot_dict
+    all_slots[class_slug] = per_class
+    sheet["spell_slots"] = all_slots
+    char.sheet = sheet
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Resolve auto-end vs ability-check.
+    auto_end = buff_source_level <= slot_level
+    check_total: int | None = None
+    check_breakdown = ""
+    check_dc = 10 + buff_source_level
+    check_passed = False
+    if not auto_end:
+        spc_mod = _caster_spellcasting_mod(sheet)
+        prof_bonus = int(sheet.get("proficiency_bonus") or 0)
+        sign = "+" if (spc_mod + prof_bonus) >= 0 else ""
+        check_expr = f"1d20{sign}{spc_mod + prof_bonus}"
+        try:
+            check_roll = dice_mod.roll(check_expr)
+            check_total = int(check_roll.total)
+            check_breakdown = check_roll.breakdown
+            check_passed = check_total >= check_dc
+        except dice_mod.DiceParseError:
+            check_total = 0
+            check_passed = False
+        await hub.broadcast(campaign_id, {
+            "type": "roll",
+            "data": {
+                "expression": check_expr,
+                "total": check_total,
+                "breakdown": check_breakdown,
+                "note": (
+                    f"🌀 Dispel Magic check · {char.name} vs DC {check_dc} "
+                    f"(L{buff_source_level} spell)"
+                ),
+                "user_name": char.name,
+                "char_name": char.name,
+                "visibility": Visibility.PUBLIC.value,
+                "dc": check_dc,
+            },
+        })
+
+    ended = auto_end or check_passed
+    removed_buff = None
+    if ended:
+        # Drop the buff. For PC targets, use _remove_buff (broadcasts +
+        # mirrors sheet); for NPC, mutate hub state directly.
+        if target.get("char_id"):
+            await _remove_buff(
+                campaign_id, int(target["char_id"]), buff_key,
+            )
+            _mirror_buffs_to_sheet(
+                db, int(target["char_id"]),
+                _get_buffs(campaign_id, int(target["char_id"])),
+            )
+            removed_buff = buffs[matched_idx]
+        else:
+            removed_buff = buffs.pop(matched_idx)
+            target["buffs"] = buffs
+            hub.set_battle(campaign_id, state)
+            await hub.broadcast(campaign_id, {
+                "type": "battle_update",
+                "data": state,
+                "force_gm_sync": True,
+            })
+
+    target_name = target.get("name") or "Target"
+    buff_label = (
+        (removed_buff or {}).get("name") if removed_buff else buff_key
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "🌀 Dispel Magic",
+            "feature_desc": (
+                f"{char.name} casts Dispel Magic at slot {slot_level} "
+                f"against {target_name}'s {buff_label}. "
+                + (
+                    f"Auto-end (L{buff_source_level} ≤ slot L{slot_level})."
+                    if auto_end else
+                    f"Check: {check_total} vs DC {check_dc} → "
+                    f"{'success — buff ended' if check_passed else 'failed — buff persists'}."
+                )
+            ),
+            "source": "dispel-magic",
+            "target_combatant_id": target_combatant_id,
+            "target_name": target_name,
+            "buff_key": buff_key,
+            "buff_name": buff_label,
+            "buff_source_level": buff_source_level,
+            "slot_level": slot_level,
+            "auto_end": auto_end,
+            "check_total": check_total,
+            "check_dc": check_dc,
+            "check_passed": check_passed,
+            "ended": ended,
+        },
+    })
+
+    return {
+        "ok": True,
+        "character_id": char.id,
+        "target_combatant_id": target_combatant_id,
+        "buff_key": buff_key,
+        "slot_level": slot_level,
+        "buff_source_level": buff_source_level,
+        "auto_end": auto_end,
+        "check_total": check_total,
+        "check_dc": check_dc,
+        "check_passed": check_passed,
+        "ended": ended,
+        "slot_used": used + 1,
+        "slot_total": total,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_devils_sight")
 async def use_devils_sight(
     campaign_id: int,
