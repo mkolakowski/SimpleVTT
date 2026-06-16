@@ -89,9 +89,12 @@ async def test_cloak_of_protection_grants_ac_bonus(gm_client, roster):
     )
     assert atk.status_code == 200, atk.text
     target_ac = atk.json().get("target_ac")
-    # Thalindra base AC 12 + Cloak of Protection +1 = 13.
-    assert target_ac == 13, (
-        f"expected target_ac=13 (12 base + 1 Cloak of Protection), "
+    # Thalindra base AC 12 + Cloak of Protection +1 + Staff of Power
+    # +2 (added to her seed v2.274.0) = 15. Test reconciled v2.369.2;
+    # the Cloak's +1 still flows through the same `_equipped_item_effects`
+    # walker — the Staff of Power addition simply stacks alongside.
+    assert target_ac == 15, (
+        f"expected target_ac=15 (12 base + 1 Cloak + 2 Staff of Power), "
         f"got {target_ac}; response={atk.json()}"
     )
 
@@ -118,12 +121,16 @@ async def test_cloak_of_protection_grants_save_bonus(gm_client, roster):
     data = resp.json()
     breakdown = data.get("breakdown", "")
     # The /roll endpoint annotates the breakdown with the source item.
+    # Reconciled v2.369.2: Thalindra also carries Staff of Power
+    # (+2 saves, added v2.274.0) so the annotation is "(+3 Cloak of
+    # Protection + Staff of Power)" — both source items are named
+    # and the summed bonus is +3, not just the Cloak's +1.
     assert "Cloak of Protection" in breakdown, (
         f"expected 'Cloak of Protection' in breakdown, got: {breakdown!r}"
     )
-    # And the +1 should be present in the breakdown annotation.
-    assert "+1" in breakdown, (
-        f"expected '+1' bonus annotation in breakdown, got: {breakdown!r}"
+    assert "+3" in breakdown, (
+        f"expected '+3' bonus annotation (Cloak +1 + Staff of Power +2) "
+        f"in breakdown, got: {breakdown!r}"
     )
 
 

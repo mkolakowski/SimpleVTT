@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.369.2] - 2026-06-16 — "The Stacking Staff"
+
+**Schema version:** 69
+
+**Commit summary:** Pre-existing test-drift fix surfaced by the v2.369.1 regression sweep. The two Cloak of Protection tests (AC + save) were written in v2.158.74 against Thalindra's then-minimal inventory; v2.274.0 added a Staff of Power (+2 AC / +2 saves / +2 spell attack) to her seed but never updated the cloak tests. Their assertions still expected the Cloak-only delta (AC 13 / save +1) instead of the stacked delta (AC 15 / save +3). Updated both assertions + their inline comments to reconcile.
+
+Pure pre-existing test fix; the AC / save engines themselves work correctly (the Cloak still contributes +1 alongside Staff of Power's +2). PATCH — no engine or schema change.
+
+### Fixed
+- `tests/harness/test_item_cloak_of_protection.py::test_cloak_of_protection_grants_ac_bonus` — assert `target_ac == 15` (12 base + Cloak +1 + Staff of Power +2).
+- `tests/harness/test_item_cloak_of_protection.py::test_cloak_of_protection_grants_save_bonus` — assert `"+3"` in the breakdown annotation ("(+3 Cloak of Protection + Staff of Power)") instead of just `"+1"`.
+
 ## [2.369.1] - 2026-06-16 — "The Bracer's Boost"
 
 **Schema version:** 69
