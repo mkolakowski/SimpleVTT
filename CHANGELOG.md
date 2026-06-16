@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.373.0] - 2026-06-16 — "The Friend-Foe Lens"
+
+**Schema version:** 69
+
+**Commit summary:** Adds an optional `faction` body param to `/battle/sphere-targets` — `"allies" | "enemies" | "all"` (default `all` = current behavior). When set AND `center_combatant_id` is supplied, filters the result list by the center combatant's PC-vs-NPC faction. Useful for self-centered AoE auto-target flows: Spirit Guardians auto-picks enemies-only, Aid / Bless / Mass Healing Word auto-picks allies-only, Fireball uses the default `all`. Three harness tests via Caelan + Pip + Bandit (PC-vs-NPC faction crossing).
+
+**Description:** A server-side foundation for the deferred client-side "select from caster" UX. The existing `/battle/sphere-targets` endpoint already accepts `center_combatant_id` and returns combatants in the radius — but it returns ALL combatants regardless of faction, so the client has to filter post-fetch (which requires the client to know each combatant's char_id presence). v2.373.0 moves the faction logic server-side using the same PC-vs-NPC heuristic the v2.99.425 aura-tick uses (PC = `char_id` set; NPC = no `char_id`).
+
+The faction filter applies only when (a) `center_combatant_id` is supplied (no faction context with raw x/y centers) AND (b) `faction != "all"`. Defaults preserve back-compat. The center combatant is always excluded from results (same as pre-v2.373.0).
+
+**v1 simplifications:**
+- Faction is binary (PC vs NPC). Truly-friendly NPCs (allied factions, summoned creatures) aren't distinguished from hostile NPCs in v1 — RAW "friendly creatures" semantics are GM-narrated.
+- Filter applies only to the `sphere-targets` endpoint v1; mirror commits for `cone-targets` and `line-targets` are a natural follow-up (same 5-line per-endpoint addition).
+
+MINOR — additive `faction` param + tests, no schema change.
+
+### Added
+- `faction` optional body param on `/api/campaign/{campaign_id}/battle/sphere-targets`. Validates against `{"all", "allies", "enemies"}`; rejects other values with 400.
+- Faction filter in the result loop — skips combatants whose `char_id` presence doesn't match the requested faction, relative to the center combatant.
+- `tests/harness/test_sphere_targets_faction_filter.py` — 4 tests (validation rejects invalid faction value; default `all` returns all; `allies` from PC center excludes NPCs; `enemies` from PC center excludes PCs).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3071 → 3075 (+4 sphere-targets faction-filter tests); new section.
+
 ## [2.372.1] - 2026-06-16 — "The Trinity Cap"
 
 **Schema version:** 69

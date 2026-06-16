@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3071 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.372.1, 2026-06-16).
+**Total tests:** 3075 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.373.0, 2026-06-16).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4290,6 +4290,16 @@ v2.56.0 — Fighter Lv 9+ Indomitable. Arm-then-consume single-use save-advantag
 | `test_use_indomitable_out_of_uses` | First call burns the only use; second call → 409 `out_of_uses` with `label=Indomitable`. |
 | `test_indomitable_consumes_on_save` | Arm + cast Suggestion at Garrik → save `base_expression="2d20kh1"`, buff removed from Garrik's combatant, consume-side `feature_used(source=indomitable)` broadcast. |
 | `test_indomitable_one_save_only` | After consume, a second save in the same round has `base_expression="1d20"` (no kh1; buff already consumed). |
+
+### `test_sphere_targets_faction_filter.py`
+v2.373.0 — `/battle/sphere-targets` gains an optional `faction` body param (`"all" | "allies" | "enemies"`, default `all` = current behavior). When set AND `center_combatant_id` is supplied, filters the result list by the center combatant's PC-vs-NPC faction. Useful for self-centered AoE auto-target flows (Spirit Guardians enemies-only, Aid allies-only, Fireball default).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_sphere_targets_faction_filter_validation` | Invalid `faction` value never returns 200 (400 validation rejection). |
+| `test_sphere_targets_default_faction_is_all` | No `faction` param → response `faction: "all"`, includes Pip in radius (back-compat preserved). |
+| `test_sphere_targets_allies_filter` | `faction: "allies"` from PC center excludes Bandit (NPC) — opposite-faction creatures filtered out. |
+| `test_sphere_targets_enemies_filter` | `faction: "enemies"` from PC center excludes Pip (PC) — same-faction creatures filtered out. |
 
 ### `test_cast_aid_target_cap.py`
 v2.372.1 — Aid 3-target cap (RAW PHB p.211). Adds `max_targets: 3` to `_SPELL_BUFF_MAP["aid"]`; `/cast_spell`'s buff-install branch returns 400 `too_many_targets` when the caller exceeds the cap. Generic substrate ready for other "up to N creatures" buff spells (Bless, Beacon of Hope, etc.) to opt in.

@@ -93284,6 +93284,17 @@ async def battle_sphere_targets(
         raise HTTPException(400, "radius_ft must be a number")
     if radius_ft <= 0:
         raise HTTPException(400, "radius_ft must be positive")
+    # v2.373.0 — optional faction filter ("allies" | "enemies" | "all";
+    # default "all" = current behavior). When set AND `center_combatant_id`
+    # is supplied, filter results to combatants of the matching faction
+    # relative to the center combatant. PC = "ally" of other PCs; NPC =
+    # "ally" of other NPCs. Center combatant is always excluded (RAW: a
+    # self-centered AoE picker doesn't include the caster). Useful for
+    # Spirit Guardians (enemies-only auto-pick) / Aid / Bless / Mass
+    # Healing Word (allies-only auto-pick).
+    faction = (body.get("faction") or "all").strip().lower()
+    if faction not in ("all", "allies", "enemies"):
+        raise HTTPException(400, "faction must be one of: all, allies, enemies")
 
     state = hub.get_battle(campaign_id)
     if not state:
@@ -93331,6 +93342,15 @@ async def battle_sphere_targets(
         center_xy = (cx, cy)
 
     ax, ay = center_xy
+    # v2.373.0 — resolve the center combatant's faction (PC vs NPC) for
+    # the faction filter. Skip filtering when faction == "all" or the
+    # center was supplied as raw x/y (no faction context). The PC-vs-NPC
+    # mapping mirrors the v2.99.425 aura-tick faction logic.
+    center_is_pc: bool | None = None
+    if center_id and faction != "all":
+        _center_c = by_id.get(center_id)
+        if _center_c is not None:
+            center_is_pc = bool(_center_c.get("char_id"))
     results: list[dict] = []
     for c in combatants:
         if not isinstance(c, dict):
@@ -93345,6 +93365,13 @@ async def battle_sphere_targets(
         dist = _distance_ft_between_points(grid_px, grid_type, ax, ay, px, py)
         if dist > radius_ft:
             continue
+        # v2.373.0 — faction filter.
+        if center_is_pc is not None:
+            subj_is_pc = bool(c.get("char_id"))
+            if faction == "allies" and subj_is_pc != center_is_pc:
+                continue
+            if faction == "enemies" and subj_is_pc == center_is_pc:
+                continue
         results.append({
             "combatant_id": cid,
             "name": c.get("name") or "",
@@ -93356,6 +93383,7 @@ async def battle_sphere_targets(
         "center_x": ax,
         "center_y": ay,
         "radius_ft": radius_ft,
+        "faction": faction,
         "results": results,
     }
 
