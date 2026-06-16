@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.382.2] - 2026-06-16 — "The Map Caught Up"
+
+**Schema version:** 69
+
+**Commit summary:** Tiny follow-up to v2.382.1 — the audit refresh commit landed the new section but the "Quick map" pointer at the top of `TODO.md` didn't update because the edit string mismatched the actual file state. This commit lands the pointer fix: header now reads "see SRD 5e Audit (v2.382.0 refresh)" + overall **~95%** automation summary. No content change.
+
+PATCH — pure doc edit; no runtime code change.
+
+### Fixed
+- `TODO.md` "Quick map" pointer: was still pointing at the v2.379.0 audit + "~94%" summary; now points at v2.382.0 + ~95% per the v2.382.1 refresh.
+
 ## [2.382.1] - 2026-06-16 — "The Final Pass"
 
 **Schema version:** 69
