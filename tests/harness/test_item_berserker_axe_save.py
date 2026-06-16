@@ -56,7 +56,7 @@ async def _snapshot_inv_and_hp(gm_client, char_id):
 
 
 async def _patch_inv(gm_client, char_id, *, equipped, attuned):
-    inv_snap, _ = await _snapshot_inv_and_hp(gm_client, char_id)
+    inv_snap, hp_snap = await _snapshot_inv_and_hp(gm_client, char_id)
     new_inv = [dict(it) if isinstance(it, dict) else it for it in inv_snap]
     found = False
     for it in new_inv:
@@ -70,7 +70,7 @@ async def _patch_inv(gm_client, char_id, *, equipped, attuned):
         json={"inventory": new_inv},
     )
     assert resp.status_code == 200, resp.text
-    return inv_snap
+    return inv_snap, hp_snap
 
 
 async def _restore_inv(gm_client, char_id, snapshot):

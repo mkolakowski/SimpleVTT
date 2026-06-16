@@ -1843,6 +1843,7 @@ _INCAPACITATING_BUFF_KEYS = frozenset({
 
 async def _maybe_item_on_damage_save(
     campaign_id: int, char, damage_amount: int,
+    db: "Session | None" = None,
 ) -> dict | None:
     """v2.363.0 — Berserker Axe cursed berserk save (RAW DMG p.155).
     Mirror of `_maybe_concentration_save`, but keyed off equipped+
@@ -1952,6 +1953,17 @@ async def _maybe_item_on_damage_save(
                     installed = await _install_buff(
                         campaign_id, int(char.id), buff,
                     )
+                    if installed and db is not None:
+                        try:
+                            _mirror_buffs_to_sheet(
+                                db, int(char.id),
+                                _get_buffs(campaign_id, int(char.id)),
+                            )
+                        except Exception:
+                            logging.exception(
+                                "buff mirror failed for char_id=%s slug=%s",
+                                char.id, slug,
+                            )
             await hub.broadcast(campaign_id, {
                 "type": "feature_used",
                 "data": {
@@ -8081,7 +8093,7 @@ async def _apply_damage_to_combatant(
         if applied > 0:
             try:
                 await _maybe_item_on_damage_save(
-                    campaign_id, char, applied,
+                    campaign_id, char, applied, db=db,
                 )
             except Exception:
                 logging.exception(
@@ -95892,7 +95904,7 @@ async def patch_sheet_fields(
         # `_apply_damage_to_combatant`).
         try:
             await _maybe_item_on_damage_save(
-                campaign_id, char, damage_amount,
+                campaign_id, char, damage_amount, db=db,
             )
         except Exception:
             logging.exception(

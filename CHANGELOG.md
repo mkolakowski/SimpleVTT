@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.363.1] - 2026-06-16 — "The Mirror's Polish"
+
+**Schema version:** 69
+
+**Commit summary:** Closes the v2.363.0 sheet-mirror gap on the new `_maybe_item_on_damage_save` helper. The berserk save install was succeeding on the combatant in hub state but not being mirrored to the PC sheet's `_buffs_active`, so subsequent GET /sheet-json calls didn't see the new `berserk` buff — the v2.363.0 harness sweep ran but couldn't observe the install. Adds an optional `db` param to the helper and calls `_mirror_buffs_to_sheet` after a successful `_install_buff` (matching the existing convention in `/cast_spell`, `/use_vow_of_enmity`, etc.). Plus a test-harness `_patch_inv` return-tuple fix.
+
+**Description:** Pure follow-up; no engine behavior change beyond the sheet-mirror sync. PATCH — bug fix on the v2.363.0 substrate; no schema change.
+
+### Fixed
+- `_maybe_item_on_damage_save` now accepts an optional `db` param and mirrors the installed buff to the PC sheet's `_buffs_active` via `_mirror_buffs_to_sheet` (mirror of the v2.99.191 `/cast_spell` convention). Both call sites (`_apply_damage_to_combatant` PC path + PATCH /sheet-fields damage branch) pass their `db` through.
+- `tests/harness/test_item_berserker_axe_save.py::_patch_inv` returns the (inv_snap, hp_snap) tuple it captures (was unpack-mismatched).
+
 ## [2.363.0] - 2026-06-16 — "The Berserker's Cry"
 
 **Schema version:** 69
