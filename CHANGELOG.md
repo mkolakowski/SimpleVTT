@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.370.0] - 2026-06-16 — "The Caught Arrow"
+
+**Schema version:** 69
+
+**Commit summary:** Wires Monk Lv 3+ Deflect Missiles damage-reduction as an auto-fire in `_apply_damage_to_combatant` — direct mirror of the v2.49.243 Uncanny Dodge auto-fire, gated on the v2.366.0 `is_ranged_weapon_attack` kwarg. RAW PHB p.78: "you can use your reaction to deflect or catch the missile when you are hit by a ranged weapon attack. When you do so, the damage you take from the attack is reduced by 1d10 + your Dexterity modifier + your monk level." Closes the Monk Lv 3 row on class-content-status.md (🟢 → ✅).
+
+**Description:** The auto-fire is bolted onto the same hook site as Uncanny Dodge (immediately after the UD block, before the immunity / resistance / vulnerability chain), with these differences:
+
+- **Trigger gate:** `is_attack AND is_ranged_weapon_attack` (UD: just `is_attack`).
+- **Class gate:** Monk Lv 3+ (UD: Rogue Lv 5+).
+- **Math:** subtract `1d10 + DEX mod + Monk Lv`, floor at 0 (UD: integer halve).
+- **Broadcast source:** `deflect-missiles` (UD: `uncanny-dodge`).
+- **"Caught" sub-feature** (RAW: spend 1 ki to throw the caught missile back) — GM-narrated v1; the broadcast carries `caught: True` when the post-reduction damage equals 0 so a future commit can wire the throw-back without retroactively reshaping the payload.
+
+After this commit the only remaining non-✅ row on class-content-status.md is **Paladin Lv 14 Cleansing Touch** 🟢 (resource counter wired; target-picker UI deferred). Three harness tests via Rowan (Longbow ranged) → Kael (Monk Lv 7, DEX 18). MINOR — additive auto-fire hook + content + tests, no schema change.
+
+### Added
+- `_target_uses_deflect_missiles(db, campaign_id, target_combatant_id)` helper — mirror of `_target_uses_uncanny_dodge` (Lv 3 gate, Monk class, reaction-available).
+- Auto-fire block in `_apply_damage_to_combatant`'s PC path between Uncanny Dodge and the immunity/resistance chain. Rolls the reduction, applies it, marks the reaction, broadcasts `feature_used(source="deflect-missiles")` with `pre_reduction` / `reduction_amount` / `post_reduction` / `caught` fields.
+- `tests/harness/test_deflect_missiles.py` — 3 tests (Longbow hit → reduction broadcast with amount in [12, 21] and `post = max(0, pre - reduction)`; melee Shortsword → no broadcast; reaction spent → no broadcast).
+
+### Changed
+- `docs/plans/class-content-status.md`: Monk Lv 3 Deflect Missiles 🟢 → ✅.
+- `docs/test-harness-coverage.md`: harness total 3059 → 3062 (+3 Deflect Missiles tests); new section.
+
 ## [2.369.2] - 2026-06-16 — "The Stacking Staff"
 
 **Schema version:** 69

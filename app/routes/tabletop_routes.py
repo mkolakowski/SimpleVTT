@@ -8077,6 +8077,63 @@ async def _apply_damage_to_combatant(
                         )
                 except Exception:
                     pass
+        # v2.370.0 — Deflect Missiles (Monk Lv 3+). Mirror of the
+        # v2.49.243 Uncanny Dodge auto-fire above, but gated on
+        # `is_ranged_weapon_attack=True` (v2.366.0 kwarg) instead of
+        # the generic `is_attack`. RAW PHB p.78: "When you are hit by
+        # a ranged weapon attack ... reduce the damage by 1d10 + your
+        # Dexterity modifier + your monk level." Subtracts (doesn't
+        # halve), floor at 0. Marks the reaction; broadcasts. The
+        # "catch + ki-rethrow when reduced to 0" sub-feature stays
+        # GM-narrated in v1.
+        deflect_missiles_used = False
+        deflect_pre = damage_amount
+        deflect_amount = 0
+        if (
+            is_attack and is_ranged_weapon_attack and damage_amount > 0
+        ):
+            _dm_applies, _dm_char = _target_uses_deflect_missiles(
+                db, campaign_id, combatant.get("id"),
+            )
+            if _dm_applies and _dm_char is not None:
+                _dm_sheet = _dm_char.sheet or {}
+                _dex = int((_dm_sheet.get("abilities") or {}).get("DEX") or 10)
+                _dex_mod = (_dex - 10) // 2
+                _monk_lv = _monk_level_from_sheet(_dm_sheet)
+                try:
+                    _d10 = dice_mod.roll("1d10")
+                    _d10_total = int(_d10.total)
+                except dice_mod.DiceParseError:
+                    _d10_total = 5
+                deflect_amount = max(0, _d10_total + _dex_mod + _monk_lv)
+                damage_amount = max(0, damage_amount - deflect_amount)
+                deflect_missiles_used = True
+                await _mark_battle_economy(
+                    campaign_id, _dm_char.id, "reaction",
+                )
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "character_id": _dm_char.id,
+                        "character_name": _dm_char.name,
+                        "user_color": _dm_char.color,
+                        "feature_name": (
+                            f"🥋 Deflect Missiles → {deflect_pre} − "
+                            f"{deflect_amount} = {damage_amount} damage"
+                        ),
+                        "feature_desc": (
+                            f"Reaction (Monk Lv 3+). Reduce ranged-weapon "
+                            f"damage by 1d10 ({_d10_total}) + DEX "
+                            f"({_dex_mod:+d}) + Monk Lv ({_monk_lv}) = "
+                            f"{deflect_amount}. {'Caught the missile!' if damage_amount == 0 else ''}"
+                        ),
+                        "source": "deflect-missiles",
+                        "pre_reduction": deflect_pre,
+                        "reduction_amount": deflect_amount,
+                        "post_reduction": damage_amount,
+                        "caught": damage_amount == 0,
+                    },
+                })
         # v2.99.124 — immunity check BEFORE resistance/vulnerability.
         # RAW: immunity supersedes both (a Petrified target immune to
         # poison takes 0 from Poison Spray, even if it's somehow also
@@ -30369,6 +30426,59 @@ def _target_uses_uncanny_dodge(
         return False, None
     sheet = char.sheet or {}
     if _rogue_level_from_sheet(sheet) < 5:
+        return False, None
+    return True, char
+
+
+def _target_uses_deflect_missiles(
+    db: Session, campaign_id: int, target_combatant_id: str | None,
+) -> "tuple[bool, Character | None]":
+    """v2.370.0 — Deflect Missiles (Monk Lv 3+). Mirror of v2.49.243
+    `_target_uses_uncanny_dodge`. Returns (applies, char) when the
+    incoming ranged-weapon attack against ``target_combatant_id``
+    should be reduced by the Monk's reaction.
+
+    RAW (PHB p.78): "you can use your reaction to deflect or catch the
+    missile when you are hit by a ranged weapon attack. When you do
+    so, the damage you take from the attack is reduced by 1d10 + your
+    Dexterity modifier + your monk level."
+
+    Conditions:
+      - target is a PC combatant with ``char_id`` → Character row
+      - PC is Monk Lv 3+ (single-class or multiclass via
+        ``_monk_level_from_sheet``)
+      - reaction slot is currently available
+
+    The CALLER also gates on ``is_ranged_weapon_attack=True`` via the
+    v2.366.0 kwarg. **v1 simplifications (GM-narrated):** the "catch
+    + ki-rethrow" sub-feature when damage is reduced to 0 (RAW: spend
+    1 ki to make a ranged attack with the caught missile) — the
+    auto-fire here just applies the reduction; the catch-and-throw
+    decision stays GM-narrated.
+    """
+    if not target_combatant_id:
+        return False, None
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False, None
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("id") == target_combatant_id:
+            target = c
+            break
+    if target is None:
+        return False, None
+    char_id = target.get("char_id")
+    if not char_id:
+        return False, None
+    economy = target.get("economy") or {}
+    if bool(economy.get("reaction")):
+        return False, None
+    char = db.query(Character).filter(Character.id == char_id).first()
+    if not char:
+        return False, None
+    sheet = char.sheet or {}
+    if _monk_level_from_sheet(sheet) < 3:
         return False, None
     return True, char
 

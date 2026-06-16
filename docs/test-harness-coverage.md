@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3059 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.369.0, 2026-06-16).
+**Total tests:** 3062 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.370.0, 2026-06-16).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4290,6 +4290,15 @@ v2.56.0 — Fighter Lv 9+ Indomitable. Arm-then-consume single-use save-advantag
 | `test_use_indomitable_out_of_uses` | First call burns the only use; second call → 409 `out_of_uses` with `label=Indomitable`. |
 | `test_indomitable_consumes_on_save` | Arm + cast Suggestion at Garrik → save `base_expression="2d20kh1"`, buff removed from Garrik's combatant, consume-side `feature_used(source=indomitable)` broadcast. |
 | `test_indomitable_one_save_only` | After consume, a second save in the same round has `base_expression="1d20"` (no kh1; buff already consumed). |
+
+### `test_deflect_missiles.py`
+v2.370.0 — Monk Lv 3+ Deflect Missiles auto-reduction. Mirror of v2.49.243 Uncanny Dodge auto-fire in `_apply_damage_to_combatant`, gated on v2.366.0 `is_ranged_weapon_attack`. Rolls 1d10 + DEX + Monk Lv, subtracts (floor 0), marks reaction. Kael (Monk Lv 7, DEX +4) takes Rowan's Longbow hit → reduction 12..21 + broadcast.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_deflect_missiles_reduces_ranged_damage` | Longbow hit on Kael → `deflect-missiles` broadcast with `reduction_amount` in [12, 21]; `post_reduction = max(0, pre - reduction)`. |
+| `test_deflect_missiles_skipped_for_melee_attack` | Rowan's Shortsword (melee) hit on Kael → no `deflect-missiles` broadcast (`is_ranged_weapon_attack` gate). |
+| `test_deflect_missiles_skipped_without_reaction` | Kael's combatant has `economy.reaction: True` (already spent) → no auto-fire (mirror UD gate). |
 
 ### `test_unarmored_defense.py`
 v2.369.0 — Barbarian + Monk Unarmored Defense auto-AC engine (`_pc_unarmored_defense_ac` helper + `_read_target_ac` hook). `max(stored, computed)` semantics — seeded ACs stay intact, but PATCHing an ability score auto-flows to attack-time AC reads. Closes Barbarian Lv 1 + Monk Lv 1 Unarmored Defense rows on the v2.344.3 class-content-status.md reconciliation.
