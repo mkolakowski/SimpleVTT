@@ -40,7 +40,9 @@ _VAULT_BY_CARRIER = {
     ],
     "Mira Greenleaf": [
         "figurine-of-wondrous-power", "horseshoes-of-a-zephyr",
-        "oil-of-etherealness", "ring-of-animal-influence",
+        "oil-of-etherealness",
+        # ring-of-animal-influence promoted to a charge-cast action
+        # (v2.353.0) — now an explicit equipped item, no longer a Vault stub.
     ],
     "Garrik Ironside": [
         "adamantine-armor", "handy-haversack", "immovable-rod",

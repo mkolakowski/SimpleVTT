@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3012 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.352.0, 2026-06-15).
+**Total tests:** 3014 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.353.0, 2026-06-16).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3558,6 +3558,14 @@ v2.347.0 engine — the `effects.disadvantage_on` roll intercept generalized fro
 | `test_con_save_disadvantage_fires` | `disadvantage_on=["con_save"]` → a CON save rolls `2d20kl1` + a `disadvantage-con_save` broadcast fires. |
 | `test_str_save_disadvantage_fires` | `disadvantage_on=["str_save"]` → a STR save rolls `2d20kl1` (saves were previously uncovered). |
 | `test_marker_specificity_control` | A `con_save`-only buff does NOT impose disadvantage on a `con_check` roll (marker specificity). |
+
+### `test_use_item_action_ring_of_animal_influence.py`
+v2.353.0 magic-items — Ring of Animal Influence (RAW DMG p.190, rare, no attunement), fourth Bucket A charge-cast item. Runs on the `/use_item_action` → Wand of Fear handler (single-target animal friendship, DC 13 WIS save or charmed, 3 charges). Carrier: Mira Greenleaf (equipped + `ring-of-animal-influence` resource).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_ring_animal_friendship_one_target` | Animal friendship at 1 NPC beast → 200, item_name "Ring of Animal Influence", save_dc 13, save_ability WIS, charges_spent 1, resource 3→2, id in results. |
+| `test_ring_animal_influence_empty_returns_409` | Ring drained to 0 charges → 409 `insufficient_charges` (current 0). |
 
 ### `test_use_item_action_trident_of_fish_command.py`
 v2.352.0 magic-items — Trident of Fish Command (RAW DMG p.205, uncommon, attunement), third Bucket A charge-cast item. Runs on the `/use_item_action` → Wand of Fear handler (single-target dominate beast, DC 15 WIS save or charmed, 3 charges). Carrier: Mira Greenleaf (equipped+attuned + `trident-of-fish-command` resource).

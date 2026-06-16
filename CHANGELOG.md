@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.353.0] - 2026-06-16 — "The Beast-Whisperer"
+
+**Schema version:** 69
+
+**Commit summary:** Fourth **Bucket-A** (charge-cast) magic-item commit off the v2.344.5 stub triage. **Ring of Animal Influence** (RAW DMG p.190, rare, NO attunement) promoted from a v2.342.0 "Vault" catalog stub to a charge-cast action through the generalized `_use_item_action_wand_of_fear` handler — the single-target `charmed` shape (Animal Friendship), 3 charges, DC 13 WIS. Seeded equipped on Mira Greenleaf with a 3-charge resource; two harness tests.
+
+**Description:** Zero new engine code — runs on the same `/use_item_action` → Wand of Fear handler path as Trident of Fish Command / Mace of Terror / Rod of Rulership. Added `ring-of-animal-influence` to `_MAGIC_ITEM_ACTIONS` (3-charge resource, WIS DC 13, `charmed` condition, single target) and the slug to the handler dispatch tuple. Promoted the slug out of the Vault passive `setdefault` loop and out of the bulk `_vault_loot` seed into an explicit equipped ring on Mira paired with a `ring-of-animal-influence` 3-charge resource (regain 1d3 at dawn). **v1 simplifications (GM-narrated):** the ring's other two charge-spells (fear on beasts, speak with animals) and the RAW beast-only target gate — v1 wires the combat-relevant Animal Friendship → charmed action. MINOR — additive item action + content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ACTIONS["ring-of-animal-influence"]` — `{requires_attunement: False, resource_key: "ring-of-animal-influence", actions: {cast-animal-friendship: {save_dc: 13, save_ability: WIS, charmed, target_shape: single, …}}}`; slug added to the Wand of Fear handler dispatch tuple.
+- Demo seed: explicit equipped **Ring of Animal Influence** on Mira Greenleaf + a `ring-of-animal-influence` 3-charge resource.
+- `tests/harness/test_use_item_action_ring_of_animal_influence.py` — 2 tests (animal friendship at 1 target → DC 13 WIS, charges 3→2, id in results; empty ring → 409 insufficient_charges).
+
+### Changed
+- `tests/harness/test_vault_stub_loot.py`: removed `ring-of-animal-influence` from Mira's Vault-stub assertion list (it's an explicit equipped item now).
+- `docs/test-harness-coverage.md`: harness total 3012 → 3014 (+2 Ring of Animal Influence tests); new `test_use_item_action_ring_of_animal_influence.py` section.
+
 ## [2.352.1] - 2026-06-15 — "The Updated Ledger"
 
 **Schema version:** 69

@@ -3134,6 +3134,16 @@ def _druid_sheet(name: str) -> dict:
              "properties": "magic, thrown", "weight_lb": 4,
              "_slug": "trident-of-fish-command",
              "desc": "Uncommon magic trident, attunement. 3 charges (regain 1d3 at dawn). Action: expend 1 to cast dominate beast (DC 15 WIS) on a beast you can see within range. RAW: only a beast with an innate swimming speed (GM-narrated). RAW DMG p.205."},
+            # v2.353.0 — Ring of Animal Influence (RAW DMG p.190, rare, NO
+            # attunement). Promoted out of the v2.342.0 Vault bulk loot into
+            # an explicit equipped ring paired with the
+            # `ring-of-animal-influence` 3-charge resource above. Runs
+            # through the generalized Wand of Fear handler with the charmed
+            # (animal friendship) condition. Thematic on Mira (Druid).
+            {"name": "Ring of Animal Influence", "type": "wondrous", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 0,
+             "_slug": "ring-of-animal-influence",
+             "desc": "Rare ring, no attunement. 3 charges (regain 1d3 at dawn). Action: expend 1 to cast animal friendship (DC 13 WIS, beast → charmed), fear on beasts (DC 13), or speak with animals. RAW DMG p.190."},
             # v2.329.0 — "The Captor's Cache" bundle: Mirror of Life Trapping
             # (RAW DMG p.181, very rare, no attunement). 4-ft-tall framed
             # mirror. When a creature other than the wielder comes within
@@ -3205,6 +3215,19 @@ def _druid_sheet(name: str) -> dict:
                 "source": "item-trident-of-fish-command",
                 "class_slug": "item",
                 "desc": "3 charges; expend 1 (action) to cast dominate beast (DC 15 WIS) on a beast. Regains 1d3 charges at dawn.",
+                "manual": False,
+            },
+            # v2.353.0 — Ring of Animal Influence charge pool (RAW DMG p.190):
+            # 3 charges, regain 1d3 at dawn (long rest). The shared save-
+            # condition wand handler decrements 1 per Animal Friendship cast.
+            {
+                "key": "ring-of-animal-influence",
+                "name": "Ring of Animal Influence",
+                "current": 3, "max": 3, "reset": "long",
+                "charge_recovery": "1d3",
+                "source": "item-ring-of-animal-influence",
+                "class_slug": "item",
+                "desc": "3 charges; expend 1 (action) to cast animal friendship (DC 13 WIS → charmed), fear on beasts, or speak with animals. Regains 1d3 charges at dawn.",
                 "manual": False,
             },
         ],
@@ -6798,7 +6821,6 @@ def seed_characters(
         ("Mira Greenleaf", "figurine-of-wondrous-power", "Figurine of Wondrous Power (Silver Raven)", "magic", "By figurine. A statuette that becomes a living creature (silver raven → a raven messenger) on the command word; reverts to a figurine after its duration. RAW DMG p.169."),
         ("Mira Greenleaf", "horseshoes-of-a-zephyr", "Horseshoes of a Zephyr", "magic", "Very rare. Four horseshoes; the shod creature moves normally while floating 4 in. above the ground (ignores difficult terrain, can't leave tracks, etc.). RAW DMG p.175."),
         ("Mira Greenleaf", "oil-of-etherealness", "Oil of Etherealness", "consumable", "Rare. Apply over 10 min → the etherealness effect for 1 hour. RAW DMG p.184."),
-        ("Mira Greenleaf", "ring-of-animal-influence", "Ring of Animal Influence", "magic", "Rare. 3 charges (regain 1d3 at dawn). Expend 1 to cast animal friendship (DC 13), fear on beasts (DC 13), or speak with animals. RAW DMG p.190."),
         ("Garrik Ironside", "adamantine-armor", "Adamantine Armor", "armor", "Uncommon (medium/heavy). While worn, any critical hit against you becomes a normal hit. RAW DMG p.150."),
         ("Garrik Ironside", "handy-haversack", "Heward's Handy Haversack", "magic", "Rare. A backpack with extradimensional pouches; weighs 5 lb regardless of contents; retrieving a specific item is always a swift action. RAW DMG p.174."),
         ("Garrik Ironside", "immovable-rod", "Immovable Rod", "magic", "Uncommon. A flat iron rod; press the button (action) to fix it in place (holds 8,000 lb; DC 30 STR to move). RAW DMG p.176."),

@@ -33810,7 +33810,9 @@ for _vault_slug, _vault_attune in [
     ("oil-of-slipperiness", False), ("orb-of-dragonkind", True),
     ("philter-of-love", False), ("pipes-of-the-sewers", True),
     ("plate-armor-of-etherealness", True), ("potion-of-poison", False),
-    ("restorative-ointment", False), ("ring-of-animal-influence", False),
+    ("restorative-ointment", False),
+    # ring-of-animal-influence promoted to a charge-cast action (animal
+    # friendship → charmed) in v2.353.0 — registered via `_MAGIC_ITEM_ACTIONS`.
     ("ring-of-djinni-summoning", True), ("ring-of-evasion", True),
     ("ring-of-invisibility", True), ("ring-of-regeneration", True),
     ("ring-of-shooting-stars", True), ("ring-of-spell-storing", True),
@@ -34583,6 +34585,36 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
                     "can repeat the save each time it takes damage",
                 ],
                 "feature_name": "🔱 Trident of Fish Command",
+            },
+        },
+    },
+    # v2.353.0 — Ring of Animal Influence (RAW DMG p.190, rare, NO
+    # attunement). Fourth Bucket-A item on the generalized Wand of Fear
+    # handler — single-target charmed (Animal Friendship). 3 charges
+    # (regain 1d3 at dawn): an action casts animal friendship (DC 13 WIS)
+    # on a beast → charmed. The other two charge-spells (fear on beasts,
+    # speak with animals) are GM-narrated; v1 wires the combat-relevant
+    # charmed action.
+    "ring-of-animal-influence": {
+        "requires_attunement": False,
+        "resource_key": "ring-of-animal-influence",
+        "actions": {
+            "cast-animal-friendship": {
+                "name": "Cast Animal Friendship (DC 13)",
+                "save_dc": 13,
+                "save_ability": "WIS",
+                "min_charges": 1,
+                "max_charges": 1,
+                "duration_rounds": 10,
+                "target_shape": "single",
+                "condition_key": "charmed",
+                "condition_label": "Charmed",
+                "condition_icon": "🐾",
+                "condition_effects": [
+                    "charmed by you; won't attack you for the duration",
+                    "RAW: works only on a beast",
+                ],
+                "feature_name": "🐾 Ring of Animal Influence",
             },
         },
     },
@@ -83832,7 +83864,10 @@ async def use_item_action(
                 "rod-of-rulership",
                 # v2.352.0 — Trident of Fish Command — single-target
                 # dominate-beast (charmed), 3 charges.
-                "trident-of-fish-command"):
+                "trident-of-fish-command",
+                # v2.353.0 — Ring of Animal Influence — single-target
+                # animal-friendship (charmed), 3 charges, no attunement.
+                "ring-of-animal-influence"):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_wand_of_fear(
             db, campaign_id, char, item, sheet, catalog,
