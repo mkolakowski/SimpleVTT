@@ -67,7 +67,9 @@ _VAULT_BY_CARRIER = {
         "rod-of-absorption", "talisman-of-ultimate-evil",
     ],
     "Dame Seraphine Vael": [
-        "ring-of-three-wishes", "rod-of-rulership",
+        "ring-of-three-wishes",
+        # rod-of-rulership promoted to a charge-cast action (v2.351.0) —
+        # now an explicit equipped item, no longer a Vault stub.
         "shield-of-missile-attraction",
     ],
     "Brakka Wildmane": [

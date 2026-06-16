@@ -2377,6 +2377,18 @@ def _paladin_vengeance_sheet(name: str) -> dict:
              "properties": "magic", "weight_lb": 4,
              "_slug": "mace-of-terror",
              "desc": "Rare mace, attunement. 3 charges (regain 1d4+1 at dawn). Action: expend 1 charge to release a wave of terror — each creature of your choice within 30 ft makes a DC 15 WIS save or is frightened of you for 1 minute (must spend turns moving away). RAW DMG p.180."},
+            # v2.351.0 — Rod of Rulership (RAW DMG p.197, rare, attunement).
+            # Promoted out of the v2.342.0 Vault bulk loot into an explicit
+            # equipped+attuned item paired with the `rod-of-rulership`
+            # 1/dawn resource above. Runs through the generalized Wand of
+            # Fear handler with the charmed condition. Seeded attuned (the
+            # /use_item_action path gates on `attuned` for attunement items);
+            # the Sun Blade detune-restore test already uses /sheet-fields
+            # (v2.340.0) so the extra seed-attuned item doesn't bite the cap.
+            {"name": "Rod of Rulership", "type": "wondrous", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "rod-of-rulership",
+             "desc": "Rare rod, attunement. 1/dawn — action: command obedience from each creature of your choice within 120 ft; each makes a DC 15 WIS save or is charmed (regards you as its trusted leader) for 1 minute. Ends if harmed by you/allies or commanded against its nature. RAW DMG p.197."},
         ],
         "resources": [
             # v2.340.0 — Mace of Terror charge pool (RAW DMG p.180): 3
@@ -2390,6 +2402,18 @@ def _paladin_vengeance_sheet(name: str) -> dict:
                 "source": "magic item — Mace of Terror",
                 "class_slug": "item",
                 "desc": "3 charges; expend 1 (action) to release a 30-ft wave of terror — DC 15 WIS save or frightened 1 min. Regain 1d4+1 at dawn.",
+                "manual": False,
+            },
+            # v2.351.0 — Rod of Rulership 1/dawn use (RAW DMG p.197): a
+            # single "charge" that refills on a long rest. The shared save-
+            # condition wand handler decrements it per Command Obedience.
+            {
+                "key": "rod-of-rulership",
+                "name": "Rod of Rulership",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "magic item — Rod of Rulership",
+                "class_slug": "item",
+                "desc": "1/dawn — action: each creature of your choice within 120 ft makes a DC 15 WIS save or is charmed (regards you as trusted leader) for 1 min. Recharges at dawn.",
                 "manual": False,
             },
             {
@@ -6774,7 +6798,6 @@ def seed_characters(
         ("Magnus Hexbinder", "rod-of-absorption", "Rod of Absorption", "magic", "Very rare, attunement. Reaction: absorb a single-target spell aimed at you (up to 50 levels stored); later spend stored levels to power your own spells. RAW DMG p.193."),
         ("Magnus Hexbinder", "talisman-of-ultimate-evil", "Talisman of Ultimate Evil", "magic", "Legendary, attunement (evil-aligned). 6 charges: expend 1 to deal 8d6 necrotic + scour a good creature into a fiery pit. An evil cleric/paladin gains +2 spell attack. RAW DMG p.207."),
         ("Dame Seraphine Vael", "ring-of-three-wishes", "Ring of Three Wishes", "magic", "Legendary. 3 charges; expend 1 to cast wish. When the last charge is used, there's a chance the ring vanishes. RAW DMG p.193."),
-        ("Dame Seraphine Vael", "rod-of-rulership", "Rod of Rulership", "magic", "Rare, attunement. Action (1/dawn): each creature of your choice within 120 ft makes a DC 15 WIS save or is charmed by you for 8 hours. RAW DMG p.193."),
         ("Dame Seraphine Vael", "shield-of-missile-attraction", "Shield of Missile Attraction", "shield", "Rare, attunement (cursed). Resistance to ranged-weapon damage; the curse redirects ranged attacks aimed within 10 ft of you to you instead. RAW DMG p.199."),
         ("Brakka Wildmane", "dimensional-shackles", "Dimensional Shackles", "magic", "Rare. Apply to an incapacitated creature (action): the shackles prevent all extradimensional movement (teleport, planar travel) while bound. RAW DMG p.165."),
         ("Brakka Wildmane", "pipes-of-the-sewers", "Pipes of the Sewers", "magic", "Uncommon, attunement (wind-instrument proficiency). 3 charges; play to attract + command swarms of rats within 60 ft. RAW DMG p.184."),

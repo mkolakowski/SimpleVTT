@@ -33816,7 +33816,9 @@ for _vault_slug, _vault_attune in [
     ("ring-of-shooting-stars", True), ("ring-of-spell-storing", True),
     ("ring-of-telekinesis", True), ("ring-of-three-wishes", False),
     ("robe-of-scintillating-colors", True), ("rod-of-absorption", True),
-    ("rod-of-lordly-might", True), ("rod-of-rulership", True),
+    ("rod-of-lordly-might", True),
+    # rod-of-rulership promoted to a charge-cast action (radius charm) in
+    # v2.351.0 — registered via `_MAGIC_ITEM_ACTIONS`.
     ("rod-of-security", False), ("rope-of-entanglement", False),
     ("shield-of-missile-attraction", True), ("sphere-of-annihilation", False),
     ("talisman-of-pure-good", True), ("talisman-of-the-sphere", True),
@@ -34518,6 +34520,37 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
                     "must spend its turns trying to move away from you",
                 ],
                 "feature_name": "😱 Pipes of Haunting",
+            },
+        },
+    },
+    # v2.351.0 — Rod of Rulership (RAW DMG p.197, rare, attunement). Second
+    # Bucket-A item on the generalized Wand of Fear handler — the Staff of
+    # Charming `charmed` condition on the Mace of Terror radius-target
+    # shape. A single 1/dawn "charge" (the resource refills on a long
+    # rest): an action commands obedience from each chosen creature within
+    # 120 ft — DC 15 WIS save or charmed (regards you as its trusted
+    # leader) for 1 minute. RAW "ends if harmed by you/allies or commanded
+    # against its nature" is GM-narrated.
+    "rod-of-rulership": {
+        "requires_attunement": True,
+        "resource_key": "rod-of-rulership",
+        "actions": {
+            "command-obedience": {
+                "name": "Command Obedience (120 ft)",
+                "save_dc": 15,
+                "save_ability": "WIS",
+                "min_charges": 1,
+                "max_charges": 1,
+                "duration_rounds": 10,
+                "condition_key": "charmed",
+                "condition_label": "Charmed",
+                "condition_icon": "👑",
+                "condition_effects": [
+                    "regards you as its trusted leader",
+                    "can't attack you or target you with harmful abilities / spells",
+                    "ends if harmed by you/allies or commanded against its nature",
+                ],
+                "feature_name": "👑 Rod of Rulership",
             },
         },
     },
@@ -83761,7 +83794,10 @@ async def use_item_action(
                 # (30-ft radius WIS → frightened, 3 charges) but NO
                 # attunement (RAW needs wind-instrument proficiency, which
                 # is GM-narrated).
-                "pipes-of-haunting"):
+                "pipes-of-haunting",
+                # v2.351.0 — Rod of Rulership — charmed condition (Staff of
+                # Charming) on the radius-target shape; a single 1/dawn use.
+                "rod-of-rulership"):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_wand_of_fear(
             db, campaign_id, char, item, sheet, catalog,

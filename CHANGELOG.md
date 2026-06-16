@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.351.0] - 2026-06-15 — "The Crowned Command"
+
+**Schema version:** 69
+
+**Commit summary:** Second **Bucket-A** (charge-cast) magic-item commit off the v2.344.5 stub triage. **Rod of Rulership** (RAW DMG p.197, rare, attunement) promoted from a v2.342.0 "Vault" catalog stub to a charge-cast action through the generalized `_use_item_action_wand_of_fear` handler — the Staff of Charming `charmed` condition on the Mace of Terror radius-target shape, with a single **1/dawn** use. Seeded equipped+attuned on Dame Seraphine Vael with a 1/dawn resource; two harness tests.
+
+**Description:** Zero new engine code — runs on the same `/use_item_action` → Wand of Fear handler path as Mace of Terror / Pipes of Haunting / Staff of Charming. Added `rod-of-rulership` to `_MAGIC_ITEM_ACTIONS` (1-use resource, WIS DC 15, `charmed` condition, 120-ft radius) and the slug to the handler dispatch tuple. Promoted the slug out of the Vault passive `setdefault` loop and out of the bulk `_vault_loot` seed into an explicit equipped+attuned item on Seraphine paired with a `rod-of-rulership` 1/dawn resource (refills on a long rest). The `/use_item_action` path gates on `attuned` for attunement items, so the rod is seeded `attuned: True` (the Sun Blade detune-restore test already uses `/sheet-fields` per v2.340.0, so the extra seed-attuned item doesn't bite the 3-item cap). Also **fixed a RAW error** in the old Vault loot desc (it said "charmed for 8 hours" — RAW is 1 minute). **v1 simplifications (GM-narrated):** the "ends if harmed by you/allies or commanded against its nature" clause; the 120-ft radius is cosmetic (the handler resolves a save per GM-picked `target_combatant_ids`). MINOR — additive item action + content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ACTIONS["rod-of-rulership"]` — `{requires_attunement: True, resource_key: "rod-of-rulership", actions: {command-obedience: {save_dc: 15, save_ability: WIS, charmed, …}}}`; slug added to the Wand of Fear handler dispatch tuple.
+- Demo seed: explicit equipped+attuned **Rod of Rulership** on Dame Seraphine Vael + a `rod-of-rulership` 1/dawn resource.
+- `tests/harness/test_use_item_action_rod_of_rulership.py` — 2 tests (command-obedience at 2 targets → DC 15 WIS, charges 1→0, both ids in results; empty rod → 409 insufficient_charges).
+
+### Changed
+- `tests/harness/test_vault_stub_loot.py`: removed `rod-of-rulership` from Dame Seraphine's Vault-stub assertion list (it's an explicit equipped item now).
+- `docs/test-harness-coverage.md`: harness total 3008 → 3010 (+2 Rod of Rulership tests); new `test_use_item_action_rod_of_rulership.py` section.
+
 ## [2.350.0] - 2026-06-15 — "The Haunting Refrain"
 
 **Schema version:** 69
