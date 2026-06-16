@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.367.1] - 2026-06-16 — "The Plan's Polish"
+
+**Schema version:** 69
+
+**Commit summary:** Doc-only re-audit of [`docs/plans/magic-items-automation.md`](docs/plans/magic-items-automation.md) after the v2.360.0 → v2.367.0 sweep closed Phase 9.1. Refreshes the status banner, the Phase 9.1 Progress block, the count summary, the four stale Bucket B/C row statuses, two misleading Wire-as columns, the dice on the Ultimate Evil row (had 6d6 instead of RAW 8d6), and adds an explicit "✅ closed v2.<version>" badge to each bucket header. PATCH — doc-only; the plan doc is already wiki-surfaced via the `plan-magic-items-automation` slug.
+
+**Description:** No engine or test change. The audit caught and fixed seven drift points in the plan doc that hadn't been kept in sync during the per-item commits:
+
+1. `staff-of-the-magi` (Bucket B) was still marked ⚪ — it shipped v2.359.0.
+2. `staff-of-the-woodlands` (Bucket B) was still marked ⚪ — it shipped v2.358.0.
+3. `shield-of-missile-attraction` Wire-as said `_resistance_type` rider; actually wired via the new `resistance_to_ranged_weapon` boolean substrate.
+4. `arrow-catching-shield` Wire-as said "conditional AC passive" (vague); sharpened to the new `conditional_ac_bonus_vs_ranged` field name + `is_ranged_attack` kwarg.
+5. `talisman-of-ultimate-evil` RAW column listed 6d6 necrotic (wrong); RAW is 8d6.
+6. Both talisman Wire-as columns said "situational rider (low priority)" — actually shipped as save-for-half charge-cast actions on the Necklace handler.
+7. The "Last updated" date + Phase 9.1 Progress block + count summary were all anchored to v2.357.0; updated to v2.367.0 with the full substrate catalog inline.
+
+### Changed
+- `docs/plans/magic-items-automation.md`: Phase 9.1 Progress block rewritten to enumerate all 20 wired items + 11 new engine substrates across the three sweeps; current-count summary updated to "all three actionable Buckets closed"; each Bucket header gains a "✅ closed v2.<version>" badge; the four stale Bucket B/C row statuses corrected; the talisman Wire-as columns + Ultimate-Evil RAW dice fixed; "Last updated" bumped to 2026-06-16 (v2.367.0 — Phase 9.1 closure); Phase 9.1-closure banner added under the top-level Status block.
+
 ## [2.367.0] - 2026-06-16 — "The Holy & The Profane"
 
 **Schema version:** 69

@@ -2,10 +2,12 @@
 
 **Status:** ✅ framework shipped end-to-end (re-audited 2026-06-11, v2.159.31 — SRD audit refresh). Phases 1–8 all closed across v2.158.74 → v2.159.25 (32 PATCH commits + the v2.159.0 MINOR milestone): passives → attunement → actions → on-hit riders → uplifts → templates → nat-20 hooks → AoE confirm modals → line/sphere/cone geometry → Javelin of Lightning → Necklace of Fireballs → Wand of Fear → Arrow of Slaying → Sun Blade → Goggles of Night (Phase 8a–8p).
 
-**Content tail (Phase 9 — NEW).** ~42 of 292 items now carry non-empty `actions`/`passives`; 250 still have `actions: []`. The remaining work is content-only — each item is a small commit picking from the established Phase 1–8 templates. See the [SRD 5e Audit (2026-06-11 refresh)](../../TODO.md#srd-5e-audit-2026-06-11-refresh) for the magic-item action backfill prioritisation.
+✅ **Phase 9.1 stub triage closed v2.367.0** — every actionable item from Buckets A/B/C is wired. The only remaining items are the two inherently GM-narrated Bucket A stubs (`wind-fan`, `medallion-of-thoughts`) and the ~82 archetype-J announce-only items in Bucket D. See the [stub-triage closure block](#phase-91--stub-triage-v23445-corrected-v23451) below for the substrate catalog.
+
+**Content tail (Phase 9).** Post-Phase-9.1 (v2.367.0): roughly 60+ of 292 items now carry non-empty `actions`/`passives` (the v2.316–v2.367 sweeps mechanized everything that fit a clean template). The remainder stays announce-only by design (Bucket D archetype J). See the [SRD 5e Audit (2026-06-11 refresh)](../../TODO.md#srd-5e-audit-2026-06-11-refresh) for the original backfill prioritisation that drove this work.
 
 **Authors:** rolling
-**Last updated:** 2026-06-15
+**Last updated:** 2026-06-16 (v2.367.0 — Phase 9.1 closure)
 
 ---
 
@@ -15,17 +17,17 @@ After the v2.316–v2.344 content sprint, **235/239 SRD magic items are wired** 
 
 > **Count correction (v2.345.1).** The original v2.344.5 figures ("133 mechanical / 108 bare stubs / ~26 automatable") were computed by inspecting only the *static* `_MAGIC_ITEM_PASSIVES` catalog payload. That under-counted the items wired via a **per-instance seed rider** — where the catalog entry is intentionally generic (`requires_attunement` only) and the specifics ride the inventory item (`_resistance_type`, `_ability_set`, `_ac_bonus`, …). Four items flagged as "bare stubs" are in fact already mechanically live + tested via the `_resistance_type` rider: **`armor-of-resistance`, `ring-of-resistance`, `dragon-scale-mail`, `ring-of-elemental-command`** (each has a `test_item_<slug>.py`).
 >
-> **Progress (v2.345.0 → v2.357.0).** Eleven items wired off this triage, plus three reusable engine additions:
-> - **Bucket B:** `luck-blade` (v2.345.0 — `save_bonus`).
-> - **Bucket C:** `staff-of-withering` (v2.346.0/.348.0 — +2d10 necrotic + the new `ability_disadvantage` on-hit-save rider, built on the **v2.347.0 generalized `disadvantage_on` intercept** — any ability check/save); `staff-of-striking` (v2.349.0 — +1d6 force).
-> - **Bucket A (save-condition, Wand of Fear handler):** `pipes-of-haunting` (frighten), `rod-of-rulership` (charm 1/dawn), `trident-of-fish-command` (dominate-beast charm), `ring-of-animal-influence` (animal-friendship charm), `robe-of-scintillating-colors` (stun), `rope-of-entanglement` (restrain — the **first `unlimited`/no-charge item**, v2.355.0).
-> - **Bucket A (damage, new shapes):** `circlet-of-blasting` (v2.356.0 — the new **`_use_item_action_spell_attack` handler**: ranged spell attacks vs AC); `ring-of-shooting-stars` (v2.357.0 — the save-for-half Necklace handler).
+> **Progress (v2.345.0 → v2.367.0).** Twenty items wired off this triage across three sweeps, plus eleven reusable engine additions:
 >
-> **Current counts (post-v2.357.0):** of 241 wired slugs, **148 are functional** (144 catalog-mechanical + 4 rider-only) and **93 are genuinely-bare GM-narrated stubs**. **Bucket A is effectively complete** — the only remaining A items are `wind-fan` (gust-of-wind forced movement) and `medallion-of-thoughts` (detect thoughts), both inherently GM-narrated (no clean combat mechanic). The actionable subset is **~10 items** (the Bucket B passives + Bucket C riders below); the remaining **~82 stay announce-only by design** (archetype J — summons, planar travel, wish, one-shot consumables, containers, capture/imprison, exploration utility). Counts are approximate at the margins.
+> - **Bucket A (charge-cast, v2.350.0 → v2.357.0):** `pipes-of-haunting` (frighten), `rod-of-rulership` (charm 1/dawn), `trident-of-fish-command` (dominate-beast charm), `ring-of-animal-influence` (animal-friendship charm), `robe-of-scintillating-colors` (stun), `rope-of-entanglement` (restrain — the **first `unlimited`/no-charge item**, v2.355.0), `circlet-of-blasting` (v2.356.0 — the new **`_use_item_action_spell_attack` handler**: ranged spell attacks vs AC), `ring-of-shooting-stars` (v2.357.0 — the save-for-half Necklace handler).
+> - **Bucket B (passive engine, v2.345.0 → v2.366.0):** `luck-blade` (v2.345.0 — `save_bonus`); `staff-of-the-woodlands` (v2.358.0 — the new `spell_dc_bonus` substrate folded into `_compute_spell_save_dc_from_sheet`); `staff-of-the-magi` (v2.359.0 — same substrate); `adamantine-armor` (v2.364.0 — the new `crits_become_normal` passive + `_target_wearer_crits_become_normal` reader + /attack + /npc_attack crit-pipeline read sites); `arrow-catching-shield` (v2.365.0 — the new `conditional_ac_bonus_vs_ranged` field + `is_ranged_attack` kwarg on `_read_target_ac`); `shield-of-missile-attraction` (v2.366.0 — the new `resistance_to_ranged_weapon` boolean + `is_ranged_weapon_attack` kwarg threaded through `_apply_damage_to_combatant` → `_resistance_halve`).
+> - **Bucket C (on-hit/crit riders, v2.346.0 → v2.367.0):** `staff-of-withering` (v2.346.0/.348.0 — +2d10 necrotic + the new `ability_disadvantage` on-hit-save rider, built on the **v2.347.0 generalized `disadvantage_on` intercept** — any ability check/save); `staff-of-striking` (v2.349.0 — +1d6 force); `sword-of-wounding` (v2.360.0 — the new `on_hit_install` rider substrate + a generalized start-of-turn-tick hook on PUT /battle); `oathbow` (v2.361.0 — the new `condition_sworn_enemy` predicate + `/declare_oathbow_sworn_enemy` endpoint, reusing the v2.158.53 Vow-of-Enmity attack-adv reader for the d20 advantage); `berserker-axe` (v2.362.0 — the new `hp_max_bonus_per_level` passive composed into `_effective_max_hp_for_sheet`; v2.363.0 — the new `on_damage_save` payload + `_maybe_item_on_damage_save` helper for the cursed berserk save); `talisman-of-pure-good` + `talisman-of-ultimate-evil` (v2.367.0 — both composed onto the existing Necklace save-for-half handler via the dispatch tuple).
+>
+> **Current counts (post-v2.367.0):** of 241 wired slugs, ~155+ are functional (catalog-mechanical or rider-only) and ~85 stay announce-only by design. **All three actionable Buckets are now closed.** The actionable subset from the original triage is **0 remaining**; the only Bucket A items still ⚪ are `wind-fan` (gust-of-wind forced movement) and `medallion-of-thoughts` (detect thoughts) — both inherently GM-narrated (no clean combat mechanic). The remaining ~82 Bucket-D items stay announce-only (archetype J — summons, planar travel, wish, one-shot consumables, containers, capture/imprison, exploration utility). Counts are approximate at the margins.
 
-### Bucket A — charge-cast a save/attack spell → `_MAGIC_ITEM_ACTIONS` cast-spell template (~10)
+### Bucket A — charge-cast a save/attack spell → `_MAGIC_ITEM_ACTIONS` cast-spell template (~10) — ✅ closed v2.357.0
 
-The strongest template (the Wand of Fear / charged-wand pattern already shipped). Each casts a defined spell with a fixed save DC or spell attack; wire the action + DC + condition/damage dispatch.
+The strongest template (the Wand of Fear / charged-wand pattern already shipped). Each casts a defined spell with a fixed save DC or spell attack; wire the action + DC + condition/damage dispatch. Closed v2.357.0; the two ⚪ rows below (`wind-fan`, `medallion-of-thoughts`) are inherently GM-narrated.
 
 | Slug | RAW effect | Wire as | Status |
 |---|---|---|---|
@@ -40,9 +42,9 @@ The strongest template (the Wand of Fear / charged-wand pattern already shipped)
 | `wind-fan` | gust of wind (forced movement, DC 13) | — | ⚪ inherently GM-narrated (no clean combat condition/damage) |
 | `medallion-of-thoughts` | detect thoughts (DC 13) | — | ⚪ inherently GM-narrated (utility, no combat) |
 
-### Bucket B — passive numeric buff → mechanical `_MAGIC_ITEM_PASSIVES` (`effects.*`) (~9)
+### Bucket B — passive numeric buff → mechanical `_MAGIC_ITEM_PASSIVES` (`effects.*`) (~9) — ✅ closed v2.366.0
 
-Always-on bonuses the engine already reads (resistance via `_resistance_halve`, save/AC/stat passives).
+Always-on bonuses the engine already reads (resistance via `_resistance_halve`, save/AC/stat passives). Closed v2.366.0 — every row below ✅.
 
 | Slug | RAW effect | Wire as | Status |
 |---|---|---|---|
@@ -51,12 +53,14 @@ Always-on bonuses the engine already reads (resistance via `_resistance_halve`, 
 | `dragon-scale-mail` | resistance to the dragon's damage type | `_resistance_type` rider | ✅ already live (mis-counted) |
 | `luck-blade` | +1 to all saves (the +1 weapon is baked) | `effects.save_bonus` | ✅ shipped v2.345.0 |
 | `adamantine-armor` | crits against you become normal hits | `effects.crits_become_normal` (new) | ✅ shipped v2.364.0 |
-| `staff-of-the-magi` | +2 spell attack & save DC | `effects.spell_attack_bonus` / `spell_dc_bonus` (new) | ⚪ |
-| `staff-of-the-woodlands` | +2 spell attack & save DC | same | ⚪ |
-| `arrow-catching-shield` | +2 AC vs ranged attacks | conditional AC passive | ✅ shipped v2.365.0 |
-| `shield-of-missile-attraction` | resistance to ranged-weapon damage + curse | `_resistance_type` rider (conditional) | ✅ shipped v2.366.0 |
+| `staff-of-the-magi` | +2 spell attack & save DC | `effects.spell_dc_bonus` (new substrate, v1 GM-narrates the +2 spell-attack half) | ✅ shipped v2.359.0 |
+| `staff-of-the-woodlands` | +2 spell attack & save DC | same substrate (the first item on `spell_dc_bonus`, v2.358.0) | ✅ shipped v2.358.0 |
+| `arrow-catching-shield` | +2 AC vs ranged attacks | new `conditional_ac_bonus_vs_ranged` field + `is_ranged_attack` kwarg on `_read_target_ac` | ✅ shipped v2.365.0 |
+| `shield-of-missile-attraction` | resistance to ranged-weapon damage + curse | new `resistance_to_ranged_weapon` boolean + `is_ranged_weapon_attack` kwarg on `_resistance_halve` (cursed redirect GM-narrated) | ✅ shipped v2.366.0 |
 
-### Bucket C — on-hit / crit weapon rider → `_MAGIC_ITEM_ATTACK_RIDERS` (~7)
+### Bucket C — on-hit / crit weapon rider → `_MAGIC_ITEM_ATTACK_RIDERS` (~7) — ✅ closed v2.367.0
+
+The richest engine bucket of the sweep — every row below ✅ as of v2.367.0. The two alignment talismans ended up on the Necklace save-for-half handler rather than `_MAGIC_ITEM_ATTACK_RIDERS` (they're charge-cast actions, not on-hit), but they're grouped here in the original triage. See the Bucket B + C engine additions in the [Progress block](#phase-91--stub-triage-v23445-corrected-v23451) above.
 
 | Slug | RAW effect | Wire as | Status |
 |---|---|---|---|
@@ -65,8 +69,8 @@ Always-on bonuses the engine already reads (resistance via `_resistance_halve`, 
 | `sword-of-wounding` | recurring 1d4 necrotic/turn, DC 15 CON to end | on-hit recurring-damage condition (new) | ✅ shipped v2.360.0 |
 | `oathbow` | vs sworn enemy: +3d6 piercing + advantage | conditional rider (declared-enemy state) | ✅ shipped v2.361.0 |
 | `berserker-axe` | +1 (baked); HP-max +level while attuned; berserk save | HP-max passive + on-damage WIS save | ✅ shipped v2.362.0–v2.363.0 |
-| `talisman-of-pure-good` | 6d6 radiant to non-good on touch | situational rider (low priority) | ✅ shipped v2.367.0 |
-| `talisman-of-ultimate-evil` | 6d6 necrotic to non-evil on touch | situational rider (low priority) | ✅ shipped v2.367.0 |
+| `talisman-of-pure-good` | 7 charges, action: DC 18 CHA save → 6d6 radiant (half on save), good attune only | Necklace save-for-half handler dispatch (alignment gate + dramatic instant-kill GM-narrated) | ✅ shipped v2.367.0 |
+| `talisman-of-ultimate-evil` | 6 charges, action: DC 18 CHA save → 8d6 necrotic (half on save), evil attune only | same Necklace handler dispatch | ✅ shipped v2.367.0 |
 
 ### Bucket D — inherently GM-narrated (stays announce-only, archetype J) (~82)
 
