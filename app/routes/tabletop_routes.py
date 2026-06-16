@@ -1841,6 +1841,147 @@ _INCAPACITATING_BUFF_KEYS = frozenset({
 })
 
 
+async def _maybe_item_on_damage_save(
+    campaign_id: int, char, damage_amount: int,
+) -> dict | None:
+    """v2.363.0 — Berserker Axe cursed berserk save (RAW DMG p.155).
+    Mirror of `_maybe_concentration_save`, but keyed off equipped+
+    attuned magic items carrying an `on_damage_save` payload in
+    `_MAGIC_ITEM_PASSIVES`. Fires from `_apply_damage_to_combatant`'s
+    PC path after any non-zero damage applies.
+
+    For each equipped+attuned item with an `on_damage_save` block,
+    rolls a save (`1d20 + ability mod (+prof if proficient) +
+    bless/bane suffix`) vs the catalog DC. On a fail, installs the
+    catalog's condition buff via `_install_buff` (refresh semantics
+    when the same key already exists). Returns the LAST save result
+    or None when no item fires.
+    """
+    if damage_amount <= 0:
+        return None
+    if char is None:
+        return None
+    sheet = char.sheet or {}
+    inventory = sheet.get("inventory") or []
+    if not inventory:
+        return None
+
+    last_result: dict | None = None
+    for inv in inventory:
+        if not isinstance(inv, dict):
+            continue
+        slug = (inv.get("_slug") or "").strip().lower()
+        if not slug:
+            continue
+        passives = _MAGIC_ITEM_PASSIVES.get(slug)
+        if not passives:
+            continue
+        for payload in passives:
+            if not isinstance(payload, dict):
+                continue
+            save_spec = payload.get("on_damage_save")
+            if not isinstance(save_spec, dict):
+                continue
+            # Attunement + equipped gate (mirror of `_equipped_item_effects`).
+            requires_attune = bool(payload.get("requires_attunement"))
+            if requires_attune and (
+                not inv.get("equipped") or not inv.get("attuned")
+            ):
+                continue
+
+            ab = str(save_spec.get("ability") or "WIS").strip().upper()[:3]
+            try:
+                dc = int(save_spec.get("dc") or 10)
+            except (TypeError, ValueError):
+                dc = 10
+            stat_key = f"{ab.lower()}_save"
+            saver_mod, _ = _resolve_stat_modifier(sheet, "dnd5e", stat_key)
+            bb_suffix = _saver_bless_bane_save_suffix(
+                campaign_id, int(char.id),
+            )
+            sign = "+" if saver_mod >= 0 else ""
+            expr = f"1d20{sign}{saver_mod}{bb_suffix}"
+            try:
+                r = dice_mod.roll(expr)
+                total = int(r.total)
+                breakdown = r.breakdown
+            except dice_mod.DiceParseError:
+                continue
+            passed = total >= dc
+            label = str(save_spec.get("label") or f"{slug} — on-damage save")
+            await hub.broadcast(campaign_id, {
+                "type": "roll",
+                "data": {
+                    "expression": expr,
+                    "total": total,
+                    "breakdown": breakdown,
+                    "note": (
+                        f"🪓 {label} · {char.name} {ab} (DC {dc})"
+                    ),
+                    "user_name": char.name,
+                    "char_name": char.name,
+                    "visibility": Visibility.PUBLIC.value,
+                    "dc": dc,
+                },
+            })
+            installed = False
+            if not passed:
+                ckey = str(save_spec.get("condition_key") or "").strip()
+                if ckey:
+                    try:
+                        dur = int(save_spec.get("duration_rounds") or 10)
+                    except (TypeError, ValueError):
+                        dur = 10
+                    buff = {
+                        "key": ckey,
+                        "name": str(save_spec.get("condition_name", ckey.title())),
+                        "icon": str(save_spec.get("condition_icon", "⚠️")),
+                        "duration_rounds": dur,
+                        "duration_max": dur,
+                        "concentration": False,
+                        "source": f"item-{slug}",
+                        "source_char_id": int(char.id),
+                        "effects": {
+                            "berserk_active": True,
+                            "berserk_attack_nearest": True,
+                            "description_only": (
+                                save_spec.get("condition_effects") or []
+                            ),
+                        },
+                    }
+                    installed = await _install_buff(
+                        campaign_id, int(char.id), buff,
+                    )
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": char.id,
+                    "character_name": char.name,
+                    "feature_name": label,
+                    "feature_desc": (
+                        f"{char.name} {'passed' if passed else 'failed'} "
+                        f"the DC {dc} {ab} save vs {label} "
+                        f"({total})."
+                    ),
+                    "source": f"item-{slug}-on-damage-save",
+                    "passed": passed,
+                    "total": total,
+                    "dc": dc,
+                    "ability": ab,
+                    "condition_installed": installed,
+                },
+            })
+            last_result = {
+                "slug": slug,
+                "passed": passed,
+                "total": total,
+                "dc": dc,
+                "ability": ab,
+                "condition_installed": installed,
+            }
+    return last_result
+
+
 async def _install_buff_on_combatant_id(
     campaign_id: int, combatant_id: str, buff: dict,
 ) -> bool:
@@ -7931,6 +8072,22 @@ async def _apply_damage_to_combatant(
         # Phase C.2 concentration save trigger.
         if applied > 0:
             await _maybe_concentration_save(campaign_id, char, applied, db=db)
+        # v2.363.0 — magic-item on-damage save (Berserker Axe RAW DMG
+        # p.155: "if you take damage from a creature while attuned, DC
+        # 15 WIS save or go berserk"). Fires next to the concentration-
+        # save trigger above; same `applied > 0` gate. Walks the
+        # wielder's inventory for any equipped+attuned item carrying
+        # an `on_damage_save` payload in `_MAGIC_ITEM_PASSIVES`.
+        if applied > 0:
+            try:
+                await _maybe_item_on_damage_save(
+                    campaign_id, char, applied,
+                )
+            except Exception:
+                logging.exception(
+                    "_maybe_item_on_damage_save failed for char_id=%s",
+                    char.id,
+                )
         # v2.142.0 — Scornful Rebuke (Conquest Paladin Lv 15+, XGE p.37):
         # "Whenever a creature hits you with an attack, that creature
         # takes psychic damage equal to your Charisma modifier (minimum
@@ -33288,16 +33445,48 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     # `_effective_max_hp_for_sheet` via the new `hp_max_bonus_per_level`
     # field — surfaces on /sheet-json derived (`effective_max_hp`) AND
     # raises `_sheet_heal_ceiling` so combat heals / long rest / Second
-    # Wind can clamp to the boosted pool. **v1 simplifications (GM-
-    # narrated):** the RAW cursed berserk save ("when you take damage
-    # you must make a DC 15 WIS save or go berserk and attack the
-    # nearest creature") — needs a damage-pipeline `on_damage_save`
-    # hook + a berserk-AI auto-attack model neither of which is in v1.
-    # The "you can't voluntarily un-attune" cursed clause is GM-
-    # narrated. The +1 magic battleaxe attack/damage bonus is baked
-    # into the wielder's seeded attack row.
+    # Wind can clamp to the boosted pool.
+    #
+    # v2.363.0 — closes the cursed berserk save. RAW: "If you take damage
+    # from a creature while you are attuned to this axe, you must
+    # succeed on a DC 15 Wisdom saving throw or go berserk." The new
+    # `on_damage_save` payload (read by `_maybe_item_on_damage_save`
+    # in `_apply_damage_to_combatant`'s PC path next to the existing
+    # concentration-save trigger) rolls the save and installs a
+    # `berserk` buff on a fail — the buff carries descriptive markers
+    # (`berserk_active: True`, `berserk_attack_nearest: True`) the GM
+    # uses to enforce the auto-attack-nearest rule (the AI is GM-
+    # narrated in v1 — VTT doesn't model NPC pathing or auto-target
+    # selection). **v1 simplifications (GM-narrated):** the "lasts
+    # until no creatures within your sight" duration is approximated
+    # with a 10-round (1 minute) duration; the auto-attack-nearest
+    # AI is GM-narrated via the `berserk` buff marker on the chip
+    # strip. The "you can't voluntarily un-attune" cursed clause is
+    # GM-narrated. The +1 magic battleaxe attack/damage bonus is
+    # GM-narrated (no attack row seeded on Krieger).
     "berserker-axe": [
-        {"hp_max_bonus_per_level": 1, "requires_attunement": True},
+        {
+            "hp_max_bonus_per_level": 1,
+            "requires_attunement": True,
+            "on_damage_save": {
+                "dc": 15,
+                "ability": "WIS",
+                "label": "Berserker Axe — Berserk",
+                "condition_key": "berserk",
+                "condition_name": "Berserk (Cursed)",
+                "condition_icon": "🪓",
+                "duration_rounds": 10,
+                "condition_effects": [
+                    "must attack the nearest creature you can see each turn",
+                    "if you can move toward it + melee-attack same turn, you do",
+                    "ends when no creatures within sight to attack",
+                ],
+                # Cursed: the wielder can't voluntarily end attunement
+                # (RAW). We surface this as a descriptive note on the
+                # condition; the GM enforces the "won't drop the axe"
+                # narrative.
+            },
+        },
     ],
     # v2.218.0 — Headband of Intellect (RAW DMG p.173, uncommon,
     # attunement; see docs/plans/str-override.md). While worn, your INT
@@ -95696,6 +95885,20 @@ async def patch_sheet_fields(
     # v2.19.2 Phase C.3: pass db so the sheet mirror updates on fail.
     if hp_result and is_damage and damage_amount > 0:
         await _maybe_concentration_save(campaign_id, char, damage_amount, db=db)
+        # v2.363.0 — magic-item on-damage save (Berserker Axe RAW DMG
+        # p.155): mirror the v2.19.1 concentration-save hook so the
+        # cursed berserk save fires from manual PATCH /sheet-fields
+        # damage too (not just the /attack chain via
+        # `_apply_damage_to_combatant`).
+        try:
+            await _maybe_item_on_damage_save(
+                campaign_id, char, damage_amount,
+            )
+        except Exception:
+            logging.exception(
+                "_maybe_item_on_damage_save failed for PATCH sheet-fields char_id=%s",
+                char.id,
+            )
 
     if hp_result and hp_result["status_changed"]:
         await hub.broadcast(campaign_id, {

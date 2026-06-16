@@ -10,6 +10,42 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.363.0] - 2026-06-16 — "The Berserker's Cry"
+
+**Schema version:** 69
+
+**Commit summary:** Closes the v2.362.0 Berserker Axe 🟠 partial — wires the cursed berserk save (RAW DMG p.155: "if you take damage from a creature while attuned, DC 15 WIS save or go berserk"). New `on_damage_save` payload on `_MAGIC_ITEM_PASSIVES` + a new `_maybe_item_on_damage_save` helper fired from BOTH `_apply_damage_to_combatant` (PC path, next to `_maybe_concentration_save`) AND PATCH /sheet-fields's damage branch. On a failed save the helper installs a `berserk` condition buff carrying `berserk_active: True` + `berserk_attack_nearest: True` markers. Two harness tests via Krieger Stonefist.
+
+**Description:** A reusable substrate, not a Berserker-Axe-only hook. Any future item carrying `on_damage_save` (Cloak of Arachnida vs spider venoms, etc.) plugs in via the same catalog row + zero new code. The helper walks the wielder's inventory for equipped+attuned items carrying the field, rolls `1d20 + ability save mod + bless/bane suffix` vs the catalog DC (default WIS), and on a fail installs the catalog's condition buff via `_install_buff`. Broadcasts the save as a `roll` event (visible to all clients) and the outcome as a `feature_used` audit entry.
+
+The Berserker Axe catalog entry now carries:
+```
+{
+  "hp_max_bonus_per_level": 1,  # v2.362.0
+  "requires_attunement": True,
+  "on_damage_save": {            # v2.363.0
+    "dc": 15, "ability": "WIS",
+    "condition_key": "berserk",
+    "condition_name": "Berserk (Cursed)",
+    "condition_icon": "🪓",
+    "duration_rounds": 10,
+    "condition_effects": [...],  # RAW description text
+  },
+}
+```
+
+The `berserk` buff is informational at the engine level — the auto-attack-nearest AI is GM-narrated in v1 (VTT doesn't model NPC pathing or auto-target selection; the GM enforces the "must attack the nearest creature" rule via the chip marker). The "lasts until no creatures within your sight" RAW duration is approximated as 10 rounds (1 minute) — long enough to outlast most combats. **v1 simplifications (GM-narrated):** the berserk-AI auto-attack-nearest, the "can't voluntarily un-attune" cursed clause, and the +1 magic battleaxe attack/damage bonus (no attack row seeded on Krieger). MINOR — additive `on_damage_save` substrate + content + tests, no schema change.
+
+### Added
+- `_maybe_item_on_damage_save` helper (`app/routes/tabletop_routes.py`) — walks equipped+attuned items for `on_damage_save` payloads, rolls the save, installs the catalog condition on fail; broadcasts `roll` + `feature_used` audit entries.
+- `on_damage_save` field on `_MAGIC_ITEM_PASSIVES["berserker-axe"]` — `{dc: 15, ability: "WIS", condition_key: "berserk", duration_rounds: 10, ...}`.
+- `tests/harness/test_item_berserker_axe_save.py` — 2 tests (across seeds, the DC 15 WIS save fails and installs the `berserk` buff carrying the right markers; equipped-but-unattuned never fires).
+
+### Changed
+- `_apply_damage_to_combatant` PC path + PATCH /sheet-fields damage branch — both now call `_maybe_item_on_damage_save` next to the existing `_maybe_concentration_save` trigger.
+- `docs/test-harness-coverage.md`: harness total 3038 → 3040 (+2 berserk-save tests); new section.
+- `docs/plans/magic-items-automation.md`: Bucket C `berserker-axe` row marked ✅ (both halves shipped); recommended batch order trimmed to ~4 remaining actionable items.
+
 ## [2.362.0] - 2026-06-16 — "The Cursed Crown"
 
 **Schema version:** 69
