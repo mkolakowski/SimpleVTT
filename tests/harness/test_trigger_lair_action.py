@@ -454,6 +454,108 @@ async def test_trigger_lair_action_player_403(alice_client):
     assert resp.status_code == 403
 
 
+# ── v2.379.0 lair-condition closure — auto-install of unconscious /
+# silenced / frightened previously needed GM narration. After v2.379.0
+# the three keys are in _LAIR_ACTION_CONDITION_BUFFS so the engine
+# auto-installs the buff on a failed save just like prone / blinded /
+# restrained / charmed / poisoned. ───────────────────────────────────
+
+
+async def test_trigger_slumberous_magic_installs_unconscious_on_fail(
+    gm_client, gm_ws, bandit_template_id,
+):
+    """Brass Dragon Slumberous Magic (WIS DC 15, no damage, unconscious).
+    Bandits have WIS save +0; a typical d20 roll fails DC 15 most of the
+    time. On a fail, `unconscious` should auto-install."""
+    b1 = "npc_lair_slumber_b1"
+    await _seed_battle(gm_client, [
+        _mkc(b1, hp_cur=40, hp_max=40, name="Bandit Asleep", initiative=15,
+             token_template_id=bandit_template_id),
+    ], in_lair=True, lair_slug="adult-brass-dragon")
+
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/trigger_lair_action",
+        json={
+            "action_id": "slumberous-magic",
+            "aoe_target_combatant_ids": [b1],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    r = data["results"][0]
+    assert r["damage_dealt"] == 0
+    if r["passed"] is False:
+        assert r["condition_installed"] is True, r
+
+    msg = await gm_ws.wait_for("lair_action_resolved")
+    assert msg["data"]["effect"] == "unconscious"
+    assert msg["data"]["damage"] == ""
+
+
+async def test_trigger_memory_shred_installs_silenced_on_fail(
+    gm_client, gm_ws, bandit_template_id,
+):
+    """Lich Memory Shred (WIS DC 18, no damage, silenced). On a failed
+    save the `silenced` buff auto-installs (no-verbal-casting lock)."""
+    b1 = "npc_lair_silence_b1"
+    await _seed_battle(gm_client, [
+        _mkc(b1, hp_cur=40, hp_max=40, name="Bandit Mute", initiative=15,
+             token_template_id=bandit_template_id),
+    ], in_lair=True, lair_slug="lich")
+
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/trigger_lair_action",
+        json={
+            "action_id": "memory-shred",
+            "aoe_target_combatant_ids": [b1],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    r = data["results"][0]
+    assert r["damage_dealt"] == 0
+    if r["passed"] is False:
+        assert r["condition_installed"] is True, r
+
+    msg = await gm_ws.wait_for("lair_action_resolved")
+    assert msg["data"]["effect"] == "silenced"
+    assert msg["data"]["damage"] == ""
+    assert msg["data"]["save_ability"] == "WIS"
+
+
+async def test_trigger_shimmering_visions_installs_frightened_on_fail(
+    gm_client, gm_ws, bandit_template_id,
+):
+    """Gold Dragon Shimmering Visions (WIS DC 15, no damage, frightened).
+    On a failed save the `frightened` buff auto-installs."""
+    b1 = "npc_lair_fear_b1"
+    await _seed_battle(gm_client, [
+        _mkc(b1, hp_cur=40, hp_max=40, name="Bandit Afraid", initiative=15,
+             token_template_id=bandit_template_id),
+    ], in_lair=True, lair_slug="adult-gold-dragon")
+
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/trigger_lair_action",
+        json={
+            "action_id": "shimmering-visions",
+            "aoe_target_combatant_ids": [b1],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    r = data["results"][0]
+    assert r["damage_dealt"] == 0
+    if r["passed"] is False:
+        assert r["condition_installed"] is True, r
+
+    msg = await gm_ws.wait_for("lair_action_resolved")
+    assert msg["data"]["effect"] == "frightened"
+    assert msg["data"]["damage"] == ""
+
+
 async def test_lair_action_resolved_carries_owner_name(
     gm_client, gm_ws, bandit_template_id,
 ):

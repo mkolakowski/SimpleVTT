@@ -441,13 +441,21 @@ combatant.legendary_resistance = {
   actions keyed under a single slug (no age variants). 5 new unit tests
   bring the total to 22 slugs. **Closes the lair-action data backfill
   arc end-to-end** — every SRD legendary lair-bearing creature now
-  carries authored data the engine can read. **Filed follow-up engine
-  commit:** extend `_LAIR_ACTION_CONDITION_BUFFS` to map the three
-  unmapped condition keys used by the metallic + non-dragon backfills
-  (`unconscious` for Brass Slumberous Magic, `silenced` for Lich Memory
-  Shred, `frightened` for Gold Shimmering Visions). v1 ships those as
-  save-and-narrate (engine rolls the save; GM applies condition
-  manually from the descriptive text).
+  carries authored data the engine can read.
+- Condition map closure (✅ **shipped v2.379.0** "The Closed Condition
+  Map"): closes the v2.378.0 filed engine follow-up by extending
+  `_LAIR_ACTION_CONDITION_BUFFS` to map `unconscious` (Brass Dragon
+  Slumberous Magic), `silenced` (Lich Memory Shred), and `frightened`
+  (Gold Dragon Shimmering Visions). The save-resolver auto-installs the
+  buff on a failed save just like the v2.171.0 chromatic + v2.378.0
+  non-dragon backfills' existing conditions (prone / blinded /
+  restrained / charmed / poisoned). 3 new harness tests in
+  `test_trigger_lair_action.py` exercise the new auto-install paths
+  (Brass Slumberous Magic / Lich Memory Shred / Gold Shimmering
+  Visions). The lair-action arc is now end-to-end-complete (data +
+  engine + UI + cadence guards + roll-log + regional effects + fade
+  tracker + every SRD condition mapped). Filed-follow-ups list is
+  empty.
 - No-repeat guard (✅ **shipped v2.172.0** "No Encore"): RAW MM p.11 —
   a lair action can't be used two rounds in a row. `trigger_lair_action`
   parks the fired action id as `state["last_lair_action_id"]` and

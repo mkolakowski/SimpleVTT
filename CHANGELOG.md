@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.379.0] - 2026-06-16 — "The Closed Condition Map"
+
+**Schema version:** 69
+
+**Commit summary:** Closes the v2.378.0 filed follow-up — extends `_LAIR_ACTION_CONDITION_BUFFS` in `app/routes/tabletop_routes.py` to include `unconscious` (Brass Dragon Slumberous Magic), `silenced` (Lich Memory Shred), and `frightened` (Gold Dragon Shimmering Visions). Previously the save-resolver matched the `effect` key against this dict; an unmapped key meant "save rolls, no buff installs" — the GM applied the condition from the descriptive text. After v2.379.0 the three keys auto-install on a failed save just like `prone` / `blinded` / `restrained` / `charmed` / `poisoned`. Three new harness tests in `test_trigger_lair_action.py` exercise the new auto-install paths via Brass/Lich/Gold lair actions.
+
+**Description:** The condition map now covers every lair-action condition the v2.171.0 chromatic + v2.377.0 metallic + v2.378.0 non-dragon backfills use. Per-condition RAW durations:
+
+- **Unconscious** — 10 rounds (RAW "for 1 minute"; GM ends earlier via `/end_buff` when damage/shake fires).
+- **Silenced** — 1 round (RAW "until end of its next turn"; mirrors the Volcanic Gases poisoned timer).
+- **Frightened** — 10 rounds (RAW "until the dragon takes another lair action"; GM-ended mirror of `prone` / `blinded` / `restrained`).
+
+All three carry the standard `_LAIR_ACTION_CONDITION_BUFFS` shape: `{key, name (with "(lair action)" suffix), icon, duration_rounds, concentration=False, effects[]}`. The `effects[]` text mirrors the RAW 5e condition definitions for the standard ones (unconscious / frightened) and the spell-derived "no verbal-component casting" lock for silenced. `silenced` isn't a 5e core condition — it's the Silence-spell state, but lair actions install it directly on the target.
+
+This finishes the **lair-action arc end-to-end**: data (v2.168.0 / v2.171.0 / v2.377.0 / v2.378.0) + engine dispatch (v2.169.0) + UI (v2.170.0) + once-per-round + no-repeat guards (v2.172.0 / v2.173.0) + init-20 server broadcast (v2.175.0) + roll-log card (v2.177.0) + regional effects (v2.178.0–v2.180.0) + fade tracker (v2.181.0) + condition closure (this commit). Every SRD-shipped lair-action mechanic is now harness-tested and engine-supported. Filed-follow-ups list is empty.
+
+MINOR — additive engine map + new tests; existing chromatic / dragon-prone behaviors unchanged.
+
+### Added
+- 3 new entries in `_LAIR_ACTION_CONDITION_BUFFS` (`app/routes/tabletop_routes.py`): `unconscious` (icon 😴), `silenced` (icon 🤐), `frightened` (icon 😱). Each carries the RAW duration + a 3–4-line effects[] description.
+- 3 new harness tests in `tests/harness/test_trigger_lair_action.py`:
+  - `test_trigger_slumberous_magic_installs_unconscious_on_fail` — Brass Dragon, single-target, WIS DC 15.
+  - `test_trigger_memory_shred_installs_silenced_on_fail` — Lich, single-target, WIS DC 18.
+  - `test_trigger_shimmering_visions_installs_frightened_on_fail` — Gold Dragon, single-target, WIS DC 15.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3102 → 3105 (+3 condition auto-install tests).
+- `docs/plans/legendary-actions.md`: non-dragon backfill row updated — the v2.378.0 "filed follow-up: extend `_LAIR_ACTION_CONDITION_BUFFS`" line marked closed by v2.379.0.
+
 ## [2.378.0] - 2026-06-16 — "The Phylactery and the Deep"
 
 **Schema version:** 69

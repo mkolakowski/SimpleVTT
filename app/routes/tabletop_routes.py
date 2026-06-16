@@ -25290,6 +25290,62 @@ _LAIR_ACTION_CONDITION_BUFFS: dict[str, dict] = {
             "the charmer has advantage on social checks against the creature",
         ],
     },
+    # v2.379.0 lair-condition closure — three lair-action conditions used
+    # by the v2.377.0 metallic + v2.378.0 non-dragon backfills that
+    # previously didn't auto-install. The save-resolver matched the
+    # `effect` key against this dict's keys, so an unmapped key meant
+    # "save rolls, no buff installs" — fine for v1 but the GM had to
+    # apply the condition narratively. Adding mapped entries closes the
+    # v2.378.0 filed follow-up so the engine auto-installs the buff on a
+    # failed save.
+    #
+    # Unconscious (Brass Dragon Slumberous Magic) — RAW: "for 1 minute"
+    # (waking on damage / shake). 10 rounds mirrors the prone /
+    # blinded / restrained default; the GM ends earlier via /end_buff
+    # when damage / shake fires.
+    "unconscious": {
+        "key": "unconscious",
+        "name": "Unconscious (lair action)",
+        "icon": "😴",
+        "duration_rounds": 10,
+        "concentration": False,
+        "effects": [
+            "incapacitated; drops what it's holding; falls prone",
+            "auto-fails Strength and Dexterity saving throws",
+            "attack rolls against the unconscious creature have advantage",
+            "any hit within 5 ft is a critical hit",
+        ],
+    },
+    # Silenced (Lich Memory Shred) — RAW: until end of the creature's
+    # next turn. 1 round, mirroring the Volcanic Gases poisoned timer.
+    # Not a 5e core condition; it's the "no verbal-component casting"
+    # state from the Silence spell, but lair actions install it directly.
+    "silenced": {
+        "key": "silenced",
+        "name": "Silenced (lair action)",
+        "icon": "🤐",
+        "duration_rounds": 1,
+        "concentration": False,
+        "effects": [
+            "cannot cast spells with verbal components",
+            "(other speech / sound is unaffected; this is a targeted",
+            " no-verbal-casting lock, not a full Silence spell zone)",
+        ],
+    },
+    # Frightened (Gold Dragon Shimmering Visions) — RAW: "until the
+    # dragon takes another lair action." 10 rounds GM-ended mirror.
+    "frightened": {
+        "key": "frightened",
+        "name": "Frightened (lair action)",
+        "icon": "😱",
+        "duration_rounds": 10,
+        "concentration": False,
+        "effects": [
+            "disadvantage on ability checks and attack rolls",
+            "  while the source of fear is within line of sight",
+            "can't willingly move closer to the source of the fear",
+        ],
+    },
 }
 
 
