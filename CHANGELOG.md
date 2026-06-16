@@ -10,6 +10,44 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.382.0] - 2026-06-16 — "The Living Map"
+
+**Schema version:** 69
+
+**Commit summary:** Closes the **last filed follow-up of the entire lair-action arc** — backfills `app/content/regional_effects.py` with 7 new regions (5 metallic dragons + Lich + Kraken). `REGIONAL_EFFECTS_BY_SLUG` grows from 10 → 22 slugs, matching `LAIR_ACTIONS_BY_SLUG`'s coverage. Every SRD legendary lair-bearing creature now carries authored regional-effect data the engine can read; the existing v2.178.0–v2.181.0 GM panel + player flavor card + fade tracker all pick the new entries up with no code change.
+
+**Description:** Drop-in JSON-only backfill mirroring the v2.171.0 chromatic regional-effects work + the v2.377.0/v2.378.0 metallic + non-dragon lair-action backfills.
+
+Per-region authored thematically (3 effects each, mirroring RAW MM's "Regional Effects" sidebar shape):
+
+- **Brass (desert / canyon, MM p.107):** Warm Dry Winds / Whirling Dust Devils / Speaking Creatures.
+- **Bronze (coastal / sea, MM p.110):** Briny Sea Mist / Sudden Sea Storms / Friendly Sea Beasts.
+- **Copper (rocky highland, MM p.113):** Echoing Laughter / Rolling Stones / Trickster Beasts.
+- **Gold (any terrain, MM p.116):** Benign Weather / Speaking Animals / Prophetic Dreams.
+- **Silver (mountain, MM p.119):** Gentle Snowfall / Cloud Mounts / Inquisitive Birds.
+- **Lich (necromantic / phylactery, MM p.202):** Restless Dead / Unsettling Whispers / Creeping Decay.
+- **Kraken (submerged ocean, MM p.197):** Abrupt Squalls / Treacherous Currents / Aggressive Sea Beasts.
+
+Ten new unit tests in `tests/harness/test_regional_effects.py` bring the file from 13 → 23 tests: keyed-slug count + adult-ancient parity + per-color/region ID set assertions + Lich/Kraken 3-count + total-slug-count guard at 22.
+
+After this commit:
+- `LAIR_ACTIONS_BY_SLUG` = 22 slugs (chromatic ×10 + metallic ×10 + Lich + Kraken).
+- `REGIONAL_EFFECTS_BY_SLUG` = 22 slugs (same coverage).
+- `_LAIR_ACTION_CONDITION_BUFFS` = 8 keys (every condition any lair action uses auto-installs).
+- All endpoint dispatch + GM UI + roll-log card + regional panels + fade tracker shipped v2.169.0–v2.181.0.
+
+**The entire lair-action arc is closed end-to-end.** The legendary-actions plan's filed-follow-ups list is now genuinely empty.
+
+MINOR — additive content backfill + new tests, no engine change.
+
+### Added
+- 7 metallic + non-dragon regional-effect sets in `app/content/regional_effects.py` (Brass / Bronze / Copper / Gold / Silver, plus Lich + Kraken; 3 effects each, keyed for adult + ancient dragon ages and single slug for Lich/Kraken → 12 new `REGIONAL_EFFECTS_BY_SLUG` entries).
+- 10 new unit tests in `tests/harness/test_regional_effects.py` — keyed-slug count, adult-ancient parity, per-region ID set assertions, Lich/Kraken 3-count, total-slug-count guard.
+
+### Changed
+- `app/content/regional_effects.py`: `REGIONAL_EFFECTS_BY_SLUG` 10 → 22 slugs; module docstring's "Coverage" line updated.
+- `docs/test-harness-coverage.md`: harness total 3115 → 3125 (+10 metallic + non-dragon regional tests).
+
 ## [2.381.1] - 2026-06-16 — "The Second Witness"
 
 **Schema version:** 69

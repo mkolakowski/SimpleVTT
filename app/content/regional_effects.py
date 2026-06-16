@@ -28,10 +28,12 @@ adult and ancient slugs share the same set, and only lair-bearing ages
 (adult + older) are keyed — young dragons and wyrmlings have none.
 
 Coverage: all five CHROMATIC dragons (black MM p.88, blue p.91, green
-p.94, red p.98, white p.101). Descriptions are rephrased RAW summaries
-(not verbatim) citing the source page. Metallic dragons + the Lich /
-Kraken are a filed follow-up backfill (they drop into
-`REGIONAL_EFFECTS_BY_SLUG` with no code change).
+p.94, red p.98, white p.101), all five METALLIC dragons (brass p.107,
+bronze p.110, copper p.113, gold p.116, silver p.119), plus Lich (p.202)
+and Kraken (p.197). Descriptions are rephrased RAW summaries (not
+verbatim) citing the source page. Closes the lair-action arc's last
+filed follow-up — every SRD legendary lair-bearing creature now carries
+authored regional-effect data the engine can read.
 """
 from __future__ import annotations
 
@@ -153,6 +155,185 @@ _WHITE_DRAGON_REGION: list[dict] = [
     },
 ]
 
+# RAW MM p.107 — Brass Dragon, "Regional Effects" (desert / canyon region).
+# v2.382.0 metallic-dragon backfill.
+_BRASS_DRAGON_REGION: list[dict] = [
+    {
+        "id": "warm-winds",
+        "name": "Warm, Dry Winds",
+        "desc": ("Warm, dry winds gust through the area within 6 miles of "
+                 "the dragon's lair, even at night and out of season."),
+    },
+    {
+        "id": "dust-devils",
+        "name": "Whirling Dust Devils",
+        "desc": ("Dust devils whirl across the open within 1 mile of the "
+                 "lair, kicking up sand and obscuring sightlines."),
+    },
+    {
+        "id": "talking-creatures",
+        "name": "Speaking Creatures",
+        "desc": ("Beasts and humanoids within 1 mile of the lair may "
+                 "briefly speak Draconic — sharing a half-remembered "
+                 "phrase or whispered secret — at the dragon's whim."),
+    },
+]
+
+# RAW MM p.110 — Bronze Dragon, "Regional Effects" (coastal / sea region).
+# v2.382.0 metallic-dragon backfill.
+_BRONZE_DRAGON_REGION: list[dict] = [
+    {
+        "id": "sea-mist",
+        "name": "Briny Sea Mist",
+        "desc": ("Sea mist drifts inland up to 6 miles from the dragon's "
+                 "coastal lair, leaving a salty tang in the air."),
+    },
+    {
+        "id": "sudden-storms",
+        "name": "Sudden Sea Storms",
+        "desc": ("Small thunderheads and brief gales gather without "
+                 "warning within 1 mile of the lair, sweeping over the "
+                 "waves before dispersing."),
+    },
+    {
+        "id": "kindly-sea-creatures",
+        "name": "Friendly Sea Beasts",
+        "desc": ("Whales, dolphins, and seabirds within 1 mile of the lair "
+                 "act with unusual interest in passersby, often shadowing "
+                 "boats or escorting swimmers."),
+    },
+]
+
+# RAW MM p.113 — Copper Dragon, "Regional Effects" (rocky highland region).
+# v2.382.0 metallic-dragon backfill.
+_COPPER_DRAGON_REGION: list[dict] = [
+    {
+        "id": "echoing-laughter",
+        "name": "Echoing Laughter",
+        "desc": ("Within 6 miles of the dragon's lair, distant peals of "
+                 "laughter echo from canyons and cliffs without obvious "
+                 "source."),
+    },
+    {
+        "id": "rolling-stones",
+        "name": "Rolling Stones",
+        "desc": ("Loose stones within 1 mile of the lair occasionally "
+                 "tumble downhill without provocation — practical jokes "
+                 "the dragon plays on intruders."),
+    },
+    {
+        "id": "trickster-beasts",
+        "name": "Trickster Beasts",
+        "desc": ("Animals within 1 mile of the lair play harmless tricks "
+                 "on passersby — leading travelers astray, hiding their "
+                 "supplies, mimicking their voices."),
+    },
+]
+
+# RAW MM p.116 — Gold Dragon, "Regional Effects" (any region the dragon claims).
+# v2.382.0 metallic-dragon backfill.
+_GOLD_DRAGON_REGION: list[dict] = [
+    {
+        "id": "calm-weather",
+        "name": "Benign Weather",
+        "desc": ("Weather within 6 miles of the dragon's lair is mild and "
+                 "fair — storms part, fogs lift, and the land enjoys a "
+                 "pleasant calm regardless of the season."),
+    },
+    {
+        "id": "speaking-animals",
+        "name": "Speaking Animals",
+        "desc": ("Beasts within 1 mile of the lair can briefly speak as if "
+                 "by the Speak with Animals spell when the dragon wills, "
+                 "sharing news of intruders or guiding travelers."),
+    },
+    {
+        "id": "prophetic-dreams",
+        "name": "Prophetic Dreams",
+        "desc": ("Intruders sleeping within 1 mile of the lair receive "
+                 "vivid dreams in which the dragon appears as a sage — "
+                 "glimpses of future consequences or moral counsel."),
+    },
+]
+
+# RAW MM p.119 — Silver Dragon, "Regional Effects" (mountain region).
+# v2.382.0 metallic-dragon backfill.
+_SILVER_DRAGON_REGION: list[dict] = [
+    {
+        "id": "light-snowfall",
+        "name": "Gentle Snowfall",
+        "desc": ("A light snowfall drifts continuously within 6 miles of "
+                 "the dragon's mountain lair, even in midsummer."),
+    },
+    {
+        "id": "cloud-mounts",
+        "name": "Cloud Mounts",
+        "desc": ("Clouds within 1 mile of the lair condense into rideable "
+                 "platforms the dragon — or its guests — can stand upon, "
+                 "moving as the dragon wills."),
+    },
+    {
+        "id": "inquisitive-birds",
+        "name": "Inquisitive Birds",
+        "desc": ("Birds within 1 mile of the lair watch intruders closely "
+                 "and relay what they see back to the dragon (Speak with "
+                 "Animals at the dragon's will)."),
+    },
+]
+
+# RAW MM p.202 — Lich, "Regional Effects" (necromantic / phylactery region).
+# v2.382.0 non-dragon backfill.
+_LICH_REGION: list[dict] = [
+    {
+        "id": "restless-dead",
+        "name": "Restless Dead",
+        "desc": ("Corpses within 1 mile of the lich's lair twitch and "
+                 "stir of their own accord, occasionally rising as weak "
+                 "undead until the lich is destroyed."),
+    },
+    {
+        "id": "unsettling-whispers",
+        "name": "Unsettling Whispers",
+        "desc": ("Voices echo through halls and tunnels within 6 miles "
+                 "of the lair — half-heard phrases in long-dead tongues "
+                 "that follow intruders no matter where they turn."),
+    },
+    {
+        "id": "creeping-decay",
+        "name": "Creeping Decay",
+        "desc": ("Plants wither and animals shun the area within 1 mile "
+                 "of the lair. Food spoils faster than nature should "
+                 "allow; water turns brackish and stale."),
+    },
+]
+
+# RAW MM p.197 — Kraken, "Regional Effects" (submerged ocean region).
+# v2.382.0 non-dragon backfill.
+_KRAKEN_REGION: list[dict] = [
+    {
+        "id": "abrupt-squalls",
+        "name": "Abrupt Squalls",
+        "desc": ("Squalls and storms gather without warning within 6 "
+                 "miles of the kraken's lair, scattering ships and "
+                 "swamping small boats."),
+    },
+    {
+        "id": "treacherous-currents",
+        "name": "Treacherous Currents",
+        "desc": ("Sea currents within 1 mile of the lair shift "
+                 "unpredictably, dragging vessels off course and pulling "
+                 "swimmers under without warning."),
+    },
+    {
+        "id": "aggressive-sea-beasts",
+        "name": "Aggressive Sea Beasts",
+        "desc": ("Sharks, giant octopuses, and other ocean predators "
+                 "within 1 mile of the lair behave with unusual "
+                 "aggression — answering the kraken's silent call."),
+    },
+]
+
+
 # Keyed by monster slug (the `slug` field on the shipped SRD monster
 # JSON). Dragons of every lair-bearing age (adult + ancient) share their
 # color's regional-effect set.
@@ -167,6 +348,20 @@ REGIONAL_EFFECTS_BY_SLUG: dict[str, list[dict]] = {
     "ancient-red-dragon": _RED_DRAGON_REGION,
     "adult-white-dragon": _WHITE_DRAGON_REGION,
     "ancient-white-dragon": _WHITE_DRAGON_REGION,
+    # v2.382.0 metallic-dragon backfill — 5 dragons × 2 ages each.
+    "adult-brass-dragon": _BRASS_DRAGON_REGION,
+    "ancient-brass-dragon": _BRASS_DRAGON_REGION,
+    "adult-bronze-dragon": _BRONZE_DRAGON_REGION,
+    "ancient-bronze-dragon": _BRONZE_DRAGON_REGION,
+    "adult-copper-dragon": _COPPER_DRAGON_REGION,
+    "ancient-copper-dragon": _COPPER_DRAGON_REGION,
+    "adult-gold-dragon": _GOLD_DRAGON_REGION,
+    "ancient-gold-dragon": _GOLD_DRAGON_REGION,
+    "adult-silver-dragon": _SILVER_DRAGON_REGION,
+    "ancient-silver-dragon": _SILVER_DRAGON_REGION,
+    # v2.382.0 non-dragon backfill — single slug each, no age variants.
+    "lich": _LICH_REGION,
+    "kraken": _KRAKEN_REGION,
 }
 
 

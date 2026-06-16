@@ -450,12 +450,19 @@ combatant.legendary_resistance = {
   buff on a failed save just like the v2.171.0 chromatic + v2.378.0
   non-dragon backfills' existing conditions (prone / blinded /
   restrained / charmed / poisoned). 3 new harness tests in
-  `test_trigger_lair_action.py` exercise the new auto-install paths
-  (Brass Slumberous Magic / Lich Memory Shred / Gold Shimmering
-  Visions). The lair-action arc is now end-to-end-complete (data +
-  engine + UI + cadence guards + roll-log + regional effects + fade
-  tracker + every SRD condition mapped). Filed-follow-ups list is
-  empty.
+  `test_trigger_lair_action.py` exercise the new auto-install paths.
+- Regional-effects backfill (✅ **shipped v2.382.0** "The Living Map"):
+  closes the last filed data follow-up by backfilling
+  `app/content/regional_effects.py` with 7 new regions (5 metallic
+  dragons + Lich + Kraken). `REGIONAL_EFFECTS_BY_SLUG` grows from 10 →
+  22 slugs, matching `LAIR_ACTIONS_BY_SLUG`'s coverage; the existing
+  v2.178.0–v2.181.0 GM panel + player flavor card + fade tracker
+  surface the new entries with no code change. 10 new unit tests in
+  `test_regional_effects.py`. After this commit **the lair-action arc
+  is end-to-end-complete**: 22 lair-action slugs + 22 regional-effect
+  slugs + 8 mapped lair-action conditions + every endpoint / UI /
+  cadence guard / roll-log card / regional panel / fade tracker
+  shipped. **Filed-follow-ups list is genuinely empty.**
 - No-repeat guard (✅ **shipped v2.172.0** "No Encore"): RAW MM p.11 —
   a lair action can't be used two rounds in a row. `trigger_lair_action`
   parks the fired action id as `state["last_lair_action_id"]` and

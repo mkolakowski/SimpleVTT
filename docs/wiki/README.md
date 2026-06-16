@@ -40,7 +40,7 @@ How much of the SRD 5.1 ruleset SimpleVTT mechanically automates, by content cat
 | [Consume-without-refund audit](consume-without-refund-audit.md) | Markdown (reference) | Contributors | ✅ shipped (v2.97.8) |
 | [Visual regression harness](visual-regression-harness.md) | Markdown (reference) | Contributors | ✅ shipped · local-only (v2.97.13) |
 | [Testing checklist](testing-checklist.md) | Markdown (per-version log) | Contributors | ✅ shipped (v2.99.8) |
-| [Lair actions & regional effects catalog](lair-regional-catalog.md) | Markdown (reference) | GMs + contributors | ✅ shipped · refreshed v2.379.1 (metallic + Lich/Kraken backfill + condition-map closure) |
+| [Lair actions & regional effects catalog](lair-regional-catalog.md) | Markdown (reference) | GMs + contributors | ✅ shipped · refreshed v2.382.0 (metallic + Lich/Kraken regional effects backfill; the entire lair-action arc is now closed) |
 
 ## Design plans
 

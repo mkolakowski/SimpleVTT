@@ -107,3 +107,73 @@ def test_white_arctic_region_shape():
     re_ = regional_effects_for_slug("adult-white-dragon")
     ids = {e["id"] for e in re_}
     assert ids == {"chill-fog", "freezing-precipitation", "frozen-sculptures"}
+
+
+# ── metallic + non-dragon coverage (v2.382.0) ────────────────────────────────
+
+
+def test_all_ten_metallic_slugs_are_keyed():
+    """Adult + ancient × brass/bronze/copper/gold/silver = 10 slugs."""
+    for metal in ("brass", "bronze", "copper", "gold", "silver"):
+        for age in ("adult", "ancient"):
+            slug = f"{age}-{metal}-dragon"
+            assert slug in REGIONAL_EFFECTS_BY_SLUG, slug
+            assert len(regional_effects_for_slug(slug)) == 3
+
+
+def test_each_metallic_color_shares_adult_and_ancient():
+    for metal in ("brass", "bronze", "copper", "gold", "silver"):
+        adult = regional_effects_for_slug(f"adult-{metal}-dragon")
+        ancient = regional_effects_for_slug(f"ancient-{metal}-dragon")
+        assert adult == ancient
+        assert [e["id"] for e in adult] == [e["id"] for e in ancient]
+
+
+def test_brass_desert_region_shape():
+    re_ = regional_effects_for_slug("adult-brass-dragon")
+    ids = {e["id"] for e in re_}
+    assert ids == {"warm-winds", "dust-devils", "talking-creatures"}
+
+
+def test_bronze_coastal_region_shape():
+    re_ = regional_effects_for_slug("adult-bronze-dragon")
+    ids = {e["id"] for e in re_}
+    assert ids == {"sea-mist", "sudden-storms", "kindly-sea-creatures"}
+
+
+def test_copper_highland_region_shape():
+    re_ = regional_effects_for_slug("adult-copper-dragon")
+    ids = {e["id"] for e in re_}
+    assert ids == {"echoing-laughter", "rolling-stones", "trickster-beasts"}
+
+
+def test_gold_auric_region_shape():
+    re_ = regional_effects_for_slug("adult-gold-dragon")
+    ids = {e["id"] for e in re_}
+    assert ids == {"calm-weather", "speaking-animals", "prophetic-dreams"}
+
+
+def test_silver_mountain_region_shape():
+    re_ = regional_effects_for_slug("adult-silver-dragon")
+    ids = {e["id"] for e in re_}
+    assert ids == {"light-snowfall", "cloud-mounts", "inquisitive-birds"}
+
+
+def test_lich_has_three_regional_effects():
+    re_ = regional_effects_for_slug("lich")
+    assert len(re_) == 3
+    ids = {e["id"] for e in re_}
+    assert ids == {"restless-dead", "unsettling-whispers", "creeping-decay"}
+
+
+def test_kraken_has_three_regional_effects():
+    re_ = regional_effects_for_slug("kraken")
+    assert len(re_) == 3
+    ids = {e["id"] for e in re_}
+    assert ids == {"abrupt-squalls", "treacherous-currents", "aggressive-sea-beasts"}
+
+
+def test_total_region_slug_count_is_twenty_two():
+    """5 chromatic + 5 metallic dragons (× adult + ancient) = 20, plus
+    Lich + Kraken (no age variants) = 22 total."""
+    assert len(REGIONAL_EFFECTS_BY_SLUG) == 22

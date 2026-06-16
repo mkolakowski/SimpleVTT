@@ -1,6 +1,6 @@
 # Lair actions & regional effects catalog
 
-*Audience: GMs + contributors. Refreshed for v2.379.1 — metallic-dragon + Lich + Kraken lair-action backfill (v2.377.0 / v2.378.0) + condition-map closure (v2.379.0). Lair-action arc is now end-to-end complete; regional-effects backfill for metallic + non-dragons is the one remaining filed follow-up.*
+*Audience: GMs + contributors. Refreshed for v2.382.0 — closes the last filed follow-up by backfilling regional effects for the metallic dragons + Lich + Kraken (v2.382.0 "The Living Map"). The entire lair-action arc is now end-to-end complete: 22 lair-action slugs + 22 regional-effect slugs + 8 mapped lair-action conditions + every endpoint / UI / fade tracker shipped. Filed-follow-ups list is empty.*
 
 A reader-facing catalog of every lair's **lair actions** (initiative-count-20
 effects) and **regional effects** (passive zone-wide flavor) currently
@@ -34,9 +34,10 @@ GM-driven fade tracker (`POST /set_regional_fade`, v2.181.0) models the RAW
 
 Dragons of every lair-bearing age (adult + ancient) share the lair-action set per color (RAW: lair actions are tied to the LAIR, not the creature's age). Young dragons and wyrmlings have no lair, so no entries.
 
-**Regional effects (`REGIONAL_EFFECTS_BY_SLUG`, 10 slugs):**
-- 5 chromatic dragons only.
-- Metallic + Lich + Kraken regional effects are a **filed follow-up backfill** — the engine + UI + fade tracker are all ready; the data is drop-in with no code change. Coming in a future commit.
+**Regional effects (`REGIONAL_EFFECTS_BY_SLUG`, 22 slugs — full parity with lair actions as of v2.382.0):**
+- 5 **chromatic** dragons (black, blue, green, red, white) — adult + ancient.
+- 5 **metallic** dragons (brass, bronze, copper, gold, silver) — adult + ancient. *(v2.382.0)*
+- **Lich** + **Kraken** — single slug each, no age variants. *(v2.382.0)*
 
 **Condition map (`_LAIR_ACTION_CONDITION_BUFFS`, 8 keys):**
 
@@ -150,13 +151,15 @@ No lair-action condition still falls back to GM-narrate.
 
 ---
 
-# Metallic dragon lairs (v2.377.0 backfill)
+# Metallic dragon lairs (v2.377.0 lair actions + v2.382.0 regional effects)
 
-The five metallic dragons share the chromatic data shape (3 lair actions each, keyed to `adult-*` + `ancient-*`) but currently have **no regional effects authored** — the entries below cover lair actions only. RAW MM citations per dragon.
+The five metallic dragons share the chromatic data shape — 3 lair actions + 3 regional effects each, keyed to `adult-*` + `ancient-*`. Lair actions shipped v2.377.0; regional effects shipped v2.382.0 closing the parity gap.
 
 ## Brass Dragon — desert / canyon lair
 
 *Slugs: `adult-brass-dragon`, `ancient-brass-dragon`. RAW MM p.107.*
+
+### Lair actions
 
 | Action | Save | Effect |
 |---|---|---|
@@ -164,9 +167,17 @@ The five metallic dragons share the chromatic data shape (3 lair actions each, k
 | **Blinding Sandstorm** | CON DC 15 | 20-ft-radius sphere; blinded until the dragon takes another lair action. |
 | **Slumberous Magic** | WIS DC 15 | Single target; unconscious for 1 minute on a fail (wakes on damage/shake). |
 
+### Regional effects
+
+- **Warm, Dry Winds** — supernaturally warm dry winds gust through the area within 6 miles of the lair.
+- **Whirling Dust Devils** — dust devils whirl across the open within 1 mile, kicking up sand and obscuring sightlines.
+- **Speaking Creatures** — beasts and humanoids within 1 mile may briefly speak Draconic at the dragon's whim.
+
 ## Bronze Dragon — coastal / sea lair
 
 *Slugs: `adult-bronze-dragon`, `ancient-bronze-dragon`. RAW MM p.110.*
+
+### Lair actions
 
 | Action | Save | Effect |
 |---|---|---|
@@ -174,9 +185,17 @@ The five metallic dragons share the chromatic data shape (3 lair actions each, k
 | **Lightning Strike** | DEX DC 15 | Up to 3 targets in 120 ft; 4d6 lightning (half on save). |
 | **Ocean Currents** | STR DC 15 | Single target; pulled 30 ft into water + prone on a fail. |
 
+### Regional effects
+
+- **Briny Sea Mist** — sea mist drifts inland up to 6 miles, leaving a salty tang in the air.
+- **Sudden Sea Storms** — small thunderheads and brief gales gather without warning within 1 mile.
+- **Friendly Sea Beasts** — whales, dolphins, and seabirds within 1 mile shadow boats and escort swimmers.
+
 ## Copper Dragon — rocky highland lair
 
 *Slugs: `adult-copper-dragon`, `ancient-copper-dragon`. RAW MM p.113.*
+
+### Lair actions
 
 | Action | Save | Effect |
 |---|---|---|
@@ -184,9 +203,17 @@ The five metallic dragons share the chromatic data shape (3 lair actions each, k
 | **Slippery Earth** | DEX DC 15 | 20-ft-radius sphere; ground becomes slick — prone on a fail. |
 | **Hilarious Magic** | WIS DC 15 | Up to 2 targets; charmed (harmless, laughing) until start of next turn. |
 
+### Regional effects
+
+- **Echoing Laughter** — distant peals of laughter echo from canyons + cliffs within 6 miles.
+- **Rolling Stones** — loose stones within 1 mile tumble downhill without provocation (practical jokes).
+- **Trickster Beasts** — animals within 1 mile play harmless tricks: leading travelers astray, hiding supplies, mimicking voices.
+
 ## Gold Dragon — auric lair
 
 *Slugs: `adult-gold-dragon`, `ancient-gold-dragon`. RAW MM p.116.*
+
+### Lair actions
 
 | Action | Save | Effect |
 |---|---|---|
@@ -194,9 +221,17 @@ The five metallic dragons share the chromatic data shape (3 lair actions each, k
 | **Calming Aura** | WIS DC 15 | 20-ft radius around dragon; can't attack (charmed/pacified) on a fail. |
 | **Shimmering Visions** | WIS DC 15 | Single target; frightened until the dragon takes another lair action. |
 
+### Regional effects
+
+- **Benign Weather** — weather within 6 miles is mild and fair regardless of season.
+- **Speaking Animals** — beasts within 1 mile can briefly speak (as Speak with Animals) at the dragon's will.
+- **Prophetic Dreams** — intruders sleeping within 1 mile receive vivid dreams in which the dragon appears as a sage.
+
 ## Silver Dragon — mountain lair
 
 *Slugs: `adult-silver-dragon`, `ancient-silver-dragon`. RAW MM p.119.*
+
+### Lair actions
 
 | Action | Save | Effect |
 |---|---|---|
@@ -204,15 +239,23 @@ The five metallic dragons share the chromatic data shape (3 lair actions each, k
 | **Treacherous Ice** | DEX DC 15 | 20-ft radius becomes difficult terrain (ice); prone on a fail. |
 | **Wintry Blast** | CON DC 15 | 20-ft-radius sphere; 3d6 cold (half on save). |
 
+### Regional effects
+
+- **Gentle Snowfall** — a light snowfall drifts continuously within 6 miles, even in midsummer.
+- **Cloud Mounts** — clouds within 1 mile condense into rideable platforms moving as the dragon wills.
+- **Inquisitive Birds** — birds within 1 mile watch intruders closely and relay what they see to the dragon.
+
 ---
 
-# Non-dragon lairs (v2.378.0 backfill)
+# Non-dragon lairs (v2.378.0 lair actions + v2.382.0 regional effects)
 
-Single-slug entries (no age variants, unlike dragons). Same lair-action data shape as dragons; **no regional effects authored** for these yet (filed follow-up).
+Single-slug entries (no age variants, unlike dragons). Lair-actions shipped v2.378.0; regional effects shipped v2.382.0.
 
 ## Lich — phylactery / necromantic lair
 
 *Slug: `lich`. RAW MM p.202.*
+
+### Lair actions
 
 | Action | Save | Effect |
 |---|---|---|
@@ -220,15 +263,29 @@ Single-slug entries (no age variants, unlike dragons). Same lair-action data sha
 | **Necrotic Surge** | CON DC 18 | 30-ft-radius sphere around lich; 4d6 necrotic (half on save). |
 | **Memory Shred** | WIS DC 18 | Single target within 60 ft; silenced (no verbal-component casting) until end of target's next turn. |
 
+### Regional effects
+
+- **Restless Dead** — corpses within 1 mile twitch + stir, occasionally rising as weak undead.
+- **Unsettling Whispers** — voices echo through halls and tunnels within 6 miles: half-heard phrases in long-dead tongues.
+- **Creeping Decay** — plants wither + animals shun the area within 1 mile; food spoils faster than nature allows.
+
 ## Kraken — submerged ocean lair
 
 *Slug: `kraken`. RAW MM p.197.*
+
+### Lair actions
 
 | Action | Save | Effect |
 |---|---|---|
 | **Stormy Currents** | STR DC 15 | 60-ft sphere around kraken; pushed 30 ft + prone on a fail. |
 | **Lightning Storm** | DEX DC 15 | Up to 3 targets in 120 ft; 3d6 lightning (half on save). |
 | **Black Ink Cloud** | — | 30-ft-radius ink sphere; heavily obscured, lingers (underwater). (GM places it.) |
+
+### Regional effects
+
+- **Abrupt Squalls** — squalls and storms gather without warning within 6 miles, scattering ships.
+- **Treacherous Currents** — sea currents within 1 mile shift unpredictably, dragging vessels off course.
+- **Aggressive Sea Beasts** — sharks + giant octopuses + ocean predators within 1 mile behave with unusual aggression.
 
 ---
 
