@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.372.1] - 2026-06-16 — "The Trinity Cap"
+
+**Schema version:** 69
+
+**Commit summary:** Adds the RAW Aid 3-target cap (PHB p.211: "Choose up to three creatures within range"). `_SPELL_BUFF_MAP["aid"]` gains `max_targets: 3`; `/cast_spell`'s buff-install branch reads the field as a hard 400 cap on `target_combatant_ids` length. Upcasting Aid raises HP per target (v2.371.0 wired the 5/level scaling) but does NOT raise the count per RAW. Two harness tests via Caelan → 3-target (success) vs 4-target (400). Generic `max_targets` substrate ready for other "up to N creatures" buff spells (Bless, Beacon of Hope, etc.) to opt in by adding the field.
+
+PATCH — minor RAW gate + test, no schema change.
+
+### Added
+- `max_targets: 3` field on `_SPELL_BUFF_MAP["aid"]`. Generic substrate readable by `/cast_spell`'s buff-install branch.
+- Target-count gate in `/cast_spell` — returns 400 `too_many_targets` with `{spell, limit, received}` when `len(target_combatant_ids) > max_targets`.
+- `tests/harness/test_cast_aid_target_cap.py` — 2 tests (3 targets → 200; 4 targets → 400 `too_many_targets` / `limit: 3`).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3069 → 3071 (+2 Aid 3-target tests); new section.
+
 ## [2.372.0] - 2026-06-16 — "The Banishing Word"
 
 **Schema version:** 69

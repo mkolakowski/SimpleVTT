@@ -1489,6 +1489,13 @@ _SPELL_BUFF_MAP: dict[str, dict] = {
         "effects": {
             "aid_hp_bonus": 5,
         },
+        # v2.372.1 — RAW Aid: "Choose up to three creatures within
+        # range." Read by /cast_spell's buff-install branch as a hard
+        # 400 cap on `target_combatant_ids` length. Upcasting Aid
+        # increases HP per target (v2.371.0) but does NOT raise the
+        # target count per RAW. Bless / other "up to three" spells
+        # can opt in by adding the same field.
+        "max_targets": 3,
         "desc": "Hit point maximum and current hit points increase by 5 for 8 hours.",
     },
     # v2.97.45 — Sanctuary (Cleric L1, also Paladin). Bonus action,
@@ -21938,6 +21945,26 @@ async def cast_spell(
             _single_tid = target_character_id_in
             if _single_tid:
                 _bless_target_char_ids.append(int(_single_tid))
+
+        # v2.372.1 — `max_targets` gate (RAW: Aid "up to three creatures
+        # within range"; Bless similar). When the buff template carries
+        # the field, return 400 too_many_targets if the caller passed
+        # more than the cap. Upcasting doesn't raise the count for
+        # spells where RAW caps it (Aid's +5 HP per upcast is on each
+        # target, not on the count).
+        _max_targets = spell_buff_template.get("max_targets")
+        if _max_targets is not None:
+            try:
+                _cap = int(_max_targets)
+            except (TypeError, ValueError):
+                _cap = 0
+            if _cap > 0 and len(_bless_target_char_ids) > _cap:
+                return JSONResponse(status_code=400, content={
+                    "error": "too_many_targets",
+                    "spell": spell_buff_template.get("key") or "",
+                    "limit": _cap,
+                    "received": len(_bless_target_char_ids),
+                })
 
         for _bless_tid in _bless_target_char_ids:
             _bless_buffs_before = _snapshot_target_buffs(
