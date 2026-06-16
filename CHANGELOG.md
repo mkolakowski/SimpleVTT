@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.371.0] - 2026-06-16 — "The Layered Blessing"
+
+**Schema version:** 69
+
+**Commit summary:** Closes the v2.97.41-filed Aid upcast hook. RAW PHB p.211: "At Higher Levels: When you cast this spell using a spell slot of 3rd level or higher, a target's hit points increase by an additional 5 for each slot level above 2nd." The base L2 cast continues to grant +5; a L3 cast now grants +10, L4 +15, L5 +20, etc. The override is materialized at `/cast_spell` time (alongside the existing Sanctuary DC + Heroism temp-HP-amount stamps) onto the per-cast `aid_hp_bonus` field, so both the install-time current-HP heal AND the `_buff_hp_max_bonus` heal-ceiling walk read the upcast value uniformly. Three harness tests via Caelan → Pip.
+
+**Description:** Pre-v2.371.0, the catalog `_SPELL_BUFF_MAP["aid"]` carried a static `aid_hp_bonus: 5` that didn't scale on upcast — a L3 Aid cast still granted +5 HP to the target. v2.371.0 patches the buff materialization branch in `/cast_spell` (next to the v2.97.52 Sanctuary DC stamp + the v2.97.58 Heroism amount stamp): when the buff template's `key == "aid"`, compute `aid_hp_bonus = 5 + 5 * max(0, slot_level - 2)` and override the materialized buff's `effects.aid_hp_bonus`. The install-time heal a few lines below was also retargeted from the static catalog template to the materialized buff so the upcast value flows correctly. The v2.97.42 `_buff_hp_max_bonus` walker reads `effects.aid_hp_bonus` off the INSTALLED buff (not the template), so the heal-ceiling expansion auto-tracks.
+
+The v2.97.40 undo flow (slot refund + buff drop) is unchanged — it captures the cast_id at install time and walks the installed buff for the drop, which carries the upcast value correctly. The existing `test_undo_cast_aid_slot_and_target_buff` (which asserts `aid_hp_bonus == 5` for an L2 cast) continues to pass — my change is purely additive at upcast levels.
+
+PATCH alternative considered — landed as MINOR since this is a user-visible mechanical change (L3+ Aid now grants more HP than L2). No schema change.
+
+### Added
+- Aid upcast override block in `/cast_spell`'s buff materialization branch — `effects.aid_hp_bonus = 5 + 5 * max(0, slot_level - 2)`.
+- `tests/harness/test_cast_aid_upcast.py` — 3 tests (L2 → +5 baseline; L3 → +10; L5 → +20, PATCHing a temporary L5 slot onto Caelan since Paladin Lv 7 only natively goes to L2).
+
+### Changed
+- `/cast_spell`'s Aid install-time heal now reads from the materialized buff (`_bless_buff["effects"]`) instead of the static catalog template, so upcast values propagate through to the +N current-HP grant.
+- `docs/test-harness-coverage.md`: harness total 3062 → 3065 (+3 Aid upcast tests); new section.
+
 ## [2.370.1] - 2026-06-16 — "The Cleansing Palm" (class-feature 100% milestone)
 
 **Schema version:** 69

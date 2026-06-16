@@ -21686,6 +21686,27 @@ async def cast_spell(
                     spell_buff_template.get("effects") or {}
                 )
                 _bless_buff["effects"]["dc"] = 8 + _sanc_prof + _sanc_mod
+            # v2.371.0 — Aid upcast scaling (RAW PHB p.211). Base L2
+            # grants +5 HP-max + +5 current HP; "At Higher Levels: a
+            # target's hit points increase by an additional 5 for each
+            # slot level above 2nd." Recompute `aid_hp_bonus` from the
+            # cast's slot_level (defaults to base 2 → +5). The
+            # install-time heal a few lines below + the
+            # `_buff_hp_max_bonus` heal-ceiling walk both read the
+            # overridden value, so a L3 Aid grants +10 / L4 grants +15
+            # / L5 grants +20.
+            if spell_buff_template.get("key") == "aid":
+                try:
+                    _aid_slot = int(slot_level or 2)
+                except (TypeError, ValueError):
+                    _aid_slot = 2
+                _aid_bonus = max(5, 5 + 5 * max(0, _aid_slot - 2))
+                _bless_buff["effects"] = dict(
+                    _bless_buff.get("effects")
+                    or spell_buff_template.get("effects")
+                    or {}
+                )
+                _bless_buff["effects"]["aid_hp_bonus"] = _aid_bonus
             # v2.97.58 — Heroism install-time temp HP amount capture.
             # Stamps the caster's spellcasting modifier on the buff so
             # the v2.97.58 turn-start recurrence hook (PUT /battle) can
@@ -21728,8 +21749,14 @@ async def cast_spell(
                 # so future spells with the same shape (e.g. higher-
                 # level Aid upcasting at +5/level) opt in without
                 # touching this site.
+                # v2.371.0 — read from the MATERIALIZED buff effects
+                # (which may carry the upcast-overridden `aid_hp_bonus`
+                # from the v2.371.0 block above) instead of the static
+                # catalog template. A L3 Aid cast grants +10 here; the
+                # `_buff_hp_max_bonus` walk reads the same value off
+                # the installed buff so the heal-ceiling stays in sync.
                 _aid_hp_bonus = int(
-                    (spell_buff_template.get("effects") or {}).get(
+                    (_bless_buff.get("effects") or {}).get(
                         "aid_hp_bonus"
                     ) or 0
                 )
