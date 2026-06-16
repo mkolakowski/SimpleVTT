@@ -34359,8 +34359,11 @@ for _vault_slug, _vault_attune in [
     # damage-resistance passive (cursed) in v2.366.0 — explicit
     # `_MAGIC_ITEM_PASSIVES` entry above.
     ("sphere-of-annihilation", False),
-    ("talisman-of-pure-good", True), ("talisman-of-the-sphere", True),
-    ("talisman-of-ultimate-evil", True), ("well-of-many-worlds", False),
+    # talisman-of-pure-good + talisman-of-ultimate-evil promoted to
+    # mechanical save-for-half charge-cast actions (Necklace handler)
+    # in v2.367.0 — explicit `_MAGIC_ITEM_ACTIONS` entries.
+    ("talisman-of-the-sphere", True),
+    ("well-of-many-worlds", False),
 ]:
     _MAGIC_ITEM_PASSIVES.setdefault(
         _vault_slug, [{"requires_attunement": _vault_attune}],
@@ -35277,6 +35280,65 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
                 "min_charges": 1,
                 "max_charges": 3,
                 "feature_name": "🌠 Ring of Shooting Stars",
+            },
+        },
+    },
+    # v2.367.0 — Talisman of Pure Good (RAW DMG p.207, legendary,
+    # attunement by good alignment). 7 charges; spend 1 (action) to
+    # force a creature within 60 ft to make a DC 18 CHA save → 6d6
+    # radiant on a fail, half on a pass. Reuses the v2.318.0 Necklace
+    # of Fireballs save-for-half handler (the slug is added to the
+    # dispatch tuple in /use_item_action). The Necklace handler
+    # iterates target ids and rolls a fresh save per target, which is
+    # the same shape the talismans want (each use targets a single
+    # creature, but the handler's per-target loop is a no-op for a
+    # single-id call). Regains all charges at dawn (long rest).
+    # **v1 simplifications (GM-narrated):** the alignment gate ("good
+    # alignment required to attune; evil-aligned wielder takes 6d6
+    # radiant per round while holding it") + the alignment-keyed
+    # plunge-into-the-Earth instant-kill on evil targets standing on
+    # holy ground + the "+2 spell attack bonus for good cleric/paladin
+    # wielder" alignment-conditional passive.
+    "talisman-of-pure-good": {
+        "requires_attunement": True,
+        "resource_key": "talisman-of-pure-good",
+        "actions": {
+            "invoke-pure-good": {
+                "name": "Invoke Pure Good (60 ft, DC 18 CHA)",
+                "save_dc": 18,
+                "save_ability": "CHA",
+                "dice": "6d6",
+                "damage_type": "radiant",
+                "save_for_half": True,
+                "min_charges": 1,
+                "max_charges": 1,
+                "feature_name": "✨ Talisman of Pure Good",
+            },
+        },
+    },
+    # v2.367.0 — Talisman of Ultimate Evil (RAW DMG p.207, legendary,
+    # attunement by evil alignment). Mirror of Pure Good: 6 charges;
+    # spend 1 to force a creature within 60 ft to make a DC 18 CHA
+    # save → 8d6 necrotic on a fail, half on a pass. Same Necklace
+    # handler. **v1 simplifications (GM-narrated):** the alignment
+    # gate (mirror of Pure Good, evil-aligned attune required) + the
+    # alignment-keyed plunge-into-fiery-pit instant-kill on good
+    # targets + the "+2 spell attack bonus for evil cleric/paladin
+    # wielder" alignment-conditional passive.
+    "talisman-of-ultimate-evil": {
+        "requires_attunement": True,
+        "resource_key": "talisman-of-ultimate-evil",
+        "actions": {
+            "invoke-ultimate-evil": {
+                "name": "Invoke Ultimate Evil (60 ft, DC 18 CHA)",
+                "save_dc": 18,
+                "save_ability": "CHA",
+                "dice": "8d6",
+                "damage_type": "necrotic",
+                "save_for_half": True,
+                "min_charges": 1,
+                "max_charges": 1,
+                "feature_name": "🕷 Talisman of Ultimate Evil",
             },
         },
     },
@@ -84818,7 +84880,13 @@ async def use_item_action(
                 # v2.357.0 — Ring of Shooting Stars "Shooting Stars" mode:
                 # 1-3 motes (= charges), each a DC 15 DEX save for half of
                 # 5d4 fire — the save-for-half multi-target damage shape.
-                "ring-of-shooting-stars"):
+                "ring-of-shooting-stars",
+                # v2.367.0 — Alignment talismans (Pure Good = 6d6 radiant,
+                # DC 18 CHA, 7 charges; Ultimate Evil = 8d6 necrotic, DC 18
+                # CHA, 6 charges). 1-charge per use, single-target. The
+                # Necklace handler's per-target loop is a no-op for a
+                # single-id call. Alignment gates GM-narrated v1.
+                "talisman-of-pure-good", "talisman-of-ultimate-evil"):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_necklace_of_fireballs(
             db, campaign_id, char, item, sheet, catalog,

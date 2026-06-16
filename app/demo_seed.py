@@ -2170,6 +2170,22 @@ def _paladin_sheet(name: str) -> dict:
                 "desc": "Action (Lv 14+): end one spell on yourself or a willing creature you touch. CHA mod uses per long rest (min 1). Use /use_cleansing_touch to spend a charge + name the buff to end.",
                 "manual": False,
             },
+            # v2.367.0 — Talisman of Pure Good charge pool (RAW DMG p.207):
+            # 7 charges, regain all at dawn (long rest). The talisman item
+            # itself is seeded INERT on Caelan (Armory's Remainder vault
+            # loot, line 6927) — the harness PATCHes equipped+attuned and
+            # invokes via /use_item_action. Seeding the resource row up
+            # front means the test doesn't need a second PATCH to
+            # bootstrap it.
+            {
+                "key": "talisman-of-pure-good",
+                "name": "Talisman of Pure Good",
+                "current": 7, "max": 7, "reset": "long",
+                "source": "magic item — Talisman of Pure Good",
+                "class_slug": "item",
+                "desc": "7 charges (regain all at dawn). Invoke Pure Good: action — spend 1 charge to force one creature within 60 ft to make a DC 18 CHA save → 6d6 radiant on a fail, half on a save (RAW DMG p.207). Alignment gate + alignment-keyed instant-kill GM-narrated in v1.",
+                "manual": False,
+            },
         ],
         # v2.53.0: Aura of Protection (Paladin Lv 6+). Passive aura —
         # allies within 10 ft of Caelan add his CHA mod (+3 with CHA 16)
@@ -3958,6 +3974,22 @@ def _warlock_sheet(name: str) -> dict:
             # (RAW DMG p.202): 5 charges, regain 1d6+1 at dawn (the
             # long-rest path reads ``charge_recovery``). The generalized
             # save-for-half AoE-damage handler decrements 2 per Thunder.
+            # v2.367.0 — Talisman of Ultimate Evil charge pool (RAW DMG
+            # p.207): 6 charges, regain all at dawn (long rest). The
+            # talisman item itself is seeded INERT on Magnus (Armory's
+            # Remainder vault loot, line 6960) — the harness PATCHes
+            # equipped+attuned and invokes via /use_item_action. Seeding
+            # the resource row up front means the test doesn't need a
+            # second PATCH to bootstrap it.
+            {
+                "key": "talisman-of-ultimate-evil",
+                "name": "Talisman of Ultimate Evil",
+                "current": 6, "max": 6, "reset": "long",
+                "source": "magic item — Talisman of Ultimate Evil",
+                "class_slug": "item",
+                "desc": "6 charges (regain all at dawn). Invoke Ultimate Evil: action — spend 1 charge to force one creature within 60 ft to make a DC 18 CHA save → 8d6 necrotic on a fail, half on a save (RAW DMG p.207). Alignment gate + alignment-keyed instant-kill GM-narrated in v1.",
+                "manual": False,
+            },
             {
                 "key": "staff-of-thunder-and-lightning",
                 "name": "Staff of Thunder and Lightning",

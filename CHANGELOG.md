@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.367.0] - 2026-06-16 — "The Holy & The Profane"
+
+**Schema version:** 69
+
+**Commit summary:** Wires both alignment talismans (RAW DMG p.207, legendary, attunement) in one commit since they're mechanically identical save for charge count, damage dice, and damage type. **Talisman of Pure Good** = 7 charges, 6d6 radiant, DC 18 CHA save-for-half. **Talisman of Ultimate Evil** = 6 charges, 8d6 necrotic, DC 18 CHA save-for-half. Both compose on the existing Necklace of Fireballs save-for-half handler (the two slugs are added to the dispatch tuple). Three harness tests via Sir Caelan + Magnus Hexbinder. **This closes the v2.344.5 stub triage — every actionable item is wired.**
+
+**Description:** RAW: each talisman lets the wielder spend 1 charge as an action to force a creature within 60 ft to make a DC 18 CHA save → save-for-half damage of the catalog's dice + type. The Necklace handler's per-target loop is a no-op for a single-id call, so a one-target talisman invocation lands cleanly. The catalog action_def carries the standard save_for_half shape (save_dc/save_ability/dice/damage_type/save_for_half/min_charges/max_charges), so no engine code change was needed beyond adding the two slugs to the dispatch tuple.
+
+**v1 simplifications (GM-narrated):**
+
+- The cursed alignment gate (Pure Good requires good alignment to attune; non-good attuners take damage each round while holding it. Ultimate Evil mirrors with evil).
+- The alignment-keyed dramatic instant-kill on opposite-alignment targets standing on holy/unholy ground (Pure Good: evil targets at 50 HP or fewer dragged into a fiery pit; Ultimate Evil: good targets at 50 HP or fewer plunged into a black abyss).
+- The +2 spell attack alignment-conditional bonus for cleric/paladin wielders.
+
+The resource rows (7 charges Pure Good / 6 charges Ultimate Evil, regain all at dawn) are seeded up front on the demo PCs so the harness doesn't need a second PATCH. The inventory items themselves stay inert in the vault loot (seed-inert + PATCH-equipped+attuned pattern consistent with the session). MINOR — additive `_MAGIC_ITEM_ACTIONS` entries + content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ACTIONS["talisman-of-pure-good"]` — `{resource_key, actions: {invoke-pure-good: {save_dc: 18, save_ability: CHA, dice: "6d6", damage_type: "radiant", save_for_half: True, min_charges: 1, max_charges: 1}}}`; promoted out of the vault bulk-stub loop.
+- `_MAGIC_ITEM_ACTIONS["talisman-of-ultimate-evil"]` — mirror with `dice: "8d6", damage_type: "necrotic"`.
+- Both slugs added to the Necklace-of-Fireballs dispatch tuple in `/use_item_action`.
+- Demo seed: `talisman-of-pure-good` 7-charge resource on Sir Caelan; `talisman-of-ultimate-evil` 6-charge resource on Magnus Hexbinder.
+- `tests/harness/test_item_alignment_talismans.py` — 3 tests (Pure Good invoke: DC 18 CHA, 6d6 radiant, charge 7→6; Ultimate Evil invoke: DC 18 CHA, 8d6 necrotic, charge 6→5; Pure Good empty charges → 409 `insufficient_charges`).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3048 → 3051 (+3 alignment talisman tests); new section.
+- `docs/plans/magic-items-automation.md`: both talisman rows marked ✅; **stub triage is closed**.
+
 ## [2.366.1] - 2026-06-16 — "The Auto-Apply Pin"
 
 **Schema version:** 69
