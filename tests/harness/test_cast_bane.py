@@ -100,7 +100,9 @@ async def test_thief_of_five_fates_happy_path(
     assert data["ok"] is True
     assert data["concentration"] is True
     assert data["range_ft"] == 30
-    assert data["max_targets"] == 3
+    # v2.383.0 — max_targets now scales with slot_level (RAW: 3 base
+    # @ L1, +1/slot). Magnus casts at L3 (Pact Magic slot) → cap = 5.
+    assert data["max_targets"] == 5
     assert data["via_invocation"] == "thief-of-five-fates"
     mg_keys = await _get_buff_keys(gm_client, magnus["id"])
     assert "concentration-bane" in mg_keys
@@ -213,3 +215,75 @@ async def test_cast_bane_missing_character_id_400(gm_client):
         json={"class_slug": "warlock"},
     )
     assert resp.status_code == 400, resp.text
+
+
+# ── v2.383.0 upcast-aware max_targets cap (RAW PHB p.216: 3 base @ L1,
+# +1/slot above 1st). Fires before slot consumption; pre-targets are
+# pre-validated and rejected at 400. Per-target buff install stays
+# filed — these tests confirm the cap-enforcement contract only. ─────
+
+
+async def test_cast_bane_l3_six_targets_returns_400(
+    gm_client, magnus_rested,
+):
+    """L3 Bane with 6 target ids → 400 too_many_targets, limit=5.
+    Magnus casts at L3 (his Pact Magic slot level) → cap = 3 + 2 = 5;
+    6 ids exceeds that."""
+    magnus = magnus_rested
+    mg_tok = f"tok_bane_cap_mg_{magnus['id']}"
+    await _seed_battle(gm_client, [
+        _mkc(mg_tok, magnus["id"], name=magnus["name"]),
+    ])
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_bane",
+        json={
+            "character_id": magnus["id"],
+            "class_slug": "warlock",
+            "via_invocation": "thief-of-five-fates",
+            "slot_level": 3,
+            "override": True,
+            "target_combatant_ids": [
+                "tok_bane_t1", "tok_bane_t2", "tok_bane_t3",
+                "tok_bane_t4", "tok_bane_t5", "tok_bane_t6",
+            ],
+        },
+    )
+    assert resp.status_code == 400, resp.text
+    body = resp.json()
+    assert body.get("error") == "too_many_targets"
+    assert body.get("spell") == "bane"
+    assert body.get("limit") == 5
+    assert body.get("received") == 6
+    assert body.get("slot_level") == 3
+
+
+async def test_cast_bane_l3_five_targets_succeeds(
+    gm_client, magnus_rested,
+):
+    """L3 Bane with 5 target ids → 200 (RAW upcast cap = 5). The
+    response carries the scaled max_targets=5 + the targets are
+    accepted (per-target buff install still filed in v1; this commit
+    is the cap enforcement only)."""
+    magnus = magnus_rested
+    mg_tok = f"tok_bane_l3_mg_{magnus['id']}"
+    await _seed_battle(gm_client, [
+        _mkc(mg_tok, magnus["id"], name=magnus["name"]),
+    ])
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_bane",
+        json={
+            "character_id": magnus["id"],
+            "class_slug": "warlock",
+            "via_invocation": "thief-of-five-fates",
+            "slot_level": 3,
+            "override": True,
+            "target_combatant_ids": [
+                "tok_b_t1", "tok_b_t2", "tok_b_t3",
+                "tok_b_t4", "tok_b_t5",
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["max_targets"] == 5
+    assert data["slot_level"] == 3

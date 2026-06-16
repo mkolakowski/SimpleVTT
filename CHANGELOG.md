@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.383.0] - 2026-06-16 — "The Wider Bane"
+
+**Schema version:** 69
+
+**Commit summary:** Wires the upcast-aware target cap on `/cast_bane` mirroring the v2.380.0 Bless pattern. The endpoint stays **audit-only** as documented in v2.99.150 ("per-target CHA save + -1d4 penalty buff filed"); v2.383.0 only adds the pre-cast cap-enforcement layer: accepts an optional `target_combatant_ids` body param, computes `bane_cap = 3 + max(0, slot_level - 1)` (RAW PHB p.216: 3 base @ L1, +1 per slot above 1st), returns 400 `too_many_targets` when the list exceeds it. The broadcast + response `max_targets` field is updated to carry the scaled value (was hardcoded 3 regardless of slot level — quietly wrong for any upcast). The existing happy-path test (Magnus L3 Pact Magic cast) flips its assertion from `max_targets == 3` to `max_targets == 5`. Two new tests cover the cap (L3 + 6 targets → 400 limit=5, L3 + 5 targets → 200 with the scaled cap echoed).
+
+**Description:** Bane has its own dedicated `/cast_bane` endpoint (v2.99.150) because it's gated behind the Warlock Thief of Five Fates invocation, so the v2.380.0 `_SPELL_BUFF_MAP` cap (which fires in `/cast_spell`'s buff-install branch) doesn't apply. Wiring the full per-target CHA save + baned-buff install would be a substantial commit — Bane is currently audit-only, the endpoint stops after consuming the slot + the concentration anchor + broadcasting the cast. v2.383.0 ships only the cap-enforcement layer on top of the existing audit-only shape so:
+- Callers can pre-validate target count and surface a 400 before burning a slot.
+- The response's advertised `max_targets` field reflects the actual upcast cap (was lying for any L2+ cast).
+- The pattern is consistent with the v2.380.0/v2.381.0 substrates — same shape, same response envelope, same RAW citation.
+
+The per-target save + buff install stays filed; nothing new lands on the install pipeline this commit. A future commit can either (a) extend `/cast_bane` to honor the target list and route through `/cast_spell`'s buff-install branch, or (b) lift the Bane install pipeline into `_SPELL_BUFF_MAP` with the same multi-target loop that handles Bless.
+
+MINOR — additive body param + cap check + scaled response field + new tests; existing audit-only contract preserved (no targets supplied → no behavior change).
+
+### Added
+- `target_combatant_ids` optional body param on `/cast_bane` (list of combatant ids; pre-validates against the upcast cap, then ignored at the audit-only install path).
+- `bane_cap = 3 + max(0, slot_level - 1)` computation in `/cast_bane` — returns 400 `too_many_targets` when the list exceeds the cap; updates both the `feature_used` broadcast + the response `max_targets` field to carry the scaled value.
+- Two new tests in `tests/harness/test_cast_bane.py` — L3 + 6 targets returns 400 limit=5, L3 + 5 targets succeeds with `max_targets=5` in the response.
+
+### Changed
+- `tests/harness/test_cast_bane.py::test_thief_of_five_fates_happy_path`: flipped `max_targets == 3` assertion to `max_targets == 5` (Magnus casts at L3 Pact Magic slot; cap = 3 + 2). The prior hardcoded 3 was quietly wrong for upcasts.
+- `docs/test-harness-coverage.md`: harness total 3125 → 3127 (+2 Bane cap tests).
+
 ## [2.382.2] - 2026-06-16 — "The Map Caught Up"
 
 **Schema version:** 69

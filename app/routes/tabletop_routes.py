@@ -81875,6 +81875,24 @@ async def cast_bane(
     slot_level = int(slot_level_raw) if slot_level_raw is not None else 1
     override = bool(body.get("override"))
     via_invocation = (body.get("via_invocation") or "").strip().lower()
+    # v2.383.0 — accept an optional target_combatant_ids list for
+    # cap-validation. RAW PHB p.216: Bane targets "up to three
+    # creatures of your choice within range" and (Higher Levels)
+    # "When you cast this spell using a spell slot of 2nd level or
+    # higher, you can target one additional creature for each slot
+    # level above 1st." The endpoint still doesn't install the
+    # baned buff per-target (filed in v1: "per-target CHA save +
+    # -1d4 penalty buff filed"), but we now reject 400
+    # too_many_targets when the caller passes more ids than the
+    # upcast-aware cap — same shape as the v2.380.0 Bless gate.
+    # Computing the effective cap here also lets the response +
+    # broadcast carry the correct scaled value (was always 3).
+    target_combatant_ids = body.get("target_combatant_ids") or []
+    if not isinstance(target_combatant_ids, list):
+        target_combatant_ids = []
+    target_combatant_ids = [
+        str(x).strip() for x in target_combatant_ids if str(x).strip()
+    ]
 
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
@@ -81893,6 +81911,22 @@ async def cast_bane(
             })
     if slot_level < 1:
         raise HTTPException(400, "slot_level must be >= 1 (Bane is L1)")
+
+    # v2.383.0 — upcast-aware target cap (RAW: 3 base @ L1, +1 per
+    # slot above 1st). Fires BEFORE slot consumption so a blocked
+    # cast doesn't burn a slot (same contract as v2.380.0 Bless cap +
+    # the v2.381.0 _SPELL_TARGET_CAPS gate). Mass Healing Word /
+    # Bless live elsewhere; Bane has its own endpoint so the cap math
+    # is inlined here.
+    bane_cap = 3 + max(0, slot_level - 1)
+    if target_combatant_ids and len(target_combatant_ids) > bane_cap:
+        return JSONResponse(status_code=400, content={
+            "error": "too_many_targets",
+            "spell": "bane",
+            "limit": bane_cap,
+            "received": len(target_combatant_ids),
+            "slot_level": slot_level,
+        })
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -82050,7 +82084,8 @@ async def cast_bane(
             "via_invocation": via_invocation or None,
             "duration_rounds": 10,
             "range_ft": 30,
-            "max_targets": 3,
+            # v2.383.0 — upcast-scaled (3 base @ L1, +1/slot above 1st).
+            "max_targets": bane_cap,
         },
     })
 
@@ -82067,7 +82102,8 @@ async def cast_bane(
         "via_invocation": via_invocation or None,
         "duration_rounds": 10,
         "range_ft": 30,
-        "max_targets": 3,
+        # v2.383.0 — upcast-scaled (3 base @ L1, +1/slot above 1st).
+        "max_targets": bane_cap,
         "concentration": True,
         # v2.99.183 — Twinned auto-route response field.
         "twinned_target_combatant_id_2": _twin_target_2_bn or None,
