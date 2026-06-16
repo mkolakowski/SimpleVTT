@@ -282,8 +282,80 @@ def test_silver_mountain_lair_shape():
 
 
 def test_total_lair_slug_count_is_twenty():
-    """All five chromatic + all five metallic × adult + ancient = 20."""
-    assert len(LAIR_ACTIONS_BY_SLUG) == 20
+    """All five chromatic + all five metallic × adult + ancient = 20.
+
+    Updated v2.378.0: the constant total is now 22 with Lich + Kraken;
+    this test pins the pre-Lich/Kraken dragon-only count via the
+    chromatic + metallic slug arithmetic to guard against accidental
+    age-variant additions on dragons. The Lich + Kraken count lands in
+    `test_total_lair_slug_count_includes_lich_and_kraken`."""
+    dragon_count = sum(
+        1 for slug in LAIR_ACTIONS_BY_SLUG
+        if slug.endswith("-dragon")
+    )
+    assert dragon_count == 20
+
+
+# ── non-dragon backfill (v2.378.0) ───────────────────────────────────────────
+
+
+def test_lich_has_three_lair_actions():
+    la = lair_actions_for_slug("lich")
+    assert len(la) == 3
+    ids = {a["id"] for a in la}
+    assert ids == {"spectral-grasp", "necrotic-surge", "memory-shred"}
+
+
+def test_lich_lair_shape():
+    la = lair_actions_for_slug("lich")
+    grasp = next(a for a in la if a["id"] == "spectral-grasp")
+    assert grasp["save_ability"] == "WIS"
+    assert grasp["save_dc"] == 18
+    assert grasp["damage"] == "3d6"
+    assert grasp["damage_type"] == "necrotic"
+    assert grasp["effect"] == "restrained"
+    surge = next(a for a in la if a["id"] == "necrotic-surge")
+    assert surge["save_ability"] == "CON"
+    assert surge["damage"] == "4d6"
+    assert surge["damage_type"] == "necrotic"
+    assert surge["half_on_save"] is True
+    # Memory shred is save-only (no damage), uses `silenced` effect key.
+    shred = next(a for a in la if a["id"] == "memory-shred")
+    assert shred["save_ability"] == "WIS"
+    assert shred["damage"] == ""
+    assert shred["effect"] == "silenced"
+
+
+def test_kraken_has_three_lair_actions():
+    la = lair_actions_for_slug("kraken")
+    assert len(la) == 3
+    ids = {a["id"] for a in la}
+    assert ids == {"stormy-currents", "lair-lightning", "ink-cloud"}
+
+
+def test_kraken_lair_shape():
+    la = lair_actions_for_slug("kraken")
+    cur = next(a for a in la if a["id"] == "stormy-currents")
+    assert cur["save_ability"] == "STR"
+    assert cur["effect"] == "prone"
+    assert cur["area"]["shape"] == "sphere"
+    light = next(a for a in la if a["id"] == "lair-lightning")
+    assert light["damage"] == "3d6"
+    assert light["damage_type"] == "lightning"
+    assert light["half_on_save"] is True
+    # Ink cloud is a no-save descriptive entry (mirrors bronze fog,
+    # silver mist, black magical-darkness, white ice-wall).
+    ink = next(a for a in la if a["id"] == "ink-cloud")
+    assert ink["save_ability"] == ""
+    assert ink["save_dc"] == 0
+    assert ink["damage"] == ""
+
+
+def test_total_lair_slug_count_includes_lich_and_kraken():
+    """All chromatic + metallic dragons (20) + Lich + Kraken = 22 slugs."""
+    assert len(LAIR_ACTIONS_BY_SLUG) == 22
+    assert "lich" in LAIR_ACTIONS_BY_SLUG
+    assert "kraken" in LAIR_ACTIONS_BY_SLUG
 
 
 # ── lair_action_by_id ────────────────────────────────────────────────────────

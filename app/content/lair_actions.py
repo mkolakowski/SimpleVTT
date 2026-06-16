@@ -552,6 +552,108 @@ _SILVER_DRAGON_MOUNTAIN_LAIR: list[dict] = [
     },
 ]
 
+# RAW MM p.202 — Lich, "Lair Actions" (phylactery / necromantic lair).
+# v2.378.0 non-dragon backfill.
+_LICH_PHYLACTERY_LAIR: list[dict] = [
+    {
+        "id": "spectral-grasp",
+        "name": "Spectral Grasp",
+        "desc": ("Ghostly hands reach from the walls of the lair at one "
+                 "creature the lich can see within 30 ft. The target must "
+                 "succeed on a DC 18 Wisdom save or take 10 (3d6) necrotic "
+                 "damage and be restrained until the end of the lich's "
+                 "next turn."),
+        "save_ability": "WIS",
+        "save_dc": 18,
+        "damage": "3d6",
+        "damage_type": "necrotic",
+        "half_on_save": False,
+        "effect": "restrained",
+        "area": {"shape": "single", "size_ft": 0},
+    },
+    {
+        "id": "necrotic-surge",
+        "name": "Necrotic Surge",
+        "desc": ("A pulse of necrotic energy spreads in a 30-ft-radius "
+                 "sphere centered on the lich. Each creature there "
+                 "(other than the lich) must succeed on a DC 18 "
+                 "Constitution save or take 14 (4d6) necrotic damage "
+                 "(half on a success)."),
+        "save_ability": "CON",
+        "save_dc": 18,
+        "damage": "4d6",
+        "damage_type": "necrotic",
+        "half_on_save": True,
+        "effect": "",
+        "area": {"shape": "sphere", "size_ft": 30},
+    },
+    {
+        "id": "memory-shred",
+        "name": "Memory Shred",
+        "desc": ("The lich targets one creature it can see within 60 ft. "
+                 "The target must succeed on a DC 18 Wisdom save or be "
+                 "unable to cast spells with verbal components until the "
+                 "end of its next turn."),
+        "save_ability": "WIS",
+        "save_dc": 18,
+        "damage": "",
+        "damage_type": "",
+        "half_on_save": False,
+        "effect": "silenced",
+        "area": {"shape": "single", "size_ft": 0},
+    },
+]
+
+# RAW MM p.197 — Kraken, "Lair Actions" (submerged ocean lair).
+# v2.378.0 non-dragon backfill.
+_KRAKEN_SUBMERGED_LAIR: list[dict] = [
+    {
+        "id": "stormy-currents",
+        "name": "Stormy Currents",
+        "desc": ("Churning sea currents and waves wash through the lair. "
+                 "Each creature within 60 ft of the kraken must succeed "
+                 "on a DC 15 Strength save or be pushed up to 30 ft away "
+                 "and knocked prone."),
+        "save_ability": "STR",
+        "save_dc": 15,
+        "damage": "",
+        "damage_type": "",
+        "half_on_save": False,
+        "effect": "prone",
+        "area": {"shape": "sphere", "size_ft": 60},
+    },
+    {
+        "id": "lair-lightning",
+        "name": "Lightning Storm",
+        "desc": ("Lightning strikes up to three creatures the kraken can "
+                 "see within 120 ft. Each target makes a DC 15 Dexterity "
+                 "save, taking 10 (3d6) lightning damage on a fail, or "
+                 "half on a success."),
+        "save_ability": "DEX",
+        "save_dc": 15,
+        "damage": "3d6",
+        "damage_type": "lightning",
+        "half_on_save": True,
+        "effect": "",
+        "area": {"shape": "multi", "size_ft": 0},
+    },
+    {
+        "id": "ink-cloud",
+        "name": "Black Ink Cloud",
+        "desc": ("The kraken releases a 30-ft-radius cloud of dark ink "
+                 "around itself (underwater). The area is heavily "
+                 "obscured until the kraken takes another lair action. "
+                 "(No save — GM places the cloud.)"),
+        "save_ability": "",
+        "save_dc": 0,
+        "damage": "",
+        "damage_type": "",
+        "half_on_save": False,
+        "effect": "",
+        "area": {"shape": "sphere", "size_ft": 30},
+    },
+]
+
 # Keyed by monster slug (the `slug` field on the shipped SRD monster
 # JSON). Dragons of every lair-bearing age (adult + ancient) share their
 # color's lair-action set.
@@ -577,6 +679,10 @@ LAIR_ACTIONS_BY_SLUG: dict[str, list[dict]] = {
     "ancient-gold-dragon": _GOLD_DRAGON_AURIC_LAIR,
     "adult-silver-dragon": _SILVER_DRAGON_MOUNTAIN_LAIR,
     "ancient-silver-dragon": _SILVER_DRAGON_MOUNTAIN_LAIR,
+    # v2.378.0 non-dragon backfill — the two remaining SRD legendary
+    # lair-bearing creatures (no age variants — only one slug each).
+    "lich": _LICH_PHYLACTERY_LAIR,
+    "kraken": _KRAKEN_SUBMERGED_LAIR,
 }
 
 

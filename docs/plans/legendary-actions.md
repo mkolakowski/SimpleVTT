@@ -434,6 +434,20 @@ combatant.legendary_resistance = {
   unit tests in `tests/harness/test_lair_actions.py`. `LAIR_ACTIONS_BY_SLUG`
   is now **20 slugs** (10 dragons × adult+ancient). **Filed follow-up:**
   Lich phylactery lair + Kraken submerged lair (same drop-in path).
+- Non-dragon backfill (✅ **shipped v2.378.0** "The Phylactery and the
+  Deep"): the last two SRD legendary lair-bearing creatures added to
+  `LAIR_ACTIONS_BY_SLUG` — Lich (phylactery / necromantic lair, MM
+  p.202) and Kraken (submerged ocean lair, MM p.197), each 3 RAW lair
+  actions keyed under a single slug (no age variants). 5 new unit tests
+  bring the total to 22 slugs. **Closes the lair-action data backfill
+  arc end-to-end** — every SRD legendary lair-bearing creature now
+  carries authored data the engine can read. **Filed follow-up engine
+  commit:** extend `_LAIR_ACTION_CONDITION_BUFFS` to map the three
+  unmapped condition keys used by the metallic + non-dragon backfills
+  (`unconscious` for Brass Slumberous Magic, `silenced` for Lich Memory
+  Shred, `frightened` for Gold Shimmering Visions). v1 ships those as
+  save-and-narrate (engine rolls the save; GM applies condition
+  manually from the descriptive text).
 - No-repeat guard (✅ **shipped v2.172.0** "No Encore"): RAW MM p.11 —
   a lair action can't be used two rounds in a row. `trigger_lair_action`
   parks the fired action id as `state["last_lair_action_id"]` and

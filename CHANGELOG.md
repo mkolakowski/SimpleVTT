@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.378.0] - 2026-06-16 — "The Phylactery and the Deep"
+
+**Schema version:** 69
+
+**Commit summary:** Backfills lair-action data for the two remaining SRD legendary lair-bearing creatures — Lich (phylactery / necromantic lair) and Kraken (submerged ocean lair) — into `app/content/lair_actions.py`. Same drop-in JSON pattern as v2.171.0 chromatic + v2.377.0 metallic. Five new pure-Python unit tests bring `LAIR_ACTIONS_BY_SLUG` from 20 → **22 slugs**. **Closes the entire lair-action data backfill arc** — every SRD-legal lair-bearing creature in the SRD 5.1 monster roster now carries authored lair-action data the engine can read.
+
+**Description:** Per-creature lair-action sets (3 actions each, same shape as the chromatic + metallic backfills):
+
+- **Lich (phylactery)** — Spectral Grasp (WIS DC18 → 3d6 necrotic + restrained, single target) / Necrotic Surge (CON DC18 → 4d6 necrotic save-half, 30-ft sphere centered on lich) / Memory Shred (WIS DC18 → silenced, single target).
+- **Kraken (submerged)** — Stormy Currents (STR DC15 → prone, 60-ft sphere around kraken) / Lightning Storm (DEX DC15 → 3d6 lightning save-half, 3 targets) / Black Ink Cloud (descriptive 30-ft sphere, no save).
+
+Single-slug entries (no age variants, unlike dragons). Stored under `lich` + `kraken` in `LAIR_ACTIONS_BY_SLUG`.
+
+**Two condition keys not in `_LAIR_ACTION_CONDITION_BUFFS` yet:** `unconscious` (Brass Slumberous Magic, v2.377.0) and `silenced` (Lich Memory Shred, this commit). The engine still rolls the save mechanically and broadcasts the result; the unmapped condition simply doesn't auto-install — the GM applies it from the descriptive text. Extending `_LAIR_ACTION_CONDITION_BUFFS` to cover these (and `frightened` for Gold Shimmering Visions) is a filed follow-up engine commit; v1 ships as save-and-narrate for these three.
+
+This closes the v2.376.0 audit refresh's Remaining-gaps row #2 entirely. The Monsters category nudges from ~98% → effectively **99%+** with every SRD legendary lair authored. The remaining ~1% is engine polish (the three unmapped lair-action conditions above), not content.
+
+MINOR — additive content backfill + new tests, no engine change.
+
+### Added
+- Lich phylactery lair (3 actions) in `app/content/lair_actions.py` — `spectral-grasp` / `necrotic-surge` / `memory-shred`.
+- Kraken submerged lair (3 actions) — `stormy-currents` / `lair-lightning` / `ink-cloud`.
+- 5 new unit tests in `tests/harness/test_lair_actions.py` — 3-action count + shape assertions per creature + total-slug-count guard at 22.
+
+### Changed
+- `app/content/lair_actions.py`: `LAIR_ACTIONS_BY_SLUG` 20 → 22 slugs.
+- `docs/test-harness-coverage.md`: harness total 3097 → 3102 (+5 Lich/Kraken tests).
+- `docs/plans/legendary-actions.md`: chromatic backfill row gets a v2.378.0 sibling entry recording the non-dragon close-out; filed follow-up updated to note "extend `_LAIR_ACTION_CONDITION_BUFFS` for `unconscious` / `silenced` / `frightened`."
+
 ## [2.377.0] - 2026-06-16 — "The Metallic Five"
 
 **Schema version:** 69
