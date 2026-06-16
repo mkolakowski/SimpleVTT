@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.357.0] - 2026-06-16 — "The Falling Stars"
+
+**Schema version:** 69
+
+**Commit summary:** **Ring of Shooting Stars** (RAW DMG p.191, very rare, attunement) promoted from a v2.342.0 "Vault" catalog stub to a charge-cast action — its combat "Shooting Stars" mode on the generalized save-for-half **Necklace of Fireballs** handler: expend 1-3 charges to launch that many motes, each a DC 15 DEX save for half of 5d4 fire (independent roll per mote). Seeded equipped+attuned on Zara Emberfire with a 6-charge resource; two harness tests. Zero new engine code — the Necklace handler already resolves an independent per-target save-for-half hit, which is exactly RAW for separate motes.
+
+**Description:** Added `ring-of-shooting-stars` to `_MAGIC_ITEM_ACTIONS` (`{save_dc: 15, save_ability: DEX, dice: "5d4", damage_type: fire, save_for_half: True, min_charges: 1, max_charges: 3}`) and the slug to the Necklace handler's dispatch tuple. The caller passes `charges` = number of motes = number of target ids; the handler decrements that many charges and rolls 5d4 (save-for-half) independently per target. Promoted the slug out of the Vault passive `setdefault` loop + bulk `_vault_loot` seed into an explicit equipped+attuned ring on Zara + a `ring-of-shooting-stars` 6-charge resource (regain all at dawn). Also corrected the old Vault loot desc (per-mote 5d4, not "12d6 across targets"). **v1 simplifications (GM-narrated):** the dancing-lights/light at-will mode, the ball-lightning mode, and the RAW outdoors-at-night restriction. MINOR — additive item action + content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ACTIONS["ring-of-shooting-stars"]` — Shooting Stars action (save-for-half 5d4 fire, 1-3 motes); slug added to the Necklace handler dispatch tuple.
+- Demo seed: explicit equipped+attuned **Ring of Shooting Stars** on Zara Emberfire + a `ring-of-shooting-stars` 6-charge resource.
+- `tests/harness/test_use_item_action_ring_of_shooting_stars.py` — 2 tests (3 motes at 3 targets → DC 15 DEX, 5d4, charges 6→3, all ids resolved; empty ring → 409 insufficient_charges).
+
+### Changed
+- `tests/harness/test_vault_stub_loot.py`: removed `ring-of-shooting-stars` from Zara's Vault-stub assertion list (it's an explicit equipped item now).
+- `docs/test-harness-coverage.md`: harness total 3020 → 3022 (+2 Ring of Shooting Stars tests); new section.
+
 ## [2.356.0] - 2026-06-16 — "The Searing Diadem"
 
 **Schema version:** 69

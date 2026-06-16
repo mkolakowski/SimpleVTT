@@ -33817,7 +33817,9 @@ for _vault_slug, _vault_attune in [
     # friendship → charmed) in v2.353.0 — registered via `_MAGIC_ITEM_ACTIONS`.
     ("ring-of-djinni-summoning", True), ("ring-of-evasion", True),
     ("ring-of-invisibility", True), ("ring-of-regeneration", True),
-    ("ring-of-shooting-stars", True), ("ring-of-spell-storing", True),
+    ("ring-of-spell-storing", True),
+    # ring-of-shooting-stars promoted to a save-for-half damage action
+    # (Shooting Stars) in v2.357.0 — registered via `_MAGIC_ITEM_ACTIONS`.
     ("ring-of-telekinesis", True), ("ring-of-three-wishes", False),
     # robe-of-scintillating-colors promoted to a charge-cast action
     # (radius stunned) in v2.354.0 — registered via `_MAGIC_ITEM_ACTIONS`.
@@ -34709,6 +34711,32 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
                 "min_charges": 1,
                 "max_charges": 1,
                 "feature_name": "🔥 Circlet of Blasting",
+            },
+        },
+    },
+    # v2.357.0 — Ring of Shooting Stars (RAW DMG p.191, very rare,
+    # attunement). The combat "Shooting Stars" mode on the generalized
+    # save-for-half Necklace of Fireballs handler: expend 1-3 charges as an
+    # action to launch that many glowing motes — each at a target, dealing
+    # a DC 15 DEX save for half of 5d4 fire (independent roll per mote,
+    # which the handler already does per target). Pass `charges` = number
+    # of motes = number of target ids. The 6-charge pool regains all at
+    # dawn. The dancing-lights/light at-will + the ball-lightning mode are
+    # GM-narrated, as is the RAW "outdoors at night" restriction.
+    "ring-of-shooting-stars": {
+        "requires_attunement": True,
+        "resource_key": "ring-of-shooting-stars",
+        "actions": {
+            "shooting-stars": {
+                "name": "Shooting Stars (1-3 motes, 60 ft)",
+                "save_dc": 15,
+                "save_ability": "DEX",
+                "dice": "5d4",
+                "damage_type": "fire",
+                "save_for_half": True,
+                "min_charges": 1,
+                "max_charges": 3,
+                "feature_name": "🌠 Ring of Shooting Stars",
             },
         },
     },
@@ -83880,7 +83908,11 @@ async def use_item_action(
         )
     if slug in ("necklace-of-fireballs", "staff-of-fire", "staff-of-frost",
                 "staff-of-swarming-insects", "staff-of-thunder-and-lightning",
-                "staff-of-power"):
+                "staff-of-power",
+                # v2.357.0 — Ring of Shooting Stars "Shooting Stars" mode:
+                # 1-3 motes (= charges), each a DC 15 DEX save for half of
+                # 5d4 fire — the save-for-half multi-target damage shape.
+                "ring-of-shooting-stars"):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_necklace_of_fireballs(
             db, campaign_id, char, item, sheet, catalog,

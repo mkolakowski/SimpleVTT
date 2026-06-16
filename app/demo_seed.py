@@ -5589,6 +5589,18 @@ def _sorcerer_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 0,
              "_slug": "circlet-of-blasting",
              "desc": "Uncommon wondrous item, no attunement. 1/dawn — action: cast scorching ray from it (3 ranged spell attacks at +5 to hit, 2d6 fire each on a hit). RAW DMG p.159."},
+            # v2.357.0 — Ring of Shooting Stars (RAW DMG p.191, very rare,
+            # attunement). Promoted out of the v2.342.0 Vault bulk loot into
+            # an explicit equipped+attuned ring paired with the
+            # `ring-of-shooting-stars` 6-charge resource above. The combat
+            # "Shooting Stars" mode runs through the generalized save-for-
+            # half Necklace handler (1-3 motes, DC 15 DEX, 5d4 fire each).
+            # Seeded attuned (the /use_item_action path gates on `attuned`);
+            # seed-load bypasses the RAW 3-item cap. On-theme for a Sorcerer.
+            {"name": "Ring of Shooting Stars", "type": "wondrous", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True, "weight_lb": 0,
+             "_slug": "ring-of-shooting-stars",
+             "desc": "Very rare ring, attunement (works outdoors at night, GM-narrated). 6 charges (regain all at dawn). Shooting Stars: expend 1-3 charges (action) to launch that many motes — each target makes a DC 15 DEX save, taking 5d4 fire (half on a save). Dancing-lights/light at will + ball-lightning mode GM-narrated. RAW DMG p.191."},
             {"name": "Dungeoneer's pack", "type": "gear", "qty": 1,
              "weight_lb": 61.5,
              "desc": "Backpack, crowbar, hammer, 10 pitons, 10 torches, tinderbox, 10 days rations, waterskin, 50 ft hempen rope."},
@@ -5767,6 +5779,18 @@ def _sorcerer_sheet(name: str) -> dict:
                 "source": "magic item — Circlet of Blasting",
                 "class_slug": "item",
                 "desc": "1/dawn — action: cast scorching ray (3 ranged spell attacks at +5, 2d6 fire each). Recharges at dawn.",
+                "manual": False,
+            },
+            # v2.357.0 — Ring of Shooting Stars charge pool (RAW DMG p.191):
+            # 6 charges, regain all at dawn (long rest). The save-for-half
+            # Necklace handler decrements N per Shooting Stars (N motes).
+            {
+                "key": "ring-of-shooting-stars",
+                "name": "Ring of Shooting Stars",
+                "current": 6, "max": 6, "reset": "long",
+                "source": "magic item — Ring of Shooting Stars",
+                "class_slug": "item",
+                "desc": "6 charges (regain all at dawn). Shooting Stars: expend 1-3 (action) to launch that many motes — each target DC 15 DEX save or 5d4 fire (half on save).",
                 "manual": False,
             },
             {
@@ -6888,7 +6912,6 @@ def seed_characters(
         ("Kael Brightleaf", "ring-of-evasion", "Ring of Evasion", "magic", "Rare, attunement. 3 charges (regain 1d3 at dawn). Reaction when you fail a DEX save: expend 1 charge to succeed instead. RAW DMG p.191."),
         ("Zara Emberfire", "orb-of-dragonkind", "Orb of Dragonkind", "magic", "Artifact, attunement. Advantage on saves vs dragon Frightful Presence/breath; while holding it you can cast a charge-fueled spell + attempt to dominate a dragon within 1 mile. RAW DMG p.156."),
         ("Zara Emberfire", "ring-of-djinni-summoning", "Ring of Djinni Summoning", "magic", "Legendary, attunement. Action: summon a specific djinni (1/dawn) that serves + obeys you for up to 1 hour. RAW DMG p.190."),
-        ("Zara Emberfire", "ring-of-shooting-stars", "Ring of Shooting Stars", "magic", "Very rare, attunement (worn in dim light/darkness). Charges fuel faerie fire, ball lightning, light spheres, and a shooting-stars burst (DC 15 DEX, up to 12d6 fire across targets). RAW DMG p.192."),
         ("Krieger Stonefist", "horn-of-valhalla", "Horn of Valhalla (Silver)", "magic", "Rare. Blow the horn (action) to summon 2d4+2 berserker spirits that fight for you for 1 hour (1/short-or-long rest). Higher-metal horns need martial proficiency. RAW DMG p.175."),
         ("Krieger Stonefist", "ring-of-regeneration", "Ring of Regeneration", "magic", "Very rare, attunement. While worn, regain 1d6 HP every 10 min if you have ≥1 HP; severed body parts regrow over 1d6+1 days. RAW DMG p.192."),
         ("Krieger Stonefist", "rod-of-lordly-might", "Rod of Lordly Might", "magic", "Legendary, attunement. A mace +3 with six buttons (blade, climbing pole, battering ram, paralysis/fear/drain strikes) + several daily powers. RAW DMG p.193."),

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3020 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.356.0, 2026-06-16).
+**Total tests:** 3022 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.357.0, 2026-06-16).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3558,6 +3558,14 @@ v2.347.0 engine — the `effects.disadvantage_on` roll intercept generalized fro
 | `test_con_save_disadvantage_fires` | `disadvantage_on=["con_save"]` → a CON save rolls `2d20kl1` + a `disadvantage-con_save` broadcast fires. |
 | `test_str_save_disadvantage_fires` | `disadvantage_on=["str_save"]` → a STR save rolls `2d20kl1` (saves were previously uncovered). |
 | `test_marker_specificity_control` | A `con_save`-only buff does NOT impose disadvantage on a `con_check` roll (marker specificity). |
+
+### `test_use_item_action_ring_of_shooting_stars.py`
+v2.357.0 magic-items — Ring of Shooting Stars (RAW DMG p.191, very rare, attunement), the "Shooting Stars" mode on the generalized save-for-half Necklace of Fireballs handler (1-3 motes, DC 15 DEX save or 5d4 fire each, half on save). Carrier: Zara Emberfire (equipped+attuned + `ring-of-shooting-stars` 6-charge resource).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_ring_shooting_stars_3_motes` | 3 motes (charges=3) at 3 targets → 200, item_name "Ring of Shooting Stars", save_dc 15, save_ability DEX, dice 5d4, charges_spent 3, resource 6→3, all three ids resolved. |
+| `test_ring_shooting_stars_empty_returns_409` | Ring drained to 0 charges → 409 `insufficient_charges` (current 0). |
 
 ### `test_use_item_action_circlet_of_blasting.py`
 v2.356.0 magic-items — Circlet of Blasting (RAW DMG p.159, uncommon, no attunement), first item on the new spell-ATTACK handler (`_use_item_action_spell_attack`). Scorching Ray: 3 ranged spell attacks at +5, 2d6 fire each on a hit, 1/dawn. Carrier: Zara Emberfire (equipped + `circlet-of-blasting` resource). AC-1 dummies + seeded dice.
