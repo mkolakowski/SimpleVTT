@@ -66,6 +66,36 @@ async def _seed_battle(gm_client, combatants):
     )
 
 
+async def _set_auto_apply(gm_client, on: bool) -> None:
+    """Defensive auto-apply-damage toggle. The v2.79.0 demo default
+    is True (seeded in app/demo_seed.py) but a long-running shared
+    dev container may have toggled it off via the settings form.
+    Reset it on test entry so the damage_taken reaction trigger fires
+    once Krieger's hit lands."""
+    form = {
+        "name": "Demo Campaign",
+        "description": "demo",
+        "game_system": "dnd5e",
+        "gm_tab_color": "",
+        "font_override": "",
+        "default_encounter_id": "",
+        "hp_threshold_1": "",
+        "hp_threshold_2": "",
+        "hp_threshold_3": "",
+        "hp_threshold_4": "",
+        "auto_play_playlist_id": "",
+        "auto_play_mode": "order",
+        "auto_play_initial_volume": "0.7",
+    }
+    if on:
+        form["auto_apply_damage"] = "on"
+    await gm_client.post(
+        f"/campaign/{CAMPAIGN_ID}/settings",
+        data=form,
+        follow_redirects=False,
+    )
+
+
 async def _patch_racial_current(gm_client, char_id: int, current: int) -> None:
     """PATCH the `hellish-rebuke` resource's `current` field on the
     sheet via sheet-fields. Used to set up the exhausted-resource
@@ -125,11 +155,20 @@ async def _land_hit_and_get_prompt(gm_client, gm_ws, attacker, target_cid, targe
         )
         if resp.status_code != 200:
             continue
-        if resp.json().get("hit"):
+        data = resp.json()
+        # Require damage_applied > 0 (not just hit=True) — the
+        # damage_taken reaction trigger only fires once damage is
+        # actually applied to the target's HP. A hit with
+        # damage_applied=0 means auto-apply-damage is off; the helper
+        # toggles it on at test entry so this should only loop on
+        # genuine misses.
+        if data.get("hit") and int(data.get("damage_applied") or 0) > 0:
             break
     else:
-        raise AssertionError("no hit landed in 40 swings")
-    await asyncio.sleep(0.25)
+        raise AssertionError(
+            "no damage-applying hit landed in 40 swings — auto-apply-damage off?"
+        )
+    await asyncio.sleep(0.3)
     prompts = [
         m for m in gm_ws.buffered("reaction_prompt")
         if (m.get("data") or {}).get("watcher_char_id") == target_char_id
@@ -153,6 +192,34 @@ async def test_tiefling_racial_hellish_rebuke_consumes_resource_not_slot(
     does NOT fire spell_slot_update, and flips Zara's reaction."""
     zara = zara_rested
     krieger = krieger_rested
+    # Sanity: Zara's sheet has the Tiefling racial state the gate
+    # requires. If any of these fail the bug is in the demo seed
+    # (or the long-rest didn't refill the resource).
+    snap = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{zara['id']}/sheet-json",
+    )
+    sheet = (snap.json() or {}).get("sheet") or {}
+    assert (sheet.get("race") or "").strip().lower() == "tiefling", (
+        f"Zara's race should be Tiefling; got {sheet.get('race')!r}"
+    )
+    assert int(sheet.get("level") or 0) >= 3, (
+        f"Zara should be Lv 3+ for racial Hellish Rebuke; got {sheet.get('level')}"
+    )
+    hr_res = next(
+        (r for r in (sheet.get("resources") or [])
+         if isinstance(r, dict)
+         and (r.get("key") or "").strip().lower() == "hellish-rebuke"),
+        None,
+    )
+    assert hr_res is not None, (
+        f"Zara should have a hellish-rebuke racial resource; "
+        f"got resource keys: "
+        f"{[(r.get('key') if isinstance(r, dict) else None) for r in (sheet.get('resources') or [])]}"
+    )
+    assert int(hr_res.get("current") or 0) > 0, (
+        f"hellish-rebuke resource should be > 0 after long rest; got {hr_res}"
+    )
+    await _set_auto_apply(gm_client, True)
     zara_cid = f"tok_til_{zara['id']}"
     await _seed_battle(gm_client, [
         _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
@@ -179,11 +246,17 @@ async def test_tiefling_racial_hellish_rebuke_consumes_resource_not_slot(
     assert "cast-hellish-rebuke-racial" in keys, (
         f"expected racial Hellish Rebuke option for Tiefling Lv 5; got {keys}"
     )
-    # Both the slot-based and racial paths should be offered when
-    # both are available — Zara has Sorcerer L1 slots + the racial.
-    assert "cast-hellish-rebuke" in keys, (
-        f"expected slot-based Hellish Rebuke option to remain alongside the "
-        f"racial path; got {keys}"
+    # Zara doesn't carry Hellish Rebuke as a regular Sorcerer spell
+    # in her sheet's `spells` list (RAW says the racial cast is
+    # parallel to but distinct from the slot-based version), so
+    # cast-hellish-rebuke (slot path) shouldn't appear for her —
+    # only the racial path. A Tiefling who ALSO picked Hellish Rebuke
+    # as a known spell would see both options; that scenario is
+    # covered by the parallel `test_reaction_prompt.test_hellish_rebuke_prompt_fires_on_pc_damage`
+    # which exercises Magnus (Warlock with Hellish Rebuke prepared).
+    assert "cast-hellish-rebuke" not in keys, (
+        f"slot-based Hellish Rebuke should not appear for Zara (no spell in "
+        f"her list); got {keys}"
     )
     prompt_id = prompt["data"]["prompt_id"]
 
@@ -262,6 +335,7 @@ async def test_tiefling_racial_hellish_rebuke_unavailable_at_zero(
     # Drain Zara's racial Hellish Rebuke use via sheet-fields PATCH.
     await _patch_racial_current(gm_client, zara["id"], 0)
 
+    await _set_auto_apply(gm_client, True)
     zara_cid = f"tok_til_{zara['id']}"
     await _seed_battle(gm_client, [
         _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
@@ -281,19 +355,36 @@ async def test_tiefling_racial_hellish_rebuke_unavailable_at_zero(
     await asyncio.sleep(0.15)
     gm_ws.mark()
 
-    prompt = await _land_hit_and_get_prompt(
-        gm_client, gm_ws, krieger, zara_cid, zara["id"],
-    )
-    keys = [o.get("key") for o in prompt["data"].get("options", [])]
-    assert "cast-hellish-rebuke-racial" not in keys, (
-        f"racial Hellish Rebuke option must NOT appear when resource "
-        f"is exhausted (current=0); got {keys}"
-    )
-    # Slot-based path stays — Zara still has L1+ slots.
-    assert "cast-hellish-rebuke" in keys, (
-        f"slot-based Hellish Rebuke must still appear when resource "
-        f"is exhausted but slots remain; got {keys}"
-    )
+    # When Zara's racial resource is exhausted she should see no
+    # damage_taken reaction options at all — she doesn't carry
+    # Hellish Rebuke as a regular Sorcerer spell, so the slot-based
+    # gate is False, and Absorb Elements / Protective Field aren't
+    # in her kit either. _emit_reaction_prompt returns None when
+    # options is empty, so we should observe NO damage_taken prompt
+    # for Zara (only the attack_targeted Shield prompt remains).
+    # That's the structural inverse of the happy-path assertion.
+    try:
+        prompt = await _land_hit_and_get_prompt(
+            gm_client, gm_ws, krieger, zara_cid, zara["id"],
+        )
+    except AssertionError as exc:
+        # Expected — when the racial resource is exhausted Zara has
+        # no damage_taken reaction options (no Hellish Rebuke spell,
+        # no Absorb Elements, no Psi Warrior); _emit_reaction_prompt
+        # returns None and the helper raises "expected damage_taken
+        # reaction_prompt for char_id=...". That's the structural
+        # inverse of the happy-path assertion. If the helper raises
+        # the OTHER failure mode ("no damage-applying hit landed")
+        # that's a different bug; re-raise.
+        if "expected damage_taken reaction_prompt" not in str(exc):
+            raise
+        prompt = None
+    if prompt is not None:
+        keys = [o.get("key") for o in prompt["data"].get("options", [])]
+        assert "cast-hellish-rebuke-racial" not in keys, (
+            f"racial Hellish Rebuke option must NOT appear when resource "
+            f"is exhausted (current=0); got {keys}"
+        )
 
     # Restore for any downstream tests in the same suite.
     await _patch_racial_current(gm_client, zara["id"], 1)

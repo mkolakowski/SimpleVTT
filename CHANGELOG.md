@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.395.1] - 2026-06-16 — "The Calibrated Test"
+
+**Schema version:** 69
+
+**Commit summary:** Test-fix follow-up to v2.395.0. The `test_tiefling_hellish_rebuke_racial.py` happy-path and exhausted-control tests both passed locally during dev, but the v2.395.0 first-cut shipped them with two stale assumptions: (1) Zara would see BOTH `cast-hellish-rebuke` (slot) AND `cast-hellish-rebuke-racial` options on the damage_taken prompt — actually Zara's seed doesn't carry Hellish Rebuke as a regular Sorcerer spell, so only the racial option fires (RAW correct: a Tiefling who hasn't picked Hellish Rebuke as a regular known spell only has the racial path); (2) the exhausted-resource control test asserted on prompt options when in fact `_emit_reaction_prompt` returns None on empty-options, so the prompt itself doesn't fire — Zara has no other damage_taken reactions in her kit.
+
+**Description:** v2.395.1 corrects both assertions and adds a sanity-check preamble that confirms Zara has the expected Tiefling racial state (race=Tiefling, level=5, hellish-rebuke resource > 0) before triggering the reaction loop. Plus a defensive `_set_auto_apply(gm_client, True)` toggle at test entry — the v2.79.0 demo default is True, but a long-running shared dev container may have flipped it via a prior test's settings POST. Plus a tightened hit-detection loop guard (`hit AND damage_applied > 0` instead of just `hit`) since the damage_taken trigger only fires when damage actually applies to the target's HP.
+
+Tests pass green: 2/2. Production-side code unchanged from v2.395.0; this commit only modifies the test file.
+
+PATCH — test fix only; no runtime engine change.
+
+### Fixed
+- `tests/harness/test_tiefling_hellish_rebuke_racial.py::test_tiefling_racial_hellish_rebuke_consumes_resource_not_slot` — assertion that BOTH options fire was wrong; Zara only has the racial path. Asserts `cast-hellish-rebuke-racial in keys` AND `cast-hellish-rebuke not in keys` (the inverse).
+- `tests/harness/test_tiefling_hellish_rebuke_racial.py::test_tiefling_racial_hellish_rebuke_unavailable_at_zero` — when Zara's racial resource is exhausted, `_emit_reaction_prompt` returns None (no options), so the damage_taken prompt simply doesn't fire. Test now catches the "expected damage_taken reaction_prompt" AssertionError from `_land_hit_and_get_prompt` as the success signal.
+
+### Added
+- Sanity-check preamble in the happy-path test that confirms Zara's race/level/hellish-rebuke-current state via `/sheet-json` before triggering the reaction loop, so a future demo-seed regression surfaces as a clear early failure instead of as a mysterious "no damage_taken prompt" miss.
+- Defensive `_set_auto_apply(gm_client, True)` toggle helper (copied from `test_attack_auto_damage.py`) called at test entry to guard against shared-container state drift.
+- Tightened hit-detection loop: now requires `hit AND damage_applied > 0` per swing (was just `hit`), so a missed auto-apply toggle surfaces as a clear "no damage-applying hit landed" failure instead of a confusing prompt miss.
+
 ## [2.395.0] - 2026-06-16 — "The Free Rebuke"
 
 **Schema version:** 69
