@@ -381,6 +381,105 @@ async def test_multi_day_cooldown_items_decrement_and_resist_rest(
             )
 
 
+async def test_chime_of_opening_lifetime_pool(gm_client, roster):
+    """v2.403.4: Chime of Opening (10 lifetime uses, then cracks).
+    Pip carries it equipped. Test exercises (a) full-pool drain across
+    10 sequential strikes (10 → 0), (b) 11th strike → 409, (c) long
+    rest stays at 0 (`reset: "none"`). Reset via direct sheet-fields
+    PATCH at the end (simulating finding a new chime, since the chime
+    cracks per RAW)."""
+    char = roster["Pip Quickfingers"]
+    # Reset the chime to 10/10 in case prior tests spent it.
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-json",
+    )
+    sheet = (r.json() or {}).get("sheet") or {}
+    resources = list(sheet.get("resources") or [])
+    for row in resources:
+        if isinstance(row, dict) and row.get("key") == "chime-of-opening":
+            row["current"] = 10
+    await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-fields",
+        json={"resources": resources},
+    )
+    try:
+        sheet = await _sheet(gm_client, char["id"])
+        idx = _slug_index(sheet.get("inventory") or [], "chime-of-opening")
+        assert idx >= 0
+        # Drain the 10-use pool.
+        for expected_after in range(9, -1, -1):
+            resp = await _invoke(gm_client, char["id"], idx, "strike-chime")
+            assert resp.status_code == 200, resp.text
+            assert resp.json()["resource"]["current"] == expected_after
+        # 11th strike → 409.
+        eleventh = await _invoke(gm_client, char["id"], idx, "strike-chime")
+        assert eleventh.status_code == 409, eleventh.text
+        # Long rest does NOT refill (`reset: "none"`).
+        await _long_rest(gm_client, char["id"])
+        sheet_rested = await _sheet(gm_client, char["id"])
+        assert _resource_current(sheet_rested, "chime-of-opening") == 0
+    finally:
+        # Restore the chime to 10/10 for downstream tests.
+        r = await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-json",
+        )
+        sheet = (r.json() or {}).get("sheet") or {}
+        resources = list(sheet.get("resources") or [])
+        for row in resources:
+            if isinstance(row, dict) and row.get("key") == "chime-of-opening":
+                row["current"] = 10
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-fields",
+            json={"resources": resources},
+        )
+
+
+async def test_ring_of_three_wishes_lifetime_pool(gm_client, roster):
+    """v2.403.4: Ring of Three Wishes (3 lifetime charges, then
+    nonmagical). Seraphine carries it as vault loot equipped=False.
+    Test PATCHes equipped+attuned, drains 3 → 0, asserts 4th use → 409,
+    and that long rest doesn't refill. Restores inert state + resource
+    to 3/3 on teardown."""
+    char = roster["Dame Seraphine Vael"]
+    prior = await _patch_inventory_item(
+        gm_client, char["id"], "ring-of-three-wishes",
+        equipped=True, attuned=True,
+    )
+    try:
+        sheet = await _sheet(gm_client, char["id"])
+        idx = _slug_index(sheet.get("inventory") or [], "ring-of-three-wishes")
+        assert idx >= 0
+        assert _resource_current(sheet, "ring-of-three-wishes") == 3
+        # Three wishes deplete the ring.
+        for expected_after in (2, 1, 0):
+            resp = await _invoke(gm_client, char["id"], idx, "cast-wish")
+            assert resp.status_code == 200, resp.text
+            assert resp.json()["resource"]["current"] == expected_after
+        # 4th wish → 409.
+        fourth = await _invoke(gm_client, char["id"], idx, "cast-wish")
+        assert fourth.status_code == 409, fourth.text
+        # Long rest does NOT refill.
+        await _long_rest(gm_client, char["id"])
+        sheet_rested = await _sheet(gm_client, char["id"])
+        assert _resource_current(sheet_rested, "ring-of-three-wishes") == 0
+    finally:
+        await _patch_inventory_item(
+            gm_client, char["id"], "ring-of-three-wishes", **prior,
+        )
+        r = await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-json",
+        )
+        sheet = (r.json() or {}).get("sheet") or {}
+        resources = list(sheet.get("resources") or [])
+        for row in resources:
+            if isinstance(row, dict) and row.get("key") == "ring-of-three-wishes":
+                row["current"] = 3
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-fields",
+            json={"resources": resources},
+        )
+
+
 async def test_cube_of_force_variable_charge_spend(gm_client, roster):
     """v2.403.2: Cube of Force (36 charges, 1d20/dawn) — RAW per-face
     cost is 1/2/3/4/5; v1 ships the generic "expend 1-5" action. Test

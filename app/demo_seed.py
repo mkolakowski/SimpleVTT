@@ -665,6 +665,19 @@ def _rogue_sheet(name: str) -> dict:
                 "desc": "3 charges. Spend 1 to sense the distance and direction of any secret door or trap within 30 ft (single whisper). Regains 1d3 charges on long rest.",
                 "manual": False,
             },
+            # v2.403.4 — magic-items-automation Phase 9.2 batch 5:
+            # Chime of Opening (RAW DMG p.158) — 10 lifetime uses, then
+            # cracks. The chime is seeded equipped on Pip (line ~600).
+            # `reset: "none"` — counter never refills; at 0 the chime
+            # breaks (GM-narrated removal from inventory).
+            {
+                "key": "chime-of-opening",
+                "name": "Chime of Opening",
+                "current": 10, "max": 10, "reset": "none",
+                "source": "item-chime-of-opening",
+                "desc": "10 lifetime uses. Action: strike the chime at a locked / bound object within 120 ft; one lock or latch opens. After the 10th use the chime cracks and becomes useless. RAW DMG p.158.",
+                "manual": False,
+            },
         ],
         # v2.6.0 (action-economy Phase 3): clickable class-feature
         # entries. The Class abilities section of sheet_dnd5e.html
@@ -2530,6 +2543,20 @@ def _paladin_vengeance_sheet(name: str) -> dict:
                 "current": 1, "max": 1, "reset": "long",
                 "source": "item-censer-of-controlling-air-elementals",
                 "desc": "1/dawn. Burn incense + speak the command word: an air elemental appears within 30 ft. Make a CHA check vs the elemental to command it (GM-narrated, concentration up to 1 hour).",
+                "manual": False,
+            },
+            # v2.403.4 — magic-items-automation Phase 9.2 batch 5:
+            # Ring of Three Wishes (RAW DMG p.193) — 3 lifetime charges,
+            # then nonmagical. The ring is seeded INERT on Seraphine
+            # (vault loot at line ~7180); the harness PATCHes equipped+
+            # attuned. `reset: "none"` — counter never refills; at 0 the
+            # ring becomes nonmagical (GM-narrated).
+            {
+                "key": "ring-of-three-wishes",
+                "name": "Ring of Three Wishes",
+                "current": 3, "max": 3, "reset": "none",
+                "source": "item-ring-of-three-wishes",
+                "desc": "3 lifetime charges. Action: expend 1 charge to cast Wish from it. After the third wish the ring becomes nonmagical (GM-narrated). RAW DMG p.193.",
                 "manual": False,
             },
         ],

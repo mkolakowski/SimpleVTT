@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.403.4] - 2026-06-17 — "The Spent Chime"
+
+**Schema version:** 69
+
+**Commit summary:** Fifth batch of charge-tracked announce-only Bucket D items on the v2.403.0 substrate. Two lifetime-charge items — **Chime of Opening** (10 lifetime uses, then cracks per RAW, on Pip) and **Ring of Three Wishes** (3 lifetime wishes, then nonmagical, on Seraphine). Both ship `reset: "none"` so the counter never refills; at zero the item is "spent" by RAW. The destruction step (chime breaks, ring loses magic) stays GM-narrated — the player sees their last use, then it's the GM's call whether to remove the inventory entry.
+
+**Description:** Direct content drop-in on the v2.403.3 `reset: "none"` shape. Lifetime charges differ from multi-day cooldowns in framing — the cooldown items are "patient hourglasses" (the GM manually resets when in-fiction time elapses), while lifetime items are spent forever (no reset path exists in v1; finding a replacement chime is a treasure-hand-out narrative, not a sheet operation). The harness exercises the **full-drain** path: chime 10 → 0 across 10 invocations, ring-of-three-wishes 3 → 0, then 409 on the next use, then long rest stays at 0. Both tests restore the resource to full via direct sheet-fields PATCH on teardown so subsequent tests start fresh.
+
+**Why "The Spent Chime":** the chime is the headline item — drain it 10 times in one test, watch the counter rest at 0 forever. Lifetime charges are the substrate's most one-way path.
+
+PATCH — 2 new wired items + 2 paired resource rows + 2 new harness tests. Magic items category remains **235/239 wired (~98%)** in the audit denominator; sixteen Bucket D items now machine-track their charges (up from fourteen in v2.403.3). Substrate is now proven for the lifetime-pool shape on top of every other prior shape. Remaining: multi-dose consumables (restorative-ointment, dust-of-dryness, sovereign-glue, bag-of-beans), one-shot consumables, then the two Bucket A holdouts (wind-fan + medallion-of-thoughts).
+
+### Added
+- `app/routes/tabletop_routes.py`: two new `_MAGIC_ITEM_ACTIONS` entries (`chime-of-opening`, `ring-of-three-wishes`). Both `min_charges=max_charges=1`; only `ring-of-three-wishes` requires attunement. Dispatch tuple extended.
+- `app/demo_seed.py`: two new `resources[]` rows. Chime on Pip (10/10, `reset: "none"`), Ring on Seraphine (3/3, `reset: "none"`).
+- `tests/harness/test_use_item_action_announce_only.py`: two new tests — `test_chime_of_opening_lifetime_pool` (10-use drain + 11th → 409 + long-rest stays at 0) + `test_ring_of_three_wishes_lifetime_pool` (PATCH-equipped + 3-use drain + 4th → 409 + long-rest stays at 0).
+
+### Changed
+- `docs/plans/magic-items-automation.md`: Phase 9.2 status table grows two new ✅ rows.
+- `docs/test-harness-coverage.md`: total-test-count bump (+2) + the announce-only file entry grows with both lifetime-pool tests.
+
 ## [2.403.3] - 2026-06-17 — "The Patient Hourglass"
 
 **Schema version:** 69

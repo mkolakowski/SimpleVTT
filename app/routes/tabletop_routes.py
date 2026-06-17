@@ -37860,6 +37860,42 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "manually resets the counter)."
         ),
     },
+    # v2.403.4 — magic-items-automation Phase 9.2 batch 5: lifetime-
+    # charge items. Use the counter until 0, then the item is consumed
+    # / destroyed (no regen, no manual reset). RAW shape: chime cracks
+    # after 10 uses; ring-of-three-wishes becomes nonmagical after the
+    # 3rd wish. Resource row uses `reset: "none"`; the destruction step
+    # at zero is GM-narrated (the inventory item itself stays — the GM
+    # decides whether to delete it from the sheet).
+    "chime-of-opening": {
+        "key": "strike-chime",
+        "name": "Strike the Chime",
+        "resource_key": "chime-of-opening",
+        "requires_attunement": False,
+        "min_charges": 1,
+        "max_charges": 1,
+        "narration": (
+            "struck the chime at a locked or bound object within 120 ft "
+            "— one lock / latch opens, or the object itself opens if no "
+            "locks remain (GM-narrated). Lifetime counter; after the "
+            "10th use the chime cracks and becomes useless."
+        ),
+    },
+    "ring-of-three-wishes": {
+        "key": "cast-wish",
+        "name": "Cast Wish",
+        "resource_key": "ring-of-three-wishes",
+        "requires_attunement": True,
+        "min_charges": 1,
+        "max_charges": 1,
+        "narration": (
+            "expended one of the ring's wishes — cast Wish from it "
+            "(GM-narrated: any spell ≤ 8th level + duplicate effects, "
+            "with stress consequences if used beyond the spell list). "
+            "Lifetime counter; the ring becomes nonmagical after the "
+            "third wish."
+        ),
+    },
 }
 
 
@@ -87312,6 +87348,8 @@ async def use_item_action(
     # v2.403.3: multi-day cooldown items — horn-of-valhalla (1/7d) +
     # ring-of-djinni-summoning (1/24h) + rod-of-security (1/10d).
     # All three use `reset: "none"` (GM manual reset, no rest auto-refill).
+    # v2.403.4: lifetime-charge items — chime-of-opening (10 lifetime
+    # then cracks) + ring-of-three-wishes (3 lifetime then nonmagical).
     if slug in (
         "bowl-of-commanding-water-elementals",
         "brazier-of-commanding-fire-elementals",
@@ -87327,6 +87365,8 @@ async def use_item_action(
         "horn-of-valhalla",
         "ring-of-djinni-summoning",
         "rod-of-security",
+        "chime-of-opening",
+        "ring-of-three-wishes",
     ):
         return await _use_item_action_announce_only(
             db, campaign_id, char, item, sheet, catalog, slug,

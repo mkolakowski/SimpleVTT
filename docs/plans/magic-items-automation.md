@@ -54,6 +54,8 @@ Adding the 25th item is a 2-line catalog row + a dispatch entry + a per-PC `reso
 | `horn-of-valhalla` | 1 use + 7-day cooldown (GM manual reset) | ✅ shipped v2.403.3 (first `reset: "none"` multi-day item) |
 | `ring-of-djinni-summoning` | 1 use + 24-h cooldown (GM manual reset) | ✅ shipped v2.403.3 |
 | `rod-of-security` | 1 use + 10-day cooldown (GM manual reset) | ✅ shipped v2.403.3 |
+| `chime-of-opening` | 10 lifetime uses, then cracks | ✅ shipped v2.403.4 (first lifetime-pool item) |
+| `ring-of-three-wishes` | 3 lifetime wishes, then nonmagical | ✅ shipped v2.403.4 |
 
 All four share an identical RAW shape (1/dawn, no attunement, summon-elemental + CHA-check control); the single harness file (`test_use_item_action_announce_only.py`) covers all four through one parameterized happy-path test + a 409-second-use test + a long-rest-restore test.
 
@@ -67,7 +69,7 @@ Grouped by template. Each batch ships as one PATCH commit.
 
 **Multi-day cooldown (single use, reset > 1 day).** ~`horn-of-valhalla`~ ✅ v2.403.3, ~`ring-of-djinni-summoning`~ ✅ v2.403.3, ~`rod-of-security`~ ✅ v2.403.3 — all `reset: "none"` with GM manual reset.
 
-**Lifetime charges (`reset: "none"`).** `chime-of-opening` (10), `ring-of-three-wishes` (3), `rod-of-absorption` (50 levels — needs reaction wiring).
+**Lifetime charges (`reset: "none"`).** ~`chime-of-opening`~ ✅ v2.403.4 (10), ~`ring-of-three-wishes`~ ✅ v2.403.4 (3), `rod-of-absorption` (50 levels — filed: needs reaction wiring, different dispatch surface).
 
 **Multi-dose consumables.** `restorative-ointment` (1d4+1), `dust-of-dryness` (1d6+4), `sovereign-glue` (1d6+1), `bag-of-beans` (3d4).
 
