@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.389.0] - 2026-06-16 — "The Broken Hold"
+
+**Schema version:** 69
+
+**Commit summary:** Closes **clause #3** of the v2.384.0 condition-enforcement audit — RAW PHB p.290 Grappled clause 2 ("The condition ends if the grappler is incapacitated") is now auto-enforced. Adds an install-side-effect to `_install_buff`: when the just-installed buff's key is in `_INCAPACITATING_BUFF_KEYS`, the helper sweeps the active battle's combatants for `grappled` buffs whose `source_char_id` matches the newly-incapacitated character_id and auto-removes them (mutates the victim's buff list + broadcasts `buff_update` with `reason: "grappler_incapacitated"`). Handles both PC + NPC victims uniformly via direct mutation rather than going through `_remove_buff` (which is PC-char_id keyed). Two harness tests via Krieger (grappler) + Caelan (victim) + Lyra (caster of Hold Person / Bless).
+
+**Description:** Per the v2.384.0 audit doc, this was clause #3 — different pattern from the v2.385.0–v2.388.0 gate sweep. Instead of rejecting an action, it removes a stale condition when the predicate that justified it is no longer true. The Grappled buff's `source_char_id` field (set by `_make_grappled_buff` at v2.99.112) is the load-bearing piece — without it, there'd be no way to identify which grappled buffs were sourced by the newly-incapacitated grappler.
+
+The hook lives in `_install_buff` — that's the canonical buff-install path that all spell/feature buffs flow through. Tested against Hold Person specifically (since it's the most common way a creature gets paralyzed in actual play) + a baseline test that casts Bless (non-incapacitating) and confirms the sweep stays silent.
+
+After v2.389.0 the per-clause status is **4/6 closed** (Sneak Attack ally-skip + 3 action gates + Grappled-ends-on-incap). One clause remains: Charmed can't-target-charmer (clause #4).
+
+The sweep is defensive — wrapped in try/except so a malformed combatant list doesn't blow up the install path (a `logging.exception` records the failure but the install still returns True). RAW doesn't actually allow self-grapple, so the source-char check naturally excludes the newly-incapacitated grappler from accidentally clearing their OWN grappled buff.
+
+MINOR — additive engine hook + new tests, no API surface change (the hook fires inside an existing endpoint pipeline; no new endpoints, no new body params).
+
+### Added
+- `_install_buff` side-effect at line ~1033 — sweeps grappled buffs sourced by the newly-incapacitated character; broadcasts `buff_update` with `reason: "grappler_incapacitated"` per victim.
+- `tests/harness/test_grapple_ends_on_grappler_incapacitated.py` — 2 tests: (a) Hold Person paralyzes Krieger ↔ Caelan's grappled buff auto-clears (conditional on the WIS save failing); (b) Bless on Krieger leaves Caelan's grappled buff intact (non-incapacitating buff doesn't fire the sweep).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3139 → 3141 (+2 grappled-ends-on-grappler-incap tests).
+
 ## [2.388.0] - 2026-06-16 — "The Held Trick"
 
 **Schema version:** 69

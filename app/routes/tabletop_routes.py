@@ -1030,6 +1030,66 @@ async def _install_buff(
                     "char_name": caster_name,
                 },
             })
+
+    # v2.389.0 — RAW PHB p.290 Grappled clause 2: "The condition ends
+    # if the grappler is incapacitated." Closes clause #3 of the
+    # v2.384.0 condition-enforcement audit. When the just-installed
+    # buff is in `_INCAPACITATING_BUFF_KEYS`, sweep the campaign's
+    # combatants for any `grappled` buff whose `source_char_id`
+    # matches the newly-incapacitated character_id, and auto-end
+    # those grapples (mutate the victim's buff list + broadcast
+    # buff_update). Handles both PC + NPC victims uniformly via
+    # direct mutation rather than going through `_remove_buff`
+    # (which is PC-char_id keyed). Self-grapple is impossible RAW
+    # so the source-char check naturally excludes the grappler.
+    if key.strip().lower() in _INCAPACITATING_BUFF_KEYS:
+        try:
+            for _vic in list(state.get("combatants") or []):
+                if not isinstance(_vic, dict):
+                    continue
+                _vic_buffs = _vic.get("buffs") or []
+                if not isinstance(_vic_buffs, list):
+                    continue
+                _has_grapple_from = any(
+                    isinstance(b, dict)
+                    and str((b or {}).get("key") or "").lower() == "grappled"
+                    and (b or {}).get("source_char_id") == character_id
+                    for b in _vic_buffs
+                )
+                if not _has_grapple_from:
+                    continue
+                # End every grappled-from-this-grappler buff on the
+                # victim. (RAW: one grappler at a time, so the list
+                # comprehension typically removes one entry — but
+                # multi-grappler edge cases are handled gracefully.)
+                _new_vic_buffs = [
+                    b for b in _vic_buffs
+                    if not (
+                        isinstance(b, dict)
+                        and str((b or {}).get("key") or "").lower() == "grappled"
+                        and (b or {}).get("source_char_id") == character_id
+                    )
+                ]
+                _vic["buffs"] = _new_vic_buffs
+                hub.set_battle(campaign_id, state)
+                # Broadcast buff_update for the victim so client
+                # mini-sheets refresh. Match the shape _remove_buff
+                # uses for PC removals.
+                await hub.broadcast(campaign_id, {
+                    "type": "buff_update",
+                    "data": {
+                        "combatant_id": _vic.get("id"),
+                        "character_id": _vic.get("char_id"),
+                        "buffs": _new_vic_buffs,
+                        "reason": "grappler_incapacitated",
+                    },
+                })
+        except Exception:
+            logging.exception(
+                "Grappled-end sweep failed after incapacitating "
+                "buff install (key=%s, char_id=%s)",
+                key, character_id,
+            )
     return True
 
 
