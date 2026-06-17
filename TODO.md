@@ -17,11 +17,66 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 
 **Quick map of where to look:**
 
-- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (v2.382.0 refresh)](#srd-5e-audit-v23820-refresh) for the current per-category coverage (overall **~95%** — Monsters effectively at strictly-✅ 100% post-lair-arc closure, utility-spell cap substrates shipped, v2.382.1 reconciliation caught a third stale audit row; filed-follow-ups on the legendary-actions plan is genuinely empty). Prior passes: [v2.379.0](#srd-5e-audit-v23790-refresh), [v2.376.0](#srd-5e-audit-v23760-refresh), [v2.344.1](#srd-5e-audit-v23441-refresh), [v2.315.0](#srd-5e-audit-v23150-refresh), [2026-06-14](#srd-5e-audit-2026-06-14-refresh), [2026-06-13](#srd-5e-audit-2026-06-13-refresh), [2026-06-11](#srd-5e-audit-2026-06-11-refresh), [2026-06-10](#srd-5e-audit-2026-06-10). The v2.315.0 refresh **corrects two denominators** that all prior passes got wrong: magic items are now **235 / 239 wired (~98%)** — the old "292" figure counted total equipment (239 magic + 37 mundane weapons + 18 mundane armor); and class features are **222 per-row entries (now strictly-✅ 100%)**, not the stale "133".
+- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (v2.390.0 refresh)](#srd-5e-audit-v23900-refresh) for the current per-category coverage (overall **~96%** — Conditions category jumped ~85% → ~92% via the v2.384.0 condition-enforcement audit closure across v2.385.0–v2.390.0; the audit's per-clause shipping list is genuinely empty). Prior passes: [v2.382.0](#srd-5e-audit-v23820-refresh), [v2.379.0](#srd-5e-audit-v23790-refresh), [v2.376.0](#srd-5e-audit-v23760-refresh), [v2.344.1](#srd-5e-audit-v23441-refresh), [v2.315.0](#srd-5e-audit-v23150-refresh), [2026-06-14](#srd-5e-audit-2026-06-14-refresh), [2026-06-13](#srd-5e-audit-2026-06-13-refresh), [2026-06-11](#srd-5e-audit-2026-06-11-refresh), [2026-06-10](#srd-5e-audit-2026-06-10). The v2.315.0 refresh **corrects two denominators** that all prior passes got wrong: magic items are now **235 / 239 wired (~98%)** — the old "292" figure counted total equipment (239 magic + 37 mundane weapons + 18 mundane armor); and class features are **222 per-row entries (now strictly-✅ 100%)**, not the stale "133".
 - **Active class-feature automation backlog** → see [Full Class-Feature Automation — remaining backlog](#full-class-feature-automation--remaining-backlog) (just Phase 8 + a few per-feature Phase-2 finishers remain after v2.149.1).
 - **Design plans with deferred phases** → see [Design Plans Backlog](#design-plans-backlog) (every `docs/plans/*.md` indexed with a priority tag).
 - **One-off bugs + UI polish that don't have a design plan** → see [Manually Added](#manually-added).
 - **Big feature buckets that aren't tracked by a plan** → see the topic sections below (Character Sheet, GM Tools, Combat, Maps, Media, Player Features, UI/Mobile, Rules Reference, Legal & Compliance, Test Infrastructure, Integrations, Visual, Class Features (next cycle)). The priority legend doesn't apply to these — they're topic-grouped, not P-tagged.
+
+---
+
+## SRD 5e Audit (v2.390.0 refresh)
+
+**Audit scope.** Recomputed against the codebase as of v2.390.0, after the **v2.385.0 → v2.390.0 condition-enforcement sweep** that closed all six clauses surfaced by the v2.384.0 `docs/condition-enforcement-audit.md`:
+
+- **v2.385.0 "The Conscious Ally"** — Sneak Attack ally-adjacency skips incapacitated allies (clause #1).
+- **v2.386.0 "The Still Hand"** — `/attack` rejects 409 incapacitated (clause #2a).
+- **v2.387.0 "The Quiet Tongue"** — `/cast_spell` rejects 409 incapacitated (clause #2b).
+- **v2.388.0 "The Held Trick"** — `/use_feature` rejects 409 incapacitated (clause #2c). Completes the general action gate.
+- **v2.389.0 "The Broken Hold"** — Grappled auto-ends when grappler becomes incapacitated (clause #3).
+- **v2.390.0 "The Charmer's Shield"** — `/attack` rejects 409 when attacker is charmed by target (clause #4). The audit's per-clause shipping list is now **fully closed end-to-end**.
+
+The shared `_combatant_is_incapacitated` predicate landed in v2.385.0 and was reused unchanged across 5 sites (Sneak Attack ally-skip + 3 action gates + Grappled-end sweep). The shared `_caster_is_incapacitated` helper landed in v2.386.0 and was reused unchanged across the 3 action gates. The audit doc's prediction held: a single predicate served every site without modification — the substrate-first design paid off.
+
+### Per-category coverage (the headline numbers)
+
+| Category | SRD count | Automated | Notes |
+|---|---|---|---|
+| Races | 9 | **~90%** | Unchanged. |
+| Monsters | 322 | **✅ ~100%** | Unchanged from v2.382.0 — lair-action arc end-to-end complete. |
+| Conditions | 15 | **~92%** | **+7 pts vs. v2.382.0 (~85% → ~92%).** All six clauses from the v2.384.0 audit doc closed across v2.385.0–v2.390.0. Specifically: Incapacitated → action gate enforced at `/attack` + `/cast_spell` + `/use_feature` + Sneak Attack ally-skip; Grappled clause 2 auto-fires; Charmed clause 1 enforced at `/attack`. **Remaining ~8% is permanently GM-narrated by design** (Charmed clause 2 social-check advantage + Grappled clause 3 out-of-reach movement + Deafened "auto-fail hearing checks") — these need substrates that don't exist (social-check engine, Reach-aware movement) and aren't planned for v2.x. |
+| Class features | **222 rows** | **✅ 100%** | Unchanged. |
+| Spells | 319 | **~79%** | Unchanged from v2.382.0. The remaining gap is cast-and-broadcast utility-spell richness; substrate-extensions only (Bless / Mass Healing Word / Bane caps all shipped v2.380.0–v2.383.0). |
+| Magic items | **235 / 239 wired** | **~98%** | Unchanged. |
+
+**Overall ~96%** automated across the SRD ruleset (up from ~95% at v2.382.0 — the Conditions bump from ~85% → ~92% is the mover). The remaining ~4% is dominated by **cast-and-broadcast utility-spell richness** (P2 below) + the permanently-GM-narrated Charmed-social/Grappled-reach/Deafened-hearing clauses (out-of-scope by design).
+
+### Remaining gaps (priority order — toward full SRD automation)
+
+After the v2.385.0–v2.390.0 sweep, the audit's per-clause shipping list is empty. The remaining engine-shaped gap is content-layer.
+
+1. 🟡 **P2 — Cast-and-broadcast utility-spell upcast.** Unchanged from prior audits. ~250 SRD utility spells with no damage/healing base — a subset could gain richer per-slot modeling (Mass Suggestion / Heroes' Feast / etc.). Substrate work, not engine.
+2. 🟠 **Filed follow-up (small) — populate `source_char_id` on charmed-buff install sites.** The v2.390.0 `/attack` gate works against hand-seeded buffs but doesn't fire in real-game flows because the existing charmed-install sites (the v2.32.0 save-resolution branch around `tabletop_routes.py:18837`, lair-action installs at line 25553, Charm Person/Monster cast paths) don't always populate `source_char_id`. Per-install-site backfill; small surface.
+3. 🟠 **Filed follow-up — mirror v2.390.0 onto `/cast_spell` + `/use_feature`.** The Charmed-can't-target-charmer gate is currently `/attack`-only. Mirror to the other two PC action endpoints (~10 lines each, mirrors the v2.387.0/v2.388.0 incapacitated-gate sweep).
+4. ✅ **DONE — Condition-enforcement audit clauses #1–#4.** Closed v2.385.0–v2.390.0.
+5. ✅ **DONE — Class-feature ⚪ tail.** Closed v2.368.0–v2.370.1.
+6. ✅ **DONE — Spell area-effect automation.** Closed v2.373.0–v2.376.0.
+7. ✅ **DONE — Spell upcast dice/heal scaling.** Effectively complete (v2.344.2 reconciliation).
+8. ✅ **DONE — Magic-item content tail.** Closed v2.316.0–v2.344.0.
+9. ✅ **DONE — Legendary + Lair Actions arc.** Closed end-to-end v2.159.32–v2.382.0.
+10. ✅ **DONE — Hold Person / Hold Monster / Sleep refactor.** Reconciled v2.382.1; already uses shared `upcast_target_count` helper.
+
+### Out-of-scope (unchanged)
+
+Tasha's, Xanathar's-beyond-SRD, Strixhaven, post-SRD feats, backgrounds beyond Acolyte stay future-3.x scope. **2024 rules + Mythic Actions** likewise stay future-3.x scope. **Charmed clause 2** (social-check advantage), **Grappled clause 3** (out-of-reach), **Deafened** (mostly hearing-narrative): permanently GM-narrated per the v2.384.0 audit doc — need substrates that don't exist.
+
+### What's left to ship in SimpleVTT 2.x?
+
+The SRD ruleset is now ~96% automated end-to-end. The remaining ~4% is dominated by **content-layer utility-spell richness** + two small filed-follow-up gaps from the v2.390.0 ship (`source_char_id` backfill, /cast_spell+/use_feature charmed-gate mirror). After that the SRD is essentially closed; the natural next-arc inflection is:
+
+- **3.0 scope expansion** — post-SRD content (Tasha's, Xanathar's, 2024-PHB rule changes, Mythic Actions).
+- **Polish + UX** — Manually Added P3 polish items + Combat / GM Tools sections.
+- **Test-infrastructure hardening** — spell-validation suite Phase 5 + pytest-xdist parallelization.
 
 ---
 

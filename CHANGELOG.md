@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.390.1] - 2026-06-16 — "The Closed Audit"
+
+**Schema version:** 69
+
+**Commit summary:** Refreshes the [`TODO.md`](TODO.md) SRD 5e audit to v2.390.0 — captures the v2.385.0 → v2.390.0 condition-enforcement sweep that closed all six clauses from the v2.384.0 `docs/condition-enforcement-audit.md`. Conditions category jumps **~85% → ~92%** (every clause the audit doc flagged is now closed); overall coverage bumps from ~95% → **~96%**. The audit's per-clause shipping list is genuinely empty.
+
+**Description:** Per-clause results from the sweep:
+
+- ✅ #1 — Sneak Attack ally-skip (v2.385.0).
+- ✅ #2a — `/attack` gate (v2.386.0).
+- ✅ #2b — `/cast_spell` gate (v2.387.0).
+- ✅ #2c — `/use_feature` gate (v2.388.0).
+- ✅ #3 — Grappled ends on grappler incapacitated (v2.389.0).
+- ✅ #4 — Charmed can't target charmer (v2.390.0).
+
+Two small filed-follow-up items remain (`source_char_id` backfill on existing charmed-install sites so the v2.390.0 gate fires in real-game flows; mirroring the v2.390.0 gate onto `/cast_spell` + `/use_feature`) — both are small per-site work, not new substrate. The remaining ~4% of SRD coverage is dominated by content-layer utility-spell richness (~250 cast-and-broadcast spells with no damage/healing base) + the permanently-GM-narrated clauses (Charmed clause 2 social check, Grappled clause 3 out-of-reach, Deafened hearing-checks — all need substrates that don't exist + aren't planned for v2.x).
+
+PATCH — pure doc edit; no runtime code change.
+
+### Changed
+- `TODO.md`: new SRD 5e Audit (v2.390.0 refresh) section prepended above the v2.382.0 entry — re-baselines Conditions ~85% → ~92%, overall ~95% → ~96%; drops the audit doc's per-clause shipping list rows from the gaps list.
+- `TODO.md` "Quick map" pointer updated to point at the v2.390.0 audit.
+
 ## [2.390.0] - 2026-06-16 — "The Charmer's Shield"
 
 **Schema version:** 69
