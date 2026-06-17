@@ -10,6 +10,38 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.391.0] - 2026-06-16 — "The Charmer's Wider Shield"
+
+**Schema version:** 69
+
+**Commit summary:** Mirrors the v2.390.0 `/attack` Charmed gate onto `/cast_spell`. A charmed caster who tries to cast a spell on their charmer now gets 409 `charmed_cannot_target_charmer` — same shape as the /attack rejection. `body.get("override")` bypasses. Closes the last condition-enforcement audit follow-up from v2.390.1/v2.390.2 across the two PC action endpoints that can target a creature.
+
+**Description:** The /use_feature endpoint was intentionally skipped — most /use_feature calls are self-targeted (Action Surge, Lay on Hands, Channel Divinity); the Charmed-cannot-target-charmer rule is moot for self-buffs. Filed as not-applicable rather than not-done.
+
+The condition-enforcement audit arc from v2.384.0 is now end-to-end-end-to-end complete:
+
+| Audit clause | Ship | Endpoints covered |
+|---|---|---|
+| #1 — Sneak Attack ally-skip | v2.385.0 | (helper site) |
+| #2 — Incapacitated action gate | v2.386.0/.387.0/.388.0 | /attack, /cast_spell, /use_feature |
+| #3 — Grappled ends on grappler incap | v2.389.0 | (install side-effect) |
+| #4 — Charmed can't target charmer | v2.390.0 + v2.391.0 | /attack, /cast_spell |
+
+After v2.391.0 the audit's per-clause shipping list AND its filed follow-ups are both empty. The v2.384.0 `docs/condition-enforcement-audit.md` doc serves now as historical record + reference for future commits.
+
+Note: v1 treats "target the charmer" uniformly regardless of harmful/beneficial intent — RAW technically allows Cure Wounds on a charmer, but enforcing that distinction requires a "spell harmful?" classifier that doesn't exist. GM `override: true` is the escape hatch for the beneficial-cast case.
+
+Three harness tests via Caelan + Pip + Krieger: charmed → 409; charmed+override → 200; charmed casting on third party → 200 (gate is target-specific).
+
+MINOR — additive gate + 3 tests; existing /cast_spell tests with non-charmed casters unchanged.
+
+### Added
+- `/cast_spell` charmed-cannot-target-charmer gate (mirrors the v2.390.0 /attack gate).
+- `tests/harness/test_cast_spell_charmed_cannot_target_charmer.py` — 3 tests (charmed → 409, charmed+override → 200, third-party target → 200).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3145 → 3148 (+3 cast-spell charmed gate tests).
+
 ## [2.390.2] - 2026-06-16 — "The Smaller Follow-Up"
 
 **Schema version:** 69

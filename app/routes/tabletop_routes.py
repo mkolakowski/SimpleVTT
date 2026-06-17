@@ -19601,6 +19601,33 @@ async def cast_spell(
             "source": "cast_spell",
         })
 
+    # v2.391.0 — RAW PHB p.290 Charmed clause 1: "A charmed creature
+    # can't … target the charmer with harmful abilities or magical
+    # effects." Mirror of the v2.390.0 /attack gate. Fires when
+    # target_combatant_id (or the first id in target_combatant_ids)
+    # resolves to the charmer. body.get("override") bypasses.
+    # Closes the filed follow-up from v2.390.1 / v2.390.2 — closes
+    # the Charmed-cannot-target-charmer clause across the two
+    # PC-action endpoints that can target a creature (i.e. /attack
+    # + /cast_spell; /use_feature is mostly self-targeted so the
+    # mirror is moot there). Note: this gate fires for ALL spells —
+    # RAW technically allows beneficial-spell targeting (e.g. Cure
+    # Wounds on the charmer), but v1 treats "target the charmer"
+    # uniformly. GM override is the escape hatch for the beneficial
+    # case.
+    if not bool(body.get("override")) and target_combatant_id_in:
+        _tc_cs = _lookup_combatant(campaign_id, target_combatant_id_in)
+        if _tc_cs and _tc_cs.get("char_id"):
+            if _attacker_is_charmed_by_target(
+                campaign_id, int(char.id), int(_tc_cs.get("char_id")),
+            ):
+                return JSONResponse(status_code=409, content={
+                    "error": "charmed_cannot_target_charmer",
+                    "char_name": char.name,
+                    "source": "cast_spell",
+                    "target_combatant_id": target_combatant_id_in,
+                })
+
     sheet = dict(char.sheet or {})
     if char.template == "dnd5e":
         normalize_dnd5e_sheet(sheet)
