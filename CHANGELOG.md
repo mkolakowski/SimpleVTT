@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.403.5] - 2026-06-17 — "The Apothecary's Jar"
+
+**Schema version:** 69
+
+**Commit summary:** Sixth batch of charge-tracked announce-only Bucket D items on the v2.403.0 substrate. Four **multi-dose consumable containers** — **Restorative Ointment** (3 doses avg from 1d4+1, on Tavik), **Dust of Dryness** (7 pinches avg from 1d6+4, on Kael), **Sovereign Glue** (4 oz avg from 1d6+1, on Garrik), and **Bag of Beans** (7 beans avg from 3d4, on Mira). Each container ships `reset: "none"` — doses don't refill (the container is consumable by design). Demo seed uses the average-roll counts for each so the resource row has a stable value (rather than rolling per-character at seed time).
+
+**Description:** Direct content drop-in on the v2.403.4 lifetime-pool shape, with a new framing: the container is a consumable but the **doses inside** are tracked. Pour out the last dose, the container is empty — the inventory entry stays (it's a story prop now) but the resource row pins at 0. This handles the "jar of N pinches" or "bag of N beans" pattern that's slightly different from "ring of N charges" — the resource is a count of consumable units within a container, not lifetime charges of a magical effect.
+
+The harness exercises the **single-dose drain + long-rest-doesn't-refill** pattern for all four items in one parameterized test. The Restorative Ointment and Dust of Dryness are vault-loot (equipped=False); Sovereign Glue and Bag of Beans are seeded equipped+True on their carriers. The test handles both paths with an `is_vault_loot` flag in the `_MULTI_DOSE` tuple.
+
+**Why "The Apothecary's Jar":** the multi-dose container is the apothecary's stock-in-trade — a finite jar of doses, GM-narrated effect per dose, counter pinned at zero when empty.
+
+PATCH — 4 new wired items + 4 paired resource rows + 1 new harness test (parameterized over all 4). Magic items category remains **235/239 wired (~98%)** in the audit denominator; **twenty Bucket D items** now machine-track their charges (up from sixteen in v2.403.4). Substrate is now proven for: 1/1 single-charge, multi-charge pools (3/3, 36/36), multi-charge-per-call (1-5), `reset: "none"` manual-reset cooldowns, lifetime drain pools, and multi-dose consumable containers. **Remaining: just the two Bucket A holdouts** (wind-fan + medallion-of-thoughts) — one-shot consumables (potion-of-poison, dust-of-disappearance, philter-of-love, etc.) belong to the existing consumable framework and don't need the new charge substrate.
+
+### Added
+- `app/routes/tabletop_routes.py`: four new `_MAGIC_ITEM_ACTIONS` entries (`restorative-ointment`, `dust-of-dryness`, `sovereign-glue`, `bag-of-beans`). All `min_charges=max_charges=1`, no attunement. Dispatch tuple extended.
+- `app/demo_seed.py`: four new `resources[]` rows. Restorative Ointment on Tavik (3/3), Dust of Dryness on Kael (7/7), Sovereign Glue on Garrik (4/4), Bag of Beans on Mira (7/7). All `reset: "none"`.
+- `tests/harness/test_use_item_action_announce_only.py`: `_MULTI_DOSE` constant + `test_multi_dose_consumable_containers_drain` parameterized over all four items, with `is_vault_loot` branching for the two vault-loot items.
+
+### Changed
+- `docs/plans/magic-items-automation.md`: Phase 9.2 status table grows four new ✅ rows. The multi-dose-consumable backlog item is updated to reflect closure. The "Remaining" section narrows to just the two Bucket A holdouts.
+- `docs/test-harness-coverage.md`: total-test-count bump (+1) + the announce-only file entry grows with the multi-dose-container test.
+
 ## [2.403.4] - 2026-06-17 — "The Spent Chime"
 
 **Schema version:** 69

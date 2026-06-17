@@ -480,6 +480,83 @@ async def test_ring_of_three_wishes_lifetime_pool(gm_client, roster):
         )
 
 
+_MULTI_DOSE = [
+    # (carrier_name, slug, action_key, initial_pool, requires_attune, is_vault_loot)
+    ("Brother Tavik Stonebrow", "restorative-ointment",
+     "apply-dose", 3, False, True),
+    ("Kael Brightleaf", "dust-of-dryness",
+     "sprinkle-pinch", 7, False, True),
+    ("Garrik Ironside", "sovereign-glue",
+     "apply-ounce", 4, False, False),  # equipped already
+    ("Mira Greenleaf", "bag-of-beans",
+     "plant-bean", 7, False, False),  # equipped already
+]
+
+
+async def test_multi_dose_consumable_containers_drain(gm_client, roster):
+    """v2.403.5: multi-dose consumable containers (restorative-ointment
+    3 doses, dust-of-dryness 7 pinches, sovereign-glue 4 oz,
+    bag-of-beans 7 beans). Each: PATCH equipped if vault-loot, drain
+    one dose, assert resource ticks down, long rest stays put
+    (`reset: "none"`). Restores state on teardown."""
+    for (carrier_name, slug, action_key, initial,
+         req_attune, is_vault_loot) in _MULTI_DOSE:
+        char = roster[carrier_name]
+        prior = None
+        if is_vault_loot:
+            prior = await _patch_inventory_item(
+                gm_client, char["id"], slug,
+                equipped=True, attuned=req_attune,
+            )
+        try:
+            # Reset to initial in case prior tests consumed.
+            r = await gm_client.get(
+                f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-json",
+            )
+            sheet = (r.json() or {}).get("sheet") or {}
+            resources = list(sheet.get("resources") or [])
+            for row in resources:
+                if isinstance(row, dict) and row.get("key") == slug:
+                    row["current"] = initial
+            await gm_client.patch(
+                f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-fields",
+                json={"resources": resources},
+            )
+
+            sheet = await _sheet(gm_client, char["id"])
+            idx = _slug_index(sheet.get("inventory") or [], slug)
+            assert idx >= 0, f"{carrier_name} must carry seeded {slug}"
+
+            # One dose drains the pool by 1.
+            resp = await _invoke(gm_client, char["id"], idx, action_key)
+            assert resp.status_code == 200, resp.text
+            assert resp.json()["resource"]["current"] == initial - 1
+
+            # Long rest does NOT refill the consumable.
+            await _long_rest(gm_client, char["id"])
+            sheet_rested = await _sheet(gm_client, char["id"])
+            assert _resource_current(sheet_rested, slug) == initial - 1, \
+                f"{slug} should NOT refill on long rest"
+        finally:
+            if prior is not None:
+                await _patch_inventory_item(
+                    gm_client, char["id"], slug, **prior,
+                )
+            # Restore the resource for downstream tests.
+            r = await gm_client.get(
+                f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-json",
+            )
+            sheet = (r.json() or {}).get("sheet") or {}
+            resources = list(sheet.get("resources") or [])
+            for row in resources:
+                if isinstance(row, dict) and row.get("key") == slug:
+                    row["current"] = initial
+            await gm_client.patch(
+                f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-fields",
+                json={"resources": resources},
+            )
+
+
 async def test_cube_of_force_variable_charge_spend(gm_client, roster):
     """v2.403.2: Cube of Force (36 charges, 1d20/dawn) — RAW per-face
     cost is 1/2/3/4/5; v1 ships the generic "expend 1-5" action. Test

@@ -56,6 +56,10 @@ Adding the 25th item is a 2-line catalog row + a dispatch entry + a per-PC `reso
 | `rod-of-security` | 1 use + 10-day cooldown (GM manual reset) | ✅ shipped v2.403.3 |
 | `chime-of-opening` | 10 lifetime uses, then cracks | ✅ shipped v2.403.4 (first lifetime-pool item) |
 | `ring-of-three-wishes` | 3 lifetime wishes, then nonmagical | ✅ shipped v2.403.4 |
+| `restorative-ointment` | 1d4+1 doses (avg 3); each dose heals + cures | ✅ shipped v2.403.5 (multi-dose consumable container) |
+| `dust-of-dryness` | 1d6+4 pinches (avg 7); each pinch absorbs a 15-ft water cube | ✅ shipped v2.403.5 |
+| `sovereign-glue` | 1d6+1 ounces (avg 4); each ounce permanently bonds | ✅ shipped v2.403.5 |
+| `bag-of-beans` | 3d4 beans (avg 7); each bean rolls on the chaos table | ✅ shipped v2.403.5 |
 
 All four share an identical RAW shape (1/dawn, no attunement, summon-elemental + CHA-check control); the single harness file (`test_use_item_action_announce_only.py`) covers all four through one parameterized happy-path test + a 409-second-use test + a long-rest-restore test.
 
@@ -71,7 +75,7 @@ Grouped by template. Each batch ships as one PATCH commit.
 
 **Lifetime charges (`reset: "none"`).** ~`chime-of-opening`~ ✅ v2.403.4 (10), ~`ring-of-three-wishes`~ ✅ v2.403.4 (3), `rod-of-absorption` (50 levels — filed: needs reaction wiring, different dispatch surface).
 
-**Multi-dose consumables.** `restorative-ointment` (1d4+1), `dust-of-dryness` (1d6+4), `sovereign-glue` (1d6+1), `bag-of-beans` (3d4).
+**Multi-dose consumables.** ~`restorative-ointment`~ ✅ v2.403.5 (1d4+1 doses, avg 3), ~`dust-of-dryness`~ ✅ v2.403.5 (1d6+4 pinches, avg 7), ~`sovereign-glue`~ ✅ v2.403.5 (1d6+1 ounces, avg 4), ~`bag-of-beans`~ ✅ v2.403.5 (3d4 beans, avg 7).
 
 **One-shot consumables.** `feather-token`, `elemental-gem`, `dust-of-disappearance`, `dust-of-sneezing-and-choking`, `oil-of-etherealness`, `philter-of-love`, `potion-of-poison`, `universal-solvent`. (The existing `consumable: True` catalog flag handles destroy-on-use; the new handler just decrements + broadcasts.)
 

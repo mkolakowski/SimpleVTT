@@ -37896,6 +37896,68 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "third wish."
         ),
     },
+    # v2.403.5 — magic-items-automation Phase 9.2 batch 6: multi-dose
+    # consumable containers. Each "dose" decrements one charge from the
+    # container's pool; at 0 the container is empty (no rest refill).
+    # RAW shape: a jar/packet/flask with N doses, each dose narrated by
+    # the GM. The container item itself isn't deleted on empty (the
+    # player keeps the empty jar as a story prop); the resource row at
+    # 0 + the narration "the jar is now empty" signal the depletion.
+    "restorative-ointment": {
+        "key": "apply-dose",
+        "name": "Apply Ointment Dose",
+        "resource_key": "restorative-ointment",
+        "requires_attunement": False,
+        "min_charges": 1,
+        "max_charges": 1,
+        "narration": (
+            "applied one dose of the ointment to a creature (GM-narrated: "
+            "the creature regains 2d8+2 HP and ceases to be poisoned, "
+            "cured of all diseases — RAW DMG p.181)."
+        ),
+    },
+    "dust-of-dryness": {
+        "key": "sprinkle-pinch",
+        "name": "Sprinkle a Pinch",
+        "resource_key": "dust-of-dryness",
+        "requires_attunement": False,
+        "min_charges": 1,
+        "max_charges": 1,
+        "narration": (
+            "sprinkled a pinch of the dust over water — the cube up to "
+            "15 ft on a side becomes a marble-sized pellet (GM-narrated: "
+            "shatter to release the water as a wave that affects all "
+            "creatures within 30 ft)."
+        ),
+    },
+    "sovereign-glue": {
+        "key": "apply-ounce",
+        "name": "Apply an Ounce",
+        "resource_key": "sovereign-glue",
+        "requires_attunement": False,
+        "min_charges": 1,
+        "max_charges": 1,
+        "narration": (
+            "spread an ounce of the glue over a 1-square-foot surface — "
+            "any two objects in contact bond permanently within a round "
+            "(GM-narrated: only universal solvent or oil of etherealness "
+            "releases the bond)."
+        ),
+    },
+    "bag-of-beans": {
+        "key": "plant-bean",
+        "name": "Plant a Bean",
+        "resource_key": "bag-of-beans",
+        "requires_attunement": False,
+        "min_charges": 1,
+        "max_charges": 1,
+        "narration": (
+            "planted one bean and watered it (GM-narrated: 1 hour later, "
+            "roll d100 on the beanstalk table — possibilities range from "
+            "a 5-ft pit to a treant, a wishing flower, or an 11d6 fire "
+            "explosion). Bag depletes one bean per use."
+        ),
+    },
 }
 
 
@@ -87350,6 +87412,9 @@ async def use_item_action(
     # All three use `reset: "none"` (GM manual reset, no rest auto-refill).
     # v2.403.4: lifetime-charge items — chime-of-opening (10 lifetime
     # then cracks) + ring-of-three-wishes (3 lifetime then nonmagical).
+    # v2.403.5: multi-dose consumables — restorative-ointment (3 doses
+    # avg) + dust-of-dryness (7 pinches) + sovereign-glue (4 oz) +
+    # bag-of-beans (7 beans).
     if slug in (
         "bowl-of-commanding-water-elementals",
         "brazier-of-commanding-fire-elementals",
@@ -87367,6 +87432,10 @@ async def use_item_action(
         "rod-of-security",
         "chime-of-opening",
         "ring-of-three-wishes",
+        "restorative-ointment",
+        "dust-of-dryness",
+        "sovereign-glue",
+        "bag-of-beans",
     ):
         return await _use_item_action_announce_only(
             db, campaign_id, char, item, sheet, catalog, slug,

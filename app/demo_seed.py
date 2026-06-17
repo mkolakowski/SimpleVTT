@@ -1708,6 +1708,19 @@ def _cleric_sheet(name: str) -> dict:
                 "desc": "10 charges. Cast Cure Wounds (1-4 charges), Lesser Restoration (2), or Mass Cure Wounds (5). Regains 1d6+4 charges on long rest.",
                 "manual": False,
             },
+            # v2.403.5 — magic-items-automation Phase 9.2 batch 6:
+            # Restorative Ointment (RAW DMG p.181) — 1d4+1 doses (avg 3).
+            # The jar is seeded INERT on Tavik (vault loot at line ~7205);
+            # the harness PATCHes equipped=True. `reset: "none"` — the
+            # jar doesn't refill (consumable).
+            {
+                "key": "restorative-ointment",
+                "name": "Restorative Ointment",
+                "current": 3, "max": 3, "reset": "none",
+                "source": "item-restorative-ointment",
+                "desc": "3 doses. Action: apply one dose to a creature — regain 2d8+2 HP and cure poison + disease. The jar doesn't refill. RAW DMG p.181.",
+                "manual": False,
+            },
             # v2.266.0 — charged-items Phase 1: Wand of Binding charge
             # counter. Same 7-charge / 1d6+1 recharge shape as the Web
             # wand; the spell + base slot live in the catalog (Hold
@@ -3332,6 +3345,18 @@ def _druid_sheet(name: str) -> dict:
         # surface in the transform UI. Counter exists today so the
         # mini-sheet renders the chip.
         "resources": [
+            # v2.403.5 — magic-items-automation Phase 9.2 batch 6:
+            # Bag of Beans (RAW DMG p.152) — 3d4 beans (avg 7). The bag
+            # is seeded equipped on Mira (line ~3336). `reset: "none"`
+            # — beans are spent permanently (consumable).
+            {
+                "key": "bag-of-beans",
+                "name": "Bag of Beans",
+                "current": 7, "max": 7, "reset": "none",
+                "source": "item-bag-of-beans",
+                "desc": "7 beans. Action: plant + water one bean — roll d100 on the beanstalk table (5-ft pit, summoned creature, treant, wish-flower, fire explosion, etc.). Beans don't refill. RAW DMG p.152.",
+                "manual": False,
+            },
             {
                 "key": "wild-shape",
                 "name": "Wild Shape",
@@ -5654,6 +5679,19 @@ def _monk_sheet(name: str) -> dict:
                 "desc": "Action: regain 3× monk level HP (21 at Lv 7). Once per long rest.",
                 "manual": False,
             },
+            # v2.403.5 — magic-items-automation Phase 9.2 batch 6:
+            # Dust of Dryness (RAW DMG p.166) — 1d6+4 pinches (avg 7).
+            # The dust is seeded INERT on Kael (vault loot at line
+            # ~7222); the harness PATCHes equipped=True. `reset: "none"`
+            # — the packet doesn't refill (it's a consumable container).
+            {
+                "key": "dust-of-dryness",
+                "name": "Dust of Dryness",
+                "current": 7, "max": 7, "reset": "none",
+                "source": "item-dust-of-dryness",
+                "desc": "7 pinches. Action: sprinkle one pinch over water — a cube of water up to 15 ft on a side becomes a marble-sized pellet. Shatter the pellet to release the water as a wave. The packet doesn't refill. RAW DMG p.166.",
+                "manual": False,
+            },
         ],
         # v2.18.0: clickable Ki-spend buttons in the Class abilities
         # panel. Each option is a bonus action (slot:'bonus' per the
@@ -6923,6 +6961,18 @@ def _fighter_sheet(name: str) -> dict:
                 "charge_recovery": "1d3",
                 "source": "item-ring-of-the-ram",
                 "desc": "3 charges. Spend 1-3 to make a ranged force attack (+7 to hit, 2d10 force per charge). Regains 1d3 charges on long rest.",
+                "manual": False,
+            },
+            # v2.403.5 — magic-items-automation Phase 9.2 batch 6:
+            # Sovereign Glue (RAW DMG p.200) — 1d6+1 ounces (avg 4).
+            # The flask is seeded equipped on Garrik (line ~6868).
+            # `reset: "none"` — the flask doesn't refill (consumable).
+            {
+                "key": "sovereign-glue",
+                "name": "Sovereign Glue",
+                "current": 4, "max": 4, "reset": "none",
+                "source": "item-sovereign-glue",
+                "desc": "4 ounces. Action: apply one ounce to a surface — bonds any two objects in contact permanently (1-round set time). Only universal solvent or oil of etherealness releases the bond. Flask doesn't refill. RAW DMG p.200.",
                 "manual": False,
             },
         ],
