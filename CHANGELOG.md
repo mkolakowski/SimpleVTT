@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.403.0] - 2026-06-17 — "The Elemental Counter"
+
+**Schema version:** 69
+
+**Commit summary:** Lands the new `_use_item_action_announce_only` substrate + first batch of charge-tracked Bucket D items — the four elemental-summoning items (bowl/brazier/censer/stone) now tick a 1/dawn resource on `/use_item_action` and broadcast a GM-narrated summary, instead of being purely catalog stubs. Substrate is generic: any future Bucket D item with a finite charge/per-day counter (`pipes-of-the-sewers`, `helm-of-teleportation`, `horn-of-valhalla`, `ring-of-three-wishes`, `chime-of-opening`, `cape-of-the-mountebank`, the multi-dose consumables, etc.) becomes a 2-line catalog row + a dispatch entry + a per-PC resource row. The actual elemental summon / control check stays GM-narrated by design.
+
+**Description:** This is the substrate ship for magic-items-automation Phase 9.2 — "charge tracking for the announce-only tail." The v2.367.0 plan-update closed the actionable Buckets A/B/C with full mechanization (`Wind Fan` + `Medallion of Thoughts` left as the two inherently-GM-narrated Bucket A holdouts); Bucket D (~82 items: summons, planar travel, capture, exploration utility, etc.) stays announce-only by design — the *effect* needs systems SimpleVTT doesn't model (extradimensional travel, summoned-creature mechanics, table conversations). But many of those items carry an engine-trackable **counter** in RAW: 1/dawn, 3 charges + 1d3/dawn recovery, 10 lifetime uses, etc. Phase 9.2 builds out the counter without claiming to model the effect, so a player carrying a Brazier of Commanding Fire Elementals sees a charge tick down on their sheet when they invoke it, and the GM has an authoritative cross-table record.
+
+The substrate is just a fifth dispatch path on `/use_item_action`: it's a near-twin of `_use_item_action_charge_wand` (decrement resource → broadcast `feature_used`) but with the spell-cast routing stripped out + a `narration` string carried on the catalog entry. The four elemental items share an identical RAW shape (1/dawn, no attunement, summon-elemental + CHA control), so this commit's harness covers all four through one parameterized test plus a 409-second-use and a long-rest-restore for the gate. The on-disk JSON for the items is unchanged — the only edits are the catalog rows (`_MAGIC_ITEM_ACTIONS`), the new handler, the dispatch branch, the four paired resource rows on Caelan/Seraphine/Rowan/Krieger, and the harness file.
+
+**Why "The Elemental Counter":** the four newly-tracking items are the elemental-summoning quartet — the counter is the engine surface, the elemental is the table.
+
+MINOR — new substrate handler + 4 new wired items + 4 paired resource rows in the demo seed + 1 new harness file. Magic items category remains **235/239 wired (~98%)** in the audit denominator; the substrate that enables the next ~20 items to flip from "stub catalog row" to "real charge tracker" is now in place. Subsequent commits will ship the rest of the charge-bearing Bucket D backlog (1/dawn batch, multi-charge per-day batch, lifetime-charge batch, multi-dose-consumable batch, one-shot-consumable batch), followed by the two Bucket A holdouts (wind-fan + medallion-of-thoughts).
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_use_item_action_announce_only(db, campaign_id, char, item, sheet, catalog, slug, charges_raw)` handler — decrements the catalog's `resource_key` row by N, broadcasts a `feature_used` summary carrying `catalog['narration']`, returns ok + the new resource shape. Four new `_MAGIC_ITEM_ACTIONS` entries (bowl/brazier/censer/stone-of-commanding/controlling-*-elementals), each `min_charges=max_charges=1`, `requires_attunement=False`. New dispatch branch in `/use_item_action` routes those four slugs to the new handler.
+- `app/demo_seed.py`: four new `resources[]` rows on Sir Caelan Lightbringer (brazier), Dame Seraphine Vael (censer), Rowan Quickbow (bowl), and Krieger Stonefist (stone) — each `current=1, max=1, reset=long`. The carrier items themselves were already seeded equipped in v2.332.0 / "The Elemental Conclave"; this commit adds the matching resource row so the new handler can find it.
+- `tests/harness/test_use_item_action_announce_only.py`: new harness file covering all four items via a parameterized happy-path test, plus a single-item 409-second-use test and a single-item long-rest-restore test. Total +4 tests.
+
+### Changed
+- `docs/plans/magic-items-automation.md`: Phase 9.2 section documenting the new substrate + the rolling backlog of Bucket D charge-tracked items.
+- `docs/test-harness-coverage.md`: total-test-count bump + new entry for `test_use_item_action_announce_only.py`.
+
 ## [2.402.0] - 2026-06-17 — "The Condition Card"
 
 **Schema version:** 69

@@ -37641,6 +37641,71 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "summary_effect": "Charisma permanently increases by 2",
         },
     },
+    # v2.403.0 — magic-items-automation Phase 9.2: charge-tracked
+    # announce-only items. The Bucket D tail (summons, planar travel,
+    # capture, exploration utility) ships catalog rows whose mechanical
+    # surface is purely a charge/per-day counter; the effect itself
+    # (rat swarm, fire elemental, paradise plane shift, …) stays GM-
+    # narrated. The generalized ``_use_item_action_announce_only``
+    # handler decrements the resource + broadcasts a feature_used
+    # summary, no engine effect. First batch: the four elemental-
+    # summoning items (bowl/brazier/censer/stone) — all RAW 1/dawn,
+    # no attunement, identical shape. The on-disk JSON for each is
+    # already in `app/data/local/dnd5e/items/`; the demo seed already
+    # carries them equipped on thematic PCs; this commit adds the
+    # paired resource row + the dispatch.
+    "bowl-of-commanding-water-elementals": {
+        "key": "summon-water-elemental",
+        "name": "Summon Water Elemental",
+        "resource_key": "bowl-of-commanding-water-elementals",
+        "requires_attunement": False,
+        "min_charges": 1,
+        "max_charges": 1,
+        "narration": (
+            "filled the bowl with water and spoke the command word — a "
+            "water elemental rises within 30 ft (GM-narrated: CHA check "
+            "vs the elemental to command it, concentration up to 1 hr)."
+        ),
+    },
+    "brazier-of-commanding-fire-elementals": {
+        "key": "summon-fire-elemental",
+        "name": "Summon Fire Elemental",
+        "resource_key": "brazier-of-commanding-fire-elementals",
+        "requires_attunement": False,
+        "min_charges": 1,
+        "max_charges": 1,
+        "narration": (
+            "lit the brazier and spoke the command word — a fire "
+            "elemental appears within 30 ft (GM-narrated: CHA check "
+            "vs the elemental to command it, concentration up to 1 hr)."
+        ),
+    },
+    "censer-of-controlling-air-elementals": {
+        "key": "summon-air-elemental",
+        "name": "Summon Air Elemental",
+        "resource_key": "censer-of-controlling-air-elementals",
+        "requires_attunement": False,
+        "min_charges": 1,
+        "max_charges": 1,
+        "narration": (
+            "burned incense in the censer and spoke the command word — "
+            "an air elemental appears within 30 ft (GM-narrated: CHA "
+            "check vs the elemental to command it, concentration up to 1 hr)."
+        ),
+    },
+    "stone-of-controlling-earth-elementals": {
+        "key": "summon-earth-elemental",
+        "name": "Summon Earth Elemental",
+        "resource_key": "stone-of-controlling-earth-elementals",
+        "requires_attunement": False,
+        "min_charges": 1,
+        "max_charges": 1,
+        "narration": (
+            "placed the stone on the ground and spoke the command word — "
+            "an earth elemental appears within 30 ft (GM-narrated: CHA "
+            "check vs the elemental to command it, concentration up to 1 hr)."
+        ),
+    },
 }
 
 
@@ -87080,6 +87145,20 @@ async def use_item_action(
         return await _use_item_action_permanent_boost(
             db, campaign_id, char, item, sheet, catalog, inv_idx,
         )
+    # v2.403.0 — magic-items-automation Phase 9.2: charge-tracked
+    # announce-only items. Bucket D tail items whose RAW carries a
+    # finite charge / per-day-use counter but whose effect stays GM-
+    # narrated. First batch: the four elemental-summoning items.
+    if slug in (
+        "bowl-of-commanding-water-elementals",
+        "brazier-of-commanding-fire-elementals",
+        "censer-of-controlling-air-elementals",
+        "stone-of-controlling-earth-elementals",
+    ):
+        return await _use_item_action_announce_only(
+            db, campaign_id, char, item, sheet, catalog, slug,
+            body.get("charges"),
+        )
     raise HTTPException(409, "unknown item action handler")
 
 
@@ -87340,6 +87419,107 @@ async def _use_item_action_charge_wand(
         "spell_slug": spell_slug,
         "charges_spent": charges,
         "cast_slot_level": cast_slot_level,
+        "resource": {
+            "key": res_key,
+            "current": res_row["current"],
+            "max": res_max,
+        },
+    }
+
+
+async def _use_item_action_announce_only(
+    db, campaign_id, char, item, sheet, catalog, slug, charges_raw,
+):
+    """v2.403.0 — magic-items-automation Phase 9.2: charge-tracked
+    announce-only handler for the Bucket D tail (summons, planar
+    travel, capture, exploration utility). Decrements the item's
+    resource row by N charges + broadcasts a ``feature_used`` summary
+    with the catalog's ``narration`` string; the underlying effect
+    (rat swarm, fire elemental, paradise plane shift, …) stays GM-
+    narrated by design. Drop-in for every per-day/per-charge Bucket-D
+    item that doesn't fit a cleaner engine template.
+    """
+    try:
+        charges = int(charges_raw if charges_raw is not None else 1)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "charges must be an int")
+    min_c = int(catalog.get("min_charges") or 1)
+    max_c = int(catalog.get("max_charges") or 1)
+    if charges < min_c or charges > max_c:
+        raise HTTPException(
+            400,
+            f"charges must be {min_c}..{max_c} for {item.get('name')}",
+        )
+
+    resources = list(sheet.get("resources") or [])
+    res_key = str(catalog.get("resource_key") or "")
+    res_idx = -1
+    for i, r in enumerate(resources):
+        if isinstance(r, dict) and (r.get("key") or "").lower() == res_key:
+            res_idx = i
+            break
+    if res_idx < 0:
+        raise HTTPException(
+            409,
+            f"No {res_key!r} resource row on sheet — item not bootstrapped",
+        )
+    res_row = dict(resources[res_idx])
+    cur = int(res_row.get("current") or 0)
+    res_max = int(res_row.get("max") or 0)
+    if cur < charges:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "insufficient_charges",
+                "current": cur,
+                "requested": charges,
+                "label": item.get("name") or slug,
+            },
+        )
+
+    res_row["current"] = cur - charges
+    resources[res_idx] = res_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    narration = str(catalog.get("narration") or
+                    f"used the {item.get('name') or slug}.")
+    summary = f"{char.name} {narration}"
+
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "resource_update",
+            "data": {
+                "character_id": char.id,
+                "key": res_key,
+                "current": res_row["current"],
+                "max": res_max,
+            },
+        })
+    except Exception:
+        pass
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "caster_char_name": char.name,
+                "source": f"item-{slug}",
+                "label": catalog.get("name") or "Use item",
+                "summary": summary,
+            },
+        })
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "item_name": item.get("name") or slug,
+        "charges_spent": charges,
         "resource": {
             "key": res_key,
             "current": res_row["current"],

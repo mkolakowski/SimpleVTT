@@ -7,7 +7,74 @@
 **Content tail (Phase 9).** Post-Phase-9.1 (v2.367.0): roughly 60+ of 292 items now carry non-empty `actions`/`passives` (the v2.316–v2.367 sweeps mechanized everything that fit a clean template). The remainder stays announce-only by design (Bucket D archetype J). See the [SRD 5e Audit (2026-06-11 refresh)](../../TODO.md#srd-5e-audit-2026-06-11-refresh) for the original backfill prioritisation that drove this work.
 
 **Authors:** rolling
-**Last updated:** 2026-06-16 (v2.367.0 — Phase 9.1 closure)
+**Last updated:** 2026-06-17 (v2.403.0 — Phase 9.2 substrate ship)
+
+---
+
+## Phase 9.2 — charge tracking for the announce-only tail (v2.403.0+)
+
+The post-v2.367.0 audit found that **~24 Bucket D items carry an engine-trackable charge / per-day / lifetime counter in RAW**, even though their effect (rat swarm, fire elemental, paradise plane shift, bag-of-tricks creature draw, etc.) is GM-narrated by design. Phase 9.2 builds out the counter without claiming to model the effect — the player sees their charge tick down on the sheet, the GM has an authoritative cross-table record, and the table conversation continues as before.
+
+### Substrate (v2.403.0)
+
+The generalized `_use_item_action_announce_only(db, campaign_id, char, item, sheet, catalog, slug, charges_raw)` handler is a near-twin of `_use_item_action_charge_wand`, but with the spell-cast routing stripped out + a `narration` field on the catalog entry that the handler embeds in the `feature_used` broadcast summary. The catalog row shape is:
+
+```python
+"slug-here": {
+    "key": "action-key",
+    "name": "Display label",
+    "resource_key": "slug-here",           # PC sheet resources[] row
+    "requires_attunement": False,          # per the item's RAW
+    "min_charges": 1, "max_charges": 1,    # most are 1/dawn
+    "narration": (
+        "lit the brazier and spoke the command word — a fire "
+        "elemental appears within 30 ft (GM-narrated: CHA check "
+        "vs the elemental to command it, concentration up to 1 hr)."
+    ),
+},
+```
+
+Adding the 25th item is a 2-line catalog row + a dispatch entry + a per-PC `resources[]` row in the demo seed. No engine code changes after v2.403.0.
+
+### Substrate ship (v2.403.0)
+
+| Slug | RAW | Status |
+|---|---|---|
+| `bowl-of-commanding-water-elementals` | 1/dawn summon water elemental | ✅ shipped v2.403.0 |
+| `brazier-of-commanding-fire-elementals` | 1/dawn summon fire elemental | ✅ shipped v2.403.0 |
+| `censer-of-controlling-air-elementals` | 1/dawn summon air elemental | ✅ shipped v2.403.0 |
+| `stone-of-controlling-earth-elementals` | 1/dawn summon earth elemental | ✅ shipped v2.403.0 |
+
+All four share an identical RAW shape (1/dawn, no attunement, summon-elemental + CHA-check control); the single harness file (`test_use_item_action_announce_only.py`) covers all four through one parameterized happy-path test + a 409-second-use test + a long-rest-restore test.
+
+### Backlog (charge-bearing Bucket D items still to wire)
+
+Grouped by template. Each batch ships as one PATCH commit.
+
+**1/dawn (single charge, dawn reset).** `cape-of-the-mountebank`, `plate-armor-of-etherealness`, `iron-bands-of-binding`, `efreeti-bottle`, `bag-of-tricks` (3/dawn — multi-charge under the same template).
+
+**Multi-charge per-day (charges + per-day recharge dice).** `pipes-of-the-sewers` (3, 1d3/dawn), `helm-of-teleportation` (3, 1d3/dawn), `cube-of-force` (36, 1d20/dawn — 6 modes, needs a multi-action catalog).
+
+**Multi-day cooldown (single use, reset > 1 day).** `horn-of-valhalla` (1/7d), `ring-of-djinni-summoning` (1/24h), `rod-of-security` (1/10d).
+
+**Lifetime charges (`reset: "none"`).** `chime-of-opening` (10), `ring-of-three-wishes` (3), `rod-of-absorption` (50 levels — needs reaction wiring).
+
+**Multi-dose consumables.** `restorative-ointment` (1d4+1), `dust-of-dryness` (1d6+4), `sovereign-glue` (1d6+1), `bag-of-beans` (3d4).
+
+**One-shot consumables.** `feather-token`, `elemental-gem`, `dust-of-disappearance`, `dust-of-sneezing-and-choking`, `oil-of-etherealness`, `philter-of-love`, `potion-of-poison`, `universal-solvent`. (The existing `consumable: True` catalog flag handles destroy-on-use; the new handler just decrements + broadcasts.)
+
+**Filed follow-up — reaction items.** `ring-of-evasion` (3 charges, 1d3/dawn). Needs reaction wiring rather than `/use_item_action` dispatch; gates on the v2.78.0 `_pc_item_reactions_for_trigger` substrate. Filed separately.
+
+**Skip / too complex for v1.** `necklace-of-prayer-beads` (per-bead spell-cast, random bead generation), `rod-of-lordly-might` (6 mode-buttons + 3 dawn actives), `candle-of-invocation` (burn-time tracking, alignment-conditional spell list), `crystal-ball` (variant-specific 1/dawn modes), `deck-of-many-things` / `deck-of-illusions` (finite-card mechanic), `iron-flask` / `mirror-of-life-trapping` / `orb-of-dragonkind` / `sphere-of-annihilation` (state-based capture, not counter-based).
+
+### Then the two Bucket A holdouts
+
+After the Bucket D charge backlog closes, the final two Bucket A items get wired (the v2.367.0 closure note flagged both as "inherently GM-narrated" — Phase 9.2 reframes them with charge tracking + announce-only broadcast):
+
+- **`medallion-of-thoughts`** — 3 charges, 1d3/dawn → detect thoughts (DC 13). Routes through the existing `_use_item_action_potion_of_mind_reading` buff handler + a charge gate.
+- **`wind-fan`** — 1/dawn → gust of wind, with cumulative 20% crumble chance per same-day re-use. Engine surface: 1/dawn resource + a "wear" counter + the crumble d20 mechanic on overuse.
+
+After this arc closes, every Bucket D item that carries a counter in RAW will be machine-tracked, every Bucket A item will be wired, and the magic-item category will be at maximum mechanizable depth without modelling Bucket D effects.
 
 ---
 

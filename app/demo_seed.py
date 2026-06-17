@@ -2186,6 +2186,20 @@ def _paladin_sheet(name: str) -> dict:
                 "desc": "7 charges (regain all at dawn). Invoke Pure Good: action — spend 1 charge to force one creature within 60 ft to make a DC 18 CHA save → 6d6 radiant on a fail, half on a save (RAW DMG p.207). Alignment gate + alignment-keyed instant-kill GM-narrated in v1.",
                 "manual": False,
             },
+            # v2.403.0 — magic-items-automation Phase 9.2: charge-tracked
+            # announce-only Bucket D item. Brazier of Commanding Fire
+            # Elementals (RAW DMG p.156) — 1/dawn. The brazier is seeded
+            # equipped on Caelan (line 2089). The summon + CHA control
+            # check are GM-narrated; this resource row backs the
+            # /use_item_action endpoint's charge decrement.
+            {
+                "key": "brazier-of-commanding-fire-elementals",
+                "name": "Brazier of Commanding Fire Elementals",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "item-brazier-of-commanding-fire-elementals",
+                "desc": "1/dawn. Light the brazier + speak the command word: a fire elemental appears within 30 ft. Make a CHA check vs the elemental to command it (GM-narrated, concentration up to 1 hour).",
+                "manual": False,
+            },
         ],
         # v2.53.0: Aura of Protection (Paladin Lv 6+). Passive aura —
         # allies within 10 ft of Caelan add his CHA mod (+3 with CHA 16)
@@ -2487,6 +2501,20 @@ def _paladin_vengeance_sheet(name: str) -> dict:
                 "class_slug": "paladin",
                 "subclass_slug": "vengeance",
                 "desc": "Channel an oath effect (Abjure Enemy, Vow of Enmity). One use per short rest.",
+                "manual": False,
+            },
+            # v2.403.0 — magic-items-automation Phase 9.2: charge-tracked
+            # announce-only Bucket D item. Censer of Controlling Air
+            # Elementals (RAW DMG p.157) — 1/dawn. The censer is seeded
+            # equipped on Seraphine (line 2401). The summon + CHA control
+            # check are GM-narrated; this resource row backs the
+            # /use_item_action endpoint's charge decrement.
+            {
+                "key": "censer-of-controlling-air-elementals",
+                "name": "Censer of Controlling Air Elementals",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "item-censer-of-controlling-air-elementals",
+                "desc": "1/dawn. Burn incense + speak the command word: an air elemental appears within 30 ft. Make a CHA check vs the elemental to command it (GM-narrated, concentration up to 1 hour).",
                 "manual": False,
             },
         ],
@@ -4461,6 +4489,20 @@ def _ranger_sheet(name: str) -> dict:
         "resources": [
             {"key": "gem-of-seeing", "name": "Gem of Seeing charges",
              "current": 3, "max": 3, "per": "long", "charge_recovery": "1d3"},
+            # v2.403.0 — magic-items-automation Phase 9.2: charge-tracked
+            # announce-only Bucket D item. Bowl of Commanding Water
+            # Elementals (RAW DMG p.156) — 1/dawn. The bowl is seeded
+            # equipped on Rowan (line 4461). The summon + CHA control
+            # check are GM-narrated; this resource row backs the
+            # /use_item_action endpoint's charge decrement.
+            {
+                "key": "bowl-of-commanding-water-elementals",
+                "name": "Bowl of Commanding Water Elementals",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "item-bowl-of-commanding-water-elementals",
+                "desc": "1/dawn. Fill with water + speak the command word: a water elemental appears within 30 ft. Make a CHA check vs the elemental to command it (GM-narrated, concentration up to 1 hour).",
+                "manual": False,
+            },
         ],
         # v2.18.3: clickable Class abilities buttons. Each is announce-only
         # in v1 — Favored Enemy + Natural Explorer fire /use_feature and
@@ -4800,6 +4842,20 @@ def _barbarian_sheet(name: str) -> dict:
                 "current": 1, "max": 1, "reset": "long",
                 "source": "Half-Orc",
                 "desc": "When reduced to 0 HP but not killed outright, drop to 1 HP instead. 1/long rest.",
+                "manual": False,
+            },
+            # v2.403.0 — magic-items-automation Phase 9.2: charge-tracked
+            # announce-only Bucket D item. Stone of Controlling Earth
+            # Elementals (RAW DMG p.207) — 1/dawn. The stone is seeded
+            # equipped on Krieger (line 4782). The summon + CHA control
+            # check are GM-narrated; this resource row backs the
+            # /use_item_action endpoint's charge decrement.
+            {
+                "key": "stone-of-controlling-earth-elementals",
+                "name": "Stone of Controlling Earth Elementals",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "item-stone-of-controlling-earth-elementals",
+                "desc": "1/dawn. Place on the ground + speak the command word: an earth elemental appears within 30 ft. Make a CHA check vs the elemental to command it (GM-narrated, concentration up to 1 hour).",
                 "manual": False,
             },
         ],

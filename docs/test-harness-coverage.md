@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3173 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.401.0, 2026-06-17).
+**Total tests:** 3177 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.403.0, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3621,6 +3621,16 @@ v2.356.0 magic-items — Circlet of Blasting (RAW DMG p.159, uncommon, no attune
 |------|-----------------|
 | `test_circlet_scorching_ray_3_beams` | 3 rays at AC-1 dummies → 200, item_name "Circlet of Blasting", attack_bonus 5, beams 3, damage_type fire, charges_spent 1, resource 1→0, 3 results, ≥1 hit dealing fire damage. |
 | `test_circlet_empty_returns_409` | Circlet drained to 0 uses → 409 `insufficient_charges` (current 0). |
+
+### `test_use_item_action_announce_only.py`
+v2.403.0 magic-items — Phase 9.2 substrate ship: charge-tracked announce-only Bucket D items. Four elemental-summoning items (RAW 1/dawn, no attunement) share the new `_use_item_action_announce_only` handler — the *summon + control check* stay GM-narrated, but the engine ticks the 1/dawn counter on `/use_item_action` and broadcasts a `feature_used` summary. Carriers: Bowl on Rowan, Brazier on Caelan, Censer on Seraphine, Stone on Krieger (each equipped + paired resource row).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_elemental_summon_decrements_charge` | All four items: `/use_item_action` → 200 with `charges_spent=1`, `resource.current=0`, `item_name` populated; sheet read-back also shows the counter decremented. |
+| `test_second_use_same_day_returns_409` | Bowl: second invocation before a rest → 409 `insufficient_charges` (current 0, requested 1). |
+| `test_long_rest_restores_charge` | Censer: spend → 0; long rest → counter back to 1/1. |
+| `test_unknown_action_key_returns_404` | Bowl with a bogus `action_key` → 404 `no action` (dispatch gate). |
 
 ### `test_use_item_action_rope_of_entanglement.py`
 v2.355.0 magic-items — Rope of Entanglement (RAW DMG p.198, rare, no attunement), sixth Bucket A item and the first `unlimited` (no-charge) item on the shared Wand of Fear handler. DC 15 DEX save or restrained, at will. Carrier: Kael Brightleaf (equipped, NO charge resource).
