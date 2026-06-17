@@ -108,7 +108,7 @@
   <h2 id="srd-coverage">SRD 5e automation coverage</h2>
   <p class="lede" style="margin-bottom:8px;">
     How much of the SRD 5.1 ruleset SimpleVTT mechanically automates, by content
-    category, as of <strong>v2.400.0</strong>. "Automated" means the engine
+    category, as of <strong>v2.404.10</strong>. "Automated" means the engine
     derives or enforces the rule (saves, damage, passive item effects, class
     features, conditions) rather than leaving it to GM narration. Recomputed
     each audit pass; see <a href="/wiki/doc/todo">TODO</a> for the breakdown and
@@ -123,7 +123,7 @@
       <tr><td>Monsters</td><td>322</td><td><span class="status-shipped">✅ ~100%</span></td></tr>
       <tr><td>Conditions</td><td>15</td><td><span class="status-shipped">~92%</span></td></tr>
       <tr><td>Class features</td><td>222 rows</td><td><span class="status-shipped">✅ 100%</span></td></tr>
-      <tr><td>Spells</td><td>319</td><td><span class="status-shipped">~79%</span></td></tr>
+      <tr><td>Spells</td><td>319</td><td><span class="status-shipped">~83%</span></td></tr>
       <tr><td>Magic items</td><td>239 / 239 wired</td><td><span class="status-shipped">✅ 100%</span></td></tr>
     </tbody>
   </table>
@@ -134,6 +134,11 @@
     <code>_use_item_action_announce_only</code> + dedicated handlers (Phase 9.2),
     plus the 4 umbrella catalog slugs closed in v2.404.0 (potion-of-healing real heal handler with tier picker,
     spell-scroll real cast handler, weapon-1-2-or-3 + wand-of-the-war-mage-1-2-or-3 passive stubs — Phase 9.3).
+    Spells moved <strong>~79% → ~83%</strong> via the v2.404.1–v2.404.10
+    <a href="/wiki/doc/plan-spell-utility-upcast">spell utility-upcast arc</a>:
+    nine target-scaling utility spells (Invisibility, Fly, Enhance Ability, Longstrider, Charm Person, Bane,
+    Command, Animal Friendship, Blindness/Deafness) now ride the v2.380.0 / v2.381.0
+    cap-extension substrate across both <code>_SPELL_BUFF_MAP</code> and <code>_SPELL_TARGET_CAPS</code>.
     Prior arcs that already shipped: the v2.392.0–v2.399.2
     <a href="/wiki/srd-races-implementation">race-features arc</a>
     (Dragonborn Breath Weapon, Tiefling racial Hellish Rebuke, Hill Dwarf

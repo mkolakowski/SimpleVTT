@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.404.12] - 2026-06-17 — "The Refreshed Surface"
+
+**Schema version:** 69
+
+**Commit summary:** Wiki landing-page audit refresh — the SRD coverage table on the `/wiki` landing page (`app/templates/wiki.html`) and the on-disk index (`docs/wiki/README.md`) were stamped "as of v2.400.0" with the pre-v2.404.x percentages. This commit syncs both surfaces to **v2.404.10**: Spells flips from **~79% → ~83%** to reflect the v2.404.1–v2.404.10 spell utility-upcast arc that the v2.404.11 TODO refresh catalogued. The narrative paragraph beneath the table now names the v2.404.x arc inline with a cross-link to the [closure-retrospective plan doc](docs/plans/spell-utility-upcast.md) so a reader scanning the wiki landing sees what moved + can drill in. The remaining-~3% framing widens from "utility-spell richness" to "utility-spell mechanical depth" (duration-scaling, AoE-radius scaling, summon-level scaling) per the v2.404.10 TODO reframing.
+
+**Description:** Same wiki-catches-up pattern as v2.391.1 ("The Wiki Catches Up") and v2.400.1 ("The Reckoned Tally") — every multi-commit arc that moves a category percentage needs a matching wiki-surface refresh so the landing page doesn't drift into staleness. The v2.404.x arc shipped 10 commits + 1 TODO refresh + 1 plan-doc closure-retrospective, but the wiki landing page kept reading **~79%** for Spells and **v2.400.0** as the as-of stamp. This commit closes that gap.
+
+**Why "The Refreshed Surface":** the wiki landing is the user-facing summary surface — the table + paragraph a new visitor sees first. Refreshing it keeps the project's headline numbers honest.
+
+PATCH — doc-only edit to two reader-facing wiki surfaces. No code change; no schema bump; no harness test churn (the wiki landing has structural assertions in `test_wiki_home_renders` that check row presence, not values). Magic items + Spells both reflect the closed arc; the v2.404.10 stamp tracks the audit pass that drove the refresh.
+
+### Changed
+- `app/templates/wiki.html`: as-of stamp **v2.400.0 → v2.404.10**, Spells row **~79% → ~83%**, narrative paragraph inserts the v2.404.x spell utility-upcast arc summary with cross-link to `plan-spell-utility-upcast`.
+- `docs/wiki/README.md`: same as-of stamp + Spells percentage + narrative inline mention.
+
 ## [2.404.11] - 2026-06-17 — "The Tally Updated"
 
 **Schema version:** 69
