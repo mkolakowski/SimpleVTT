@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.404.11] - 2026-06-17 — "The Tally Updated"
+
+**Schema version:** 69
+
+**Commit summary:** Audit refresh for the spell utility-upcast arc. New `SRD 5e Audit (v2.404.10 refresh)` entry at the top of TODO.md catalogs the 10-commit arc (v2.404.1 → v2.404.10), updates the Spells row from **~79% → ~83%** (the 9 in-scope target-scaling utility spells are now closed), and re-frames the P2 follow-up to reflect the narrower remaining scope. Two new filed follow-ups surface: the PC-side save-or-suck install hook (NPC-only in v1 per v2.32.0) + the duration-scaling substrate (Hunter's Mark / Mass Suggestion / Bestow Curse / Geas / Modify Memory — 11 spells gated by a substrate that doesn't yet exist).
+
+**Description:** Doc-only commit. No engine code touched. The audit refresh:
+- Names all 10 arc commits with their substrate + shape
+- Updates the Spells percentage with a 4-pt bump
+- Re-scopes the P2 "cast-and-broadcast utility-spell upcast" gap from "~250 spells with no mechanical depth" to a narrower set of sub-buckets: duration-only (11), AoE-radius (9), summon-level (6), effect-rider (14) — each needs its own substrate ship
+- Files the PC-save-or-suck install hook as a separate gap since v2.404.x exposed how many spells now depend on it
+- Stamps `✅ DONE — Spell target-scaling cap+upcast arc (v2.404.1–v2.404.10)` to close the arc on the audit's accomplishment ledger
+
+The headline ~97% SRD-automation number stays put — Spells's 4-pt bump is below the rounding noise floor. The substantive change is the new closed line item and the narrower remaining-gap scope.
+
+PATCH — TODO.md audit-section addition (+~75 lines). No code touched.
+
+### Changed
+- `TODO.md`: new `## SRD 5e Audit (v2.404.10 refresh)` section at the top, with the existing v2.404.0 entry pushed down. Spells category bumped ~79% → ~83%. Two new filed follow-ups (PC save-or-suck install hook; duration-scaling substrate). The v2.404.x arc gets a `✅ DONE` row on the audit's accomplishment ledger.
+
 ## [2.404.10] - 2026-06-17 — "The Arc Recorded"
 
 **Schema version:** 69

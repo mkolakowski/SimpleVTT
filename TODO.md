@@ -25,6 +25,72 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 
 ---
 
+## SRD 5e Audit (v2.404.10 refresh)
+
+**Audit scope.** Recomputed against the codebase as of v2.404.10, after the **v2.404.1 → v2.404.10 spell utility-upcast arc** that closed the target-scaling cap+upcast substrate for 9 utility spells across both substrate dicts:
+
+- **v2.404.1 "The Hidden Hand"** — Invisibility cap (`_SPELL_BUFF_MAP`, L2 + 1/slot).
+- **v2.404.2 "The Borrowed Sky"** — Fly cap (`_SPELL_BUFF_MAP`, L3 + 1/slot).
+- **v2.404.3 "The Menagerie's Touch"** — Enhance Ability cap (`_SPELL_BUFF_MAP`, L2 + 1/slot).
+- **v2.404.4 "The Hour's Stride"** — Longstrider cap (`_SPELL_BUFF_MAP`, L1 + 1/slot; existing entry extended).
+- **v2.404.5 "The Whispered Bond"** — Charm Person cap (`_SPELL_TARGET_CAPS` data drop, L1 + 1/slot — first condition-shape consumer of the generalized substrate).
+- **v2.404.6 "The Shared Cap"** — Bane substrate consolidation (moved inline math to registry; new `_spell_target_cap_for_slot` helper for bespoke endpoints).
+- **v2.404.7 "The Single Word"** — Command full condition-install + cap (`_SPELL_CONDITION_MAP` + `_SPELL_TARGET_CAPS`, L1 + 1/slot).
+- **v2.404.8 "The Beast's Trust"** — Animal Friendship full condition-install + cap (L1 + 1/slot).
+- **v2.404.9 "The Stolen Sense"** — Blindness/Deafness arc-closer (first L2-base condition-install ship).
+- **v2.404.10 "The Arc Recorded"** — Closure-retrospective plan doc at [`docs/plans/spell-utility-upcast.md`](plans/spell-utility-upcast.md) + wiki surfacing (allowlist + landing-page row + on-disk index row + per-slug harness test).
+
+The session shipped **10 commits** end-to-end. Spells moves slightly closer to its strictly-✅ ceiling (cap arithmetic substrate is now a closed surface across both dicts; the remaining ~17% gap is mechanical depth on the cast-and-broadcast utility tail — see filed gap #1 below).
+
+### Per-category coverage (the headline numbers)
+
+| Category | SRD count | Automated | Notes |
+|---|---|---|---|
+| Races | 9 | **✅ ~100%** | Unchanged. |
+| Monsters | 322 | **✅ ~100%** | Unchanged. |
+| Conditions | 15 | **~92%** | Unchanged. |
+| Class features | **222 rows** | **✅ 100%** | Unchanged. |
+| Spells | 319 | **~83%** | **+4 pts vs. v2.404.0 (~79% → ~83%).** Nine target-scaling utility spells (Invisibility / Fly / Enhance Ability / Longstrider / Charm Person / Bane / Command / Animal Friendship / Blindness-Deafness) now ride the v2.380.0 / v2.381.0 cap-extension substrate. **All 9 in-scope target-scaling utility spells are now wired** — the cap-arithmetic surface is closed across both `_SPELL_BUFF_MAP` and `_SPELL_TARGET_CAPS`. The remaining ~17% gap is mechanical depth on cast-and-broadcast utility spells (no damage/heal base) — filed below. |
+| Magic items | **239 / 239 wired** | **✅ 100%** | Unchanged from v2.404.0. |
+
+**Overall ~97%** automated across the SRD ruleset (headline unchanged — Spells was already in the ~79% range; the meaningful change is that the target-scaling cap+upcast substrate is now a closed surface). The remaining ~3% is dominated by the cast-and-broadcast utility-spell mechanical-depth tail + the permanently-GM-narrated condition clauses.
+
+### Remaining gaps (priority order — toward full SRD automation)
+
+After the v2.404.x spell utility-upcast arc, the per-category gaps are narrower still:
+
+1. 🟡 **P2 — Cast-and-broadcast utility-spell mechanical depth (narrower scope).** Reframed. The v2.404.x arc closed the **target-scaling** cap+upcast surface for the 9 in-scope spells. The remaining ~250 SRD utility spells either don't scale RAW (True Strike / Identify / Heroes' Feast / Detect Magic / etc.) or scale via mechanisms outside the target-cap substrate: duration-only (Mass Suggestion / Hunter's Mark / Bestow Curse / Geas / Modify Memory — 11 spells), radius/AoE-area (Confusion / Fog Cloud / Major Image / Globe of Invulnerability — 9 spells), summon-level (the Conjure family — 6 spells), counter/effect riders (Counterspell / Dispel Magic / Heal / Animate Dead / Magic Weapon — 14 spells). Each sub-bucket needs its own substrate ship (duration-scaling first, since it has the most spells). Filed for a v2.5x.x arc.
+2. 🟠 **Filed follow-up — PC save-or-suck install for condition-shape spells.** The condition-install path at line ~22165 of `tabletop_routes.py` is NPC-only in v1 (per the v2.32.0 filed comment). The v2.404.x arc shipped Command / Animal Friendship / Blindness-Deafness with the cap enforcement working for PC targets, but the per-target condition install on a failed save still requires the v2.32.0 PC-save roll-response hook. Affects 5+ spells in this arc + Charm Person + Hold Person + every save-or-suck spell. Filed for the same v2.5x.x arc.
+3. 🟠 **Filed follow-up — Bucket D announce-only mechanization (Path C from the v2.403.x arc).** Unchanged. ~60 SRD magic items have catalog rows + charge counters wired but mechanical effects stay GM-narrated by design. Filed for v3.x scope expansion.
+4. 🟠 **Filed follow-up — race-features Phases 1b/1c + 4b/5b + 7.** Unchanged.
+5. ✅ **DONE — Spell target-scaling cap+upcast arc (v2.404.1–v2.404.10).** All 9 in-scope target-scaling utility spells now use the v2.380.0 / v2.381.0 substrate. Both buff-shape and condition-shape paths exercised.
+6. ✅ **DONE — Magic-items closure arc (v2.403.0–v2.404.0).** Unchanged.
+7. ✅ **DONE — Charmed-gate mirror onto `/cast_spell` + `/use_feature` (v2.399.2 reconciliation).** Unchanged.
+8. ✅ **DONE — Race tail (v2.392.0–v2.399.0).** Unchanged.
+9. ✅ **DONE — Condition-enforcement audit clauses #1–#4.** Closed v2.385.0–v2.390.0.
+10. ✅ **DONE — Class-feature ⚪ tail.** Closed v2.368.0–v2.370.1.
+11. ✅ **DONE — Spell area-effect automation.** Closed v2.373.0–v2.376.0.
+12. ✅ **DONE — Spell upcast dice/heal scaling.** Effectively complete (v2.344.2 reconciliation).
+13. ✅ **DONE — Magic-item content tail.** Closed v2.316.0–v2.344.0.
+14. ✅ **DONE — Legendary + Lair Actions arc.** Closed end-to-end v2.159.32–v2.382.0.
+
+### Out-of-scope (unchanged)
+
+Tasha's, Xanathar's-beyond-SRD, Strixhaven, post-SRD feats, backgrounds beyond Acolyte stay future-3.x scope. **2024 rules + Mythic Actions** likewise stay future-3.x scope. **Charmed clause 2** (social-check advantage), **Grappled clause 3** (out-of-reach), **Deafened** (mostly hearing-narrative): permanently GM-narrated per the v2.384.0 audit doc.
+
+### What's left to ship in SimpleVTT 2.x?
+
+The SRD ruleset stays at ~97% automated end-to-end. The remaining ~3% is dominated by the cast-and-broadcast utility-spell mechanical-depth tail (filed gap #1, narrower scope after v2.404.x) + the PC-side save-or-suck install hook (filed gap #2) + the substrate-dependent filed follow-ups. The natural next-arc inflection is unchanged:
+
+- **3.0 scope expansion** — post-SRD content (Tasha's, Xanathar's, 2024-PHB rule changes, Mythic Actions). **Plus the Bucket D announce-only mechanization arc** (filed gap #3 above).
+- **v2.5x.x utility-spell mechanical-depth arcs** — duration-scaling substrate (Hunter's Mark / Bestow Curse / Geas / Modify Memory / Mass Suggestion) is the highest-leverage next ship; AoE-radius scaling (Confusion / Fog Cloud / Globe of Invulnerability) next.
+- **v2.5x.x PC save-or-suck install hook** — closes the condition-install gap for PC targets across Charm Person / Hold Person / Command / Animal Friendship / Blindness-Deafness + every existing save-or-suck spell.
+- **Polish + UX** — Manually Added P3 polish items + Combat / GM Tools sections.
+- **Test-infrastructure hardening** — spell-validation suite Phase 5 + pytest-xdist parallelization.
+- **Maps 2.0 / Stealth-cover substrates** — would unlock Phases 4b + 5b of race-features.
+
+---
+
 ## SRD 5e Audit (v2.404.0 refresh)
 
 **Audit scope.** Recomputed against the codebase as of v2.404.0, after the **v2.403.0 → v2.404.0 magic-items closure arc** that took the magic-items category from 235/239 (~98%) to 239/239 (100%):
