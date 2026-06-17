@@ -4900,6 +4900,20 @@ def _barbarian_sheet(name: str) -> dict:
                 "desc": "1/dawn. Action: hurl the sphere up to 60 ft at a Huge-or-smaller target. Ranged attack with DEX + PB; on a hit the bands unfold and restrain (DC 20 STR to escape; bonus action to release). RAW DMG p.176.",
                 "manual": False,
             },
+            # v2.403.3 — magic-items-automation Phase 9.2 batch 4:
+            # Horn of Valhalla (RAW DMG p.175) — 1/7 days summon spirits.
+            # The horn is seeded INERT on Krieger (vault loot at line
+            # ~7100); the harness PATCHes equipped=True before invoking.
+            # `reset: "none"` — GM manual reset when the 7-day cooldown
+            # elapses in fiction.
+            {
+                "key": "horn-of-valhalla",
+                "name": "Horn of Valhalla",
+                "current": 1, "max": 1, "reset": "none",
+                "source": "item-horn-of-valhalla",
+                "desc": "1 use, then 7-day cooldown (GM manual reset). Action: blow the horn — warrior spirits (berserker stats) appear within 60 ft and fight as allies for 1 hour. Higher-metal horns require martial proficiency (GM-narrated). RAW DMG p.175.",
+                "manual": False,
+            },
         ],
         # v2.18.2: clickable Class abilities buttons. Rage's curated
         # entry is slot:'bonus' (since v2.6.0); clicking announces +
@@ -5361,6 +5375,21 @@ def _monk_drunken_sheet(name: str) -> dict:
                 "source": "monk Lv 2",
                 "class_slug": "monk",
                 "desc": "Spend 1 Ki for Flurry of Blows / Patient Defense / Step of the Wind (bonus action). 5 points at Lv 5; refreshes on short rest.",
+                "manual": False,
+            },
+            # v2.403.3 — magic-items-automation Phase 9.2 batch 4:
+            # Rod of Security (RAW DMG p.193) — 1/10 days paradise shift.
+            # The rod is seeded INERT on Quan (vault loot, equipped=False
+            # at line ~7176); the harness PATCHes equipped=True before
+            # invoking. `reset: "none"` so long-rest doesn't auto-refill —
+            # the GM manually resets the counter when the 10-day cooldown
+            # elapses in fiction.
+            {
+                "key": "rod-of-security",
+                "name": "Rod of Security",
+                "current": 1, "max": 1, "reset": "none",
+                "source": "item-rod-of-security",
+                "desc": "1 use, then 10-day cooldown (GM manual reset). Action: transport you + up to 199 willing creatures to an extraplanar paradise for up to 200 days ÷ travelers. Returns party to original location at the end. RAW DMG p.193.",
                 "manual": False,
             },
         ],
@@ -6052,6 +6081,19 @@ def _sorcerer_sheet(name: str) -> dict:
                 "charge_recovery": "1d20",
                 "source": "item-cube-of-force",
                 "desc": "36 charges; bonus action to press a face + expend 1-5 charges (per face) to project a 15-ft force barrier. Regain 1d20 at dawn. RAW DMG p.165.",
+                "manual": False,
+            },
+            # v2.403.3 — magic-items-automation Phase 9.2 batch 4:
+            # Ring of Djinni Summoning (RAW DMG p.190) — 1/24 hours.
+            # The ring is seeded INERT on Zara (vault loot at line
+            # ~7178); the harness PATCHes equipped+attuned. `reset:
+            # "none"` — GM manual reset when 24-h cooldown elapses.
+            {
+                "key": "ring-of-djinni-summoning",
+                "name": "Ring of Djinni Summoning",
+                "current": 1, "max": 1, "reset": "none",
+                "source": "item-ring-of-djinni-summoning",
+                "desc": "1 use, then 24-h cooldown (GM manual reset). Action: summon the bound djinni within 120 ft — friendly + obeys commands for up to 1 hour (concentration). RAW DMG p.190.",
                 "manual": False,
             },
             # v2.208.0 — Eyes of Charming charge pool (RAW DMG p.168):

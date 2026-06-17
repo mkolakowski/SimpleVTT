@@ -37812,6 +37812,54 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "effects, face 5 nothing-passes, face 6 deactivate)."
         ),
     },
+    # v2.403.3 — magic-items-automation Phase 9.2 batch 4: multi-day
+    # cooldown items. Each resource row uses ``reset: "none"`` so the
+    # standard rest-refill path skips the counter — the GM manually
+    # resets the resource via the existing manual-reset path when the
+    # in-fiction cooldown (24 h / 7 d / 10 d) elapses. SimpleVTT has no
+    # clock substrate, so manual-reset is the v1 model.
+    "horn-of-valhalla": {
+        "key": "blow-horn",
+        "name": "Blow Horn of Valhalla",
+        "resource_key": "horn-of-valhalla",
+        "requires_attunement": False,
+        "min_charges": 1,
+        "max_charges": 1,
+        "narration": (
+            "blew the horn — warrior spirits from Valhalla appear "
+            "within 60 ft and fight as allies (GM-narrated: berserker "
+            "stats, 1-hour duration; 7-day cooldown before the horn "
+            "can be used again — GM manually resets the counter)."
+        ),
+    },
+    "ring-of-djinni-summoning": {
+        "key": "summon-djinni",
+        "name": "Summon the Djinni",
+        "resource_key": "ring-of-djinni-summoning",
+        "requires_attunement": True,
+        "min_charges": 1,
+        "max_charges": 1,
+        "narration": (
+            "spoke the ring's command word and summoned the bound djinni "
+            "within 120 ft (GM-narrated: friendly + obeys commands, up "
+            "to 1 hr concentration; 24-h cooldown — GM manually resets "
+            "the counter)."
+        ),
+    },
+    "rod-of-security": {
+        "key": "paradise-shift",
+        "name": "Shift to Paradise",
+        "resource_key": "rod-of-security",
+        "requires_attunement": False,
+        "min_charges": 1,
+        "max_charges": 1,
+        "narration": (
+            "activated the rod and transported the party (up to 199 "
+            "willing creatures) to an extraplanar paradise (GM-narrated: "
+            "stay up to 200 days ÷ travelers; 10-day cooldown — GM "
+            "manually resets the counter)."
+        ),
+    },
 }
 
 
@@ -87261,6 +87309,9 @@ async def use_item_action(
     # v2.403.2: multi-charge per-day items with recharge dice —
     # pipes-of-the-sewers (3, 1d3/dawn, expend 1-3) + helm-of-teleportation
     # (3, 1d3/dawn, expend 1) + cube-of-force (36, 1d20/dawn, expend 1-5).
+    # v2.403.3: multi-day cooldown items — horn-of-valhalla (1/7d) +
+    # ring-of-djinni-summoning (1/24h) + rod-of-security (1/10d).
+    # All three use `reset: "none"` (GM manual reset, no rest auto-refill).
     if slug in (
         "bowl-of-commanding-water-elementals",
         "brazier-of-commanding-fire-elementals",
@@ -87273,6 +87324,9 @@ async def use_item_action(
         "pipes-of-the-sewers",
         "helm-of-teleportation",
         "cube-of-force",
+        "horn-of-valhalla",
+        "ring-of-djinni-summoning",
+        "rod-of-security",
     ):
         return await _use_item_action_announce_only(
             db, campaign_id, char, item, sheet, catalog, slug,

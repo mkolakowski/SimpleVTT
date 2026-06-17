@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.403.3] - 2026-06-17 — "The Patient Hourglass"
+
+**Schema version:** 69
+
+**Commit summary:** Fourth batch of charge-tracked announce-only Bucket D items on the v2.403.0 substrate. Three multi-day cooldown items now tick their RAW single-use counter on `/use_item_action`, with `reset: "none"` so long-rest **doesn't** auto-refill (the GM manually resets the counter when the in-fiction cooldown elapses): **Horn of Valhalla** (1/7d, on Krieger), **Ring of Djinni Summoning** (1/24h, on Zara), and **Rod of Security** (1/10d, on Quan). All three are vault-loot items the harness PATCHes equipped+attuned for the test.
+
+**Description:** SimpleVTT has no in-fiction clock substrate — there's no engine model for "7 days have passed" or "24 hours have passed." The audit's prior pass treated multi-day cooldowns as out-of-scope for charge tracking; this commit reframes them as `reset: "none"` resources that decrement on use, refuse a second use until reset, and require the GM to manually flip the counter back to 1/1 when the cooldown elapses at the table. The mechanical surface — counter ticks down + 409 on a second same-cooldown use — is the engine's authoritative cross-table record, even though the elapsed-time gate is GM-narrated.
+
+The harness test exercises the full lifecycle: PATCH inventory equipped (+attuned for the djinni ring) → spend → 200 with current=0 → second use → 409 → long rest → counter **stays at 0** (the negative assertion that `reset: "none"` works) → restore the inert vault-loot state. The fixture also restores the resource to 1/1 via direct sheet-fields PATCH (simulating the GM's manual reset) so subsequent tests start clean.
+
+**Why "The Patient Hourglass":** the multi-day cooldown is the engine's "hourglass" — counter pinned at 0 until the GM resets it. Patient because the elapsed time happens at the table, not in code.
+
+PATCH — 3 new wired items + 3 paired resource rows + 1 new harness test (parameterized across all 3). Magic items category remains **235/239 wired (~98%)** in the audit denominator; fourteen Bucket D items now machine-track their charges (up from eleven in v2.403.2). Substrate is now proven for: 1/1 single-charge, 3/3 multi-pool, 3/3 multi-spend-per-call, 36/36 multi-spend with dice-recharge, and `reset: "none"` manual-reset cooldowns. Remaining batches: lifetime charges (chime-of-opening, ring-of-three-wishes), multi-dose consumables, one-shot consumables, then the two Bucket A holdouts (wind-fan + medallion-of-thoughts).
+
+### Added
+- `app/routes/tabletop_routes.py`: three new `_MAGIC_ITEM_ACTIONS` entries (`horn-of-valhalla`, `ring-of-djinni-summoning`, `rod-of-security`). Each `min_charges=max_charges=1`; only `ring-of-djinni-summoning` requires attunement. Dispatch tuple extended.
+- `app/demo_seed.py`: three new `resources[]` rows. Horn on Krieger (1/1, `reset: "none"`), Ring on Zara (1/1, `reset: "none"`), Rod on Quan (1/1, `reset: "none"`). All three skip the auto-refill path.
+- `tests/harness/test_use_item_action_announce_only.py`: new test `test_multi_day_cooldown_items_decrement_and_resist_rest` parameterized over all three items + a `_MULTI_DAY` constant. Asserts spend → 0, second use → 409, **long rest stays at 0** (the negative `reset: "none"` assertion).
+
+### Changed
+- `docs/plans/magic-items-automation.md`: Phase 9.2 status table grows three new ✅ rows.
+- `docs/test-harness-coverage.md`: total-test-count bump (+1) + the announce-only file entry grows with the multi-day-cooldown test.
+
 ## [2.403.2] - 2026-06-17 — "The Recharging Cube"
 
 **Schema version:** 69

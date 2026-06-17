@@ -314,6 +314,73 @@ async def test_helm_of_teleportation_requires_attunement(gm_client, roster):
         await _long_rest(gm_client, char["id"])
 
 
+_MULTI_DAY = [
+    # (carrier_name, slug, action_key, requires_attunement)
+    ("Krieger Stonefist", "horn-of-valhalla", "blow-horn", False),
+    ("Zara Emberfire", "ring-of-djinni-summoning", "summon-djinni", True),
+    ("Quan Reelstep", "rod-of-security", "paradise-shift", False),
+]
+
+
+async def test_multi_day_cooldown_items_decrement_and_resist_rest(
+    gm_client, roster,
+):
+    """v2.403.3: multi-day cooldown items (horn-of-valhalla 1/7d,
+    ring-of-djinni-summoning 1/24h, rod-of-security 1/10d). Each:
+    PATCH inventory equipped (+attuned where required) → spend 1 →
+    resource 1 → 0 → second use returns 409 → long rest does NOT
+    refill (reset: "none" — GM manually resets in fiction). Restore
+    the inert vault-loot state on teardown."""
+    for carrier_name, slug, action_key, requires_attune in _MULTI_DAY:
+        char = roster[carrier_name]
+        prior = await _patch_inventory_item(
+            gm_client, char["id"], slug,
+            equipped=True, attuned=requires_attune,
+        )
+        try:
+            sheet = await _sheet(gm_client, char["id"])
+            idx = _slug_index(sheet.get("inventory") or [], slug)
+            assert idx >= 0, f"{carrier_name} must carry seeded {slug}"
+            # Resource starts at 1/1 (no rest-refill since reset=none;
+            # the demo seed ships full).
+            assert _resource_current(sheet, slug) == 1, \
+                f"{slug} should ship at 1/1 in demo seed"
+
+            spend = await _invoke(gm_client, char["id"], idx, action_key)
+            assert spend.status_code == 200, spend.text
+            assert spend.json()["resource"]["current"] == 0
+
+            second = await _invoke(gm_client, char["id"], idx, action_key)
+            assert second.status_code == 409, second.text
+
+            # Long rest does NOT refill (reset: "none"). The counter
+            # should stay at 0 until the GM manually resets.
+            rest_resp = await _long_rest(gm_client, char["id"])
+            assert rest_resp.status_code == 200, rest_resp.text
+            sheet_rested = await _sheet(gm_client, char["id"])
+            assert _resource_current(sheet_rested, slug) == 0, \
+                f"{slug} should NOT refill on long rest (reset=none)"
+        finally:
+            # Restore the inert vault-loot state + reset the counter to
+            # 1/1 for the next test by direct sheet-fields PATCH (GM
+            # manual-reset simulation).
+            await _patch_inventory_item(
+                gm_client, char["id"], slug, **prior,
+            )
+            r = await gm_client.get(
+                f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-json",
+            )
+            sheet = (r.json() or {}).get("sheet") or {}
+            resources = list(sheet.get("resources") or [])
+            for row in resources:
+                if isinstance(row, dict) and row.get("key") == slug:
+                    row["current"] = row.get("max", 1)
+            await gm_client.patch(
+                f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-fields",
+                json={"resources": resources},
+            )
+
+
 async def test_cube_of_force_variable_charge_spend(gm_client, roster):
     """v2.403.2: Cube of Force (36 charges, 1d20/dawn) — RAW per-face
     cost is 1/2/3/4/5; v1 ships the generic "expend 1-5" action. Test
