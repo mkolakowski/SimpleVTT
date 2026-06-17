@@ -1948,6 +1948,33 @@ def _combatant_is_incapacitated(combatant: dict | None) -> bool:
     return False
 
 
+def _caster_is_incapacitated(campaign_id: int, char_id: int) -> bool:
+    """v2.386.0 — return True when the active battle has a combatant
+    for ``char_id`` whose buff list carries any incapacitating key.
+    Returns False when the character isn't in init (no combatant to
+    read state from — no enforcement when the actor is off-screen).
+
+    Closes clause #2a of the v2.384.0 condition-enforcement audit
+    (Incapacitated general action gate). Used by ``/attack`` first
+    in v2.386.0; follow-up commits can wire the same helper into
+    ``/cast_spell`` and ``/use_feature``. Per the audit doc the
+    contract is: "incapacitated rejects the action but doesn't end
+    the turn" — the gate fires before slot/economy gates so a
+    blocked attempt doesn't burn the action slot.
+    """
+    if not char_id or char_id <= 0:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if not isinstance(c, dict):
+            continue
+        if c.get("char_id") and int(c.get("char_id")) == int(char_id):
+            return _combatant_is_incapacitated(c)
+    return False
+
+
 async def _maybe_item_on_damage_save(
     campaign_id: int, char, damage_amount: int,
     db: "Session | None" = None,
@@ -89416,6 +89443,26 @@ async def use_attack(
     attack = dict(attacks[attack_index] or {})
 
     name = (attack.get("name") or "Attack").strip()
+
+    # v2.386.0 — RAW PHB p.290 Incapacitated: "An incapacitated
+    # creature can't take actions or reactions." Gate fires BEFORE
+    # the over-budget check so a blocked attempt doesn't burn the
+    # action slot (same contract as the v2.49.75 range gate). Skipped
+    # when the attacker isn't in init (no combatant to read state
+    # from) or when body.get("override") is set (GM bypass — matches
+    # the existing override convention). Closes clause #2a of the
+    # v2.384.0 condition-enforcement audit; follow-up commits wire
+    # the same helper into /cast_spell + /use_feature.
+    if (
+        not bool(body.get("override"))
+        and _caster_is_incapacitated(campaign_id, int(char.id))
+    ):
+        return JSONResponse(status_code=409, content={
+            "error": "incapacitated",
+            "char_name": char.name,
+            "source": "attack",
+            "label": name,
+        })
 
     # v2.6.1: Phase 4 over-budget gate. Every weapon attack consumes the
     # action slot (bonus-action attacks are filed under feature/Class

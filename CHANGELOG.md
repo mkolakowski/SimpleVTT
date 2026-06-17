@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.386.0] - 2026-06-16 — "The Still Hand"
+
+**Schema version:** 69
+
+**Commit summary:** Closes **clause #2a** of the v2.384.0 condition-enforcement audit — `/attack` now rejects with 409 `incapacitated` when the calling character carries an incapacitating buff (paralyzed / stunned / unconscious / petrified / asleep / Hideous-Laughter), per RAW PHB p.290 ("An incapacitated creature can't take actions or reactions."). Adds a thin `_caster_is_incapacitated(campaign_id, char_id)` helper that wraps the v2.385.0 `_combatant_is_incapacitated` predicate — looks up the character's combatant in the active battle, returns the predicate, defaults False when the character isn't in init. The gate fires BEFORE the over-budget check so a blocked attempt doesn't burn the action slot. `body.get("override")` bypasses the gate (same GM-escape convention as the v2.6.1 over-budget gate). Follow-up commits wire the same helper into `/cast_spell` (clause #2b) and `/use_feature` (clause #2c).
+
+**Description:** This is the most impactful single per-clause fix from the v2.384.0 audit's suggested-shipping-order. Today a paralyzed PC can still `/attack` and the engine fires the attack normally — wrong RAW. After v2.386.0 the gate rejects with a structured 409 (`error: "incapacitated"`, `char_name`, `source: "attack"`, `label`) that the UI can render as a non-blocking toast instead of an attack card.
+
+The gate is **silent when the character isn't in active init** — `_caster_is_incapacitated` returns False if `hub.get_battle(campaign_id)` returns None or if no combatant in the active battle matches the `char_id`. This preserves the v1 "off-screen narrative attack" affordance while still gating in-battle play strictly. Future commits closing clauses #2b/#2c will use the same helper without touching this contract.
+
+The helper is reused across the three condition-audit gates (Sneak Attack ally-skip in v2.385.0, /attack gate here, /cast_spell + /use_feature gates next) — single source of truth for "is this combatant incapacitated?", reads the canonical `_INCAPACITATING_BUFF_KEYS` frozenset shipped v2.49.51.
+
+Per the audit doc the contract is: "incapacitated rejects the action but doesn't end the turn." This commit honors that — the v1 design parks the turn slot intact; the GM advances `/next_turn` per usual once the paralyzed PC's turn is done.
+
+Three harness tests in `test_attack_incapacitated_gate.py`: (a) paralyzed PC → 409 with structured error; (b) paralyzed PC with `override: true` → 200 (gate bypassed); (c) non-paralyzed PC → 200 (gate silent).
+
+MINOR — additive engine helper + one endpoint gate + 3 tests; existing /attack tests with non-incapacitated callers are unchanged.
+
+### Added
+- `_caster_is_incapacitated(campaign_id, char_id) -> bool` helper in `app/routes/tabletop_routes.py` (sits next to `_combatant_is_incapacitated` shipped v2.385.0).
+- `/attack` incapacitated gate at the top of `use_attack`, just before the v2.6.1 over-budget gate.
+- `tests/harness/test_attack_incapacitated_gate.py` — 3 tests (paralyzed → 409, paralyzed+override → 200, baseline non-paralyzed → 200).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3130 → 3133 (+3 incapacitated-gate tests).
+
 ## [2.385.0] - 2026-06-16 — "The Conscious Ally"
 
 **Schema version:** 69
