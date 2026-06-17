@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.394.0] - 2026-06-16 — "The Second Look"
+
+**Schema version:** 69
+
+**Commit summary:** Fifth stale-audit reconciliation in the v2.376.2 → v2.394.0 stretch — the v2.393.0 race-features plan listed Half-Orc Savage Attacks as ⚪ unwired (Phase 1 of 7), but a follow-up grep audit confirms it's been shipped end-to-end since **v2.99.23** in `_compute_attack_auto_uplifts` at `tabletop_routes.py:29709`, with `tests/harness/test_savage_attacks.py` covering the auto-uplift `source="savage-attacks"` flow and the per-test entry already living at `docs/test-harness-coverage.md:799`. The plan's per-race table flips Savage Attacks ⚪ → ✅, the 7-phase shipping list shrinks to 6 phases (Tiefling Infernal Legacy now Phase 1; Trance now Phase 7), and the wiki landing-page + on-disk index status flip from "⚪ proposed" to "🟢 partial." The 5 other ⚪ rows (Stonecunning, heavy-armor speed, Halfling Nimbleness, Naturally Stealthy, Artificer's Lore) were re-verified by an `Explore`-agent grep sweep — those are genuinely unwired and stay scheduled in the plan.
+
+**Description:** Caught mid-flight: I'd started writing `_pc_has_savage_attacks` + `_savage_attacks_first_die` helpers and wiring them into the `/attack` crit damage path before the existing v2.99.23 implementation surfaced via a `grep` on the duplicate `tests/harness/test_savage_attacks.py` filename. The duplicate implementation would have **double-fired** the bonus die on every Half-Orc crit (once via the existing `_compute_attack_auto_uplifts` rider, once via my new inline path) — a real correctness regression caught by the `[check-plan-doc memory](memory/feedback_check_plan_doc_before_audit_promote.md)` rule's instinct to verify before re-implementing. Reverted the work-in-progress changes (zero net `tabletop_routes.py` diff after revert), then shipped this reconciliation in pure doc form.
+
+This is the **5th stale-audit reconciliation** in the session, following:
+1. v2.344.1 — magic-item content tail (116 items shown unwired, all 116 actually shipped v2.316.0–v2.344.0)
+2. v2.344.3 — class-feature ⚪ tail (22 of 24 rows shown unwired, all 22 shipped v2.99.197–.221)
+3. v2.376.2 — Legendary + Lair Actions (promoted to P1 on stale audit, actually shipped end-to-end v2.159.32–v2.181.0)
+4. v2.382.1 — Hold Person / Hold Monster / Sleep bespoke-constant refactor (already used the shared `upcast_target_count` helper from v2.127.0)
+5. v2.394.0 — Half-Orc Savage Attacks (this commit)
+
+The `feedback_check_plan_doc_before_audit_promote.md` auto-memory was already documenting "hit 3 times" before this session; updated to "**four times**" with this commit's inline evidence so future audits run the verification checklist (plan doc → harness test → grep) before promoting a trait between ⚪/✅.
+
+PATCH — pure doc edit; reverted the duplicate-implementation changes in `tabletop_routes.py` before they landed in any commit.
+
+### Changed
+- `docs/plans/race-features.md`: Savage Attacks row ⚪ → ✅ with citation to `tabletop_routes.py:29709` + the harness file. Counts updated 16/11/8 → 17/11/7. Per-phase shipping list renumbered (7 phases → 6 active + 1 optional). Added "Stale-audit reconciliations" section linking to the auto-memory rule.
+- `app/templates/wiki.html`: landing-page row status flipped from "⚪ proposed (v2.393.0) — 7 phase ships" to "🟢 partial (v2.394.0) — 6 phase ships remaining."
+- `docs/wiki/README.md`: matching status flip on the on-disk index row.
+
+### Fixed
+- The v2.393.0 plan's miscount of how many race-trait phases remain (was 7, actually 6 after the v2.99.23 reconciliation).
+
 ## [2.393.0] - 2026-06-16 — "The Bloodline Ledger"
 
 **Schema version:** 69

@@ -1,6 +1,6 @@
 # Race features — close the SRD races gap to 100%
 
-> **Status:** ⚪ proposed (v2.393.0 plan landing). Drives the **Races ~90% → 100%** axis of the [SRD audit](../../TODO.md#srd-5e-audit-v23900-refresh).
+> **Status:** 🟢 partial (v2.394.0). Drives the **Races ~90% → 100%** axis of the [SRD audit](../../TODO.md#srd-5e-audit-v23900-refresh). Phase 1 (Half-Orc Savage Attacks) was already shipped in v2.99.23 — reconciled v2.394.0 (stale-audit correction; see below). Phases 2–7 still to ship.
 
 ## Why this plan exists
 
@@ -22,7 +22,7 @@ Cells: ✅ wired in engine code · 🟠 inert sheet seed (no engine read) · ⚪
 | **Half-Orc** | Relentless Endurance | ✅ | `_pc_has_relentless_endurance_available` + `_apply_hp_change` clamp |
 | | Darkvision 60 ft | 🟠 | `darkvision_ft` seed |
 | | Menacing (Intimidation prof) | 🟠 | `skill_proficiencies` seed |
-| | **Savage Attacks** | ⚪ | — |
+| | Savage Attacks | ✅ | `_compute_attack_auto_uplifts` (v2.99.23) at `tabletop_routes.py:29709` — auto-uplift with `source="savage-attacks"`. Covered by `tests/harness/test_savage_attacks.py`. Stale-audit reconciliation v2.394.0 — see "Stale-audit reconciliations" below. |
 | **High Elf** | Fey Ancestry (charm + sleep) | ✅ | `_RACE_SAVE_ADVANTAGES["elf"]` + sleep immunity |
 | | Darkvision 60 ft | 🟠 | seed |
 | | Keen Senses (Perception) | 🟠 | skill seed |
@@ -50,32 +50,39 @@ Cells: ✅ wired in engine code · 🟠 inert sheet seed (no engine read) · ⚪
 | | **Infernal Legacy spells** | 🟠 | Thaumaturgy / Hellish Rebuke / Darkness manually seeded into the sheet's spell list; no auto-grant gate, no level-based reveal |
 | | **Stout Halfling Stout Resilience** | ✅ | `_RACE_SAVE_ADVANTAGES["halfling-stout"]` (subrace) |
 
-**Counts:** 16 ✅ · 11 🟠 · 8 ⚪ · 3 N/A.
+**Counts:** 17 ✅ · 11 🟠 · 7 ⚪ · 3 N/A (after v2.394.0 Savage Attacks reconciliation; was 16/11/8/3 in the v2.393.0 first cut).
 
 ## Scope decision: which traits to ship vs leave
 
-This plan ships the **8 unwired** traits — every ⚪ above — except where RAW is intentionally narrative or substrate-blocked. After ship the Races coverage row goes from ~90% → essentially 100% for engine-shaped RAW.
+This plan ships the remaining **7 unwired** traits — every ⚪ above — except where RAW is intentionally narrative or substrate-blocked. After ship the Races coverage row goes from ~90% → essentially 100% for engine-shaped RAW.
 
 | Trait | Phase | Ship? | Why |
 |---|---|---|---|
-| Half-Orc Savage Attacks | 1 | ✅ | Composes on the existing `_double_dice_for_crit` substrate at PC weapon-attack sites |
-| Tiefling Infernal Legacy auto-grant | 2 | ✅ | Level-gated spell list + per-day resource seeding; mirrors v2.99.200 Pact-of-the-Tome wiring |
-| Hill Dwarf Stonecunning | 3 | ✅ | Skill-check double-PB; small endpoint or roll-route flag |
-| Hill Dwarf Speed-not-reduced-by-heavy-armor | 4 | ✅ | Composes on the existing speed/armor-weight gate (the gate doesn't fire today, so this lands as the gate's first consumer) |
-| Halfling Nimbleness | 5 | ✅ | Move-through-larger-creature gate at `/token/move`; reuses combatant-size data |
-| Halfling Naturally Stealthy | 6 | ✅ | Stealth-check size-cover gate (skill-check side, doesn't need vision LOS) |
-| Rock Gnome Artificer's Lore | 7 | ✅ | Same shape as Stonecunning (Phase 3) — double PB on History; topic = "magic items / alchemical / tech" |
-| Elf Trance | 8 | 🟢 (flavor) | Long-rest UI nudge only; no mechanical effect server-side per RAW |
+| Half-Orc Savage Attacks | — | ✅ DONE (v2.99.23) | Already shipped on `_compute_attack_auto_uplifts`; reconciled v2.394.0 |
+| Tiefling Infernal Legacy auto-grant | 1 | ✅ | Level-gated spell list + per-day resource seeding; mirrors v2.99.200 Pact-of-the-Tome wiring |
+| Hill Dwarf Stonecunning | 2 | ✅ | Skill-check double-PB; small endpoint or roll-route flag |
+| Hill Dwarf Speed-not-reduced-by-heavy-armor | 3 | ✅ | Composes on the existing speed/armor-weight gate (the gate doesn't fire today, so this lands as the gate's first consumer) |
+| Halfling Nimbleness | 4 | ✅ | Move-through-larger-creature gate at `/token/move`; reuses combatant-size data |
+| Halfling Naturally Stealthy | 5 | ✅ | Stealth-check size-cover gate (skill-check side, doesn't need vision LOS) |
+| Rock Gnome Artificer's Lore | 6 | ✅ | Same shape as Stonecunning (Phase 2) — double PB on History; topic = "magic items / alchemical / tech" |
+| Elf Trance | 7 | 🟢 (flavor) | Long-rest UI nudge only; no mechanical effect server-side per RAW |
 | Rock Gnome Tinker | — | ❌ | **Out-of-scope** — needs a crafting substrate that doesn't exist (1-hour craft, GP cost, clockwork-creature catalog). Permanently GM-narrated by design. |
 | 🟠 → ✅ promotions (Skill Versatility, Keen Senses, Elf Weapon Training, etc.) | — | ❌ | These are already correctly seeded onto the sheet; the proficiency math reads through. No engine work owed. Test coverage may be filed under the harness-coverage doc when convenient but not required by this plan. |
 
-After Phase 7 the engine-shaped tail is closed. Phase 8 is the optional Trance polish (flavor toast on long rest). Tinker stays out-of-scope.
+After Phase 6 the engine-shaped tail is closed. Phase 7 is the optional Trance polish (flavor toast on long rest). Tinker stays out-of-scope.
+
+## Stale-audit reconciliations
+
+| Trait | First-cut audit status | Reality | Reconciled |
+|---|---|---|---|
+| Half-Orc Savage Attacks | ⚪ unwired (Explore agent on v2.393.0 plan) | ✅ shipped v2.99.23 — `_compute_attack_auto_uplifts` adds the bonus die at `tabletop_routes.py:29709` with `source="savage-attacks"`, covered by `tests/harness/test_savage_attacks.py` | v2.394.0 |
+
+This is the **5th stale-audit reconciliation** in the v2.382.1 → v2.394.0 stretch, following Aura of Courage (v2.376.2), Legendary + Lair Actions (v2.376.2), Hold Person / Hold Monster (v2.382.1), and `source_char_id` on charmed-buff installs (v2.390.2). The pattern is captured in `~/.claude/projects/.../memory/feedback_check_plan_doc_before_audit_promote.md` — audit prose drifts; the code + harness tests are the source of truth. Always verify before promoting a trait from "wired" to "needs work" or vice versa.
 
 ## Implementation patterns to copy
 
 Every phase reuses an existing substrate; no new architectural primitive is needed.
 
-- **Savage Attacks** — extend `_double_dice_for_crit(expr, *, savage_attacks: bool = False)` to append one extra die-group when the flag is true. Thread through the **player-side** weapon-attack crit sites only (NPC attacks don't get this — RAW Half-Orc trait is PC-only). Reference call sites: `tabletop_routes.py:27245`, `73559`, `90642`, `92205`, `92564`. Gate via `race_slug == "half-orc"` derived from the sheet through `_race_slug_from_sheet`.
 - **Infernal Legacy** — model: v2.99.200 Pact of the Tome (Warlock). Add `_pc_infernal_legacy_spells(sheet)` returning the level-gated catalog (Thaumaturgy always · Hellish Rebuke @ Lv 3+ · Darkness @ Lv 5+). Merge into the cast-spell whitelist + auto-seed `_resources` entries for Hellish Rebuke + Darkness (both 1/day, reset on long rest). The seed runs once per `/sheet-json` projection so adding a new Tiefling PC just works without manual character-builder steps.
 - **Stonecunning** — RAW: when making a History check related to the origin of stonework, the Dwarf adds 2× proficiency bonus instead of 1×. Implementation: small additive `topic` param on the History check roll (or a dedicated `/check_stonecunning` endpoint), gated via `race_slug in {"dwarf", "hill-dwarf"}`. Pattern: `_RACE_SAVE_ADVANTAGES`-shaped derivation, but on the check-roll side.
 - **Speed-not-reduced-by-heavy-armor** — small predicate that suppresses the (currently no-op) heavy-armor speed reduction. The substrate doesn't fire today, so this lands as the substrate's installation + Dwarf bypass in one shot. RAW PHB p.20 STR threshold check: heavy armor "Str < Str_min" reduces speed by 10. Dwarves are exempt regardless of STR.
@@ -86,16 +93,15 @@ Every phase reuses an existing substrate; no new architectural primitive is need
 
 ## Per-phase shipping plan
 
-Each phase = one MINOR commit + 1 happy-path test + 1 error-path test (race mismatch / resource exhausted / state check). The full plan lands across 7 commits (Phases 1–7) plus optional Phase 8 flavor.
+Each phase = one MINOR commit + 1 happy-path test + 1 error-path test (race mismatch / resource exhausted / state check). The full plan lands across 6 commits (Phases 1–6) plus optional Phase 7 flavor ship.
 
-1. **Phase 1 — Half-Orc Savage Attacks** (MINOR). Extend `_double_dice_for_crit` with `extra_die` flag; thread through PC weapon-attack crit sites; gate via Half-Orc race slug. Tests: Krieger-as-Half-Orc weapon crit emits the extra die; non-Half-Orc baseline unchanged. (Krieger is currently Fighter; ship as a separate Half-Orc demo PC OR upgrade an existing demo to validate the gate. Re-using an existing seed avoids new fixture sprawl.)
-2. **Phase 2 — Tiefling Infernal Legacy auto-grant** (MINOR). `_pc_infernal_legacy_spells` + level-gated catalog + `_resources` seed for Hellish Rebuke (Lv 3+) + Darkness (Lv 5+). Caelan (existing demo Tiefling Warlock per `_tiefling_*` sheet seeds) gets all three on `/sheet-json` projection.
-3. **Phase 3 — Hill Dwarf Stonecunning** (MINOR). History-check double-PB with `topic` parameter. Tavik (existing Hill Dwarf demo) is the test fixture.
-4. **Phase 4 — Hill Dwarf Speed-not-reduced-by-heavy-armor** (MINOR). Install heavy-armor STR-threshold speed gate; carve out Dwarf bypass. Test: Tavik in plate at STR 14 keeps base 25; non-Dwarf at STR 14 in plate loses 10.
-5. **Phase 5 — Halfling Nimbleness** (MINOR). Move-through-larger gate at `/token/move`. Pip (existing Lightfoot Halfling Rogue) is the fixture.
-6. **Phase 6 — Halfling Naturally Stealthy** (MINOR). Stealth-check size-cover gate. Pip is the fixture; cover combatant = an Orc or larger creature.
-7. **Phase 7 — Rock Gnome Artificer's Lore** (MINOR). Twin of Phase 3 with topic = magic items / alchemical / tech. Existing Rock Gnome demo (Mira) is the fixture.
-8. **Phase 8 — Elf Trance (flavor)** (PATCH). Long-rest UI card flavor for Elves. Optional polish ship.
+1. **Phase 1 — Tiefling Infernal Legacy auto-grant** (MINOR). `_pc_infernal_legacy_spells` + level-gated catalog + `_resources` seed for Hellish Rebuke (Lv 3+) + Darkness (Lv 5+). Caelan (existing demo Tiefling Warlock per `_tiefling_*` sheet seeds) gets all three on `/sheet-json` projection.
+2. **Phase 2 — Hill Dwarf Stonecunning** (MINOR). History-check double-PB with `topic` parameter. Tavik (existing Hill Dwarf demo) is the test fixture.
+3. **Phase 3 — Hill Dwarf Speed-not-reduced-by-heavy-armor** (MINOR). Install heavy-armor STR-threshold speed gate; carve out Dwarf bypass. Test: Tavik in plate at STR 14 keeps base 25; non-Dwarf at STR 14 in plate loses 10.
+4. **Phase 4 — Halfling Nimbleness** (MINOR). Move-through-larger gate at `/token/move`. Pip (existing Lightfoot Halfling Rogue) is the fixture.
+5. **Phase 5 — Halfling Naturally Stealthy** (MINOR). Stealth-check size-cover gate. Pip is the fixture; cover combatant = an Orc or larger creature.
+6. **Phase 6 — Rock Gnome Artificer's Lore** (MINOR). Twin of Phase 2 with topic = magic items / alchemical / tech. Existing Rock Gnome demo (Mira) is the fixture.
+7. **Phase 7 — Elf Trance (flavor)** (PATCH). Long-rest UI card flavor for Elves. Optional polish ship.
 
 ## Out-of-scope by design
 
@@ -111,6 +117,6 @@ Per [CLAUDE.md](../../CLAUDE.md#every-new-endpoint-commit-lands-a-harness-test):
 
 ## Closing the audit row
 
-After Phases 1–7 ship the **Races** row in the [SRD audit](../../TODO.md#srd-5e-audit-v23900-refresh) flips from `~90%` to `✅ ~100%` (mirroring the Class-features / Monsters trajectory). Trance and the per-race-darkvision Maps 2.0 ties are filed at the bottom of this doc as intentional non-goals.
+After Phases 1–6 ship the **Races** row in the [SRD audit](../../TODO.md#srd-5e-audit-v23900-refresh) flips from `~90%` to `✅ ~100%` (mirroring the Class-features / Monsters trajectory). Trance and the per-race-darkvision Maps 2.0 ties are filed at the bottom of this doc as intentional non-goals.
 
 The audit overall ticks from ~96% → ~97% on this arc — small but the table reads consistently across categories: races joins monsters + class-features as a strictly-✅ surface.
