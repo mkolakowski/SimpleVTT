@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.404.8] - 2026-06-17 — "The Beast's Trust"
+
+**Schema version:** 69
+
+**Commit summary:** Eighth commit of the **spell utility-upcast** arc — second condition-install ship following the v2.404.7 recipe. Wires **Animal Friendship** (RAW PHB p.213) end-to-end: new `_SPELL_CONDITION_MAP["animal-friendship"]` entry installs a `befriended-beast` buff on a failed WIS save (24-hour duration, no concentration), new `_SPELL_TARGET_CAPS["animal-friendship"]` entry enforces the cap (1 target at L1, +1 per slot above 1st). Routes through `/cast_spell` automatically — Animal Friendship's SRD JSON already carries `save_ability: "wis"`.
+
+**Description:** Pure content drop-in on the v2.404.7 substrate. No engine code touched beyond the two registry entries. Beast-only target gate + INT 4+ immunity are GM-judged (the cast still goes through; GM declares the spell fizzles per RAW if the target is immune — exposing that to the engine would require modeling creature INT scores + creature type, which is out of scope for v1).
+
+Duration 14400 rounds (24 hours @ 6 s/round) is the longest auto-expiring buff in `_SPELL_CONDITION_MAP` today — the buff badge will sit on the target through the equivalent of ~14000 round-decrement ticks. The `_buff_decrement` loop already handles arbitrarily long durations, so no new code is needed. In practice the buff will be manually end-buff'd by the GM once the encounter or session ends; the long countdown is for narrative bookkeeping.
+
+Mira Greenleaf (Druid Lv 6) is the cast surface; her L1 + L2 slots cover both base cap and +1 upcast extension. Animal Friendship appended at spell index 12 (after Longstrider at 11).
+
+**Why "The Beast's Trust":** the spell trades a morsel of food for a beast's 24-hour friendship — the trust is the mechanical surface. Bears the same shape as v2.404.5 "The Whispered Bond" (Charm Person's 1-hour social charm), just longer and beast-only.
+
+PATCH — 1 new condition-map entry + 1 new target-caps entry + 1 demo-seed spell-list addition + 1 new harness file (4 tests). Spell catalog: 8 of ~9 target-scaling utility spells now closed in the v2.404.x arc. **Blindness/Deafness is the last one queued** — same recipe, picks blinded OR deafened at cast time (concentration up to 1 minute, CON save).
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_SPELL_CONDITION_MAP["animal-friendship"]` entry (key: "befriended-beast", icon: 🐾, duration_rounds: 14400, no concentration, descriptive effects list naming the beast-only target gate + INT 4+ immunity). New `_SPELL_TARGET_CAPS["animal-friendship"]` entry (1 + 1/slot above L1).
+- `app/demo_seed.py`: appended Animal Friendship to Mira's druid spell list at index 12 (END-append to preserve existing spell_index assertions).
+- `tests/harness/test_cast_animal_friendship_target_cap_upcast.py`: new harness file (4 tests) — L1 1 target → 200, L1 2 targets → 400 limit=1, L2 2 targets → 200, L2 3 targets → 400 limit=2.
+
+### Changed
+- `docs/test-harness-coverage.md`: total-test-count bump (+4) + new row for the animal-friendship cap file.
+
 ## [2.404.7] - 2026-06-17 — "The Single Word"
 
 **Schema version:** 69

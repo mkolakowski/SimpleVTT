@@ -1175,6 +1175,36 @@ _SPELL_CONDITION_MAP = {
             "immune: Undead, creatures that don't understand the caster's language, or commands directly harmful to the target",
         ],
     },
+    # v2.404.8 — Animal Friendship (Bard / Druid / Ranger L1). RAW PHB
+    # p.213: WIS save vs becoming friendly to caster for 24 hours.
+    # Target must be a Beast; Beasts with INT 4 or higher are immune
+    # automatically (RAW). NO concentration. Material component: a
+    # morsel of food (the cast still succeeds without explicit
+    # bookkeeping in v1 — GM tracks the morsel via the inventory
+    # narration if relevant).
+    #
+    # Mechanical model: install a `befriended-beast` condition with a
+    # descriptive effects list naming the friendly behavior + immunity
+    # clauses. The "doesn't attack the caster, regards as friendly"
+    # behavior stays GM-narrated — the buff badge surfaces the duration
+    # countdown (24 hours = 14400 rounds at 6 s/round). The beast-only
+    # target gate + INT 4+ immunity is GM-judged (the cast still goes
+    # through; GM declares the spell fizzles per RAW if the target is
+    # immune).
+    "animal-friendship": {
+        "key": "befriended-beast",
+        "name": "Befriended Beast",
+        "icon": "🐾",
+        "duration_rounds": 14400,  # 24 hours @ 6 s/round
+        "concentration": False,
+        "effects": [
+            "regards caster as friendly for 24 hours",
+            "won't attack caster or caster's allies unless harmed",
+            "RAW target restriction: Beast only",
+            "immune: Beasts with INT 4 or higher (GM-judged)",
+            "morsel of food consumed at cast (M component, GM-narrated)",
+        ],
+    },
     # v2.54.0 — Suggestion → Charmed (Wis save). RAW: "you suggest a
     # course of activity ... if it fails its save, it pursues the
     # suggested course for the duration." Duration is up to 8 hours
@@ -1855,6 +1885,19 @@ _SPELL_TARGET_CAPS: dict[str, dict] = {
     # ["command"]` install on a failed save flow through the existing
     # save-or-suck path unchanged.
     "command": {
+        "max_targets": 1,
+        "base_level": 1,
+        "extra_targets_per_slot_above_base": 1,
+    },
+    # v2.404.8 — Animal Friendship (Bard / Druid / Ranger L1). RAW PHB
+    # p.213: "One animal you choose within range you can see." Higher
+    # Levels: "When you cast this spell using a spell slot of 2nd level
+    # or higher, you can affect one additional creature for each slot
+    # level above 1st." Routes through `/cast_spell` automatically
+    # (Animal Friendship's SRD JSON carries `save_ability: "wis"` and
+    # no damage, so the existing save-or-suck dispatcher picks it up
+    # the moment the condition map gains the entry above).
+    "animal-friendship": {
         "max_targets": 1,
         "base_level": 1,
         "extra_targets_per_slot_above_base": 1,

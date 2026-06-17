@@ -3216,6 +3216,17 @@ def _druid_sheet(name: str) -> dict:
             # the test exercises both base cap and the +1 upcast extension.
             # Appended at END so existing spell_index assertions stay valid.
             {"name": "Longstrider", "level": 1, "prepared": True, "_slug": "longstrider", "casting_time": "1 action"},
+            # v2.404.8 — Animal Friendship (Bard / Druid / Ranger L1).
+            # RAW PHB p.213: WIS save vs becoming friendly to caster for
+            # 24 hours. Beast-only target; INT 4+ Beasts immune RAW.
+            # Demo fixture for the v2.404.8 condition-install ship — new
+            # `_SPELL_CONDITION_MAP["animal-friendship"]` installs a
+            # `befriended-beast` buff on failed save; cap via
+            # `_SPELL_TARGET_CAPS["animal-friendship"]`. Mira has L1 + L2
+            # slots so the test exercises both base cap and the +1
+            # upcast extension. Appended at END so existing spell_index
+            # assertions stay valid.
+            {"name": "Animal Friendship", "level": 1, "prepared": True, "_slug": "animal-friendship", "casting_time": "1 action"},
         ],
         "spell_slots": {
             "druid": {
