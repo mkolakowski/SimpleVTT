@@ -1793,7 +1793,55 @@ _SPELL_TARGET_CAPS: dict[str, dict] = {
         "base_level": 1,
         "extra_targets_per_slot_above_base": 1,
     },
+    # v2.404.6 — Bane (Bard / Cleric L1). RAW PHB p.216: "Up to three
+    # creatures of your choice that you can see within range." Higher
+    # Levels: "When you cast this spell using a spell slot of 2nd level
+    # or higher, you can target one additional creature for each slot
+    # level above 1st." Substrate-consolidation entry — Bane has its
+    # own `/cast_bane` endpoint (the per-target buff install runs
+    # through `_SPELL_CONDITION_MAP["bane"]` from a custom dispatch
+    # loop, not the generic `/cast_spell` save dispatcher), so the
+    # cap-reader at `/cast_spell` doesn't fire for it. Instead,
+    # `/cast_bane` reads this entry directly to compute its cap (see
+    # the call site at line ~83595). Pre-v2.404.6 the cap math was
+    # inlined as `3 + max(0, slot_level - 1)`; this commit moves the
+    # data into the registry so future cap changes are data-only.
+    "bane": {
+        "max_targets": 3,
+        "base_level": 1,
+        "extra_targets_per_slot_above_base": 1,
+    },
 }
+
+
+def _spell_target_cap_for_slot(
+    spell_slug: str, slot_level: int, default_base: int = 1,
+) -> int:
+    """v2.404.6 — shared cap-arithmetic helper. Reads
+    ``_SPELL_TARGET_CAPS[spell_slug]`` and returns
+    ``max_targets + max(0, slot_level - base_level) * extras``, or 0 if
+    no entry exists. Mirrors the inline math at the v2.381.0 cap-reader
+    in ``/cast_spell`` (line ~19877). Bespoke endpoints with their own
+    response shapes (``/cast_bane``, ``/cast_hold_monster``, etc.) can
+    call this to share the same source of truth without buying into
+    the ``/cast_spell`` JSONResponse format.
+    """
+    entry = _SPELL_TARGET_CAPS.get(spell_slug)
+    if not entry:
+        return 0
+    try:
+        cap_max = int(entry.get("max_targets") or 0)
+    except (TypeError, ValueError):
+        cap_max = 0
+    try:
+        cap_base = int(entry.get("base_level") or default_base)
+    except (TypeError, ValueError):
+        cap_base = default_base
+    try:
+        cap_extra = int(entry.get("extra_targets_per_slot_above_base") or 0)
+    except (TypeError, ValueError):
+        cap_extra = 0
+    return cap_max + max(0, int(slot_level) - cap_base) * cap_extra
 
 
 _SPELL_BUFF_MAP["resistance-all"] = {
@@ -83589,10 +83637,13 @@ async def cast_bane(
     # v2.383.0 — upcast-aware target cap (RAW: 3 base @ L1, +1 per
     # slot above 1st). Fires BEFORE slot consumption so a blocked
     # cast doesn't burn a slot (same contract as v2.380.0 Bless cap +
-    # the v2.381.0 _SPELL_TARGET_CAPS gate). Mass Healing Word /
-    # Bless live elsewhere; Bane has its own endpoint so the cap math
-    # is inlined here.
-    bane_cap = 3 + max(0, slot_level - 1)
+    # the v2.381.0 _SPELL_TARGET_CAPS gate). v2.404.6 — cap math moved
+    # to `_SPELL_TARGET_CAPS["bane"]` so the registry is the single
+    # source of truth; the inline `3 + max(0, slot_level - 1)` shape
+    # is now data on the catalog entry. /cast_bane keeps its bespoke
+    # response shape (slot_level field), so we just borrow the
+    # arithmetic helper rather than the JSONResponse format.
+    bane_cap = _spell_target_cap_for_slot("bane", slot_level)
     if target_combatant_ids and len(target_combatant_ids) > bane_cap:
         return JSONResponse(status_code=400, content={
             "error": "too_many_targets",

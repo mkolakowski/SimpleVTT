@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.404.6] - 2026-06-17 — "The Shared Cap"
+
+**Schema version:** 69
+
+**Commit summary:** Sixth commit of the **spell utility-upcast** arc — substrate-consolidation refactor for Bane. Moves the inlined `3 + max(0, slot_level - 1)` cap arithmetic out of `/cast_bane` and into a new `_SPELL_TARGET_CAPS["bane"]` registry entry. Adds a shared helper `_spell_target_cap_for_slot(slug, slot_level)` so bespoke endpoints with their own response shapes can read the same source of truth as the `/cast_spell` cap reader without buying into the generic JSONResponse format. Behavior is unchanged; the existing v2.383.0 Bane cap tests (L3 6 targets → 400 limit=5, L3 5 targets → 200 max_targets=5) verify the math identity.
+
+**Description:** v2.383.0 originally ran Bane's cap math as an inline expression because the v2.381.0 `_SPELL_TARGET_CAPS` reader at `/cast_spell` only handles the generic response shape (no `slot_level` field). Bane's response carries `slot_level` so its 400 body matches its 200 body symmetrically — clients can pivot on a single response shape.
+
+The v2.404.6 refactor separates **data** (the cap values) from **response shape** (the JSON format). The new helper `_spell_target_cap_for_slot` returns just the integer cap. `/cast_bane` calls the helper, then builds its own JSONResponse with `slot_level` included. `/cast_spell`'s reader still uses the inline math (touching it is a wider blast radius — Mass Healing Word + Mass Cure Wounds + Charm Person all consume it). Both paths read from the same `_SPELL_TARGET_CAPS` dict, so the single source of truth holds.
+
+This unlocks two future commits cheaply:
+- Other bespoke-endpoint cap consolidations (`/cast_hold_monster`'s cap, etc.) can adopt the helper to share Bane's pattern.
+- The generic `/cast_spell` cap reader could later be refactored to call the helper too, completing the consolidation.
+
+**Why "The Shared Cap":** the data was already in the registry shape for /cast_spell; this commit makes the same data load-bearing for /cast_bane too. One registry, two consumers.
+
+PATCH — 1 new `_SPELL_TARGET_CAPS` entry + 1 new helper function + 3 inline-math call sites converted. **No new harness test** — the refactor is behavior-preserving and the v2.383.0 `test_cast_bane_*` cap tests (in `tests/harness/test_cast_bane.py`) verify the arithmetic identity. Refactor-only commits are exempt from the harness-discipline rule per CLAUDE.md.
+
+Spell catalog: 5 buff-shape + 1 condition-shape + 1 substrate-consolidation in the v2.404.x arc. **Total: 6 of ~9 target-scaling utility spells closed** (Bane is the 6th, now reading from the same registry as Mass Healing Word / Mass Cure Wounds / Charm Person).
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_SPELL_TARGET_CAPS["bane"]` entry (`max_targets: 3, base_level: 1, extra_targets_per_slot_above_base: 1`). New shared helper `_spell_target_cap_for_slot(slug, slot_level)` for bespoke-endpoint consumers.
+
+### Changed
+- `app/routes/tabletop_routes.py`: `/cast_bane` now calls `_spell_target_cap_for_slot("bane", slot_level)` in place of the inline `3 + max(0, slot_level - 1)` expression. The two downstream `max_targets` reads (chat-card broadcast + JSON response body) still use the same `bane_cap` local, just sourced from the helper.
+
 ## [2.404.5] - 2026-06-17 — "The Whispered Bond"
 
 **Schema version:** 69
