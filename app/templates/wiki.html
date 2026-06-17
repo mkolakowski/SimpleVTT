@@ -108,7 +108,7 @@
   <h2 id="srd-coverage">SRD 5e automation coverage</h2>
   <p class="lede" style="margin-bottom:8px;">
     How much of the SRD 5.1 ruleset SimpleVTT mechanically automates, by content
-    category, as of <strong>v2.391.0</strong>. "Automated" means the engine
+    category, as of <strong>v2.400.0</strong>. "Automated" means the engine
     derives or enforces the rule (saves, damage, passive item effects, class
     features, conditions) rather than leaving it to GM narration. Recomputed
     each audit pass; see <a href="/wiki/doc/todo">TODO</a> for the breakdown and
@@ -119,7 +119,7 @@
       <tr><th>Category</th><th>Count</th><th>Automated</th></tr>
     </thead>
     <tbody>
-      <tr><td>Races</td><td>9</td><td><span class="status-shipped">~90%</span></td></tr>
+      <tr><td>Races</td><td>9</td><td><span class="status-shipped">✅ ~100%</span></td></tr>
       <tr><td>Monsters</td><td>322</td><td><span class="status-shipped">✅ ~100%</span></td></tr>
       <tr><td>Conditions</td><td>15</td><td><span class="status-shipped">~92%</span></td></tr>
       <tr><td>Class features</td><td>222 rows</td><td><span class="status-shipped">✅ 100%</span></td></tr>
@@ -128,19 +128,23 @@
     </tbody>
   </table>
   <p class="lede" style="margin-top:0;">
-    <strong>Overall ~96%.</strong> Major arcs closed across the v2.316–v2.391
-    sweep: magic-item content tail, class-feature strictly-✅ 100% (Aura of
-    Courage v2.368.0; Unarmored Defense / Deflect Missiles / Cleansing Touch
-    v2.369.0–v2.370.1), AoE auto-targeting (sphere/cone/line picker + cast_spell
-    parity v2.373.0–v2.376.0), the lair-action arc end-to-end
-    (v2.377.0–v2.382.0: metallic + Lich + Kraken backfill + condition map +
-    regional effects), and the entire condition-enforcement audit
-    (v2.385.0–v2.391.0: Sneak Attack ally-skip + 3 PC-action incapacitated
-    gates + Grappled-ends-on-grappler-incap + Charmed-can't-target-charmer).
-    The remaining ~4% is content-layer utility-spell richness (~250
-    cast-and-broadcast spells with no damage/healing base) + permanently-GM-
-    narrated condition clauses by design. Known defects are tracked in
-    <a href="/wiki/doc/bugs">BUGS</a>.
+    <strong>Overall ~97%.</strong> Races joins Monsters + Class features as a
+    strictly-✅ surface after the v2.392.0–v2.399.2 <a href="/wiki/srd-races-implementation">race-features arc</a>
+    (Dragonborn Breath Weapon, Tiefling racial Hellish Rebuke, Hill Dwarf
+    Stonecunning + heavy-armor speed bypass, Rock Gnome Artificer's Lore, plus
+    recognition flags for Halfling Nimbleness + Naturally Stealthy). Prior
+    arcs closed across v2.316–v2.391: magic-item content tail, class-feature
+    strictly-✅ 100% (Aura of Courage v2.368.0; Unarmored Defense / Deflect
+    Missiles / Cleansing Touch v2.369.0–v2.370.1), AoE auto-targeting
+    (sphere/cone/line picker + cast_spell parity v2.373.0–v2.376.0), the
+    lair-action arc end-to-end (v2.377.0–v2.382.0: metallic + Lich + Kraken
+    backfill + condition map + regional effects), and the condition-enforcement
+    audit (v2.385.0–v2.391.0: Sneak Attack ally-skip + 3 PC-action
+    incapacitated gates + Grappled-ends-on-grappler-incap +
+    Charmed-can't-target-charmer). The remaining ~3% is content-layer
+    utility-spell richness (~250 cast-and-broadcast spells with no
+    damage/healing base) + permanently-GM-narrated condition clauses by design.
+    Known defects are tracked in <a href="/wiki/doc/bugs">BUGS</a>.
   </p>
 
   <h2 id="guides">Available guides</h2>

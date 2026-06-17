@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.400.1] - 2026-06-17 — "The Reckoned Tally"
+
+**Schema version:** 69
+
+**Commit summary:** Refreshes the **SRD 5e automation coverage** percentages surfaced in two reader-facing wiki locations (the landing page at `app/templates/wiki.html` + the on-disk index at `docs/wiki/README.md`) to reflect the post-v2.399.2 reality after the race-features arc. Races flips **~90% → ✅ ~100%**, joining Monsters + Class features as a strictly-✅ surface; overall coverage ticks **~96% → ~97%**. Version banner moves v2.391.0 → v2.400.0; the narrative paragraph adds the race-features arc citation with a cross-link to the new [SRD races implementation guide](docs/wiki/srd-races-implementation.md) shipped in v2.400.0.
+
+**Description:** Same two-file refresh pattern as v2.391.1 ("The Wiki Catches Up") — the wiki landing's coverage table is the user-facing surface most readers see first, so keeping it stale meant new visitors got an inaccurate impression of the engine's race coverage. The TODO.md audit was refreshed to v2.399.0 in `v2.399.1` ("The Refreshed Atlas") but the wiki landing's percentages weren't synced; this commit closes that gap.
+
+Per-category re-baseline (vs. v2.391.0 → v2.400.0):
+- Races: ~90% → **✅ ~100%** (+10 pts — the v2.392.0–v2.399.2 race-features arc).
+- Overall: ~96% → **~97%** (Races bump is the mover; other rows unchanged).
+
+PATCH — pure doc edit; no runtime code change. Two files updated (same shape as v2.391.1).
+
+### Changed
+- `app/templates/wiki.html`: SRD-coverage table version banner v2.391.0 → v2.400.0; Races row ~90% → ✅ ~100%; overall ~96% → ~97%; rewrote the narrative paragraph to put the race-features arc up front + added a `/wiki/srd-races-implementation` cross-link.
+- `docs/wiki/README.md`: same updates mirrored in the on-disk wiki index.
+
 ## [2.400.0] - 2026-06-17 — "The Race Card"
 
 **Schema version:** 69
