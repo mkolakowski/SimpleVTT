@@ -885,6 +885,15 @@ def _wizard_sheet(name: str) -> dict:
             # cap and the +1 upcast extension. Appended at END so existing
             # spell_index assertions stay valid.
             {"name": "Fly", "level": 3, "prepared": True, "_slug": "fly", "casting_time": "1 action"},
+            # v2.404.5 — Charm Person (Bard / Druid / Sorcerer / Warlock /
+            # Wizard L1). RAW PHB p.221: WIS save vs Charmed for 1 hour,
+            # no concentration. Upcast: +1 target per slot above 1st.
+            # Demo fixture for the v2.404.5 `_SPELL_TARGET_CAPS["charm-person"]`
+            # entry (1 + (slot - 1) * 1). Thalindra has L1 + L2 slots
+            # natively (4/3) so the test exercises both base cap and +1
+            # upcast extension. Appended at END so existing spell_index
+            # assertions stay valid.
+            {"name": "Charm Person", "level": 1, "prepared": True, "_slug": "charm-person", "casting_time": "1 action"},
         ],
         "spell_slots": {
             "wizard": {

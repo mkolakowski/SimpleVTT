@@ -1775,6 +1775,24 @@ _SPELL_TARGET_CAPS: dict[str, dict] = {
         "max_targets": 6,
         "base_level": 5,
     },
+    # v2.404.5 — Charm Person (Bard / Druid / Sorcerer / Warlock /
+    # Wizard L1). RAW PHB p.221: "One humanoid you choose within range."
+    # Higher Levels: "When you cast this spell using a spell slot of 2nd
+    # level or higher, you can target one additional creature for each
+    # slot level above 1st. The creatures must be within 30 feet of each
+    # other when you target them." First condition-shape spell to use
+    # the generalized `_SPELL_TARGET_CAPS` substrate (Mass Healing Word
+    # + Mass Cure Wounds are heal-shape). Routes through `/cast_spell`
+    # (no bespoke `/cast_charm_person` endpoint), so adding this entry
+    # is all the engine work needed — the v2.381.0 cap reader at
+    # `/cast_spell` already enforces the limit before slot consumption.
+    # The save-or-suck Charmed install on a failed save flows through
+    # `_SPELL_CONDITION_MAP["charm-person"]` (line ~1133) unchanged.
+    "charm-person": {
+        "max_targets": 1,
+        "base_level": 1,
+        "extra_targets_per_slot_above_base": 1,
+    },
 }
 
 

@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.404.5] - 2026-06-17 — "The Whispered Bond"
+
+**Schema version:** 69
+
+**Commit summary:** Fifth commit of the **spell utility-upcast** arc — first **condition-shape** spell to use the existing v2.381.0 `_SPELL_TARGET_CAPS` substrate. **Charm Person** (RAW PHB p.221) gets a data-only entry; the cap reader at `/cast_spell` (line ~19877) already enforces `max_targets + max(0, slot_level - base_level) * extra_targets_per_slot_above_base` for any registered slug. RAW: 1 humanoid at L1, +1 per slot above 1st. The save-or-suck Charmed install on a failed WIS save still flows through `_SPELL_CONDITION_MAP["charm-person"]` unchanged.
+
+**Description:** Investigating "what's next" after the v2.404.4 arc-closer revealed that **the substrate for condition-shape cap enforcement already exists** — `_SPELL_TARGET_CAPS` (v2.381.0) is the generalized dict for non-buff-install caps. Mass Healing Word + Mass Cure Wounds were the only consumers before this commit; Charm Person is the third. **Pure data drop, no engine code touched.**
+
+This also re-scopes the "remaining 5 condition-shape spells" estimate I floated in v2.404.4's changelog. The actual breakdown:
+- **Charm Person** — ships today via `_SPELL_TARGET_CAPS` (the cleanest path).
+- **Suggestion** — could ship the same way, but RAW Suggestion doesn't scale targets (single-target only); skipped.
+- **Bane** — has its own `/cast_bane` endpoint with bespoke `bane_cap` logic; consolidating to the generalized substrate is a small refactor for a future commit.
+- **Command / Animal Friendship / Blindness-Deafness** — NOT in `_SPELL_CONDITION_MAP` today, so they have no auto-condition-install path. Adding them requires real engine work (modeling the condition, wiring the failed-save install) BEFORE the cap can be hooked. Filed for future commits.
+
+So the arc's "5 condition-shape spells" is really 1 trivial + 1 deferred refactor + 3 condition-install ships. Charm Person closes the trivial half.
+
+**Why "The Whispered Bond":** Charm Person's whispered persuasion creates a brief social bond — not a thrall, just a friendly tilt. Fits the social-charm flavor + the "no concentration" 1-hour duration that distinguishes it from Hold Person / Dominate.
+
+PATCH — 1 new cap-substrate entry + 1 demo-seed spell-list addition + 1 new harness file (4 tests). Spell catalog: 5 of ~9 target-scaling utility spells now use the v2.380.0 / v2.381.0 substrate (4 buff-shape via v2.404.1-.4 + 1 condition-shape via this commit). The substrate has proven itself across both branches: `_SPELL_BUFF_MAP` (Bless / Aid / Invisibility / Fly / Enhance Ability / Longstrider) and `_SPELL_TARGET_CAPS` (Mass Healing Word / Mass Cure Wounds / Charm Person).
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_SPELL_TARGET_CAPS["charm-person"]` entry. `max_targets: 1`, `base_level: 1`, `extra_targets_per_slot_above_base: 1`. Wires through the existing v2.381.0 cap-extension reader at `/cast_spell` automatically.
+- `app/demo_seed.py`: appended Charm Person to Thalindra's spell list at index 21 (END-append to preserve existing spell_index assertions).
+- `tests/harness/test_cast_charm_person_target_cap_upcast.py`: new harness file (4 tests) — L1 1 target → 200, L1 2 targets → 400 limit=1, L2 2 targets → 200, L2 3 targets → 400 limit=2.
+
+### Changed
+- `docs/test-harness-coverage.md`: total-test-count bump (+4) + new row for the charm-person cap file.
+
 ## [2.404.4] - 2026-06-17 — "The Hour's Stride"
 
 **Schema version:** 69
