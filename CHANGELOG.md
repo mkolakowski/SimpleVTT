@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.404.2] - 2026-06-17 — "The Borrowed Sky"
+
+**Schema version:** 69
+
+**Commit summary:** Second commit of the **spell utility-upcast** arc — wires **Fly** through the v2.380.0 `_SPELL_BUFF_MAP` cap+upcast substrate. RAW PHB p.244: 1 target at L3, +1 target per slot above 3rd. First **L3-base** spell to use the substrate (Bless = L1, Aid + Invisibility = L2). `/cast_spell` now installs a `fly` concentration buff (mirrors the existing `flying-potion` shape with `effects.fly_speed_ft: 60`) and enforces the multi-target cap. The 60-ft flying speed is real engine effect — the same marker the Stormborn / levitate / dragon-wings buffs already use surfaces flying capability for the 2D map. Fall-when-spell-ends and willing-creature clauses stay GM-narrated.
+
+**Description:** The substrate proves itself a third time on a new base level. With Bless (L1+1/slot above 1), Aid (L2 hard 3-cap no extras), Invisibility (L2+1/slot above 2), and now Fly (L3+1/slot above 3), the `_SPELL_BUFF_MAP` cap-extension reader has covered every shape in the wild: L1-base + extras, L2-base hard cap, L2-base + extras, L3-base + extras. The remaining 2 commits in this arc (Enhance Ability + Longstrider) plug into the same shape — they're now content drop-ins.
+
+Thalindra Moonwhisper (Wizard Lv 7, L3 + L4 slots) gets Fly appended at index 20 — the cast surface for the harness. Her existing L1-L19 spell indices are untouched so adjacent harness tests keep their assertions valid (the established "appended at END" pattern from the v2.49.58 Sleep / v2.72.0 Silvery Barbs / v2.99.26 Gust of Wind additions).
+
+**Why "The Borrowed Sky":** Fly lends its target a slice of sky for 10 minutes — borrowed, returned when the spell ends. Follows "The Hidden Hand" (Invisibility) on the arc.
+
+PATCH — 1 new wired spell + 1 demo-seed spell-list addition + 1 new harness file (4 tests). Spell catalog: 2 of ~9 target-scaling utility spells now use the v2.380.0 substrate via this arc (Invisibility v2.404.1 + Fly v2.404.2; Enhance Ability + Longstrider queued).
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_SPELL_BUFF_MAP["fly"]` entry. `concentration: True`, `effects.fly_speed_ft: 60`, `max_targets: 1`, `base_level: 3`, `extra_targets_per_slot_above_base: 1`. Wires through the existing v2.380.0 cap-extension reader at `/cast_spell` automatically.
+- `app/demo_seed.py`: appended Fly to Thalindra's spell list at index 20 (END-append to preserve existing spell_index assertions).
+- `tests/harness/test_cast_fly_target_cap_upcast.py`: new harness file (4 tests) — L3 1 target → 200, L3 2 targets → 400 limit=1, L4 2 targets → 200, L4 3 targets → 400 limit=2.
+
+### Changed
+- `docs/test-harness-coverage.md`: total-test-count bump (+4) + new row for the fly cap file.
+
 ## [2.404.1] - 2026-06-17 — "The Hidden Hand"
 
 **Schema version:** 69

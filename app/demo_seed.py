@@ -876,6 +876,15 @@ def _wizard_sheet(name: str) -> dict:
             {"name": "Gust of Wind", "level": 2, "prepared": True, "_slug": "gust-of-wind",
              "casting_time": "1 action", "save_ability": "STR",
              "desc": "60 ft × 10 ft line from caster, STR save DC 14 or be pushed 15 ft. Disperses gas / extinguishes candles. Concentration up to 1 min."},
+            # v2.404.2 — Fly (Wizard / Sorcerer / Warlock L3). RAW PHB
+            # p.244: touch a willing creature, gains 60 ft flying speed
+            # for up to 10 min (concentration). Upcast: +1 target per slot
+            # above 3rd. Demo fixture for the v2.404.2
+            # `_SPELL_BUFF_MAP["fly"]` cap + extras (1 + (slot - 3) * 1).
+            # Thalindra has L3 + L4 slots so the test exercises both base
+            # cap and the +1 upcast extension. Appended at END so existing
+            # spell_index assertions stay valid.
+            {"name": "Fly", "level": 3, "prepared": True, "_slug": "fly", "casting_time": "1 action"},
         ],
         "spell_slots": {
             "wizard": {

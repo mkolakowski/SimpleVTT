@@ -1937,6 +1937,36 @@ _SPELL_BUFF_MAP["invisibility"] = {
     ),
 }
 
+# v2.404.2 — Fly (Sorcerer / Warlock / Wizard L3). RAW PHB p.244: "Touch a
+# willing creature. The target gains a flying speed of 60 feet for the
+# duration." Up to 10 minutes, concentration. "When you cast this spell
+# using a spell slot of 4th level or higher, you can target one additional
+# creature for each slot level above 3rd." First L3-base spell to use the
+# v2.380.0 substrate with `max_targets: 1, base_level: 3,
+# extra_targets_per_slot_above_base: 1` so L4 = 2 targets, L5 = 3, etc.
+# Marker effect `fly_speed_ft: 60` matches the existing `flying-potion`
+# buff (DMG p.187) — the fall-when-spell-ends and the willing-creature
+# clauses stay GM-narrated.
+_SPELL_BUFF_MAP["fly"] = {
+    "key": "fly",
+    "name": "Fly",
+    "icon": "🕊️",
+    "duration_rounds": 100,  # up to 10 minutes @ 6 s/round
+    "duration_max": 100,
+    "concentration": True,
+    "effects": {
+        "fly_speed_ft": 60,
+    },
+    "max_targets": 1,
+    "base_level": 3,
+    "extra_targets_per_slot_above_base": 1,
+    "desc": (
+        "Flying speed 60 ft for up to 10 minutes (concentration). The "
+        "target falls when the spell ends if still aloft (GM-narrated). "
+        "RAW PHB p.244."
+    ),
+}
+
 # v2.203.0 — Potion of Clairvoyance (RAW DMG p.187, rare): drink → the
 # clairvoyance spell (a scrying sensor for 10 minutes). A purely
 # descriptive buff like Water Breathing — the engine tracks no scrying

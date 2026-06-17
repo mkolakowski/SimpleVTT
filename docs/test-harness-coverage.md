@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3196 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.404.1, 2026-06-17).
+**Total tests:** 3200 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.404.2, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4434,6 +4434,16 @@ v2.404.1 — Invisibility multi-target cap + per-slot upcast scaling (RAW PHB p.
 | `test_invisibility_l2_two_targets_returns_400` | L2 cast with 2 targets → 400 `too_many_targets` with `{limit: 1, received: 2}`. |
 | `test_invisibility_l3_two_targets_succeeds` | L3 cast with 2 targets → 200 (extended cap = 1 + (3-2)*1 = 2). |
 | `test_invisibility_l3_three_targets_returns_400` | L3 cast with 3 targets → 400 with `{limit: 2, received: 3}` — confirms the upcast field is honored, not the base 1. |
+
+### `test_cast_fly_target_cap_upcast.py`
+v2.404.2 — Fly multi-target cap + per-slot upcast scaling (RAW PHB p.244). Wires Fly through the v2.380.0 `_SPELL_BUFF_MAP` substrate with `max_targets: 1, base_level: 3, extra_targets_per_slot_above_base: 1`. First L3-base spell to use the substrate. `/cast_spell` now installs a `fly` concentration buff with `effects.fly_speed_ft: 60` (the same marker the Stormborn / levitate / dragon-wings / flying-potion buffs use). Thalindra Moonwhisper (Wizard Lv 7, Fly appended at spell index 20) is the cast surface; her L3 + L4 slots cover both base cap and +1 upcast extension.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_fly_l3_one_target_succeeds` | L3 cast with 1 target → 200 (RAW base cap). |
+| `test_fly_l3_two_targets_returns_400` | L3 cast with 2 targets → 400 `too_many_targets` with `{limit: 1, received: 2}`. |
+| `test_fly_l4_two_targets_succeeds` | L4 cast with 2 targets → 200 (extended cap = 1 + (4-3)*1 = 2). |
+| `test_fly_l4_three_targets_returns_400` | L4 cast with 3 targets → 400 with `{limit: 2, received: 3}` — confirms the upcast field is honored. |
 
 ### `test_cast_dispel_magic.py`
 v2.372.0 — Dispel Magic endpoint (`/cast_dispel_magic`). Resolves auto-end (buff source-spell-level ≤ slot_level) vs ability check (`1d20 + spc_mod + prof` vs DC `10 + buff_source_level`). Slot consumed up front; buff drop on auto-end or check-success via `_remove_buff` (PC) or hub-state mutation (NPC). Lyra Sunstrider (Bard Lv 6, Dispel Magic on her list) → Krieger Stonefist driver.
