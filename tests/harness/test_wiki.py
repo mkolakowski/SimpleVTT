@@ -105,6 +105,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-race-features" in resp.text
     # v2.400.0: SRD race rules implementation guide listed in Available guides.
     assert "/wiki/srd-races-implementation" in resp.text
+    # v2.402.0: SRD conditions implementation guide listed in Available guides.
+    assert "/wiki/srd-conditions" in resp.text
 
 
 async def test_wiki_guide_serves_roll_log():

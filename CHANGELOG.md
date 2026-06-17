@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.402.0] - 2026-06-17 — "The Condition Card"
+
+**Schema version:** 69
+
+**Commit summary:** Lands a new reader-facing wiki guide at `docs/wiki/srd-conditions.md` — per-condition coverage of every RAW SRD 5.1 condition (the 15 standard conditions + Exhaustion's 6-level ladder), what fires automatically vs. what the engine reads + warns vs. what's GM-narrated by design, with the underlying mechanism (buff key, helper, endpoint, save resolver) inlined so a GM scanning the page knows exactly what to expect at the table. Reached directly via `/wiki/srd-conditions` (no allowlist required for `docs/wiki/<slug>` paths). Surfaced via the wiki landing-page "Available guides" table + the on-disk `docs/wiki/README.md` index; the `test_wiki_home_renders` harness assertion picks up the new slug so a future regression that drops the row gets caught.
+
+**Description:** The guide is structured as a 15-condition walkthrough — each section opens with the RAW summary verbatim, then a per-clause table with Status / How it works, plus install paths + test-coverage references inline. A TL;DR table at the top splits behavior into three columns (engine fires automatically / engine reads + warns / GM-narrated) so a GM running their first SimpleVTT session can see at a glance which RAW clauses will fire on their own. The dedicated "Out-of-scope by design" section calls out the three permanently-deferred clauses (Charmed clause 2 social-check, Grappled clause 3 out-of-reach, Deafened hearing-checks) so readers know what's intentionally deferred and why.
+
+The guide closes the matching wiki-surface debt to v2.400.0's `srd-races-implementation.md`. Where the races guide captured the v2.392.0–v2.399.2 race-features arc, this guide captures the v2.385.0–v2.401.0 condition-enforcement-plus-UI-surfacing arc: the v2.385.0–v2.391.0 sweep that closed the four engine-side clauses on the v2.384.0 audit's per-clause shipping order + the v2.400.2 reconciliation refresh of the audit doc + the v2.401.0 mini-sheet warning-pill backfill for charmed/grappled/incapacitated.
+
+Mirror of the audit summary I produced when verifying the condition-feature state against `app/content/condition_impacts.py`, `tabletop_routes.py` helpers (`_combatant_is_incapacitated`, `_attacker_is_charmed_by_target`, `_make_grappled_buff` / `_make_restrained_buff` / `_make_paralyzed_buff` / `_make_petrified_buff` / `_make_stunned_buff` / `_make_unconscious_buff`), and the `_RACE_SAVE_ADVANTAGES` immunity reads. Status legend matches the audit doc (✅ / 🟢 / ⚪ / OOS / N/A) so a reader cross-referencing the two surfaces sees the same vocabulary.
+
+MINOR — new wiki guide; additive only. The Conditions feature has been at ~92% (TODO row) since v2.391.0; this commit doesn't move the engine number (the remaining ~8% is permanently-GM-narrated substrate work — see the Out-of-scope section in the guide) but does close the matching documentation-surface debt. SRD-side reference docs now have two parallel wiki guides — Races (v2.400.0) + Conditions (v2.402.0) — with Class features + Spells + Magic items the natural next surfaces if the polish track continues.
+
+### Added
+- `docs/wiki/srd-conditions.md` — per-condition implementation guide. 15 condition sections + Exhaustion ladder + TL;DR auto-fires-vs-warn-vs-narrated table + Out-of-scope-by-design section + mini-sheet warning-pill explainer + cross-links to the audit doc, the exhaustion-levels plan, the reactions guide, and the parallel races guide.
+- `app/templates/wiki.html`: new row in the "Available guides" table linking the guide.
+- `docs/wiki/README.md`: matching row in the on-disk index.
+- `tests/harness/test_wiki.py::test_wiki_home_renders`: new assertion picks up `/wiki/srd-conditions` so a regression that drops the landing row fails the harness.
+
 ## [2.401.0] - 2026-06-17 — "The Wider Warning"
 
 **Schema version:** 69
