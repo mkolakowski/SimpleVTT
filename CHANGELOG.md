@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.404.4] - 2026-06-17 — "The Hour's Stride"
+
+**Schema version:** 69
+
+**Commit summary:** Fourth and closing commit of the **spell utility-upcast** arc — wires **Longstrider** through the v2.380.0 `_SPELL_BUFF_MAP` cap+upcast substrate. RAW PHB p.255: 1 target at L1, +1 target per slot above 1st. Same L1-base + extras shape as Bless (`max_targets: 1` vs Bless's 3). First **non-concentration** spell in the arc (`concentration: False` — Longstrider is the 1-hour bull-rush mobility buff that already exists at line 1687 of `tabletop_routes.py`; this commit just adds the cap fields). The +10 ft `speed_bonus_ft` already flows through `_effective_speed_walk` at /token/move time (v2.99.431); this commit closes the cap surface.
+
+**Description:** Longstrider was already in `_SPELL_BUFF_MAP` (the only one of the 4 arc spells with a pre-existing entry — Invisibility, Fly, and Enhance Ability all got brand-new entries). The v2.404.4 edit is surgical: add `max_targets: 1`, `base_level: 1`, `extra_targets_per_slot_above_base: 1`. The cap reader at /cast_spell already knows what to do — same code path as Bless / Aid / Invisibility / Fly / Enhance Ability.
+
+Mira Greenleaf (Druid Lv 6, L1 + L2 slots) gets Longstrider appended at spell index 11. Her existing L1-L10 spell indices are untouched.
+
+**Arc summary (v2.404.1 → v2.404.4):** four sequential PATCH bumps closed the buff-shape target-scaler half of the spell utility-upcast work. All four spells now ride the v2.380.0 cap-extension arithmetic that already shipped for Bless. The substrate proved itself across all four base levels in the buff-shape set: L1 (Longstrider, Bless), L2 (Invisibility, Enhance Ability, Aid hard-cap), L3 (Fly). The remaining 5 utility-upcast spells are condition-shape (Bane, Command, Charm Person, Animal Friendship, Blindness/Deafness) — they require extending `_SPELL_CONDITION_MAP` to read the cap fields, which is the next substrate ship (filed as a follow-up).
+
+**Why "The Hour's Stride":** Longstrider runs for a full hour, the longest of the four arc spells (Bless / Invisibility = concentration up to 1 minute / hour). The hour-long bull-rush closes the arc on a steady pace.
+
+PATCH — 1 cap-field extension to an existing buff entry + 1 demo-seed spell-list addition + 1 new harness file (4 tests). Spell catalog: 4 of ~9 target-scaling utility spells now use the v2.380.0 substrate (Invisibility v2.404.1 + Fly v2.404.2 + Enhance Ability v2.404.3 + Longstrider v2.404.4). Buff-shape half of the spell utility-upcast arc CLOSED.
+
+### Added
+- `app/demo_seed.py`: appended Longstrider to Mira's spell list at index 11 (END-append to preserve existing spell_index assertions).
+- `tests/harness/test_cast_longstrider_target_cap_upcast.py`: new harness file (4 tests) — L1 1 target → 200, L1 2 targets → 400 limit=1, L2 2 targets → 200, L2 3 targets → 400 limit=2.
+
+### Changed
+- `app/routes/tabletop_routes.py`: extended the existing `_SPELL_BUFF_MAP["longstrider"]` entry with `max_targets: 1`, `base_level: 1`, `extra_targets_per_slot_above_base: 1`. No new entry — pure field addition on an existing template.
+- `docs/test-harness-coverage.md`: total-test-count bump (+4) + new row for the longstrider cap file.
+
 ## [2.404.3] - 2026-06-17 — "The Menagerie's Touch"
 
 **Schema version:** 69

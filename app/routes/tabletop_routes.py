@@ -1684,6 +1684,15 @@ _SPELL_BUFF_MAP: dict[str, dict] = {
     # Longstrider (Ranger / Wizard / etc. L1): "+10 ft speed for 1 hour,
     # no concentration." Modeled as effects.speed_bonus_ft = 10, read by
     # effective_speed_walk so the move-endpoint speed cap rises.
+    # v2.404.4 — Cap + per-slot upcast scaling. RAW PHB p.255: "You touch
+    # a creature. The target's speed increases by 10 feet until the spell
+    # ends." Higher Levels: "When you cast this spell using a spell slot
+    # of 2nd level or higher, you can target one additional creature for
+    # each spell slot above 1st." Mirrors the v2.380.0 Bless cap+upcast
+    # shape but with `max_targets: 1` (Longstrider's RAW base) instead of
+    # 3, so L2 = 2, L3 = 3, etc. Closes the v2.404.x spell utility-upcast
+    # arc — first L1-base + extras spell paired with `concentration:
+    # False`.
     "longstrider": {
         "key": "longstrider",
         "name": "Longstrider",
@@ -1694,6 +1703,9 @@ _SPELL_BUFF_MAP: dict[str, dict] = {
         "effects": {
             "speed_bonus_ft": 10,
         },
+        "max_targets": 1,
+        "base_level": 1,
+        "extra_targets_per_slot_above_base": 1,
         "desc": "Speed increases by 10 ft for 1 hour.",
     },
 }

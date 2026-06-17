@@ -3188,6 +3188,14 @@ def _druid_sheet(name: str) -> dict:
             {"name": "Heat Metal",      "level": 2, "prepared": True, "_slug": "heat-metal", "casting_time": "1 action"},
             {"name": "Call Lightning",  "level": 3, "prepared": True, "_slug": "call-lightning", "casting_time": "1 action"},
             {"name": "Conjure Animals", "level": 3, "prepared": True, "_slug": "conjure-animals", "casting_time": "1 action"},
+            # v2.404.4 — Longstrider (Druid / Ranger / Bard / Wizard L1).
+            # RAW PHB p.255: touch a creature, +10 ft speed for 1 hour
+            # (no concentration). Upcast: +1 target per slot above 1st.
+            # Demo fixture for the v2.404.4 `_SPELL_BUFF_MAP["longstrider"]`
+            # cap + extras (1 + (slot - 1) * 1). Mira has L1 + L2 slots so
+            # the test exercises both base cap and the +1 upcast extension.
+            # Appended at END so existing spell_index assertions stay valid.
+            {"name": "Longstrider", "level": 1, "prepared": True, "_slug": "longstrider", "casting_time": "1 action"},
         ],
         "spell_slots": {
             "druid": {
