@@ -110,7 +110,11 @@ async def test_stonecunning_rejects_non_dwarf(gm_client, pip_rested):
     body = resp.json()
     assert body["error"] == "race_not_dwarf"
     assert body["char_name"] == pip["name"]
-    assert (body["got_race"] or "").lower().startswith("lightfoot")
+    # Demo seed stores Pip's race as plain "Halfling" (the Lightfoot
+    # subrace is the v2.99.13 _race_slug_from_sheet default). Accept
+    # either form so a future Stout-Halfling subrace demo doesn't
+    # regress the assertion.
+    assert "halfling" in (body["got_race"] or "").lower()
 
 
 async def test_stonecunning_missing_character_id_400(gm_client):

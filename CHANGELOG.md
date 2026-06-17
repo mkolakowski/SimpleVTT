@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.396.1] - 2026-06-16 — "The Plain Halfling"
+
+**Schema version:** 69
+
+**Commit summary:** Test-fix follow-up to v2.396.0. The `test_stonecunning_rejects_non_dwarf` test asserted Pip's race string started with "lightfoot", but the demo seed stores it as plain "Halfling" (the Lightfoot subrace identity comes through the v2.99.13 `_race_slug_from_sheet` default-folding, not from the race string). 3/4 tests passed on v2.396.0; this commit relaxes the assertion to `"halfling" in race.lower()` so it accepts either form (and a future Stout Halfling demo PC wouldn't regress).
+
+PATCH — single test assertion fix; production code unchanged.
+
+### Fixed
+- `tests/harness/test_check_stonecunning.py::test_stonecunning_rejects_non_dwarf` — accept "Halfling" (plain) OR "Lightfoot Halfling" (full) as Pip's race string in the 409 response's `got_race` echo. Demo seed currently uses plain "Halfling"; the assertion was over-specific.
+
 ## [2.396.0] - 2026-06-16 — "The Hewn Memory"
 
 **Schema version:** 69
