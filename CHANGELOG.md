@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.387.0] - 2026-06-16 — "The Quiet Tongue"
+
+**Schema version:** 69
+
+**Commit summary:** Closes **clause #2b** of the v2.384.0 condition-enforcement audit — mirrors the v2.386.0 `/attack` gate onto `/cast_spell`. A paralyzed/stunned/unconscious caster who calls `/cast_spell` now gets 409 `incapacitated` (with `char_name` + `source: "cast_spell"`) before the spell lookup + slot gates fire, so a blocked attempt doesn't consume a slot. Uses the v2.386.0 `_caster_is_incapacitated` helper unchanged. `body.get("override")` bypasses (GM convention). Three harness tests via Caelan + Pip.
+
+Together with v2.385.0 (Sneak Attack ally-skip) + v2.386.0 (`/attack` gate), this puts SimpleVTT's general action gate at **2/3 of the PC endpoints** the audit doc identified. The remaining `/use_feature` gate is the next planned slice (clause #2c).
+
+MINOR — same shape as v2.386.0: one endpoint gate + 3 tests; existing /cast_spell tests with non-incapacitated callers unchanged.
+
+### Added
+- `/cast_spell` incapacitated gate at the top of `cast_spell()`, just after the auth check + before the spell lookup. Identical shape to the v2.386.0 `/attack` gate.
+- `tests/harness/test_cast_spell_incapacitated_gate.py` — 3 tests (paralyzed → 409, paralyzed+override → 200, baseline non-paralyzed → 200).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3133 → 3136 (+3 cast-spell incapacitated-gate tests).
+
 ## [2.386.0] - 2026-06-16 — "The Still Hand"
 
 **Schema version:** 69

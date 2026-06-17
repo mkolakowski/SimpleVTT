@@ -19474,6 +19474,24 @@ async def cast_spell(
     if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
         raise HTTPException(403, "Not your character")
 
+    # v2.387.0 — RAW PHB p.290 Incapacitated: "An incapacitated
+    # creature can't take actions or reactions." Mirror of the
+    # v2.386.0 /attack gate. Fires before the spell lookup + slot
+    # gates so a paralyzed/stunned/unconscious caster gets the
+    # informative 409 instead of burning a slot or hitting a
+    # downstream 404. body.get("override") bypasses (GM convention,
+    # matches the existing range + over-budget gates). Closes
+    # clause #2b of the v2.384.0 condition-enforcement audit.
+    if (
+        not bool(body.get("override"))
+        and _caster_is_incapacitated(campaign_id, int(char.id))
+    ):
+        return JSONResponse(status_code=409, content={
+            "error": "incapacitated",
+            "char_name": char.name,
+            "source": "cast_spell",
+        })
+
     sheet = dict(char.sheet or {})
     if char.template == "dnd5e":
         normalize_dnd5e_sheet(sheet)
