@@ -1,6 +1,6 @@
 # Race features — close the SRD races gap to 100%
 
-> **Status:** 🟢 partial (v2.394.0). Drives the **Races ~90% → 100%** axis of the [SRD audit](../../TODO.md#srd-5e-audit-v23900-refresh). Phase 1 (Half-Orc Savage Attacks) was already shipped in v2.99.23 — reconciled v2.394.0 (stale-audit correction; see below). Phases 2–7 still to ship.
+> **Status:** 🟢 partial (v2.395.0). Drives the **Races ~90% → 100%** axis of the [SRD audit](../../TODO.md#srd-5e-audit-v23900-refresh). Phase 1 (Tiefling Infernal Legacy racial Hellish Rebuke) **shipped v2.395.0**. Pre-existing: Half-Orc Savage Attacks shipped v2.99.23 (reconciled v2.394.0 from stale-audit; see below). Phases 2–6 still to ship + the optional Phase 7 Trance polish + Phase 1b/1c Infernal Legacy tail follow-ups.
 
 ## Why this plan exists
 
@@ -47,7 +47,7 @@ Cells: ✅ wired in engine code · 🟠 inert sheet seed (no engine read) · ⚪
 | | **Tinker** | ⚪ | — (RAW: craft tiny clockwork; no crafting substrate exists — **out-of-scope by design**) |
 | **Tiefling** | Hellish Resistance (fire) | ✅ | `damage_resistances: ["fire"]` seed |
 | | Darkvision 60 ft | 🟠 | seed |
-| | **Infernal Legacy spells** | 🟠 | Thaumaturgy / Hellish Rebuke / Darkness manually seeded into the sheet's spell list; no auto-grant gate, no level-based reveal |
+| | Infernal Legacy spells (Thaumaturgy + Hellish Rebuke + Darkness) | 🟢 partial | Thaumaturgy + Darkness still 🟠 (manually seeded into sheet's spells + resources, no auto-grant). **Hellish Rebuke (racial, 1/long, L2) wired v2.395.0** — `_pc_has_tiefling_hellish_rebuke_racial(sheet)` + new `cast-hellish-rebuke-racial` reaction option + dedicated cast handler that consumes the `hellish-rebuke` resource (not a spell slot). Covered by `tests/harness/test_tiefling_hellish_rebuke_racial.py`. |
 | | **Stout Halfling Stout Resilience** | ✅ | `_RACE_SAVE_ADVANTAGES["halfling-stout"]` (subrace) |
 
 **Counts:** 17 ✅ · 11 🟠 · 7 ⚪ · 3 N/A (after v2.394.0 Savage Attacks reconciliation; was 16/11/8/3 in the v2.393.0 first cut).
@@ -95,7 +95,7 @@ Every phase reuses an existing substrate; no new architectural primitive is need
 
 Each phase = one MINOR commit + 1 happy-path test + 1 error-path test (race mismatch / resource exhausted / state check). The full plan lands across 6 commits (Phases 1–6) plus optional Phase 7 flavor ship.
 
-1. **Phase 1 — Tiefling Infernal Legacy auto-grant** (MINOR). `_pc_infernal_legacy_spells` + level-gated catalog + `_resources` seed for Hellish Rebuke (Lv 3+) + Darkness (Lv 5+). Caelan (existing demo Tiefling Warlock per `_tiefling_*` sheet seeds) gets all three on `/sheet-json` projection.
+1. **Phase 1 — Tiefling Infernal Legacy racial Hellish Rebuke** (MINOR, **shipped v2.395.0**). The first slice of Infernal Legacy: route the reaction Hellish Rebuke cast through the `hellish-rebuke` racial resource (1/long, L2) instead of consuming a spell slot. New `_pc_has_tiefling_hellish_rebuke_racial(sheet)` gate; new `cast-hellish-rebuke-racial` reaction option offered alongside the existing slot-based path; new cast handler that consumes the racial resource. Zara Emberfire (Tiefling Sorcerer Lv 5) is the demo fixture. Follow-up tail filed: **Darkness 1/long racial cast (Phase 1b)** + **auto-grant projection of Thaumaturgy / Hellish Rebuke / Darkness on `/sheet-json` so future Tiefling PCs don't need manual demo-seed wiring (Phase 1c)** — both deferred until a fresh Tiefling PC creation flow is in scope.
 2. **Phase 2 — Hill Dwarf Stonecunning** (MINOR). History-check double-PB with `topic` parameter. Tavik (existing Hill Dwarf demo) is the test fixture.
 3. **Phase 3 — Hill Dwarf Speed-not-reduced-by-heavy-armor** (MINOR). Install heavy-armor STR-threshold speed gate; carve out Dwarf bypass. Test: Tavik in plate at STR 14 keeps base 25; non-Dwarf at STR 14 in plate loses 10.
 4. **Phase 4 — Halfling Nimbleness** (MINOR). Move-through-larger gate at `/token/move`. Pip (existing Lightfoot Halfling Rogue) is the fixture.

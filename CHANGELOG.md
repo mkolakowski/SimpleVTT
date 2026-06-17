@@ -10,6 +10,40 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.395.0] - 2026-06-16 — "The Free Rebuke"
+
+**Schema version:** 69
+
+**Commit summary:** Ships **race-features plan Phase 1** — the **Tiefling Infernal Legacy racial Hellish Rebuke** path. A Tiefling Lv 3+ with the `hellish-rebuke` resource available now sees a **parallel** reaction option alongside the existing v2.71.0 slot-based cast: "🔥 Cast Hellish Rebuke (racial 1/long) (L2: 3d10 fire, DEX save half)". Picking the racial path consumes the `hellish-rebuke` resource (not a spell slot), broadcasts `resource_update` + `feature_used(source=hellish-rebuke-racial)`, and flips the reaction economy. Once the racial resource hits 0 the option disappears from future prompts; the slot-based cast remains while slots last. Zara Emberfire (Tiefling Sorcerer Lv 5) is the demo fixture; 2 new harness tests (happy path + exhausted-resource control).
+
+**Description:** Per the v2.394.0 plan refresh, Phase 1 of race-features is Tiefling Infernal Legacy. The audit-agent's original framing imagined a sweeping `_pc_infernal_legacy_spells` auto-grant + level-gated catalog + `/sheet-json` injection — useful for future Tiefling PCs but architectural and not actually needed for the existing demo's Zara, who has the spells + resources manually seeded already. The genuine bug was: **the reaction cast handler always consumes a spell slot**, even when the casting Tiefling has the racial 1/long-rest use available. RAW PHB p.43 says the racial cast is FREE — burning Zara's L1 Sorcerer slot to fire a Hellish Rebuke that should be racial-free was the actual wiring gap.
+
+The ship is a minimal, additive composition:
+- New `_pc_has_tiefling_hellish_rebuke_racial(sheet)` predicate — Tiefling race slug + character level ≥ 3 + `hellish-rebuke` resource current > 0.
+- New `_decrement_tiefling_hellish_rebuke_racial(sheet)` resource mutator (in-place).
+- New `cast-hellish-rebuke-racial` reaction-option entry appended alongside the existing `cast-hellish-rebuke` option when the racial gate passes. RAW: racial cast is FIXED at L2 (the per-slot scaling above L1 only applies to slot-based casts).
+- New cast-handler branch on `reaction_key == "cast-hellish-rebuke-racial"` that consumes the racial resource (not a slot), emits the same chat-card shape as the slot path (so the front-end doesn't need to know about the racial branch), with `source="hellish-rebuke-racial"` and `reaction_kind="race-feature"` so harness / chat-card assertions can attribute the cast correctly.
+
+**Follow-up tail (filed):**
+- **Phase 1b — Darkness 1/long racial cast.** Same shape: `_pc_has_tiefling_darkness_racial(sheet)` (Tiefling Lv 5+ + `darkness-racial` resource > 0) + a new `cast-darkness-racial` action-economy ship. Different surface — Darkness is an *action* cast, not a *reaction* — so it routes through `/cast_spell` (not `/use_reaction`); shipping it cleanly needs a parallel "racial cast" branch in the regular cast handler. Filed for a follow-up MINOR.
+- **Phase 1c — auto-grant projection of Thaumaturgy / Hellish Rebuke / Darkness on `/sheet-json`** so any future Tiefling PC built via the demo seed or character-builder gets all three racial slots + resources without manual wiring. Architectural; filed.
+
+The 2 new harness tests live at `tests/harness/test_tiefling_hellish_rebuke_racial.py` and cover (a) the racial-path happy path (Zara at full racial → both options offered → racial cast → resource decremented to 0, NO slot spent, economy flip, feature_used + resource_update broadcasts both fire) and (b) the exhausted-resource control (Zara at racial=0 → only the slot-based option offered, the racial option suppressed). Reuses Krieger as the attacker — his Greataxe at +7 vs Zara's AC 15 lands a hit within the 40-swing budget every run.
+
+MINOR — additive race-feature reaction path + 2 tests; existing slot-based reaction path unchanged for non-Tieflings + for Tieflings with 0 racial uses left.
+
+### Added
+- `_pc_has_tiefling_hellish_rebuke_racial(sheet)` predicate (PHB p.43 RAW gate).
+- `_decrement_tiefling_hellish_rebuke_racial(sheet)` in-place resource decrementer.
+- `cast-hellish-rebuke-racial` reaction-option entry in the on-damage prompt builder.
+- `cast-hellish-rebuke-racial` cast-handler branch in `/use_reaction`.
+- `tests/harness/test_tiefling_hellish_rebuke_racial.py` — 2 tests (happy + exhausted control).
+
+### Changed
+- `docs/plans/race-features.md`: Phase 1 status flipped ⚪ → 🟢 partial (Hellish Rebuke racial path shipped; Phase 1b Darkness + Phase 1c auto-grant projection filed as follow-ups). Per-race table row for Tiefling Infernal Legacy 🟠 → 🟢 partial. Header status banner refreshed to v2.395.0.
+- `app/templates/wiki.html` + `docs/wiki/README.md`: race-features row status flipped from "🟢 partial (v2.394.0) — 6 phase ships remaining" → "🟢 partial (v2.395.0) — Phase 1 shipped; 5 phase ships remaining."
+- `docs/test-harness-coverage.md`: harness total 3153 → 3155.
+
 ## [2.394.0] - 2026-06-16 — "The Second Look"
 
 **Schema version:** 69

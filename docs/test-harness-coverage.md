@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3153 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.393.0, 2026-06-16).
+**Total tests:** 3155 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.395.0, 2026-06-16).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -803,6 +803,14 @@ v2.99.23 — Half-Orc Savage Attacks. `_compute_attack_auto_uplifts` extended wi
 |------|-----------------|
 | `test_savage_attacks_fires_on_half_orc_crit` | Krieger crits a Bandit (seeded d20=20) → `auto_uplifts` includes `{source="savage-attacks", expression="1d12"}` (the weapon's first die). |
 | `test_savage_attacks_skips_non_half_orc` | Control: Garrik (Variant Human Champion Fighter) crits (d20 ∈ {19, 20}) → no Savage Attacks uplift. Regression guard. |
+
+### `test_tiefling_hellish_rebuke_racial.py`
+v2.395.0 — race-features plan Phase 1: Tiefling Infernal Legacy racial Hellish Rebuke. New `_pc_has_tiefling_hellish_rebuke_racial(sheet)` gate (Tiefling Lv 3+ AND `hellish-rebuke` resource current > 0) surfaces a parallel `cast-hellish-rebuke-racial` reaction option alongside the existing slot-based v2.71.0 path; picking the racial one consumes the resource (not a spell slot), broadcasts `resource_update` + `feature_used(source=hellish-rebuke-racial)`, and flips the reaction economy. Zara Emberfire (Tiefling Sorcerer Lv 5) is the demo fixture.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_tiefling_racial_hellish_rebuke_consumes_resource_not_slot` | Zara at full racial resource (current=1) takes damage from Krieger; prompt offers BOTH `cast-hellish-rebuke` + `cast-hellish-rebuke-racial`; picking the racial path emits `resource_update` (hellish-rebuke → 0) + `feature_used(source=hellish-rebuke-racial, damage_expr=3d10, reaction_kind=race-feature)` + economy flip; NO `spell_slot_update` fires for Zara. |
+| `test_tiefling_racial_hellish_rebuke_unavailable_at_zero` | Control: Zara at racial current=0 takes damage; prompt does NOT offer `cast-hellish-rebuke-racial` but still offers the slot-based `cast-hellish-rebuke` (slots untouched). Regression guard against over-broad gate. |
 
 ### `test_hellish_resistance.py`
 v2.99.18 — (D) Phase 3 third-ship: Tiefling Hellish Resistance (sheet-level `damage_resistances` field on PCs). `_resistance_halve` extended to read the sheet root's `damage_resistances` list before walking buffs. Same field shape NPC templates already use. Zara Emberfire's demo sheet ships `damage_resistances: ["fire"]`.

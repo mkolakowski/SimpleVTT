@@ -5518,6 +5518,69 @@ def _pc_has_hellish_rebuke_available(char) -> "tuple[bool, str, int]":
     return True, best_class, best_lv
 
 
+def _pc_has_tiefling_hellish_rebuke_racial(sheet: "dict | None") -> bool:
+    """v2.395.0 — Tiefling Infernal Legacy racial Hellish Rebuke gate
+    (race-features plan Phase 1). RAW PHB p.43: "Once you reach 3rd
+    level, you can cast the hellish rebuke spell as a 2nd-level spell
+    once with this trait and regain the ability to do so when you
+    finish a long rest." Cast is FREE — no spell slot consumed.
+    Eligible when:
+      1. PC's race normalizes to "tiefling".
+      2. Total character level >= 3.
+      3. `hellish-rebuke` resource exists with current > 0.
+
+    The racial path runs in parallel with the existing slot-based
+    reaction (`_pc_has_hellish_rebuke_available`); a Tiefling Lv 3+
+    with both slots and racial uses available will see two reaction
+    options ("Cast Hellish Rebuke (L1 slot)" + "Cast Hellish Rebuke
+    (racial 1/long, L2)") and can pick the racial one to preserve
+    their slots.
+    """
+    if not sheet:
+        return False
+    if _race_slug_from_sheet(sheet) != "tiefling":
+        return False
+    try:
+        char_lv = int(sheet.get("level") or 0)
+    except (TypeError, ValueError):
+        char_lv = 0
+    if char_lv < 3:
+        return False
+    for r in (sheet.get("resources") or []):
+        if not isinstance(r, dict):
+            continue
+        key = (r.get("key") or "").strip().lower()
+        if key != "hellish-rebuke":
+            continue
+        try:
+            cur = int(r.get("current") or 0)
+        except (TypeError, ValueError):
+            cur = 0
+        return cur > 0
+    return False
+
+
+def _decrement_tiefling_hellish_rebuke_racial(sheet: dict) -> None:
+    """v2.395.0 — in-place decrement of the `hellish-rebuke` resource
+    counter on a sheet. Called by the cast-hellish-rebuke-racial
+    reaction handler after the cast is broadcast.
+    """
+    resources = list(sheet.get("resources") or [])
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "hellish-rebuke":
+            updated = dict(r)
+            try:
+                cur = int(updated.get("current") or 0)
+            except (TypeError, ValueError):
+                cur = 0
+            updated["current"] = max(0, cur - 1)
+            resources[i] = updated
+            sheet["resources"] = resources
+            return
+
+
 # v2.71.0 Phase 3c — Absorb Elements. RAW (XGtE p.150): "1 reaction,
 # which you take when you take acid, cold, fire, lightning, or thunder
 # damage." 1st-level spell, +1d6 to the next melee hit per slot above
@@ -6439,6 +6502,36 @@ def _eligible_reactions(
                 "params": {
                     "slot_level": hr_lv,
                     "class_slug": hr_class,
+                    "attacker_name": attacker_name,
+                    "attacker_char_id": context.get("attacker_char_id"),
+                    "attacker_combatant_id": context.get("attacker_combatant_id"),
+                    "damage_amount": context.get("damage_amount"),
+                },
+                "available": True,
+                "unavailable_reason": None,
+            })
+        # v2.395.0 race-features Phase 1 — Tiefling Infernal Legacy
+        # racial Hellish Rebuke. RAW PHB p.43: Tiefling Lv 3+ can
+        # cast Hellish Rebuke at 2nd level once per long rest as a
+        # FREE (no-slot) racial action. Surfaced as a parallel option
+        # to the slot-based Phase 3c cast above so a Tiefling who has
+        # both slots + the racial use can preserve their slots by
+        # picking the racial path. Disappears once the racial
+        # resource hits 0.
+        if _pc_has_tiefling_hellish_rebuke_racial(char.sheet if char else None):
+            attacker_name = context.get("attacker_name") or "the attacker"
+            opts.append({
+                "key": "cast-hellish-rebuke-racial",
+                "label": (
+                    f"🔥 Cast Hellish Rebuke (racial 1/long) on {attacker_name} "
+                    f"(L2: 3d10 fire, DEX save half)"
+                ),
+                "kind": "race-feature",
+                "resource_cost": "Reaction + 1× Infernal Legacy use",
+                "params": {
+                    # RAW: racial cast is FIXED at L2. No class_slug —
+                    # the cast handler branches on the option key.
+                    "slot_level": 2,
                     "attacker_name": attacker_name,
                     "attacker_char_id": context.get("attacker_char_id"),
                     "attacker_combatant_id": context.get("attacker_combatant_id"),
@@ -26934,6 +27027,97 @@ async def use_reaction(
             raise
         except Exception:
             pass
+    elif reaction_key == "cast-hellish-rebuke-racial" and watcher_char_id:
+        # v2.395.0 race-features Phase 1 — Tiefling Infernal Legacy
+        # racial Hellish Rebuke. RAW PHB p.43: Tiefling Lv 3+ casts
+        # Hellish Rebuke at 2nd level FREE (no slot) 1/long rest via
+        # this race trait. Consumes the `hellish-rebuke` resource,
+        # broadcasts feature_used + resource_update. Same chat-card
+        # shape as the slot-based cast above so the front-end doesn't
+        # need to know about the racial branch; only the resource
+        # delta + source string differ.
+        try:
+            options = entry.get("options") or []
+            matching = next(
+                (o for o in options if o.get("key") == "cast-hellish-rebuke-racial"),
+                None,
+            )
+            params = (matching or {}).get("params") or {}
+            slot_level = int(params.get("slot_level") or 2)  # RAW: always 2
+            attacker_name = str(params.get("attacker_name") or "the attacker")
+            watcher_char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+            if not watcher_char or not watcher_char.sheet:
+                raise HTTPException(404, "watcher character not found")
+            sheet = dict(watcher_char.sheet or {})
+            # Re-check the racial gate at execution time — the resource
+            # may have been consumed between option-build and click.
+            if not _pc_has_tiefling_hellish_rebuke_racial(sheet):
+                return JSONResponse(status_code=409, content={
+                    "error": "no_racial_use",
+                    "trait": "tiefling-infernal-legacy",
+                    "spell": "hellish-rebuke",
+                })
+            # Read pre-decrement value for the resource_update broadcast.
+            res_max = 1
+            for r in (sheet.get("resources") or []):
+                if isinstance(r, dict) and (r.get("key") or "").strip().lower() == "hellish-rebuke":
+                    try:
+                        res_max = int(r.get("max") or 1)
+                    except (TypeError, ValueError):
+                        res_max = 1
+                    break
+            _decrement_tiefling_hellish_rebuke_racial(sheet)
+            from sqlalchemy.orm.attributes import flag_modified
+            watcher_char.sheet = sheet
+            flag_modified(watcher_char, "sheet")
+            db.commit()
+            hellish_rebuke_cast_id = uuid.uuid4().hex[:12]
+            await _mark_battle_economy(
+                campaign_id, int(watcher_char_id), "reaction",
+            )
+            damage_dice = 1 + slot_level  # RAW: 3d10 at L2
+            await hub.broadcast(campaign_id, {
+                "type": "resource_update",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "key": "hellish-rebuke",
+                    "current": 0,
+                    "max": res_max,
+                },
+            })
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "character_name": watcher_char.name,
+                    "user_color": watcher_char.color,
+                    "feature_name": "🔥 Hellish Rebuke (racial 1/long)",
+                    "feature_desc": (
+                        f"Reaction. {attacker_name} takes {damage_dice}d10 "
+                        f"fire damage (DEX save DC = caster's spell save DC "
+                        f"for half). Tiefling Infernal Legacy racial use — "
+                        f"no spell slot consumed."
+                    ),
+                    "source": "hellish-rebuke-racial",
+                    "cast_id": hellish_rebuke_cast_id,
+                    "reaction_kind": "race-feature",
+                    "slot_level": slot_level,
+                    "damage_expr": f"{damage_dice}d10",
+                    "damage_type": "fire",
+                    "rebuke_target_name": attacker_name,
+                    "rebuke_target_char_id": params.get("attacker_char_id"),
+                    "rebuke_target_combatant_id": params.get("attacker_combatant_id"),
+                },
+            })
+        except HTTPException:
+            raise
+        except Exception:
+            logging.exception(
+                "cast-hellish-rebuke-racial dispatch failed for char_id=%s",
+                watcher_char_id,
+            )
     elif reaction_key == "cast-absorb-elements" and watcher_char_id:
         # v2.71.0 Phase 3c — Absorb Elements. Consume the 1st+ slot,
         # mark reaction, install absorb-elements-active buff with
