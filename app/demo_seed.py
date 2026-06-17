@@ -3345,6 +3345,14 @@ def _warlock_sheet(name: str) -> dict:
         # v2.99.19 Hill Dwarf Dwarven Resilience poison — sheet-level
         # damage_resistances list read by _resistance_halve.
         "damage_resistances": ["lightning"],
+        # v2.392.0 — Dragonborn ancestry selector. RAW PHB p.34
+        # Draconic Ancestry table: bronze → lightning damage type,
+        # 5×30-ft line, DEX save. Read by /use_breath_weapon to
+        # pick the AoE shape + damage type + save ability without
+        # parsing the breath-weapon resource's free-text desc.
+        # The 10 valid values are: black, blue, brass, bronze,
+        # copper, gold, green, red, silver, white.
+        "_dragonborn_ancestor": "bronze",
         "initiative_bonus": 2,  # DEX 14 mod
         "proficiency_bonus": 3,
         "hit_dice": {"current": 5, "max": 5},

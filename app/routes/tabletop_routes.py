@@ -24259,6 +24259,309 @@ def _song_of_rest_for_campaign(db: Session, campaign_id: int) -> tuple[int, str,
     return die, best_name, best_lv
 
 
+# v2.392.0 — Dragonborn Breath Weapon (RAW PHB p.34). Per-ancestry
+# AoE shape + damage type + save ability. Damage dice scale by
+# character level: 2d6 (1-5) / 3d6 (6-10) / 4d6 (11-15) / 5d6 (16+).
+# DC = 8 + CON mod + proficiency bonus. Short-rest charge (1/short).
+# The /use_breath_weapon endpoint below reads the caster's
+# `_dragonborn_ancestor` sheet field to look up params here.
+_DRAGONBORN_BREATH_PARAMS: dict[str, dict] = {
+    "black":  {"damage_type": "acid",      "shape": "line", "save_ability": "DEX", "size_ft": 30},
+    "blue":   {"damage_type": "lightning", "shape": "line", "save_ability": "DEX", "size_ft": 30},
+    "brass":  {"damage_type": "fire",      "shape": "line", "save_ability": "DEX", "size_ft": 30},
+    "bronze": {"damage_type": "lightning", "shape": "line", "save_ability": "DEX", "size_ft": 30},
+    "copper": {"damage_type": "acid",      "shape": "line", "save_ability": "DEX", "size_ft": 30},
+    "gold":   {"damage_type": "fire",      "shape": "cone", "save_ability": "DEX", "size_ft": 15},
+    "green":  {"damage_type": "poison",    "shape": "cone", "save_ability": "CON", "size_ft": 15},
+    "red":    {"damage_type": "fire",      "shape": "cone", "save_ability": "DEX", "size_ft": 15},
+    "silver": {"damage_type": "cold",      "shape": "cone", "save_ability": "CON", "size_ft": 15},
+    "white":  {"damage_type": "cold",      "shape": "cone", "save_ability": "CON", "size_ft": 15},
+}
+
+
+def _dragonborn_breath_damage_dice(char_level: int) -> str:
+    """RAW PHB p.34 Breath Weapon scaling table. Returns the damage
+    expression for the character's level."""
+    if char_level >= 16:
+        return "5d6"
+    if char_level >= 11:
+        return "4d6"
+    if char_level >= 6:
+        return "3d6"
+    return "2d6"
+
+
+@router.post("/api/campaign/{campaign_id}/use_breath_weapon")
+async def use_breath_weapon(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.392.0 — Dragonborn Breath Weapon endpoint.
+
+    Body: ``{character_id, target_combatant_ids[], override?}``.
+
+    RAW (PHB p.34): action — exhale destructive energy in a 5×30-ft
+    line (chromatic-line ancestries) or a 15-ft cone (cone
+    ancestries), keyed by the caster's `_dragonborn_ancestor` sheet
+    field. Per-target Dex or Con save (depends on ancestry); DC = 8
+    + CON modifier + proficiency bonus. Damage starts at 2d6 and
+    scales by character level (3d6 @ 6, 4d6 @ 11, 5d6 @ 16). Half
+    damage on a successful save. One use per short rest, consumed
+    from the `breath-weapon` resource on the sheet.
+
+    Mirrors the v2.169.0 `/trigger_lair_action` pattern for the
+    per-target save + half-damage application (using
+    `_resolve_feature_save` + `_apply_damage_to_combatant`). Action
+    economy gated like `/use_lay_on_hands` (`body.get("override")`
+    bypasses unless strict-mode). Per-target outcomes returned in
+    ``results: [{combatant_id, passed, damage_dealt}]``; per-target
+    `feature_used` broadcasts ride the save-resolver.
+
+    Errors:
+      400 missing character_id.
+      403 not your character / non-member.
+      404 character not found.
+      409 wrong_race (caller isn't Dragonborn) /
+          no_charges (breath-weapon resource exhausted) /
+          unknown_ancestry (sheet's `_dragonborn_ancestor` not in the
+          10-ancestry table) /
+          over_budget (action slot already spent) /
+          incapacitated (the v2.386.0 incapacitated gate).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_combatant_ids = body.get("target_combatant_ids") or []
+    if not isinstance(target_combatant_ids, list):
+        target_combatant_ids = []
+    target_combatant_ids = [
+        str(x).strip() for x in target_combatant_ids if str(x).strip()
+    ]
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if (sheet.get("race") or "").strip().lower() != "dragonborn":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_race",
+            "char_name": char.name,
+            "got_race": sheet.get("race") or "",
+        })
+
+    ancestor = (sheet.get("_dragonborn_ancestor") or "").strip().lower()
+    params = _DRAGONBORN_BREATH_PARAMS.get(ancestor)
+    if not params:
+        return JSONResponse(status_code=409, content={
+            "error": "unknown_ancestry",
+            "char_name": char.name,
+            "got_ancestor": ancestor,
+            "valid_ancestors": sorted(_DRAGONBORN_BREATH_PARAMS.keys()),
+        })
+
+    # Incapacitated gate (v2.386.0 helper reuse).
+    if not override and _caster_is_incapacitated(campaign_id, int(char.id)):
+        return JSONResponse(status_code=409, content={
+            "error": "incapacitated",
+            "char_name": char.name,
+            "source": "breath_weapon",
+        })
+
+    # Charge gate — read the breath-weapon resource. Decrement on
+    # successful dispatch (BEFORE the per-target loop so a partial
+    # failure doesn't burn the charge twice).
+    resources = list(sheet.get("resources") or [])
+    bw_row = None
+    bw_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").strip().lower() == "breath-weapon":
+            bw_row = dict(r)
+            bw_idx = i
+            break
+    if bw_row is None:
+        return JSONResponse(status_code=409, content={
+            "error": "no_resource",
+            "char_name": char.name,
+            "hint": "breath-weapon resource missing from sheet",
+        })
+    try:
+        bw_cur = int(bw_row.get("current") or 0)
+    except (TypeError, ValueError):
+        bw_cur = 0
+    if bw_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_charges",
+            "char_name": char.name,
+            "current": bw_cur,
+            "max": int(bw_row.get("max") or 1),
+            "reset": str(bw_row.get("reset") or "short"),
+        })
+
+    # Phase 4 over-budget gate (action slot).
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "breath-weapon",
+            "label": "Breath Weapon",
+            "strict": strict,
+        })
+
+    # Compute DC = 8 + CON mod + proficiency bonus.
+    abilities = sheet.get("abilities") or {}
+    try:
+        con_score = int(abilities.get("CON") or 10)
+    except (TypeError, ValueError):
+        con_score = 10
+    con_mod = (con_score - 10) // 2
+    try:
+        pb = int(sheet.get("proficiency_bonus") or 2)
+    except (TypeError, ValueError):
+        pb = 2
+    save_dc = 8 + con_mod + pb
+
+    # Damage dice scale by character level.
+    try:
+        char_level = int(sheet.get("level") or 1)
+    except (TypeError, ValueError):
+        char_level = 1
+    damage_expr = _dragonborn_breath_damage_dice(char_level)
+
+    # Roll damage ONCE for the AoE (RAW area-effect rule, mirrors
+    # the v2.169.0 lair-action dispatch).
+    full_damage = 0
+    try:
+        full_damage = int(dice_mod.roll(damage_expr).total)
+    except dice_mod.DiceParseError:
+        full_damage = 0
+
+    # Commit charge decrement + action-economy mark. Do this BEFORE
+    # the per-target loop so a partial failure doesn't double-decrement.
+    bw_row["current"] = bw_cur - 1
+    resources[bw_idx] = bw_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    save_ability = params["save_ability"]
+    damage_type = params["damage_type"]
+    shape = params["shape"]
+    size_ft = params["size_ft"]
+    ancestor_label = ancestor.title()
+    source_name = f"Breath Weapon ({ancestor_label})"
+
+    results: list[dict] = []
+    for tid in target_combatant_ids[:24]:
+        target_c = _lookup_combatant(campaign_id, tid)
+        if not target_c:
+            results.append({"combatant_id": tid, "reason": "not_found"})
+            continue
+        try:
+            sr = await _resolve_feature_save(
+                db, campaign_id,
+                caster_char_id=int(char.id),
+                caster_char_name=char.name,
+                target_combatant=target_c,
+                save_ability=save_ability,
+                dc=save_dc,
+                note_label=f"Breath Weapon (DC {save_dc} {save_ability})",
+                condition_buff=None,
+                repeated_save=False,
+                source="dragonborn-breath-weapon",
+                campaign=campaign,
+                prompt_user=user,
+                feature_name=f"🐉 {source_name}",
+            )
+        except Exception:
+            logging.exception(
+                "Breath Weapon save resolve failed for tid=%s", tid,
+            )
+            results.append({"combatant_id": tid, "reason": "save_error"})
+            continue
+        passed = sr.get("passed")
+        damage_dealt = 0
+        # PC targets are prompted (passed None) — damage stays
+        # deferred. NPC targets resolve inline.
+        if passed is not None:
+            damage_dealt = full_damage if passed is False else full_damage // 2
+            if damage_dealt > 0:
+                try:
+                    await _apply_damage_to_combatant(
+                        db, campaign_id, target_c,
+                        damage_amount=damage_dealt,
+                        damage_type=damage_type,
+                        is_attack=False, is_magical=False,
+                    )
+                except Exception:
+                    logging.exception(
+                        "Breath Weapon damage apply failed for tid=%s", tid,
+                    )
+        results.append({
+            "combatant_id": tid,
+            "name": target_c.get("name") or "",
+            "passed": passed,
+            "damage_dealt": damage_dealt,
+            "prompted": bool(sr.get("prompted")),
+        })
+
+    # Summary broadcast (feature_used header for the cast itself).
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color,
+            "feature_name": f"🐉 {source_name}",
+            "feature_desc": (
+                f"{ancestor_label} Dragonborn breath: {damage_expr} "
+                f"{damage_type} in a {size_ft}-ft {shape} — "
+                f"{save_ability} DC {save_dc} for half. "
+                f"{len(results)} target(s)."
+            ),
+            "source": "dragonborn-breath-weapon",
+            "remaining": bw_row.get("current"),
+            "max": bw_row.get("max"),
+        },
+    })
+
+    return {
+        "ok": True,
+        "ancestor": ancestor,
+        "damage_type": damage_type,
+        "shape": shape,
+        "size_ft": size_ft,
+        "save_ability": save_ability,
+        "save_dc": save_dc,
+        "damage_expression": damage_expr,
+        "full_damage": full_damage,
+        "char_level": char_level,
+        "charges_remaining": bw_row.get("current"),
+        "charges_max": bw_row.get("max"),
+        "results": results,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_bardic_inspiration")
 async def use_bardic_inspiration(
     campaign_id: int,

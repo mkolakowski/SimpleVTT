@@ -10,6 +10,41 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.392.0] - 2026-06-16 — "The Exhaled Storm"
+
+**Schema version:** 69
+
+**Commit summary:** Ships the **Dragonborn Breath Weapon** racial action — the single highest-leverage gap on the post-v2.391.0 Races audit. A new `POST /use_breath_weapon` endpoint reads the caster's `_dragonborn_ancestor` sheet field, looks up per-ancestry params (damage type / shape / save ability) in a new `_DRAGONBORN_BREATH_PARAMS` map, computes the RAW DC (`8 + CON mod + proficiency`), scales damage dice by character level (2d6 → 3d6 @ Lv 6 → 4d6 @ Lv 11 → 5d6 @ Lv 16), rolls damage once for the AoE, and resolves per-target save+half-damage via the existing `_resolve_feature_save` + `_apply_damage_to_combatant` substrates (same path the v2.169.0 lair-action dispatch uses). Charge consumed from the `breath-weapon` resource on the sheet (1/short rest, was previously announce-only / GM-narrated). Demo seed adds `_dragonborn_ancestor: "bronze"` to Magnus Hexbinder. Four harness tests via Magnus + a bandit (happy-path, no-charges-after-use, wrong-race, paralyzed-caster).
+
+**Description:** Per the post-v2.391.0 wiki Races audit, the genuinely engine-shaped unwired race traits were: Dragonborn Breath Weapon, Tiefling Hellish Resistance, Hill Dwarf Dwarven Toughness, and Tiefling Infernal Legacy. Breath Weapon was the highest-leverage single ship because it composes the most existing substrates:
+
+- **Per-target AoE save** — `_resolve_feature_save` (v2.99.405 feature-save resolver).
+- **Save-for-half damage application** — `_apply_damage_to_combatant` (v2.49.x damage pipeline).
+- **Incapacitated gate reuse** — `_caster_is_incapacitated` (v2.386.0).
+- **Charge tracking** — sheet `resources[]` entry with `reset: "short"`.
+- **Action economy gate** — `_mark_battle_economy` + `_is_slot_used` (v2.6.1).
+
+The 10 SRD draconic ancestries split into two AoE shapes: 5 chromatic-line (Black/Blue/Brass/Bronze/Copper) at 5×30 ft with DEX save, and 5 cone ancestries (Gold/Green/Red/Silver/White) at 15 ft with mixed DEX/CON saves (Green + Silver + White use CON). Both shapes share the same per-target dispatch path; only the geometry display differs (the response carries `shape` + `size_ft` for the client picker to pre-fill targets via `/battle/line-targets` or `/battle/cone-targets` — the existing v2.159.4–v2.159.5 helpers).
+
+The endpoint takes a `target_combatant_ids[]` body param — the caller pre-computes the affected combatants client-side (or via the line/cone-targets helpers) and passes the resolved id list. Per-target save + half-damage runs inline for NPC targets; PC targets get a roll-request prompt (damage stays deferred — same v2.169.0 lair-action contract).
+
+**v1 simplifications:**
+- The endpoint doesn't compute the AoE shape server-side. The client is expected to use `/battle/line-targets` (chromatic ancestries) or `/battle/cone-targets` (other ancestries) to pre-fill `target_combatant_ids`. The `shape` + `size_ft` fields in the response tell the client which picker to use.
+- Damage rolls ONCE for the whole AoE per RAW area-effect rule (mirrors the v2.169.0 lair-action dispatch); each target gets `full_damage` on a failed save, `full_damage // 2` on a successful save.
+- Self-damage isn't possible RAW (the cone/line emanates from the caster), but the endpoint doesn't explicitly exclude the caster's combatant id from the target list — the caller is responsible for not including themselves.
+
+MINOR — new endpoint + new constant + new sheet field + 4 tests; reuses existing substrates throughout.
+
+### Added
+- `_DRAGONBORN_BREATH_PARAMS` map in `app/routes/tabletop_routes.py` — per-ancestry damage type / shape / save ability / size_ft (10 entries).
+- `_dragonborn_breath_damage_dice(char_level)` helper — RAW PHB p.34 damage scaling table.
+- `POST /api/campaign/{cid}/use_breath_weapon` endpoint — full per-target save + half-damage + charge decrement + action-economy mark + summary broadcast.
+- `_dragonborn_ancestor: "bronze"` field on Magnus Hexbinder's demo sheet so the endpoint can read his ancestry without parsing the resource's free-text desc.
+- `tests/harness/test_use_breath_weapon.py` — 4 tests covering the happy path + the four 409 error paths.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3148 → 3152 (+4 Breath Weapon tests).
+
 ## [2.391.1] - 2026-06-16 — "The Wiki Catches Up"
 
 **Schema version:** 69
