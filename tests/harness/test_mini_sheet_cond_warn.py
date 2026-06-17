@@ -71,6 +71,86 @@ async def test_poisoned_pc_mini_sheet_shows_warning_pill(
     )
 
 
+async def test_charmed_pc_mini_sheet_shows_charmer_block_warning(
+    gm_client, roster,
+):
+    """v2.401.0 — Pip carries a Charmed buff → the abilities header pill
+    surfaces the new "cannot attack charmer or target charmer with harmful
+    spells" impact string that mirrors the v2.390.0/v2.391.0 gate. Covers
+    the post-v2.385.0–v2.391.0 enforcement sweep being made visible
+    through the same warning-pill UI the d20-adv/dis conditions use."""
+    pip = roster["Pip Quickfingers"]
+    pip_cid = f"tok_{pip['id']}"
+    await _seed_battle(gm_client, [
+        {"id": pip_cid, "char_id": pip["id"], "name": pip["name"],
+         "initiative": 10, "hp_current": 24, "hp_max": 24,
+         "buffs": [{"key": "charmed", "name": "Charmed"}],
+         "economy": {"action": False, "bonus": False,
+                     "reaction": False, "movement": 0}},
+    ])
+    resp = await gm_client.get(f"/campaign/{CAMPAIGN_ID}")
+    assert resp.status_code == 200, resp.text
+    pip_html = _find_char_detail(resp.text, pip["name"])
+    assert "mini-ab-cond-warn" in pip_html, (
+        "Expected the abilities header to carry the .mini-ab-cond-warn "
+        "pill when Pip has the Charmed buff active."
+    )
+    assert "Charmed" in pip_html
+    assert "cannot attack charmer or target charmer with harmful spells" in pip_html, (
+        "Expected the tooltip to surface the v2.401.0 Charmed impact text "
+        "mirroring the v2.390.0/v2.391.0 attack/cast_spell gate."
+    )
+    # Label broadened in v2.401.0 since Charmed/Grappled/Incapacitated
+    # gate actions rather than d20 rolls — assert the new label so a
+    # regression that reverts to "affecting d20 rolls" gets caught.
+    assert "Active conditions affecting actions or d20 rolls" in pip_html
+
+
+async def test_grappled_pc_mini_sheet_shows_speed_zero_warning(
+    gm_client, roster,
+):
+    """v2.401.0 — Grappled buff surfaces the "speed reduced to 0" impact
+    in the warning pill, matching the v2.99.112 + v2.389.0 enforcement."""
+    pip = roster["Pip Quickfingers"]
+    pip_cid = f"tok_{pip['id']}"
+    await _seed_battle(gm_client, [
+        {"id": pip_cid, "char_id": pip["id"], "name": pip["name"],
+         "initiative": 10, "hp_current": 24, "hp_max": 24,
+         "buffs": [{"key": "grappled", "name": "Grappled"}],
+         "economy": {"action": False, "bonus": False,
+                     "reaction": False, "movement": 0}},
+    ])
+    resp = await gm_client.get(f"/campaign/{CAMPAIGN_ID}")
+    assert resp.status_code == 200, resp.text
+    pip_html = _find_char_detail(resp.text, pip["name"])
+    assert "mini-ab-cond-warn" in pip_html
+    assert "Grappled" in pip_html
+    assert "speed reduced to 0" in pip_html
+
+
+async def test_incapacitated_pc_mini_sheet_shows_action_gate_warning(
+    gm_client, roster,
+):
+    """v2.401.0 — Incapacitated buff surfaces the "cannot take actions,
+    bonus actions, or reactions" impact, matching the v2.385.0–v2.388.0
+    /attack + /cast_spell + /use_feature gate sweep."""
+    pip = roster["Pip Quickfingers"]
+    pip_cid = f"tok_{pip['id']}"
+    await _seed_battle(gm_client, [
+        {"id": pip_cid, "char_id": pip["id"], "name": pip["name"],
+         "initiative": 10, "hp_current": 24, "hp_max": 24,
+         "buffs": [{"key": "incapacitated", "name": "Incapacitated"}],
+         "economy": {"action": False, "bonus": False,
+                     "reaction": False, "movement": 0}},
+    ])
+    resp = await gm_client.get(f"/campaign/{CAMPAIGN_ID}")
+    assert resp.status_code == 200, resp.text
+    pip_html = _find_char_detail(resp.text, pip["name"])
+    assert "mini-ab-cond-warn" in pip_html
+    assert "Incapacitated" in pip_html
+    assert "cannot take actions, bonus actions, or reactions" in pip_html
+
+
 async def test_clean_pc_mini_sheet_omits_warning_pill(
     gm_client, roster,
 ):

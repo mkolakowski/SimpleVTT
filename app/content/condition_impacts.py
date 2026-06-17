@@ -38,14 +38,20 @@ from __future__ import annotations
 
 
 CONDITION_IMPACTS: "dict[str, str]" = {
-    "poisoned":    "disadvantage on attacks + ability checks",
-    "frightened":  "disadvantage on attacks + ability checks",
-    "restrained":  "disadvantage on attacks; attacks against have advantage; disadvantage on DEX saves",
-    "blinded":     "disadvantage on attacks; attacks against have advantage",
-    "prone":       "disadvantage on attacks (own); melee attacks against have advantage",
-    "paralyzed":   "incapacitated · auto-fail STR + DEX saves · attacks against have advantage · melee = auto-crit",
-    "stunned":     "incapacitated · auto-fail STR + DEX saves · attacks against have advantage",
-    "unconscious": "incapacitated, prone · auto-fail STR + DEX saves · attacks against have advantage · melee = auto-crit",
-    "petrified":   "auto-fail STR + DEX saves · resistance to all damage",
-    "invisible":   "advantage on own attack rolls; attacks against have disadvantage",
+    "poisoned":      "disadvantage on attacks + ability checks",
+    "frightened":    "disadvantage on attacks + ability checks",
+    "restrained":    "disadvantage on attacks; attacks against have advantage; disadvantage on DEX saves",
+    "blinded":       "disadvantage on attacks; attacks against have advantage",
+    "prone":         "disadvantage on attacks (own); melee attacks against have advantage",
+    "paralyzed":     "incapacitated · auto-fail STR + DEX saves · attacks against have advantage · melee = auto-crit",
+    "stunned":       "incapacitated · auto-fail STR + DEX saves · attacks against have advantage",
+    "unconscious":   "incapacitated, prone · auto-fail STR + DEX saves · attacks against have advantage · melee = auto-crit",
+    "petrified":     "auto-fail STR + DEX saves · resistance to all damage",
+    "invisible":     "advantage on own attack rolls; attacks against have disadvantage",
+    # v2.401.0 — surfaces the post-v2.385.0–v2.391.0 enforcement sweep
+    # (Incapacitated action gate, Grappled clause 1, Charmed clause 1)
+    # in the same warning-pill UI the d20-adv/dis conditions already use.
+    "charmed":       "cannot attack charmer or target charmer with harmful spells",
+    "grappled":      "speed reduced to 0",
+    "incapacitated": "cannot take actions, bonus actions, or reactions",
 }

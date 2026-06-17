@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.401.0] - 2026-06-17 — "The Wider Warning"
+
+**Schema version:** 69
+
+**Commit summary:** Backfills three new entries into `app/content/condition_impacts.py` — **charmed**, **grappled**, and **incapacitated** — so the mini-sheet abilities-header warning pill surfaces the post-v2.385.0–v2.391.0 enforcement sweep to the player. Pre-v2.401.0 the pill only knew about the 10 d20-adv/dis conditions (Poisoned / Frightened / Restrained / Blinded / Prone / Paralyzed / Stunned / Unconscious / Petrified / Invisible); after the v2.385.0–v2.391.0 sweep closed the action gate (Incapacitated), the grappler-incapacitated sweep (Grappled clause 2), and the can't-target-charmer gate (Charmed clause 1), three additional conditions started having player-visible mechanical consequences but the UI didn't tell the player what those consequences were. This commit closes that gap: a PC carrying any of the three now sees a warning pill with the exact impact string the engine enforces. Touches the single-source-of-truth Python dict, which is exposed both as a Jinja global (server-rendered `_mini_sheet_card.html` path) and as `window._COND_IMPACT_MAP` (runtime JS hydration path) — both surfaces pick up the new keys without further wiring.
+
+Also broadens the pill's title + aria-label from "Active conditions affecting d20 rolls" → "Active conditions affecting actions or d20 rolls" (in both the Jinja partial and the JS hydration helper). The d20-only framing was accurate for the original 10 conditions but would mislead a player seeing a Charmed/Grappled/Incapacitated entry, which gates actions rather than dice. The broader label keeps the pill honest.
+
+**Description:** Final UI-surface debt from the v2.385.0–v2.391.0 condition-enforcement sweep. The engine started enforcing the new clauses six commits ago; the warning pill kept pretending only ten conditions existed. The split was structural — `CONDITION_IMPACTS` was originally scoped to "what the v2.152.0–v2.157.0 d20 automation enforces" and the v2.385.0–v2.391.0 work never circled back to widen the scope. Closing the gap now means the next time a player gets Charmed mid-combat and tries to attack their charmer, the 409 they hit at the `/attack` endpoint is not the first signal — the mini-sheet pill already told them what would happen.
+
+MINOR — three new dict entries surfaced through both the Jinja template and the JS runtime, plus the label widening. The Conditions feature has been at ~92% (TODO row) since v2.391.0; this commit doesn't move the engine-enforcement number (the gates were already there) but does close the matching UI-surfacing gap. The mini-sheet pill is now structurally aligned with the engine's enforcement set for every SRD condition that has a mechanical (non-narrative) effect.
+
+### Added
+- `app/content/condition_impacts.py`: three new tooltip entries — `charmed` ("cannot attack charmer or target charmer with harmful spells"), `grappled` ("speed reduced to 0"), `incapacitated` ("cannot take actions, bonus actions, or reactions"). The dict comment now spans the v2.385.0–v2.391.0 enforcement sweep as well as the original v2.152.0–v2.157.0 d20 automation.
+- `tests/harness/test_mini_sheet_cond_warn.py`: three new tests — `test_charmed_pc_mini_sheet_shows_charmer_block_warning`, `test_grappled_pc_mini_sheet_shows_speed_zero_warning`, `test_incapacitated_pc_mini_sheet_shows_action_gate_warning`. Each asserts (a) the pill renders for a PC carrying the new buff, (b) the new impact string appears in the tooltip. The Charmed test also asserts the broadened "Active conditions affecting actions or d20 rolls" label so a regression that reverts the wording gets caught.
+
+### Changed
+- `app/templates/_mini_sheet_card.html`: pill `title` + `aria-label` widened "affecting d20 rolls" → "affecting actions or d20 rolls".
+- `app/templates/tabletop.html`: matching pill widening in the `_updateConditionWarnPill` JS helper (runtime hydration path keeps the same wording as the server-rendered initial render).
+- `docs/test-harness-coverage.md`: total-test-count line bumped 3170 → 3173 + version stamp v2.399.0 → v2.401.0.
+
 ## [2.400.2] - 2026-06-17 — "The Closed Ledger"
 
 **Schema version:** 69

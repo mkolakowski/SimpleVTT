@@ -130,8 +130,8 @@
                     <span class="mini-section-label" style="margin:0;flex:1;">Abilities</span>
                     {% if _ab_warn_ns.parts %}
                     <span class="mini-ab-cond-warn"
-                          title="Active conditions affecting d20 rolls:&#10;&#10;{{ _ab_warn_ns.parts | join('&#10;') }}"
-                          aria-label="Active conditions affecting d20 rolls">⚠ Conditions</span>
+                          title="Active conditions affecting actions or d20 rolls:&#10;&#10;{{ _ab_warn_ns.parts | join('&#10;') }}"
+                          aria-label="Active conditions affecting actions or d20 rolls">⚠ Conditions</span>
                     {% endif %}
                     <div class="mini-ab-toggle" data-char-id="{{ c.id }}">
                         <button type="button" class="mini-ab-toggle-btn active" data-char-id="{{ c.id }}" data-mode="check">Check</button>
