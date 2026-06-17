@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3155 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.395.1, 2026-06-16).
+**Total tests:** 3159 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.396.0, 2026-06-16).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -803,6 +803,16 @@ v2.99.23 — Half-Orc Savage Attacks. `_compute_attack_auto_uplifts` extended wi
 |------|-----------------|
 | `test_savage_attacks_fires_on_half_orc_crit` | Krieger crits a Bandit (seeded d20=20) → `auto_uplifts` includes `{source="savage-attacks", expression="1d12"}` (the weapon's first die). |
 | `test_savage_attacks_skips_non_half_orc` | Control: Garrik (Variant Human Champion Fighter) crits (d20 ∈ {19, 20}) → no Savage Attacks uplift. Regression guard. |
+
+### `test_check_stonecunning.py`
+v2.396.0 — race-features plan Phase 2: Hill Dwarf Stonecunning History check. New `_pc_has_stonecunning(sheet)` race-gate predicate + new `POST /api/campaign/{cid}/check_stonecunning` endpoint that rolls `1d20 + INT mod + 2 × PB` (RAW: double PB even when not proficient in History) and emits a `feature_used(source=stonecunning, stat_key=history, stat_ability=INT, …)` broadcast. Composes the PC's standing roll-state advantage/disadvantage. Tavik Stonebrow (Hill Dwarf Cleric Lv 8, INT 10, PB +3) is the demo fixture.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_stonecunning_rolls_with_double_pb` | Tavik rolls; response total in [7, 26] (1d20 + 0 INT + 6 = 2 × PB 3); expression contains `+6`; feature_used broadcast carries `source=stonecunning`, `stat_key=history`, `stat_ability=INT`, `int_mod=0`, `proficiency_bonus=3`, `double_pb=6`. |
+| `test_stonecunning_rejects_non_dwarf` | Pip (Lightfoot Halfling) → 409 `race_not_dwarf` with `got_race` echo. Race-gate regression guard. |
+| `test_stonecunning_missing_character_id_400` | Body without `character_id` → 400. Input-gate regression guard. |
+| `test_stonecunning_echoes_note` | Tavik with `note="Origin of these temple walls"` → response carries `note` verbatim; feature_used `feature_desc` contains the note text so the GM sees what stonework topic the player was rolling on. |
 
 ### `test_tiefling_hellish_rebuke_racial.py`
 v2.395.0 — race-features plan Phase 1: Tiefling Infernal Legacy racial Hellish Rebuke. New `_pc_has_tiefling_hellish_rebuke_racial(sheet)` gate (Tiefling Lv 3+ AND `hellish-rebuke` resource current > 0) surfaces a parallel `cast-hellish-rebuke-racial` reaction option alongside the existing slot-based v2.71.0 path; picking the racial one consumes the resource (not a spell slot), broadcasts `resource_update` + `feature_used(source=hellish-rebuke-racial)`, and flips the reaction economy. Zara Emberfire (Tiefling Sorcerer Lv 5) is the demo fixture.

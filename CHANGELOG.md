@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.396.0] - 2026-06-16 — "The Hewn Memory"
+
+**Schema version:** 69
+
+**Commit summary:** Ships **race-features plan Phase 2** — the **Hill Dwarf Stonecunning** RAW. A new race-gate predicate `_pc_has_stonecunning(sheet)` (any Dwarf subrace via `_race_slug_from_sheet`) plus a dedicated `POST /api/campaign/{cid}/check_stonecunning` endpoint rolls `1d20 + INT mod + 2 × PB` and broadcasts a `feature_used(source=stonecunning, stat_key=history, stat_ability=INT, …)` event with the math fields surfaced (`int_mod`, `proficiency_bonus`, `double_pb`, `expression`, `breakdown`, `total`). Optional free-text `note` field echoes back so the GM sees what stonework topic the player was rolling on. Composes the PC's standing `roll_state` advantage/disadvantage. Tavik Stonebrow (Hill Dwarf Cleric Lv 8, INT 10 → +0 mod, PB +3) is the demo fixture; 4 harness tests (happy path + non-Dwarf 409 + missing-id 400 + note echo).
+
+**Description:** RAW PHB p.20 Stonecunning: "Whenever you make an Intelligence (History) check related to the origin of stonework, you are considered proficient in the History skill and add double your proficiency bonus to the check, instead of your normal proficiency bonus." The 2× PB applies even if the Dwarf isn't proficient in History (the trait grants proficiency for the duration of the check). The endpoint encodes the uniform formula `1d20 + INT mod + 2 × PB` regardless of the Dwarf's regular History proficiency — Tavik isn't proficient in History per his demo sheet, so his regular History check would be 1d20+0; with Stonecunning it's 1d20+6.
+
+The endpoint is **player-driven** (RAW expects the DM to adjudicate whether the topic counts as "origin of stonework"). The free-text `note` field is the player's stated topic — e.g., "Origin of these temple walls" — echoed into the chat-card's `feature_desc` so the GM can sanity-check whether the trait should fire before applying the result. No server-side topic enforcement; the player either uses /check_stonecunning when the topic is stonework or uses the regular /roll path otherwise.
+
+The endpoint composes the standing roll-state toggle (advantage / disadvantage / canceled). A Dwarf rolling stonework History under disadvantage gets `2d20kl1 + INT mod + 2 × PB` — same compositional gate as the rest of the d20 routes.
+
+MINOR — new endpoint + new race-gate predicate + 4 harness tests; no changes to existing roll paths.
+
+### Added
+- `_pc_has_stonecunning(sheet)` race-gate predicate (any Dwarf subrace via `_race_slug_from_sheet`).
+- `POST /api/campaign/{cid}/check_stonecunning` endpoint — rolls `1d20 + INT mod + 2 × PB`, broadcasts `feature_used(source=stonecunning)`, returns the math fields.
+- `tests/harness/test_check_stonecunning.py` — 4 tests covering happy path + non-Dwarf 409 + missing-id 400 + note echo.
+
+### Changed
+- `docs/plans/race-features.md`: Stonecunning row ⚪ → ✅; per-phase shipping list Phase 2 marked shipped. Status banner refreshed to v2.396.0.
+- `app/templates/wiki.html` + `docs/wiki/README.md`: race-features row status flipped to "🟢 partial (v2.396.0) — Phases 1+2 shipped; 4 phase ships remaining."
+- `docs/test-harness-coverage.md`: harness total 3155 → 3159.
+
 ## [2.395.1] - 2026-06-16 — "The Calibrated Test"
 
 **Schema version:** 69
