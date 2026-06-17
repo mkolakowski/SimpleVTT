@@ -5692,6 +5692,23 @@ def _monk_sheet(name: str) -> dict:
                 "desc": "7 pinches. Action: sprinkle one pinch over water — a cube of water up to 15 ft on a side becomes a marble-sized pellet. Shatter the pellet to release the water as a wave. The packet doesn't refill. RAW DMG p.166.",
                 "manual": False,
             },
+            # v2.403.6 — magic-items-automation Phase 9.2 Bucket A
+            # holdout #1: Wind Fan (RAW DMG p.213). 1/dawn safe; each
+            # subsequent same-day use rolls d100 vs cumulative-20%
+            # tear-into-tatters. Resource shape: current=10, max=10,
+            # reset=long — first use (current==max) is safe; later uses
+            # roll vs (max-current_before)*20% chance to tear (item
+            # destroyed). `_use_item_action_wind_fan` handler manages
+            # the roll + destruction branch. The fan is seeded equipped
+            # on Kael (line ~5648).
+            {
+                "key": "wind-fan",
+                "name": "Wind Fan",
+                "current": 10, "max": 10, "reset": "long",
+                "source": "item-wind-fan",
+                "desc": "Use #1/day: safe Gust of Wind (DC 13). Each subsequent same-day use: cumulative 20% chance per overuse to tear the fan into nonmagical tatters (1st overuse 20%, 2nd 40%, etc.). Counter resets at dawn. RAW DMG p.213.",
+                "manual": False,
+            },
         ],
         # v2.18.0: clickable Ki-spend buttons in the Class abilities
         # panel. Each option is a bonus action (slot:'bonus' per the

@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.403.6] - 2026-06-17 — "The Tearing Fan"
+
+**Schema version:** 69
+
+**Commit summary:** First of the two Bucket A holdouts the v2.367.0 plan-update left as "inherently GM-narrated." **Wind Fan** (RAW DMG p.213, on Kael) now wires the cumulative-20%-tear mechanic through a dedicated `_use_item_action_wind_fan` handler. RAW: use #1/day is safe; each subsequent same-day use rolls d100 against a cumulative 20% tear-into-tatters threshold. The handler manages the safe-vs-overuse branch, the dice roll (with a `force_d100` test seam), and the destruction broadcast — when the fan tears, the inventory item gets `_destroyed: True` + `equipped: False` and the resource is NOT decremented past its current value. The gust-of-wind forced-movement effect itself stays GM-narrated.
+
+**Description:** Wind Fan is the v2.403.x arc's first **non-uniform** mechanic — it can't ride the generic `_use_item_action_announce_only` handler because the result branches on a dice roll (with destruction as one outcome). The resource is modeled as a use-counter starting at `current=10, max=10, reset=long`: the first use of the day (when `current == max`) is safe; on subsequent uses the tear chance is `(max - current_before_use) × 20%` capped at 100%. This naturally produces RAW's cadence: 1st use 0%, 2nd 20%, 3rd 40%, …, 6th+ 100%.
+
+The harness covers three paths via the `force_d100` test seam:
+- `test_wind_fan_first_use_is_safe` — current=10 → invocation → tear_chance=0, no roll, resource 10 → 9.
+- `test_wind_fan_overuse_tears_on_force` — current=9 + force_d100=10 → tear_chance=20%, roll lands ≤ threshold → fan destroyed, inventory flagged.
+- `test_wind_fan_overuse_survives_on_high_roll` — current=9 + force_d100=80 → tear_chance=20%, roll above threshold → no destruction, resource 9 → 8.
+
+**Why "The Tearing Fan":** the dramatic moment is the silk fan ripping apart in the player's hand — the first item on the substrate that can be physically destroyed by its use.
+
+PATCH — 1 new wired item + 1 new dedicated handler + 1 paired resource row + 3 new harness tests. Magic items category remains **235/239 wired (~98%)** in the audit denominator; **twenty-one Bucket D + first Bucket A item** now machine-track their charges (up from twenty Bucket D in v2.403.5). One Bucket A holdout remaining — `medallion-of-thoughts` ships next.
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_use_item_action_wind_fan(db, campaign_id, char, item, sheet, catalog, inv_idx, force_d100=None)` handler. New `_MAGIC_ITEM_ACTIONS` entry for `wind-fan` (carries both a `narration` for survival + a `destruction_narration` for tearing). New dispatch branch routing wind-fan to the dedicated handler with `force_d100` plumbed from the request body.
+- `app/demo_seed.py`: new `resources[]` row for wind-fan on Kael (10/10, `reset: "long"`).
+- `tests/harness/test_use_item_action_announce_only.py`: three new tests + a `_invoke_with_extras` helper that supports `force_d100` plumbed through the body.
+
+### Changed
+- `docs/plans/magic-items-automation.md`: Bucket A row for `wind-fan` flips to ✅ shipped v2.403.6. The Phase 9.2 narrative now reflects 21 Bucket D + 1 Bucket A items wired with 1 Bucket A holdout remaining.
+- `docs/test-harness-coverage.md`: total-test-count bump (+3) + the announce-only file entry grows with the three wind-fan tests.
+
 ## [2.403.5] - 2026-06-17 — "The Apothecary's Jar"
 
 **Schema version:** 69

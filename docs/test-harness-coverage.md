@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3185 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.403.5, 2026-06-17).
+**Total tests:** 3188 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.403.6, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3639,6 +3639,9 @@ v2.403.0 + v2.403.1 magic-items — Phase 9.2 substrate ship: charge-tracked ann
 | `test_chime_of_opening_lifetime_pool` (v2.403.4) | Chime of Opening (10/10 lifetime): drain across 10 sequential strikes (10 → 0), 11th → 409, long rest stays at 0 (`reset: "none"`). Tests the lifetime-pool drain shape. |
 | `test_ring_of_three_wishes_lifetime_pool` (v2.403.4) | Ring of Three Wishes (3/3 lifetime, attunement): PATCH equipped+attuned → drain 3 → 0, 4th → 409, long rest stays at 0. Tests the lifetime-pool drain shape on an attunement-gated item. |
 | `test_multi_dose_consumable_containers_drain` (v2.403.5) | Multi-dose consumable containers (restorative-ointment 3, dust-of-dryness 7, sovereign-glue 4, bag-of-beans 7): each item drains 1 dose + long rest stays put (`reset: "none"`). Tests the consumable-container shape; handles both equipped and vault-loot carriers. |
+| `test_wind_fan_first_use_is_safe` (v2.403.6) | Wind Fan first use of the day (current==max): tear_chance=0, no roll, resource 10 → 9. The Bucket A holdout's safe-first-use branch. |
+| `test_wind_fan_overuse_tears_on_force` (v2.403.6) | Wind Fan overuse with `force_d100=10` (≤ 20% threshold): destroyed=True, inventory item flagged `_destroyed: True` + `equipped: False`, resource is NOT decremented. Tests the destruction branch. |
+| `test_wind_fan_overuse_survives_on_high_roll` (v2.403.6) | Wind Fan overuse with `force_d100=80` (> 20% threshold): destroyed=False, resource 9 → 8. Tests the survive-the-overuse branch. |
 
 ### `test_use_item_action_rope_of_entanglement.py`
 v2.355.0 magic-items — Rope of Entanglement (RAW DMG p.198, rare, no attunement), sixth Bucket A item and the first `unlimited` (no-charge) item on the shared Wand of Fear handler. DC 15 DEX save or restrained, at will. Carrier: Kael Brightleaf (equipped, NO charge resource).

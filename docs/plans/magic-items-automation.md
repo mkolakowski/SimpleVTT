@@ -87,8 +87,8 @@ Grouped by template. Each batch ships as one PATCH commit.
 
 After the Bucket D charge backlog closes, the final two Bucket A items get wired (the v2.367.0 closure note flagged both as "inherently GM-narrated" — Phase 9.2 reframes them with charge tracking + announce-only broadcast):
 
-- **`medallion-of-thoughts`** — 3 charges, 1d3/dawn → detect thoughts (DC 13). Routes through the existing `_use_item_action_potion_of_mind_reading` buff handler + a charge gate.
-- **`wind-fan`** — 1/dawn → gust of wind, with cumulative 20% crumble chance per same-day re-use. Engine surface: 1/dawn resource + a "wear" counter + the crumble d20 mechanic on overuse.
+- ~`wind-fan`~ ✅ shipped v2.403.6 — dedicated handler with cumulative-20% tear-on-overuse, `force_d100` test seam.
+- **`medallion-of-thoughts`** — 3 charges, 1d3/dawn → detect thoughts (DC 13). Routes through the existing `_use_item_action_potion_of_mind_reading` buff handler + a charge gate. **Next ship.**
 
 After this arc closes, every Bucket D item that carries a counter in RAW will be machine-tracked, every Bucket A item will be wired, and the magic-item category will be at maximum mechanizable depth without modelling Bucket D effects.
 
@@ -122,7 +122,7 @@ The strongest template (the Wand of Fear / charged-wand pattern already shipped)
 | `ring-of-shooting-stars` | 1-3 motes, DC 15 DEX save for half 5d4 fire | save-for-half Necklace handler | ✅ shipped v2.357.0 |
 | `robe-of-scintillating-colors` | DC 15 WIS or stunned (dazzle) | Wand of Fear handler → stunned | ✅ shipped v2.354.0 |
 | `rope-of-entanglement` | DC 15 DEX or restrained (at will) | Wand of Fear handler → restrained, `unlimited` | ✅ shipped v2.355.0 |
-| `wind-fan` | gust of wind (forced movement, DC 13) | — | ⚪ inherently GM-narrated (no clean combat condition/damage) |
+| `wind-fan` | gust of wind (forced movement, DC 13) + cumulative-20% tear-into-tatters | dedicated `_use_item_action_wind_fan` handler with `force_d100` test seam | ✅ shipped v2.403.6 (use-counter resource + tear-on-overuse branch) |
 | `medallion-of-thoughts` | detect thoughts (DC 13) | — | ⚪ inherently GM-narrated (utility, no combat) |
 
 ### Bucket B — passive numeric buff → mechanical `_MAGIC_ITEM_PASSIVES` (`effects.*`) (~9) — ✅ closed v2.366.0

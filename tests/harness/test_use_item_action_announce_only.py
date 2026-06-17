@@ -493,6 +493,144 @@ _MULTI_DOSE = [
 ]
 
 
+async def _invoke_with_extras(gm_client, char_id, inv_idx, action_key, **kwargs):
+    body = {"inventory_index": inv_idx, "action_key": action_key}
+    body.update(kwargs)
+    return await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/use_item_action",
+        json=body,
+    )
+
+
+async def test_wind_fan_first_use_is_safe(gm_client, roster):
+    """v2.403.6: Wind Fan first use of the day → safe (no tear roll),
+    resource 10 → 9, no destruction. Tests the safe-first-use branch."""
+    char = roster["Kael Brightleaf"]
+    # Reset wind-fan resource to 10/10 in case prior tests bumped it.
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-json",
+    )
+    sheet = (r.json() or {}).get("sheet") or {}
+    resources = list(sheet.get("resources") or [])
+    for row in resources:
+        if isinstance(row, dict) and row.get("key") == "wind-fan":
+            row["current"] = 10
+    inv = list(sheet.get("inventory") or [])
+    for it in inv:
+        if isinstance(it, dict) and it.get("_slug") == "wind-fan":
+            it["_destroyed"] = False
+            it["equipped"] = True
+    await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-fields",
+        json={"resources": resources, "inventory": inv},
+    )
+
+    sheet = await _sheet(gm_client, char["id"])
+    idx = _slug_index(sheet.get("inventory") or [], "wind-fan")
+    assert idx >= 0
+    resp = await _invoke(gm_client, char["id"], idx, "cast-gust-of-wind")
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["destroyed"] is False
+    assert data["tear_chance"] == 0
+    assert data["resource"]["current"] == 9
+    assert data["resource"]["max"] == 10
+
+
+async def test_wind_fan_overuse_tears_on_force(gm_client, roster):
+    """v2.403.6: Wind Fan overuse with `force_d100` test seam. After
+    one safe use, the 2nd use carries 20% tear chance — force d100=10
+    (≤ 20) → fan tears, item flagged `_destroyed: True`, resource is
+    NOT decremented past 9 (because the destruction branch skips the
+    decrement)."""
+    char = roster["Kael Brightleaf"]
+    # Set wind-fan to current=9 (already used once) and reset _destroyed.
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-json",
+    )
+    sheet = (r.json() or {}).get("sheet") or {}
+    resources = list(sheet.get("resources") or [])
+    for row in resources:
+        if isinstance(row, dict) and row.get("key") == "wind-fan":
+            row["current"] = 9
+    inv = list(sheet.get("inventory") or [])
+    for it in inv:
+        if isinstance(it, dict) and it.get("_slug") == "wind-fan":
+            it["_destroyed"] = False
+            it["equipped"] = True
+    await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-fields",
+        json={"resources": resources, "inventory": inv},
+    )
+
+    sheet = await _sheet(gm_client, char["id"])
+    idx = _slug_index(sheet.get("inventory") or [], "wind-fan")
+    resp = await _invoke_with_extras(
+        gm_client, char["id"], idx, "cast-gust-of-wind", force_d100=10,
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["tear_chance"] == 20
+    assert data["d100"] == 10
+    assert data["destroyed"] is True
+    assert data["resource"] is None
+    # Sheet readback confirms the inventory flag flipped.
+    sheet_after = await _sheet(gm_client, char["id"])
+    for it in (sheet_after.get("inventory") or []):
+        if isinstance(it, dict) and it.get("_slug") == "wind-fan":
+            assert it.get("_destroyed") is True
+            assert it.get("equipped") is False
+
+
+async def test_wind_fan_overuse_survives_on_high_roll(gm_client, roster):
+    """v2.403.6: Wind Fan overuse with d100 above the tear threshold →
+    no destruction, resource decrements. Inverse of the prior test."""
+    char = roster["Kael Brightleaf"]
+    # Set wind-fan to current=9 and reset _destroyed for a clean test.
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-json",
+    )
+    sheet = (r.json() or {}).get("sheet") or {}
+    resources = list(sheet.get("resources") or [])
+    for row in resources:
+        if isinstance(row, dict) and row.get("key") == "wind-fan":
+            row["current"] = 9
+    inv = list(sheet.get("inventory") or [])
+    for it in inv:
+        if isinstance(it, dict) and it.get("_slug") == "wind-fan":
+            it["_destroyed"] = False
+            it["equipped"] = True
+    await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-fields",
+        json={"resources": resources, "inventory": inv},
+    )
+
+    sheet = await _sheet(gm_client, char["id"])
+    idx = _slug_index(sheet.get("inventory") or [], "wind-fan")
+    resp = await _invoke_with_extras(
+        gm_client, char["id"], idx, "cast-gust-of-wind", force_d100=80,
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["tear_chance"] == 20
+    assert data["d100"] == 80
+    assert data["destroyed"] is False
+    assert data["resource"]["current"] == 8  # 9 → 8 on survival
+    # Restore wind-fan resource for downstream tests.
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-json",
+    )
+    sheet = (r.json() or {}).get("sheet") or {}
+    resources = list(sheet.get("resources") or [])
+    for row in resources:
+        if isinstance(row, dict) and row.get("key") == "wind-fan":
+            row["current"] = 10
+    await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-fields",
+        json={"resources": resources},
+    )
+
+
 async def test_multi_dose_consumable_containers_drain(gm_client, roster):
     """v2.403.5: multi-dose consumable containers (restorative-ointment
     3 doses, dust-of-dryness 7 pinches, sovereign-glue 4 oz,

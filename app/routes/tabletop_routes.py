@@ -37958,6 +37958,29 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "explosion). Bag depletes one bean per use."
         ),
     },
+    # v2.403.6 — magic-items-automation Phase 9.2 (Bucket A holdout #1):
+    # Wind Fan (RAW DMG p.213). 1/dawn safe, with a cumulative-20%-per-
+    # overuse tear-into-tatters risk. Uses the `wind-fan` resource as a
+    # use-counter (current starts at 10/10; each use decrements). Safe
+    # use when `current == max` (no uses today yet); subsequent uses
+    # roll d100 vs (max - current_before_use) × 20% to determine if the
+    # fan tears. The custom handler `_use_item_action_wind_fan` routes
+    # this — the generic announce_only handler isn't suitable due to the
+    # tear-risk-instead-of-decrement branch.
+    "wind-fan": {
+        "key": "cast-gust-of-wind",
+        "name": "Cast Gust of Wind (Fan)",
+        "resource_key": "wind-fan",
+        "requires_attunement": False,
+        "narration": (
+            "cast Gust of Wind from the woven-silk fan (save DC 13) "
+            "(GM-narrated: forced-movement push)."
+        ),
+        "destruction_narration": (
+            "the woven-silk fan tore into useless, nonmagical tatters "
+            "(GM-narrated: remove the fan from inventory)."
+        ),
+    },
 }
 
 
@@ -87397,6 +87420,14 @@ async def use_item_action(
         return await _use_item_action_permanent_boost(
             db, campaign_id, char, item, sheet, catalog, inv_idx,
         )
+    # v2.403.6 — magic-items-automation Phase 9.2 Bucket A holdout #1:
+    # Wind Fan dedicated handler (cumulative-20% tear-into-tatters
+    # mechanic doesn't fit the generic announce_only handler).
+    if slug == "wind-fan":
+        return await _use_item_action_wind_fan(
+            db, campaign_id, char, item, sheet, catalog, inv_idx,
+            force_d100=body.get("force_d100"),
+        )
     # v2.403.0 — magic-items-automation Phase 9.2: charge-tracked
     # announce-only items. Bucket D tail items whose RAW carries a
     # finite charge / per-day-use counter but whose effect stays GM-
@@ -87814,6 +87845,134 @@ async def _use_item_action_announce_only(
             "current": res_row["current"],
             "max": res_max,
         },
+    }
+
+
+async def _use_item_action_wind_fan(
+    db, campaign_id, char, item, sheet, catalog, inv_idx, force_d100=None,
+):
+    """v2.403.6 — magic-items-automation Phase 9.2 (Bucket A holdout #1):
+    Wind Fan (RAW DMG p.213). 1/dawn ideal use; each subsequent same-day
+    use has a cumulative 20% chance to tear the fan into nonmagical
+    tatters. Modeled with a 10/10 resource pool:
+
+      - 1st use (current == max): safe, decrement to 9.
+      - Nth use (current == max - k): roll d100 vs (k × 20%) — if the
+        roll lands at or below the threshold, the fan is destroyed
+        (the inventory item is flagged ``_destroyed: True`` and the
+        resource is NOT decremented further). Otherwise, decrement.
+
+    Test seam: ``force_d100`` overrides the dice roll for deterministic
+    harness coverage (mirror of the Wand of Wonder ``force_roll`` path).
+    """
+    slug = "wind-fan"
+    resources = list(sheet.get("resources") or [])
+    res_key = str(catalog.get("resource_key") or slug)
+    res_idx = -1
+    for i, r in enumerate(resources):
+        if isinstance(r, dict) and (r.get("key") or "").lower() == res_key:
+            res_idx = i
+            break
+    if res_idx < 0:
+        raise HTTPException(
+            409,
+            f"No {res_key!r} resource row on sheet — item not bootstrapped",
+        )
+    res_row = dict(resources[res_idx])
+    cur = int(res_row.get("current") or 0)
+    res_max = int(res_row.get("max") or 0)
+
+    # Compute the tear chance. Safe first-of-day if current==max.
+    tear_chance = min(100, max(0, (res_max - cur) * 20))
+
+    inventory = list(sheet.get("inventory") or [])
+    target_item = dict(inventory[inv_idx]) if isinstance(
+        inventory[inv_idx], dict) else inventory[inv_idx]
+
+    destroyed = False
+    d100 = None
+    if tear_chance > 0:
+        if force_d100 is not None:
+            try:
+                d100 = max(1, min(100, int(force_d100)))
+            except (TypeError, ValueError):
+                raise HTTPException(400, "force_d100 must be an int 1..100")
+        else:
+            try:
+                roll_result = dice_mod.roll("1d100")
+                d100 = int(roll_result.total)
+            except (dice_mod.DiceParseError, Exception):
+                d100 = 50  # safe fallback
+        if d100 <= tear_chance:
+            destroyed = True
+
+    if destroyed:
+        # Flag the inventory item destroyed; the resource is NOT
+        # decremented (the fan is gone, no more uses possible).
+        if isinstance(target_item, dict):
+            target_item["_destroyed"] = True
+            target_item["equipped"] = False
+            inventory[inv_idx] = target_item
+            sheet["inventory"] = inventory
+    else:
+        # Decrement the use counter. Don't go below 0.
+        res_row["current"] = max(0, cur - 1)
+        resources[res_idx] = res_row
+        sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    if destroyed:
+        narration = str(catalog.get("destruction_narration") or
+                        "the wind fan tore into tatters.")
+    else:
+        narration = str(catalog.get("narration") or
+                        "cast Gust of Wind from the fan.")
+    summary = f"{char.name} {narration}"
+
+    try:
+        if not destroyed:
+            await hub.broadcast(campaign_id, {
+                "type": "resource_update",
+                "data": {
+                    "character_id": char.id,
+                    "key": res_key,
+                    "current": res_row["current"],
+                    "max": res_max,
+                },
+            })
+    except Exception:
+        pass
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "caster_char_name": char.name,
+                "source": f"item-{slug}",
+                "label": catalog.get("name") or "Use Wind Fan",
+                "summary": summary,
+            },
+        })
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "item_name": item.get("name") or slug,
+        "tear_chance": tear_chance,
+        "d100": d100,
+        "destroyed": destroyed,
+        "resource": (
+            None if destroyed else {
+                "key": res_key,
+                "current": res_row["current"],
+                "max": res_max,
+            }
+        ),
     }
 
 
