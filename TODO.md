@@ -17,11 +17,73 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 
 **Quick map of where to look:**
 
-- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (v2.390.0 refresh)](#srd-5e-audit-v23900-refresh) for the current per-category coverage (overall **~96%** — Conditions category jumped ~85% → ~92% via the v2.384.0 condition-enforcement audit closure across v2.385.0–v2.390.0; the audit's per-clause shipping list is genuinely empty). Prior passes: [v2.382.0](#srd-5e-audit-v23820-refresh), [v2.379.0](#srd-5e-audit-v23790-refresh), [v2.376.0](#srd-5e-audit-v23760-refresh), [v2.344.1](#srd-5e-audit-v23441-refresh), [v2.315.0](#srd-5e-audit-v23150-refresh), [2026-06-14](#srd-5e-audit-2026-06-14-refresh), [2026-06-13](#srd-5e-audit-2026-06-13-refresh), [2026-06-11](#srd-5e-audit-2026-06-11-refresh), [2026-06-10](#srd-5e-audit-2026-06-10). The v2.315.0 refresh **corrects two denominators** that all prior passes got wrong: magic items are now **235 / 239 wired (~98%)** — the old "292" figure counted total equipment (239 magic + 37 mundane weapons + 18 mundane armor); and class features are **222 per-row entries (now strictly-✅ 100%)**, not the stale "133".
+- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (v2.399.0 refresh)](#srd-5e-audit-v23990-refresh) for the current per-category coverage (overall **~97%** — Races category jumped ~90% → ~100% via the v2.392.0–v2.399.0 race-features arc; the audit's per-clause shipping list is genuinely empty). Prior passes: [v2.390.0](#srd-5e-audit-v23900-refresh), [v2.382.0](#srd-5e-audit-v23820-refresh), [v2.379.0](#srd-5e-audit-v23790-refresh), [v2.376.0](#srd-5e-audit-v23760-refresh), [v2.344.1](#srd-5e-audit-v23441-refresh), [v2.315.0](#srd-5e-audit-v23150-refresh), [2026-06-14](#srd-5e-audit-2026-06-14-refresh), [2026-06-13](#srd-5e-audit-2026-06-13-refresh), [2026-06-11](#srd-5e-audit-2026-06-11-refresh), [2026-06-10](#srd-5e-audit-2026-06-10). The v2.315.0 refresh **corrects two denominators** that all prior passes got wrong: magic items are now **235 / 239 wired (~98%)** — the old "292" figure counted total equipment (239 magic + 37 mundane weapons + 18 mundane armor); and class features are **222 per-row entries (now strictly-✅ 100%)**, not the stale "133".
 - **Active class-feature automation backlog** → see [Full Class-Feature Automation — remaining backlog](#full-class-feature-automation--remaining-backlog) (just Phase 8 + a few per-feature Phase-2 finishers remain after v2.149.1).
 - **Design plans with deferred phases** → see [Design Plans Backlog](#design-plans-backlog) (every `docs/plans/*.md` indexed with a priority tag).
 - **One-off bugs + UI polish that don't have a design plan** → see [Manually Added](#manually-added).
 - **Big feature buckets that aren't tracked by a plan** → see the topic sections below (Character Sheet, GM Tools, Combat, Maps, Media, Player Features, UI/Mobile, Rules Reference, Legal & Compliance, Test Infrastructure, Integrations, Visual, Class Features (next cycle)). The priority legend doesn't apply to these — they're topic-grouped, not P-tagged.
+
+---
+
+## SRD 5e Audit (v2.399.0 refresh)
+
+**Audit scope.** Recomputed against the codebase as of v2.399.0, after the **v2.392.0 → v2.399.0 race-features arc** that closed the per-race trait tail end-to-end:
+
+- **v2.392.0 "The Exhaled Storm"** — Dragonborn Breath Weapon endpoint.
+- **v2.393.0 "The Bloodline Ledger"** — `docs/plans/race-features.md` plan + wiki surfacing.
+- **v2.394.0 "The Second Look"** — 5th stale-audit reconciliation (Half-Orc Savage Attacks was already shipped v2.99.23; caught before duplicate code committed).
+- **v2.395.0 "The Free Rebuke"** — Phase 1: Tiefling Infernal Legacy racial Hellish Rebuke (consumes the `hellish-rebuke` racial resource, not a spell slot).
+- **v2.395.1 "The Calibrated Test"** — test-assertion fixes.
+- **v2.396.0 "The Hewn Memory"** — Phase 2: Hill Dwarf Stonecunning (`POST /check_stonecunning` rolls `1d20 + INT + 2×PB`).
+- **v2.396.1 "The Plain Halfling"** — test-assertion fix.
+- **v2.397.0 "The Unburdened Stride"** — Phase 3: Hill Dwarf heavy-armor speed bypass (`_pc_heavy_armor_speed_penalty` + `_apply_heavy_armor_speed_penalty` folded into `_speed_walk_from_sheet`; installs the underlying PHB p.144 -10 substrate alongside the PHB p.20 Dwarf exemption in one ship).
+- **v2.398.0 "The Tinker's Memory"** — Phase 6: Rock Gnome Artificer's Lore (`POST /check_artificers_lore` — twin of Stonecunning).
+- **v2.399.0 "The Quiet Steps"** — Phases 4a + 5a: Halfling Nimbleness + Lightfoot Naturally Stealthy recognition flags on `/sheet-json`. Phases 4b + 5b (full enforcement) filed for the future Maps 2.0 / Stealth-cover substrate arcs.
+
+The session shipped **9 commits** end-to-end, lifting Races from a long-standing ~90% to essentially closed for v2.x.
+
+### Per-category coverage (the headline numbers)
+
+| Category | SRD count | Automated | Notes |
+|---|---|---|---|
+| Races | 9 | **✅ ~100%** | **+10 pts vs. v2.390.0 (~90% → ~100%).** All 7 engine-shaped race traits now ship with at least a recognition flag (Phases 4a + 5a) or full enforcement (Phases 1 + 2 + 3 + 6 + Savage Attacks + Breath Weapon). Phase 4b/5b enforcement filed for the future Maps 2.0 / Stealth-cover arcs; out-of-scope-by-design traits (Rock Gnome Tinker, Elf Trance) intentionally not shipped per the [plan](plans/race-features.md). |
+| Monsters | 322 | **✅ ~100%** | Unchanged. |
+| Conditions | 15 | **~92%** | Unchanged. |
+| Class features | **222 rows** | **✅ 100%** | Unchanged. |
+| Spells | 319 | **~79%** | Unchanged. |
+| Magic items | **235 / 239 wired** | **~98%** | Unchanged. |
+
+**Overall ~97%** automated across the SRD ruleset (up from ~96% at v2.390.0 — the Races bump from ~90% → ~100% is the mover). Races joins Monsters + Class features as a strictly-✅ surface; the remaining ~3% is the long-known cast-and-broadcast utility-spell tail (P2) + the permanently-GM-narrated Charmed-social/Grappled-reach/Deafened-hearing clauses.
+
+### Remaining gaps (priority order — toward full SRD automation)
+
+After the v2.392.0–v2.399.0 race-features arc, the per-category gaps are genuinely small and substrate-shaped.
+
+1. 🟡 **P2 — Cast-and-broadcast utility-spell upcast.** Unchanged from v2.390.0. ~250 SRD utility spells with no damage/healing base — a subset could gain richer per-slot modeling. Substrate work, not engine.
+2. 🟠 **Filed follow-up — race-features Phases 1b/1c + 4b/5b + 7.** All filed in [`docs/plans/race-features.md`](plans/race-features.md): Tiefling Darkness 1/long racial cast (Phase 1b — needs `/cast_spell` racial-resource branch); auto-grant projection of Tiefling Infernal Legacy spells on `/sheet-json` (Phase 1c — architectural); Halfling Nimbleness full move-through-creature enforcement (Phase 4b — needs Maps 2.0 substrate); Naturally Stealthy full Stealth-cover gate (Phase 5b — needs Stealth-cover substrate); Elf Trance long-rest UI flavor (Phase 7 — pure polish).
+3. 🟠 **Filed follow-up — mirror v2.390.0 onto `/cast_spell` + `/use_feature`.** From the v2.390.0 audit — the Charmed-can't-target-charmer gate is currently `/attack`-only. Mirror to the other two PC action endpoints.
+4. ✅ **DONE — Race tail (v2.392.0–v2.399.0).** Engine-shaped Races row at ~100% per the per-race plan table.
+5. ✅ **DONE — Condition-enforcement audit clauses #1–#4.** Closed v2.385.0–v2.390.0.
+6. ✅ **DONE — Class-feature ⚪ tail.** Closed v2.368.0–v2.370.1.
+7. ✅ **DONE — Spell area-effect automation.** Closed v2.373.0–v2.376.0.
+8. ✅ **DONE — Spell upcast dice/heal scaling.** Effectively complete (v2.344.2 reconciliation).
+9. ✅ **DONE — Magic-item content tail.** Closed v2.316.0–v2.344.0.
+10. ✅ **DONE — Legendary + Lair Actions arc.** Closed end-to-end v2.159.32–v2.382.0.
+
+### Out-of-scope (unchanged)
+
+Tasha's, Xanathar's-beyond-SRD, Strixhaven, post-SRD feats, backgrounds beyond Acolyte stay future-3.x scope. **2024 rules + Mythic Actions** likewise stay future-3.x scope. **Charmed clause 2** (social-check advantage), **Grappled clause 3** (out-of-reach), **Deafened** (mostly hearing-narrative): permanently GM-narrated per the v2.384.0 audit doc — need substrates that don't exist.
+
+**Out-of-scope by design (race-features):** Rock Gnome Tinker (needs a crafting substrate — 1-hour craft, GP cost, clockwork-creature catalog). Race-trait Darkvision (already correctly seeded as `darkvision_ft: 60`; actual gameplay consequence lives in Maps 2.0).
+
+### What's left to ship in SimpleVTT 2.x?
+
+The SRD ruleset is now ~97% automated end-to-end. The remaining ~3% is dominated by content-layer utility-spell richness + the substrate-dependent filed follow-ups in (2) and (3). After those the SRD is essentially closed; the natural next-arc inflection is unchanged:
+
+- **3.0 scope expansion** — post-SRD content (Tasha's, Xanathar's, 2024-PHB rule changes, Mythic Actions).
+- **Polish + UX** — Manually Added P3 polish items + Combat / GM Tools sections.
+- **Test-infrastructure hardening** — spell-validation suite Phase 5 + pytest-xdist parallelization.
+- **Maps 2.0 / Stealth-cover substrates** — would unlock Phases 4b + 5b of race-features.
 
 ---
 

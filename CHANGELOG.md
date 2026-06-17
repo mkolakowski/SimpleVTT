@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.399.1] - 2026-06-16 — "The Refreshed Atlas"
+
+**Schema version:** 69
+
+**Commit summary:** Doc-only audit refresh. Adds a new `SRD 5e Audit (v2.399.0 refresh)` section at the top of `TODO.md` that records the v2.392.0 → v2.399.0 race-features arc and flips the Races row from **~90%** (long-standing) to **✅ ~100%**. Overall SRD coverage ticks **~96% → ~97%**. Updates the quick-map link in the TODO header to point at the new audit + cross-links the prior v2.390.0 audit so historic readers keep the breadcrumb. No runtime code change.
+
+**Description:** The Races row had been pinned at ~90% across every audit refresh in 2026 because the audit's headline framing ("8 wired through `_RACE_SAVE_ADVANTAGES`") obscured the ~8 unwired engine-shaped traits underneath. The v2.392.0 → v2.399.0 race-features arc (9 commits — plan landing, stale-audit reconciliation, 7 phase ships) closed the per-race tail end-to-end:
+
+- **Full enforcement:** Dragonborn Breath Weapon (v2.392.0), Tiefling racial Hellish Rebuke (v2.395.0), Hill Dwarf Stonecunning (v2.396.0), Hill Dwarf heavy-armor speed bypass (v2.397.0), Rock Gnome Artificer's Lore (v2.398.0).
+- **Recognition flags:** Halfling Nimbleness + Lightfoot Naturally Stealthy (v2.399.0). Full enforcement of the underlying RAW PHB p.190 + p.177 substrates is filed for the future Maps 2.0 / Stealth-cover arcs.
+- **Pre-existing:** Half-Orc Savage Attacks (v2.99.23, reconciled v2.394.0 from a stale-audit miss — the 5th such reconciliation in the session).
+- **Out-of-scope by design:** Rock Gnome Tinker (needs crafting substrate), Elf Trance (pure flavor, filed Phase 7), Darkvision (Maps 2.0 lighting concern).
+
+After this refresh the SRD audit's headline framing reads consistently across categories: Races joins Monsters + Class features as a strictly-✅ surface; the remaining ~3% gap is the long-known cast-and-broadcast utility-spell tail (P2) + the permanently-GM-narrated Charmed-social / Grappled-reach / Deafened-hearing clauses.
+
+PATCH — pure TODO.md edit + the quick-map link refresh; no runtime code change.
+
+### Added
+- `TODO.md`: new `## SRD 5e Audit (v2.399.0 refresh)` section at the top of the audits chronology. Records the v2.392.0–v2.399.0 race-features ships, lifts Races to ✅ ~100%, ticks overall coverage to ~97%, lists filed follow-ups (Phases 1b/1c, 4b/5b, 7 + Charmed `/cast_spell`+`/use_feature` mirror + utility-spell upcast tail).
+
+### Changed
+- `TODO.md` quick-map header line: points at the new v2.399.0 audit + back-cross-links v2.390.0 so historic readers keep the chronology.
+
 ## [2.399.0] - 2026-06-16 — "The Quiet Steps"
 
 **Schema version:** 69
