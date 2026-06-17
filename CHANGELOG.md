@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.391.1] - 2026-06-16 — "The Wiki Catches Up"
+
+**Schema version:** 69
+
+**Commit summary:** Updates the SRD 5e automation-coverage table in two wiki-surfaced locations (the landing page `/wiki` at `app/templates/wiki.html` + the on-disk index `docs/wiki/README.md`) to v2.391.0 per-category numbers. Both sources had stale v2.344.4 percentages from before the v2.345.0 → v2.391.0 sweep landed. After this commit a reader hitting `/wiki` sees the actual coverage (~96% overall, Monsters effectively 100%, Class features strictly-✅ 100%, Conditions ~92%, Spells ~79%) instead of the pre-sweep figures.
+
+**Description:** The wiki landing's SRD-coverage table was the user-facing surface most-readers see first; keeping it stale meant new visitors got an inaccurate impression of the engine's maturity. The TODO.md audit has been refreshed multiple times during this session (v2.376.0/v2.379.0/v2.382.0/v2.390.0) but the wiki landing wasn't synced — closing that gap now.
+
+Per-category re-baseline (vs. v2.344.4 → v2.391.0):
+- Monsters: ~85% → **✅ ~100%** (+15 pts — lair-action arc end-to-end shipped v2.169.0–v2.382.0).
+- Conditions: ~85% → **~92%** (+7 pts — condition-enforcement audit closed v2.385.0–v2.391.0).
+- Class features: ~99% → **✅ 100%** (Aura of Courage v2.368.0 + the v2.344.3 reconciliation).
+- Spells: ~72% → **~79%** (+7 pts — AoE auto-targeting arc).
+- Overall: **~88% → ~96%** (+8 pts on the recompute).
+
+PATCH — pure doc edit; no runtime code change. Same two files the v2.382.0 commit had updated (`docs/wiki/lair-regional-catalog.md` landing-page row + `docs/wiki/README.md` references), this time the SRD-coverage section in both.
+
+### Changed
+- `app/templates/wiki.html`: SRD-coverage table version banner v2.344.4 → v2.391.0; per-category percentages re-baselined; rewrote the narrative paragraph to reflect the v2.316–v2.391 arcs.
+- `docs/wiki/README.md`: same updates mirrored in the on-disk wiki index.
+
 ## [2.391.0] - 2026-06-16 — "The Charmer's Wider Shield"
 
 **Schema version:** 69
