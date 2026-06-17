@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.399.2] - 2026-06-16 — "The Already-Closed Door"
+
+**Schema version:** 69
+
+**Commit summary:** Sixth stale-audit reconciliation in the v2.376.2 → v2.399.2 stretch (5th in this session alone). The v2.390.0 audit's filed follow-up row #3 said "mirror the Charmed-can't-target-charmer gate to `/cast_spell` + `/use_feature`," but per-site verification confirms (a) `/cast_spell` was already mirrored in **v2.391.0** at `tabletop_routes.py:19706`, and (b) `/use_feature` doesn't accept a `target_combatant_id` body field — it's structurally self-targeted (Action Surge, Channel Divinity buffs, Lay on Hands), so the Charmed-cannot-target-charmer rule is moot. The v2.391.0 changelog explicitly filed `/use_feature` as "not-applicable rather than not-done" with this exact rationale, but the audit row never picked up the close across the v2.391.0 / v2.392.0 / v2.399.0 refreshes. The TODO.md row flips ✅ DONE; the auto-memory file bumps hit-count 4 → 6.
+
+**Description:** Mirrored a pattern that's now repeated 6 times across the v2.344.1 → v2.399.2 audit history:
+
+1. **v2.344.1** — magic-item content tail said "116 unwired"; all 116 already shipped v2.316.0–v2.344.0.
+2. **v2.344.3** — class-feature ⚪ tail said "24 rows unwired"; 22 of 24 already shipped v2.99.197–.221.
+3. **v2.376.2** — Legendary + Lair Actions promoted to P1; Phases 1+2+3 already shipped end-to-end v2.159.32–v2.181.0.
+4. **v2.382.1** — Hold Person/Hold Monster/Sleep bespoke-constant refactor; already using shared `upcast_target_count` helper from v2.127.0.
+5. **v2.394.0** — Half-Orc Savage Attacks listed ⚪ unwired; shipped v2.99.23 in `_compute_attack_auto_uplifts` (the most-dangerous of the six — I started writing duplicate code before the existing test file surfaced via grep).
+6. **v2.399.2 (this commit)** — Charmed-gate mirror onto `/cast_spell` + `/use_feature`.
+
+The pattern is durable enough that the auto-memory rule [check-plan-doc-before-audit-promote](memory/feedback_check_plan_doc_before_audit_promote.md) now treats verification (plan doc + harness test + grep) as a mandatory pre-promotion check. Five hits in a single session reinforces the rule's value.
+
+PATCH — pure TODO.md edit + auto-memory bump; no runtime code change. The /use_feature endpoint is intentionally NOT touched — its self-targeted shape means there's no body field to gate against.
+
+### Changed
+- `TODO.md` SRD 5e Audit (v2.399.0 refresh) "Remaining gaps" row #3: flipped from 🟠 filed follow-up → ✅ DONE with the per-site evidence inlined (v2.391.0 ship for /cast_spell + structural-not-applicable rationale for /use_feature).
+
+### Fixed
+- Auto-memory `feedback_check_plan_doc_before_audit_promote.md`: hit-count bumped from four → six; added the v2.399.2 row to the chronological list of stale-audit pattern occurrences.
+
 ## [2.399.1] - 2026-06-16 — "The Refreshed Atlas"
 
 **Schema version:** 69
