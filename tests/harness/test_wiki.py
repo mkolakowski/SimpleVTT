@@ -101,6 +101,8 @@ async def test_wiki_home_renders():
     assert 'id="srd-coverage"' in resp.text
     # v2.317.0 (assert tag): BUGS known-defect tracker listed in Repo documentation.
     assert "/wiki/doc/bugs" in resp.text
+    # v2.393.0: race-features plan listed (closes the SRD Races row to ~100%).
+    assert "/wiki/doc/plan-race-features" in resp.text
 
 
 async def test_wiki_guide_serves_roll_log():
@@ -680,6 +682,20 @@ async def test_wiki_doc_serves_permanent_ability_increase_reconciliation_plan():
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "permanent ability-increase reconciliation" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_race_features_plan():
+    """v2.393.0: GET /wiki/doc/plan-race-features — 200 + body
+    contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/race-features.md``. Closes the
+    SRD Races row from ~90% → ~100% via 7 phase ships on top of the
+    v2.392.0 Dragonborn Breath Weapon."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-race-features")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "race features" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

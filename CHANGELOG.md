@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.393.0] - 2026-06-16 — "The Bloodline Ledger"
+
+**Schema version:** 69
+
+**Commit summary:** Lands `docs/plans/race-features.md` — a new MINOR plan tracking the path from the SRD audit's **Races ~90% → ~100%** target. Surfaces the plan through the wiki (allowlist + landing-page table + `docs/wiki/README.md` index) and the harness (new per-slug `test_wiki_doc_serves_race_features_plan` + landing-page assertion update). No runtime engine code change — pure plan landing + wiki surfacing. Sets up Phases 1–7 (Half-Orc Savage Attacks · Tiefling Infernal Legacy auto-grant · Hill Dwarf Stonecunning · Hill Dwarf heavy-armor speed bypass · Halfling Nimbleness · Halfling Naturally Stealthy · Rock Gnome Artificer's Lore) plus an optional Phase 8 Elf Trance polish; Rock Gnome Tinker and proficiency-already-seeded 🟠 → ✅ promotions stay intentionally out-of-scope.
+
+**Description:** The Races row in the SRD audit has been pinned at ~90% across every refresh since v2.99.x even though the celebratory framing ("8 wired through `_RACE_SAVE_ADVANTAGES`") obscures **~8 RAW race traits still unwired**. The v2.392.0 ship of Dragonborn Breath Weapon was the highest-leverage single-race ship; this plan picks up the remaining tail and codifies the per-race per-trait state (16 ✅ · 11 🟠 · 8 ⚪ · 3 N/A) into a navigable design doc so the audit can finally flip Races to ✅.
+
+Per-phase implementation patterns documented in the plan reuse existing substrates throughout:
+- **Savage Attacks** rides `_double_dice_for_crit` with a new `extra_die` flag threaded through PC weapon-attack crit sites only.
+- **Infernal Legacy** mirrors the v2.99.200 Pact-of-the-Tome wiring (level-gated catalog + `_resources` seeding via `/sheet-json` projection).
+- **Stonecunning / Artificer's Lore** are twin double-PB-on-History gates analogous to `_RACE_SAVE_ADVANTAGES` but on the check-roll side.
+- **Heavy-armor speed bypass** installs the (currently no-op) PHB p.20 STR-threshold gate alongside the Dwarf carve-out in one ship.
+- **Halfling Nimbleness** gates at `/token/move`; **Naturally Stealthy** gates on Stealth-check size-cover.
+
+MINOR — new plan doc + 1 allowlist entry + 1 landing-page table row + 1 on-disk index row + 1 new harness test + 1 landing-page assertion update. No app/code runtime change.
+
+### Added
+- `docs/plans/race-features.md` — proposed plan; per-race per-trait state table (16 ✅ · 11 🟠 · 8 ⚪ · 3 N/A) + 7 named implementation phases + out-of-scope-by-design notes.
+- `app/routes/wiki_routes.py` `_DOC_ALLOWLIST["plan-race-features"]` — surfaces the plan at `/wiki/doc/plan-race-features`.
+- `app/templates/wiki.html` — new row in the Design plans table.
+- `docs/wiki/README.md` — mirror row in the on-disk index.
+- `tests/harness/test_wiki.py::test_wiki_doc_serves_race_features_plan` — per-slug harness test (200 + H1 + nav menu).
+
+### Changed
+- `tests/harness/test_wiki.py::test_wiki_home_renders` — adds the `/wiki/doc/plan-race-features` landing-page assertion.
+- `docs/test-harness-coverage.md`: harness total 3152 → 3153.
+
 ## [2.392.0] - 2026-06-16 — "The Exhaled Storm"
 
 **Schema version:** 69
