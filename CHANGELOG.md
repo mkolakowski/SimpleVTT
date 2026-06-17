@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.404.10] - 2026-06-17 — "The Arc Recorded"
+
+**Schema version:** 69
+
+**Commit summary:** Plan-doc closure retrospective for the v2.404.1 → v2.404.9 spell utility-upcast arc. New `docs/plans/spell-utility-upcast.md` documents the 9-commit arc: what shipped, why each commit had the shape it did, the three substrate facts the arc proved (`_SPELL_BUFF_MAP` is sufficient for buff-install spells, `_SPELL_TARGET_CAPS` is the generalized non-buff cap reader, and `/cast_spell` auto-wires save-or-suck via `_SPELL_CONDITION_MAP`), plus filed follow-ups (deafened-variant install, PC save-or-suck, Bane consolidation extension to other bespoke endpoints). Surfaces through `/wiki/doc/plan-spell-utility-upcast` per the CLAUDE.md every-doc-must-be-wiki-discoverable rule.
+
+**Description:** Closure retrospectives like this one matter for the next contributor — the work is done, but the *reasons* it ran cleanly (substrate already existed; the audit was loose; every commit shared the same shape) are the kind of context that doesn't survive in commit messages alone. Mirrors the magic-items-automation Phase 9.3 closure pattern.
+
+The doc is intentionally short (~150 lines) rather than a full design plan, since the work is shipped. It catalogs the 9 commits in a table, documents the three substrate facts in prose, names the one helper introduced (`_spell_target_cap_for_slot`), and files 6 specific follow-ups. A future contributor scanning `/wiki` for "what's left on spell upcast" gets a clean handoff.
+
+PATCH — 1 new plan doc + 4 wiki-surfacing edits (allowlist + landing-page row + on-disk index row + 2 harness-test changes). **Per the CLAUDE.md "every doc must be surfaced through the wiki" rule**, the doc lands wired through all three discovery surfaces in the same commit.
+
+### Added
+- `docs/plans/spell-utility-upcast.md`: new closure-retrospective plan doc for the v2.404.1 → v2.404.9 arc. ~150 lines covering: arc framing, the 9 commits in a table, substrate facts, the v2.404.6 helper, filed follow-ups, references.
+- `app/routes/wiki_routes.py`: new `_DOC_ALLOWLIST["plan-spell-utility-upcast"]` entry routing `/wiki/doc/plan-spell-utility-upcast` to the new plan doc.
+- `app/templates/wiki.html`: new "Spell utility-upcast arc" row in the Design plans table, marked ✅ shipped.
+- `docs/wiki/README.md`: new row in the on-disk Design plans index, mirroring the landing-page entry.
+- `tests/harness/test_wiki.py`: new `test_wiki_doc_serves_spell_utility_upcast_plan` smoke test (200 + H1 + wiki nav) + `test_wiki_home_renders` extended to assert the landing-page link.
+
+### Changed
+- `docs/test-harness-coverage.md`: total-test-count bump (+1) + the wiki test-file entry grows with the new spell-utility-upcast test.
+
 ## [2.404.9] - 2026-06-17 — "The Stolen Sense"
 
 **Schema version:** 69

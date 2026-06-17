@@ -66,6 +66,7 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 | [Reactions automation](../plans/reactions-automation.md) | Markdown (design) | Contributors | 🟠 Phases 1–6 shipped (v2.67.0–v2.78.0); v3 auto-resolution backlog filed |
 | [Ruler & range enforcement](../plans/ruler-and-range.md) | Markdown (design) | Contributors | ✅ All phases shipped (1, 2, 3A–E) |
 | [Spell up-casting](../plans/spell-upcasting.md) | Markdown (design) | Contributors | 🟠 Mechanisms shipped (A+B+C, v2.108.0–v2.110.0); + higher_level prose parser (v2.125.0) auto-covers the tail; 34/319 hand-annotated |
+| [Spell utility-upcast arc](../plans/spell-utility-upcast.md) | Markdown (closure retrospective) | Contributors | ✅ shipped (v2.404.1 → v2.404.9, 2026-06-17) · 9 target-scaling utility spells closed across `_SPELL_BUFF_MAP` + `_SPELL_TARGET_CAPS` |
 | [Spell-validation test suite](../plans/spell-validation-suite.md) | Markdown (design) | Contributors | 🟠 partial · Phase 1 smoke + 2A damage landed |
 | [Sorcery Points + Metamagic](../plans/sorcery-points-and-metamagic.md) | Markdown (design) | Contributors | 🟢 Font of Magic + 7/8 metamagics + Sorcerous Restoration shipped (v2.49.120–v2.99.x); Quickened + AoE Empowered remain |
 | [Warlock Pact Boon](../plans/warlock-pact-boon.md) | Markdown (design) | Contributors | ✅ all three boons shipped (Tome v2.99.200 / Blade v2.99.212 / Chain v2.99.213) |

@@ -40,6 +40,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-spell-validation-suite" in resp.text
     # v2.107.2: spell up-casting plan listed too.
     assert "/wiki/doc/plan-spell-upcasting" in resp.text
+    # v2.404.10: spell utility-upcast arc closure retrospective listed.
+    assert "/wiki/doc/plan-spell-utility-upcast" in resp.text
     # v2.49.118: Sorcery Points + Metamagic plan listed too.
     assert "/wiki/doc/plan-sorcery-points-and-metamagic" in resp.text
     # v2.49.119: Warlock Pact Boon plan listed too.
@@ -275,6 +277,22 @@ async def test_wiki_doc_serves_spell_upcasting_plan():
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "up-casting" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_spell_utility_upcast_plan():
+    """v2.404.10: GET /wiki/doc/plan-spell-utility-upcast — 200 + body
+    contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/spell-utility-upcast.md``. Closure
+    retrospective for the v2.404.1 → v2.404.9 spell utility-upcast arc
+    that closed 9 target-scaling utility spells across both
+    `_SPELL_BUFF_MAP` and `_SPELL_TARGET_CAPS` substrates.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-spell-utility-upcast")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "spell utility-upcast" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

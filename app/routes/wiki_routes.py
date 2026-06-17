@@ -85,6 +85,7 @@ _DOC_ALLOWLIST: dict[str, Path] = {
     "plan-ruler-and-range": Path("docs") / "plans" / "ruler-and-range.md",
     "plan-sorcery-points-and-metamagic": Path("docs") / "plans" / "sorcery-points-and-metamagic.md",
     "plan-spell-upcasting": Path("docs") / "plans" / "spell-upcasting.md",
+    "plan-spell-utility-upcast": Path("docs") / "plans" / "spell-utility-upcast.md",
     "plan-spell-validation-suite": Path("docs") / "plans" / "spell-validation-suite.md",
     "plan-warlock-pact-boon": Path("docs") / "plans" / "warlock-pact-boon.md",
     "plan-test-harness": Path("docs") / "plans" / "test-harness.md",
