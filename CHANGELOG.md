@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.404.1] - 2026-06-17 — "The Hidden Hand"
+
+**Schema version:** 69
+
+**Commit summary:** First commit of the **spell utility-upcast** arc — wires **Invisibility** through the v2.380.0 `_SPELL_BUFF_MAP` cap+upcast substrate. RAW PHB p.254: 1 target at L2, +1 target per slot above 2nd. Today `/cast_spell` broadcasts the cast but installs no buff; tomorrow it installs an `invisibility` concentration buff (mirrors the existing `invisibility-potion` shape) and enforces the multi-target cap at the slot level. The attack/cast self-end and see-invisible interaction stay GM-narrated; the buff badge + concentration anchor + cap arithmetic are the surfaced engine work.
+
+**Description:** This is the first of a planned batch of 4 buff-shape target-scaling spells (Invisibility → Fly → Enhance Ability → Longstrider). The v2.380.0 Bless substrate proved that a single `_SPELL_BUFF_MAP` entry with `max_targets` / `base_level` / `extra_targets_per_slot_above_base` is enough to wire the cap-extension arithmetic through `/cast_spell` automatically — no per-spell endpoint code, no new handler. Invisibility is the cleanest first ship because Lyra Sunstrider's Lv 6 Bard spell list (index 10) already carries it, so the cap test can use the demo caster's existing slots (L1/L2/L3) without a demo-seed change.
+
+The new buff entry mirrors the existing `invisibility-potion` (DMG p.188) marker shape (`effects.invisible: True`) so any future hook reading the marker (attack-side disadvantage / see-invisible interaction) composes across the spell and potion paths uniformly. Concentration is True per RAW (the potion is False — it's a 1-hour standalone effect, not a sustained spell).
+
+**Why "The Hidden Hand":** the invisible touch is the canonical second-level wizard fingerprint — a hand on the shoulder, then gone. Opens the spell-utility-upcast arc.
+
+PATCH — 1 new wired spell + 1 new harness file (4 tests). Spell catalog: 1 of ~9 target-scaling utility spells now uses the v2.380.0 substrate (Bless already shipped; Fly + Enhance Ability + Longstrider queued; bane/command/charm-person/animal-friendship/blindness-deafness need `_SPELL_CONDITION_MAP` substrate extension to gain the cap fields).
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_SPELL_BUFF_MAP["invisibility"]` entry. `concentration: True`, `effects.invisible: True`, `max_targets: 1`, `base_level: 2`, `extra_targets_per_slot_above_base: 1`. Wires through the existing v2.380.0 cap-extension reader at `/cast_spell` automatically.
+- `tests/harness/test_cast_invisibility_target_cap_upcast.py`: new harness file (4 tests) — L2 1 target → 200, L2 2 targets → 400 limit=1, L3 2 targets → 200, L3 3 targets → 400 limit=2. Patterned after `test_cast_bless_target_cap_upcast.py`.
+
+### Changed
+- `docs/test-harness-coverage.md`: total-test-count bump (+4) + new row for the invisibility cap file.
+
 ## [2.404.0] - 2026-06-17 — "The Last Four Rows"
 
 **Schema version:** 69

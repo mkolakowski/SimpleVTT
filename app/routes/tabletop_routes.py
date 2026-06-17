@@ -1908,6 +1908,35 @@ _SPELL_BUFF_MAP["flying-potion"] = {
     ),
 }
 
+# v2.404.1 — Invisibility (Bard / Sorcerer / Warlock / Wizard L2). RAW PHB
+# p.254: "A creature you touch becomes invisible until the spell ends." Up
+# to 1 hour, concentration. "When you cast this spell using a spell slot of
+# 3rd level or higher, you can target one additional creature for each slot
+# level above 2nd." Mirrors the v2.380.0 Bless cap+upcast shape with
+# `max_targets: 1, base_level: 2, extra_targets_per_slot_above_base: 1`
+# so L3 = 2 targets, L4 = 3, etc. Marker effect `invisible: True` matches
+# the existing `invisibility-potion` buff (DMG p.188) — the attack/cast
+# self-end and the see-invisible interaction stay GM-narrated.
+_SPELL_BUFF_MAP["invisibility"] = {
+    "key": "invisibility",
+    "name": "Invisibility",
+    "icon": "🫥",
+    "duration_rounds": 600,  # up to 1 hour @ 6 s/round
+    "duration_max": 600,
+    "concentration": True,
+    "effects": {
+        "invisible": True,
+    },
+    "max_targets": 1,
+    "base_level": 2,
+    "extra_targets_per_slot_above_base": 1,
+    "desc": (
+        "Invisible until the spell ends or until the target attacks or "
+        "casts a spell (GM-narrated end). Concentration up to 1 hour. "
+        "RAW PHB p.254."
+    ),
+}
+
 # v2.203.0 — Potion of Clairvoyance (RAW DMG p.187, rare): drink → the
 # clairvoyance spell (a scrying sensor for 10 minutes). A purely
 # descriptive buff like Water Breathing — the engine tracks no scrying
