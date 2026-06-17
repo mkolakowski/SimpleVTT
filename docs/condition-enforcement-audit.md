@@ -1,11 +1,11 @@
 # Condition enforcement audit — Charmed / Grappled / Incapacitated
 
-**Status:** Reference audit, written for v2.384.0 (2026-06-16).
-**Audience:** Contributors planning to close the partial-enforcement gaps the v2.383.0 SRD audit surfaced.
+**Status:** Reference audit, written for v2.384.0 (2026-06-16). **Reconciliation refresh v2.400.2 (2026-06-17):** all four per-clause items on the suggested shipping order **shipped end-to-end v2.385.0 → v2.391.0**. The TODO.md Conditions row moved ~85% → ~92% on the strength of this sweep, and the only remaining ~8% is the three permanently-GM-narrated clauses listed under [Out-of-scope](#out-of-scope). This doc is now a historical record of how the gaps closed, not a punch list of open work.
+**Audience:** Contributors looking up *how* a particular Charmed/Grappled/Incapacitated clause is enforced today, or referencing the per-clause shipping order as a template for future condition arcs.
 
 ## Why this doc exists
 
-The v2.383.0 ground-truth SRD audit found that the TODO.md "Conditions ~85%" headline papers over a more nuanced state: all 15 SRD conditions have **data + buff templates + at least one read site**, but **per-clause RAW enforcement varies in completeness**. This doc walks the three most-cited partially-enforced conditions (Charmed, Grappled, Incapacitated) clause-by-clause, citing the existing enforcement points and the filed gaps. Subsequent commits can pick individual clauses off this list and ship narrow per-clause fixes.
+The v2.383.0 ground-truth SRD audit found that the TODO.md "Conditions ~85%" headline papered over a more nuanced state: all 15 SRD conditions had **data + buff templates + at least one read site**, but **per-clause RAW enforcement varied in completeness**. This doc walked the three most-cited partially-enforced conditions (Charmed, Grappled, Incapacitated) clause-by-clause, citing the existing enforcement points and the filed gaps. The v2.385.0–v2.391.0 sweep picked the four clauses off this list one commit at a time and closed each one with a narrow per-clause ship. The clause sections below mark each one ✅ shipped with the version reference.
 
 Not in scope: Deafened (mostly narrative-only RAW), Exhaustion (separately tracked via `/set_exhaustion` and exhaustion-levels plan, already ~95% enforced). Out-of-scope per the v2.383.0 audit: charmed/frightened (immunity reads at lines 1054/1067/1551 are correct — Aura of Devotion).
 
@@ -15,9 +15,10 @@ Not in scope: Deafened (mostly narrative-only RAW), Exhaustion (separately track
 
 **Clause 1: "A charmed creature can't attack the charmer or target the charmer with harmful abilities or magical effects."**
 
-- **State:** ⚪ **filed.** The buff template's `effects` field at `tabletop_routes.py:25387–25397` is a descriptive list of strings (lair-action shape) — not a structured dict the engine reads. No grep match for "charmer" being checked at `/attack` or `/cast_spell` time. A GM playing strict RAW today has to remember + reject the player's attack.
-- **Read site needed:** `/attack` + `/use_attack` + `/cast_spell` (when targeting an attack/harmful spell). Pattern: check the attacker's buffs for `key == "charmed"`, look up the buff's `source_char_id`, return 409 `charmed_cannot_target_charmer` when the target_char_id matches.
-- **Existing scaffolding:** `_install_buff` already records `source_char_id` on the buff. The charmed buff would just need the structured `effects.charmer_char_id` field + the gate check at the three sites.
+- **State:** ✅ **shipped v2.390.0 + v2.391.0.** The gate reads the charmed buff's `source_char_id` (which `_install_buff` was already populating) and rejects the action with 409 `charmed_cannot_target_charmer` when the attacker is charmed by the target.
+  - `v2.390.0 "The Charmer's Shield"` — `/attack` gate via `_attacker_is_charmed_by_target` helper at `tabletop_routes.py`.
+  - `v2.391.0 "The Charmer's Wider Shield"` — mirrored onto `/cast_spell` (single-target harmful spells) at `tabletop_routes.py:19706`.
+  - `/use_feature` is **not applicable** — the endpoint is structurally self-targeted (Action Surge, Channel Divinity buffs, Lay on Hands pool), so there's no `target_combatant_id` to gate against. The v2.399.2 audit-row reconciliation confirms this. The v2.390.2 install-site verification confirmed `source_char_id` is set on every realistic charm source (`tabletop_routes.py:19048` for spell-cast charms, `:2187` for item-action charms); lair-action installs from monster sources fundamentally can't carry a `source_char_id` and are GM-narrated by design.
 
 **Clause 2: "The charmer has advantage on any ability check to interact socially with the creature."**
 
@@ -34,8 +35,7 @@ Not in scope: Deafened (mostly narrative-only RAW), Exhaustion (separately track
 
 **Clause 2: "The condition ends if the grappler is incapacitated."**
 
-- **State:** ⚪ **filed.** The `raw_effects[]` array at `tabletop_routes.py:33401` documents this RAW clause, but no engine hook auto-ends the grappled buff when the grappler becomes incapacitated. Today the GM `/end_buff`s the grappled buff manually when the grappler drops to 0 HP, is paralyzed, etc.
-- **Hook needed:** A buff-install side-effect: whenever a buff with `incapacitated` semantics is installed on a creature (lookup against `_INCAPACITATED_KEYS` at line 1906), scan all combatants for `grappled` buffs whose `source_char_id` matches the newly-incapacitated combatant and auto-`/end_buff` them. The set of incapacitating buff keys is already canonical (`hideous-laughter`, `stunned`, `paralyzed`, `unconscious`, `petrified`, the generic `incapacitated`).
+- **State:** ✅ **shipped v2.389.0 "The Broken Hold".** Buff-install side-effect: whenever a buff with `incapacitated` semantics is installed on a creature, the engine sweeps every combatant for `grappled` buffs whose `source_char_id` matches the newly-incapacitated combatant and auto-ends them. Uses the canonical `_INCAPACITATED_KEYS` set (`hideous-laughter`, `stunned`, `paralyzed`, `unconscious`, `petrified`, the generic `incapacitated`) and the shared `_combatant_is_incapacitated` predicate that landed in v2.385.0. The grappled buff's `source_char_id` field (already populated by `_install_buff` from v2.99.112) was the existing scaffolding the sweep keyed off.
 
 **Clause 3: "The condition also ends if an effect removes the grappled creature from the reach of the grappler."**
 
@@ -47,40 +47,42 @@ Not in scope: Deafened (mostly narrative-only RAW), Exhaustion (separately track
 
 **Clause 1: "An incapacitated creature can't take actions or reactions."**
 
-- **State:** 🟡 **partial.**
-  - ✅ Concentration drops when incapacitated: `tabletop_routes.py:965, 989, 2343`.
-  - ✅ Cleansing Touch (Paladin Lv 14) can end charmed/frightened/etc.: `tabletop_routes.py:274–279`.
-  - ⚪ **Opportunity attacks specifically don't check incapacitated.** Comment at `tabletop_routes.py:3259–3260`: *"v1 doesn't check the incapacitated buff; filed."* So an incapacitated creature whose space a hostile creature exits *can* still trigger an opportunity attack — wrong RAW.
-  - ⚪ **General action / reaction gate.** The action-economy gate (`_mark_battle_economy`) tracks whether an action/bonus/reaction has been spent but doesn't reject the attempt outright when the actor is incapacitated. Today an incapacitated character can `/use_attack` and the engine fires the attack normally. The gate would need an early `is_incapacitated(combatant)` check that returns 409 `incapacitated`.
+- **State:** ✅ **shipped v2.385.0 → v2.388.0.** All action/reaction sites now reject 409 `incapacitated` when the actor carries an incapacitating buff.
+  - ✅ Concentration drops when incapacitated: `tabletop_routes.py:965, 989, 2343` (pre-audit).
+  - ✅ Cleansing Touch (Paladin Lv 14) can end charmed/frightened/etc.: `tabletop_routes.py:274–279` (pre-audit).
+  - ✅ **Sneak Attack ally-adjacency skips incapacitated allies** — `v2.385.0 "The Conscious Ally"`. Introduces the shared `_combatant_is_incapacitated` predicate that the rest of the sweep reuses unchanged.
+  - ✅ **`/attack` action gate** — `v2.386.0 "The Still Hand"`. The opportunity-attack reaction branch shares the same `/attack` endpoint, so this commit closes the filed note that previously sat at `tabletop_routes.py:3259–3260`.
+  - ✅ **`/cast_spell` action gate** — `v2.387.0 "The Quiet Tongue"`.
+  - ✅ **`/use_feature` action gate** — `v2.388.0 "The Held Trick"`. Completes the general action gate.
+  - **`/next_turn` deliberately has no gate** — incapacitated combatants still consume the turn slot RAW; their turn just has no actions.
 
-**Hook needed for the opportunity-attack + action-gate clauses:** A shared `_combatant_is_incapacitated(c: dict) -> bool` helper that checks the combatant's buff list against `_INCAPACITATED_KEYS` (line 1906). Three call sites:
-
-1. `/use_attack` + `/cast_spell` + `/use_feature` — pre-action-economy gate: if incapacitated, 409 with `error: "incapacitated"`.
-2. `/use_attack` reaction branch (opportunity attacks) — same gate per the `tabletop_routes.py:3259–3260` filed note.
-3. `/next_turn` — no gate (incapacitated still consumes the turn slot RAW; their turn just has no actions).
+The shared `_combatant_is_incapacitated` helper reads the combatant's buff list against `_INCAPACITATED_KEYS` (line 1906). The substrate-first design held: a single predicate served all five sites (Sneak Attack ally-skip + 3 action gates + Grappled-end sweep) without modification.
 
 ---
 
-## Suggested per-clause shipping order
+## Per-clause shipping order — closed end-to-end
 
-Ordered by leverage × scope:
+The original v2.384.0 list (ordered by leverage × scope) closed in order across v2.385.0 → v2.391.0. Recorded here for posterity + as a template future condition arcs can reuse.
 
-1. **Incapacitated → opportunity-attack gate (small):** closes the explicit filed comment at line 3260. One helper + one site. Probably 30-line PR + 2 harness tests.
-2. **Incapacitated → general action gate (medium):** the helper from #1 + checks at `/use_attack`, `/cast_spell`, `/use_feature`. ~50-line PR + 3-4 tests. Affects normal play (incapacitated PCs can't attack).
-3. **Grappled → ends on grappler incapacitated (medium):** install-side-effect on the incapacitating buffs. Uses the same `_INCAPACITATED_KEYS` set as #1/#2 + a sweep over the campaign's combatants. ~40-line PR + 2 tests.
-4. **Charmed → can't target charmer (medium):** new structured `effects.charmer_char_id` field on the charmed buff + 3-site gate. ~60-line PR + 3 tests. Requires updating existing charmed-buff installs to populate the new field.
+1. ✅ **Incapacitated → opportunity-attack + general action gate** — shipped as a four-commit sweep:
+   - `v2.385.0 "The Conscious Ally"` — Sneak Attack ally-adjacency skips incapacitated allies; introduces the shared `_combatant_is_incapacitated` predicate.
+   - `v2.386.0 "The Still Hand"` — `/attack` gate (covers both the action and the opportunity-attack reaction branch via the same endpoint, closing the long-standing `tabletop_routes.py:3259–3260` filed comment).
+   - `v2.387.0 "The Quiet Tongue"` — `/cast_spell` gate.
+   - `v2.388.0 "The Held Trick"` — `/use_feature` gate.
+2. ✅ **Grappled → ends on grappler incapacitated** — `v2.389.0 "The Broken Hold"`. Install-side-effect that sweeps for `grappled` buffs whose `source_char_id` matches the newly-incapacitated combatant.
+3. ✅ **Charmed → can't target charmer** — `v2.390.0 "The Charmer's Shield"` (`/attack`) + `v2.391.0 "The Charmer's Wider Shield"` (`/cast_spell` mirror). `/use_feature` is structurally self-targeted; not applicable.
 
-**Total estimated:** 4 commits, ~180 lines net, ~11 harness tests. Closes the per-clause Charmed/Grappled/Incapacitated gaps.
+**Total shipped:** 6 commits across v2.385.0 → v2.391.0. The Conditions TODO row moved ~85% → ~92% on the strength of this sweep. The `_combatant_is_incapacitated` helper landed in v2.385.0 and was reused unchanged across 5 sites — substrate-first design paid off.
 
 ---
 
 ## Out-of-scope
 
 - **Charmed clause 2** (advantage on social checks) — no social-check substrate exists.
-- **Grappled clause 3** (ends on out-of-reach movement) — no Reach-aware movement substrate.
+- **Grappled clause 3** (ends on out-of-reach movement) — no Reach-aware movement substrate; blocked on the Maps 2.0 arc.
 - **Deafened** — RAW is mostly "can't hear" narrative; the only mechanical clause is "auto-fail any ability check requiring hearing" which is GM-narrated by design.
 
-These three clauses are filed as future-3.x or out-of-scope per the v2.383.0 audit's "polish + UX" + "3.0 scope expansion" tracks.
+These three clauses remain the ~8% gap between the post-v2.391.0 Conditions row (~92%) and 100%. They're filed as future-3.x or out-of-scope per the v2.383.0 audit's "polish + UX" + "3.0 scope expansion" tracks, and account for **every** condition-side gap left in the SRD ruleset as of v2.400.x.
 
 ## Related docs
 

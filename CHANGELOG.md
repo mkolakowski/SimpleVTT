@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.400.2] - 2026-06-17 — "The Closed Ledger"
+
+**Schema version:** 69
+
+**Commit summary:** Refreshes `docs/condition-enforcement-audit.md` to reflect the **v2.385.0 → v2.391.0 sweep that closed all four clauses on the audit's suggested per-clause shipping order**. The doc was written for v2.384.0 as a punch-list of partially-enforced Charmed / Grappled / Incapacitated clauses; six commits later every clause shipped, but the doc itself still read `⚪ filed` / `🟡 partial`, which made every new contributor reading it think there was open work to do. This commit flips each clause to **✅ shipped vX.Y.Z** with the version reference + the per-site helper noted (`_combatant_is_incapacitated` for the Incapacitated sweep, `_attacker_is_charmed_by_target` for the Charmed gate, the install-side-effect sweep for the Grappled clause-2 close). Adds a "Reconciliation refresh" line to the header so a reader scanning the top of the doc immediately sees the doc has flipped from punch-list to historical record. The Out-of-scope section grows a closing sentence noting the three permanently-GM-narrated clauses (Charmed clause 2, Grappled clause 3, Deafened) account for **every** condition-side gap left in the SRD ruleset as of v2.400.x — the ~92% Conditions row will stay at ~92% until the substrate work (social-check engine, Reach-aware movement) lands in 3.x scope.
+
+**Description:** Pure doc cleanup — no runtime code change, no test churn, no version-banner cascade. The pattern is identical to v2.399.1 ("The Refreshed Atlas") for the race-features arc: a multi-commit sweep closes a coherent set of filed gaps, then a follow-up commit refreshes the reference doc so the historical record reads correctly. The audit doc is reachable via the wiki at `/wiki/doc/condition-enforcement-audit` (the allowlist row landed in v2.384.0); the doc body changed but the wiki surface didn't, so no `_DOC_ALLOWLIST` / wiki landing-page / `docs/wiki/README.md` edits are required.
+
+**Why "The Closed Ledger":** the audit doc was the ledger that recorded the per-clause debt; six commits closed every line item and this commit signs the ledger ✅.
+
+PATCH — doc-only edit. No schema bump; no API surface change; no harness test churn (the audit doc has no per-slug harness coverage — it's a reference doc, not a wiki guide). The Conditions feature is now structurally feature-complete for SimpleVTT 2.x; further work is substrate-dependent and 3.x scope.
+
+### Changed
+- `docs/condition-enforcement-audit.md`: header gains a "Reconciliation refresh v2.400.2" line; Charmed clause 1 flipped ⚪ filed → ✅ shipped v2.390.0 + v2.391.0 (with `/use_feature` structurally-not-applicable note); Grappled clause 2 flipped ⚪ filed → ✅ shipped v2.389.0; Incapacitated clause 1 flipped 🟡 partial → ✅ shipped v2.385.0–v2.388.0 (with the action gate + opportunity-attack reaction branch both noted); "Suggested per-clause shipping order" rewritten as "Per-clause shipping order — closed end-to-end" with each item carrying its ship version; Out-of-scope section gains a closing sentence framing the three permanently-GM-narrated clauses as the entire remaining ~8% gap.
+
 ## [2.400.1] - 2026-06-17 — "The Reckoned Tally"
 
 **Schema version:** 69
