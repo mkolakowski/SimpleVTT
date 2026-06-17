@@ -2754,6 +2754,17 @@ def _bard_sheet(name: str) -> dict:
             # gate (Heroism on Pip should now short-circuit a Fear install).
             # Appended to preserve existing spell-index assumptions.
             {"name": "Fear", "level": 3, "prepared": True, "_slug": "fear", "casting_time": "1 action"},
+            # v2.404.9 — Blindness/Deafness (Bard / Cleric / Sorcerer /
+            # Wizard L2). RAW PHB p.219: CON save vs Blinded OR Deafened
+            # for 1 minute (caster picks; v1 defaults to Blinded). End-of
+            # -turn CON save to shake off. NOT concentration. Upcast: +1
+            # target per slot above 2nd. Demo fixture for the v2.404.9
+            # ARC-CLOSER — new `_SPELL_CONDITION_MAP["blindnessdeafness"]`
+            # entry + new `_SPELL_TARGET_CAPS["blindnessdeafness"]` cap.
+            # Lyra has L2 + L3 slots so the test exercises both base cap
+            # and the +1 upcast extension. Appended at END so existing
+            # spell_index assertions stay valid.
+            {"name": "Blindness/Deafness", "level": 2, "prepared": True, "_slug": "blindnessdeafness", "casting_time": "1 action"},
         ],
         "spell_slots": {
             "bard": {

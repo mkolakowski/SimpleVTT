@@ -10,6 +10,43 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.404.9] - 2026-06-17 — "The Stolen Sense"
+
+**Schema version:** 69
+
+**Commit summary:** Ninth and **arc-closing** commit of the **spell utility-upcast** arc — wires **Blindness/Deafness** (RAW PHB p.219) end-to-end. New `_SPELL_CONDITION_MAP["blindnessdeafness"]` entry installs a `blinded` buff on a failed CON save (1 minute, NOT concentration, end-of-turn CON save to shake off). New `_SPELL_TARGET_CAPS["blindnessdeafness"]` cap (1 target at L2, +1 per slot above 2nd). **First L2-base condition-install spell** to use the substrate. With this commit, **all 9 target-scaling utility spells identified in the v2.404.x scoping audit are now closed.**
+
+**Description:** Drop-in on the v2.404.7 recipe, with two notable design choices:
+
+1. **Default install: blinded.** RAW says the caster picks Blinded OR Deafened at cast time. v1 installs Blinded by default (the more common combat-relevant pick). The deafened variant + the caster-picker UI are filed for follow-up — would thread a per-cast `body.condition_choice` field through `/cast_spell` to this entry's install branch. Until that ships, the GM can hand-edit the buff badge to "Deafened (Blindness/Deafness)" if the caster narratively picked deafened.
+
+2. **End-of-turn save reuses the existing repeated-save infra.** v2.97.62's `_apply_end_of_turn_buff_decrement_and_saves` loop reads `repeated_save_ability` + `repeated_save_dc` from the installed buff. The post-save install path at line ~22220 stamps these fields automatically for any condition install where the spell carries `save_ability`. So Blindness/Deafness's end-of-turn CON save fires for free — no new code needed.
+
+3. **SRD slug oddity: `blindnessdeafness` (no separator).** The SRD JSON catalog smashes the words together — `blindnessdeafness.json`. The condition map + target caps use the same slug so the dispatch path lookup is straight. Confirmed by reading `app/data/local/dnd5e/spells/blindnessdeafness.json` — `save_ability: "con"`, `level_int: 2`, no damage.
+
+Lyra Sunstrider (Bard Lv 6) gets Blindness/Deafness appended at spell index 20. Her L2 + L3 slots cover both base cap and +1 upcast extension.
+
+**Arc summary (v2.404.1 → v2.404.9):** nine sequential PATCH bumps closed the target-scaling utility-spell work across both substrate dicts.
+
+| Substrate | Spells closed |
+|-----------|---------------|
+| `_SPELL_BUFF_MAP` | Invisibility (v2.404.1) + Fly (.2) + Enhance Ability (.3) + Longstrider (.4) |
+| `_SPELL_TARGET_CAPS` | Charm Person (v2.404.5) + Bane (.6 — consolidation refactor + helper) + Command (.7 — first condition-install) + Animal Friendship (.8) + Blindness/Deafness (.9 — arc closer) |
+
+The substrate has proven itself across both cap-enforcement dicts, all 4 base levels (L1 / L2 / L3 / L4 by inference), both concentration modes, and three distinct shapes: pure data (Bless / Aid pattern), substrate-consolidation (the Bane refactor + `_spell_target_cap_for_slot` helper), and condition-install wiring (Command / Animal Friendship / Blindness/Deafness).
+
+**Why "The Stolen Sense":** Blindness/Deafness steals one of the two cognate senses — the spell's whole tableau is the world snapping shut on the victim's eye or ear. Closes the arc on the senses motif while the Bard's "spells of words" sub-theme echoes back to v2.404.5 "The Whispered Bond."
+
+PATCH — 1 new condition-map entry + 1 new target-caps entry + 1 demo-seed spell-list addition + 1 new harness file (4 tests). **Spell catalog: 9 of 9 target-scaling utility spells closed.** The v2.404.x arc is CLOSED.
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_SPELL_CONDITION_MAP["blindnessdeafness"]` entry (key: "blinded", icon: 🙈, duration_rounds: 10, NOT concentration, descriptive effects list naming the Blinded mechanical clauses + the end-of-turn CON save). New `_SPELL_TARGET_CAPS["blindnessdeafness"]` entry (1 + 1/slot above L2 — first L2-base condition-install spell).
+- `app/demo_seed.py`: appended Blindness/Deafness to Lyra's bard spell list at index 20 (END-append to preserve existing spell_index assertions).
+- `tests/harness/test_cast_blindness_deafness_target_cap_upcast.py`: new harness file (4 tests) — L2 1 target → 200, L2 2 targets → 400 limit=1, L3 2 targets → 200, L3 3 targets → 400 limit=2.
+
+### Changed
+- `docs/test-harness-coverage.md`: total-test-count bump (+4) + new row for the blindness-deafness cap file.
+
 ## [2.404.8] - 2026-06-17 — "The Beast's Trust"
 
 **Schema version:** 69

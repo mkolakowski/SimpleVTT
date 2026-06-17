@@ -1205,6 +1205,37 @@ _SPELL_CONDITION_MAP = {
             "morsel of food consumed at cast (M component, GM-narrated)",
         ],
     },
+    # v2.404.9 — Blindness/Deafness (Bard / Cleric / Sorcerer / Wizard
+    # L2). RAW PHB p.219: CON save vs being either Blinded OR Deafened
+    # for 1 minute (caster picks at cast time). End-of-turn CON save to
+    # shake off (RAW). NOT concentration. SRD slug: `blindnessdeafness`
+    # (no separator) — the JSON catalog smashes the words together.
+    #
+    # Mechanical model for v1: install a `blinded` condition by default
+    # (the more common combat-relevant pick). The "deafened" variant +
+    # the caster-picker UI are filed as a future commit (would thread a
+    # per-cast `body.condition_choice` field through `/cast_spell` to
+    # this entry's install branch). The end-of-turn CON save is wired
+    # via the existing `save_on_damage`-style auto-repeat infra (the
+    # v2.97.62 repeated-save end-of-turn loop reads
+    # `repeated_save_ability` + `repeated_save_dc` from the install
+    # stamp; the post-save install path at line 22220 stamps these
+    # automatically for any condition with save_ability set on the
+    # spell).
+    "blindnessdeafness": {
+        "key": "blinded",
+        "name": "Blinded (Blindness/Deafness)",
+        "icon": "🙈",
+        "duration_rounds": 10,  # 1 minute RAW @ 6 s/round
+        "concentration": False,
+        "effects": [
+            "can't see; automatically fails sight-based checks",
+            "attack rolls have disadvantage",
+            "attacks against the blinded creature have advantage",
+            "CON save at end of each turn to shake off (RAW)",
+            "deafened-variant install filed for the v2.404.x follow-up",
+        ],
+    },
     # v2.54.0 — Suggestion → Charmed (Wis save). RAW: "you suggest a
     # course of activity ... if it fails its save, it pursues the
     # suggested course for the duration." Duration is up to 8 hours
@@ -1900,6 +1931,21 @@ _SPELL_TARGET_CAPS: dict[str, dict] = {
     "animal-friendship": {
         "max_targets": 1,
         "base_level": 1,
+        "extra_targets_per_slot_above_base": 1,
+    },
+    # v2.404.9 — Blindness/Deafness (Bard / Cleric / Sorcerer / Wizard
+    # L2). RAW PHB p.219: "One creature you can see within range."
+    # Higher Levels: "When you cast this spell using a spell slot of 3rd
+    # level or higher, you can target one additional creature for each
+    # slot level above 2nd." First L2-base condition-install spell to
+    # use the substrate (Charm Person / Command / Animal Friendship are
+    # L1 base). Routes through `/cast_spell` automatically — the SRD
+    # JSON carries `save_ability: "con"` and no damage. CLOSES the
+    # v2.404.x spell utility-upcast arc — all 9 target-scaling utility
+    # spells in scope are now wired.
+    "blindnessdeafness": {
+        "max_targets": 1,
+        "base_level": 2,
         "extra_targets_per_slot_above_base": 1,
     },
 }
