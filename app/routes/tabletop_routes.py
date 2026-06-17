@@ -37765,6 +37765,53 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "on the wielder's turn for up to 10 minutes)."
         ),
     },
+    # v2.403.2 — magic-items-automation Phase 9.2 batch 3: multi-charge
+    # per-day items with recharge dice. All three require attunement.
+    # The 1d3/dawn (pipes/helm) and 1d20/dawn (cube) recharge expressions
+    # live on the resource row's ``charge_recovery`` field — picked up by
+    # the existing v2.158.86 dice-recharge substrate on long rest.
+    "pipes-of-the-sewers": {
+        "key": "summon-rat-swarm",
+        "name": "Summon Rat Swarm",
+        "resource_key": "pipes-of-the-sewers",
+        "requires_attunement": True,
+        "min_charges": 1,
+        "max_charges": 3,
+        "narration": (
+            "played the pipes and expended {charges} charge(s) — "
+            "{charges} swarm(s) of rats appear within 60 ft if local "
+            "rats are available (GM-narrated: CHA contest vs the swarm's "
+            "WIS to control; swarm friendly while pipes play each round)."
+        ),
+    },
+    "helm-of-teleportation": {
+        "key": "cast-teleport",
+        "name": "Cast Teleport (Helm)",
+        "resource_key": "helm-of-teleportation",
+        "requires_attunement": True,
+        "min_charges": 1,
+        "max_charges": 1,
+        "narration": (
+            "donned the helm and expended 1 charge to cast Teleport "
+            "(GM-narrated: party + willing creatures touched, up to 8, "
+            "shift to a destination familiar to the helm-wearer)."
+        ),
+    },
+    "cube-of-force": {
+        "key": "project-barrier",
+        "name": "Project Force Barrier",
+        "resource_key": "cube-of-force",
+        "requires_attunement": True,
+        "min_charges": 1,
+        "max_charges": 5,
+        "narration": (
+            "pressed a face on the cube and expended {charges} charge(s) "
+            "— an invisible 15-ft force barrier projects, blocking the "
+            "category keyed to that face (GM-narrated: face 1 gas/fog, "
+            "face 2 nonliving matter, face 3 living matter, face 4 spell "
+            "effects, face 5 nothing-passes, face 6 deactivate)."
+        ),
+    },
 }
 
 
@@ -87211,6 +87258,9 @@ async def use_item_action(
     # v2.403.0: bowl/brazier/censer/stone-of-commanding/controlling-elementals.
     # v2.403.1: cape-of-the-mountebank + iron-bands-of-binding +
     # efreeti-bottle + bag-of-tricks (3/dawn — shared shape).
+    # v2.403.2: multi-charge per-day items with recharge dice —
+    # pipes-of-the-sewers (3, 1d3/dawn, expend 1-3) + helm-of-teleportation
+    # (3, 1d3/dawn, expend 1) + cube-of-force (36, 1d20/dawn, expend 1-5).
     if slug in (
         "bowl-of-commanding-water-elementals",
         "brazier-of-commanding-fire-elementals",
@@ -87220,6 +87270,9 @@ async def use_item_action(
         "iron-bands-of-binding",
         "efreeti-bottle",
         "bag-of-tricks",
+        "pipes-of-the-sewers",
+        "helm-of-teleportation",
+        "cube-of-force",
     ):
         return await _use_item_action_announce_only(
             db, campaign_id, char, item, sheet, catalog, slug,
@@ -87552,8 +87605,15 @@ async def _use_item_action_announce_only(
     flag_modified(char, "sheet")
     db.commit()
 
-    narration = str(catalog.get("narration") or
-                    f"used the {item.get('name') or slug}.")
+    narration_tmpl = str(catalog.get("narration") or
+                         f"used the {item.get('name') or slug}.")
+    # v2.403.2 — narration may carry a `{charges}` placeholder for multi-
+    # charge items (pipes-of-the-sewers, cube-of-force). The format call
+    # is no-op for narrations without placeholders.
+    try:
+        narration = narration_tmpl.format(charges=charges)
+    except (KeyError, IndexError, ValueError):
+        narration = narration_tmpl
     summary = f"{char.name} {narration}"
 
     try:

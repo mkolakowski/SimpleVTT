@@ -1277,6 +1277,21 @@ def _wizard_sheet(name: str) -> dict:
                 "desc": "3 charges. Spend 1 to cast Detect Magic (30-ft radius, 10-min concentration). Regains 1d3 charges on long rest.",
                 "manual": False,
             },
+            # v2.403.2 — magic-items-automation Phase 9.2 batch 3:
+            # Helm of Teleportation (RAW DMG p.169) — 3 charges, regain
+            # 1d3 at dawn. The helm is seeded INERT on Thalindra (vault
+            # loot, equipped=False/attuned=False at line ~7100); the
+            # harness PATCHes equipped+attuned before invoking. Resource
+            # row is seeded up front so the dispatch can find it.
+            {
+                "key": "helm-of-teleportation",
+                "name": "Helm of Teleportation",
+                "current": 3, "max": 3, "reset": "long",
+                "charge_recovery": "1d3",
+                "source": "item-helm-of-teleportation",
+                "desc": "3 charges; expend 1 (action) to cast Teleport (GM-narrated destination). Regain 1d3 at dawn. RAW DMG p.169.",
+                "manual": False,
+            },
         ],
     }
 
@@ -5144,6 +5159,22 @@ def _barbarian_beast_sheet(name: str) -> dict:
                 "desc": "3 pulls/dawn. Action: pull a fuzzy ball + throw up to 20 ft; it transforms into a random animal (rolled per bag color) that's friendly for 10 min or until 0 HP. RAW DMG p.154.",
                 "manual": False,
             },
+            # v2.403.2 — magic-items-automation Phase 9.2 batch 3:
+            # Pipes of the Sewers (RAW DMG p.184) — 3 charges, regain
+            # 1d3 at dawn. The pipes are seeded INERT on Brakka (vault
+            # loot, equipped=False/attuned=False at line ~7114); the
+            # harness PATCHes equipped+attuned before invoking. Resource
+            # row is seeded up front so the dispatch can find it without
+            # bootstrap.
+            {
+                "key": "pipes-of-the-sewers",
+                "name": "Pipes of the Sewers",
+                "current": 3, "max": 3, "reset": "long",
+                "charge_recovery": "1d3",
+                "source": "item-pipes-of-the-sewers",
+                "desc": "3 charges; expend 1-3 (action) to summon that many rat swarms within 60 ft (if local rats are available). Regain 1d3 at dawn. RAW DMG p.184. Wind-instrument proficiency required (GM-narrated).",
+                "manual": False,
+            },
         ],
         "class_features": [
             {
@@ -6005,6 +6036,22 @@ def _sorcerer_sheet(name: str) -> dict:
                 "current": 1, "max": 1, "reset": "long",
                 "source": "item-efreeti-bottle",
                 "desc": "1/dawn. Action: pull the stopper — smoke pours out and (per a d100 roll) the efreeti within attacks, grants 3 wishes, or serves for 1 hour. RAW DMG p.167.",
+                "manual": False,
+            },
+            # v2.403.2 — magic-items-automation Phase 9.2 batch 3:
+            # Cube of Force (RAW DMG p.165) — 36 charges, regain 1d20
+            # at dawn. The cube is seeded equipped+attuned on Zara
+            # (line ~5908). v1 ships a generic "expend 1-5 charges"
+            # action — the face choice + which category the barrier
+            # blocks are GM-narrated. RAW per-face cost: 1 gas/fog,
+            # 2 nonliving, 3 living, 4 spell effects, 5 nothing-passes.
+            {
+                "key": "cube-of-force",
+                "name": "Cube of Force",
+                "current": 36, "max": 36, "reset": "long",
+                "charge_recovery": "1d20",
+                "source": "item-cube-of-force",
+                "desc": "36 charges; bonus action to press a face + expend 1-5 charges (per face) to project a 15-ft force barrier. Regain 1d20 at dawn. RAW DMG p.165.",
                 "manual": False,
             },
             # v2.208.0 — Eyes of Charming charge pool (RAW DMG p.168):

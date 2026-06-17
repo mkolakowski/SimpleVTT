@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3178 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.403.1, 2026-06-17).
+**Total tests:** 3181 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.403.2, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3632,6 +3632,9 @@ v2.403.0 + v2.403.1 magic-items — Phase 9.2 substrate ship: charge-tracked ann
 | `test_long_rest_restores_charge` | Censer: spend → 0; long rest → counter back to full initial. |
 | `test_unknown_action_key_returns_404` | Bowl with a bogus `action_key` → 404 `no action` (dispatch gate). |
 | `test_bag_of_tricks_multi_pull_pool` (v2.403.1) | Bag of Tricks (3/3): three sequential pulls drain 3 → 2 → 1 → 0; fourth pull → 409 `insufficient_charges`. Canonical test for the multi-charge-pool variant of the shared handler. |
+| `test_pipes_of_the_sewers_multi_charge_spend` (v2.403.2) | Pipes of the Sewers (3/3 + 1d3/dawn): PATCH equipped+attuned → spend 2 charges in one call (3 → 1) → `>max` (4) returns 400. Tests the multi-charge-per-call path on a vault-loot item. |
+| `test_helm_of_teleportation_requires_attunement` (v2.403.2) | Helm of Teleportation: equipped + un-attuned → 409 "attunement"; PATCH attuned=True → 200 with resource 3 → 2. Tests the attunement gate. |
+| `test_cube_of_force_variable_charge_spend` (v2.403.2) | Cube of Force (36/36 + 1d20/dawn): spend 3 then 5 (36 → 33 → 28), `>max` (6) returns 400, long rest strictly grows the pool from 28 (bounded by 1d20 roll, not full refill). Tests the largest-pool + dice-recharge path. |
 
 ### `test_use_item_action_rope_of_entanglement.py`
 v2.355.0 magic-items — Rope of Entanglement (RAW DMG p.198, rare, no attunement), sixth Bucket A item and the first `unlimited` (no-charge) item on the shared Wand of Fear handler. DC 15 DEX save or restrained, at will. Carrier: Kael Brightleaf (equipped, NO charge resource).

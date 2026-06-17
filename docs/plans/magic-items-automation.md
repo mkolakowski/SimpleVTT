@@ -48,6 +48,9 @@ Adding the 25th item is a 2-line catalog row + a dispatch entry + a per-PC `reso
 | `iron-bands-of-binding` | 1/dawn restrain via ranged attack | ✅ shipped v2.403.1 |
 | `efreeti-bottle` | 1/dawn release (d100 table outcome) | ✅ shipped v2.403.1 |
 | `bag-of-tricks` | 3/dawn pulls (random animal per bag color) | ✅ shipped v2.403.1 (first multi-charge pool on the substrate) |
+| `pipes-of-the-sewers` | 3 charges + 1d3/dawn; expend 1-3 per use to summon rat swarms | ✅ shipped v2.403.2 (first multi-charge-per-call) |
+| `helm-of-teleportation` | 3 charges + 1d3/dawn; expend 1 to cast teleport | ✅ shipped v2.403.2 (attunement gate exercised) |
+| `cube-of-force` | 36 charges + 1d20/dawn; expend 1-5 per face for 15-ft barrier | ✅ shipped v2.403.2 (largest pool + dice-recharge test bed) |
 
 All four share an identical RAW shape (1/dawn, no attunement, summon-elemental + CHA-check control); the single harness file (`test_use_item_action_announce_only.py`) covers all four through one parameterized happy-path test + a 409-second-use test + a long-rest-restore test.
 
@@ -57,7 +60,7 @@ Grouped by template. Each batch ships as one PATCH commit.
 
 **1/dawn (single charge, dawn reset).** ~`cape-of-the-mountebank`~ ✅ v2.403.1, `plate-armor-of-etherealness`, ~`iron-bands-of-binding`~ ✅ v2.403.1, ~`efreeti-bottle`~ ✅ v2.403.1, ~`bag-of-tricks`~ ✅ v2.403.1 (3/dawn — multi-charge under the same template).
 
-**Multi-charge per-day (charges + per-day recharge dice).** `pipes-of-the-sewers` (3, 1d3/dawn), `helm-of-teleportation` (3, 1d3/dawn), `cube-of-force` (36, 1d20/dawn — 6 modes, needs a multi-action catalog).
+**Multi-charge per-day (charges + per-day recharge dice).** ~`pipes-of-the-sewers`~ ✅ v2.403.2 (3, 1d3/dawn), ~`helm-of-teleportation`~ ✅ v2.403.2 (3, 1d3/dawn), ~`cube-of-force`~ ✅ v2.403.2 (36, 1d20/dawn — v1 ships generic "expend 1-5"; per-face semantics GM-narrated).
 
 **Multi-day cooldown (single use, reset > 1 day).** `horn-of-valhalla` (1/7d), `ring-of-djinni-summoning` (1/24h), `rod-of-security` (1/10d).
 

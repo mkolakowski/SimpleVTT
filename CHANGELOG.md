@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.403.2] - 2026-06-17 — "The Recharging Cube"
+
+**Schema version:** 69
+
+**Commit summary:** Third batch of charge-tracked announce-only Bucket D items on the v2.403.0 substrate. Three items with multi-charge spends + per-day dice-recharge now tick their RAW counters on `/use_item_action`: **Pipes of the Sewers** (3 charges, 1d3/dawn, spend 1-3 to summon rat swarms — on Brakka), **Helm of Teleportation** (3 charges, 1d3/dawn, spend 1 to cast teleport — on Thalindra), and **Cube of Force** (36 charges, 1d20/dawn, spend 1-5 per face — on Zara). The first two are vault-loot items the harness PATCHes equipped+attuned for the test; the cube is seeded equipped+attuned and exercises the substrate's larger pool + recharge dice path end-to-end.
+
+**Description:** This commit graduates the announce-only substrate from single-charge-per-call to **multi-charge-per-call** items. The handler already accepted `min_charges` / `max_charges` on the catalog (used by Wand of Magic Missiles and friends at the substrate level); v2.403.0/v2.403.1 just shipped items with `min=max=1`. The pipes (`min=1, max=3`) and cube (`min=1, max=5`) exercise the variable-charge path: a single client call can spend N charges in one decrement and broadcast that N. Also adds a small `.format(charges=N)` step to the narration template so the broadcast summary can echo the spend ("expended 3 charge(s) — 3 swarm(s) of rats appear…").
+
+The vault-loot PATCH pattern (PATCH equipped+attuned → test → PATCH back to inert) mirrors the established Robe of the Archmagi / Talisman of Pure Good harness shape. The resource row is seeded up front (matching the v2.367.0 Talisman of Pure Good seed), so the dispatch finds it without a bootstrap step. The Helm of Teleportation test also covers the **attunement gate** — first invocation with `attuned=False` returns 409 with "attunement" in the message, then the test flips attuned=True and the second invocation succeeds. The Cube of Force test asserts the **dice-recharge path** end-to-end: spend → long-rest → strict pool growth bounded by the 1d20 roll (not a full refill).
+
+**Why "The Recharging Cube":** Cube of Force is the headline item — the largest charge pool yet (36) on the substrate and the canonical dice-recharge test bed.
+
+PATCH — 3 new wired items + 3 paired resource rows + handler narration polish + harness extension (+3 new tests). Magic items category remains **235/239 wired (~98%)** in the audit denominator; eleven Bucket D items now machine-track their charges (up from eight in v2.403.1). Substrate is now proven for: 1/1 single-charge, 3/3 multi-pool, 3/3 multi-spend-per-call, 36/36 multi-spend with dice-recharge. Subsequent batches will roll out multi-day cooldowns (horn-of-valhalla / ring-of-djinni-summoning / rod-of-security), lifetime charges (chime-of-opening / ring-of-three-wishes), multi-dose consumables, one-shot consumables, then the two Bucket A holdouts (wind-fan + medallion-of-thoughts).
+
+### Added
+- `app/routes/tabletop_routes.py`: three new `_MAGIC_ITEM_ACTIONS` entries (`pipes-of-the-sewers`, `helm-of-teleportation`, `cube-of-force`). Pipes carries `min_charges=1, max_charges=3`; cube `min=1, max=5`. The `narration` template gains a `{charges}` placeholder syntax. Dispatch tuple extended.
+- `app/demo_seed.py`: three new `resources[]` rows. Pipes on Brakka's resources array (3/3, `charge_recovery: "1d3"`), Helm on Thalindra (3/3, `1d3`), Cube on Zara (36/36, `1d20`). All three carry `reset: "long"` so the existing v2.158.86 dice-recharge substrate picks them up on long rest.
+- `tests/harness/test_use_item_action_announce_only.py`: three new tests + a `_patch_inventory_item` helper. `test_pipes_of_the_sewers_multi_charge_spend` exercises the variable-N path + the >max rejection. `test_helm_of_teleportation_requires_attunement` exercises the attunement gate (409 unattuned → 200 attuned). `test_cube_of_force_variable_charge_spend` exercises the larger pool + dice-recharge bounds.
+
+### Changed
+- `app/routes/tabletop_routes.py` (`_use_item_action_announce_only`): narration template now runs through `.format(charges=N)` to inline the spend count in the broadcast summary (no-op for narrations without placeholders).
+- `docs/plans/magic-items-automation.md`: Phase 9.2 status table grows three new ✅ rows; the multi-charge per-day backlog item is updated to reflect closure.
+- `docs/test-harness-coverage.md`: total-test-count bump (+3) + the announce-only file entry expands with the three new tests.
+
 ## [2.403.1] - 2026-06-17 — "The Trickster's Counter"
 
 **Schema version:** 69
