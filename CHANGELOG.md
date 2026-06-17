@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.400.0] - 2026-06-17 — "The Race Card"
+
+**Schema version:** 69
+
+**Commit summary:** Lands a new reader-facing wiki guide at `docs/wiki/srd-races-implementation.md` — per-race coverage of every RAW SRD 5.1 trait, what fires automatically vs. what you click vs. what's GM-narrated, with the underlying mechanism (endpoint, helper, sheet seed) inlined so a GM scanning the page knows exactly what to expect at the table. Reached directly via `/wiki/srd-races-implementation` (no allowlist required for `docs/wiki/<slug>` paths). Surfaced via the wiki landing-page "Available guides" table + the on-disk `docs/wiki/README.md` index; the `test_wiki_home_renders` harness assertion picks up the new slug so a future regression that drops the row gets caught.
+
+**Description:** The guide is structured as a single 9-race walkthrough — each section opens with the demo PC name + a one-line "try this" hook, then a per-trait table with Status / How it works. The TL;DR table at the top splits traits into three columns (auto-fires / click-driven / GM-narrated) so a GM running their first SimpleVTT session can see at a glance which RAW traits will fire on their own. Filed follow-ups (Halfling Phase 4b/5b enforcement, Tiefling Phase 1b Darkness, Phase 1c auto-grant projection, Dwarven Toughness per-level hook) are called out in dedicated sections so readers know what's intentionally deferred.
+
+Mirror of the audit summary I produced when verifying the v2.399.0 race-features arc against the RAW JSON in `app/data/local/dnd5e/races/`. Status legend is the same five-tier (✅ / 🟢 / 🟠 / ⚪ / OOS) as the plan doc, with cross-links to the [race-features plan](/wiki/doc/plan-race-features), the [reactions guide](/wiki/reactions), and the [targeting guide](/wiki/targeting-system-guide) for the Breath Weapon target-fill path.
+
+MINOR — new wiki guide; additive only. Versioning rolls 2.399.2 → 2.400.0 — a normal MINOR bump per my [auto-memory note](memory/feedback_minor_can_exceed_99.md), not a MAJOR (the rule there is "MINOR can exceed 99; use real SemVer instead of cramming features into PATCH"). MAJOR is reserved for breaking API/schema/config changes, which this isn't.
+
+### Added
+- `docs/wiki/srd-races-implementation.md` — per-race trait coverage guide. 9 race sections + TL;DR auto-fires-vs-click table + out-of-scope-by-design + filed follow-ups + cross-links.
+- `app/templates/wiki.html`: new row in the "Available guides" table linking the guide.
+- `docs/wiki/README.md`: matching row in the on-disk index.
+- `tests/harness/test_wiki.py::test_wiki_home_renders`: new assertion picks up `/wiki/srd-races-implementation` so a regression that drops the landing row fails the harness.
+
 ## [2.399.2] - 2026-06-16 — "The Already-Closed Door"
 
 **Schema version:** 69

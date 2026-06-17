@@ -103,6 +103,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/bugs" in resp.text
     # v2.393.0: race-features plan listed (closes the SRD Races row to ~100%).
     assert "/wiki/doc/plan-race-features" in resp.text
+    # v2.400.0: SRD race rules implementation guide listed in Available guides.
+    assert "/wiki/srd-races-implementation" in resp.text
 
 
 async def test_wiki_guide_serves_roll_log():

@@ -41,6 +41,7 @@ How much of the SRD 5.1 ruleset SimpleVTT mechanically automates, by content cat
 | [Visual regression harness](visual-regression-harness.md) | Markdown (reference) | Contributors | ✅ shipped · local-only (v2.97.13) |
 | [Testing checklist](testing-checklist.md) | Markdown (per-version log) | Contributors | ✅ shipped (v2.99.8) |
 | [Lair actions & regional effects catalog](lair-regional-catalog.md) | Markdown (reference) | GMs + contributors | ✅ shipped · refreshed v2.382.0 (metallic + Lich/Kraken regional effects backfill; the entire lair-action arc is now closed) |
+| [SRD race rules — implementation guide](srd-races-implementation.md) | Markdown (reference + how-to) | GMs + players + contributors | ✅ shipped (v2.400.0) — per-race trait coverage after the v2.392.0–v2.399.2 race-features arc |
 
 ## Design plans
 
