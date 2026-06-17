@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3167 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.398.0, 2026-06-16).
+**Total tests:** 3170 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.399.0, 2026-06-16).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -813,6 +813,15 @@ v2.397.0 — race-features plan Phase 3: Hill Dwarf heavy-armor speed bypass. Ne
 | `test_dwarf_in_plate_no_penalty_via_race_exemption` | Tavik PATCHed into plate (STR req 15, STR 14 < 15) → `derived` STILL has no `heavy_armor_speed_penalty` key (Dwarf exemption). |
 | `test_non_dwarf_in_plate_takes_penalty` | Tavik PATCHed to race "Human" + plate → `derived.heavy_armor_speed_penalty.penalty_ft = 10`; source mentions "plate". |
 | `test_non_dwarf_sufficient_str_no_penalty` | Tavik PATCHed to race "Human" + plate + STR 15 → no penalty (STR ≥ req). Controls for the STR-threshold gate independently of the race gate. |
+
+### `test_halfling_nimbleness.py`
+v2.399.0 — race-features plan Phases 4a + 5a: Halfling Nimbleness + Naturally Stealthy recognition flags. Neither RAW PHB p.28 trait has a server-side enforcement substrate today (/token/move doesn't gate moving-through-creatures; /roll doesn't gate Stealth cover), so both Halfling exemptions are vacuously satisfied. v2.399.0 ships the **recognition half**: new `_pc_has_halfling_nimbleness(sheet)` + `_pc_has_naturally_stealthy(sheet)` predicates surface `derived.halfling_nimbleness` and `derived.naturally_stealthy` blocks on `/sheet-json` carrying the source citation + verbatim RAW clause + an `enforcement_status` string noting that Phases 4b + 5b (full enforcement) are filed for the future Maps 2.0 / Stealth-cover substrate arcs. Pip Quickfingers (Lightfoot Halfling Rogue) is the fixture; Krieger (Half-Orc) is the non-Halfling control.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_halfling_recognition_flags_for_pip` | Pip's `/sheet-json` carries both `derived.halfling_nimbleness.applies = True` (PHB p.28 "Halfling race trait" source, Phase 4b enforcement filed) and `derived.naturally_stealthy.applies = True` (PHB p.28 "Lightfoot Halfling race trait" source, Phase 5b enforcement filed). |
+| `test_halfling_recognition_flags_not_for_non_halfling` | Krieger's `derived` has neither `halfling_nimbleness` nor `naturally_stealthy`. Race-gate regression guard. |
+| `test_halfling_recognition_carries_raw_clauses` | Both blocks include the verbatim RAW PHB p.28 clauses ("move through the space of any creature" / "obscured only by a creature"). Future refactors that drop these clauses silently would degrade the player-facing chat-card text; this guard catches the regression. |
 
 ### `test_check_artificers_lore.py`
 v2.398.0 — race-features plan Phase 6: Rock Gnome Artificer's Lore. Twin of `test_check_stonecunning.py` shipped v2.396.0. New `_pc_has_artificers_lore(sheet)` race-gate predicate (any Gnome subrace via `_race_slug_from_sheet`) + new `POST /api/campaign/{cid}/check_artificers_lore` endpoint that rolls `1d20 + INT mod + 2 × PB` and broadcasts `feature_used(source=artificers-lore, …)`. Tavik PATCHed-to-Rock-Gnome is the test fixture since no demo PC ships as a Gnome today; the race is restored on test teardown.

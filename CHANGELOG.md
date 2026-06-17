@@ -10,6 +10,42 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.399.0] - 2026-06-16 — "The Quiet Steps"
+
+**Schema version:** 69
+
+**Commit summary:** Ships **race-features plan Phases 4a + 5a** — recognition flags for **Halfling Nimbleness** and **Lightfoot Halfling Naturally Stealthy** (RAW PHB p.28). Bundled into one commit because they share the structural shape (Halfling-race-gated recognition flag on `/sheet-json` derived block) and the substrate-deferral rationale (neither RAW trait's underlying restriction has a server-side enforcement substrate today). New `_pc_has_halfling_nimbleness(sheet)` + `_pc_has_naturally_stealthy(sheet)` predicates surface `derived.halfling_nimbleness` and `derived.naturally_stealthy` blocks carrying source citation + verbatim RAW clause + `enforcement_status` string. 3 harness tests at `test_halfling_nimbleness.py`. Phases 4b + 5b (full enforcement) filed for the future Maps 2.0 / Stealth-cover substrate arcs.
+
+**Description:** Both Halfling traits exempt the Halfling from a RAW restriction that SimpleVTT's engine doesn't currently enforce:
+
+- **Nimbleness (PHB p.28):** "You can move through the space of any creature that is of a size larger than yours." The underlying RAW restriction is PHB p.190 "moving through other creatures" (must be 2+ size categories different, generally). SimpleVTT's `/token/move` endpoint doesn't gate moving-through-creatures at all today — any token can cross any other's space.
+- **Naturally Stealthy (PHB p.28):** "You can attempt to hide even when you are obscured only by a creature that is at least one size larger than you." The underlying RAW restriction is PHB p.177 "you can't hide from a creature that can see you clearly" (needs cover or heavy obscurement). SimpleVTT's `/roll` endpoint doesn't gate Stealth checks by LOS / cover at all — Stealth always rolls.
+
+So both Halfling exemptions are vacuously satisfied — Halflings already get the behavior the exemption describes (no restriction to exempt from). v2.399.0 ships the **recognition half** of both traits: a `derived` block on `/sheet-json` that surfaces the trait recognition (source citation, RAW clause text, `enforcement_status` noting Phase 4b/5b filed). The recognition flag exists so:
+1. Chat-card / UI can surface "Pip has Halfling Nimbleness" without a separate sheet walk.
+2. The harness has a stable assertion target.
+3. The race-gate predicates (`_pc_has_halfling_nimbleness` / `_pc_has_naturally_stealthy`) are in place for the future Phase 4b / 5b substrate ships to compose against.
+
+Naturally Stealthy is **Lightfoot-subrace-keyed** — generic "Halfling" (no subrace specified) or "Stout Halfling" don't get it per RAW. The predicate uses `_subrace_slug_from_sheet` to fold "Lightfoot Halfling" into the `halfling-lightfoot` slug; a fall-back accepts the bare "Halfling" race string too (Pip's demo seed uses that; the PHB-default Halfling is Lightfoot per the core RAW).
+
+Phases 4b + 5b (full enforcement) are filed for the future arcs:
+- **Phase 4b:** Install RAW PHB p.190 "moving through other creatures" gate at `/token/move` (block crossing same-size or larger hostile creature spaces) + carve out the Halfling exemption. Composes with the Maps 2.0 movement-substrate work.
+- **Phase 5b:** Install RAW PHB p.177 Stealth-cover gate (require cover or obscurement to make a Stealth check during combat with witnesses) + carve out the Naturally Stealthy Lightfoot exemption (allow hiding when obscured by a creature ≥1 size larger). Composes with the future Stealth-cover substrate.
+
+MINOR — two additive race-gate predicates + two additive `/sheet-json` derived blocks + 3 tests; no existing roll / movement / stealth paths change.
+
+### Added
+- `_pc_has_halfling_nimbleness(sheet)` race-gate predicate (any Halfling subrace).
+- `_pc_has_naturally_stealthy(sheet)` Lightfoot-subrace-keyed predicate (folds "Lightfoot Halfling" / generic "Halfling" → True; "Stout Halfling" → False).
+- `derived.halfling_nimbleness: {applies, source, raw_clause, enforcement_status}` block on `/sheet-json` for any Halfling PC.
+- `derived.naturally_stealthy: {applies, source, raw_clause, enforcement_status}` block on `/sheet-json` for any Lightfoot Halfling PC.
+- `tests/harness/test_halfling_nimbleness.py` — 3 tests covering both recognition flags + non-Halfling control + RAW-clause-preservation regression guard.
+
+### Changed
+- `docs/plans/race-features.md`: Halfling Nimbleness + Naturally Stealthy rows ⚪ → 🟢 partial; Phase 4a + 5a marked shipped (Phase 4b + 5b filed). Status banner refreshed to v2.399.0 with the "all 7 engine-shaped race traits have at least a recognition flag" framing.
+- `app/templates/wiki.html` + `docs/wiki/README.md`: race-features row status flipped to "🟢 partial (v2.399.0) — Phases 1+2+3+4a+5a+6 shipped; Phase 4b/5b filed."
+- `docs/test-harness-coverage.md`: harness total 3167 → 3170.
+
 ## [2.398.0] - 2026-06-16 — "The Tinker's Memory"
 
 **Schema version:** 69

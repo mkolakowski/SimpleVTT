@@ -43379,6 +43379,63 @@ def _pc_heavy_armor_speed_penalty(sheet: "dict | None") -> int:
     return 0
 
 
+def _pc_has_halfling_nimbleness(sheet: "dict | None") -> bool:
+    """v2.399.0 — Halfling Nimbleness recognition gate (race-features
+    Phase 4). RAW PHB p.28: "You can move through the space of any
+    creature that is of a size larger than yours." Race-gated to
+    Halfling (any subrace via `_race_slug_from_sheet`).
+
+    Substrate note (v1 limitation): SimpleVTT's /token/move endpoint
+    doesn't currently enforce the RAW PHB p.190 "moving through other
+    creatures" restriction — any token can move through any other
+    token's space without server-side blocking. The Halfling exemption
+    is therefore vacuously satisfied; this predicate exists so the
+    sheet-json `derived` field can surface the trait to chat-card / UI
+    consumers, and so a future Maps 2.0 / movement-enforcement arc
+    has a stable race-gate to compose against. Phase 4b (full
+    enforcement) is filed; this Phase 4a (recognition flag) ships now.
+    """
+    if not sheet:
+        return False
+    return _race_slug_from_sheet(sheet) == "halfling"
+
+
+def _pc_has_naturally_stealthy(sheet: "dict | None") -> bool:
+    """v2.399.0 — Lightfoot Halfling Naturally Stealthy recognition
+    gate (race-features Phase 5). RAW PHB p.28: "You can attempt to
+    hide even when you are obscured only by a creature that is at
+    least one size larger than you." Lightfoot-subrace-keyed via
+    `_subrace_slug_from_sheet` (the parent "halfling" slug covers
+    both Lightfoot and Stout, so we need the subrace fold to gate
+    Lightfoot-only traits like Naturally Stealthy without the Stout
+    side getting it too).
+
+    Substrate note (v1 limitation): SimpleVTT's Stealth check path
+    doesn't currently enforce a "you need cover or obscurement to
+    hide" gate at all — `/roll` with `stat_key="Stealth"` always
+    rolls regardless of LOS. The Naturally Stealthy exemption is
+    therefore vacuously satisfied; this predicate exists so the
+    sheet-json `derived` field can surface the trait, and so a
+    future Stealth-cover-enforcement arc has a stable subrace gate
+    to compose against. Phase 5b (full enforcement) is filed.
+    """
+    if not sheet:
+        return False
+    # Lightfoot Halfling subrace required. Generic "Halfling" (no
+    # subrace specified) doesn't get it — RAW reserves this trait
+    # to Lightfoot specifically.
+    if _subrace_slug_from_sheet(sheet) == "halfling-lightfoot":
+        return True
+    # Defensive: some demo sheets store just "Halfling" without the
+    # Lightfoot prefix. Accept the parent slug too so the default
+    # PHB-p.28 Halfling (which is Lightfoot per RAW core) gets the
+    # trait. Filed: tighten this if a Stout-subrace demo PC lands
+    # and the gate over-fires.
+    if (sheet.get("race") or "").strip().lower() == "halfling":
+        return True
+    return False
+
+
 def _pc_has_artificers_lore(sheet: "dict | None") -> bool:
     """v2.398.0 — Rock Gnome Artificer's Lore gate (race-features
     Phase 6). RAW PHB p.37: "Whenever you make an Intelligence
@@ -98332,6 +98389,46 @@ async def get_character_sheet_json(
     # this endpoint.
     derived: dict = {}
     if char.template == "dnd5e":
+        # v2.399.0 race-features Phase 4a — Halfling Nimbleness
+        # recognition flag. RAW PHB p.28 lets a Halfling move through
+        # the space of any larger creature. SimpleVTT's /token/move
+        # endpoint doesn't currently enforce the RAW PHB p.190 "moving
+        # through other creatures" restriction at all (any token can
+        # cross any other), so the Halfling exemption is vacuously
+        # satisfied. This derived flag surfaces the trait recognition
+        # so chat-card / UI / harness can attribute the trait without
+        # a Phase 4b movement-substrate ship. Phase 4b (actual
+        # enforcement) is filed for the Maps 2.0 / movement arc.
+        if _pc_has_halfling_nimbleness(sheet):
+            derived["halfling_nimbleness"] = {
+                "applies": True,
+                "source": "Halfling race trait (PHB p.28)",
+                "raw_clause": (
+                    "You can move through the space of any creature "
+                    "that is of a size larger than yours."
+                ),
+                "enforcement_status": "recognized — server-side enforcement filed for Phase 4b",
+            }
+        # v2.399.0 race-features Phase 5a — Lightfoot Halfling Naturally
+        # Stealthy recognition flag. RAW PHB p.28: "You can attempt to
+        # hide even when you are obscured only by a creature that is at
+        # least one size larger than you." Like Halfling Nimbleness
+        # above, the underlying substrate (Stealth-check LOS/cover
+        # enforcement) doesn't currently exist server-side; this flag
+        # surfaces the trait recognition so chat-card / UI / harness
+        # can attribute it, and Phase 5b (actual enforcement) is filed
+        # for the future Stealth-cover arc.
+        if _pc_has_naturally_stealthy(sheet):
+            derived["naturally_stealthy"] = {
+                "applies": True,
+                "source": "Lightfoot Halfling race trait (PHB p.28)",
+                "raw_clause": (
+                    "You can attempt to hide even when you are obscured "
+                    "only by a creature that is at least one size larger "
+                    "than you."
+                ),
+                "enforcement_status": "recognized — server-side enforcement filed for Phase 5b",
+            }
         # v2.397.0 race-features Phase 3 — Hill Dwarf heavy-armor speed
         # bypass. Surface the heavy-armor speed penalty (if any) as a
         # derived field so clients (carry-meter UI, ruler, harness)
