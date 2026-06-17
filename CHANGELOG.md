@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.388.0] - 2026-06-16 — "The Held Trick"
+
+**Schema version:** 69
+
+**Commit summary:** Closes **clause #2c** of the v2.384.0 condition-enforcement audit — the third and final endpoint for the general action gate. `/use_feature` now rejects with 409 `incapacitated` (+ `feature_key` + `char_name` + `source`) when the calling character carries an incapacitating buff. Together with v2.385.0 (Sneak Attack ally-skip), v2.386.0 (`/attack`), and v2.387.0 (`/cast_spell`), this closes the **entire** "general action gate" audit row — paralyzed/stunned/unconscious/petrified/Hideous-Laughter PCs now have no PC-action endpoint they can fire through without `override: true`. Three harness tests via Pip + Cunning Action.
+
+**Description:** Per the v2.384.0 audit doc the suggested per-clause shipping order was 4 clauses; this commit closes clause #2 (the general action gate) end-to-end. After v2.388.0 the per-clause status is:
+
+- ✅ **#1** — Sneak Attack ally-skip (v2.385.0).
+- ✅ **#2a** — `/attack` gate (v2.386.0).
+- ✅ **#2b** — `/cast_spell` gate (v2.387.0).
+- ✅ **#2c** — `/use_feature` gate (this commit).
+- ⚪ **#3** — Grappled ends on grappler incapacitated (next planned).
+- ⚪ **#4** — Charmed can't target charmer (planned).
+
+`_caster_is_incapacitated` is now reused in 4 sites; the shared helper proved itself across the sweep without modification.
+
+MINOR — same shape as the prior two gates; existing /use_feature tests with non-incapacitated callers are unchanged.
+
+### Added
+- `/use_feature` incapacitated gate at the top of `use_feature()`, just after the auth check + before the over-budget gate.
+- `tests/harness/test_use_feature_incapacitated_gate.py` — 3 tests (paralyzed → 409, paralyzed+override → 200, baseline non-paralyzed → 200).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3136 → 3139 (+3 use-feature incapacitated-gate tests).
+
 ## [2.387.0] - 2026-06-16 — "The Quiet Tongue"
 
 **Schema version:** 69

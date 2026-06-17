@@ -23356,6 +23356,25 @@ async def use_feature(
     if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
         raise HTTPException(403, "Not your character")
 
+    # v2.388.0 — RAW PHB p.290 Incapacitated: "An incapacitated
+    # creature can't take actions or reactions." Mirror of the
+    # v2.386.0 /attack + v2.387.0 /cast_spell gates. Closes clause
+    # #2c of the v2.384.0 condition-enforcement audit (the third
+    # and final endpoint for the general action gate). Fires before
+    # the over-budget gate so a blocked attempt doesn't burn the
+    # slot; body.get("override") bypasses (GM convention). Reuses
+    # the v2.385.0 shared `_caster_is_incapacitated` helper.
+    if (
+        not bool(body.get("override"))
+        and _caster_is_incapacitated(campaign_id, int(char.id))
+    ):
+        return JSONResponse(status_code=409, content={
+            "error": "incapacitated",
+            "char_name": char.name,
+            "source": "use_feature",
+            "feature_key": feature_key,
+        })
+
     feature_label = (body.get("label") or feature_key.replace("-", " ").title())[:160]
     if option_key:
         feature_label = f"{feature_label}: {(option_key or '').replace('-', ' ').title()}"
