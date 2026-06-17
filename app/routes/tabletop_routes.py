@@ -24795,6 +24795,134 @@ async def check_stonecunning(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/check_artificers_lore")
+async def check_artificers_lore(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.398.0 — Rock Gnome Artificer's Lore History check
+    (race-features Phase 6).
+
+    Body: ``{character_id, note?: str}``.
+
+    RAW PHB p.37: "Whenever you make an Intelligence (History) check
+    related to magic items, alchemical objects, or technological
+    devices, you can add twice your proficiency bonus, instead of any
+    proficiency bonus you normally apply." Race-gated to Gnome (any
+    subrace via `_race_slug_from_sheet`). The endpoint rolls ``1d20
+    + INT mod + 2 × PB`` (uniform formula regardless of regular
+    History proficiency — RAW grants 2× PB instead of 1× PB) and
+    composes the PC's standing roll_state advantage / disadvantage.
+
+    Returns the roll's total + breakdown; broadcasts a `feature_used`
+    event with ``source: "artificers-lore"`` so chat-card / harness
+    can attribute the bonus. The free-text ``note`` echoes back in
+    `feature_desc` so the GM sees what magic-item / alchemical / tech
+    topic the player was rolling on.
+
+    Errors:
+      400 missing character_id.
+      403 not your character / non-member.
+      404 character not found.
+      409 race_not_gnome (caller isn't a Gnome).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    note = str(body.get("note") or "")[:200]
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_artificers_lore(sheet):
+        return JSONResponse(status_code=409, content={
+            "error": "race_not_gnome",
+            "char_name": char.name,
+            "got_race": sheet.get("race") or "",
+        })
+
+    try:
+        int_score = int((sheet.get("abilities") or {}).get("INT") or 10)
+    except (TypeError, ValueError):
+        int_score = 10
+    int_mod = (int_score - 10) // 2
+    try:
+        pb = int(sheet.get("proficiency_bonus") or 2)
+    except (TypeError, ValueError):
+        pb = 2
+    total_bonus = int_mod + (2 * pb)
+    sign = "+" if total_bonus >= 0 else "-"
+    expr = f"1d20{sign}{abs(total_bonus)}"
+    expr, roll_state_applied = _apply_roll_state(
+        expr, sheet.get("roll_state"),
+    )
+    try:
+        result = dice_mod.roll(expr)
+    except dice_mod.DiceParseError:
+        raise HTTPException(400, "invalid roll expression")
+    total = int(result.total or 0)
+    breakdown = result.breakdown or ""
+
+    feature_desc_parts = [
+        f"{char.name} rolls a History check on magic items / alchemy / tech: ",
+        f"1d20 + INT {int_mod:+d} + 2× PB {pb} = ",
+        f"{breakdown} = {total}",
+    ]
+    if note:
+        feature_desc_parts.append(f" (topic: {note})")
+    if roll_state_applied:
+        feature_desc_parts.append(f" [{roll_state_applied}]")
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": int(char.id),
+            "character_name": char.name,
+            "user_color": char.color,
+            "feature_name": "🔧 Artificer's Lore — History check (2× PB)",
+            "feature_desc": "".join(feature_desc_parts),
+            "source": "artificers-lore",
+            "stat_key": "history",
+            "stat_ability": "INT",
+            "int_mod": int_mod,
+            "proficiency_bonus": pb,
+            "double_pb": 2 * pb,
+            "expression": expr,
+            "breakdown": breakdown,
+            "total": total,
+            "note": note,
+            "roll_state_applied": roll_state_applied or None,
+        },
+    })
+
+    return {
+        "ok": True,
+        "character_id": int(char.id),
+        "character_name": char.name,
+        "expression": expr,
+        "breakdown": breakdown,
+        "total": total,
+        "int_mod": int_mod,
+        "proficiency_bonus": pb,
+        "double_pb": 2 * pb,
+        "roll_state_applied": roll_state_applied or None,
+        "note": note,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_bardic_inspiration")
 async def use_bardic_inspiration(
     campaign_id: int,
@@ -43249,6 +43377,20 @@ def _pc_heavy_armor_speed_penalty(sheet: "dict | None") -> int:
         if str_score < req:
             return 10
     return 0
+
+
+def _pc_has_artificers_lore(sheet: "dict | None") -> bool:
+    """v2.398.0 — Rock Gnome Artificer's Lore gate (race-features
+    Phase 6). RAW PHB p.37: "Whenever you make an Intelligence
+    (History) check related to magic items, alchemical objects, or
+    technological devices, you can add twice your proficiency bonus,
+    instead of any proficiency bonus you normally apply." Race-gated
+    to Gnome (any subrace — Rock, Forest, generic; `_race_slug_from_sheet`
+    folds Rock/Forest into the parent "gnome" slug).
+    """
+    if not sheet:
+        return False
+    return _race_slug_from_sheet(sheet) == "gnome"
 
 
 def _pc_has_stonecunning(sheet: "dict | None") -> bool:

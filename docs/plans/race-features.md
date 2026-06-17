@@ -1,6 +1,6 @@
 # Race features — close the SRD races gap to 100%
 
-> **Status:** 🟢 partial (v2.397.0). Drives the **Races ~90% → 100%** axis of the [SRD audit](../../TODO.md#srd-5e-audit-v23900-refresh). Phase 1 (Tiefling Infernal Legacy racial Hellish Rebuke) **shipped v2.395.0**. Phase 2 (Hill Dwarf Stonecunning) **shipped v2.396.0**. Phase 3 (Hill Dwarf heavy-armor speed bypass) **shipped v2.397.0**. Pre-existing: Half-Orc Savage Attacks shipped v2.99.23 (reconciled v2.394.0 from stale-audit). Phases 4–6 still to ship + the optional Phase 7 Trance polish + Phase 1b/1c Infernal Legacy tail follow-ups.
+> **Status:** 🟢 partial (v2.398.0). Drives the **Races ~90% → 100%** axis of the [SRD audit](../../TODO.md#srd-5e-audit-v23900-refresh). Phase 1 (Tiefling Infernal Legacy racial Hellish Rebuke) **shipped v2.395.0**. Phase 2 (Hill Dwarf Stonecunning) **shipped v2.396.0**. Phase 3 (Hill Dwarf heavy-armor speed bypass) **shipped v2.397.0**. Phase 6 (Rock Gnome Artificer's Lore) **shipped v2.398.0**. Pre-existing: Half-Orc Savage Attacks shipped v2.99.23 (reconciled v2.394.0 from stale-audit). Phases 4–5 still to ship (Halfling Nimbleness + Naturally Stealthy) + the optional Phase 7 Trance polish + Phase 1b/1c Infernal Legacy tail follow-ups.
 
 ## Why this plan exists
 
@@ -43,7 +43,7 @@ Cells: ✅ wired in engine code · 🟠 inert sheet seed (no engine read) · ⚪
 | | **Naturally Stealthy** | ⚪ | — (RAW: hide while obscured by creature ≥1 size larger) |
 | **Rock Gnome** | Gnome Cunning (INT/WIS/CHA vs magic) | ✅ | `_RACE_SAVE_ADVANTAGES["gnome"]` (`is_spell_save: True`) |
 | | Darkvision 60 ft | 🟠 | seed |
-| | **Artificer's Lore** | ⚪ | — (RAW: double PB on History checks about magic items / alchemical / tech) |
+| | Artificer's Lore | ✅ | `_pc_has_artificers_lore(sheet)` + `POST /check_artificers_lore` (v2.398.0) — twin of Stonecunning (Phase 2); rolls `1d20 + INT mod + 2 × PB`. Covered by `tests/harness/test_check_artificers_lore.py`. |
 | | **Tinker** | ⚪ | — (RAW: craft tiny clockwork; no crafting substrate exists — **out-of-scope by design**) |
 | **Tiefling** | Hellish Resistance (fire) | ✅ | `damage_resistances: ["fire"]` seed |
 | | Darkvision 60 ft | 🟠 | seed |
@@ -100,7 +100,7 @@ Each phase = one MINOR commit + 1 happy-path test + 1 error-path test (race mism
 3. **Phase 3 — Hill Dwarf Speed-not-reduced-by-heavy-armor** (MINOR, **shipped v2.397.0**). Installed `_HEAVY_ARMOR_STR_REQ` constant + `_pc_heavy_armor_speed_penalty(sheet)` predicate + `_apply_heavy_armor_speed_penalty(base, sheet)` helper folded into `_speed_walk_from_sheet`. Penalty fires for non-Dwarves whose STR is below the equipped heavy armor's requirement; Dwarves are RAW-exempt. `/sheet-json` surfaces a `derived.heavy_armor_speed_penalty: {penalty_ft, source}` block. 4 tests at `tests/harness/test_heavy_armor_speed_dwarf.py`: Tavik chain mail no-penalty / Tavik plate Dwarf-exemption / non-Dwarf plate penalty fires / non-Dwarf plate sufficient-STR no-penalty.
 4. **Phase 4 — Halfling Nimbleness** (MINOR). Move-through-larger gate at `/token/move`. Pip (existing Lightfoot Halfling Rogue) is the fixture.
 5. **Phase 5 — Halfling Naturally Stealthy** (MINOR). Stealth-check size-cover gate. Pip is the fixture; cover combatant = an Orc or larger creature.
-6. **Phase 6 — Rock Gnome Artificer's Lore** (MINOR). Twin of Phase 2 with topic = magic items / alchemical / tech. Existing Rock Gnome demo (Mira) is the fixture.
+6. **Phase 6 — Rock Gnome Artificer's Lore** (MINOR, **shipped v2.398.0**). Twin of Phase 2: dedicated `POST /check_artificers_lore` endpoint with topic = magic items / alchemical / tech. No demo PC is a Rock Gnome today (Mira is a Wood Elf, all others non-Gnome), so the harness uses Tavik PATCHed to "Rock Gnome" with try/finally restore. 4 harness tests at `tests/harness/test_check_artificers_lore.py`.
 7. **Phase 7 — Elf Trance (flavor)** (PATCH). Long-rest UI card flavor for Elves. Optional polish ship.
 
 ## Out-of-scope by design

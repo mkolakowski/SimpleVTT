@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.398.0] - 2026-06-16 — "The Tinker's Memory"
+
+**Schema version:** 69
+
+**Commit summary:** Ships **race-features plan Phase 6** — **Rock Gnome Artificer's Lore** (RAW PHB p.37). Twin of v2.396.0 Stonecunning. New `_pc_has_artificers_lore(sheet)` race-gate predicate (any Gnome subrace via `_race_slug_from_sheet`) + new `POST /api/campaign/{cid}/check_artificers_lore` endpoint that rolls `1d20 + INT mod + 2 × PB` and broadcasts a `feature_used(source=artificers-lore, …)` event. Optional free-text `note` echoes back into the chat-card so the GM sees what magic-item / alchemical / tech topic the player was rolling on. 4 harness tests at `test_check_artificers_lore.py`. Because no demo PC ships as a Gnome (Mira is a Wood Elf, all others non-Gnome), the tests PATCH Tavik's race to "Rock Gnome" for test scope with try/finally restoration.
+
+**Description:** The endpoint is structurally identical to v2.396.0 `/check_stonecunning` — same formula (`1d20 + INT mod + 2 × PB`), same race-gate shape (different `_race_slug_from_sheet` target), same chat-card / harness contract (`source=artificers-lore` vs `source=stonecunning`). RAW p.37 differs from Stonecunning's RAW p.20 only in the topic ("magic items, alchemical objects, or technological devices" vs "stonework"); the topic is left to player free-text + GM adjudication via the optional `note` body field.
+
+This phase doesn't change the substrate at all — it's the cleanest possible "ship more race traits on the existing pattern" commit. The two traits stay distinct endpoints (rather than a single `/check_double_pb_history` with a polymorphic topic) so the chat-card / harness can attribute the cast to the correct race trait without disambiguating topic strings; the duplication is a few dozen lines of straightforward endpoint code in exchange for cleaner provenance.
+
+MINOR — additive race-gate predicate + additive endpoint + 4 tests; no existing roll paths change.
+
+### Added
+- `_pc_has_artificers_lore(sheet)` race-gate predicate (any Gnome subrace).
+- `POST /api/campaign/{cid}/check_artificers_lore` endpoint — rolls `1d20 + INT mod + 2 × PB`, broadcasts `feature_used(source=artificers-lore)`.
+- `tests/harness/test_check_artificers_lore.py` — 4 tests (happy path + non-Gnome 409 + missing-id 400 + note echo).
+
+### Changed
+- `docs/plans/race-features.md`: Artificer's Lore row ⚪ → ✅; per-phase shipping list Phase 6 marked shipped. Status banner refreshed to v2.398.0.
+- `app/templates/wiki.html` + `docs/wiki/README.md`: race-features row status flipped to "🟢 partial (v2.398.0) — Phases 1+2+3+6 shipped; 2 phase ships remaining."
+- `docs/test-harness-coverage.md`: harness total 3163 → 3167.
+
 ## [2.397.0] - 2026-06-16 — "The Unburdened Stride"
 
 **Schema version:** 69

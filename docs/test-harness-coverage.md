@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3163 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.397.0, 2026-06-16).
+**Total tests:** 3167 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.398.0, 2026-06-16).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -813,6 +813,16 @@ v2.397.0 — race-features plan Phase 3: Hill Dwarf heavy-armor speed bypass. Ne
 | `test_dwarf_in_plate_no_penalty_via_race_exemption` | Tavik PATCHed into plate (STR req 15, STR 14 < 15) → `derived` STILL has no `heavy_armor_speed_penalty` key (Dwarf exemption). |
 | `test_non_dwarf_in_plate_takes_penalty` | Tavik PATCHed to race "Human" + plate → `derived.heavy_armor_speed_penalty.penalty_ft = 10`; source mentions "plate". |
 | `test_non_dwarf_sufficient_str_no_penalty` | Tavik PATCHed to race "Human" + plate + STR 15 → no penalty (STR ≥ req). Controls for the STR-threshold gate independently of the race gate. |
+
+### `test_check_artificers_lore.py`
+v2.398.0 — race-features plan Phase 6: Rock Gnome Artificer's Lore. Twin of `test_check_stonecunning.py` shipped v2.396.0. New `_pc_has_artificers_lore(sheet)` race-gate predicate (any Gnome subrace via `_race_slug_from_sheet`) + new `POST /api/campaign/{cid}/check_artificers_lore` endpoint that rolls `1d20 + INT mod + 2 × PB` and broadcasts `feature_used(source=artificers-lore, …)`. Tavik PATCHed-to-Rock-Gnome is the test fixture since no demo PC ships as a Gnome today; the race is restored on test teardown.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_artificers_lore_rolls_with_double_pb_for_gnome` | Tavik PATCHed to "Rock Gnome"; rolls; response total in [7, 26] (1d20 + 0 INT + 6 = 2 × PB 3); feature_used carries `source=artificers-lore`, `stat_key=history`, `stat_ability=INT`, math fields. |
+| `test_artificers_lore_rejects_non_gnome` | Tavik (real seed = Hill Dwarf) → 409 `race_not_gnome` with `got_race` echo. Race-gate regression guard. |
+| `test_artificers_lore_missing_character_id_400` | Body without `character_id` → 400. Input-gate regression guard. |
+| `test_artificers_lore_echoes_note` | Tavik PATCHed to "Rock Gnome" + `note="Wand of Magic Detection"` → response carries note verbatim; feature_used `feature_desc` contains the note text. |
 
 ### `test_check_stonecunning.py`
 v2.396.0 — race-features plan Phase 2: Hill Dwarf Stonecunning History check. New `_pc_has_stonecunning(sheet)` race-gate predicate + new `POST /api/campaign/{cid}/check_stonecunning` endpoint that rolls `1d20 + INT mod + 2 × PB` (RAW: double PB even when not proficient in History) and emits a `feature_used(source=stonecunning, stat_key=history, stat_ability=INT, …)` broadcast. Composes the PC's standing roll-state advantage/disadvantage. Tavik Stonebrow (Hill Dwarf Cleric Lv 8, INT 10, PB +3) is the demo fixture.
