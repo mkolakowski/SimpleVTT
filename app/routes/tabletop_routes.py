@@ -37981,6 +37981,25 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "(GM-narrated: remove the fan from inventory)."
         ),
     },
+    # v2.403.7 — magic-items-automation Phase 9.2 (Bucket A holdout #2):
+    # Medallion of Thoughts (RAW DMG p.182). 3 charges + 1d3/dawn
+    # recharge; expend 1 charge to cast detect thoughts (DC 13 WIS). The
+    # save + thought-reading itself stays GM-narrated; the engine tracks
+    # the charge counter. Uses the generic announce_only handler.
+    "medallion-of-thoughts": {
+        "key": "read-thoughts",
+        "name": "Cast Detect Thoughts (Medallion)",
+        "resource_key": "medallion-of-thoughts",
+        "requires_attunement": True,
+        "min_charges": 1,
+        "max_charges": 1,
+        "narration": (
+            "expended 1 charge from the medallion and cast Detect "
+            "Thoughts (save DC 13 WIS) on a creature within 30 ft "
+            "(GM-narrated: probe the target's surface thoughts for 1 "
+            "minute on concentration)."
+        ),
+    },
 }
 
 
@@ -87446,6 +87465,8 @@ async def use_item_action(
     # v2.403.5: multi-dose consumables — restorative-ointment (3 doses
     # avg) + dust-of-dryness (7 pinches) + sovereign-glue (4 oz) +
     # bag-of-beans (7 beans).
+    # v2.403.7: Bucket A holdout #2 — medallion-of-thoughts (3 + 1d3/dawn,
+    # detect-thoughts GM-narrated).
     if slug in (
         "bowl-of-commanding-water-elementals",
         "brazier-of-commanding-fire-elementals",
@@ -87467,6 +87488,7 @@ async def use_item_action(
         "dust-of-dryness",
         "sovereign-glue",
         "bag-of-beans",
+        "medallion-of-thoughts",
     ):
         return await _use_item_action_announce_only(
             db, campaign_id, char, item, sheet, catalog, slug,

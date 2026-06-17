@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.403.7] - 2026-06-17 — "The Quiet Probe"
+
+**Schema version:** 69
+
+**Commit summary:** Closes the **Bucket A holdouts** — second of the two items the v2.367.0 plan-update flagged as "inherently GM-narrated." **Medallion of Thoughts** (RAW DMG p.182, on Magnus) wires through the generic `_use_item_action_announce_only` substrate with 3 charges + 1d3/dawn recharge. The detect-thoughts probe + DC 13 WIS save itself stays GM-narrated; the engine tracks the charge counter. With this commit, **every charge-bearing Bucket D item + both Bucket A holdouts are now machine-tracked** — the magic-items-automation Phase 9.2 arc is closed.
+
+**Description:** The medallion is the lightest commit of the v2.403.x arc — a pure content drop-in on the v2.403.2 multi-charge per-day shape (catalog row + resource row + dispatch entry + harness test). No new engine code; the substrate built across v2.403.0 → v2.403.6 absorbs the last item without modification. Worth noting: the v2.367.0 closure note framed both wind-fan AND medallion-of-thoughts as "no clean combat mechanic — inherently GM-narrated." That framing wasn't wrong about the *effect*, but it underweighted the value of tracking the *counter*. The Phase 9.2 substrate reframed the engine surface as the per-day-charge bookkeeping rather than the spell-effect resolution, which makes both items shippable.
+
+**Why "The Quiet Probe":** detect-thoughts is the quiet psychic interrogation — the medallion's whole point is to surface thoughts the target hasn't said out loud. The "probe" pun closes the arc on a quieter note than "The Tearing Fan."
+
+PATCH — 1 new wired item + 1 paired resource row + 1 new harness test. Magic items category remains **235/239 wired (~98%)** in the audit denominator; **all 22 charge-bearing Bucket D items + both 2 Bucket A holdouts** now machine-track their charges. The arc that started in v2.403.0 closes here.
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_MAGIC_ITEM_ACTIONS` entry for `medallion-of-thoughts` (3 charges; attunement required). Dispatch tuple for the announce_only branch extended.
+- `app/demo_seed.py`: new `resources[]` row on Magnus Hexbinder (3/3, `charge_recovery: "1d3"`, `reset: "long"`).
+- `tests/harness/test_use_item_action_announce_only.py`: new test `test_medallion_of_thoughts_charge_decrement` exercising the 3-charge drain + 4th → 409 + long-rest 1d3-bounded refill.
+
+### Changed
+- `docs/plans/magic-items-automation.md`: Bucket A holdout for `medallion-of-thoughts` flips to ✅ shipped v2.403.7. Phase 9.2 narrative reflects arc closure (22 Bucket D + 2 Bucket A items wired; nothing left to wire on the charge-tracking surface).
+- `docs/test-harness-coverage.md`: total-test-count bump (+1) + the announce-only file entry grows with the medallion test.
+
 ## [2.403.6] - 2026-06-17 — "The Tearing Fan"
 
 **Schema version:** 69

@@ -631,6 +631,75 @@ async def test_wind_fan_overuse_survives_on_high_roll(gm_client, roster):
     )
 
 
+async def test_medallion_of_thoughts_charge_decrement(gm_client, roster):
+    """v2.403.7: Medallion of Thoughts (3 charges + 1d3/dawn, attunement)
+    — RAW Bucket A holdout #2. Magnus carries it as vault loot. Test
+    PATCHes equipped+attuned, spends 1 charge (3 → 2), confirms 409
+    after draining, then long-rest dice-refill bounds 0 < new ≤ 3."""
+    char = roster["Magnus Hexbinder"]
+    prior = await _patch_inventory_item(
+        gm_client, char["id"], "medallion-of-thoughts",
+        equipped=True, attuned=True,
+    )
+    try:
+        # Reset resource to 3/3.
+        r = await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-json",
+        )
+        sheet = (r.json() or {}).get("sheet") or {}
+        resources = list(sheet.get("resources") or [])
+        for row in resources:
+            if isinstance(row, dict) and row.get("key") == "medallion-of-thoughts":
+                row["current"] = 3
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-fields",
+            json={"resources": resources},
+        )
+
+        sheet = await _sheet(gm_client, char["id"])
+        idx = _slug_index(sheet.get("inventory") or [], "medallion-of-thoughts")
+        assert idx >= 0
+
+        # 1st probe drains 3 → 2.
+        resp = await _invoke(gm_client, char["id"], idx, "read-thoughts")
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["resource"]["current"] == 2
+
+        # Two more probes drain to 0.
+        for expected_after in (1, 0):
+            resp = await _invoke(gm_client, char["id"], idx, "read-thoughts")
+            assert resp.status_code == 200, resp.text
+            assert resp.json()["resource"]["current"] == expected_after
+
+        # 4th probe → 409.
+        fourth = await _invoke(gm_client, char["id"], idx, "read-thoughts")
+        assert fourth.status_code == 409, fourth.text
+
+        # Long rest restores via the 1d3 charge_recovery (dice-bounded).
+        await _long_rest(gm_client, char["id"])
+        sheet_rested = await _sheet(gm_client, char["id"])
+        new_cur = _resource_current(sheet_rested, "medallion-of-thoughts")
+        assert new_cur is not None and 1 <= new_cur <= 3, \
+            f"medallion 1d3-recharge should land in 1..3, got {new_cur}"
+    finally:
+        await _patch_inventory_item(
+            gm_client, char["id"], "medallion-of-thoughts", **prior,
+        )
+        # Restore to 3/3 for downstream tests.
+        r = await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-json",
+        )
+        sheet = (r.json() or {}).get("sheet") or {}
+        resources = list(sheet.get("resources") or [])
+        for row in resources:
+            if isinstance(row, dict) and row.get("key") == "medallion-of-thoughts":
+                row["current"] = 3
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/sheet-fields",
+            json={"resources": resources},
+        )
+
+
 async def test_multi_dose_consumable_containers_drain(gm_client, roster):
     """v2.403.5: multi-dose consumable containers (restorative-ointment
     3 doses, dust-of-dryness 7 pinches, sovereign-glue 4 oz,

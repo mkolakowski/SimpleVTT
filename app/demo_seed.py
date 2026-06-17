@@ -3983,6 +3983,22 @@ def _warlock_sheet(name: str) -> dict:
                 "desc": "1/long rest: cast Compulsion using a Warlock spell slot — routed via /cast_compulsion with class_slug=\"warlock\" + via_invocation=\"bewitching-whispers\" per v2.99.148.",
                 "manual": False,
             },
+            # v2.403.7 — magic-items-automation Phase 9.2 Bucket A
+            # holdout #2: Medallion of Thoughts (RAW DMG p.182). 3
+            # charges + 1d3/dawn recharge. The medallion is seeded
+            # INERT on Magnus (vault loot at line ~7303); the harness
+            # PATCHes equipped+attuned. The detect-thoughts probe + DC
+            # 13 WIS save are GM-narrated; this row backs the charge
+            # decrement.
+            {
+                "key": "medallion-of-thoughts",
+                "name": "Medallion of Thoughts",
+                "current": 3, "max": 3, "reset": "long",
+                "charge_recovery": "1d3",
+                "source": "item-medallion-of-thoughts",
+                "desc": "3 charges. Action: expend 1 to cast Detect Thoughts (DC 13 WIS) — probe a target's surface thoughts for 1 minute (concentration). Regains 1d3 charges at dawn. RAW DMG p.182.",
+                "manual": False,
+            },
             # v2.99.149 — Sign of Ill Omen 1/long-rest resource.
             # /cast_bestow_curse with via_invocation="sign-of-ill-omen"
             # gates on this row being current >= 1 + decrements on
