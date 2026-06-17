@@ -10,6 +10,39 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.390.0] - 2026-06-16 — "The Charmer's Shield"
+
+**Schema version:** 69
+
+**Commit summary:** Closes **clause #4** of the v2.384.0 condition-enforcement audit — the final clause in the suggested per-clause shipping order. RAW PHB p.290 Charmed clause 1: "A charmed creature can't attack the charmer or target the charmer with harmful abilities or magical effects." Adds the `_attacker_is_charmed_by_target(campaign_id, attacker_char_id, target_char_id)` helper that walks the attacker's combatant buff list for a `charmed` buff whose `source_char_id` matches the target's char_id. `/attack` now returns 409 `charmed_cannot_target_charmer` when the predicate fires. `body.get("override")` bypasses. Four harness tests via Pip + Caelan + Krieger.
+
+**Description:** The v2.384.0 audit's per-clause list is now **fully closed**:
+
+- ✅ **#1** — Sneak Attack ally-skip (v2.385.0).
+- ✅ **#2a** — `/attack` gate (v2.386.0).
+- ✅ **#2b** — `/cast_spell` gate (v2.387.0).
+- ✅ **#2c** — `/use_feature` gate (v2.388.0).
+- ✅ **#3** — Grappled ends on grappler incapacitated (v2.389.0).
+- ✅ **#4** — Charmed can't target charmer (this commit).
+
+Six clauses closed across six commits over a single session arc. The audit doc's suggested-shipping-order list is now empty.
+
+**One filed follow-up:** the gate only fires when the charmed buff has `source_char_id` populated. Existing charmed-install sites in `tabletop_routes.py` (the v2.32.0 save-resolution branch around line 18837, plus lair-action installs at line 25553) don't always set `source_char_id`. Extending them is a per-install-site backfill — for v2.390.0 the gate ships shipped + harness-validated against hand-seeded buffs; subsequent commits can iterate per install site.
+
+**Scope-down rationale:** Per the audit doc, clause #4 was estimated as ~60 lines + 3 tests spanning `/attack` + `/cast_spell` + `/use_feature`. v2.390.0 ships JUST `/attack` to keep the diff tight; the v2.387.0/v2.388.0 pattern showed the mirror to the other two endpoints is straightforward (~10 lines each) and can land as v2.391.0/v2.392.0 follow-ups.
+
+Charmed clause 2 (charmer has advantage on social ability checks) is permanently GM-narrated per the audit doc — no social-check substrate exists. That clause is out-of-scope for v2.x; deferred to a future 3.x social-check arc.
+
+MINOR — additive helper + one endpoint gate + 4 tests; existing /attack tests with non-charmed attackers unchanged.
+
+### Added
+- `_attacker_is_charmed_by_target(campaign_id, attacker_char_id, target_char_id) -> bool` helper in `app/routes/tabletop_routes.py` (sits next to `_caster_is_incapacitated`).
+- `/attack` charmed-cannot-target-charmer gate (just after the v2.386.0 incapacitated gate).
+- `tests/harness/test_attack_charmed_cannot_target_charmer.py` — 4 tests: charmed → 409; charmed+override → 200; charmed attacking third party → 200 (target-specific); charmed buff without `source_char_id` → 200 (silent pass-through).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 3141 → 3145 (+4 charmed-cannot-target-charmer tests).
+
 ## [2.389.0] - 2026-06-16 — "The Broken Hold"
 
 **Schema version:** 69

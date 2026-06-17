@@ -2008,6 +2008,55 @@ def _combatant_is_incapacitated(combatant: dict | None) -> bool:
     return False
 
 
+def _attacker_is_charmed_by_target(
+    campaign_id: int, attacker_char_id: int, target_char_id: int | None,
+) -> bool:
+    """v2.390.0 — return True when the attacker carries a `charmed`
+    buff whose `source_char_id` matches the target's char_id. Closes
+    clause #4 of the v2.384.0 condition-enforcement audit (RAW PHB
+    p.290 Charmed clause 1: "A charmed creature can't attack the
+    charmer or target the charmer with harmful abilities or magical
+    effects.").
+
+    The gate only fires when the charmed buff carries `source_char_id`
+    — buffs installed without that field (lair actions, environment
+    charms) silently pass. Existing charmed-install sites will need
+    to populate `source_char_id` for the gate to fire in their flows;
+    that's a filed follow-up. v2.390.0 ships the gate + the helper;
+    real-game install-site updates land in subsequent commits.
+
+    Returns False on missing inputs, missing battle, attacker not in
+    init, or no charmed buff matches the target.
+    """
+    if not attacker_char_id or attacker_char_id <= 0:
+        return False
+    if not target_char_id or int(target_char_id) <= 0:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if not isinstance(c, dict):
+            continue
+        if not c.get("char_id") or int(c.get("char_id")) != int(attacker_char_id):
+            continue
+        for b in c.get("buffs") or []:
+            if not isinstance(b, dict):
+                continue
+            if str(b.get("key") or "").strip().lower() != "charmed":
+                continue
+            _src = b.get("source_char_id")
+            if _src is None:
+                continue
+            try:
+                if int(_src) == int(target_char_id):
+                    return True
+            except (TypeError, ValueError):
+                continue
+        return False
+    return False
+
+
 def _caster_is_incapacitated(campaign_id: int, char_id: int) -> bool:
     """v2.386.0 — return True when the active battle has a combatant
     for ``char_id`` whose buff list carries any incapacitating key.
@@ -89560,6 +89609,31 @@ async def use_attack(
             "source": "attack",
             "label": name,
         })
+
+    # v2.390.0 — RAW PHB p.290 Charmed clause 1: "A charmed creature
+    # can't attack the charmer or target the charmer with harmful
+    # abilities or magical effects." Closes clause #4 of the v2.384.0
+    # condition-enforcement audit. Gate looks up the target combatant
+    # (when target_combatant_id is supplied), resolves the target's
+    # char_id, and rejects with 409 charmed_cannot_target_charmer when
+    # the attacker carries a charmed buff whose source_char_id matches
+    # the target. body.get("override") bypasses (GM convention).
+    # Filed: extending charmed-install sites to populate source_char_id
+    # on the buff (without it, this gate stays silent in real flows —
+    # v2.390.0 ships the gate; install-site updates are follow-up).
+    if not bool(body.get("override")) and target_combatant_id:
+        _tc = _lookup_combatant(campaign_id, target_combatant_id)
+        if _tc and _tc.get("char_id"):
+            if _attacker_is_charmed_by_target(
+                campaign_id, int(char.id), int(_tc.get("char_id")),
+            ):
+                return JSONResponse(status_code=409, content={
+                    "error": "charmed_cannot_target_charmer",
+                    "char_name": char.name,
+                    "source": "attack",
+                    "label": name,
+                    "target_combatant_id": target_combatant_id,
+                })
 
     # v2.6.1: Phase 4 over-budget gate. Every weapon attack consumes the
     # action slot (bonus-action attacks are filed under feature/Class
