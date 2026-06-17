@@ -2967,6 +2967,19 @@ def _bard_sheet(name: str) -> dict:
                 "desc": "10 charges; expend 1 to cast charm person / command / comprehend languages using your spell save DC. Regain 1d8+2 at dawn.",
                 "manual": False,
             },
+            # v2.403.1 — magic-items-automation Phase 9.2 batch 2:
+            # Cape of the Mountebank (RAW DMG p.157) — 1/dawn dimension
+            # door. The cape is seeded equipped on Lyra (line ~2899).
+            # Teleport + smoke cloud are GM-narrated; this resource row
+            # backs the /use_item_action endpoint's charge decrement.
+            {
+                "key": "cape-of-the-mountebank",
+                "name": "Cape of the Mountebank",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "item-cape-of-the-mountebank",
+                "desc": "1/dawn. Action: cast Dimension Door — teleport up to 500 ft. Both spaces are lightly obscured by brimstone-scented smoke until end of your next turn (GM-narrated). RAW DMG p.157.",
+                "manual": False,
+            },
             # v2.326.0 — Gem of Brightness charge pool (RAW DMG p.172): 50
             # charges, NO recharge (reset: "none") — when the gem is depleted
             # it becomes a non-magical 50 gp jewel. Each beam use decrements
@@ -4858,6 +4871,20 @@ def _barbarian_sheet(name: str) -> dict:
                 "desc": "1/dawn. Place on the ground + speak the command word: an earth elemental appears within 30 ft. Make a CHA check vs the elemental to command it (GM-narrated, concentration up to 1 hour).",
                 "manual": False,
             },
+            # v2.403.1 — magic-items-automation Phase 9.2 batch 2:
+            # Iron Bands of Binding (RAW DMG p.176) — 1/dawn restrain
+            # via ranged attack. The bands are seeded equipped on Krieger
+            # (line 4769). The throw + restrain mechanic are GM-narrated;
+            # this resource row backs the /use_item_action endpoint's
+            # charge decrement.
+            {
+                "key": "iron-bands-of-binding",
+                "name": "Iron Bands of Binding",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "item-iron-bands-of-binding",
+                "desc": "1/dawn. Action: hurl the sphere up to 60 ft at a Huge-or-smaller target. Ranged attack with DEX + PB; on a hit the bands unfold and restrain (DC 20 STR to escape; bonus action to release). RAW DMG p.176.",
+                "manual": False,
+            },
         ],
         # v2.18.2: clickable Class abilities buttons. Rage's curated
         # entry is slot:'bonus' (since v2.6.0); clicking announces +
@@ -5102,6 +5129,19 @@ def _barbarian_beast_sheet(name: str) -> dict:
                 "source": "barbarian Lv 1",
                 "class_slug": "barbarian",
                 "desc": "Bonus action — enter rage: +2 damage on STR melee attacks (Lv 1-8), advantage on STR checks / saves, resistance to bludgeoning / piercing / slashing. 3 uses at Lv 3-5; refreshes on long rest.",
+                "manual": False,
+            },
+            # v2.403.1 — magic-items-automation Phase 9.2 batch 2:
+            # Bag of Tricks (RAW DMG p.154) — 3/dawn pulls. The bag is
+            # seeded equipped on Brakka (line ~5104). The random-animal
+            # roll + 10-min duration are GM-narrated; this resource row
+            # backs the /use_item_action endpoint's per-pull decrement.
+            {
+                "key": "bag-of-tricks",
+                "name": "Bag of Tricks",
+                "current": 3, "max": 3, "reset": "long",
+                "source": "item-bag-of-tricks",
+                "desc": "3 pulls/dawn. Action: pull a fuzzy ball + throw up to 20 ft; it transforms into a random animal (rolled per bag color) that's friendly for 10 min or until 0 HP. RAW DMG p.154.",
                 "manual": False,
             },
         ],
@@ -5952,6 +5992,19 @@ def _sorcerer_sheet(name: str) -> dict:
                 "source": "Tiefling Infernal Legacy",
                 "class_slug": "tiefling",
                 "desc": "Action (Tiefling Lv 5+): cast Darkness without expending a spell slot. 1/long rest.",
+                "manual": False,
+            },
+            # v2.403.1 — magic-items-automation Phase 9.2 batch 2:
+            # Efreeti Bottle (RAW DMG p.167) — 1/dawn release. The bottle
+            # is seeded equipped on Zara (line ~5920). The d100 release
+            # table + efreeti service are GM-narrated; this resource row
+            # backs the /use_item_action endpoint's charge decrement.
+            {
+                "key": "efreeti-bottle",
+                "name": "Efreeti Bottle",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "item-efreeti-bottle",
+                "desc": "1/dawn. Action: pull the stopper — smoke pours out and (per a d100 roll) the efreeti within attacks, grants 3 wishes, or serves for 1 hour. RAW DMG p.167.",
                 "manual": False,
             },
             # v2.208.0 — Eyes of Charming charge pool (RAW DMG p.168):

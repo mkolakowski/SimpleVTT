@@ -36,7 +36,7 @@ The generalized `_use_item_action_announce_only(db, campaign_id, char, item, she
 
 Adding the 25th item is a 2-line catalog row + a dispatch entry + a per-PC `resources[]` row in the demo seed. No engine code changes after v2.403.0.
 
-### Substrate ship (v2.403.0)
+### Substrate ship (v2.403.0–v2.403.1)
 
 | Slug | RAW | Status |
 |---|---|---|
@@ -44,6 +44,10 @@ Adding the 25th item is a 2-line catalog row + a dispatch entry + a per-PC `reso
 | `brazier-of-commanding-fire-elementals` | 1/dawn summon fire elemental | ✅ shipped v2.403.0 |
 | `censer-of-controlling-air-elementals` | 1/dawn summon air elemental | ✅ shipped v2.403.0 |
 | `stone-of-controlling-earth-elementals` | 1/dawn summon earth elemental | ✅ shipped v2.403.0 |
+| `cape-of-the-mountebank` | 1/dawn dimension door | ✅ shipped v2.403.1 |
+| `iron-bands-of-binding` | 1/dawn restrain via ranged attack | ✅ shipped v2.403.1 |
+| `efreeti-bottle` | 1/dawn release (d100 table outcome) | ✅ shipped v2.403.1 |
+| `bag-of-tricks` | 3/dawn pulls (random animal per bag color) | ✅ shipped v2.403.1 (first multi-charge pool on the substrate) |
 
 All four share an identical RAW shape (1/dawn, no attunement, summon-elemental + CHA-check control); the single harness file (`test_use_item_action_announce_only.py`) covers all four through one parameterized happy-path test + a 409-second-use test + a long-rest-restore test.
 
@@ -51,7 +55,7 @@ All four share an identical RAW shape (1/dawn, no attunement, summon-elemental +
 
 Grouped by template. Each batch ships as one PATCH commit.
 
-**1/dawn (single charge, dawn reset).** `cape-of-the-mountebank`, `plate-armor-of-etherealness`, `iron-bands-of-binding`, `efreeti-bottle`, `bag-of-tricks` (3/dawn — multi-charge under the same template).
+**1/dawn (single charge, dawn reset).** ~`cape-of-the-mountebank`~ ✅ v2.403.1, `plate-armor-of-etherealness`, ~`iron-bands-of-binding`~ ✅ v2.403.1, ~`efreeti-bottle`~ ✅ v2.403.1, ~`bag-of-tricks`~ ✅ v2.403.1 (3/dawn — multi-charge under the same template).
 
 **Multi-charge per-day (charges + per-day recharge dice).** `pipes-of-the-sewers` (3, 1d3/dawn), `helm-of-teleportation` (3, 1d3/dawn), `cube-of-force` (36, 1d20/dawn — 6 modes, needs a multi-action catalog).
 

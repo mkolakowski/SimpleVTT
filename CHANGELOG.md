@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.403.1] - 2026-06-17 — "The Trickster's Counter"
+
+**Schema version:** 69
+
+**Commit summary:** Second batch of charge-tracked announce-only Bucket D items on the v2.403.0 `_use_item_action_announce_only` substrate. Four more items now tick their RAW counter on `/use_item_action`: **Cape of the Mountebank** (1/dawn dimension door, on Lyra), **Iron Bands of Binding** (1/dawn restrain via ranged attack, on Krieger), **Efreeti Bottle** (1/dawn release per d100 table, on Zara), and **Bag of Tricks** (3/dawn pulls per bag color, on Brakka). Bag of Tricks is the first multi-charge-pool item on the new handler — same `min/max=1` per call as the others, but the resource row starts at 3 to model RAW's "three fuzzy objects per dawn." The teleport / restrain / efreeti behavior / random animal roll all stay GM-narrated by design.
+
+**Description:** Pure content drop-in on v2.403.0's substrate, exactly as planned: four new `_MAGIC_ITEM_ACTIONS` catalog rows + four new resource rows on existing demo PCs + dispatch updates + harness extension. No engine code changes; no new handler; no new test file (the existing `test_use_item_action_announce_only.py` extends its `_BATCH` constant to cover all eight items + a new dedicated test for Bag of Tricks's multi-pull pool that proves the 3 → 2 → 1 → 0 → 409 sequence works on the shared handler).
+
+**Why "The Trickster's Counter":** Bag of Tricks is the headline item of the batch — the first multi-charge announce-only counter — and gives the commit a name that pairs with the substrate ship's "The Elemental Counter" without recycling.
+
+PATCH — 4 new wired items + 4 paired resource rows + harness test extension. Magic items category remains **235/239 wired (~98%)** in the audit denominator; eight Bucket D items now machine-track their charges (up from four in v2.403.0). Subsequent batches will continue the rollout: multi-charge per-day items (pipes/helm-of-teleportation/cube-of-force), multi-day cooldowns (horn-of-valhalla/ring-of-djinni-summoning/rod-of-security), lifetime charges (chime-of-opening/ring-of-three-wishes/rod-of-absorption), multi-dose consumables (restorative-ointment/dust-of-dryness/sovereign-glue/bag-of-beans), then one-shot consumables, and finally the two Bucket A holdouts (wind-fan + medallion-of-thoughts).
+
+### Added
+- `app/routes/tabletop_routes.py`: four new `_MAGIC_ITEM_ACTIONS` entries (`cape-of-the-mountebank`, `iron-bands-of-binding`, `efreeti-bottle`, `bag-of-tricks`) — same shape as v2.403.0's elemental quartet, each with a per-item `narration` string. Dispatch tuple extended with the four new slugs.
+- `app/demo_seed.py`: four new `resources[]` rows on Lyra Sunstrider (cape), Krieger Stonefist (iron-bands — second 1/dawn item alongside the v2.403.0 stone), Zara Emberfire (efreeti-bottle), and Brakka Wildmane (bag-of-tricks @ 3/3). Each carrier item was already seeded equipped via the prior content sprints; this commit adds the matching resource row.
+- `tests/harness/test_use_item_action_announce_only.py`: `_BATCH` constant extended to 8 entries (now also carries an `initial_charges` field per item to support varying pool sizes). The happy-path test renamed `test_announce_only_items_decrement_charge` parameterizes over all 8; the existing 409-second-use / long-rest-restore / unknown-action-key tests stay scoped to single items. New test `test_bag_of_tricks_multi_pull_pool` exercises the 3 → 2 → 1 → 0 → 409 multi-pull sequence as the canonical test for the multi-charge-pool variant.
+
+### Changed
+- `docs/plans/magic-items-automation.md`: Phase 9.2 status table grows the four new items as ✅ shipped v2.403.1.
+- `docs/test-harness-coverage.md`: total-test-count bump (+1 net: +1 new `test_bag_of_tricks_multi_pull_pool` test, the existing parameterized test absorbs the four new items in-place) + the announce-only file entry updated to reflect the 8-item coverage + the new multi-pull test.
+
 ## [2.403.0] - 2026-06-17 — "The Elemental Counter"
 
 **Schema version:** 69

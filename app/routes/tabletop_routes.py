@@ -37706,6 +37706,65 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "check vs the elemental to command it, concentration up to 1 hr)."
         ),
     },
+    # v2.403.1 — magic-items-automation Phase 9.2 batch 2: four more
+    # charge-tracked announce-only Bucket D items on the same
+    # ``_use_item_action_announce_only`` substrate. Three 1/dawn singles
+    # plus the 3/dawn Bag of Tricks (same handler — min/max=1 per pull,
+    # resource starts at 3).
+    "cape-of-the-mountebank": {
+        "key": "cast-dimension-door",
+        "name": "Cast Dimension Door (Cape)",
+        "resource_key": "cape-of-the-mountebank",
+        "requires_attunement": False,
+        "min_charges": 1,
+        "max_charges": 1,
+        "narration": (
+            "swirled the brimstone-scented cape and cast Dimension Door "
+            "from it (GM-narrated teleport up to 500 ft; both spaces are "
+            "lightly obscured until end of next turn)."
+        ),
+    },
+    "iron-bands-of-binding": {
+        "key": "hurl-bands",
+        "name": "Hurl Iron Bands",
+        "resource_key": "iron-bands-of-binding",
+        "requires_attunement": False,
+        "min_charges": 1,
+        "max_charges": 1,
+        "narration": (
+            "hurled the rusty iron sphere at a Huge-or-smaller target "
+            "within 60 ft (GM-narrated: ranged attack with DEX + PB; on "
+            "a hit the bands unfold and restrain the target until ended "
+            "by bonus action or DC 20 STR escape)."
+        ),
+    },
+    "efreeti-bottle": {
+        "key": "release-efreeti",
+        "name": "Release the Efreeti",
+        "resource_key": "efreeti-bottle",
+        "requires_attunement": False,
+        "min_charges": 1,
+        "max_charges": 1,
+        "narration": (
+            "pulled the stopper — smoke pours out and an efreeti appears "
+            "(GM-narrated: roll d100 for behavior — attack, 1-hour service, "
+            "or three wishes)."
+        ),
+    },
+    "bag-of-tricks": {
+        "key": "pull-creature",
+        "name": "Pull a Fuzzy Object",
+        "resource_key": "bag-of-tricks",
+        "requires_attunement": False,
+        "min_charges": 1,
+        "max_charges": 1,
+        "narration": (
+            "reached into the bag, pulled out a fuzzy object and threw "
+            "it up to 20 ft (GM-narrated: rolls d8 on the bag's color "
+            "table for which creature appears — it's friendly and acts "
+            "on the wielder's turn for up to 10 minutes)."
+        ),
+    },
 }
 
 
@@ -87148,12 +87207,19 @@ async def use_item_action(
     # v2.403.0 — magic-items-automation Phase 9.2: charge-tracked
     # announce-only items. Bucket D tail items whose RAW carries a
     # finite charge / per-day-use counter but whose effect stays GM-
-    # narrated. First batch: the four elemental-summoning items.
+    # narrated.
+    # v2.403.0: bowl/brazier/censer/stone-of-commanding/controlling-elementals.
+    # v2.403.1: cape-of-the-mountebank + iron-bands-of-binding +
+    # efreeti-bottle + bag-of-tricks (3/dawn — shared shape).
     if slug in (
         "bowl-of-commanding-water-elementals",
         "brazier-of-commanding-fire-elementals",
         "censer-of-controlling-air-elementals",
         "stone-of-controlling-earth-elementals",
+        "cape-of-the-mountebank",
+        "iron-bands-of-binding",
+        "efreeti-bottle",
+        "bag-of-tricks",
     ):
         return await _use_item_action_announce_only(
             db, campaign_id, char, item, sheet, catalog, slug,
