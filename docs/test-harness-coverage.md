@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3212 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.404.6, 2026-06-17).
+**Total tests:** 3216 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.404.7, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4474,6 +4474,16 @@ v2.404.5 — Charm Person multi-target cap + per-slot upcast scaling (RAW PHB p.
 | `test_charm_person_l1_two_targets_returns_400` | L1 cast with 2 targets → 400 `too_many_targets` with `{limit: 1, received: 2}`. |
 | `test_charm_person_l2_two_targets_succeeds` | L2 cast with 2 targets → 200 (extended cap = 1 + (2-1)*1 = 2). |
 | `test_charm_person_l2_three_targets_returns_400` | L2 cast with 3 targets → 400 with `{limit: 2, received: 3}` — confirms the upcast field is honored. |
+
+### `test_cast_command_target_cap_upcast.py`
+v2.404.7 — Command condition-install + multi-target cap (RAW PHB p.223). First **condition-install ship** of the v2.404.x arc — adds both a new `_SPELL_CONDITION_MAP["command"]` entry (key: "commanded", icon: 📢, 1-round duration, descriptive effects naming the 6 RAW commands) AND a new `_SPELL_TARGET_CAPS["command"]` entry (`max_targets: 1, base_level: 1, extra_targets_per_slot_above_base: 1`). Routes through `/cast_spell` automatically — Command's SRD JSON already carries `save_ability: "wis"`. The Commanded install on a failed save (NPC-only v1 per v2.32.0) is wired but not yet test-covered; the cap-enforcement contract is what this file asserts. Brother Tavik Stonebrow (Cleric Lv 8, Command appended at spell index 14) is the cast surface; his L1 + L2 slots cover both base cap and +1 upcast extension.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_command_l1_one_target_succeeds` | L1 cast with 1 target → 200 (RAW base cap). |
+| `test_command_l1_two_targets_returns_400` | L1 cast with 2 targets → 400 `too_many_targets` with `{limit: 1, received: 2}`. |
+| `test_command_l2_two_targets_succeeds` | L2 cast with 2 targets → 200 (extended cap = 1 + (2-1)*1 = 2). |
+| `test_command_l2_three_targets_returns_400` | L2 cast with 3 targets → 400 with `{limit: 2, received: 3}` — confirms the upcast field is honored. |
 
 ### `test_cast_dispel_magic.py`
 v2.372.0 — Dispel Magic endpoint (`/cast_dispel_magic`). Resolves auto-end (buff source-spell-level ≤ slot_level) vs ability check (`1d20 + spc_mod + prof` vs DC `10 + buff_source_level`). Slot consumed up front; buff drop on auto-end or check-success via `_remove_buff` (PC) or hub-state mutation (NPC). Lyra Sunstrider (Bard Lv 6, Dispel Magic on her list) → Krieger Stonefist driver.

@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.404.7] - 2026-06-17 — "The Single Word"
+
+**Schema version:** 69
+
+**Commit summary:** Seventh commit of the **spell utility-upcast** arc — **first condition-install wiring** ship of the arc. Wires **Command** (RAW PHB p.223) end-to-end: new `_SPELL_CONDITION_MAP["command"]` entry installs a `commanded` buff on a failed WIS save (NPC-only v1 per the v2.32.0 save-or-suck path), new `_SPELL_TARGET_CAPS["command"]` entry enforces the cap (1 target at L1, +1 per slot above 1st). Routes through `/cast_spell` automatically — Command's SRD JSON already carries `save_ability: "wis"` and no damage, so the existing save-or-suck dispatcher picks it up the moment the condition map gains the entry.
+
+**Description:** This is where the arc transitions from data-only commits (v2.404.1 → v2.404.6) to engine work. The v2.404.5 Charm Person commit clarified that Command / Animal Friendship / Blindness-Deafness all lack `_SPELL_CONDITION_MAP` entries, so they need real condition modeling before their caps can be hooked. Command goes first because:
+- Its SRD JSON already has `save_ability: "wis"` (no JSON edit needed)
+- The 6 RAW commands (Approach / Drop / Flee / Grovel / Halt / GM-judged other) are well-bounded and can be GM-narrated cleanly via a descriptive effects list
+- Duration is just 1 round, so the existing per-round buff-decrement loop handles auto-expiration without new code
+- Tavik (Cleric Lv 8) is already in the demo with cleric slots — minimal seed change
+
+The `commanded` condition is **descriptive** in v1 — the GM controls the target's next turn given the imposed restriction (the buff badge surfaces the 6 RAW commands so the GM remembers what's been imposed). Future work could thread the chosen command word through as a per-cast `effects.command_word` field, but the install + 1-round auto-expiration + cap-enforcement are the surfaced engine work here.
+
+**Pattern set for Animal Friendship + Blindness/Deafness:** the v2.404.7 shape (condition-map entry + target-caps entry + spell list append + harness test) is repeatable. Both remaining condition-install spells follow the same recipe — `_SPELL_CONDITION_MAP["animal-friendship"]` would install a `friendly-beast` condition; `_SPELL_CONDITION_MAP["blindnessdeafness"]` would install `blinded` or `deafened` (the existing `_SPELL_CONDITION_MAP["blinded"]` at line 26368 may already exist via a different surface; need to check).
+
+**Why "The Single Word":** Command's V-only one-word casting is the spell's signature mechanic. Halt. Grovel. Flee. One word, one bend.
+
+PATCH — 1 new condition-map entry + 1 new target-caps entry + 1 demo-seed spell-list addition + 1 new harness file (4 tests). Spell catalog: 7 of ~9 target-scaling utility spells now use the v2.380.0 / v2.381.0 substrate (5 buff-shape + 1 condition-shape via Charm Person + Bane consolidation + Command condition-install). The arc has 2 spells left (Animal Friendship + Blindness/Deafness) and they're now content drop-ins on the v2.404.7 recipe.
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_SPELL_CONDITION_MAP["command"]` entry (key: "commanded", icon: 📢, duration_rounds: 1, no concentration, effects list naming the 6 RAW commands + immunity clauses). New `_SPELL_TARGET_CAPS["command"]` entry (1 + 1/slot above L1).
+- `app/demo_seed.py`: appended Command to Brother Tavik Stonebrow's cleric spell list at index 14 (END-append to preserve existing spell_index assertions).
+- `tests/harness/test_cast_command_target_cap_upcast.py`: new harness file (4 tests) — L1 1 target → 200, L1 2 targets → 400 limit=1, L2 2 targets → 200, L2 3 targets → 400 limit=2.
+
+### Changed
+- `docs/test-harness-coverage.md`: total-test-count bump (+4) + new row for the command cap file.
+
 ## [2.404.6] - 2026-06-17 — "The Shared Cap"
 
 **Schema version:** 69

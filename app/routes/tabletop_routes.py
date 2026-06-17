@@ -1141,6 +1141,40 @@ _SPELL_CONDITION_MAP = {
             "advantage on social interactions with caster",
         ],
     },
+    # v2.404.7 — Command (Cleric / Warlock L1). RAW PHB p.223: WIS save
+    # or follow a one-word command on the target's next turn. Duration:
+    # 1 round (ends at the end of the target's next turn). NO
+    # concentration. Effects depend on the command word chosen by the
+    # caster — RAW lists 6 examples: Approach (move toward caster),
+    # Drop (drop held items + end turn), Flee (move away with all
+    # movement), Grovel (fall prone + end turn), Halt (no actions, no
+    # movement), or a GM-judged other word.
+    #
+    # Mechanical model for v1: install a `commanded` condition with a
+    # descriptive effects list naming the 6 RAW commands so the GM sees
+    # the restriction in the buff tooltip. The actual enforcement of
+    # the chosen command stays GM-narrated — the GM controls the
+    # target's next turn given the imposed restriction. Future work
+    # could thread the chosen command word through as a per-cast
+    # `effects.command_word` field, but the buff badge + 1-round
+    # auto-expiration are the surfaced engine work here.
+    #
+    # Immunity to Undead + non-language-speaking creatures + directly-
+    # harmful commands is GM-judged (the cast still goes through; the
+    # GM declares the spell fizzles per RAW if the target is immune).
+    "command": {
+        "key": "commanded",
+        "name": "Commanded",
+        "icon": "📢",
+        "duration_rounds": 1,  # 1 round (ends at end of target's next turn)
+        "concentration": False,
+        "effects": [
+            "must obey one-word command on next turn",
+            "RAW commands: Approach / Drop / Flee / Grovel / Halt / other (GM-judged)",
+            "spell ends if target can't follow the command",
+            "immune: Undead, creatures that don't understand the caster's language, or commands directly harmful to the target",
+        ],
+    },
     # v2.54.0 — Suggestion → Charmed (Wis save). RAW: "you suggest a
     # course of activity ... if it fails its save, it pursues the
     # suggested course for the duration." Duration is up to 8 hours
@@ -1808,6 +1842,20 @@ _SPELL_TARGET_CAPS: dict[str, dict] = {
     # data into the registry so future cap changes are data-only.
     "bane": {
         "max_targets": 3,
+        "base_level": 1,
+        "extra_targets_per_slot_above_base": 1,
+    },
+    # v2.404.7 — Command (Cleric / Warlock L1). RAW PHB p.223: "A
+    # creature you can see within range." Higher Levels: "When you cast
+    # this spell using a spell slot of 2nd level or higher, you can
+    # affect one additional creature for each slot level above 1st."
+    # Routes through `/cast_spell` (no bespoke endpoint); the cap reader
+    # at line ~19877 enforces the limit before slot consumption. The
+    # WIS save resolution + the new v2.404.7 `_SPELL_CONDITION_MAP
+    # ["command"]` install on a failed save flow through the existing
+    # save-or-suck path unchanged.
+    "command": {
+        "max_targets": 1,
         "base_level": 1,
         "extra_targets_per_slot_above_base": 1,
     },

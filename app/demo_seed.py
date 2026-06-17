@@ -1483,6 +1483,17 @@ def _cleric_sheet(name: str) -> dict:
             # exercises both base cap and the +1 upcast extension. Appended
             # at END so existing spell_index assertions stay valid.
             {"name": "Enhance Ability", "level": 2, "prepared": True, "_slug": "enhance-ability", "casting_time": "1 action"},
+            # v2.404.7 — Command (Cleric / Warlock L1). RAW PHB p.223: WIS
+            # save vs a one-word command (Approach / Drop / Flee / Grovel /
+            # Halt / GM-judged other). 1 round duration, no concentration.
+            # Upcast: +1 target per slot above 1st. Demo fixture for the
+            # v2.404.7 first condition-install ship of the arc — the new
+            # `_SPELL_CONDITION_MAP["command"]` entry installs a
+            # `commanded` buff on a failed save (NPC v1 only), and the
+            # `_SPELL_TARGET_CAPS["command"]` cap enforces the multi-
+            # target limit before slot consumption. Appended at END so
+            # existing spell_index assertions stay valid.
+            {"name": "Command", "level": 1, "prepared": True, "_slug": "command", "casting_time": "1 action"},
         ],
         # Lv 8 cleric slot progression — 4/3/3/2 (v2.60.0: L4 added).
         "spell_slots": {
