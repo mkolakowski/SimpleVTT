@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.390.2] - 2026-06-16 — "The Smaller Follow-Up"
+
+**Schema version:** 69
+
+**Commit summary:** Fourth stale-doc reconciliation this session — the v2.390.1 audit refresh listed "populate `source_char_id` on charmed-buff install sites" as a filed follow-up based on the v2.384.0 audit doc's pessimistic assumption. Per-site verification confirms it's already done: the v2.32.0 save-resolution branch at `tabletop_routes.py:19048` sets `source_char_id` from `ctx["caster_char_id"]` for spell-cast charms (charm-person, suggestion); the item-action save handler at line 2187 sets `source_char_id: int(char.id)` for item charms; lair-action / monster-source charms fundamentally can't carry a PC `source_char_id` (RAW-correctly silent — GM-narrated). **The v2.390.0 Charmed gate fires correctly for every realistic charm source out of the box.**
+
+**Description:** This is the fourth stale-doc audit correction in the session (after Aura of Courage v2.376.2, Legendary + Lair Actions v2.376.2, and Hold Person refactor v2.382.1). The same pattern keeps recurring: an older audit-time assumption survives multiple refreshes until someone audits the actual code. The [check-plan-doc-before-promoting-audit-P1 memory](memory/feedback_check_plan_doc_before_audit_promote.md) captures the durable lesson — verify before listing as a gap.
+
+After this commit the v2.390.1 audit's "Remaining gaps" section is:
+
+1. 🟡 **P2** — Cast-and-broadcast utility-spell upcast (~250 spells, content-layer richness).
+2. 🟠 **Filed follow-up** — Mirror v2.390.0 onto `/cast_spell` + `/use_feature`.
+
+Everything else is permanently GM-narrated by design or already shipped.
+
+PATCH — pure doc edit; no runtime code change.
+
+### Fixed
+- `TODO.md` SRD 5e Audit (v2.390.0 refresh) "Remaining gaps" row #2: flipped from "filed follow-up" to "✅ DONE (v2.390.2 verification)" with the per-site evidence inlined.
+
 ## [2.390.1] - 2026-06-16 — "The Closed Audit"
 
 **Schema version:** 69
