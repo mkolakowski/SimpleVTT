@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3159 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.396.1, 2026-06-16).
+**Total tests:** 3163 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.397.0, 2026-06-16).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -803,6 +803,16 @@ v2.99.23 — Half-Orc Savage Attacks. `_compute_attack_auto_uplifts` extended wi
 |------|-----------------|
 | `test_savage_attacks_fires_on_half_orc_crit` | Krieger crits a Bandit (seeded d20=20) → `auto_uplifts` includes `{source="savage-attacks", expression="1d12"}` (the weapon's first die). |
 | `test_savage_attacks_skips_non_half_orc` | Control: Garrik (Variant Human Champion Fighter) crits (d20 ∈ {19, 20}) → no Savage Attacks uplift. Regression guard. |
+
+### `test_heavy_armor_speed_dwarf.py`
+v2.397.0 — race-features plan Phase 3: Hill Dwarf heavy-armor speed bypass. New `_pc_heavy_armor_speed_penalty(sheet)` predicate + `_apply_heavy_armor_speed_penalty(base, sheet)` helper folded into `_speed_walk_from_sheet`. Dwarves are exempt regardless of STR (RAW PHB p.20); non-Dwarves wearing equipped heavy armor whose `_slug` ∈ `_HEAVY_ARMOR_STR_REQ` (chain-mail 13 / splint 15 / plate 15) lose 10 ft when STR < required. `/sheet-json` surfaces a `derived.heavy_armor_speed_penalty: {penalty_ft, source}` block only when the penalty fires.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_dwarf_in_chain_mail_no_penalty` | Tavik (Hill Dwarf STR 14) in chain mail (STR req 13) → `derived` has no `heavy_armor_speed_penalty` key (STR ≥ req). |
+| `test_dwarf_in_plate_no_penalty_via_race_exemption` | Tavik PATCHed into plate (STR req 15, STR 14 < 15) → `derived` STILL has no `heavy_armor_speed_penalty` key (Dwarf exemption). |
+| `test_non_dwarf_in_plate_takes_penalty` | Tavik PATCHed to race "Human" + plate → `derived.heavy_armor_speed_penalty.penalty_ft = 10`; source mentions "plate". |
+| `test_non_dwarf_sufficient_str_no_penalty` | Tavik PATCHed to race "Human" + plate + STR 15 → no penalty (STR ≥ req). Controls for the STR-threshold gate independently of the race gate. |
 
 ### `test_check_stonecunning.py`
 v2.396.0 — race-features plan Phase 2: Hill Dwarf Stonecunning History check. New `_pc_has_stonecunning(sheet)` race-gate predicate + new `POST /api/campaign/{cid}/check_stonecunning` endpoint that rolls `1d20 + INT mod + 2 × PB` (RAW: double PB even when not proficient in History) and emits a `feature_used(source=stonecunning, stat_key=history, stat_ability=INT, …)` broadcast. Composes the PC's standing roll-state advantage/disadvantage. Tavik Stonebrow (Hill Dwarf Cleric Lv 8, INT 10, PB +3) is the demo fixture.

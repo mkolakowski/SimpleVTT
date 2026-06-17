@@ -1,6 +1,6 @@
 # Race features — close the SRD races gap to 100%
 
-> **Status:** 🟢 partial (v2.396.0). Drives the **Races ~90% → 100%** axis of the [SRD audit](../../TODO.md#srd-5e-audit-v23900-refresh). Phase 1 (Tiefling Infernal Legacy racial Hellish Rebuke) **shipped v2.395.0**. Phase 2 (Hill Dwarf Stonecunning) **shipped v2.396.0**. Pre-existing: Half-Orc Savage Attacks shipped v2.99.23 (reconciled v2.394.0 from stale-audit). Phases 3–6 still to ship + the optional Phase 7 Trance polish + Phase 1b/1c Infernal Legacy tail follow-ups.
+> **Status:** 🟢 partial (v2.397.0). Drives the **Races ~90% → 100%** axis of the [SRD audit](../../TODO.md#srd-5e-audit-v23900-refresh). Phase 1 (Tiefling Infernal Legacy racial Hellish Rebuke) **shipped v2.395.0**. Phase 2 (Hill Dwarf Stonecunning) **shipped v2.396.0**. Phase 3 (Hill Dwarf heavy-armor speed bypass) **shipped v2.397.0**. Pre-existing: Half-Orc Savage Attacks shipped v2.99.23 (reconciled v2.394.0 from stale-audit). Phases 4–6 still to ship + the optional Phase 7 Trance polish + Phase 1b/1c Infernal Legacy tail follow-ups.
 
 ## Why this plan exists
 
@@ -34,7 +34,7 @@ Cells: ✅ wired in engine code · 🟠 inert sheet seed (no engine read) · ⚪
 | | Dwarven Combat Training | 🟠 | weapon proficiency seed |
 | | Tool Proficiency | 🟠 | tool proficiency seed |
 | | Stonecunning | ✅ | `_pc_has_stonecunning(sheet)` + `POST /check_stonecunning` (v2.396.0) — rolls `1d20 + INT mod + 2 × PB`; broadcasts `feature_used(source=stonecunning)`. Covered by `tests/harness/test_check_stonecunning.py`. |
-| | **Speed not reduced by heavy armor** | ⚪ | — (speed engine doesn't factor armor weight either way today) |
+| | Speed not reduced by heavy armor | ✅ | `_pc_heavy_armor_speed_penalty(sheet)` + `_apply_heavy_armor_speed_penalty(base, sheet)` (v2.397.0) — installs the RAW PHB p.144 -10 penalty alongside the Dwarf exemption; `_speed_walk_from_sheet` subtracts the penalty. `/sheet-json` surfaces a `derived.heavy_armor_speed_penalty` block when the penalty fires. Covered by `tests/harness/test_heavy_armor_speed_dwarf.py`. |
 | | **Dwarven Toughness** | 🟠 | currently baked into the `hp.max` seed at character build; no per-level-up hook |
 | **Human** | ASI +1 all | ✅ | Native to ability engine |
 | **Lightfoot Halfling** | Halfling Lucky | ✅ | `_pc_has_halfling_lucky` + 3 surfaces (save/attack/check) |
@@ -97,7 +97,7 @@ Each phase = one MINOR commit + 1 happy-path test + 1 error-path test (race mism
 
 1. **Phase 1 — Tiefling Infernal Legacy racial Hellish Rebuke** (MINOR, **shipped v2.395.0**). The first slice of Infernal Legacy: route the reaction Hellish Rebuke cast through the `hellish-rebuke` racial resource (1/long, L2) instead of consuming a spell slot. New `_pc_has_tiefling_hellish_rebuke_racial(sheet)` gate; new `cast-hellish-rebuke-racial` reaction option offered alongside the existing slot-based path; new cast handler that consumes the racial resource. Zara Emberfire (Tiefling Sorcerer Lv 5) is the demo fixture. Follow-up tail filed: **Darkness 1/long racial cast (Phase 1b)** + **auto-grant projection of Thaumaturgy / Hellish Rebuke / Darkness on `/sheet-json` so future Tiefling PCs don't need manual demo-seed wiring (Phase 1c)** — both deferred until a fresh Tiefling PC creation flow is in scope.
 2. **Phase 2 — Hill Dwarf Stonecunning** (MINOR, **shipped v2.396.0**). Dedicated `POST /check_stonecunning` endpoint that rolls `1d20 + INT mod + 2 × PB` and broadcasts `feature_used(source=stonecunning)`. Tavik Stonebrow (Hill Dwarf Cleric Lv 8) is the demo fixture. 4 harness tests in `test_check_stonecunning.py` (happy path + non-Dwarf 409 + missing-id 400 + note-echo).
-3. **Phase 3 — Hill Dwarf Speed-not-reduced-by-heavy-armor** (MINOR). Install heavy-armor STR-threshold speed gate; carve out Dwarf bypass. Test: Tavik in plate at STR 14 keeps base 25; non-Dwarf at STR 14 in plate loses 10.
+3. **Phase 3 — Hill Dwarf Speed-not-reduced-by-heavy-armor** (MINOR, **shipped v2.397.0**). Installed `_HEAVY_ARMOR_STR_REQ` constant + `_pc_heavy_armor_speed_penalty(sheet)` predicate + `_apply_heavy_armor_speed_penalty(base, sheet)` helper folded into `_speed_walk_from_sheet`. Penalty fires for non-Dwarves whose STR is below the equipped heavy armor's requirement; Dwarves are RAW-exempt. `/sheet-json` surfaces a `derived.heavy_armor_speed_penalty: {penalty_ft, source}` block. 4 tests at `tests/harness/test_heavy_armor_speed_dwarf.py`: Tavik chain mail no-penalty / Tavik plate Dwarf-exemption / non-Dwarf plate penalty fires / non-Dwarf plate sufficient-STR no-penalty.
 4. **Phase 4 — Halfling Nimbleness** (MINOR). Move-through-larger gate at `/token/move`. Pip (existing Lightfoot Halfling Rogue) is the fixture.
 5. **Phase 5 — Halfling Naturally Stealthy** (MINOR). Stealth-check size-cover gate. Pip is the fixture; cover combatant = an Orc or larger creature.
 6. **Phase 6 — Rock Gnome Artificer's Lore** (MINOR). Twin of Phase 2 with topic = magic items / alchemical / tech. Existing Rock Gnome demo (Mira) is the fixture.

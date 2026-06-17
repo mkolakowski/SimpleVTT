@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.397.0] - 2026-06-16 — "The Unburdened Stride"
+
+**Schema version:** 69
+
+**Commit summary:** Ships **race-features plan Phase 3** — **Hill Dwarf "speed is not reduced by heavy armor"** (RAW PHB p.20) alongside the previously-uninstalled heavy-armor STR-threshold penalty (RAW PHB p.144). A new `_HEAVY_ARMOR_STR_REQ` constant (`chain-mail: 13`, `splint: 15`, `plate: 15`) + `_pc_heavy_armor_speed_penalty(sheet)` predicate + `_apply_heavy_armor_speed_penalty(base, sheet)` helper fold the -10 speed reduction into `_speed_walk_from_sheet`. Dwarves are RAW-exempt regardless of STR; non-Dwarves whose equipped heavy armor's `_slug` matches the table and whose STR is below the requirement lose 10 ft. `/sheet-json` surfaces a `derived.heavy_armor_speed_penalty: {penalty_ft, source}` block whenever the penalty fires so chat-card / UI / harness can attribute the -10. Tavik Stonebrow is the demo fixture (Hill Dwarf in chain mail, STR 14); 4 harness tests at `test_heavy_armor_speed_dwarf.py` cover (a) the no-penalty baseline, (b) the Dwarf-exemption gate via PATCH-into-plate, (c) the non-Dwarf STR-threshold penalty firing, and (d) the non-Dwarf sufficient-STR no-penalty control.
+
+**Description:** This phase ships TWO RAW rules at once — they're paired by design. Pre-v2.397.0 SimpleVTT had no heavy-armor speed gate at all, so the Dwarf exemption was vacuously satisfied. The right ship installs the substrate (the -10 reduction) and the exemption (Dwarves bypass) in one commit; otherwise the gate test could only assert "no change" (uninteresting) until the penalty side existed.
+
+The penalty is *derived*, not stored — `_speed_walk_from_sheet` subtracts it on every read of the sheet's walking speed. That means the move-cap path (token movement during combat), the carry-meter UI, and `/sheet-json` consumers all automatically honor the new rule without per-call-site changes. The `derived.heavy_armor_speed_penalty` block on `/sheet-json` is **informational only** — clients show the source ("Plate (STR 14 < required 15)") so the GM understands the -10; the actual mathematical effect is already baked into `sheet.speed` by the time the consumer reads it.
+
+The 4 harness tests exercise the gate's two halves independently:
+- **Race-exemption half:** Tavik (Hill Dwarf) gets no penalty in chain mail (his real seed) AND no penalty when PATCHed into plate at STR 14 (where a non-Dwarf would lose 10).
+- **STR-threshold half:** Tavik PATCHed to race "Human" + plate at STR 14 takes the -10; PATCHed to race "Human" + plate + STR 15 doesn't (sufficient STR).
+
+Each PATCH test restores the original sheet state via try/finally so the shared dev container stays clean for downstream tests.
+
+MINOR — additive helper + substrate folded into existing speed pipeline + 4 tests; no existing speed read paths change for non-heavy-armor PCs or Dwarves.
+
+### Added
+- `_HEAVY_ARMOR_STR_REQ` constant dict (`chain-mail`/`splint`/`plate` → STR req per RAW PHB p.144).
+- `_pc_heavy_armor_speed_penalty(sheet)` predicate (0 for Dwarves; 10 for non-Dwarves wearing equipped heavy armor whose STR < req; 0 otherwise).
+- `_apply_heavy_armor_speed_penalty(base, sheet)` helper folded into `_speed_walk_from_sheet`.
+- `derived.heavy_armor_speed_penalty: {penalty_ft, source}` block on `/sheet-json` (only present when the penalty fires).
+- `tests/harness/test_heavy_armor_speed_dwarf.py` — 4 tests covering both halves of the gate.
+
+### Changed
+- `_speed_walk_from_sheet`: every int-conversion branch now passes through `_apply_heavy_armor_speed_penalty` before returning.
+- `docs/plans/race-features.md`: Speed-not-reduced-by-heavy-armor row ⚪ → ✅; Phase 3 marked shipped. Status banner refreshed to v2.397.0.
+- `app/templates/wiki.html` + `docs/wiki/README.md`: race-features row status flipped to "🟢 partial (v2.397.0) — Phases 1+2+3 shipped; 3 phase ships remaining."
+- `docs/test-harness-coverage.md`: harness total 3159 → 3163.
+
 ## [2.396.1] - 2026-06-16 — "The Plain Halfling"
 
 **Schema version:** 69

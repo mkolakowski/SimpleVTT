@@ -4299,26 +4299,35 @@ def _speed_walk_from_sheet(sheet: dict | None) -> int:
         return 30
     v = sheet.get("speed")
     if isinstance(v, (int, float)) and v > 0:
-        return int(v)
+        return _apply_heavy_armor_speed_penalty(int(v), sheet)
     if isinstance(v, dict):
         w = v.get("walk")
         if isinstance(w, (int, float)) and w > 0:
-            return int(w)
+            return _apply_heavy_armor_speed_penalty(int(w), sheet)
         if isinstance(w, str):
             import re as _re
             m = _re.search(r"\d+", w)
             if m:
                 n = int(m.group())
                 if n > 0:
-                    return n
+                    return _apply_heavy_armor_speed_penalty(n, sheet)
     if isinstance(v, str):
         import re as _re
         m = _re.search(r"\d+", v)
         if m:
             n = int(m.group())
             if n > 0:
-                return n
-    return 30
+                return _apply_heavy_armor_speed_penalty(n, sheet)
+    return _apply_heavy_armor_speed_penalty(30, sheet)
+
+
+def _apply_heavy_armor_speed_penalty(base_speed: int, sheet: dict) -> int:
+    """v2.397.0 — subtract the heavy-armor speed penalty (if any) from
+    a derived base walking speed. Clamps to ≥ 0. Race-gated via
+    `_pc_heavy_armor_speed_penalty`; Dwarves are RAW-exempt.
+    """
+    penalty = _pc_heavy_armor_speed_penalty(sheet)
+    return max(0, base_speed - penalty)
 
 
 def _resolve_combatant_speed_walk(
@@ -43190,6 +43199,57 @@ def _extract_kept_d20_from_breakdown(breakdown: str) -> "int | None":
 #     new_current=1 + decrement the resource + stay alive. Returns
 #     a `relentless_endurance_fired: True` flag in the result dict
 #     so callers can broadcast the trigger.
+
+# v2.397.0 race-features Phase 3 — Hill Dwarf heavy-armor speed
+# bypass. RAW PHB p.144 Heavy Armor table: when the wearer's STR is
+# below the armor's STR requirement, walking speed is reduced by 10.
+# RAW PHB p.20 Dwarf: "Your speed is not reduced by wearing heavy
+# armor." Map slug → STR req for the 3 SRD heavy armors.
+_HEAVY_ARMOR_STR_REQ: "dict[str, int]" = {
+    "chain-mail": 13,
+    "splint": 15,
+    "plate": 15,
+}
+
+
+def _pc_heavy_armor_speed_penalty(sheet: "dict | None") -> int:
+    """v2.397.0 — return the heavy-armor walking-speed penalty for a
+    PC sheet (in feet). Returns 0 for Dwarves (Hill / Mountain /
+    generic) regardless of STR — RAW PHB p.20 exempts them. Returns
+    0 for non-Dwarves whose STR meets or exceeds the equipped heavy
+    armor's requirement. Returns 10 when:
+      - non-Dwarf
+      - has an EQUIPPED heavy armor item in the inventory whose
+        `_slug` matches `_HEAVY_ARMOR_STR_REQ`
+      - STR score < that armor's requirement
+    Reads `sheet.inventory[*]` for the equipped heavy armor; the
+    armor's `_slug` field is the lookup key (matches the SRD armor
+    JSON slugs `chain-mail` / `splint` / `plate`).
+    """
+    if not sheet:
+        return 0
+    # Dwarves are exempt regardless of STR.
+    if _race_slug_from_sheet(sheet) == "dwarf":
+        return 0
+    try:
+        str_score = int((sheet.get("abilities") or {}).get("STR") or 10)
+    except (TypeError, ValueError):
+        str_score = 10
+    for item in (sheet.get("inventory") or []):
+        if not isinstance(item, dict):
+            continue
+        if (item.get("armor_type") or "").strip().lower() != "heavy":
+            continue
+        if not item.get("equipped"):
+            continue
+        slug = (item.get("_slug") or "").strip().lower()
+        req = _HEAVY_ARMOR_STR_REQ.get(slug)
+        if req is None:
+            continue
+        if str_score < req:
+            return 10
+    return 0
+
 
 def _pc_has_stonecunning(sheet: "dict | None") -> bool:
     """v2.396.0 — Hill Dwarf Stonecunning gate (race-features Phase 2).
@@ -98130,6 +98190,42 @@ async def get_character_sheet_json(
     # this endpoint.
     derived: dict = {}
     if char.template == "dnd5e":
+        # v2.397.0 race-features Phase 3 — Hill Dwarf heavy-armor speed
+        # bypass. Surface the heavy-armor speed penalty (if any) as a
+        # derived field so clients (carry-meter UI, ruler, harness)
+        # can show "wearing plate, STR 14 < 15 → -10 speed". The
+        # `_speed_walk_from_sheet` already subtracts it from the
+        # returned speed; this field exposes the WHY for the chat-card.
+        _ha_penalty = _pc_heavy_armor_speed_penalty(sheet)
+        if _ha_penalty > 0:
+            # Identify which equipped heavy armor triggered the penalty
+            # so the surface is informative (not just "-10").
+            _ha_source = ""
+            for item in (sheet.get("inventory") or []):
+                if not isinstance(item, dict):
+                    continue
+                if (item.get("armor_type") or "").strip().lower() != "heavy":
+                    continue
+                if not item.get("equipped"):
+                    continue
+                slug = (item.get("_slug") or "").strip().lower()
+                req = _HEAVY_ARMOR_STR_REQ.get(slug)
+                if req is None:
+                    continue
+                try:
+                    _str_score = int((sheet.get("abilities") or {}).get("STR") or 10)
+                except (TypeError, ValueError):
+                    _str_score = 10
+                if _str_score < req:
+                    _ha_source = (
+                        f"{item.get('name') or slug} (STR {_str_score} "
+                        f"< required {req})"
+                    )
+                    break
+            derived["heavy_armor_speed_penalty"] = {
+                "penalty_ft": _ha_penalty,
+                "source": _ha_source,
+            }
         # v2.212.0 — ability-score override (Belt of Giant Strength etc.,
         # docs/plans/str-override.md). Expose the EFFECTIVE scores for any
         # ability an equipped item sets above its base, and feed the
