@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.385.0] - 2026-06-16 — "The Conscious Ally"
+
+**Schema version:** 69
+
+**Commit summary:** Closes **clause #1** of the v2.384.0 condition-enforcement audit — Sneak Attack's ally-adjacency advisory now correctly skips incapacitated allies per RAW. Adds a shared `_combatant_is_incapacitated()` helper that reads the existing `_INCAPACITATING_BUFF_KEYS` set (paralyzed / stunned / unconscious / petrified / asleep / Hideous-Laughter). The `_sneak_attack_ally_adjacent` helper at `tabletop_routes.py` walks combatants in 5 ft of the target and now skips any whose buffs include an incapacitating key. Closes the explicit filed comment at line 3260 ("v1 doesn't check the incapacitated buff; filed").
+
+**Description:** RAW Sneak Attack (PHB p.96): rogue gets the bonus dice when (a) attacker has advantage on the attack roll, OR (b) "another enemy of the target is within 5 feet of it, **not incapacitated**, and you don't have disadvantage on the attack roll." The v2.62.1 advisory implementation enforced the geometric clause (within-5-ft) but left the "not incapacitated" clause filed. v2.385.0 closes the gap.
+
+The shared helper is intentionally general — future commits closing audit clauses #2 (Incapacitated general action gate), #3 (Grappled ends-on-grappler-incapacitated), and #4 (Charmed can't-target-charmer) can all reuse it. It's a 12-line predicate over the combatant's buff list; no new state, no new buff plumbing.
+
+What's still filed per the v2.384.0 audit's suggested-shipping-order:
+- Clause #2 — Incapacitated general action gate on `/use_attack`, `/cast_spell`, `/use_feature`.
+- Clause #3 — Grappled ends on grappler incapacitated (install-side-effect on incapacitating buffs).
+- Clause #4 — Charmed can't target charmer (new structured `effects.charmer_char_id` field + 3-site gate).
+
+Two harness tests via Pip + Krieger + Caelan with Caelan placed 5 ft from Krieger:
+- Caelan carries `paralyzed` → advisory False (incapacitated ally doesn't count).
+- Caelan carries `bless` → advisory True (non-incapacitating buff doesn't disqualify).
+
+MINOR — additive shared helper + behavior-only change (Sneak Attack advisory flips False when the only adjacent ally is paralyzed); existing geometry happy-path test unchanged.
+
+### Added
+- `_combatant_is_incapacitated(combatant) -> bool` helper in `app/routes/tabletop_routes.py` (after `_INCAPACITATING_BUFF_KEYS` at line ~1920).
+- Incapacitated-skip in `_sneak_attack_ally_adjacent` (line ~3315).
+- `tests/harness/test_sneak_attack_ally_incapacitated.py` — 2 tests: paralyzed ally doesn't enable Sneak Attack; blessed ally still does.
+
+### Changed
+- `tabletop_routes.py` line 3259–3260 comment: `⚪ filed` → `✅ enforced v2.385.0` with pointer at the helper.
+- `docs/test-harness-coverage.md`: harness total 3128 → 3130 (+2 incapacitated-skip tests).
+
 ## [2.384.1] - 2026-06-16 — "The Missing COPY"
 
 **Schema version:** 69

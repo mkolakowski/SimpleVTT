@@ -1919,6 +1919,35 @@ _INCAPACITATING_BUFF_KEYS = frozenset({
 })
 
 
+def _combatant_is_incapacitated(combatant: dict | None) -> bool:
+    """v2.385.0 — return True when a combatant carries any buff whose
+    ``key`` is in ``_INCAPACITATING_BUFF_KEYS``. Closes clause #1 of
+    the v2.384.0 condition-enforcement audit (Charmed/Grappled/
+    Incapacitated per-clause review) — the Sneak Attack
+    ally-adjacency helper at `_sneak_attack_ally_adjacent` was filed
+    as "doesn't check the incapacitated buff" and used this set
+    via concentration drops only; now a single shared predicate
+    serves both call sites + future ones (the audit doc suggests
+    general action gate + ends-on-incapacitated grapple-end hook
+    as subsequent commits).
+
+    None / non-dict / no-buffs-list inputs return False (defensive
+    matches the rest of the buff-walk helpers in this file).
+    """
+    if not combatant or not isinstance(combatant, dict):
+        return False
+    buffs = combatant.get("buffs") or []
+    if not isinstance(buffs, list):
+        return False
+    for b in buffs:
+        if not isinstance(b, dict):
+            continue
+        key = str(b.get("key") or "").strip().lower()
+        if key in _INCAPACITATING_BUFF_KEYS:
+            return True
+    return False
+
+
 async def _maybe_item_on_damage_save(
     campaign_id: int, char, damage_amount: int,
     db: "Session | None" = None,
@@ -3257,7 +3286,12 @@ def _segment_to_point_min_ft(
 #   this is correct ~95% of the time; mixed loyalty edge cases
 #   (charmed ally, party-vs-party PVP) are filed.
 # - "Not incapacitated" — RAW excludes adjacent creatures who are
-#   incapacitated. v1 doesn't check the incapacitated buff; filed.
+#   incapacitated. ✅ enforced v2.385.0 via the shared
+#   ``_combatant_is_incapacitated()`` helper (reads
+#   ``_INCAPACITATING_BUFF_KEYS`` against the candidate's buff list);
+#   incapacitated allies (paralyzed / stunned / unconscious / etc.)
+#   no longer count as Sneak Attack enablers. Closes clause #1 of the
+#   v2.384.0 condition-enforcement audit.
 # - "You don't have disadvantage" — RAW disqualifies the rogue when
 #   they have disadvantage. v1 doesn't read the rogue's roll-state
 #   today; filed.
@@ -3308,6 +3342,13 @@ def _sneak_attack_ally_adjacent(
             continue
         other_id = int(other_char_id)
         if other_id == rogue_char_id_int or other_id == target_char_id:
+            continue
+        # v2.385.0 — RAW "not incapacitated" clause. The candidate ally
+        # must be conscious/uncapped to enable Sneak Attack; paralyzed
+        # / stunned / unconscious / petrified / asleep / Hideous-Laughter
+        # combatants are skipped. Closes clause #1 of the v2.384.0
+        # condition-enforcement audit.
+        if _combatant_is_incapacitated(c):
             continue
         distance = _distance_ft_between_chars(
             db, campaign_id, other_id, target_char_id,
