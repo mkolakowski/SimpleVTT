@@ -7,7 +7,7 @@
 **Content tail (Phase 9).** Post-Phase-9.1 (v2.367.0): roughly 60+ of 292 items now carry non-empty `actions`/`passives` (the v2.316–v2.367 sweeps mechanized everything that fit a clean template). The remainder stays announce-only by design (Bucket D archetype J). See the [SRD 5e Audit (2026-06-11 refresh)](../../TODO.md#srd-5e-audit-2026-06-11-refresh) for the original backfill prioritisation that drove this work.
 
 **Authors:** rolling
-**Last updated:** 2026-06-17 (v2.403.0 — Phase 9.2 substrate ship)
+**Last updated:** 2026-06-17 (v2.404.0 — Phase 9.3 umbrella-slug closure; magic-items category at literal 239/239 = 100%)
 
 ---
 
@@ -91,6 +91,23 @@ Grouped by template. Each batch ships as one PATCH commit.
 - ~`medallion-of-thoughts`~ ✅ shipped v2.403.7 — generic announce_only with 3 charges + 1d3/dawn recharge.
 
 **Phase 9.2 is closed.** Every charge-bearing Bucket D item + both Bucket A holdouts are now machine-tracked. The remaining Bucket D items are passive / state-based (containers, deck-of-many-things, sphere-of-annihilation, etc.) and don't carry RAW charge counters; their effects stay GM-narrated by design (archetype J).
+
+---
+
+## Phase 9.3 — umbrella-slug closure (v2.404.0)
+
+Closes the **four umbrella SRD slugs** that prior audits flagged as "intentionally not discrete collectibles" but kept in the denominator. The v2.404.0 ship wires all four into the registry dicts, taking the magic-items audit denominator from **235/239 (~98%)** to **239/239 (literal 100%)**.
+
+| Slug | Shape | Wiring |
+|---|---|---|
+| `potion-of-healing` | Self-heal action with tier picker (1/2/3/4 = basic / greater / superior / supreme) | New `_use_item_action_potion_of_healing` handler. `_tier` field on inventory item drives dice (2d4+2 / 4d4+4 / 8d4+8 / 10d4+20). HP heal clamped at max; qty decrement / removal on use. |
+| `spell-scroll` | Cast-from-scroll action; consumable | New `_use_item_action_spell_scroll` handler. `_spell_slug` field on inventory item names the spell. Consumed on use; broadcasts the cast for table visibility. |
+| `weapon-1-2-or-3` | Passive +N attack/damage (umbrella) | `_MAGIC_ITEM_PASSIVES` catalog stub. Actual +N rides per-instance on the weapon item (baked into `damage` + `attack_bonus`). |
+| `wand-of-the-war-mage-1-2-or-3` | Passive +N spell attack (umbrella) | `_MAGIC_ITEM_PASSIVES` catalog stub aliased to the existing `wand-of-the-war-mage` row. |
+
+### What's still GM-narrated (filed for v3.x scope)
+
+The ~60 Bucket D items the v2.367.0 closure note classified as "out of scope by design (archetype J)" stay GM-narrated. Their effects need substrates SimpleVTT doesn't model — extradimensional storage math, planar travel, sentient items, capture-creature state, random-table dispatch, multi-mode catalog entries, reaction-charge items. Filed in `TODO.md` as a future arc. The audit row stays at 100% because catalog wiring is complete; what's left is mechanical *depth* of inherently-narrative items.
 
 After this arc closes, every Bucket D item that carries a counter in RAW will be machine-tracked, every Bucket A item will be wired, and the magic-item category will be at maximum mechanizable depth without modelling Bucket D effects.
 

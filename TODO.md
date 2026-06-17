@@ -17,11 +17,72 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 
 **Quick map of where to look:**
 
-- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (v2.399.0 refresh)](#srd-5e-audit-v23990-refresh) for the current per-category coverage (overall **~97%** — Races category jumped ~90% → ~100% via the v2.392.0–v2.399.0 race-features arc; the audit's per-clause shipping list is genuinely empty). Prior passes: [v2.390.0](#srd-5e-audit-v23900-refresh), [v2.382.0](#srd-5e-audit-v23820-refresh), [v2.379.0](#srd-5e-audit-v23790-refresh), [v2.376.0](#srd-5e-audit-v23760-refresh), [v2.344.1](#srd-5e-audit-v23441-refresh), [v2.315.0](#srd-5e-audit-v23150-refresh), [2026-06-14](#srd-5e-audit-2026-06-14-refresh), [2026-06-13](#srd-5e-audit-2026-06-13-refresh), [2026-06-11](#srd-5e-audit-2026-06-11-refresh), [2026-06-10](#srd-5e-audit-2026-06-10). The v2.315.0 refresh **corrects two denominators** that all prior passes got wrong: magic items are now **235 / 239 wired (~98%)** — the old "292" figure counted total equipment (239 magic + 37 mundane weapons + 18 mundane armor); and class features are **222 per-row entries (now strictly-✅ 100%)**, not the stale "133".
+- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (v2.404.0 refresh)](#srd-5e-audit-v24040-refresh) for the current per-category coverage (overall **~97%** — **Magic items joins Monsters + Class features + Races as a strictly-✅ 100% surface** via the v2.403.0–v2.404.0 Phase 9.2 + 9.3 arc). Prior passes: [v2.399.0](#srd-5e-audit-v23990-refresh), [v2.390.0](#srd-5e-audit-v23900-refresh), [v2.382.0](#srd-5e-audit-v23820-refresh), [v2.379.0](#srd-5e-audit-v23790-refresh), [v2.376.0](#srd-5e-audit-v23760-refresh), [v2.344.1](#srd-5e-audit-v23441-refresh), [v2.315.0](#srd-5e-audit-v23150-refresh), [2026-06-14](#srd-5e-audit-2026-06-14-refresh), [2026-06-13](#srd-5e-audit-2026-06-13-refresh), [2026-06-11](#srd-5e-audit-2026-06-11-refresh), [2026-06-10](#srd-5e-audit-2026-06-10). The v2.315.0 refresh **corrects two denominators** that all prior passes got wrong: magic items now sit at **239/239 wired (100%)** post-v2.404.0 — the old "292" figure counted total equipment (239 magic + 37 mundane weapons + 18 mundane armor); class features are **222 per-row entries (strictly-✅ 100%)**, not the stale "133".
 - **Active class-feature automation backlog** → see [Full Class-Feature Automation — remaining backlog](#full-class-feature-automation--remaining-backlog) (just Phase 8 + a few per-feature Phase-2 finishers remain after v2.149.1).
 - **Design plans with deferred phases** → see [Design Plans Backlog](#design-plans-backlog) (every `docs/plans/*.md` indexed with a priority tag).
 - **One-off bugs + UI polish that don't have a design plan** → see [Manually Added](#manually-added).
 - **Big feature buckets that aren't tracked by a plan** → see the topic sections below (Character Sheet, GM Tools, Combat, Maps, Media, Player Features, UI/Mobile, Rules Reference, Legal & Compliance, Test Infrastructure, Integrations, Visual, Class Features (next cycle)). The priority legend doesn't apply to these — they're topic-grouped, not P-tagged.
+
+---
+
+## SRD 5e Audit (v2.404.0 refresh)
+
+**Audit scope.** Recomputed against the codebase as of v2.404.0, after the **v2.403.0 → v2.404.0 magic-items closure arc** that took the magic-items category from 235/239 (~98%) to 239/239 (100%):
+
+- **v2.403.0 "The Elemental Counter"** — substrate ship: new `_use_item_action_announce_only` handler + 4 elemental-summoning items (bowl/brazier/censer/stone).
+- **v2.403.1 "The Trickster's Counter"** — 4 more announce-only items (cape-of-the-mountebank, iron-bands-of-binding, efreeti-bottle, bag-of-tricks 3/dawn).
+- **v2.403.2 "The Recharging Cube"** — 3 multi-charge per-day items with dice-recharge (pipes-of-the-sewers, helm-of-teleportation, cube-of-force).
+- **v2.403.3 "The Patient Hourglass"** — 3 multi-day cooldown items (horn-of-valhalla, ring-of-djinni-summoning, rod-of-security).
+- **v2.403.4 "The Spent Chime"** — 2 lifetime-charge items (chime-of-opening, ring-of-three-wishes).
+- **v2.403.5 "The Apothecary's Jar"** — 4 multi-dose consumable containers (restorative-ointment, dust-of-dryness, sovereign-glue, bag-of-beans).
+- **v2.403.6 "The Tearing Fan"** — Bucket A holdout #1: Wind Fan with cumulative-20% tear-on-overuse mechanic (dedicated handler).
+- **v2.403.7 "The Quiet Probe"** — Bucket A holdout #2: Medallion of Thoughts closes the Phase 9.2 arc.
+- **v2.404.0 "The Last Four Rows"** — Phase 9.3 umbrella-slug closure. 4 umbrella catalog slugs wired (potion-of-healing real heal handler with tier picker, spell-scroll real cast handler, weapon-1-2-or-3 + wand-of-the-war-mage-1-2-or-3 passive catalog stubs). Magic-items denominator from 235/239 → **239/239 = 100%**.
+
+The session shipped **9 commits** end-to-end. Magic items joins Monsters + Class features + Races as a strictly-✅ surface.
+
+### Per-category coverage (the headline numbers)
+
+| Category | SRD count | Automated | Notes |
+|---|---|---|---|
+| Races | 9 | **✅ ~100%** | Unchanged. |
+| Monsters | 322 | **✅ ~100%** | Unchanged. |
+| Conditions | 15 | **~92%** | Unchanged. |
+| Class features | **222 rows** | **✅ 100%** | Unchanged. |
+| Spells | 319 | **~79%** | Unchanged. |
+| Magic items | **239 / 239 wired** | **✅ 100%** | **+2 pts vs. v2.399.0 (~98% → 100%).** The v2.403.0–v2.403.7 Phase 9.2 arc wired charge tracking for 22 Bucket D + 2 Bucket A holdout items; v2.404.0 Phase 9.3 closed the 4 umbrella catalog slugs (potion-of-healing + spell-scroll real handlers; weapon-1-2-or-3 + wand-of-the-war-mage-1-2-or-3 passive stubs). Every SRD magic-item slug now resolves to a wiring entry. |
+
+**Overall ~97%** automated across the SRD ruleset (unchanged headline % — Magic items was already in the 98% range; the meaningful change is that another category joins the strictly-✅ club, narrowing the remaining gap to just the utility-spell upcast tail + the permanently-GM-narrated condition clauses).
+
+### Remaining gaps (priority order — toward full SRD automation)
+
+After the v2.404.0 magic-items closure, the per-category gaps are genuinely small and substrate-shaped.
+
+1. 🟡 **P2 — Cast-and-broadcast utility-spell upcast.** Unchanged. ~250 SRD utility spells with no damage/healing base — a subset could gain richer per-slot modeling. Substrate work, not engine.
+2. 🟠 **Filed follow-up — Bucket D announce-only mechanization (Path C from the v2.403.x arc).** Roughly 60 SRD magic items have their catalog row + charge counter wired but their *effect* stays GM-narrated by design ("archetype J" per the v2.367.0 closure note). These need substrates SimpleVTT doesn't model: extradimensional storage math (bag-of-holding, handy-haversack, portable-hole, bag-of-devouring), item-summoned creatures (figurines, staff-of-the-python, dancing-sword, animated-shield), planar travel (amulet-of-the-planes, cubic-gate, well-of-many-worlds, cape teleport, plate-armor-of-etherealness, rod-of-security), capture-creature state (iron-flask, mirror-of-life-trapping), random-table dispatch (deck-of-many-things, deck-of-illusions, bag-of-beans rolls), multi-mode catalog entries (rod-of-lordly-might 6-button, candle-of-invocation, crystal-ball variants, necklace-of-prayer-beads), and reaction-charge items (rod-of-absorption, ring-of-evasion). Filed for the v3.x scope expansion. The audit row stays at 100% because catalog wiring is complete; what's left is mechanical *depth* of inherently-narrative items.
+3. 🟠 **Filed follow-up — race-features Phases 1b/1c + 4b/5b + 7.** Unchanged. All filed in [`docs/plans/race-features.md`](plans/race-features.md).
+4. ✅ **DONE — Magic-items closure arc (v2.403.0–v2.404.0).** All 239 SRD magic-item slugs now resolve to a wiring entry.
+5. ✅ **DONE — Charmed-gate mirror onto `/cast_spell` + `/use_feature` (v2.399.2 reconciliation).** Unchanged.
+6. ✅ **DONE — Race tail (v2.392.0–v2.399.0).** Unchanged.
+7. ✅ **DONE — Condition-enforcement audit clauses #1–#4.** Closed v2.385.0–v2.390.0.
+8. ✅ **DONE — Class-feature ⚪ tail.** Closed v2.368.0–v2.370.1.
+9. ✅ **DONE — Spell area-effect automation.** Closed v2.373.0–v2.376.0.
+10. ✅ **DONE — Spell upcast dice/heal scaling.** Effectively complete (v2.344.2 reconciliation).
+11. ✅ **DONE — Magic-item content tail.** Closed v2.316.0–v2.344.0.
+12. ✅ **DONE — Legendary + Lair Actions arc.** Closed end-to-end v2.159.32–v2.382.0.
+
+### Out-of-scope (unchanged)
+
+Tasha's, Xanathar's-beyond-SRD, Strixhaven, post-SRD feats, backgrounds beyond Acolyte stay future-3.x scope. **2024 rules + Mythic Actions** likewise stay future-3.x scope. **Charmed clause 2** (social-check advantage), **Grappled clause 3** (out-of-reach), **Deafened** (mostly hearing-narrative): permanently GM-narrated per the v2.384.0 audit doc — need substrates that don't exist.
+
+### What's left to ship in SimpleVTT 2.x?
+
+The SRD ruleset is now ~97% automated end-to-end. Four of six categories are strictly-✅ 100% (Races, Monsters, Class features, **Magic items** new in v2.404.0). The remaining ~3% is dominated by content-layer utility-spell richness + the substrate-dependent filed follow-ups. After those the SRD is essentially closed; the natural next-arc inflection is unchanged:
+
+- **3.0 scope expansion** — post-SRD content (Tasha's, Xanathar's, 2024-PHB rule changes, Mythic Actions). **Plus the Bucket D announce-only mechanization arc** (filed gap #2 above) — extradimensional storage substrate, planar travel, sentient items, random-table dispatch, multi-mode catalog entries, reaction-charge items.
+- **Polish + UX** — Manually Added P3 polish items + Combat / GM Tools sections.
+- **Test-infrastructure hardening** — spell-validation suite Phase 5 + pytest-xdist parallelization.
+- **Maps 2.0 / Stealth-cover substrates** — would unlock Phases 4b + 5b of race-features.
 
 ---
 

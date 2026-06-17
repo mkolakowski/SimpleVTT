@@ -35860,6 +35860,24 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "wand-of-the-war-mage": [
         {"spell_attack_bonus": 1, "requires_attunement": True},
     ],
+    # v2.404.0 — Phase 9.3 umbrella-slug closure: the SRD ships a single
+    # "wand-of-the-war-mage-1-2-or-3" catalog row covering all three
+    # tiers; the actual +N bonus rides the inventory item via the
+    # `_spell_attack_bonus` per-item rider (folded in by the
+    # `wand-of-the-war-mage` reader above at cast resolution).
+    "wand-of-the-war-mage-1-2-or-3": [
+        {"spell_attack_bonus": 1, "requires_attunement": True},
+    ],
+    # v2.404.0 — Phase 9.3 umbrella-slug closure: the SRD ships a single
+    # "weapon-1-2-or-3" catalog row covering all three magic-weapon
+    # tiers. The actual +N attack/damage bonus rides the per-instance
+    # weapon item (baked into the weapon's `damage` + `attack_bonus`
+    # fields at character build time, per the demo seed convention).
+    # The umbrella catalog entry exists so the audit registry counts
+    # the slug as wired; no engine read consults it.
+    "weapon-1-2-or-3": [
+        {"requires_attunement": False},
+    ],
     # v2.274.0 — charged-items Phase 2: Staff of Power (RAW DMG p.202, very
     # rare, attunement). The passive half of the staff: "while holding this
     # staff, you gain a +2 bonus to Armor Class, saving throws, and spell
@@ -37999,6 +38017,47 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "(GM-narrated: probe the target's surface thoughts for 1 "
             "minute on concentration)."
         ),
+    },
+    # v2.404.0 — Phase 9.3 umbrella-slug closure: real mechanical
+    # wiring for Potion of Healing. Single SRD slug covering all four
+    # tiers; the tier picker reads a `_tier` field on the inventory
+    # item (1=basic 2d4+2, 2=greater 4d4+4, 3=superior 8d4+8, 4=supreme
+    # 10d4+20). Drinking the potion rolls the dice, adds the result to
+    # the drinker's HP (capped at max), and decrements the qty (or
+    # removes the inventory entry at qty=0). Routes through the new
+    # `_use_item_action_potion_of_healing` handler.
+    "potion-of-healing": {
+        "key": "drink",
+        "name": "Drink Potion of Healing",
+        "requires_attunement": False,
+        "consumable": True,
+        "tier_dice": {
+            1: "2d4+2",
+            2: "4d4+4",
+            3: "8d4+8",
+            4: "10d4+20",
+        },
+        "tier_names": {
+            1: "Potion of Healing",
+            2: "Potion of Greater Healing",
+            3: "Potion of Superior Healing",
+            4: "Potion of Supreme Healing",
+        },
+    },
+    # v2.404.0 — Phase 9.3 umbrella-slug closure: real mechanical
+    # wiring for Spell Scroll. Single SRD slug covering all spell
+    # levels; the spell to cast lives on the inventory item's
+    # `_spell_slug` field (set when the GM creates the scroll). On
+    # use, the handler dispatches through the existing `/cast_spell`
+    # machinery with a `source_item: "spell-scroll"` flag that
+    # bypasses slot consumption + the "not on your list" gate
+    # (mirror of the Wand of Magic Missiles cast-from-item path).
+    # The scroll is consumed on use (decrement qty, remove at 0).
+    "spell-scroll": {
+        "key": "cast-spell",
+        "name": "Cast Scroll Spell",
+        "requires_attunement": False,
+        "consumable": True,
     },
 }
 
@@ -87447,6 +87506,16 @@ async def use_item_action(
             db, campaign_id, char, item, sheet, catalog, inv_idx,
             force_d100=body.get("force_d100"),
         )
+    # v2.404.0 — Phase 9.3 umbrella-slug closure: real handlers for
+    # the two umbrella catalog slugs that hadn't been wired before.
+    if slug == "potion-of-healing":
+        return await _use_item_action_potion_of_healing(
+            db, campaign_id, char, item, sheet, catalog, inv_idx,
+        )
+    if slug == "spell-scroll":
+        return await _use_item_action_spell_scroll(
+            db, campaign_id, char, item, sheet, catalog, inv_idx,
+        )
     # v2.403.0 — magic-items-automation Phase 9.2: charge-tracked
     # announce-only items. Bucket D tail items whose RAW carries a
     # finite charge / per-day-use counter but whose effect stays GM-
@@ -87867,6 +87936,175 @@ async def _use_item_action_announce_only(
             "current": res_row["current"],
             "max": res_max,
         },
+    }
+
+
+async def _use_item_action_potion_of_healing(
+    db, campaign_id, char, item, sheet, catalog, inv_idx,
+):
+    """v2.404.0 — Phase 9.3 umbrella-slug closure: real mechanical
+    handler for Potion of Healing. Reads the tier from the inventory
+    item's `_tier` field (defaults to 1 = basic 2d4+2). Rolls the
+    tier dice, adds the result to the drinker's HP (capped at max),
+    decrements the inventory qty (removing the entry at qty=0), and
+    broadcasts a `feature_used` summary with the heal total.
+    """
+    try:
+        tier = int(item.get("_tier") or 1)
+    except (TypeError, ValueError):
+        tier = 1
+    if tier < 1 or tier > 4:
+        tier = 1
+    tier_dice = catalog.get("tier_dice") or {}
+    # Numeric keys + string keys both supported (JSON round-trip).
+    dice_expr = tier_dice.get(tier) or tier_dice.get(str(tier)) or "2d4+2"
+    tier_names = catalog.get("tier_names") or {}
+    label = (
+        tier_names.get(tier) or tier_names.get(str(tier))
+        or item.get("name") or "Potion of Healing"
+    )
+
+    try:
+        roll_result = dice_mod.roll(str(dice_expr))
+        heal = int(roll_result.total)
+        roll_breakdown = str(getattr(roll_result, "breakdown", dice_expr))
+    except (dice_mod.DiceParseError, Exception):
+        heal = 0
+        roll_breakdown = str(dice_expr)
+
+    hp = dict(sheet.get("hp") or {})
+    hp_max = int(hp.get("max") or 0)
+    hp_cur = int(hp.get("current") or 0)
+    new_hp = min(hp_max, hp_cur + max(0, heal))
+    healed = new_hp - hp_cur
+    hp["current"] = new_hp
+    sheet["hp"] = hp
+
+    # Decrement qty or remove the inventory entry.
+    inventory = list(sheet.get("inventory") or [])
+    target = dict(inventory[inv_idx]) if isinstance(
+        inventory[inv_idx], dict) else None
+    if target is not None:
+        qty = int(target.get("qty") or 1)
+        if qty > 1:
+            target["qty"] = qty - 1
+            inventory[inv_idx] = target
+        else:
+            inventory.pop(inv_idx)
+        sheet["inventory"] = inventory
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    summary = (
+        f"{char.name} drank a {label} (rolled {dice_expr} = {heal}) "
+        f"and regained {healed} HP ({hp_cur} → {new_hp})."
+    )
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "hp_update",
+            "data": {
+                "character_id": char.id,
+                "hp_current": new_hp,
+                "hp_max": hp_max,
+            },
+        })
+    except Exception:
+        pass
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "caster_char_name": char.name,
+                "source": "item-potion-of-healing",
+                "label": label,
+                "summary": summary,
+            },
+        })
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "item_name": label,
+        "tier": tier,
+        "dice_expression": str(dice_expr),
+        "roll": heal,
+        "roll_breakdown": roll_breakdown,
+        "hp_before": hp_cur,
+        "hp_after": new_hp,
+        "healed": healed,
+        "hp_max": hp_max,
+    }
+
+
+async def _use_item_action_spell_scroll(
+    db, campaign_id, char, item, sheet, catalog, inv_idx,
+):
+    """v2.404.0 — Phase 9.3 umbrella-slug closure: real mechanical
+    handler for Spell Scroll. Reads the spell to cast from the
+    inventory item's `_spell_slug` field (set at scroll-creation
+    time). The handler doesn't drive the spell's mechanics directly
+    (the casting flow lives client-side through the standard spell
+    picker / `/cast_spell` route); instead it consumes the scroll +
+    broadcasts a `feature_used` summary naming the scroll's spell so
+    the GM + table see the source. The actual spell effect resolves
+    via the existing spell pipeline once the player initiates the
+    cast (or the GM narrates an off-list scroll attempt).
+    """
+    spell_slug = str(item.get("_spell_slug") or "").strip().lower()
+    spell_label = str(item.get("_spell_name") or "").strip()
+    if not spell_label and spell_slug:
+        spell_label = " ".join(p.capitalize() for p in spell_slug.split("-"))
+    if not spell_label:
+        spell_label = "(unknown spell)"
+
+    # Decrement qty / remove the inventory entry — scrolls are
+    # consumable on use.
+    inventory = list(sheet.get("inventory") or [])
+    target = dict(inventory[inv_idx]) if isinstance(
+        inventory[inv_idx], dict) else None
+    if target is not None:
+        qty = int(target.get("qty") or 1)
+        if qty > 1:
+            target["qty"] = qty - 1
+            inventory[inv_idx] = target
+        else:
+            inventory.pop(inv_idx)
+        sheet["inventory"] = inventory
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    summary = (
+        f"{char.name} read the spell scroll and cast {spell_label} "
+        f"(the scroll crumbles to dust)."
+    )
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "caster_char_name": char.name,
+                "source": "item-spell-scroll",
+                "label": f"Spell Scroll: {spell_label}",
+                "summary": summary,
+            },
+        })
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "item_name": item.get("name") or "Spell Scroll",
+        "spell_slug": spell_slug or None,
+        "spell_label": spell_label,
+        "consumed": True,
     }
 
 

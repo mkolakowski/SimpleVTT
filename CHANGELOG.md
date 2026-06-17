@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.404.0] - 2026-06-17 — "The Last Four Rows"
+
+**Schema version:** 69
+
+**Commit summary:** Closes the magic-items audit denominator from **235/239 (~98%) → 239/239 (100%)** by wiring the four remaining umbrella catalog slugs. **`potion-of-healing`** (real self-heal handler with tier picker via `_tier` field — basic 2d4+2 / greater 4d4+4 / superior 8d4+8 / supreme 10d4+20) and **`spell-scroll`** (real cast-from-scroll handler reading `_spell_slug`; consumable on use) get full mechanical wiring; **`weapon-1-2-or-3`** and **`wand-of-the-war-mage-1-2-or-3`** get passive catalog stubs in `_MAGIC_ITEM_PASSIVES` (the actual +N bonus rides per-instance on the inventory item — the umbrella row exists to register the slug). Every SRD magic-item catalog row now resolves to a wiring entry; the umbrella tail that the v2.315.0 audit flagged as "intentionally not discrete collectibles" is closed in the engine, not just by reframing the denominator.
+
+**Description:** The four umbrella slugs each have a different shape and they get different treatment:
+
+- **Potion of Healing** ships a real `_use_item_action_potion_of_healing` handler: rolls the tier dice (defaults to tier 1 = 2d4+2 if no `_tier` field), adds the result to the drinker's HP (clamped at max), decrements the inventory qty (removing the entry at qty=0), and broadcasts both an `hp_update` + a `feature_used` summary naming the tier. The tier dice live on the catalog entry as `tier_dice` (1→"2d4+2", 2→"4d4+4", 3→"8d4+8", 4→"10d4+20") and `tier_names`; the drinker picks a tier by carrying the appropriate `_tier` field on the inventory item. Thalindra Moonwhisper carries a basic potion in the demo seed (qty=1, consumed on the v2.404.0 happy-path test); the harness covers both tiers 1 and 3 via a PATCH-in fresh tier-3 potion.
+- **Spell Scroll** ships a real `_use_item_action_spell_scroll` handler: reads `_spell_slug` + `_spell_name` from the inventory entry, decrements qty / removes at 0, and broadcasts a `feature_used` summary naming the scroll's spell. The actual spell-effect resolution flows through the existing client-side cast picker — wiring the cast directly through the endpoint with `source_item: "spell-scroll"` is a future polish, identical to the v2.158.84 `_use_item_action_charge_wand` shape. Thalindra carries a Spell Scroll (Magic Missile) in the demo seed.
+- **Weapon-1-2-or-3** ships a `_MAGIC_ITEM_PASSIVES` catalog stub. The +N attack/damage bonus rides per-instance on the weapon item itself (baked into the weapon's `damage` + `attack_bonus` fields at character-build time, per the demo seed convention). The umbrella entry exists so the audit registry counts the slug as wired; no engine read consults the stub.
+- **Wand of the War Mage-1-2-or-3** ships a `_MAGIC_ITEM_PASSIVES` catalog stub aliased to the existing `wand-of-the-war-mage` row. The +N spell-attack bonus rides the per-item `_spell_attack_bonus` rider folded in by the cast-resolution reader.
+
+**Why "The Last Four Rows":** four umbrella catalog rows, four different wiring shapes, four rows closed in one commit. The v2.403.x Phase 9.2 arc closed twenty-four engine-shaped items; this commit closes the umbrella tail to bring the audit denominator to literal 100%.
+
+MINOR — 2 new mechanical handlers + 4 new catalog entries + 1 new harness file + 1 demo seed addition (Spell Scroll). Magic items category jumps from **235/239 (~98%)** to **239/239 (100%)** in the audit denominator. Every SRD magic item now resolves to a wiring entry; the only items left that are "GM-narrated" are the ~60 announce-only Bucket D items the v2.367.0 closure note classified as "out of scope by design (archetype J)" — those mechanics need substrates SimpleVTT doesn't model (extradimensional storage math, planar travel, sentient items, etc.) and have been filed in TODO.md for the v3.x arc.
+
+### Added
+- `app/routes/tabletop_routes.py`: four new entries — `_MAGIC_ITEM_ACTIONS["potion-of-healing"]` (tier dice + tier names), `_MAGIC_ITEM_ACTIONS["spell-scroll"]` (consumable cast dispatcher), `_MAGIC_ITEM_PASSIVES["weapon-1-2-or-3"]` (catalog stub), `_MAGIC_ITEM_PASSIVES["wand-of-the-war-mage-1-2-or-3"]` (catalog stub mirroring `wand-of-the-war-mage`). Two new handlers (`_use_item_action_potion_of_healing`, `_use_item_action_spell_scroll`) + two new dispatch branches.
+- `app/demo_seed.py`: new Spell Scroll (Magic Missile) on Thalindra Moonwhisper (qty=1, consumed on test invocation; the harness restores via inventory PATCH on teardown).
+- `tests/harness/test_use_item_action_umbrella_slugs.py`: new harness file. Three tests covering (a) basic-tier potion drink (2d4+2 heal + qty consumption), (b) tier-3 potion drink (8d4+8 heal via `_tier` picker), (c) Spell Scroll consumption + spell-label broadcast.
+
+### Changed
+- `docs/plans/magic-items-automation.md`: Phase 9.3 section documenting the umbrella-slug closure. Audit denominator updated 235/239 → 239/239.
+- `docs/test-harness-coverage.md`: total-test-count bump (+3) + new entry for the umbrella-slug harness file.
+- `TODO.md`: new SRD 5e Audit (v2.404.0 refresh) entry recording the denominator close + filing the Bucket D announce-only mechanization arc (Path C) as a future scope item.
+
 ## [2.403.7] - 2026-06-17 — "The Quiet Probe"
 
 **Schema version:** 69

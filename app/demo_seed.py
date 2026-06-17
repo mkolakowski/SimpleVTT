@@ -1154,6 +1154,22 @@ def _wizard_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 0.5,
              "_slug": "cubic-gate",
              "desc": "Legendary wondrous item, no attunement. 3-in. cube with six faces (each keyed to a different plane). Action: press a face to attune the cube; press again to cast Gate (DC 17) targeting that plane. Each face has 1 daily charge (regain all at dawn). RAW DMG p.165."},
+            # v2.404.0 — Phase 9.3 umbrella-slug closure: Spell Scroll
+            # (RAW DMG p.200). The single SRD slug covers all spell
+            # levels; the spell is keyed by the inventory item's
+            # `_spell_slug` field. Seeded equipped on Thalindra (Wizard
+            # — natural scroll-scribe) with Magic Missile as the demo
+            # spell. The `_use_item_action_spell_scroll` handler
+            # consumes the scroll on use and broadcasts the spell
+            # cast; the spell's effect resolves via the standard
+            # spell-casting pipeline.
+            {"name": "Spell Scroll (Magic Missile)", "type": "magic",
+             "qty": 1, "equippable": True, "equipped": True,
+             "consumable": True, "weight_lb": 0,
+             "_slug": "spell-scroll",
+             "_spell_slug": "magic-missile",
+             "_spell_name": "Magic Missile",
+             "desc": "Common consumable. Action: read the scroll to cast Magic Missile (1st-level, 3 darts × 1d4+1 force). The scroll crumbles to dust on use. RAW DMG p.200."},
         ],
         "feats": [],
         # v2.16.1: Arcane Recovery counter (Wizard Lv 1 feature). Once per

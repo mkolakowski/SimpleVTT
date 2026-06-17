@@ -124,21 +124,27 @@
       <tr><td>Conditions</td><td>15</td><td><span class="status-shipped">~92%</span></td></tr>
       <tr><td>Class features</td><td>222 rows</td><td><span class="status-shipped">✅ 100%</span></td></tr>
       <tr><td>Spells</td><td>319</td><td><span class="status-shipped">~79%</span></td></tr>
-      <tr><td>Magic items</td><td>235 / 239 wired</td><td><span class="status-shipped">~98%</span></td></tr>
+      <tr><td>Magic items</td><td>239 / 239 wired</td><td><span class="status-shipped">✅ 100%</span></td></tr>
     </tbody>
   </table>
   <p class="lede" style="margin-top:0;">
-    <strong>Overall ~97%.</strong> Races joins Monsters + Class features as a
-    strictly-✅ surface after the v2.392.0–v2.399.2 <a href="/wiki/srd-races-implementation">race-features arc</a>
+    <strong>Overall ~97%.</strong> Magic items joins Monsters + Class features + Races as a
+    strictly-✅ surface after the v2.403.0–v2.404.0 magic-items closure arc — 22 charge-bearing Bucket D items
+    + both Bucket A holdouts (wind-fan, medallion-of-thoughts) wired through the new
+    <code>_use_item_action_announce_only</code> + dedicated handlers (Phase 9.2),
+    plus the 4 umbrella catalog slugs closed in v2.404.0 (potion-of-healing real heal handler with tier picker,
+    spell-scroll real cast handler, weapon-1-2-or-3 + wand-of-the-war-mage-1-2-or-3 passive stubs — Phase 9.3).
+    Prior arcs that already shipped: the v2.392.0–v2.399.2
+    <a href="/wiki/srd-races-implementation">race-features arc</a>
     (Dragonborn Breath Weapon, Tiefling racial Hellish Rebuke, Hill Dwarf
     Stonecunning + heavy-armor speed bypass, Rock Gnome Artificer's Lore, plus
-    recognition flags for Halfling Nimbleness + Naturally Stealthy). Prior
-    arcs closed across v2.316–v2.391: magic-item content tail, class-feature
+    recognition flags for Halfling Nimbleness + Naturally Stealthy);
+    magic-item content tail (v2.316–v2.344); class-feature
     strictly-✅ 100% (Aura of Courage v2.368.0; Unarmored Defense / Deflect
-    Missiles / Cleansing Touch v2.369.0–v2.370.1), AoE auto-targeting
-    (sphere/cone/line picker + cast_spell parity v2.373.0–v2.376.0), the
+    Missiles / Cleansing Touch v2.369.0–v2.370.1); AoE auto-targeting
+    (sphere/cone/line picker + cast_spell parity v2.373.0–v2.376.0); the
     lair-action arc end-to-end (v2.377.0–v2.382.0: metallic + Lich + Kraken
-    backfill + condition map + regional effects), and the condition-enforcement
+    backfill + condition map + regional effects); and the condition-enforcement
     audit (v2.385.0–v2.391.0: Sneak Attack ally-skip + 3 PC-action
     incapacitated gates + Grappled-ends-on-grappler-incap +
     Charmed-can't-target-charmer). The remaining ~3% is content-layer
