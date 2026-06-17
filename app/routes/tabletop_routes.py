@@ -1967,6 +1967,40 @@ _SPELL_BUFF_MAP["fly"] = {
     ),
 }
 
+# v2.404.3 — Enhance Ability (Cleric / Druid / Bard / Sorcerer L2). RAW
+# PHB p.237: touch a creature and choose one of six variants — Bear's
+# Endurance (advantage on CON checks + 2d6 temp HP), Bull's Strength
+# (advantage on STR checks + doubled carrying capacity), Cat's Grace
+# (advantage on DEX checks + no fall damage <=20 ft), Eagle's Splendor
+# (advantage on CHA checks), Fox's Cunning (advantage on INT checks),
+# Owl's Wisdom (advantage on WIS checks). Concentration up to 1 hour.
+# "When you cast this spell using a spell slot of 3rd level or higher,
+# you can target one additional creature for each slot level above 2nd."
+# Mirrors the v2.404.1 Invisibility shape: L2 base, +1 per slot above 2.
+# The variant choice + variant-specific rider (temp HP, carrying capacity,
+# fall protection) stay GM-narrated; the cap + concentration anchor are
+# the surfaced engine work.
+_SPELL_BUFF_MAP["enhance-ability"] = {
+    "key": "enhance-ability",
+    "name": "Enhance Ability",
+    "icon": "💪",
+    "duration_rounds": 600,  # up to 1 hour @ 6 s/round
+    "duration_max": 600,
+    "concentration": True,
+    "effects": {
+        "enhance_ability_active": True,
+    },
+    "max_targets": 1,
+    "base_level": 2,
+    "extra_targets_per_slot_above_base": 1,
+    "desc": (
+        "Magical enhancement (Bear's Endurance / Bull's Strength / Cat's "
+        "Grace / Eagle's Splendor / Fox's Cunning / Owl's Wisdom variant; "
+        "GM-narrated). Advantage on the matching ability check + the "
+        "variant rider. Concentration up to 1 hour. RAW PHB p.237."
+    ),
+}
+
 # v2.203.0 — Potion of Clairvoyance (RAW DMG p.187, rare): drink → the
 # clairvoyance spell (a scrying sensor for 10 minutes). A purely
 # descriptive buff like Water Breathing — the engine tracks no scrying

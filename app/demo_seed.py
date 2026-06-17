@@ -1465,6 +1465,15 @@ def _cleric_sheet(name: str) -> dict:
              "_subclass_granted": True, "_granted_by": "Life Domain"},
             {"name": "Spirit Guardians",  "level": 3, "prepared": True, "_slug": "spirit-guardians", "casting_time": "1 action"},
             {"name": "Mass Healing Word", "level": 3, "prepared": True, "_slug": "mass-healing-word", "casting_time": "1 bonus action"},
+            # v2.404.3 — Enhance Ability (Cleric / Druid / Bard / Sorcerer
+            # L2). RAW PHB p.237: touch a creature, choose a Bear / Bull /
+            # Cat / Eagle / Fox / Owl variant; concentration up to 1 hour.
+            # Upcast: +1 target per slot above 2nd. Demo fixture for the
+            # v2.404.3 `_SPELL_BUFF_MAP["enhance-ability"]` cap + extras
+            # (1 + (slot - 2) * 1). Tavik has L2 + L3 slots so the test
+            # exercises both base cap and the +1 upcast extension. Appended
+            # at END so existing spell_index assertions stay valid.
+            {"name": "Enhance Ability", "level": 2, "prepared": True, "_slug": "enhance-ability", "casting_time": "1 action"},
         ],
         # Lv 8 cleric slot progression — 4/3/3/2 (v2.60.0: L4 added).
         "spell_slots": {

@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.404.3] - 2026-06-17 — "The Menagerie's Touch"
+
+**Schema version:** 69
+
+**Commit summary:** Third commit of the **spell utility-upcast** arc — wires **Enhance Ability** through the v2.380.0 `_SPELL_BUFF_MAP` cap+upcast substrate. RAW PHB p.237: 1 target at L2, +1 target per slot above 2nd. Same shape as Invisibility (L2 base + extras). The six variant choices — Bear's Endurance / Bull's Strength / Cat's Grace / Eagle's Splendor / Fox's Cunning / Owl's Wisdom — and their riders (2d6 temp HP / doubled carrying capacity / no fall damage <=20 ft) stay GM-narrated. The cap + concentration anchor are the surfaced engine work.
+
+**Description:** Tavik (Cleric Lv 8, L2 + L3 slots) gets Enhance Ability appended at spell index 13. His existing L1-L12 spell indices are untouched so the established "appended at END" pattern preserves all existing assertion-shape harness tests. The new buff entry uses a single `effects.enhance_ability_active: True` marker — the variant choice + variant rider live on the GM's narration side, identical to how Sanctuary's specific narration is GM-tracked (the engine just enforces concentration + the buff badge).
+
+**Why "The Menagerie's Touch":** six animal totems imprinted by a single touch — bear endurance, bull strength, cat grace, eagle splendor, fox cunning, owl wisdom. The menagerie's all six.
+
+PATCH — 1 new wired spell + 1 demo-seed spell-list addition + 1 new harness file (4 tests). Spell catalog: 3 of ~9 target-scaling utility spells now use the v2.380.0 substrate via this arc (Invisibility v2.404.1 + Fly v2.404.2 + Enhance Ability v2.404.3; Longstrider queued for the arc's closing commit).
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_SPELL_BUFF_MAP["enhance-ability"]` entry. `concentration: True`, `effects.enhance_ability_active: True`, `max_targets: 1`, `base_level: 2`, `extra_targets_per_slot_above_base: 1`. Wires through the existing v2.380.0 cap-extension reader at `/cast_spell` automatically.
+- `app/demo_seed.py`: appended Enhance Ability to Tavik's spell list at index 13 (END-append to preserve existing spell_index assertions).
+- `tests/harness/test_cast_enhance_ability_target_cap_upcast.py`: new harness file (4 tests) — L2 1 target → 200, L2 2 targets → 400 limit=1, L3 2 targets → 200, L3 3 targets → 400 limit=2.
+
+### Changed
+- `docs/test-harness-coverage.md`: total-test-count bump (+4) + new row for the enhance-ability cap file.
+
 ## [2.404.2] - 2026-06-17 — "The Borrowed Sky"
 
 **Schema version:** 69
