@@ -1,0 +1,47 @@
+# SimpleVTT audit-log parser for CrowdSec
+#
+# Parses the canonical audit-log line format emitted by
+# app/audit_log.py:
+#
+#   <subsystem.event> ip=<ip> ua="<ua>" [key=value ...]
+#
+# After this parser runs, scenarios can filter on
+# evt.Meta.log_type == 'simplevtt-audit' and the event subtype is
+# available at evt.Parsed.evt_subtype.
+#
+# Install:
+#     cp simplevtt.yaml /etc/crowdsec/parsers/s01-parse/simplevtt.yaml
+#     systemctl reload crowdsec
+#
+# Same canonical line shape the fail2ban filter at
+# docs/integrations/fail2ban/filter.d/simplevtt-auth.conf consumes —
+# pick whichever engine you prefer.
+
+filter: "evt.Line.Module != ''"
+onsuccess: next_stage
+debug: false
+name: simplevtt/audit-parser
+description: "Parse SimpleVTT canonical audit-log lines"
+
+pattern_syntax:
+  AUDIT_EVENT_TAG: "[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*"
+  AUDIT_QUOTED_UA: '"[^"]*"|[^ "]+'
+
+nodes:
+  # Parse the timestamped python-logger prefix + the canonical
+  # event line. The simplevtt.audit logger emits at INFO or WARNING
+  # depending on success/rejection; both feed the same parser.
+  - grok:
+      pattern: '^%{DATA:ts}\s+%{WORD:level}\s+simplevtt\.audit:\s+%{AUDIT_EVENT_TAG:evt_subtype}\s+ip=%{NOTSPACE:ip}\s+ua=%{AUDIT_QUOTED_UA:ua}\s*%{GREEDYDATA:remainder}$'
+      apply_on: message
+    statics:
+      - meta: log_type
+        value: simplevtt-audit
+      - meta: source_ip
+        expression: evt.Parsed.ip
+      - meta: service
+        value: simplevtt
+      - meta: event_subtype
+        expression: evt.Parsed.evt_subtype
+      - target: evt.StrTime
+        expression: evt.Parsed.ts

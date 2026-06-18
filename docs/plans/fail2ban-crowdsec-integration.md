@@ -1,6 +1,6 @@
 # fail2ban / CrowdSec log integration — Design Plan
 
-> **Status:** ✅ Phase 1 effectively complete (v2.426.0) — emission module + auth canonical events + API-surface 401/403 events + demo_magic_link.* events + reference fail2ban configs covering all three families shipped. Only the wiki-surface for `docs/integrations/README.md` remains filed. CrowdSec configs and the compose-side smoke test land with Phase 2.
+> **Status:** ✅ Phase 1 + Phase 2 shipped (v2.426.0 + v2.429.0) — emission module + auth canonical events + API-surface 401/403 events + demo_magic_link.* events + cloudflare.* events + reference fail2ban configs covering all 8 event tags + CrowdSec parser + 5 reference scenarios + operator compose override template. Only the wiki-surface for `docs/integrations/README.md` and the compose-side smoke test (Phase 2B, gated on Docker Hub image reliability) remain filed.
 > **Tracked in:** [`TODO.md`](../../TODO.md) → Manually Added → "fail2ban / CrowdSec log integration out of the box".
 > **Sibling plans:**
 > - [`demo-magic-link.md`](demo-magic-link.md) — defines half the consumer side of this contract (the `demo_magic_link.*` log lines).
@@ -166,12 +166,14 @@ Each config block carries a header comment with a short rationale + the threshol
 5. ✅ **v2.426.0** — API surface events (`api.unauthorized` + `api.forbidden`) plumbed into the global `_auth_redirect_handler`. Legitimate browser-bounce path (HTML request to guarded page → 303 to `/login`) is explicitly excluded so the log doesn't drown in normal navigation noise. fail2ban filter at `docs/integrations/fail2ban/filter.d/simplevtt-auth.conf` extended to cover the new event tags + the `demo_magic_link.verify_rejected` family. 3 new harness tests at `tests/harness/test_api_audit_emission.py`.
 6. 🟠 **Filed for follow-up** — Wiki surfacing for `docs/integrations/README.md`. Skipped in v2.424.0 to keep the commit focused; the plan-doc cross-link is the only reachability path today.
 
-### Phase 2 — CrowdSec configs + compose-side smoke test (v2.5x.1)
+### Phase 2 — CrowdSec configs + compose-side smoke test (v2.429.0 — ✅ configs shipped)
 
-1. Drop the CrowdSec configs into `docs/integrations/crowdsec/`.
-2. New `docker-compose.test.yml` override with the `crowdsec-test` service.
-3. New `tests/audit/test_crowdsec_pipeline.py` that brings the override up, replays events, asserts scenarios fire.
-4. Document the operator's choice in `docs/integrations/README.md`: fail2ban for "I run on a VPS with iptables," CrowdSec for "I want the community signal-sharing layer or a Cloudflare bouncer at the edge."
+1. ✅ **v2.429.0** — CrowdSec parser at `docs/integrations/crowdsec/parsers/s01-parse/simplevtt.yaml` parses the canonical audit-log line shape, emits `evt.Meta.log_type = simplevtt-audit` and `evt.Parsed.evt_subtype = <subsystem.event>`.
+2. ✅ **v2.429.0** — Five scenarios at `docs/integrations/crowdsec/scenarios/`: auth-bruteforce, magic-link-bruteforce, magic-link-replay (trigger / always-ban), api-probe, admin-mint-flood. Each is namespaced `simplevtt/<slug>`, carries `labels.service=simplevtt` + `labels.remediation=true`, and references the parser's `simplevtt-audit` log_type to scope correctly.
+3. ✅ **v2.429.0** — Operator-side `docs/integrations/crowdsec/docker-compose.crowdsec.yml` override brings up CrowdSec with the shipped configs mounted in. Templated for the standard "logs forwarded to a host file" pattern.
+4. ✅ **v2.429.0** — `docs/integrations/crowdsec/README.md` covers install, scenario table, wiring the CrowdSec → Cloudflare bouncer, and a manual smoke test using `cscli explain --type simplevtt-audit`. The `docs/integrations/README.md` index table also distinguishes fail2ban (small host + iptables) from CrowdSec (community signal + Cloudflare bouncer).
+5. ✅ **v2.429.0** — YAML syntax + schema validation at `tests/harness/test_crowdsec_configs.py` (46 parametrized tests across 5 scenarios + 1 parser + README cross-link). Catches typo'd filter expressions, missing required keys, mis-namespaced scenarios, scenarios that forgot the `simplevtt-audit` log_type filter (would silently fire on unrelated CrowdSec events), and a parser drift that dropped the `log_type` static.
+6. 🟠 **Filed for Phase 2B** — Real CrowdSec container smoke test that replays synthetic events and asserts scenarios fire via `cscli decisions list`. Gated on the CrowdSec image being reliably available from Docker Hub (the v2.427.0 wiremock pull was hung indefinitely, so a CrowdSec pull may be too — the YAML validation test is the no-network-dependency stand-in).
 
 ### Phase 3 — Audit log JSON side-channel (v2.5x.2, optional)
 

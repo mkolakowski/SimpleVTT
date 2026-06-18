@@ -1,0 +1,48 @@
+# Operator-side docker-compose override that wires CrowdSec
+# alongside SimpleVTT. NOT loaded by the default ``docker compose
+# up`` — invoke with:
+#
+#     docker compose -f docker-compose.yml \
+#         -f docs/integrations/crowdsec/docker-compose.crowdsec.yml \
+#         up -d crowdsec
+#
+# The container mounts SimpleVTT's stdout-captured log file as its
+# datasource (acquis target) + the shipped parser + scenario
+# directories as read-only volumes. Decisions live in
+# ``/var/lib/crowdsec/data/crowdsec.db`` inside the container —
+# inspect via:
+#
+#     docker compose exec crowdsec cscli decisions list
+#
+# To wire the Cloudflare bouncer to push CrowdSec decisions to the
+# edge, follow the install steps in the README.md alongside this
+# file. The bouncer runs OUTSIDE this compose stack so it survives
+# CrowdSec container restarts cleanly.
+
+services:
+  crowdsec:
+    image: crowdsecurity/crowdsec:v1.6.4
+    container_name: simplevtt-crowdsec
+    restart: unless-stopped
+    environment:
+      COLLECTIONS: "crowdsecurity/linux"
+      CUSTOM_HOSTNAME: simplevtt
+      # Pass through the SimpleVTT log type so the parser fires.
+      ACQUIRE_FILES: /logs/app.log
+    volumes:
+      # Read-only mounts of the shipped parser + scenarios.
+      - ./docs/integrations/crowdsec/parsers/s01-parse/simplevtt.yaml:/etc/crowdsec/parsers/s01-parse/simplevtt.yaml:ro
+      - ./docs/integrations/crowdsec/scenarios:/etc/crowdsec/scenarios/simplevtt:ro
+      # Mount the SimpleVTT log file. The operator is responsible
+      # for arranging this — typical pattern is to use a docker
+      # logging-driver to forward the simplevtt-app container's
+      # stdout to a host file, then mount that file here.
+      - /var/log/simplevtt/app.log:/logs/app.log:ro
+    ports:
+      # cscli admin API. Don't expose publicly.
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD", "cscli", "lapi", "status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

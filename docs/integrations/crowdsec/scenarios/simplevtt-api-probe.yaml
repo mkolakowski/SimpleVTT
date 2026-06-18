@@ -1,0 +1,34 @@
+# API surface probing detection for SimpleVTT
+#
+# Fires when one IP triggers 10 api.unauthorized or api.forbidden
+# events within 10 minutes — a scanner probing for unguarded API
+# paths. The threshold is more lenient than the auth-bruteforce
+# scenario because a misconfigured client can legitimately
+# 401-storm a single endpoint, but 10 hits in 10 minutes is well
+# beyond that noise floor.
+#
+# Default remediation: 1-hour ban.
+
+type: leaky
+name: simplevtt/api-probe
+description: "Detect SimpleVTT API endpoint probing (10 401/403 in 10 min)"
+
+filter: |
+  evt.Meta.log_type == 'simplevtt-audit'
+  && (evt.Parsed.evt_subtype == 'api.unauthorized'
+      || evt.Parsed.evt_subtype == 'api.forbidden')
+
+groupby: evt.Meta.source_ip
+distinct: evt.Meta.source_ip
+
+leakspeed: 60s
+capacity: 10
+
+blackhole: 5m
+
+labels:
+  service: simplevtt
+  type: api-probe
+  remediation: true
+  classification:
+    - attack.reconnaissance

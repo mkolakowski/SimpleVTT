@@ -38,9 +38,25 @@ sudo fail2ban-client status simplevtt-auth
 
 ### CrowdSec — community-signal banning
 
-Status: **Phase 2 unstarted.** Reference configs (parsers +
-scenarios) and a compose-side smoke test land with the next ship
-on the integration plan.
+Status: **Phase 2 shipped (v2.429.0).** Drop-in parser + 5 scenarios
+under [`crowdsec/`](crowdsec/) cover credential stuffing, magic-link
+bruteforce + replay, API-surface probing, and admin mint flooding.
+Plus a compose override template at
+[`crowdsec/docker-compose.crowdsec.yml`](crowdsec/docker-compose.crowdsec.yml)
+the operator can use to bring up CrowdSec alongside SimpleVTT.
+
+Files:
+
+- [`crowdsec/parsers/s01-parse/simplevtt.yaml`](crowdsec/parsers/s01-parse/simplevtt.yaml) — grok parser matching the canonical audit-log line shape.
+- [`crowdsec/scenarios/simplevtt-auth-bruteforce.yaml`](crowdsec/scenarios/simplevtt-auth-bruteforce.yaml) — 5× `auth.login_failed` in 5 min → 5-minute ban.
+- [`crowdsec/scenarios/simplevtt-magic-link-bruteforce.yaml`](crowdsec/scenarios/simplevtt-magic-link-bruteforce.yaml) — 5× signature-rejected `verify_rejected` in 5 min → 5-minute ban.
+- [`crowdsec/scenarios/simplevtt-magic-link-replay.yaml`](crowdsec/scenarios/simplevtt-magic-link-replay.yaml) — 1× replay → 24-hour ban (never legitimate).
+- [`crowdsec/scenarios/simplevtt-api-probe.yaml`](crowdsec/scenarios/simplevtt-api-probe.yaml) — 10× 401/403 in 10 min → 5-minute ban.
+- [`crowdsec/scenarios/simplevtt-admin-anomaly.yaml`](crowdsec/scenarios/simplevtt-admin-anomaly.yaml) — 10× `mint_ok` in 5 min → 1-hour ban (compromised admin signal).
+- [`crowdsec/docker-compose.crowdsec.yml`](crowdsec/docker-compose.crowdsec.yml) — operator-side override; brings up CrowdSec with the shipped parser + scenarios mounted in.
+
+See [`crowdsec/README.md`](crowdsec/README.md) for the install how-to
++ how to wire the CrowdSec → Cloudflare bouncer for edge enforcement.
 
 ### Cloudflare — edge banning
 

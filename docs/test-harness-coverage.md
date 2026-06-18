@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3404 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.428.0, 2026-06-18).
+**Total tests:** 3451 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.429.0, 2026-06-18).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5311,6 +5311,30 @@ Read-only doc-hub routes added in v2.43.3, expanded in v2.49.9 with the `/wiki/d
 | `test_wiki_doc_serves_cloudflare_edge_banning_plan` | v2.423.5: `GET /wiki/doc/plan-cloudflare-edge-banning` → 200, body contains "cloudflare" + "edge-banning" + the nav menu. Resolves through the allowlist to `docs/plans/cloudflare-edge-banning.md` (outbound Cloudflare API client + GM-only "Ban IP at edge" button + admin-audit log + wiremock service in docker-compose for dev per the third-party-API rule; closes the three-piece security spine started in v2.423.2). |
 | `test_wiki_doc_unknown_slug_404` | v2.49.9: a slug that isn't in `_DOC_ALLOWLIST` → 404. Important security guarantee — the allowlist is the only way to reach a file outside `docs/wiki/`. |
 | `test_wiki_doc_traversal_blocked` | v2.49.9: directory-traversal characters in the doc slug → 404 / 400, rejected by the slug guard before the allowlist lookup. |
+
+---
+
+## CrowdSec config validation (Phase 2 — v2.429.0)
+
+YAML syntax + schema validation for the CrowdSec parser + scenarios at `docs/integrations/crowdsec/`. Pure in-process — no CrowdSec container needed. Lives in `tests/harness/test_crowdsec_configs.py`. A real end-to-end test that brings up CrowdSec and replays events is filed as Phase 2B (gated on Docker Hub image availability).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_crowdsec_dir_exists` | The `docs/integrations/crowdsec/` directory is present. |
+| `test_parsers_present` | At least one parser YAML file exists. |
+| `test_scenarios_present` | At least 5 scenario YAMLs exist (README documents 5). |
+| `test_scenario_yaml_parses[…]` × 5 | Every scenario file is valid YAML (parses to a dict). |
+| `test_scenario_has_required_keys[…]` × 5 | `type` / `name` / `filter` / `groupby` / `blackhole` / `labels` all present. A missing key silently disables the scenario when CrowdSec reloads — assertion catches it pre-ship. |
+| `test_scenario_type_is_valid[…]` × 5 | `type` is one of `leaky` / `trigger` / `counter`. |
+| `test_scenario_name_is_namespaced[…]` × 5 | Every scenario name starts with `simplevtt/` so multi-deployment operators can tell which one fired a decision. |
+| `test_scenario_labels_have_service_simplevtt[…]` × 5 | `labels.service == 'simplevtt'`. |
+| `test_scenario_remediation_flag_set[…]` × 5 | `labels.remediation == True` — every shipped scenario drives a real ban. |
+| `test_scenario_filter_references_simplevtt_log[…]` × 5 | Filter expression references the `simplevtt-audit` log_type tag so scenarios don't silently match unrelated CrowdSec events. |
+| `test_leaky_scenarios_have_capacity_and_leakspeed[…]` × 5 | Leaky scenarios carry both. The trigger-type magic-link-replay scenario is `pytest.skip`-ped. |
+| `test_parser_yaml_parses[path0]` | Parser YAML parses. |
+| `test_parser_has_required_keys[path0]` | `name` / `filter` / `nodes` all present. |
+| `test_parser_has_audit_log_type_static[path0]` | Parser emits `meta: log_type, value: simplevtt-audit` somewhere in its nodes — without it, every scenario silently no-ops. |
+| `test_readme_documents_all_scenarios` | README's scenario table mentions every shipped scenario by name. Catches doc-vs.-files drift. |
 
 ---
 

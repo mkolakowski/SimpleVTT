@@ -1,0 +1,34 @@
+# Admin demo-magic-link mint flood for SimpleVTT
+#
+# Fires when one IP triggers 10 demo_magic_link.mint_ok events
+# within 5 minutes — even an admin doesn't legitimately mint 10
+# demo links a minute. This is the "compromised admin cookie or
+# admin abusing the mint endpoint" signal. The threshold is set
+# above any normal sharing pattern.
+#
+# Default remediation: 1-hour ban. The admin should investigate
+# the actor_id field in the simplevtt-app log to identify which
+# admin account fired the events before unbanning.
+
+type: leaky
+name: simplevtt/admin-mint-flood
+description: "Detect SimpleVTT admin demo-magic-link mint flood"
+
+filter: |
+  evt.Meta.log_type == 'simplevtt-audit'
+  && evt.Parsed.evt_subtype == 'demo_magic_link.mint_ok'
+
+groupby: evt.Meta.source_ip
+distinct: evt.Meta.source_ip
+
+leakspeed: 30s
+capacity: 10
+
+blackhole: 1h
+
+labels:
+  service: simplevtt
+  type: admin-anomaly
+  remediation: true
+  classification:
+    - attack.privilege-escalation

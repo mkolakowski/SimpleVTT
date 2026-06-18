@@ -1,0 +1,33 @@
+# Magic-link replay attempts on SimpleVTT demo instance
+#
+# Fires on the FIRST demo_magic_link.verify_rejected with
+# reason=replay — replay is *never* legitimate. A token can be
+# consumed exactly once; the second attempt is either an attacker
+# who harvested a leaked URL from a logged proxy/screenshot OR a
+# user double-clicking the link. Both warrant attention; the
+# attacker case warrants a long ban.
+#
+# Default remediation: 24-hour ban. The trip-on-1 capacity is
+# deliberate — there's no legitimate reason to keep retrying a
+# consumed token.
+
+type: trigger
+name: simplevtt/magic-link-replay
+description: "SimpleVTT demo magic-link replay attempt (always suspicious)"
+
+filter: |
+  evt.Meta.log_type == 'simplevtt-audit'
+  && evt.Parsed.evt_subtype == 'demo_magic_link.verify_rejected'
+  && evt.Parsed.remainder contains 'reason=replay'
+
+groupby: evt.Meta.source_ip
+distinct: evt.Meta.source_ip
+
+blackhole: 24h
+
+labels:
+  service: simplevtt
+  type: token-replay
+  remediation: true
+  classification:
+    - attack.credential-access

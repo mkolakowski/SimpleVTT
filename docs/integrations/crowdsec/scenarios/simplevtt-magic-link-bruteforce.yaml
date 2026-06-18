@@ -1,0 +1,32 @@
+# Magic-link token enumeration for SimpleVTT demo instance
+#
+# Fires when one IP triggers 5 demo_magic_link.verify_rejected
+# events with reason=signature within 5 minutes — an attacker
+# rapid-firing ?token=<guess> values trying to find a valid jti.
+# Token jtis are 16 random bytes urlsafe-b64 (128 bits), so brute
+# force is infeasible — but logging the attempt loudly is the
+# right defense even so.
+
+type: leaky
+name: simplevtt/magic-link-bruteforce
+description: "Detect SimpleVTT demo magic-link signature bruteforce"
+
+filter: |
+  evt.Meta.log_type == 'simplevtt-audit'
+  && evt.Parsed.evt_subtype == 'demo_magic_link.verify_rejected'
+  && evt.Parsed.remainder contains 'reason=signature'
+
+groupby: evt.Meta.source_ip
+distinct: evt.Meta.source_ip
+
+leakspeed: 60s
+capacity: 5
+
+blackhole: 5m
+
+labels:
+  service: simplevtt
+  type: bruteforce
+  remediation: true
+  classification:
+    - attack.credential-access

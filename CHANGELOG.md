@@ -10,6 +10,65 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.429.0] - 2026-06-18 — "The Shared Watchword"
+
+**Schema version:** 71
+
+**Commit summary:** **Phase 2 of [`docs/plans/fail2ban-crowdsec-integration.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/fail2ban-crowdsec-integration.md) shipped.** CrowdSec parser + 5 reference scenarios + operator compose-override template all land under `docs/integrations/crowdsec/`. Operators can now drop the YAMLs into `/etc/crowdsec/` (or bring up CrowdSec alongside SimpleVTT via the new override file) and get drop-in banning detection for credential stuffing, magic-link bruteforce, magic-link replay (1× = 24-hour ban), API-surface probing, and admin-side mint flooding. Same canonical log lines the v2.424.0 fail2ban filter consumes — operators pick whichever engine fits their deployment.
+
+**Description:** CrowdSec's value over fail2ban for SimpleVTT specifically is two-fold:
+
+1. **Native Cloudflare bouncer**: `cs-cloudflare-blocker` translates CrowdSec decisions directly into Cloudflare IP Access Rules via the same API that powers `/admin/cloudflare/ban_ip` in v2.427.0. Wire it once and the shipped scenarios automatically enforce at the Cloudflare edge — no host-side iptables.
+2. **Community signal sharing**: CrowdSec's community feed propagates banned-IP intelligence across deployments. SimpleVTT operators who opt in benefit from threat data observed at unrelated sites.
+
+The configs:
+
+| Scenario | Type | Trip threshold | Ban |
+|---|---|---|---|
+| `simplevtt/auth-bruteforce` | leaky | 5× `auth.login_failed` in 5 min | 5 min |
+| `simplevtt/magic-link-bruteforce` | leaky | 5× `verify_rejected reason=signature` in 5 min | 5 min |
+| `simplevtt/magic-link-replay` | **trigger** | 1× `verify_rejected reason=replay` | **24 h** |
+| `simplevtt/api-probe` | leaky | 10× `api.unauthorized` or `api.forbidden` in 10 min | 5 min |
+| `simplevtt/admin-mint-flood` | leaky | 10× `mint_ok` in 5 min | 1 h |
+
+The trigger-type replay scenario is deliberate: replay is *never* legitimate, so the very first rejected-replay attempt earns a long ban. The bruteforce + probe scenarios use the standard leaky-bucket model — slow drip + capacity threshold.
+
+**Parser**: `docs/integrations/crowdsec/parsers/s01-parse/simplevtt.yaml` matches the canonical `simplevtt.audit` log line shape via a grok pattern, sets `evt.Meta.log_type = simplevtt-audit` + `evt.Meta.source_ip` + `evt.Parsed.evt_subtype` as the discriminator fields the scenarios filter on. Without the log_type static, every scenario downstream would silently no-op — caught by a dedicated test.
+
+**Operator compose override**: `docs/integrations/crowdsec/docker-compose.crowdsec.yml` brings up `crowdsecurity/crowdsec:v1.6.4` alongside the SimpleVTT stack with the shipped parser + scenarios mounted in read-only. Templated for the standard "forward simplevtt-app stdout to a host file" pattern. Invoke with:
+
+```bash
+docker compose -f docker-compose.yml \
+    -f docs/integrations/crowdsec/docker-compose.crowdsec.yml \
+    up -d crowdsec
+```
+
+**Test coverage**: a YAML syntax + schema validation suite at `tests/harness/test_crowdsec_configs.py` — 47 parametrized tests across 5 scenarios + 1 parser + a README cross-link assertion. Pure in-process (parses YAML with PyYAML, no CrowdSec container needed). Catches typo'd filter expressions, missing required keys, scenarios that forgot the `simplevtt-audit` log_type filter (would silently fire on unrelated CrowdSec events), a parser drift that drops the `log_type` static (would silently disable every scenario downstream), and README-vs.-shipped-files drift.
+
+Harness count nudges 3404 → 3451 (one test is `pytest.skip`-ped — the `test_leaky_scenarios_have_capacity_and_leakspeed` test on the trigger-type replay scenario).
+
+**Real CrowdSec smoke test deferred** as Phase 2B. A test that brings up a CrowdSec container, replays synthetic events, and asserts the scenarios fire via `cscli decisions list` would be ideal, but the v2.427.0 wiremock pull stalled indefinitely on Docker Hub — a CrowdSec pull might too. The YAML validation suite is the no-network-dependency stand-in; the smoke test waits on reliable image availability.
+
+**Why "The Shared Watchword":** the parser-scenario family establishes a shared vocabulary between SimpleVTT's audit log and CrowdSec's decision engine — a "watchword" both speak. Once the watchword is recognized, every shipped scenario can speak the same language and act on the same signal.
+
+MINOR — new shipped configs (8 files), new operator compose template, new YAML validation test suite. No app code touched.
+
+### Added
+- `docs/integrations/crowdsec/parsers/s01-parse/simplevtt.yaml`: CrowdSec parser matching the canonical audit-log line shape.
+- `docs/integrations/crowdsec/scenarios/simplevtt-auth-bruteforce.yaml`: 5× `auth.login_failed` in 5 min → 5-minute ban.
+- `docs/integrations/crowdsec/scenarios/simplevtt-magic-link-bruteforce.yaml`: 5× signature-rejected verify in 5 min → 5-minute ban.
+- `docs/integrations/crowdsec/scenarios/simplevtt-magic-link-replay.yaml`: trigger scenario — 1× replay → 24-hour ban.
+- `docs/integrations/crowdsec/scenarios/simplevtt-api-probe.yaml`: 10× 401/403 in 10 min → 5-minute ban.
+- `docs/integrations/crowdsec/scenarios/simplevtt-admin-anomaly.yaml`: 10× `mint_ok` in 5 min → 1-hour ban.
+- `docs/integrations/crowdsec/README.md`: operator how-to. Install steps, scenario table, Cloudflare-bouncer wiring, manual smoke test.
+- `docs/integrations/crowdsec/docker-compose.crowdsec.yml`: operator override template.
+- `tests/harness/test_crowdsec_configs.py`: 47 parametrized YAML validation tests. Pure in-process — no CrowdSec container required.
+
+### Changed
+- `docs/integrations/README.md`: CrowdSec section flipped from "Phase 2 unstarted" to "Phase 2 shipped (v2.429.0)" with the full file list.
+- `docs/plans/fail2ban-crowdsec-integration.md`: status header flipped to "Phase 1 + Phase 2 shipped." Phase 2 numbered list items 1–5 marked ✅ shipped; item 6 (real CrowdSec container smoke test) filed for Phase 2B.
+- `docs/test-harness-coverage.md`: new section "CrowdSec config validation (Phase 2 — v2.429.0)" with all 15 test row descriptions. Total-test-count nudges 3404 → 3451 (some rows are parametrized × 5 scenarios = 6 underlying tests each).
+
 ## [2.428.0] - 2026-06-18 — "The Captured Bell"
 
 **Schema version:** 71

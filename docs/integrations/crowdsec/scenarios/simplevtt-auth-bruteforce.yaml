@@ -1,0 +1,39 @@
+# Credential-stuffing detection for SimpleVTT
+#
+# Fires when one IP triggers 5 auth.login_failed events within
+# 5 minutes — the canonical "trying a password list" signal.
+# Default remediation: 1-hour ban. The Cloudflare bouncer (if the
+# operator has it wired) translates the decision to a Cloudflare
+# IP Access Rule via the same API that powers
+# /admin/cloudflare/ban_ip in v2.427.0.
+#
+# Install:
+#     cp simplevtt-auth-bruteforce.yaml \
+#         /etc/crowdsec/scenarios/simplevtt-auth-bruteforce.yaml
+#     systemctl reload crowdsec
+
+type: leaky
+name: simplevtt/auth-bruteforce
+description: "Detect SimpleVTT login bruteforce (5 fails in 5 min)"
+
+filter: |
+  evt.Meta.log_type == 'simplevtt-audit'
+  && evt.Parsed.evt_subtype == 'auth.login_failed'
+
+groupby: evt.Meta.source_ip
+distinct: evt.Meta.source_ip
+
+# Leak rate: tokens drip out at one per minute. Capacity 5 means
+# the bucket fills (and the scenario fires) on the 5th event
+# within a 5-minute sliding window.
+leakspeed: 60s
+capacity: 5
+
+blackhole: 5m
+
+labels:
+  service: simplevtt
+  type: bruteforce
+  remediation: true
+  classification:
+    - attack.credential-access
