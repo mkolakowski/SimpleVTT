@@ -6,6 +6,8 @@
 >
 > **Status (AoE-radius scaling):** ✅ **PHASE 2 CLOSED** as of v2.413.0 (2026-06-17). Substrate (`_SPELL_AOE_MAP` + `_spell_aoe_for_slot()` helper) + Fog Cloud (v2.409.0, `/cast_fog_cloud`) + Confusion (v2.410.0, `/cast_confusion`) + Create or Destroy Water (v2.411.0, first cube-edge, `/cast_create_or_destroy_water`) + Creation (v2.412.0, second cube-edge, `/cast_creation`) + Private Sanctum (v2.413.0, third cube-edge, largest increment, `/cast_private_sanctum`) shipped. **All five in-scope AoE-radius scalers are live on the substrate.** See the [Phase 2 section](#phase-2--aoe-radius-scaling-substrate-v24090) below.
 >
+> **Status (rider/bonus scaling):** 🟠 **PHASE 4 OPEN** as of v2.421.0 (2026-06-17). New family — scales a flat numeric *rider* a spell grants its target (an attack/damage bonus, a temp-HP bump) as the cast slot climbs. Tier-walk substrate (`_SPELL_BONUS_MAP` + `_spell_bonus_for_slot()`, the same `(max_slot_inclusive, bonus)` shape as the Phase 3 CR ladder): **Magic Weapon** (v2.421.0, `/cast_magic_weapon`; +1 @L2–3, +2 @L4–5, +3 @L6+; Cleric/Wizard gate; installs a 1-hour non-concentration buff carrying `weapon_attack_bonus` / `weapon_damage_bonus` effects) — **first consumer live**. See the [Phase 4 section](#phase-4--riderbonus-scaling-substrate-v24210) below.
+>
 > **Status (summon-count scaling):** ✅ **PHASE 3 COMPLETE** as of v2.420.0 (2026-06-17). Multiplier substrate (`_SPELL_SUMMON_MAP` + `_spell_summon_multiplier_for_slot()`): Conjure Animals retrofit (v2.414.0, ×1/×2/×3/×4) + Conjure Woodland Beings (v2.415.0, `/cast_conjure_woodland_beings` + `fey-spirit` template) + Conjure Minor Elementals (v2.416.0, `/cast_conjure_minor_elementals` + `elemental-spirit` template; Druid/Wizard gate) — **count-multiplier family complete**. Additive substrate (`_SPELL_SUMMON_ADDITIVE_MAP` + `_spell_summon_additive_for_slot()`): Animate Dead (v2.417.0, `/cast_animate_dead` + `undead-servant` template; 1 + 2/slot above 3rd) — **count-additive family complete**. CR-increase substrate — linear (`_SPELL_SUMMON_CR_MAP` + `_spell_summon_cr_for_slot()`): Conjure Elemental (v2.418.0, `/cast_conjure_elemental`; CR 5 base +1/slot above 5th) + Conjure Fey (v2.419.0, `/cast_conjure_fey`; CR 6 base +1/slot above 6th, Druid/Warlock gate, reuses `fey-spirit`) — and tier-walk (`_SPELL_SUMMON_CR_TIER_MAP` + `_spell_summon_cr_tier_for_slot()`): Conjure Celestial (v2.420.0, `/cast_conjure_celestial` + `celestial-spirit` template; CR 4 at L7–8, CR 5 at L9, Cleric gate) — **CR-increase family complete**. All three summon-scaling families are shipped. See the [Phase 3 section](#phase-3--summon-count-scaling-substrate-v24140) below.
 
 ## What this plan covered
@@ -134,7 +136,7 @@ Each ships as a registry drop-in + retrofit + harness. Same shape across all of 
 | Geas | L5 | L5 → 30 days, L7 → 1 year, L9 → permanent | ✅ shipped v2.406.0 ("The Binding Word"). **NOT a retrofit** — Geas had no cast endpoint (catalog-only), so this was a new `/cast_geas` MINOR endpoint built on the substrate from the start. First consumer of the day/year markers (`"30d"`, `"1y"`); reuses `"permanent"`. Harness: `tests/harness/test_cast_geas.py` (7 tests). |
 | Mass Suggestion | L6 | L6 → 24h, L7 → 10d, L8 → 30d, L9 → 1y+1d | ✅ shipped v2.407.0 ("The Crowd's Whisper"). New `/cast_mass_suggestion` endpoint-build (catalog-only before). Four calendar markers, one per slot level. Harness: `tests/harness/test_cast_mass_suggestion.py` (8 tests). |
 | Modify Memory | L5 | L5 → 10 min, L6 → 1h, L7 → 24h, L8 → 7d, L9 → permanent | ✅ shipped v2.408.0 ("The Rewritten Page"). New `/cast_modify_memory` endpoint-build (catalog-only before). Final Phase 1 spell — five markers, one per slot level, reusing `"permanent"` at L9. Concentration, single target, 30 ft. Harness: `tests/harness/test_cast_modify_memory.py` (9 tests). |
-| Magic Weapon | L2 | L2-L3 → 1h, L4+ → 1h with attack-bonus increase (bonus scales, duration fixed) | Edge case: scales attack bonus, not duration. Filed as a sub-arc (or covered by Phase 4 rider substrate). |
+| Magic Weapon | L2 | L2-L3 → 1h, L4+ → 1h with attack-bonus increase (bonus scales, duration fixed) | ✅ shipped v2.421.0 ("The Tempered Edge") as the **first Phase 4 rider/bonus-scaling consumer** — see the [Phase 4 section](#phase-4--riderbonus-scaling-substrate-v24210). The bonus (+1 @L2–3, +2 @L4–5, +3 @L6+) scales via `_SPELL_BONUS_MAP`, not duration. |
 | Heroes' Feast | L6 | Fixed 24h RAW; no per-slot scaling | Filed: no substrate consumer needed; documented to prevent rework. |
 | Otiluke's Resilient Sphere | L4 | Fixed 1 min RAW (concentration); no per-slot scaling | Filed: AoE-radius scaling lands in Phase 2 instead. |
 | Tiny Hut | L3 (ritual) | Fixed 8h RAW; no per-slot scaling | Filed: no substrate consumer. |
@@ -239,6 +241,40 @@ Conjure Animals is the first consumer:
 | Conjure Elemental | L5 | CR +1 per slot above 5th | CR-increase | ✅ shipped v2.418.0 ("The Summoned Tempest"). First CR-increase consumer: new sibling `_SPELL_SUMMON_CR_MAP` + `_spell_summon_cr_for_slot()` helper + new `/cast_conjure_elemental` endpoint (reuses the `elemental-spirit` template). Count fixed at 1; CR slot-determined (CR 5 base, +1/slot). Druid / Wizard gate. Harness: `tests/harness/test_cast_conjure_elemental.py` (5 tests). **Opens the CR-increase family.** |
 | Conjure Fey | L6 | CR +1 per slot above 6th | CR-increase | ✅ shipped v2.419.0 ("The Sixth-Circle Court"). Second CR-increase consumer: new `_SPELL_SUMMON_CR_MAP["conjure-fey"]` entry + new `/cast_conjure_fey` endpoint (reuses the `_spell_summon_cr_for_slot()` helper + `fey-spirit` template). Count fixed at 1; CR slot-determined (CR 6 base, +1/slot). Druid / Warlock gate. Harness: `tests/harness/test_cast_conjure_fey.py` (5 tests). |
 | Conjure Celestial | L7 | CR 4 base → CR 5 @9th | CR-increase (tier-walk) | ✅ shipped v2.420.0 ("The Empyrean Summons"). Final Phase 3 consumer + the non-linear shape: new sibling `_SPELL_SUMMON_CR_TIER_MAP` + `_spell_summon_cr_tier_for_slot()` tier-walk helper + new `/cast_conjure_celestial` endpoint + new `celestial-spirit` companion template. CR 4 at L7–8, CR 5 at L9. Cleric gate. Harness: `tests/harness/test_cast_conjure_celestial.py` (4 tests). **Closes Phase 3.** |
+
+---
+
+## Phase 4 — rider/bonus scaling substrate (v2.421.0)
+
+Where Phase 3 scaled *summons* (count or CR), Phase 4 scales a flat numeric **rider** a spell grants its target — an attack/damage bonus, a temp-HP bump — as the cast slot climbs. The bonus typically steps in non-linear breakpoints, so the substrate borrows the Phase 3 CR tier-walk shape exactly.
+
+### Substrate
+
+```python
+_SPELL_BONUS_MAP: dict[str, dict] = {
+    "magic-weapon": {
+        "base_level": 2,
+        "tiers": [(3, 1), (5, 2), (9, 3)],   # +1 @L2-3, +2 @L4-5, +3 @L6+
+    },
+}
+
+
+def _spell_bonus_for_slot(spell_slug, slot_level, default_bonus=0) -> int:
+    """Walk the (max_slot_inclusive, bonus) tiers low→high; last-tier
+    fallback above the table. Mirrors _spell_summon_cr_tier_for_slot."""
+```
+
+A cast endpoint reads `_spell_bonus_for_slot(slug, slot_level)` and installs a buff carrying the scaled bonus as informational `effects` (the same display-only convention as Bless's `bless_attack_bonus` — the buff records the number; the player adds it to their weapon rolls). The buff install requires an active battle.
+
+### Tests (v2.421.0)
+
+`tests/harness/test_cast_magic_weapon.py` (5 tests): L2 → +1, L4 → +2, L6 → +3 (each verified against the persisted buff `effects`), the Wizard-caster gate (Thalindra), and the 409 cannot_cast on Krieger (Barbarian).
+
+### Backlog (Phase 4 follow-on spells)
+
+| Spell | Base level | RAW rider ladder | Notes |
+|---|---|---|---|
+| Magic Weapon | L2 | +1 @L2–3, +2 @L4–5, +3 @L6+ (attack & damage) | ✅ shipped v2.421.0 ("The Tempered Edge"). First consumer: new `_SPELL_BONUS_MAP` + `_spell_bonus_for_slot()` tier-walk helper + new `/cast_magic_weapon` endpoint (Cleric/Wizard gate). Installs a 1-hour non-concentration buff with `weapon_attack_bonus` / `weapon_damage_bonus` effects. **Opens Phase 4.** |
 
 ---
 

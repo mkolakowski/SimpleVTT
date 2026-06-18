@@ -2554,6 +2554,75 @@ def _spell_summon_cr_tier_for_slot(
     return default_cr
 
 
+# ---------------------------------------------------------------------------
+# v2.421.0 — Phase 4 rider/bonus scaling substrate. The Phase 3 family scaled
+# *summons* (count or CR); Phase 4 scales a flat numeric *rider* a spell grants
+# its target — an attack/damage bonus, a temp-HP bump, etc. — as the cast slot
+# climbs. Like the summon CR tier-walk, the bonus climbs in non-linear steps
+# for most consumers, so this map carries the same ``tiers`` shape
+# (a list of ``(max_slot_inclusive, bonus)`` walked low→high) and gets its own
+# tier-walk helper. RAW for the first consumer:
+#   - Magic Weapon (PHB p.257, Cleric/Wizard L2): "+1 bonus to attack and
+#     damage rolls" base; "When you cast this spell using a spell slot of 4th
+#     level or higher, the bonus increases to +2. When you use a spell slot of
+#     6th level or higher, the bonus increases to +3." (L2–L3 → +1, L4–L5 → +2,
+#     L6+ → +3.)
+# ---------------------------------------------------------------------------
+_SPELL_BONUS_MAP: dict[str, dict] = {
+    "magic-weapon": {
+        "base_level": 2,
+        "tiers": [
+            (3, 1),     # L2–L3: +1
+            (5, 2),     # L4–L5: +2
+            (9, 3),     # L6+:   +3
+        ],
+    },
+}
+
+
+def _spell_bonus_for_slot(
+    spell_slug: str,
+    slot_level: int,
+    default_bonus: int = 0,
+) -> int:
+    """v2.421.0 — Phase 4 rider/bonus tier-walk helper. Reads
+    ``_SPELL_BONUS_MAP[spell_slug]`` + walks the ``tiers`` list until it
+    finds the first tier whose ``max_slot_inclusive`` ≥ the cast's
+    ``slot_level``, returning that tier's integer bonus. Casts above the
+    last declared tier fall back to the last tier's bonus; if no entry
+    exists for the slug, returns ``default_bonus``.
+
+    Pure function — the single source of truth for per-slot rider-bonus
+    math, read by the bonus cast endpoints (``/cast_magic_weapon``).
+    Mirrors the ``_spell_summon_cr_tier_for_slot`` tier walk (an
+    attack/damage bonus instead of a CR).
+    """
+    entry = _SPELL_BONUS_MAP.get(spell_slug)
+    if not entry:
+        return default_bonus
+    tiers = entry.get("tiers") or []
+    try:
+        sl = int(slot_level)
+    except (TypeError, ValueError):
+        sl = int(entry.get("base_level") or 1)
+    for tier in tiers:
+        try:
+            max_slot = int(tier[0])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if sl <= max_slot:
+            try:
+                return int(tier[1])
+            except (TypeError, ValueError, IndexError):
+                return default_bonus
+    if tiers:
+        try:
+            return int(tiers[-1][1])
+        except (TypeError, ValueError, IndexError):
+            return default_bonus
+    return default_bonus
+
+
 _SPELL_BUFF_MAP["resistance-all"] = {
     "key": "resistance-all",
     "name": "Invulnerability (All Damage)",
@@ -62233,6 +62302,153 @@ async def cast_conjure_celestial(
         "challenge_rating": challenge_rating,
         "combatants": combatants,
         "token_ids": token_ids,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_magic_weapon")
+async def cast_magic_weapon(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.421.0 — Phase 4 rider/bonus scaling family, first consumer. Magic
+    Weapon (Cleric/Wizard L2, PHB p.257): "You touch a nonmagical weapon.
+    Until the spell ends, that weapon becomes a magic weapon with a +1
+    bonus to attack rolls and damage rolls." Upcast: "When you cast this
+    spell using a spell slot of 4th level or higher, the bonus increases to
+    +2. When you use a spell slot of 6th level or higher, the bonus
+    increases to +3." (L2–L3 → +1, L4–L5 → +2, L6+ → +3.)
+
+    Reads the per-slot bonus from the Phase 4 substrate
+    (`_SPELL_BONUS_MAP` via `_spell_bonus_for_slot()`) and installs a Magic
+    Weapon buff on the *target* (the caster, or `target_character_id` if a
+    different ally is buffed) carrying informational
+    `weapon_attack_bonus` / `weapon_damage_bonus` effects (same display-only
+    convention as Bless's `bless_attack_bonus` — the player adds the bonus
+    to their weapon rolls). Concentration per RAW (False); duration 1 hour.
+    Gates on the caster knowing Magic Weapon OR being a Cleric / Wizard.
+
+    Body: ``{character_id, slot_level?, target_character_id?}``.
+
+    Response: ``{ok, feature, bonus, slot_level, buff_installed,
+    target_character_id}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    try:
+        slot_level = int(body.get("slot_level") or 2)
+    except (TypeError, ValueError):
+        slot_level = 2
+    bonus = _spell_bonus_for_slot("magic-weapon", slot_level, default_bonus=1)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_mw = any(
+        (s.get("_slug") == "magic-weapon")
+        or (str(s.get("name", "")).lower() == "magic weapon")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"cleric", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_mw and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Magic Weapon, or cleric/wizard",
+            "got_class": _cls,
+        })
+
+    # Target defaults to the caster (Magic Weapon is touch — self or an
+    # adjacent ally's weapon).
+    target_char_id = body.get("target_character_id")
+    try:
+        target_char_id = int(target_char_id) if target_char_id else char.id
+    except (TypeError, ValueError):
+        target_char_id = char.id
+    target = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target:
+        raise HTTPException(404, "Target character not found")
+
+    buff_installed = await _install_buff(campaign_id, target.id, {
+        "key": "magic-weapon",
+        "name": f"Magic Weapon (+{bonus})",
+        "icon": "⚔️",
+        "duration_rounds": 600,   # 1 hour @ 6 s/round
+        "duration_max": 600,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "weapon_attack_bonus": bonus,
+            "weapon_damage_bonus": bonus,
+        },
+        "desc": (
+            f"Weapon gains +{bonus} to attack and damage rolls for 1 hour. "
+            f"(Magic Weapon, L{slot_level}.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(
+            db, target.id, _get_buffs(campaign_id, target.id))
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": f"⚔️ Magic Weapon — +{bonus}",
+            "feature_desc": (
+                f"{char.name} enchants {target.name}'s weapon with a "
+                f"+{bonus} bonus to attack and damage rolls for 1 hour. "
+                f"(Magic Weapon, L{slot_level}.)"
+            ),
+            "source": "magic-weapon",
+            "bonus": bonus,
+            "slot_level": slot_level,
+            "target_character_id": target.id,
+            "buff_installed": buff_installed,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "magic-weapon",
+        "bonus": bonus,
+        "slot_level": slot_level,
+        "buff_installed": buff_installed,
+        "target_character_id": target.id,
     }
 
 

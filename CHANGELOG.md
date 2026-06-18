@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.421.0] - 2026-06-17 — "The Tempered Edge"
+
+**Schema version:** 69
+
+**Commit summary:** **Opens Phase 4** (rider/bonus scaling). Where Phase 3 scaled *summons* (count or CR), Phase 4 scales a flat numeric *rider* a spell grants its target as the cast slot climbs. Adds the `_SPELL_BONUS_MAP` substrate + `_spell_bonus_for_slot()` tier-walk helper and ships the first consumer — **Magic Weapon** (Cleric/Wizard L2) — via a new **`/cast_magic_weapon`** endpoint. RAW PHB p.257: +1 to attack and damage rolls at L2–3, +2 at L4–5, +3 at L6+.
+
+**Description:** Magic Weapon's bonus climbs in non-linear steps, so the new substrate carries the same `(max_slot_inclusive, bonus)` tier-walk shape as the Phase 3 summon-CR ladder:
+
+```python
+_SPELL_BONUS_MAP["magic-weapon"] = {
+    "base_level": 2,
+    "tiers": [(3, 1), (5, 2), (9, 3)],   # +1 @L2-3, +2 @L4-5, +3 @L6+
+}
+```
+
+`/cast_magic_weapon` reads `_spell_bonus_for_slot("magic-weapon", slot_level)`, then installs a Magic Weapon buff (1 hour, non-concentration) on the target — the caster by default, or `target_character_id` for an ally's weapon — carrying scaled `weapon_attack_bonus` / `weapon_damage_bonus` effects. Those effects follow the same display-only convention as Bless's `bless_attack_bonus` (the buff records the bonus; the player adds it to their weapon rolls). The endpoint gates on knowing Magic Weapon OR being a Cleric / Wizard, and the buff install requires an active battle.
+
+**Why "The Tempered Edge":** the spell hardens a mundane blade into something that bites true — and the deeper you reach into your reserves, the keener the edge.
+
+MINOR — new HTTP endpoint (`/cast_magic_weapon`) + new rider/bonus substrate + new helper + 5 new harness tests.
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_SPELL_BONUS_MAP` substrate + `_spell_bonus_for_slot()` pure-function helper (tier walk, mirrors `_spell_summon_cr_tier_for_slot`). First entry: `magic-weapon` (+1 @L2–3, +2 @L4–5, +3 @L6+).
+- `app/routes/tabletop_routes.py`: new `POST /api/campaign/{campaign_id}/cast_magic_weapon` endpoint (Cleric/Wizard L2). Computes the per-slot bonus, installs a 1-hour non-concentration Magic Weapon buff on the target (caster or `target_character_id`) with scaled `weapon_attack_bonus` / `weapon_damage_bonus` effects, gated on knowing Magic Weapon OR being a Cleric/Wizard. Returns `{ok, feature, bonus, slot_level, buff_installed, target_character_id}`; broadcasts a `feature_used` card.
+- `tests/harness/test_cast_magic_weapon.py`: new harness file (5 tests) — L2 → +1, L4 → +2, L6 → +3 (each verified against the persisted buff effects), the Wizard-caster gate, and the 409 cannot_cast on Krieger (Barbarian).
+
+### Changed
+- `docs/plans/spell-utility-upcast.md`: Magic Weapon row flips to ✅ shipped; status header opens **Phase 4 (rider/bonus scaling)**.
+
 ## [2.420.0] - 2026-06-17 — "The Empyrean Summons"
 
 **Schema version:** 69

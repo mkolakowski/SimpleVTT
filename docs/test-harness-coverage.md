@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3337 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.420.0, 2026-06-17).
+**Total tests:** 3342 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.421.0, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2250,6 +2250,17 @@ v2.420.0 — Phase 3's final consumer and the **tier-walk** CR-increase shape (c
 | `test_conjure_celestial_l8_still_cr4` | L8 → `challenge_rating 4` (same tier; the bump only lands at L9), still `count 1`. |
 | `test_conjure_celestial_l9_cr5` | L9 → `challenge_rating 5` (top tier), still `count 1`. |
 | `test_conjure_celestial_cannot_cast_non_caster` | Krieger (Barbarian) → 409 `cannot_cast` with `expected` mentioning "cleric". |
+
+### `test_cast_magic_weapon.py`
+v2.421.0 — **opens Phase 4** (rider/bonus scaling). `/cast_magic_weapon` (Cleric/Wizard L2) reads the new `_SPELL_BONUS_MAP` via `_spell_bonus_for_slot()` — a `(max_slot_inclusive, bonus)` tier walk (+1 @L2–3, +2 @L4–5, +3 @L6+) mirroring the Phase 3 CR tier-walk. The cast installs a 1-hour non-concentration Magic Weapon buff on the target (caster by default, or `target_character_id`) carrying scaled `weapon_attack_bonus` / `weapon_damage_bonus` effects (display-only convention, same as Bless's `bless_attack_bonus`); the install requires an active battle. Caster fixtures: Brother Tavik Stonebrow (Cleric) for the ladder, Thalindra Moonwhisper (Wizard) for the gate.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_magic_weapon_base_slot_plus1` | Tavik L2 → `bonus 1`, `buff_installed True`, `target_character_id` is the caster; the persisted battle's `magic-weapon` buff carries `weapon_attack_bonus == 1`, `weapon_damage_bonus == 1`, `concentration False`. |
+| `test_magic_weapon_l4_plus2` | L4 → `bonus 2` (middle tier); buff effects carry +2 on both attack and damage. |
+| `test_magic_weapon_l6_plus3` | L6 → `bonus 3` (top tier); buff effects carry +3. |
+| `test_magic_weapon_wizard_caster_passes_gate` | Thalindra (Wizard, not Cleric) passes the caster gate → `bonus 1`, `buff_installed True`. |
+| `test_magic_weapon_cannot_cast_non_caster` | Krieger (Barbarian) → 409 `cannot_cast` with `expected` mentioning "cleric". |
 
 ### `test_cast_gust.py`
 v2.99.445 — Phase 6.3 of `docs/plans/movement-and-summons.md`. Gust (Druid/Sorcerer/Wizard cantrip, Tasha's p.106): the target makes a STR save vs the spell save DC or is pushed 5 ft away via `_force_move`. The last forced-mover. Caster fixture: Thalindra Moonwhisper (demo Wizard).
