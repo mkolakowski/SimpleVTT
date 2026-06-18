@@ -158,6 +158,41 @@
     Known defects are tracked in <a href="/wiki/doc/bugs">BUGS</a>.
   </p>
 
+  <h2 id="security-spine">Security spine (proposed, v2.5x)</h2>
+  <p class="lede" style="margin-bottom:8px;">
+    Three sibling design plans filed v2.423.3 → v2.423.5 that compose into one
+    end-to-end abuse-detection-and-banning pipeline for operators running
+    SimpleVTT on a public box. Each plan ships independently, but designed
+    together: SimpleVTT emits canonical log lines → CrowdSec parses them →
+    Cloudflare bans at the edge → an attacker never reaches the FastAPI layer
+    again. All three are ⚪ proposed; Phase 1 of each is unstarted.
+  </p>
+  <ul class="pointer-list" style="margin-top:0;">
+    <li>
+      <a href="/wiki/doc/plan-demo-magic-link"><strong>Demo magic-link login</strong></a>
+      — URL-based passwordless login for the demo instance only, double-env-var
+      gated so a compromised admin account can't enable it against production.
+      HMAC-signed single-use tokens, 15-min TTL.
+    </li>
+    <li>
+      <a href="/wiki/doc/plan-fail2ban-crowdsec-integration"><strong>fail2ban / CrowdSec log integration</strong></a>
+      — canonical structured log lines (<code>&lt;event&gt; ip=… ua=… …</code>) + reference
+      fail2ban filter.d/jail.d and CrowdSec parsers/scenarios configs shipped
+      in-repo so operators get drop-in banning detection. Same canonical lines
+      power both engines.
+    </li>
+    <li>
+      <a href="/wiki/doc/plan-cloudflare-edge-banning"><strong>Cloudflare edge-banning</strong></a>
+      — outbound API client + GM-only "Ban IP at edge" button + generic
+      <code>admin_audit_log</code> table. Wiremock-in-compose for dev per the
+      <a href="/wiki/doc/claude#third-party-apis-must-be-docker-compose-services">third-party-API rule</a>.
+      Pairs with the CrowdSec → Cloudflare bouncer path.
+    </li>
+  </ul>
+  <p class="lede" style="margin-top:0;">
+    Tracked together in the <a href="/wiki/doc/todo#security">Security section of TODO.md</a>.
+  </p>
+
   <h2 id="guides">Available guides</h2>
   <table>
     <thead>

@@ -111,6 +111,9 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-fail2ban-crowdsec-integration" in resp.text
     # v2.423.5: Cloudflare edge-banning integration plan listed.
     assert "/wiki/doc/plan-cloudflare-edge-banning" in resp.text
+    # v2.423.7: Security spine banner rendered at the top of the landing page.
+    assert "Security spine" in resp.text
+    assert 'id="security-spine"' in resp.text
     # v2.400.0: SRD race rules implementation guide listed in Available guides.
     assert "/wiki/srd-races-implementation" in resp.text
     # v2.402.0: SRD conditions implementation guide listed in Available guides.

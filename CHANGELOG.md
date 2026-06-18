@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.423.7] - 2026-06-18 — "The Lit Atrium"
+
+**Schema version:** 69
+
+**Commit summary:** New **Security spine** banner at the top of `/wiki` (under the SRD-coverage banner, above "Available guides") surfaces the three v2.423.3–v2.423.5 plans + the v2.423.6 TODO.md Security section. Mirrors the existing SRD-coverage banner's shape (`<h2 id="security-spine">` + lede paragraph + a `pointer-list` of the three plans + a cross-link to the TODO Security section). The banner is reachable from every wiki page via the standard nav.
+
+**Description:** Without this banner the security spine was discoverable only from `TODO.md` (which a typical operator might not browse) or from the `Design plans` table near the bottom of `/wiki` (where it's interleaved with 35 other plans). The lit-atrium fix pushes the spine to the same "top-of-page" location the SRD coverage already occupies — so a reader who lands on `/wiki` from the README sees both "what's mechanically automated" *and* "what's planned for security hardening" without scrolling past 30+ guide rows first.
+
+The banner copy stays concise: a one-sentence framing ("three sibling plans that compose into one end-to-end abuse-detection-and-banning pipeline"), then a 3-row pointer-list with one-sentence summaries of each plan, then a one-line cross-link to the TODO.md Security section. Each row links into the plan doc itself, not into the README — same affordance the SRD banner uses for `plan-spell-utility-upcast` and `srd-races-implementation`.
+
+The CLAUDE.md cross-link in the Cloudflare row is anchored at `#third-party-apis-must-be-docker-compose-services` since that's the rule shaping the wiremock-in-compose decision; the link target is the wiki-served `/wiki/doc/claude#…` rather than the GitHub-served `CLAUDE.md` so it stays self-contained.
+
+**Harness coverage:** `test_wiki_home_renders` gains two new assertions (`"Security spine" in resp.text` + `'id="security-spine"' in resp.text`) so a future regression that removes the banner gets caught. Total harness count is unchanged (3356 → 3356 — assertions on the existing test, not a new test row).
+
+**Why "The Lit Atrium":** the security spine had been there the whole time; the lights were just off. Lighting the atrium at the entrance of `/wiki` makes the spine the first thing a curious operator sees, not the last.
+
+PATCH — wiki.html template addition (~33 lines of banner markup) + 2 new assertions in `test_wiki_home_renders` + version + README + CHANGELOG. No code or config touched.
+
+### Added
+- `app/templates/wiki.html`: new `<h2 id="security-spine">Security spine (proposed, v2.5x)</h2>` banner between the SRD-coverage banner and the "Available guides" table. Lede paragraph + `pointer-list` of the three plan doc links (`plan-demo-magic-link` / `plan-fail2ban-crowdsec-integration` / `plan-cloudflare-edge-banning`) + a cross-link to the new TODO.md Security section.
+- `tests/harness/test_wiki.py::test_wiki_home_renders`: two new assertions for `"Security spine"` and `'id="security-spine"'` so the banner gets regression-guarded.
+
 ## [2.423.6] - 2026-06-18 — "The Sorted Vault"
 
 **Schema version:** 69
