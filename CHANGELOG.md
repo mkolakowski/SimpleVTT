@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.409.0] - 2026-06-17 — "The Rolling Bank"
+
+**Schema version:** 69
+
+**Commit summary:** Opens **Phase 2** of the spell-utility arc — **AoE-radius scaling**. Ships a new `_SPELL_AOE_MAP` substrate + `_spell_aoe_for_slot()` helper (the area-scaling analogue of v2.405.0's duration substrate) and its **first consumer**, a new **`/cast_fog_cloud`** endpoint. RAW PHB p.243: Fog Cloud is an L1 Conjuration conjuring a 20-ft-radius sphere of heavy obscurement; the radius grows +20 ft per slot above 1st (L1 → 20, L2 → 40, … L9 → 180).
+
+**Description:** A small set of SRD spells scale their *area* on upcast rather than duration or target count (Fog Cloud, Confusion, Create/Destroy Water, Creation, Private Sanctum). Phase 2 introduces a dedicated substrate for that linear `base_ft + steps × increment_ft` math, keyed by spell slug:
+
+```python
+_SPELL_AOE_MAP["fog-cloud"] = {
+    "base_level": 1,
+    "base_ft": 20,         # 20-ft-radius sphere at L1
+    "increment_ft": 20,    # +20 ft per slot above L1
+    "shape": "sphere-radius",
+}
+```
+
+Fog Cloud was catalog-only (`app/data/local/dnd5e/spells/fog-cloud.json`, no cast path), so this is an endpoint-build like Geas/Mass Suggestion/Modify Memory before it. `/cast_fog_cloud` reads `_spell_aoe_for_slot("fog-cloud", slot_level, default_ft=20)` and surfaces the scaled radius as the response + `feature_used` broadcast `radius_ft`. v1 ships the audit (slot consume + radius surfacing); placing the actual fog template on the battle map is filed.
+
+**Why "The Rolling Bank":** A fog bank rolling outward — its reach widening with every level of power poured into it.
+
+MINOR — new HTTP endpoint (`/cast_fog_cloud`) + new substrate (`_SPELL_AOE_MAP` + helper) + 1 new harness file (8 tests: 4 radius tiers + 4 error paths).
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_SPELL_AOE_MAP` + `_spell_aoe_for_slot()` Phase 2 AoE-radius scaling substrate (after the Phase 1 duration substrate). Pure-function linear scaling: `base_ft + max(0, slot − base_level) × increment_ft`.
+- `app/routes/tabletop_routes.py`: new `POST /api/campaign/{campaign_id}/cast_fog_cloud` endpoint. Validates missing character_id (400), slot_level < 1 (400), membership/ownership (403), Fog-Cloud-casting class (409 wrong_class — Druid/Ranger/Sorcerer/Wizard), spell on the list (409 spell_not_known), slot available (409 no_slot), Phase 4 action over-budget (409). On success: decrements the slot, marks the action economy, broadcasts the chat card + `spell_slot_update` + `feature_used` (with `radius_ft`), logs the slot spend for undo, returns `{ok, cast_id, slot_level, radius_ft, range_ft: 120, concentration: true, …}`.
+- `tests/harness/test_cast_fog_cloud.py`: new harness file. Four happy-path tests (L1 → 20, L2 → 40, L5 → 100, L9 → 180) + four error-path tests (missing character_id → 400, slot_level < 1 → 400, wrong class → 409, spell not known → 409). The fixture snapshots Thalindra Moonwhisper's spells + wizard slots, arms her with Fog Cloud + an L1-L9 slot table, and restores both on teardown.
+
+### Changed
+- `docs/plans/spell-utility-upcast.md`: new Phase 2 section documenting the AoE-radius substrate + the candidate spell list (Fog Cloud ✅, Confusion, Create/Destroy Water, Creation, Private Sanctum); status header flips duration-scaling to closed and opens AoE-radius scaling as in-progress.
+
 ## [2.408.0] - 2026-06-17 — "The Rewritten Page"
 
 **Schema version:** 69

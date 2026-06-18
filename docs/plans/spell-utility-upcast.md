@@ -3,6 +3,8 @@
 > **Status (target-scaling):** ✅ **CLOSED** as of v2.404.9 (2026-06-17). All 9 in-scope target-scaling spells shipped across 9 sequential PATCH commits (v2.404.1 → v2.404.9). Two related substrate facts proven; one helper introduced.
 >
 > **Status (duration-scaling):** ✅ **PHASE 1 CLOSED** as of v2.408.0 (2026-06-17). Substrate (`_SPELL_DURATION_MAP` + `_spell_duration_rounds_for_slot()` helper) + Hunter's Mark retrofit (v2.405.0) + Hex retrofit (v2.405.1) + Bestow Curse retrofit (v2.405.2, first `"permanent"` marker) + Geas (v2.406.0, first NEW endpoint + day/year markers) + Mass Suggestion (v2.407.0, endpoint-build) + Modify Memory (v2.408.0, final endpoint-build) shipped. **All six in-scope duration-scaling spells are live on the substrate.** See the [Phase 1 section](#phase-1--duration-scaling-substrate-v24050) below.
+>
+> **Status (AoE-radius scaling):** 🟠 **PHASE 2 IN PROGRESS** as of v2.409.0 (2026-06-17). Substrate (`_SPELL_AOE_MAP` + `_spell_aoe_for_slot()` helper) + Fog Cloud (v2.409.0, first consumer, new `/cast_fog_cloud` endpoint) shipped. **Four candidates remain** (Confusion, Create/Destroy Water, Creation, Private Sanctum). See the [Phase 2 section](#phase-2--aoe-radius-scaling-substrate-v24090) below.
 
 ## What this plan covered
 
@@ -145,6 +147,46 @@ Each ships as a registry drop-in + retrofit + harness. Same shape across all of 
 - `"30d"`, `"1y+1d"` — long durations the engine doesn't track minute-by-minute. Same display-cap behavior; the GM resolves expiry at the table.
 
 The helper returns the raw marker string; the caller decides how to render it. Hunter's Mark retrofit demonstrates the numeric path (integer rounds → `duration_label` mapping); marker-string callers will add their own branches.
+
+---
+
+## Phase 2 — AoE-radius scaling substrate (v2.409.0)
+
+A small set of SRD spells scale their **area** on upcast rather than their duration or target count. The growth is always linear: a fixed step per slot level above the spell's base level. Phase 2 introduces a dedicated substrate for that math, structurally parallel to the Phase 1 duration substrate.
+
+### Substrate
+
+- **`_SPELL_AOE_MAP`** — keyed by spell slug; values carry `{base_level, base_ft, increment_ft, shape}`. `shape` is descriptive (`"sphere-radius"` / `"cube-edge"`) so a caller can render the right template; the scaling math is identical regardless of shape.
+- **`_spell_aoe_for_slot(spell_slug, slot_level, default_ft=0)`** — pure-function lookup. Returns `base_ft + max(0, slot_level − base_level) × increment_ft`, or `default_ft` when the slug has no entry. Single source of truth for per-slot area math.
+
+Fog Cloud is the first consumer:
+
+```python
+"fog-cloud": {
+    "base_level": 1,
+    "base_ft": 20,         # 20-ft-radius sphere at L1
+    "increment_ft": 20,    # +20 ft per slot above L1
+    "shape": "sphere-radius",
+},
+```
+
+`/cast_fog_cloud` (a new endpoint-build, since Fog Cloud was catalog-only) reads the substrate via the helper and surfaces the scaled `radius_ft` on the response + the `feature_used` broadcast. v1 ships the spell-side audit; placing the actual fog template on the battle map is filed.
+
+### Tests (v2.409.0)
+
+`tests/harness/test_cast_fog_cloud.py` ships 8 tests — L1/L2/L5/L9 casts assert the right `radius_ft` (20/40/100/180) + 4 error paths (missing character_id, slot < 1, wrong class, spell not known).
+
+### Backlog (Phase 2 follow-on spells)
+
+Each ships as a substrate drop-in + endpoint-build + harness, same shape across all of them (all five candidates are catalog-only).
+
+| Spell | Base level | RAW area ladder | Notes |
+|---|---|---|---|
+| Fog Cloud | L1 | 20-ft radius, +20 ft per slot above 1st | ✅ shipped v2.409.0 ("The Rolling Bank"). First consumer of `_SPELL_AOE_MAP`; sphere-radius shape. Harness: `tests/harness/test_cast_fog_cloud.py` (8 tests). |
+| Confusion | L4 | 10-ft radius, +5 ft per slot above 4th | Sphere-radius. Also a WIS-save condition spell; the AoE substrate covers the radius only. |
+| Create or Destroy Water | L1 | 10-ft cube, +5 ft per slot above 1st (or +10 gal water) | Cube-edge shape; the gallons branch is a separate non-area scale. |
+| Creation | L5 | 5-ft cube, +5 ft per slot above 5th | Cube-edge. |
+| Private Sanctum | L4 | 100-ft cube, +100 ft per slot above 4th | Cube-edge; largest increment. |
 
 ---
 

@@ -2178,6 +2178,60 @@ def _spell_duration_rounds_for_slot(
     return default_rounds
 
 
+# ---------------------------------------------------------------------------
+# v2.409.0 — Phase 2 AoE-radius scaling substrate. A handful of SRD spells
+# grow their *area* on upcast (not their duration or target count): the area
+# dimension increases by a fixed step per slot level above the spell's base.
+# RAW examples:
+#   - Fog Cloud (PHB p.243): 20-ft-radius sphere, +20 ft per slot above L1.
+#   - Confusion (PHB p.224): 10-ft-radius sphere, +5 ft per slot above L4.
+#   - Create/Destroy Water, Creation, Private Sanctum: cube-edge growth.
+# Keyed by spell slug; values carry {base_level, base_ft, increment_ft,
+# shape}. ``shape`` is descriptive ("sphere-radius" / "cube-edge") so a
+# caller can render the right template; the scaling math is identical
+# (linear ``base_ft + steps * increment_ft``). Mirrors the v2.405.0
+# ``_SPELL_DURATION_MAP`` shape — data-only future tuning.
+# ---------------------------------------------------------------------------
+_SPELL_AOE_MAP: dict[str, dict] = {
+    "fog-cloud": {
+        "base_level": 1,
+        "base_ft": 20,          # 20-ft-radius sphere at L1
+        "increment_ft": 20,     # +20 ft per slot above L1
+        "shape": "sphere-radius",
+    },
+}
+
+
+def _spell_aoe_for_slot(
+    spell_slug: str,
+    slot_level: int,
+    default_ft: int = 0,
+) -> int:
+    """v2.409.0 — Phase 2 AoE-radius scaling substrate helper. Reads
+    ``_SPELL_AOE_MAP[spell_slug]`` and returns the scaled area dimension
+    (in feet) for ``slot_level``: ``base_ft + steps * increment_ft``,
+    where ``steps`` is the number of slot levels above the spell's
+    ``base_level`` (clamped at 0 so a base-level cast returns ``base_ft``
+    and an under-level cast doesn't go negative). If no entry exists for
+    the slug, returns ``default_ft``.
+
+    Pure function — the single source of truth for per-slot area math,
+    read by the bespoke AoE cast endpoints (``/cast_fog_cloud`` etc.).
+    """
+    entry = _SPELL_AOE_MAP.get(spell_slug)
+    if not entry:
+        return default_ft
+    try:
+        sl = int(slot_level)
+    except (TypeError, ValueError):
+        sl = int(entry.get("base_level") or 1)
+    base_level = int(entry.get("base_level") or 1)
+    base_ft = int(entry.get("base_ft") or 0)
+    increment_ft = int(entry.get("increment_ft") or 0)
+    steps = max(0, sl - base_level)
+    return base_ft + steps * increment_ft
+
+
 _SPELL_BUFF_MAP["resistance-all"] = {
     "key": "resistance-all",
     "name": "Invulnerability (All Damage)",
@@ -84528,6 +84582,193 @@ async def cast_modify_memory(
         "class_slug": class_slug,
         "duration_label": mm_duration_label,
         "range_ft": 30,
+        "concentration": True,
+    }
+
+
+# ----------- API: cast Fog Cloud (1st-level Conjuration, concentration, AoE) -----------
+
+@router.post("/api/campaign/{campaign_id}/cast_fog_cloud")
+async def cast_fog_cloud(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.409.0 — Cast Fog Cloud: slot consume + audit + substrate-driven
+    AoE radius. RAW (PHB p.243): L1 Conjuration, 120 ft, Concentration up
+    to 1 hour, no save. Creates a 20-ft-radius sphere of fog that heavily
+    obscures its area. The radius scales with slot level — +20 ft per slot
+    above 1st (L1 → 20 ft, L2 → 40 ft, … L9 → 180 ft). Classes: Druid,
+    Ranger, Sorcerer, Wizard.
+
+    First consumer of the Phase 2 AoE-radius scaling substrate
+    (``_SPELL_AOE_MAP`` + ``_spell_aoe_for_slot``), the area-scaling
+    analogue of the v2.405.0 duration substrate. v1 ships the spell-side
+    audit (slot consume + radius surfacing); placing the actual fog
+    template on the battle map is filed.
+
+    Body: ``{character_id, class_slug, slot_level?, override?}``.
+
+    Validates: missing character_id (400), slot_level < 1 (400),
+    membership (403), ownership/GM (403), Fog-Cloud-casting class
+    (409 wrong_class), spell on the list (409 spell_not_known), slot
+    available (409 no_slot), Phase 4 action over-budget (409).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    class_slug = (body.get("class_slug") or "").strip().lower()
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw is not None else 1
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if slot_level < 1:
+        raise HTTPException(400, "slot_level must be >= 1 (Fog Cloud is L1)")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    _FOG_CLOUD_CLASSES = {"druid", "ranger", "sorcerer", "wizard"}
+    if class_slug not in _FOG_CLOUD_CLASSES:
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class",
+            "expected": sorted(_FOG_CLOUD_CLASSES),
+            "got": class_slug or "",
+        })
+    primary_class = (sheet.get("class") or "").strip().lower()
+    if primary_class != class_slug:
+        has_class = any(
+            (entry.get("class") or "").strip().lower() == class_slug
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_class:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class",
+                "expected": class_slug,
+                "got": primary_class or "",
+            })
+
+    spells = list(sheet.get("spells") or [])
+    has_fc = any(
+        (s.get("_slug") == "fog-cloud") or
+        (str(s.get("name", "")).lower() == "fog cloud")
+        for s in spells
+    )
+    if not has_fc:
+        return JSONResponse(status_code=409, content={
+            "error": "spell_not_known",
+            "spell": "fog-cloud",
+        })
+
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get(class_slug) or {})
+    slot = dict(per_class.get(str(slot_level)) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": class_slug,
+            "spell_name": "Fog Cloud",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "fog-cloud",
+            "label": "Fog Cloud",
+            "strict": strict,
+        })
+
+    # Commit slot decrement.
+    slot["used"] = used + 1
+    per_class[str(slot_level)] = slot
+    all_slots[class_slug] = per_class
+    sheet["spell_slots"] = all_slots
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # v2.409.0 — AoE-radius scaling substrate. L1 → 20 ft, +20 ft per
+    # slot above 1st (L2 → 40, … L9 → 180).
+    radius_ft = _spell_aoe_for_slot("fog-cloud", slot_level, default_ft=20)
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    note = (
+        f"🌫️ {char.name} casts Fog Cloud (L{slot_level}) — "
+        f"120 ft, {radius_ft}-ft-radius sphere of heavy obscurement "
+        f"(v1 stops at the cast; template placement filed)"
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": "",
+            "total": 0,
+            "breakdown": note,
+            "note": note,
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id,
+            "class_slug": class_slug,
+            "level": slot_level,
+            "total": total,
+            "used": used + 1,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "🌫️ Fog Cloud",
+            "feature_desc": (
+                f"{char.name} conjures a {radius_ft}-ft-radius sphere "
+                f"of fog (heavily obscured). Template placement on the "
+                f"battle map is filed."
+            ),
+            "source": "fog-cloud",
+            "radius_ft": radius_ft,
+            "range_ft": 120,
+        },
+    })
+
+    cast_id = _log_spell_slot_spend(
+        campaign_id, char.id, class_slug, slot_level, used, "spell")
+    return {
+        "ok": True,
+        "cast_id": cast_id,
+        "slot_level": slot_level,
+        "slot_used": used + 1,
+        "slot_total": total,
+        "class_slug": class_slug,
+        "radius_ft": radius_ft,
+        "range_ft": 120,
         "concentration": True,
     }
 

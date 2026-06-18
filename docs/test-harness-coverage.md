@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3260 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.408.0, 2026-06-17).
+**Total tests:** 3268 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.409.0, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4961,6 +4961,20 @@ v2.406.0 — new `/cast_geas` endpoint + duration-scaling substrate, fourth cons
 | `test_geas_low_slot_400` | slot_level=4 → 400 (Geas is L5). |
 | `test_geas_wrong_class_409` | class_slug=barbarian (not a Geas class) → 409 `wrong_class`. |
 | `test_geas_spell_not_known_409` | Wizard without Geas on her list → 409 `spell_not_known` (fires before the slot lookup; no slot patching needed). |
+
+### `test_cast_fog_cloud.py`
+v2.409.0 — new `/cast_fog_cloud` endpoint + the Phase 2 AoE-radius scaling substrate (`_SPELL_AOE_MAP` + `_spell_aoe_for_slot()`), first consumer. RAW L1 Conjuration, 120 ft, concentration, no save, 20-ft-radius sphere of heavy obscurement. The radius scales +20 ft per slot above 1st (L1 → 20, L2 → 40, L5 → 100, L9 → 180). Thalindra Moonwhisper is armed with Fog Cloud + an L1-L9 wizard slot table (snapshot + restored on teardown).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_fog_cloud_l1_routes_20ft` | L1 cast → 200; `radius_ft == 20`, `range_ft == 120`, `concentration is True`. Base tier. |
+| `test_fog_cloud_l2_routes_40ft` | L2 cast → `radius_ft == 40` (+20 over base). |
+| `test_fog_cloud_l5_routes_100ft` | L5 cast → `radius_ft == 100` (20 + 4×20). |
+| `test_fog_cloud_l9_routes_180ft` | L9 cast → `radius_ft == 180` (20 + 8×20). Top in-table slot. |
+| `test_fog_cloud_missing_character_id_400` | Missing character_id → 400. |
+| `test_fog_cloud_low_slot_400` | slot_level=0 → 400 (Fog Cloud is L1). |
+| `test_fog_cloud_wrong_class_409` | class_slug=cleric (not a Fog Cloud class) → 409 `wrong_class`. |
+| `test_fog_cloud_spell_not_known_409` | Wizard without Fog Cloud on her list → 409 `spell_not_known` (fires before the slot lookup). |
 
 ### `test_cast_modify_memory.py`
 v2.408.0 — new `/cast_modify_memory` endpoint + duration-scaling substrate, sixth consumer (third NEW endpoint) and the final Phase 1 spell. RAW L5 Enchantment, 30 ft, concentration, single target, WIS save. Substrate `"modify-memory"` entry uses five markers ("10min" / "1h" / "24h" / "7d" / "permanent"), one per slot level L5-L9. Thalindra Moonwhisper is armed with Modify Memory + an L5-L9 wizard slot table (snapshot + restored on teardown).
