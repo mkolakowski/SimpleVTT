@@ -2657,6 +2657,17 @@ _SPELL_BONUS_ADDITIVE_MAP: dict[str, dict] = {
         "base_bonus": 0,    # the 1d4+4 base is rolled separately
         "per_slot": 5,      # +5 temp HP per slot above 1st
     },
+    # v2.432.0 — Phase 4 fourth consumer. Aid was wired in v2.371.0
+    # with a bespoke ``max(5, 5 + 5 * max(0, slot - 2))`` inline
+    # calculation; the refactor below puts it on the same substrate
+    # as False Life. RAW PHB p.211: base L2 → +5 HP-max + +5 current
+    # HP; "At Higher Levels: a target's hit points increase by an
+    # additional 5 for each slot level above 2nd."
+    "aid": {
+        "base_level": 2,
+        "base_bonus": 5,    # +5 HP at base L2 cast
+        "per_slot": 5,      # +5 HP per slot above 2nd
+    },
 }
 
 
@@ -23567,18 +23578,24 @@ async def cast_spell(
             # v2.371.0 — Aid upcast scaling (RAW PHB p.211). Base L2
             # grants +5 HP-max + +5 current HP; "At Higher Levels: a
             # target's hit points increase by an additional 5 for each
-            # slot level above 2nd." Recompute `aid_hp_bonus` from the
-            # cast's slot_level (defaults to base 2 → +5). The
-            # install-time heal a few lines below + the
-            # `_buff_hp_max_bonus` heal-ceiling walk both read the
-            # overridden value, so a L3 Aid grants +10 / L4 grants +15
-            # / L5 grants +20.
+            # slot level above 2nd." The install-time heal a few lines
+            # below + the `_buff_hp_max_bonus` heal-ceiling walk both
+            # read the overridden value, so a L3 Aid grants +10 / L4
+            # grants +15 / L5 grants +20.
+            # v2.432.0 — refactor onto the Phase 4 linear-additive
+            # substrate (``_SPELL_BONUS_ADDITIVE_MAP["aid"]`` + the
+            # shared ``_spell_bonus_additive_for_slot()`` helper).
+            # No behavior change — the math `base + (slot - base) * per`
+            # with base_bonus=5, per_slot=5, base_level=2 reproduces
+            # the v2.371.0 inline expression exactly. Aligns Aid with
+            # False Life as substrate consumers and shrinks this
+            # branch from 6 lines of bespoke math to a single helper
+            # call, so future Aid-shape spells (e.g. a Greater Aid)
+            # only need a new map entry, no new code at this site.
             if spell_buff_template.get("key") == "aid":
-                try:
-                    _aid_slot = int(slot_level or 2)
-                except (TypeError, ValueError):
-                    _aid_slot = 2
-                _aid_bonus = max(5, 5 + 5 * max(0, _aid_slot - 2))
+                _aid_bonus = _spell_bonus_additive_for_slot(
+                    "aid", slot_level, default_bonus=5,
+                )
                 _bless_buff["effects"] = dict(
                     _bless_buff.get("effects")
                     or spell_buff_template.get("effects")

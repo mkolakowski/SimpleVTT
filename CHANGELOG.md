@@ -10,6 +10,45 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.432.0] - 2026-06-18 — "The Aligned Boon"
+
+**Schema version:** 71
+
+**Commit summary:** Resumes the spell utility-upcast arc after the 8-commit security spine. **Fourth Phase 4 (rider/bonus scaling) consumer** — Aid. RAW PHB p.211: base L2 grants +5 HP-max + +5 current HP; "At Higher Levels: a target's hit points increase by an additional 5 for each slot level above 2nd." Aid's HP scaling was originally wired in v2.371.0 with a bespoke `max(5, 5 + 5 * max(0, slot - 2))` inline calculation at `/cast_spell`'s buff-install branch. This commit promotes Aid onto `_SPELL_BONUS_ADDITIVE_MAP` + `_spell_bonus_additive_for_slot()`, the same Phase 4 linear-additive substrate False Life uses.
+
+**Description:** No behavior change. The substrate formula `base_bonus + (slot - base_level) * per_slot` with `base_level=2, base_bonus=5, per_slot=5` reproduces the v2.371.0 inline expression exactly:
+
+| Slot | v2.371.0 inline | v2.432.0 substrate |
+|---|---|---|
+| L2 | `max(5, 5 + 5 * max(0, 0)) = 5` | `5 + 0*5 = 5` |
+| L3 | `max(5, 5 + 5 * max(0, 1)) = 10` | `5 + 1*5 = 10` |
+| L4 | `max(5, 5 + 5 * max(0, 2)) = 15` | `5 + 2*5 = 15` |
+| L5 | `max(5, 5 + 5 * max(0, 3)) = 20` | `5 + 3*5 = 20` |
+
+The three existing Aid upcast harness tests (`test_cast_aid_upcast.py`) pass without modification — the refactor is behavior-equivalent by construction. The verbose inline branch shrinks from 6 lines of bespoke math to a single helper call:
+
+```python
+# Before (v2.371.0):
+try:
+    _aid_slot = int(slot_level or 2)
+except (TypeError, ValueError):
+    _aid_slot = 2
+_aid_bonus = max(5, 5 + 5 * max(0, _aid_slot - 2))
+
+# After (v2.432.0):
+_aid_bonus = _spell_bonus_additive_for_slot("aid", slot_level, default_bonus=5)
+```
+
+**Why now (after the security arc):** the substrate consolidation isn't urgent on its own, but it's a clean low-risk way to restart the arc. The session memory's resumption menu specifically called out Aid as a Phase 4 candidate; verifying the substrate is intact + the refactor doesn't break the harness is the right "warm up" before the next net-new consumer (the **Spiritual Weapon** + step-N additive substrate generalization is the natural follow-on — needs a `step_size` field on the substrate entries so `floor((slot-base)/step)` can express Spiritual Weapon's +1d8 per 2 slots above 2nd shape).
+
+**Why "The Aligned Boon":** "boon" is the catalog category for Aid's HP grant; "aligned" is what the refactor does — aligns Aid with the Phase 4 substrate it should have been on from the start.
+
+PATCH — pure refactor, no behavior change. Substrate gains a 4th consumer entry (Aid joins False Life). 3 existing Aid harness tests continue to pass. No new tests; no new endpoints.
+
+### Changed
+- `app/routes/tabletop_routes.py`: new `"aid"` entry in `_SPELL_BONUS_ADDITIVE_MAP` (base_level 2, base_bonus 5, per_slot 5). Inline 6-line `_aid_bonus` calculation at `/cast_spell`'s buff-install branch refactored to a single `_spell_bonus_additive_for_slot("aid", slot_level, default_bonus=5)` call. Comment block updated to reference the v2.432.0 alignment.
+- `docs/plans/spell-utility-upcast.md`: status note updated to record Aid as the 4th Phase 4 consumer. Backlog table gains a new row marking Aid as ✅ refactored onto the substrate.
+
 ## [2.431.0] - 2026-06-18 — "The Steward's Ledger"
 
 **Schema version:** 71
