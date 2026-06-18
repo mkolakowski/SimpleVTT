@@ -109,6 +109,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-demo-magic-link" in resp.text
     # v2.423.4: fail2ban/CrowdSec log integration plan listed.
     assert "/wiki/doc/plan-fail2ban-crowdsec-integration" in resp.text
+    # v2.423.5: Cloudflare edge-banning integration plan listed.
+    assert "/wiki/doc/plan-cloudflare-edge-banning" in resp.text
     # v2.400.0: SRD race rules implementation guide listed in Available guides.
     assert "/wiki/srd-races-implementation" in resp.text
     # v2.402.0: SRD conditions implementation guide listed in Available guides.
@@ -741,6 +743,23 @@ async def test_wiki_doc_serves_fail2ban_crowdsec_integration_plan():
     assert "text/html" in resp.headers.get("content-type", "")
     assert "fail2ban" in resp.text.lower()
     assert "crowdsec" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_cloudflare_edge_banning_plan():
+    """v2.423.5: GET /wiki/doc/plan-cloudflare-edge-banning — 200 +
+    body contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/cloudflare-edge-banning.md``.
+    Proposes outbound Cloudflare API client + GM-only "Ban IP at
+    edge" button + admin-audit log, with a wiremock service in
+    docker-compose for dev testing per the third-party-API rule.
+    Closes the three-piece security spine started in v2.423.2."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-cloudflare-edge-banning")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "cloudflare" in resp.text.lower()
+    assert "edge-banning" in resp.text.lower() or "edge banning" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

@@ -10,6 +10,47 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.423.5] - 2026-06-18 — "The Distant Gatekeeper"
+
+**Schema version:** 69
+
+**Commit summary:** Sketches the third and final design plan for the v2.423.2 security-TODO triple. New `docs/plans/cloudflare-edge-banning.md` closes the three-piece security spine started two commits ago: [`demo-magic-link.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/demo-magic-link.md) was the auth surface, [`fail2ban-crowdsec-integration.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/fail2ban-crowdsec-integration.md) was the detection layer, this is the enforcement layer.
+
+**Description:** The plan keeps SimpleVTT in the "emit / decide" lane and Cloudflare's edge in the "enforce" lane. A thin async `app/integrations/cloudflare.py` client wraps the IP Access Rules REST API; three new GM-only endpoints (`POST /ban_ip` / `POST /unban_ip` / `GET /edge_bans`) drive a "Ban IP at edge" subsection in the campaign GM panel; every ban / unban call writes a row to a new generic `admin_audit_log` table (who banned what IP, when, against which scope) so abuse-of-button is reviewable and reversible.
+
+**Two env-var gates, both deploy-time:**
+
+- `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ZONE_ID` configure the *client* — the bouncer use case can use it directly without exposing the in-app UI.
+- `SIMPLEVTT_CLOUDFLARE_BANNING_ENABLED=true` gates the *GM-facing button* — operators who only want the CrowdSec → Cloudflare bouncer path can leave the in-app surface disabled.
+
+**Per the CLAUDE.md [Third-party APIs must be Docker Compose services rule](CLAUDE.md#third-party-apis-must-be-docker-compose-services):** Cloudflare's API isn't a service we run, but the dev compose stack ships a **wiremock** service (`cloudflare-mock`) under the dev profile, serving canned `/zones/<id>/firewall/access_rules/rules` responses from a `docs/integrations/cloudflare/mock/` fixture. The harness tests drive wiremock directly to assert ban/unban/list calls translate correctly into Cloudflare API calls without burning real quota.
+
+**Schema bump filed:** new `admin_audit_log` table (generic by design — Phase 1 logs cloudflare-ban/unban, future demo-magic-link mints + campaign-deletes + user-purges drop into the same table). SCHEMA_VERSION 69 → 70 when Phase 1 ships.
+
+**Three-phase roadmap:**
+
+1. **Phase 1** — client + manual ban/unban + audit log + wiremock dev + GM panel partial + harness tests.
+2. **Phase 2** — operator how-to for wiring CrowdSec's `cs-cloudflare-blocker` bouncer against the same Cloudflare token / zone; compose-side smoke test of the full "synthetic event → CrowdSec scenario fires → bouncer adds rule → wiremock receives" chain.
+3. **Phase 3** — auto-ban hook from in-app rate limit (hard-blocked on the demo-magic-link Phase 3 anonymous-mint endpoint shipping first).
+
+**Threat model** covers six classes (disruptive in-game players → already-banned attackers rotating IPs → magic-link mint-flooding → compromised-admin button abuse → Cloudflare API token leak → DoS via ban-flood against spoofed `X-Forwarded-For`). The plan reuses the `TRUSTED_PROXY_HOPS` env var from `fail2ban-crowdsec-integration.md` for IP attribution; the audit log makes admin-button abuse reviewable; the token is scoped to a single zone + Access Rules permission only so a leak can't pivot.
+
+**Non-goals** lock down scope: no in-app rate-limiting (different concern), no Cloudflare DNS management (token isn't scoped for it), no full WAF rule authoring (only IP Access Rules), no origin-protection (Cloudflare Tunnel / firewall rules are operator-side), no replacement of the existing FastAPI auth (this is defense-in-depth).
+
+Wired through all four wiki surfaces per the [Every doc must be surfaced through the wiki](CLAUDE.md#every-doc-must-be-surfaced-through-the-wiki) rule. Total harness count nudges 3355 → 3356.
+
+**Why "The Distant Gatekeeper":** the whole plan is about handing the gate keys to someone standing far away from the keep — the gatekeeper is at the edge of the network, not at the FastAPI door. A banned attacker never sees SimpleVTT at all.
+
+PATCH — doc-only addition (~330 lines of plan + 4 wiki-surfacing edits + 1 new test + version + README + CHANGELOG + test-harness-coverage row). No app code or config.
+
+### Added
+- `docs/plans/cloudflare-edge-banning.md`: new design plan for the third v2.423.2 security TODO. Outbound API client, two env-var gates (client vs. UI), wiremock-in-compose for dev, generic `admin_audit_log` table, GM-only ban/unban/list endpoints, GM panel "Edge bans" subsection, three-phase roadmap (manual → CrowdSec bouncer → auto-ban hook), threat model with 6 attack classes, non-goals carving the scope.
+- `app/routes/wiki_routes.py`: `_DOC_ALLOWLIST` entry `"plan-cloudflare-edge-banning": Path("docs") / "plans" / "cloudflare-edge-banning.md"`.
+- `app/templates/wiki.html`: new row in the "Design plans" table linking to `/wiki/doc/plan-cloudflare-edge-banning`.
+- `docs/wiki/README.md`: matching row in the "Design plans" table.
+- `tests/harness/test_wiki.py`: new `test_wiki_doc_serves_cloudflare_edge_banning_plan` smoke test + a new assertion in `test_wiki_home_renders` for the `/wiki/doc/plan-cloudflare-edge-banning` link.
+- `docs/test-harness-coverage.md`: new row for `test_wiki_doc_serves_cloudflare_edge_banning_plan` in the wiki suite, header total-test-count nudges 3355 → 3356.
+
 ## [2.423.4] - 2026-06-18 — "The Lighthouse Code"
 
 **Schema version:** 69
