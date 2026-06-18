@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3323 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.417.0, 2026-06-17).
+**Total tests:** 3328 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.418.0, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2218,6 +2218,17 @@ v2.417.0 — Phase 3 first count-*additive* consumer (a second summon-scaling sh
 | `test_animate_dead_l9_thirteen` | L9 → `count 13` (1 + 2×6), 13 undead (top of the ladder). |
 | `test_animate_dead_wizard_can_cast` | Thalindra (Wizard) passes the Cleric/Wizard gate → L4 = 3 undead. |
 | `test_animate_dead_cannot_cast_non_caster` | Krieger (Barbarian) → 409 `cannot_cast` with `expected` mentioning "cleric". |
+
+### `test_cast_conjure_elemental.py`
+v2.418.0 — Phase 3 first **CR-increase** consumer (the third and final summon-scaling shape after the multiplier and additive families). `/cast_conjure_elemental` (Druid / Wizard L5) reads the new sibling `_SPELL_SUMMON_CR_MAP` via `_spell_summon_cr_for_slot()`: the summon count stays fixed at 1, but the elemental's challenge rating is slot-determined (`5 + 1 × (slot − 5)`). Reuses the `elemental-spirit` companion template. Caster fixtures: Mira Greenleaf (Druid) for the CR ladder; Thalindra Moonwhisper (Wizard) for the Wizard-branch gate.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_conjure_elemental_base_slot_cr5` | L5 base → `count 1`, `challenge_rating 5`, exactly 1 elemental-spirit summon (`is_summon`, `companion_key == "elemental-spirit"`, `summoned_by` Mira). |
+| `test_conjure_elemental_l6_cr6` | L6 → `challenge_rating 6` (+1 per slot above 5th), still `count 1`. |
+| `test_conjure_elemental_l9_cr9` | L9 → `challenge_rating 9` (top of the ladder), still `count 1`. |
+| `test_conjure_elemental_wizard_can_cast` | Thalindra (Wizard) passes the Druid/Wizard gate → L5 = CR 5, 1 elemental. |
+| `test_conjure_elemental_cannot_cast_non_caster` | Krieger (Barbarian) → 409 `cannot_cast` with `expected` mentioning "druid". |
 
 ### `test_cast_gust.py`
 v2.99.445 — Phase 6.3 of `docs/plans/movement-and-summons.md`. Gust (Druid/Sorcerer/Wizard cantrip, Tasha's p.106): the target makes a STR save vs the spell save DC or is pushed 5 ft away via `_force_move`. The last forced-mover. Caster fixture: Thalindra Moonwhisper (demo Wizard).

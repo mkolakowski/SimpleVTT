@@ -2425,6 +2425,59 @@ def _spell_summon_additive_for_slot(
     return base_count + steps * per_slot
 
 
+# ---------------------------------------------------------------------------
+# v2.418.0 — Phase 3 summon *CR-increase* family. The third and final
+# summon-scaling shape: the creature *count* is fixed (one summoned
+# creature), but its challenge rating climbs with the slot level. Sibling
+# map to ``_SPELL_SUMMON_MAP`` (multiplier) / ``_SPELL_SUMMON_ADDITIVE_MAP``
+# (additive) so each helper stays single-purpose. RAW examples:
+#   - Conjure Elemental (PHB p.225): a CR-5 elemental at the base 5th slot;
+#     +1 CR per slot level above 5th (L5 → 5, L6 → 6, … L9 → 9).
+#   - Conjure Fey (PHB p.226): CR 6 at the base 6th slot; +1 CR per slot
+#     above 6th (filed as a Phase 3 follow-on).
+#   - Conjure Celestial (PHB p.225): CR 4 at 7th, CR 5 at 9th (follow-on).
+# Keyed by spell slug; values carry {base_level, base_cr, per_slot}.
+# ---------------------------------------------------------------------------
+_SPELL_SUMMON_CR_MAP: dict[str, dict] = {
+    "conjure-elemental": {
+        "base_level": 5,
+        "base_cr": 5,     # CR-5 elemental at the base L5 slot
+        "per_slot": 1,    # +1 CR per slot level above 5th
+    },
+}
+
+
+def _spell_summon_cr_for_slot(
+    spell_slug: str,
+    slot_level: int,
+    default_cr: int = 0,
+) -> int:
+    """v2.418.0 — Phase 3 summon CR-increase-family helper. Reads
+    ``_SPELL_SUMMON_CR_MAP[spell_slug]`` and returns
+    ``base_cr + steps * per_slot``, where ``steps`` is the number of slot
+    levels above the spell's ``base_level`` (clamped at 0 so a base-level
+    cast returns ``base_cr`` and an under-level cast doesn't go negative).
+    If no entry exists for the slug, returns ``default_cr``.
+
+    Pure function — the single source of truth for per-slot summon-CR
+    math, read by the CR-increase cast endpoints
+    (``/cast_conjure_elemental`` etc.). Mirrors the additive helper's
+    linear shape (a CR instead of a count).
+    """
+    entry = _SPELL_SUMMON_CR_MAP.get(spell_slug)
+    if not entry:
+        return default_cr
+    try:
+        sl = int(slot_level)
+    except (TypeError, ValueError):
+        sl = int(entry.get("base_level") or 1)
+    base_level = int(entry.get("base_level") or 1)
+    base_cr = int(entry.get("base_cr") or 0)
+    per_slot = int(entry.get("per_slot") or 0)
+    steps = max(0, sl - base_level)
+    return base_cr + steps * per_slot
+
+
 _SPELL_BUFF_MAP["resistance-all"] = {
     "key": "resistance-all",
     "name": "Invulnerability (All Damage)",
@@ -61706,6 +61759,135 @@ async def cast_animate_dead(
         "feature": "animate-dead",
         "count": len(combatants),
         "slot_level": slot_level,
+        "combatants": combatants,
+        "token_ids": token_ids,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_conjure_elemental")
+async def cast_conjure_elemental(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.418.0 — Phase 3 summon *CR-increase* family, first consumer.
+    Conjure Elemental (Druid / Wizard L5, PHB p.225): "An elemental of
+    challenge rating 5 or lower... appears." Upcast: "the challenge rating
+    increases by 1 for each slot level above 5th." Unlike the conjure
+    *count*-scaling spells, exactly **one** elemental is summoned and its
+    CR climbs with the slot — read from the CR-increase substrate:
+    ``base 5 + 1 × (slot − 5)`` (L5 → CR 5, L6 → CR 6, … L9 → CR 9). The
+    body carries `slot_level` but not `count` (always 1).
+
+    Body: ``{character_id, slot_level?, x?, y?, initiative?}``. The
+    elemental is summoned via `_summon_companion` (the `elemental-spirit`
+    registry entry) and tagged `is_summon` + `summoned_by` so the
+    long-rest teardown drops it. Gates on the caster knowing Conjure
+    Elemental OR being a Druid / Wizard.
+
+    Response: ``{ok, feature, count, slot_level, challenge_rating,
+    combatants: [...], token_ids: [...]}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    try:
+        slot_level = int(body.get("slot_level") or 5)
+    except (TypeError, ValueError):
+        slot_level = 5
+    # CR-increase family: count is always 1; only the elemental's CR
+    # scales with the slot.
+    count = 1
+    challenge_rating = _spell_summon_cr_for_slot(
+        "conjure-elemental", slot_level, default_cr=5)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_ce = any(
+        (s.get("_slug") == "conjure-elemental")
+        or (str(s.get("name", "")).lower() == "conjure elemental")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"druid", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_ce and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Conjure Elemental, or druid/wizard",
+            "got_class": _cls,
+        })
+
+    base_x = float(body.get("x") or 0)
+    base_y = float(body.get("y") or 0)
+    initiative = int(body.get("initiative") or 0)
+    combatants = []
+    token_ids = []
+    res = await _summon_companion(
+        db, campaign_id,
+        owner_char_id=char.id,
+        companion_key="elemental-spirit",
+        name=f"Conjured Elemental (CR {challenge_rating})",
+        x=base_x,
+        y=base_y,
+        initiative=initiative,
+    )
+    if res:
+        combatants.append(res["combatant"])
+        token_ids.append(res["token_id"])
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": f"🌪️ Conjure Elemental — CR {challenge_rating}",
+            "feature_desc": (
+                f"{char.name} summons a CR-{challenge_rating} elemental as "
+                f"a combatant. (Conjure Elemental, L{slot_level}.)"
+            ),
+            "source": "conjure-elemental",
+            "count": len(combatants),
+            "slot_level": slot_level,
+            "challenge_rating": challenge_rating,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "conjure-elemental",
+        "count": len(combatants),
+        "slot_level": slot_level,
+        "challenge_rating": challenge_rating,
         "combatants": combatants,
         "token_ids": token_ids,
     }

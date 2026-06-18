@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.418.0] - 2026-06-17 — "The Summoned Tempest"
+
+**Schema version:** 69
+
+**Commit summary:** Opens (and seeds) the **CR-increase family** of Phase 3 (summon-count scaling) — the third and final summon-scaling shape after the count-multiplier and count-additive families. Builds a sibling `_SPELL_SUMMON_CR_MAP` substrate + `_spell_summon_cr_for_slot()` helper and ships a new **`/cast_conjure_elemental`** endpoint (Druid / Wizard L5). RAW PHB p.225: a CR-5 elemental at the base 5th slot; the challenge rating climbs +1 per slot level above 5th (L5 → CR 5, L6 → CR 6, … L9 → CR 9).
+
+**Description:** Unlike the *count*-scaling conjure spells (multiplier or additive), the CR-increase family keeps the summon **count fixed at one** — only the creature's challenge rating scales with the slot. The endpoint body carries `slot_level` but not `count`. A third sibling map keeps the CR math separate from the multiplier and additive helpers:
+
+```python
+_SPELL_SUMMON_CR_MAP["conjure-elemental"] = {
+    "base_level": 5,
+    "base_cr": 5,     # CR-5 elemental at L5
+    "per_slot": 1,    # +1 CR per slot above 5th
+}
+```
+
+`/cast_conjure_elemental` reads `_spell_summon_cr_for_slot("conjure-elemental", slot_level)` (= `base_cr + per_slot × steps`), stands up a single `elemental-spirit` combatant named with its CR, and surfaces `challenge_rating` in the response + `feature_used` card. Conjure Fey (L6) and Conjure Celestial (L7) remain as Phase 3 follow-ons on this same substrate.
+
+**Why "The Summoned Tempest":** a fifth-level slot calls a CR-5 elemental; a ninth calls a CR-9 tempest — one creature, climbing in power with the slot spent.
+
+MINOR — new HTTP endpoint (`/cast_conjure_elemental`) + new sibling substrate + new helper + 5 new harness tests.
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_SPELL_SUMMON_CR_MAP` substrate + `_spell_summon_cr_for_slot()` pure-function helper (linear `base_cr + per_slot × steps`, mirrors the additive helper). First entry: `conjure-elemental`.
+- `app/routes/tabletop_routes.py`: new `POST /api/campaign/{campaign_id}/cast_conjure_elemental` endpoint (Druid / Wizard L5). Count is always 1; the elemental's CR is slot-determined. Stands up a single `elemental-spirit` combatant via `_summon_companion`, gated on knowing Conjure Elemental OR being a Druid / Wizard. Returns `{ok, feature, count, slot_level, challenge_rating, combatants, token_ids}`; broadcasts a `feature_used` card.
+- `tests/harness/test_cast_conjure_elemental.py`: new harness file (5 tests) — L5 → CR 5, L6 → CR 6, L9 → CR 9 ladder, a Wizard-caster gate test (Thalindra), and the 409 cannot_cast on Krieger (Barbarian).
+
+### Changed
+- `docs/plans/spell-utility-upcast.md`: Phase 3 backlog table flips Conjure Elemental to ✅ shipped; status header notes the CR-increase family is now open (Conjure Fey / Celestial remain).
+
 ## [2.417.0] - 2026-06-17 — "The Risen Few"
 
 **Schema version:** 69
