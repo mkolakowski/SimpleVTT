@@ -10,6 +10,39 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.405.1] - 2026-06-17 — "The Second Curse"
+
+**Schema version:** 69
+
+**Commit summary:** Retrofits **Hex** (Warlock L1) as the **second consumer** of the v2.405.0 duration-scaling substrate. Pre-v2.405.1 `/cast_hex` carried its own hardcoded `if/elif` duration ladder (lines ~81972-81981) — a verbatim copy of the one Hunter's Mark just shed. Hex shares the identical RAW per-slot structure (L1-L2 → 1 hr / L3-L4 → 8 hr / L5+ → 24 hr), so this commit adds one `"hex"` entry to `_SPELL_DURATION_MAP` and replaces the inline ladder with a `_spell_duration_rounds_for_slot()` call — proving the substrate generalizes beyond its first consumer with a data-only drop-in.
+
+**Description:** Same substrate-consolidation move as the v2.405.0 Hunter's Mark retrofit, applied to the spell that shares its exact duration ladder. The `"hex"` registry entry mirrors the `"hunters-mark"` shape:
+
+```python
+_SPELL_DURATION_MAP["hex"] = {
+    "base_level": 1,
+    "tiers": [
+        (2, 600),     # L1-L2: 1 hour
+        (4, 4800),    # L3-L4: 8 hours
+        (9, 14400),   # L5+:   24 hours
+    ],
+}
+```
+
+`/cast_hex` now reads `_spell_duration_rounds_for_slot("hex", slot_level, default_rounds=600)` and derives the display `duration_label` from the rounds count, identical to the Hunter's Mark retrofit. Engine behavior preserved — the two endpoints had byte-identical hardcoded ladders, so collapsing both onto the shared registry changes nothing at cast time while removing the duplication.
+
+**Why "The Second Curse":** Hex *is* a curse, and it's the substrate's second consumer — the entry that turns a one-off helper into a reusable pattern.
+
+PATCH — one registry entry + one endpoint retrofit + 1 new harness file (3 tests). No new spell wired; the Spells substrate-shape row stays at ~83% (Hex was already wired pre-v2.405.1; the retrofit moves the same RAW math from inline to data without changing engine behavior).
+
+### Added
+- `app/routes/tabletop_routes.py`: new `"hex"` entry in `_SPELL_DURATION_MAP` (after the `"hunters-mark"` entry, line ~2037). Same `base_level`/`tiers` shape; same L1-L2/L3-L4/L5+ → 600/4800/14400-round ladder.
+- `tests/harness/test_hex_duration_scaling.py`: new harness file. Three tests assert Magnus Hexbinder's Hex cast at L1 / L3 / L5 lands the correct `duration_label` ("1h" / "8h" / "24h") on the installed buff. The fixture PATCHes Magnus's Pact Magic slot table up to L5 (the demo Warlock carries only L3 slots) so each requested slot level lands in its own tier.
+
+### Changed
+- `app/routes/tabletop_routes.py`: `/cast_hex` (line ~81972) retrofits the per-slot duration computation. Replaces the inline `if/elif` block with a single `_spell_duration_rounds_for_slot()` call + a small mapping from rounds → display label. Engine behavior preserved.
+- `docs/plans/spell-utility-upcast.md`: Phase 1 backlog table flips Hex from pending to ✅ shipped.
+
 ## [2.405.0] - 2026-06-17 — "The Patient Mark"
 
 **Schema version:** 69

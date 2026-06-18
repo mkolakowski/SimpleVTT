@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3228 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.405.0, 2026-06-17).
+**Total tests:** 3231 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.405.1, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4937,6 +4937,15 @@ v2.99.188 — `/cast_hunters_mark` install broadcast names both targets when Twi
 |------|-----------------|
 | `test_twinned_install_broadcast_names_both_targets` | Rowan casts Hunter's Mark with Twinned armed. The `feature_used` install broadcast's `feature_name` + `feature_desc` mention both targets, and the new metadata fields fire: `target_names` is a 2-element list, `twinned_target_combatant_id_2` matches the second target ID, `twinned_target_name` resolves to the second target's display name. |
 | `test_no_twinned_broadcast_keeps_single_target` | Control: cast without Twinned pending. The install broadcast keeps the single-target shape — `target_names` is a singleton, `twinned_target_combatant_id_2` + `twinned_target_name` are falsy. |
+
+### `test_hex_duration_scaling.py`
+v2.405.1 — spell-utility-mechanical-depth Phase 1: duration-scaling substrate, second consumer. The `_SPELL_DURATION_MAP` "hex" entry + `_spell_duration_rounds_for_slot()` helper replace the hardcoded per-slot duration ladder at `/cast_hex`. Magnus Hexbinder's Pact Magic slot table PATCH'd up to L5 so all three tiers are reachable.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_hex_l1_routes_1h_duration` | Cast at L1 → substrate returns 600 rounds (1 hour); installed buff's `duration_label == "1h"`. Lower-tier branch. |
+| `test_hex_l3_routes_8h_duration` | Cast at L3 → substrate returns 4800 rounds (8 hours); `duration_label == "8h"`. Middle-tier branch. |
+| `test_hex_l5_routes_24h_duration` | Cast at L5 → substrate returns 14400 rounds (24 hours); `duration_label == "24h"`. Upper-tier branch. |
 
 ### `test_hex_twinned_install.py`
 v2.99.189 — `/cast_hex` adopts the v2.99.187/.188 Hunter's Mark pattern: per-target install when Twinned fires + chat-card naming both targets.

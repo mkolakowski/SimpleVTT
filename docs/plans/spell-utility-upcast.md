@@ -2,7 +2,7 @@
 
 > **Status (target-scaling):** ✅ **CLOSED** as of v2.404.9 (2026-06-17). All 9 in-scope target-scaling spells shipped across 9 sequential PATCH commits (v2.404.1 → v2.404.9). Two related substrate facts proven; one helper introduced.
 >
-> **Status (duration-scaling):** 🟠 **PHASE 1 IN FLIGHT** as of v2.405.0 (2026-06-17). Substrate (`_SPELL_DURATION_MAP` + `_spell_duration_rounds_for_slot()` helper) + Hunter's Mark retrofit shipped. 11 follow-on spells in Phase 1 scope: Hex, Bestow Curse, Geas, Mass Suggestion, Modify Memory, Magic Weapon, Heroes' Feast, Otiluke's Resilient Sphere, Tiny Hut, Drawmij's Instant Summons, Glyph of Warding. See the [Phase 1 section](#phase-1--duration-scaling-substrate-v24050) below.
+> **Status (duration-scaling):** 🟠 **PHASE 1 IN FLIGHT** as of v2.405.1 (2026-06-17). Substrate (`_SPELL_DURATION_MAP` + `_spell_duration_rounds_for_slot()` helper) + Hunter's Mark retrofit (v2.405.0) + Hex retrofit (v2.405.1) shipped. 4 more spells in real Phase 1 scope: Bestow Curse, Geas, Mass Suggestion, Modify Memory. See the [Phase 1 section](#phase-1--duration-scaling-substrate-v24050) below.
 
 ## What this plan covered
 
@@ -125,7 +125,7 @@ Each ships as a registry drop-in + retrofit + harness. Same shape across all of 
 
 | Spell | Base level | RAW tier ladder | Notes |
 |---|---|---|---|
-| Hex | L1 | L1-L2 → 1h, L3-L4 → 8h, L5+ → 24h | Identical to Hunter's Mark; second consumer of the substrate. Endpoint already mirrors the v2.99.187 Hunter's Mark pattern (see `app/routes/tabletop_routes.py:81972-81981` for the duplicate hardcoded ladder). |
+| Hex | L1 | L1-L2 → 1h, L3-L4 → 8h, L5+ → 24h | ✅ shipped v2.405.1 ("The Second Curse"). Second consumer of the substrate — identical ladder to Hunter's Mark, retrofitted by adding one `"hex"` registry entry + a `_spell_duration_rounds_for_slot()` call at the cast endpoint. Harness: `tests/harness/test_hex_duration_scaling.py`. |
 | Bestow Curse | L3 | L3 → 1 min, L4 → 10 min, L5 → 8h, L7 → 24h, L9 → permanent (RAW PHB p.218) | First spell to use the `"permanent"` marker. |
 | Geas | L5 | L5 → 30 days, L7 → 1 year, L9 → permanent | Uses long-marker durations (`"30d"`, `"1y"`, `"permanent"`). |
 | Mass Suggestion | L6 | L6 → 24h, L7 → 10d, L8 → 30d, L9 → 1y+1d | Filed follow-up from the v2.404.x retrospective. |
@@ -137,7 +137,7 @@ Each ships as a registry drop-in + retrofit + harness. Same shape across all of 
 | Drawmij's Instant Summons | L6 | Fixed (instantaneous summon) | Filed: not a duration spell — moved out of scope. |
 | Glyph of Warding | L3 | Fixed (until triggered) | Filed: trigger-state substrate (out of Phase 1 scope). |
 
-**Real Phase 1 scope (revised):** Hunter's Mark ✅ + Hex + Bestow Curse + Geas + Mass Suggestion + Modify Memory = **6 spells** with genuine duration scaling. The others get filed out of scope (no per-slot duration ladder) or moved to Phase 2/4. Phase 1 closure: ~5 more PATCH commits after v2.405.0.
+**Real Phase 1 scope (revised):** Hunter's Mark ✅ + Hex ✅ + Bestow Curse + Geas + Mass Suggestion + Modify Memory = **6 spells** with genuine duration scaling. The others get filed out of scope (no per-slot duration ladder) or moved to Phase 2/4. Phase 1 closure: ~4 more PATCH commits after v2.405.1.
 
 ### Markers (sentinel strings the helper returns)
 

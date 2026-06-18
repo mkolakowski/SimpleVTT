@@ -2034,6 +2034,24 @@ _SPELL_DURATION_MAP: dict[str, dict] = {
             (9, 14400),   # L5+:   24 hours
         ],
     },
+    # v2.405.1 — Hex (Warlock L1). RAW PHB p.251: "you place a curse
+    # on a creature... Concentration, up to 1 hour." Higher Levels:
+    # "When you cast this spell using a spell slot of 3rd or 4th
+    # level, you can maintain your concentration on the spell for up
+    # to 8 hours. When you use a spell slot of 5th level or higher,
+    # you can maintain your concentration on the spell for up to 24
+    # hours." Same L1-L2/L3-L4/L5+ → 1h/8h/24h ladder as Hunter's
+    # Mark; pre-v2.405.1 the tiers were hardcoded at the cast
+    # endpoint (lines ~81972-81981). Second consumer of the
+    # substrate helper.
+    "hex": {
+        "base_level": 1,
+        "tiers": [
+            (2, 600),     # L1-L2: 1 hour (concentration)
+            (4, 4800),    # L3-L4: 8 hours
+            (9, 14400),   # L5+:   24 hours
+        ],
+    },
 }
 
 
@@ -81969,15 +81987,20 @@ async def cast_hex(
         campaign_id, int(char.id),
     )
 
-    # Duration scales with slot level.
-    if slot_level >= 5:
-        duration_rounds = 100
+    # v2.405.1 — duration-scaling substrate retrofit. Was a hardcoded
+    # if/elif ladder; now reads the data-driven _SPELL_DURATION_MAP via
+    # the shared helper (mirrors the v2.405.0 Hunter's Mark retrofit).
+    raw_rounds = _spell_duration_rounds_for_slot("hex", slot_level, default_rounds=600)
+    try:
+        raw_rounds_int = int(raw_rounds)
+    except (TypeError, ValueError):
+        raw_rounds_int = 600
+    duration_rounds = 100  # display cap; engine-side duration is raw_rounds_int
+    if raw_rounds_int >= 14400:
         duration_label = "24h"
-    elif slot_level >= 3:
-        duration_rounds = 100
+    elif raw_rounds_int >= 4800:
         duration_label = "8h"
     else:
-        duration_rounds = 100
         duration_label = "1h"
 
     # v2.99.189 — list-shape rider + descriptor when Twinned fired.
