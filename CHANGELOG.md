@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.419.0] - 2026-06-17 — "The Sixth-Circle Court"
+
+**Schema version:** 69
+
+**Commit summary:** Second consumer of the Phase 3 **CR-increase family**. Adds a `_SPELL_SUMMON_CR_MAP` entry for **Conjure Fey** and ships a new **`/cast_conjure_fey`** endpoint (Druid / Warlock L6). RAW PHB p.226: a CR-6 fey at the base 6th slot; the challenge rating climbs +1 per slot level above 6th (L6 → CR 6, L7 → CR 7, … L9 → CR 9). One tier higher than Conjure Elemental, same linear shape.
+
+**Description:** Reuses the v2.418.0 CR-increase substrate and `_spell_summon_cr_for_slot()` helper unchanged — the only new code is the map entry, the endpoint, and its harness. Count stays fixed at one; the fey's CR is slot-determined. The endpoint reuses the existing `fey-spirit` companion template (from Conjure Woodland Beings) and gates on a Druid **or Warlock** caster:
+
+```python
+_SPELL_SUMMON_CR_MAP["conjure-fey"] = {
+    "base_level": 6,
+    "base_cr": 6,     # CR-6 fey at L6
+    "per_slot": 1,    # +1 CR per slot above 6th
+}
+```
+
+Conjure Celestial (L7, a two-tier CR ladder CR 4 → CR 5 @9th rather than a linear climb) remains as the last Phase 3 consumer.
+
+**Why "The Sixth-Circle Court":** a sixth-level slot opens a court of the fey; spend a higher circle and a mightier courtier answers the call.
+
+MINOR — new HTTP endpoint (`/cast_conjure_fey`) + new substrate entry + 5 new harness tests.
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_SPELL_SUMMON_CR_MAP["conjure-fey"]` entry (base CR 6, +1/slot above 6th).
+- `app/routes/tabletop_routes.py`: new `POST /api/campaign/{campaign_id}/cast_conjure_fey` endpoint (Druid / Warlock L6). Count is always 1; the fey's CR is slot-determined. Stands up a single `fey-spirit` combatant via `_summon_companion`, gated on knowing Conjure Fey OR being a Druid / Warlock. Returns `{ok, feature, count, slot_level, challenge_rating, combatants, token_ids}`; broadcasts a `feature_used` card.
+- `tests/harness/test_cast_conjure_fey.py`: new harness file (5 tests) — L6 → CR 6, L7 → CR 7, L9 → CR 9 ladder, a Warlock-caster gate test (Magnus), and the 409 cannot_cast on Krieger (Barbarian).
+
+### Changed
+- `docs/plans/spell-utility-upcast.md`: Phase 3 backlog table flips Conjure Fey to ✅ shipped; status header notes Conjure Celestial is the last remaining consumer.
+
 ## [2.418.0] - 2026-06-17 — "The Summoned Tempest"
 
 **Schema version:** 69

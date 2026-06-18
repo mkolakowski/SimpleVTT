@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3328 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.418.0, 2026-06-17).
+**Total tests:** 3333 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.419.0, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2229,6 +2229,17 @@ v2.418.0 — Phase 3 first **CR-increase** consumer (the third and final summon-
 | `test_conjure_elemental_l9_cr9` | L9 → `challenge_rating 9` (top of the ladder), still `count 1`. |
 | `test_conjure_elemental_wizard_can_cast` | Thalindra (Wizard) passes the Druid/Wizard gate → L5 = CR 5, 1 elemental. |
 | `test_conjure_elemental_cannot_cast_non_caster` | Krieger (Barbarian) → 409 `cannot_cast` with `expected` mentioning "druid". |
+
+### `test_cast_conjure_fey.py`
+v2.419.0 — Phase 3 second **CR-increase** consumer, after Conjure Elemental. `/cast_conjure_fey` (Druid / Warlock L6) reuses `_SPELL_SUMMON_CR_MAP` via `_spell_summon_cr_for_slot()`: count fixed at 1, the fey's CR slot-determined (`6 + 1 × (slot − 6)`). Reuses the `fey-spirit` companion template. Caster fixtures: Mira Greenleaf (Druid) for the CR ladder; Magnus Hexbinder (Warlock) for the Warlock-branch gate.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_conjure_fey_base_slot_cr6` | L6 base → `count 1`, `challenge_rating 6`, exactly 1 fey-spirit summon (`is_summon`, `companion_key == "fey-spirit"`, `summoned_by` Mira). |
+| `test_conjure_fey_l7_cr7` | L7 → `challenge_rating 7` (+1 per slot above 6th), still `count 1`. |
+| `test_conjure_fey_l9_cr9` | L9 → `challenge_rating 9` (top of the ladder), still `count 1`. |
+| `test_conjure_fey_warlock_can_cast` | Magnus (Warlock) passes the Druid/Warlock gate → L6 = CR 6, 1 fey. |
+| `test_conjure_fey_cannot_cast_non_caster` | Krieger (Barbarian) → 409 `cannot_cast` with `expected` mentioning "druid". |
 
 ### `test_cast_gust.py`
 v2.99.445 — Phase 6.3 of `docs/plans/movement-and-summons.md`. Gust (Druid/Sorcerer/Wizard cantrip, Tasha's p.106): the target makes a STR save vs the spell save DC or is pushed 5 ft away via `_force_move`. The last forced-mover. Caster fixture: Thalindra Moonwhisper (demo Wizard).

@@ -2444,6 +2444,15 @@ _SPELL_SUMMON_CR_MAP: dict[str, dict] = {
         "base_cr": 5,     # CR-5 elemental at the base L5 slot
         "per_slot": 1,    # +1 CR per slot level above 5th
     },
+    # v2.419.0 — Phase 3 CR-increase second consumer. RAW PHB p.226:
+    # Conjure Fey (Druid / Warlock L6) summons a fey of CR 6 or lower; the
+    # challenge rating increases by 1 per slot level above 6th. Same linear
+    # shape as Conjure Elemental, one tier higher.
+    "conjure-fey": {
+        "base_level": 6,
+        "base_cr": 6,     # CR-6 fey at the base L6 slot
+        "per_slot": 1,    # +1 CR per slot level above 6th
+    },
 }
 
 
@@ -61885,6 +61894,133 @@ async def cast_conjure_elemental(
     return {
         "ok": True,
         "feature": "conjure-elemental",
+        "count": len(combatants),
+        "slot_level": slot_level,
+        "challenge_rating": challenge_rating,
+        "combatants": combatants,
+        "token_ids": token_ids,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_conjure_fey")
+async def cast_conjure_fey(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.419.0 — Phase 3 summon CR-increase family, second consumer.
+    Conjure Fey (Druid / Warlock L6, PHB p.226): "You summon a fey
+    creature of challenge rating 6 or lower." Upcast: "the challenge
+    rating increases by 1 for each slot level above 6th." Like Conjure
+    Elemental, exactly **one** creature is summoned and its CR climbs with
+    the slot — read from the CR-increase substrate: ``base 6 + 1 ×
+    (slot − 6)`` (L6 → CR 6, L7 → CR 7, … L9 → CR 9). The body carries
+    `slot_level` but not `count` (always 1).
+
+    Body: ``{character_id, slot_level?, x?, y?, initiative?}``. The fey is
+    summoned via `_summon_companion` (the `fey-spirit` registry entry) and
+    tagged `is_summon` + `summoned_by` so the long-rest teardown drops it.
+    Gates on the caster knowing Conjure Fey OR being a Druid / Warlock.
+
+    Response: ``{ok, feature, count, slot_level, challenge_rating,
+    combatants: [...], token_ids: [...]}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    try:
+        slot_level = int(body.get("slot_level") or 6)
+    except (TypeError, ValueError):
+        slot_level = 6
+    # CR-increase family: count is always 1; only the fey's CR scales.
+    count = 1
+    challenge_rating = _spell_summon_cr_for_slot(
+        "conjure-fey", slot_level, default_cr=6)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_cf = any(
+        (s.get("_slug") == "conjure-fey")
+        or (str(s.get("name", "")).lower() == "conjure fey")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"druid", "warlock"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_cf and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Conjure Fey, or druid/warlock",
+            "got_class": _cls,
+        })
+
+    base_x = float(body.get("x") or 0)
+    base_y = float(body.get("y") or 0)
+    initiative = int(body.get("initiative") or 0)
+    combatants = []
+    token_ids = []
+    res = await _summon_companion(
+        db, campaign_id,
+        owner_char_id=char.id,
+        companion_key="fey-spirit",
+        name=f"Conjured Fey (CR {challenge_rating})",
+        x=base_x,
+        y=base_y,
+        initiative=initiative,
+    )
+    if res:
+        combatants.append(res["combatant"])
+        token_ids.append(res["token_id"])
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": f"🧚 Conjure Fey — CR {challenge_rating}",
+            "feature_desc": (
+                f"{char.name} summons a CR-{challenge_rating} fey as "
+                f"a combatant. (Conjure Fey, L{slot_level}.)"
+            ),
+            "source": "conjure-fey",
+            "count": len(combatants),
+            "slot_level": slot_level,
+            "challenge_rating": challenge_rating,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "conjure-fey",
         "count": len(combatants),
         "slot_level": slot_level,
         "challenge_rating": challenge_rating,
