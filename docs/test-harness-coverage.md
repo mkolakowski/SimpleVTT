@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3243 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.406.0, 2026-06-17).
+**Total tests:** 3251 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.407.0, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4961,6 +4961,20 @@ v2.406.0 — new `/cast_geas` endpoint + duration-scaling substrate, fourth cons
 | `test_geas_low_slot_400` | slot_level=4 → 400 (Geas is L5). |
 | `test_geas_wrong_class_409` | class_slug=barbarian (not a Geas class) → 409 `wrong_class`. |
 | `test_geas_spell_not_known_409` | Wizard without Geas on her list → 409 `spell_not_known` (fires before the slot lookup; no slot patching needed). |
+
+### `test_cast_mass_suggestion.py`
+v2.407.0 — new `/cast_mass_suggestion` endpoint + duration-scaling substrate, fifth consumer (second NEW endpoint). RAW L6 Enchantment, 60 ft, not concentration, up to 12 targets. Substrate `"mass-suggestion"` entry uses calendar markers ("24h" / "10d" / "30d" / "1y1d"), one per slot level L6-L9. Thalindra Moonwhisper is armed with Mass Suggestion + an L6-L9 wizard slot table (snapshot + restored on teardown).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_mass_suggestion_l6_routes_24h` | L6 cast → 200; `duration_label == "24h"`, `range_ft == 60`, `concentration is False`. Base tier. |
+| `test_mass_suggestion_l7_routes_10d` | L7 cast → `duration_label == "10d"`. |
+| `test_mass_suggestion_l8_routes_30d` | L8 cast → `duration_label == "30d"`. |
+| `test_mass_suggestion_l9_routes_1y1d` | L9 cast → `duration_label == "1y1d"` (a year and a day). Top tier. |
+| `test_mass_suggestion_missing_character_id_400` | Missing character_id → 400. |
+| `test_mass_suggestion_low_slot_400` | slot_level=5 → 400 (Mass Suggestion is L6). |
+| `test_mass_suggestion_wrong_class_409` | class_slug=cleric (not a Mass Suggestion class) → 409 `wrong_class`. |
+| `test_mass_suggestion_spell_not_known_409` | Wizard without Mass Suggestion on her list → 409 `spell_not_known` (fires before the slot lookup). |
 
 ### `test_hex_duration_scaling.py`
 v2.405.1 — spell-utility-mechanical-depth Phase 1: duration-scaling substrate, second consumer. The `_SPELL_DURATION_MAP` "hex" entry + `_spell_duration_rounds_for_slot()` helper replace the hardcoded per-slot duration ladder at `/cast_hex`. Magnus Hexbinder's Pact Magic slot table PATCH'd up to L5 so all three tiers are reachable.

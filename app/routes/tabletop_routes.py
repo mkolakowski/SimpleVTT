@@ -2092,6 +2092,23 @@ _SPELL_DURATION_MAP: dict[str, dict] = {
             (9, "permanent"),   # L9:    until dispelled
         ],
     },
+    # v2.407.0 — Mass Suggestion (Bard / Sorcerer / Warlock / Wizard
+    # L6). RAW PHB p.260: base "Duration: 24 hours" (NOT
+    # concentration), up to 12 targets. Higher Levels: "When you cast
+    # this spell using a 7th-level spell slot, the duration is 10 days.
+    # When you use an 8th-level spell slot, the duration is 30 days.
+    # When you use a 9th-level spell slot, the duration is a year and a
+    # day." Calendar-scale markers like Geas; each tier maps to exactly
+    # one slot level (no ranges — L6/L7/L8/L9 are distinct durations).
+    "mass-suggestion": {
+        "base_level": 6,
+        "tiers": [
+            (6, "24h"),         # L6: 24 hours
+            (7, "10d"),         # L7: 10 days
+            (8, "30d"),         # L8: 30 days
+            (9, "1y1d"),        # L9: a year and a day
+        ],
+    },
 }
 
 
@@ -84108,6 +84125,197 @@ async def cast_geas(
         "slot_total": total,
         "class_slug": class_slug,
         "duration_label": geas_duration_label,
+        "range_ft": 60,
+        "concentration": False,
+    }
+
+
+# ----------- API: cast Mass Suggestion (6th-level Enchantment, no concentration) -----------
+
+@router.post("/api/campaign/{campaign_id}/cast_mass_suggestion")
+async def cast_mass_suggestion(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.407.0 — Cast Mass Suggestion: slot consume + audit +
+    substrate-driven duration. RAW (PHB p.260): L6 Enchantment, 60 ft,
+    NOT concentration, up to 12 targets within range. On a failed WIS
+    save each target follows a suggested course of action for the
+    duration. Duration scales with slot level — L6: 24 hours, L7: 10
+    days, L8: 30 days, L9: a year and a day. Classes: Bard, Sorcerer,
+    Warlock, Wizard.
+
+    Second NEW endpoint built on the duration-scaling substrate (after
+    v2.406.0 /cast_geas). v1 ships the spell-side audit (slot consume +
+    duration surfacing); the per-target WIS save resolution + the
+    suggestion-condition buffs are filed.
+
+    Body: ``{character_id, class_slug, slot_level?, override?}``.
+
+    Validates: missing character_id (400), slot_level < 6 (400),
+    membership (403), ownership/GM (403), Mass-Suggestion-casting class
+    (409 wrong_class), spell on the list (409 spell_not_known), slot
+    available (409 no_slot), Phase 4 action over-budget (409).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    class_slug = (body.get("class_slug") or "").strip().lower()
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw is not None else 6
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if slot_level < 6:
+        raise HTTPException(400, "slot_level must be >= 6 (Mass Suggestion is L6)")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    _MASS_SUGGESTION_CLASSES = {"bard", "sorcerer", "warlock", "wizard"}
+    if class_slug not in _MASS_SUGGESTION_CLASSES:
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class",
+            "expected": sorted(_MASS_SUGGESTION_CLASSES),
+            "got": class_slug or "",
+        })
+    primary_class = (sheet.get("class") or "").strip().lower()
+    if primary_class != class_slug:
+        has_class = any(
+            (entry.get("class") or "").strip().lower() == class_slug
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_class:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class",
+                "expected": class_slug,
+                "got": primary_class or "",
+            })
+
+    spells = list(sheet.get("spells") or [])
+    has_ms = any(
+        (s.get("_slug") == "mass-suggestion") or
+        (str(s.get("name", "")).lower() == "mass suggestion")
+        for s in spells
+    )
+    if not has_ms:
+        return JSONResponse(status_code=409, content={
+            "error": "spell_not_known",
+            "spell": "mass-suggestion",
+        })
+
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get(class_slug) or {})
+    slot = dict(per_class.get(str(slot_level)) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": class_slug,
+            "spell_name": "Mass Suggestion",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "mass-suggestion",
+            "label": "Mass Suggestion",
+            "strict": strict,
+        })
+
+    # Commit slot decrement.
+    slot["used"] = used + 1
+    per_class[str(slot_level)] = slot
+    all_slots[class_slug] = per_class
+    sheet["spell_slots"] = all_slots
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # v2.407.0 — duration-scaling substrate. RAW: L6 → 24h, L7 → 10d,
+    # L8 → 30d, L9 → a year and a day. Calendar-scale markers ("24h" /
+    # "10d" / "30d" / "1y1d") the helper returns verbatim.
+    raw_dur = _spell_duration_rounds_for_slot(
+        "mass-suggestion", slot_level, default_rounds="24h",
+    )
+    ms_duration_label = raw_dur if isinstance(raw_dur, str) else "24h"
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    note = (
+        f"🗣️ {char.name} casts Mass Suggestion (L{slot_level}) — "
+        f"60 ft, up to 12 targets, WIS save (v1 stops at the cast; "
+        f"duration {ms_duration_label})"
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": "",
+            "total": 0,
+            "breakdown": note,
+            "note": note,
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id,
+            "class_slug": class_slug,
+            "level": slot_level,
+            "total": total,
+            "used": used + 1,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "🗣️ Mass Suggestion",
+            "feature_desc": (
+                f"{char.name} casts Mass Suggestion (up to 12 targets). "
+                f"Each target makes a WIS save (per-target save + "
+                f"suggestion-condition tracking filed)."
+            ),
+            "source": "mass-suggestion",
+            "duration_label": ms_duration_label,
+            "range_ft": 60,
+        },
+    })
+
+    cast_id = _log_spell_slot_spend(
+        campaign_id, char.id, class_slug, slot_level, used, "spell")
+    return {
+        "ok": True,
+        "cast_id": cast_id,
+        "slot_level": slot_level,
+        "slot_used": used + 1,
+        "slot_total": total,
+        "class_slug": class_slug,
+        "duration_label": ms_duration_label,
         "range_ft": 60,
         "concentration": False,
     }

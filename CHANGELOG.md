@@ -10,6 +10,40 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.407.0] - 2026-06-17 — "The Crowd's Whisper"
+
+**Schema version:** 69
+
+**Commit summary:** Ships a new **`/cast_mass_suggestion`** endpoint — the **fifth consumer** of the duration-scaling substrate and the **second NEW endpoint** built on it (after v2.406.0 `/cast_geas`). Like Geas, Mass Suggestion was catalog-only (`app/data/local/dnd5e/spells/mass-suggestion.json`, no cast path), so this builds the spell-side audit and wires its per-slot duration through `_SPELL_DURATION_MAP`. RAW PHB p.260: L6 → 24 hours, L7 → 10 days, L8 → 30 days, L9 → a year and a day.
+
+**Description:** Same endpoint-build shape as `/cast_geas` (the scope correction recorded in v2.406.0: the remaining Phase 1 spells are builds, not retrofits). Mass Suggestion targets up to 12 creatures and is NOT concentration. Its four durations map one-to-one to slot levels L6-L9 (no ranges — each level is a distinct duration), so the substrate entry carries a calendar-scale marker per level:
+
+```python
+_SPELL_DURATION_MAP["mass-suggestion"] = {
+    "base_level": 6,
+    "tiers": [
+        (6, "24h"),   # L6: 24 hours
+        (7, "10d"),   # L7: 10 days
+        (8, "30d"),   # L8: 30 days
+        (9, "1y1d"),  # L9: a year and a day
+    ],
+}
+```
+
+`/cast_mass_suggestion` reads `_spell_duration_rounds_for_slot("mass-suggestion", slot_level, default_rounds="24h")` and surfaces the marker as the response + `feature_used` broadcast `duration_label`. v1 ships the audit; the per-target WIS save resolution + the suggestion-condition buffs are filed.
+
+**Why "The Crowd's Whisper":** Mass Suggestion plants a single suggested course of action in up to a dozen minds at once.
+
+MINOR — new HTTP endpoint (`/cast_mass_suggestion`) + new substrate entry + 1 new harness file (8 tests: 4 duration tiers + 4 error paths). The substrate-shape `Spells` row ticks up as Mass Suggestion goes from text-only catalog entry to a live cast path.
+
+### Added
+- `app/routes/tabletop_routes.py`: new `POST /api/campaign/{campaign_id}/cast_mass_suggestion` endpoint. Validates missing character_id (400), slot_level < 6 (400), membership/ownership (403), Mass-Suggestion-casting class (409 wrong_class — Bard/Sorcerer/Warlock/Wizard), spell on the list (409 spell_not_known), slot available (409 no_slot), Phase 4 action over-budget (409). On success: decrements the slot, marks the action economy, broadcasts the chat card + `spell_slot_update` + `feature_used` (with `duration_label`), logs the slot spend for undo, returns `{ok, cast_id, slot_level, duration_label, range_ft: 60, concentration: false, …}`.
+- `app/routes/tabletop_routes.py`: new `"mass-suggestion"` entry in `_SPELL_DURATION_MAP` (after `"geas"`). Four calendar-scale markers ("24h" / "10d" / "30d" / "1y1d"), one per slot level L6-L9.
+- `tests/harness/test_cast_mass_suggestion.py`: new harness file. Four happy-path tests (L6 → "24h", L7 → "10d", L8 → "30d", L9 → "1y1d") + four error-path tests (missing character_id → 400, slot_level < 6 → 400, wrong class → 409, spell not known → 409). The fixture snapshots Thalindra Moonwhisper's spells + wizard slots, arms her with Mass Suggestion + an L6-L9 slot table, and restores both on teardown.
+
+### Changed
+- `docs/plans/spell-utility-upcast.md`: Phase 1 backlog table flips Mass Suggestion to ✅ shipped (new-endpoint build); status line + remaining-scope count updated. Only Modify Memory remains in Phase 1 scope.
+
 ## [2.406.0] - 2026-06-17 — "The Binding Word"
 
 **Schema version:** 69
