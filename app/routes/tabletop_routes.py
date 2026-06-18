@@ -2303,6 +2303,19 @@ _SPELL_SUMMON_MAP: dict[str, dict] = {
             (9, 4),     # L9: four times as many
         ],
     },
+    # v2.415.0 — Phase 3 multiplier-family second consumer. RAW PHB
+    # p.226: Conjure Woodland Beings (Druid L4) summons twice as many
+    # fey at a 6th-level slot, three times as many at an 8th-level slot.
+    # No further scaling above 8th — the last tier carries through L9
+    # via the ``_spell_summon_multiplier_for_slot`` last-tier fallback.
+    "conjure-woodland-beings": {
+        "base_level": 4,
+        "tiers": [
+            (5, 1),     # L4–L5: ×1 (base option count)
+            (7, 2),     # L6–L7: twice as many
+            (9, 3),     # L8–L9: three times as many
+        ],
+    },
 }
 
 
@@ -4364,6 +4377,15 @@ _COMPANION_TEMPLATES: dict[str, dict] = {
     "steel-defender": {"name": "Steel Defender", "ac": 15, "hp": 2,
                        "speed_walk": 40, "size": 1, "team": "hero",
                        "color": "#6b7280"},
+    # v2.415.0 — Phase 3 (summon-count) second consumer (Conjure Woodland
+    # Beings). RAW PHB p.226: fey spirits that take beast form. Stats are
+    # a v1 generic-fey ballpark (between CR ¼ pixie and CR ½ satyr): low
+    # HP, light AC, walking speed 30. GM can hand-edit per encounter; the
+    # broadcast name on cast is "Conjured Fey Spirit N" so the table can
+    # narrate the specific fey form.
+    "fey-spirit": {"name": "Fey Spirit", "ac": 13, "hp": 7,
+                   "speed_walk": 30, "size": 1, "team": "hero",
+                   "color": "#a48cc8"},
 }
 
 
@@ -61187,6 +61209,148 @@ async def cast_conjure_animals(
     return {
         "ok": True,
         "feature": "conjure-animals",
+        "count": len(combatants),
+        "base_count": base_count,
+        "slot_level": slot_level,
+        "multiplier": multiplier,
+        "combatants": combatants,
+        "token_ids": token_ids,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_conjure_woodland_beings")
+async def cast_conjure_woodland_beings(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.415.0 — Phase 3 multiplier-family second consumer. Conjure
+    Woodland Beings (Druid L4, PHB p.226): "You summon fey creatures
+    that appear in beast forms... one fey creature of CR 2, two of CR 1,
+    four of CR ½, or eight of CR ¼." Mirrors `/cast_conjure_animals`'s
+    shape with two differences: base_level 4 (not 3), and the upcast
+    ladder runs ×2 @6th, ×3 @8th (no ×4 tier — RAW caps at three times
+    as many).
+
+    Body: ``{character_id, count?, slot_level?, x?, y?, spacing?,
+    initiative?}``. Each fey is summoned via `_summon_companion` (the
+    new `fey-spirit` registry entry) at ``x + i × spacing``. Gates on
+    the caster knowing Conjure Woodland Beings OR being a Druid (RAW
+    Druid-only spell — not Ranger). All summons share the `is_summon`
+    + `summoned_by` tags so the long-rest teardown drops the whole
+    grove.
+
+    Response: ``{ok, feature, count, base_count, slot_level, multiplier,
+    combatants: [...], token_ids: [...]}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    try:
+        base_count = int(body.get("count") or 8)
+    except (TypeError, ValueError):
+        base_count = 8
+    # `count` is the chosen summoning option (8 × CR¼, 4 × CR½, 2 × CR1,
+    # 1 × CR2) — clamped to that 1–8 range.
+    base_count = max(1, min(8, base_count))
+    try:
+        slot_level = int(body.get("slot_level") or 4)
+    except (TypeError, ValueError):
+        slot_level = 4
+    multiplier = _spell_summon_multiplier_for_slot(
+        "conjure-woodland-beings", slot_level, default_multiplier=1)
+    count = base_count * multiplier
+    spacing = float(body.get("spacing") or 70)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_cwb = any(
+        (s.get("_slug") == "conjure-woodland-beings")
+        or (str(s.get("name", "")).lower() == "conjure woodland beings")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    # RAW Druid-only (Conjure Animals is Druid/Ranger; Woodland Beings
+    # is Druid-only). Stricter class gate than its sibling endpoint.
+    _caster_classes = {"druid"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_cwb and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Conjure Woodland Beings, or druid",
+            "got_class": _cls,
+        })
+
+    base_x = float(body.get("x") or 0)
+    base_y = float(body.get("y") or 0)
+    initiative = int(body.get("initiative") or 0)
+    combatants = []
+    token_ids = []
+    for i in range(count):
+        res = await _summon_companion(
+            db, campaign_id,
+            owner_char_id=char.id,
+            companion_key="fey-spirit",
+            name=f"Conjured Fey Spirit {i + 1}",
+            x=base_x + i * spacing,
+            y=base_y,
+            initiative=initiative,
+        )
+        if res:
+            combatants.append(res["combatant"])
+            token_ids.append(res["token_id"])
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": f"🍃 Conjure Woodland Beings — {len(combatants)} fey",
+            "feature_desc": (
+                f"{char.name} summons {len(combatants)} fey creatures in "
+                f"beast form as combatants. (Conjure Woodland Beings, "
+                f"L{slot_level}"
+                f"{f', ×{multiplier}' if multiplier > 1 else ''}.)"
+            ),
+            "source": "conjure-woodland-beings",
+            "count": len(combatants),
+            "slot_level": slot_level,
+            "multiplier": multiplier,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "conjure-woodland-beings",
         "count": len(combatants),
         "base_count": base_count,
         "slot_level": slot_level,

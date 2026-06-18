@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.415.0] - 2026-06-17 — "The Sylvan Throng"
+
+**Schema version:** 69
+
+**Commit summary:** Second Phase 3 (summon-count) consumer. Ships a new **`/cast_conjure_woodland_beings`** endpoint + a new **`fey-spirit`** companion template + the second `_SPELL_SUMMON_MAP` entry. RAW PHB p.226: Conjure Woodland Beings is an L4 Druid spell summoning fey in beast form, with an upcast ladder of ×2 @6th-level slot, ×3 @8th — narrower than Conjure Animals's ×2/×3/×4 (no ×4 tier RAW). Second of the count-multiplier family; Conjure Minor Elementals next.
+
+**Description:** Endpoint-build mirroring `/cast_conjure_animals`'s shape (base_count clamp 1–8, per-fey `_summon_companion` loop on `x + i × spacing`, broadcast + response carrying `base_count` / `slot_level` / `multiplier`) with three structural differences:
+
+1. **Base level 4, not 3** — the substrate's `base_level` field for `conjure-woodland-beings` is 4. A base-slot cast at L4 keeps the ×1 multiplier; L5 still rides the base tier; L6 enters the ×2 tier; L8 enters the ×3 tier; L9 falls through the last-tier fallback to ×3 (no ×4).
+2. **Druid-only class gate** (Conjure Animals is Druid/Ranger; Woodland Beings is RAW Druid-only). The `_caster_classes` set tightens to `{"druid"}`.
+3. **New `fey-spirit` companion template** — `_COMPANION_TEMPLATES["fey-spirit"]` carries v1 generic-fey ballpark stats (AC 13 / HP 7 / walk 30 / size 1 / `#a48cc8` lavender). The cast broadcasts the fey as "Conjured Fey Spirit N" so the table can narrate the specific beast form (badger / wolf / sprite / etc.) without the template carrying every variant.
+
+The substrate's last-tier fallback handles the L9 case cleanly. RAW Conjure Woodland Beings doesn't grant a ×4 tier the way Conjure Animals does, so an L9 cast keeps the ×3 multiplier (3 fey from a base-1 summoning option rather than 4). The harness asserts this explicitly.
+
+**Why "The Sylvan Throng":** the doubled, tripled throng of woodland fey is the spell's signature flavor — a wave of pixies, sprites, satyrs, and dryads in beast form storming a clearing. "Sylvan" anchors the woodland, "throng" anchors the multiplier.
+
+MINOR — new `/cast_conjure_woodland_beings` endpoint + new `fey-spirit` companion template + new `_SPELL_SUMMON_MAP["conjure-woodland-beings"]` entry + 6 new harness tests.
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_COMPANION_TEMPLATES["fey-spirit"]` entry (AC 13, HP 7, walk 30, color `#a48cc8`). New `_SPELL_SUMMON_MAP["conjure-woodland-beings"]` entry (base_level 4, tiers `[(5, 1), (7, 2), (9, 3)]`). New `/cast_conjure_woodland_beings` endpoint: 8-fey-default summoning loop, Druid-only class gate, `slot_level`-driven multiplier.
+- `tests/harness/test_cast_conjure_woodland_beings.py`: six new tests covering the L4 base / L5 same-tier / L6 ×2 / L8 ×3 / L9 ×3-fallback ladder + a 409 cannot_cast for a non-druid non-knower (Krieger Barbarian).
+
+### Changed
+- `docs/plans/spell-utility-upcast.md`: Phase 3 status block + backlog table mark Conjure Woodland Beings ✅ shipped. Conjure Minor Elementals named as next.
+- `docs/test-harness-coverage.md`: total-test-count bump (+6) + new row for the conjure-woodland-beings test file.
+
 ## [2.414.0] - 2026-06-17 — "The Doubling Pack"
 
 **Schema version:** 69

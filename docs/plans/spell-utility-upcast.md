@@ -6,7 +6,7 @@
 >
 > **Status (AoE-radius scaling):** ✅ **PHASE 2 CLOSED** as of v2.413.0 (2026-06-17). Substrate (`_SPELL_AOE_MAP` + `_spell_aoe_for_slot()` helper) + Fog Cloud (v2.409.0, `/cast_fog_cloud`) + Confusion (v2.410.0, `/cast_confusion`) + Create or Destroy Water (v2.411.0, first cube-edge, `/cast_create_or_destroy_water`) + Creation (v2.412.0, second cube-edge, `/cast_creation`) + Private Sanctum (v2.413.0, third cube-edge, largest increment, `/cast_private_sanctum`) shipped. **All five in-scope AoE-radius scalers are live on the substrate.** See the [Phase 2 section](#phase-2--aoe-radius-scaling-substrate-v24090) below.
 >
-> **Status (summon-count scaling):** 🟠 **PHASE 3 IN PROGRESS** as of v2.414.0 (2026-06-17). Substrate (`_SPELL_SUMMON_MAP` + `_spell_summon_multiplier_for_slot()` helper) + Conjure Animals retrofit (v2.414.0, `/cast_conjure_animals` now routes its summon count ×1/×2/×3/×4 by slot level). **First of the count-multiplier family shipped**; Conjure Woodland Beings + Conjure Minor Elementals (multiplier), Animate Dead (additive), and Conjure Fey / Elemental / Celestial (CR-increase) remain. See the [Phase 3 section](#phase-3--summon-count-scaling-substrate-v24140) below.
+> **Status (summon-count scaling):** 🟠 **PHASE 3 IN PROGRESS** as of v2.415.0 (2026-06-17). Substrate (`_SPELL_SUMMON_MAP` + `_spell_summon_multiplier_for_slot()` helper) + Conjure Animals retrofit (v2.414.0, `/cast_conjure_animals` ×1/×2/×3/×4 by slot) + Conjure Woodland Beings (v2.415.0, new `/cast_conjure_woodland_beings` endpoint + new `fey-spirit` companion template; ×1/×2/×3 ladder L4→L9). **Two of the count-multiplier family shipped**; Conjure Minor Elementals (multiplier), Animate Dead (additive), and Conjure Fey / Elemental / Celestial (CR-increase) remain. See the [Phase 3 section](#phase-3--summon-count-scaling-substrate-v24140) below.
 
 ## What this plan covered
 
@@ -230,7 +230,7 @@ Conjure Animals is the first consumer:
 | Spell | Base level | RAW summon ladder | Family | Notes |
 |---|---|---|---|---|
 | Conjure Animals | L3 | ×2 @5th, ×3 @7th, ×4 @9th | count-multiplier | ✅ shipped v2.414.0 ("The Doubling Pack"). First consumer of `_SPELL_SUMMON_MAP`. Harness: `tests/harness/test_cast_conjure_animals.py`. |
-| Conjure Woodland Beings | L4 | ×2 @6th, ×3 @8th | count-multiplier | Substrate drop-in; needs a `/cast_conjure_woodland_beings` endpoint-build (currently catalog-only). |
+| Conjure Woodland Beings | L4 | ×2 @6th, ×3 @8th | count-multiplier | ✅ shipped v2.415.0 ("The Sylvan Throng"). Second consumer of `_SPELL_SUMMON_MAP`; new `/cast_conjure_woodland_beings` endpoint + new `fey-spirit` companion template. Harness: `tests/harness/test_cast_conjure_woodland_beings.py`. |
 | Conjure Minor Elementals | L4 | ×2 @6th, ×3 @8th | count-multiplier | Substrate drop-in; endpoint-build. Same ladder as Woodland Beings. |
 | Animate Dead | L3 | +2 undead per slot above 3rd | count-additive | New additive helper (`base + (slot − base_level) × per_slot`); endpoint-build. |
 | Conjure Elemental | L5 | CR +1 per slot above 5th | CR-increase | New CR helper; count fixed at 1; endpoint-build. |

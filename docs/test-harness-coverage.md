@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3304 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.414.0, 2026-06-17).
+**Total tests:** 3310 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.415.0, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2181,6 +2181,18 @@ v2.99.443 — Phase 7.2 of `docs/plans/movement-and-summons.md`; v2.414.0 — Ph
 | `test_conjure_animals_l7_triples` | `slot_level=7`, base 2 → `multiplier 3`, `count 6`, 6 wolves. |
 | `test_conjure_animals_l9_quadruples` | `slot_level=9`, base 1 → `multiplier 4`, `count 4`, 4 wolves. |
 | `test_conjure_animals_cannot_cast` | Krieger (Barbarian) → 409 `cannot_cast`. |
+
+### `test_cast_conjure_woodland_beings.py`
+v2.415.0 — Phase 3 multiplier-family second consumer. `/cast_conjure_woodland_beings` (Druid L4) mirrors `/cast_conjure_animals`'s shape but with base_level 4, a ×1/×2/×3 ladder (L4–L5/L6–L7/L8–L9; no ×4 RAW), and a Druid-only class gate. New `_COMPANION_TEMPLATES["fey-spirit"]` (AC 13, HP 7, walk 30, color `#a48cc8`) is the summoned token template. Caster fixture: Mira Greenleaf (demo Druid).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cwb_base_slot_no_multiplier` | L4 default → `base_count 8`, `multiplier 1`, `count 8`, 8 fey-spirit summons. |
+| `test_cwb_l5_still_base_tier` | L5 stays in the L4–L5 tier → `multiplier 1`, base 2 → 2 fey. |
+| `test_cwb_l6_doubles` | L6 enters the second tier → `multiplier 2`, base 2 → 4 fey. |
+| `test_cwb_l8_triples` | L8 enters the third tier → `multiplier 3`, base 2 → 6 fey. |
+| `test_cwb_l9_last_tier_fallback` | L9 falls through the last-tier fallback → `multiplier 3` (no ×4), base 1 → 3 fey. |
+| `test_cwb_cannot_cast_non_druid` | Krieger (Barbarian) → 409 `cannot_cast` with `expected` mentioning "druid". |
 
 ### `test_cast_gust.py`
 v2.99.445 — Phase 6.3 of `docs/plans/movement-and-summons.md`. Gust (Druid/Sorcerer/Wizard cantrip, Tasha's p.106): the target makes a STR save vs the spell save DC or is pushed 5 ft away via `_force_move`. The last forced-mover. Caster fixture: Thalindra Moonwhisper (demo Wizard).
