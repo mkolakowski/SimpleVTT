@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.423.2] - 2026-06-18 — "The Watchtower's Brief"
+
+**Schema version:** 69
+
+**Commit summary:** Doc-only commit. Three new feature TODOs filed in `TODO.md`'s **Manually Added** section, all 🟡 P2 security / infrastructure asks: (1) URL-based magic-link login **hard-gated to the demo instance** (env-var-keyed at deploy time, not flippable from admin UI); (2) **fail2ban + CrowdSec** log integration out of the box (canonical log lines + reference `filter.d`/`jail.d` and `parsers/scenarios` configs ship in-repo); (3) **Cloudflare** edge-banning integration (env-var-keyed outbound API client + GM-only "Ban IP at edge" button + admin-audit log).
+
+**Description:** The three entries are siblings on the same security spine — URL-login makes the demo instance trivially shareable, the fail2ban/CrowdSec log contract makes any abuse of that link (or of the regular auth surface) visible to log-based banning engines, and the Cloudflare integration moves the actual ban from the FastAPI layer to the Cloudflare edge so a determined attacker can't simply retry through the box. Each entry stands alone — operators can ship URL-login without the banning stack, or wire CrowdSec/Cloudflare without ever enabling the demo magic-link — but they're cross-linked in the TODO so a future implementer sees the whole story.
+
+The TODO copy is deliberate about the threat model: the URL-login gate is **not** flippable from the admin UI (deploy-time env var only), so a compromised admin account can't be tricked into accepting magic links on a production deployment. The fail2ban/CrowdSec entry commits to shipping reference configs in the repo so operators don't have to invent regex filters from scratch — and to a canonical log-line format so picking fail2ban over CrowdSec (or vice versa) doesn't fork the log shape. The Cloudflare entry calls out the per-CLAUDE.md "third-party APIs are Compose services" rule and proposes a wiremock service for dev testing.
+
+**Why "The Watchtower's Brief":** before the wall goes up, the watchtower writes down what to watch for and what to do when it shows up. These three TODOs are SimpleVTT's brief to its future security wall — what to ban, what to log, where to enforce.
+
+**Note on the user's "crowdstrike" spelling:** the entry was filed as **CrowdSec** (the open-source IP-reputation engine that reads logs the same way fail2ban does), since the user's "via logs out of the box" framing fits CrowdSec — CrowdStrike Falcon is endpoint protection software and doesn't operate on application logs. The TODO carries a parenthetical noting the assumption.
+
+PATCH — TODO.md addition (~25 lines). No code touched.
+
+### Changed
+- `TODO.md`: three new 🟡 P2 entries at the top of **Manually Added** — URL-based demo-only magic-link login, fail2ban/CrowdSec log integration with shipped reference configs, Cloudflare edge-banning integration. Existing P3 polish items unchanged, just pushed below the new P2 block.
+
 ## [2.423.1] - 2026-06-18 — "The Summon's Reins"
 
 **Schema version:** 69
