@@ -2222,6 +2222,17 @@ _SPELL_AOE_MAP: dict[str, dict] = {
         "increment_ft": 5,      # +5 ft per slot above L1
         "shape": "cube-edge",
     },
+    # v2.412.0 — Creation (Sorcerer / Wizard L5). RAW PHB p.229: 30 ft,
+    # Special duration, no save. Conjures a nonliving object no larger
+    # than a 5-ft cube. Higher Levels: "the cube increases by 5 feet for
+    # each slot level above 5th." Second cube-edge consumer (L5 → 5,
+    # L6 → 10, … L9 → 25).
+    "creation": {
+        "base_level": 5,
+        "base_ft": 5,           # 5-ft cube at L5
+        "increment_ft": 5,      # +5 ft per slot above L5
+        "shape": "cube-edge",
+    },
 }
 
 
@@ -85150,6 +85161,191 @@ async def cast_create_or_destroy_water(
                 f"+ template placement are filed."
             ),
             "source": "create-or-destroy-water",
+            "cube_ft": cube_ft,
+            "range_ft": 30,
+        },
+    })
+
+    cast_id = _log_spell_slot_spend(
+        campaign_id, char.id, class_slug, slot_level, used, "spell")
+    return {
+        "ok": True,
+        "cast_id": cast_id,
+        "slot_level": slot_level,
+        "slot_used": used + 1,
+        "slot_total": total,
+        "class_slug": class_slug,
+        "cube_ft": cube_ft,
+        "range_ft": 30,
+        "concentration": False,
+    }
+
+
+# ----------- API: cast Creation (5th-level Illusion, AoE cube) -----------
+
+@router.post("/api/campaign/{campaign_id}/cast_creation")
+async def cast_creation(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.412.0 — Cast Creation: slot consume + audit + substrate-driven
+    AoE cube. RAW (PHB p.229): L5 Illusion, 30 ft, Special duration, no
+    save. Conjures a nonliving object no larger than a 5-ft cube; the
+    cube edge scales with slot level — +5 ft per slot above 5th (L5 → 5
+    ft, L6 → 10 ft, … L9 → 25 ft). Classes: Sorcerer, Wizard.
+
+    Fourth consumer of the Phase 2 AoE-radius scaling substrate and the
+    second ``cube-edge`` shape (after Create or Destroy Water). Surfaces
+    ``cube_ft``. v1 ships the spell-side audit (slot consume + cube
+    surfacing); the conjured-object material/lifespan tracking is filed.
+
+    Body: ``{character_id, class_slug, slot_level?, override?}``.
+
+    Validates: missing character_id (400), slot_level < 5 (400),
+    membership (403), ownership/GM (403), eligible class (409
+    wrong_class — Sorcerer/Wizard), spell on the list (409
+    spell_not_known), slot available (409 no_slot), Phase 4 action
+    over-budget (409).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    class_slug = (body.get("class_slug") or "").strip().lower()
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw is not None else 5
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if slot_level < 5:
+        raise HTTPException(400, "slot_level must be >= 5 (Creation is L5)")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    _CREATION_CLASSES = {"sorcerer", "wizard"}
+    if class_slug not in _CREATION_CLASSES:
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class",
+            "expected": sorted(_CREATION_CLASSES),
+            "got": class_slug or "",
+        })
+    primary_class = (sheet.get("class") or "").strip().lower()
+    if primary_class != class_slug:
+        has_class = any(
+            (entry.get("class") or "").strip().lower() == class_slug
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_class:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class",
+                "expected": class_slug,
+                "got": primary_class or "",
+            })
+
+    spells = list(sheet.get("spells") or [])
+    has_cr = any(
+        (s.get("_slug") == "creation") or
+        (str(s.get("name", "")).lower() == "creation")
+        for s in spells
+    )
+    if not has_cr:
+        return JSONResponse(status_code=409, content={
+            "error": "spell_not_known",
+            "spell": "creation",
+        })
+
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get(class_slug) or {})
+    slot = dict(per_class.get(str(slot_level)) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": class_slug,
+            "spell_name": "Creation",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "creation",
+            "label": "Creation",
+            "strict": strict,
+        })
+
+    # Commit slot decrement.
+    slot["used"] = used + 1
+    per_class[str(slot_level)] = slot
+    all_slots[class_slug] = per_class
+    sheet["spell_slots"] = all_slots
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # v2.412.0 — AoE-radius scaling substrate (cube-edge shape). L5 →
+    # 5 ft, +5 ft per slot above 5th (L6 → 10, … L9 → 25).
+    cube_ft = _spell_aoe_for_slot("creation", slot_level, default_ft=5)
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    note = (
+        f"✨ {char.name} casts Creation (L{slot_level}) — "
+        f"30 ft, conjures an object up to a {cube_ft}-ft cube (v1 stops "
+        f"at the cast; material/lifespan tracking filed)"
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": "",
+            "total": 0,
+            "breakdown": note,
+            "note": note,
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id,
+            "class_slug": class_slug,
+            "level": slot_level,
+            "total": total,
+            "used": used + 1,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "✨ Creation",
+            "feature_desc": (
+                f"{char.name} conjures a nonliving object up to a "
+                f"{cube_ft}-ft cube. Material/lifespan tracking is filed."
+            ),
+            "source": "creation",
             "cube_ft": cube_ft,
             "range_ft": 30,
         },

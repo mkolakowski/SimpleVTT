@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.412.0] - 2026-06-17 — "The Shadow Forge"
+
+**Schema version:** 69
+
+**Commit summary:** Fourth Phase 2 consumer and the **second `cube-edge` shape** on the AoE-radius substrate. Ships a new **`/cast_creation`** endpoint. RAW PHB p.229: Creation is an L5 Illusion, 30 ft, Special duration, no save; it conjures a nonliving object no larger than a 5-ft cube whose edge grows +5 ft per slot above 5th (L5 → 5, L6 → 10, … L9 → 25).
+
+**Description:** Same endpoint-build shape as the prior Phase 2 spells (Creation was catalog-only). Second cube-edge consumer of `_SPELL_AOE_MAP`:
+
+```python
+_SPELL_AOE_MAP["creation"] = {
+    "base_level": 5,
+    "base_ft": 5,          # 5-ft cube at L5
+    "increment_ft": 5,     # +5 ft per slot above L5
+    "shape": "cube-edge",
+}
+```
+
+`/cast_creation` reads `_spell_aoe_for_slot("creation", slot_level, default_ft=5)` and surfaces `cube_ft` on the response + `feature_used` broadcast. v1 ships the audit; the conjured-object material/lifespan tracking is filed.
+
+**Why "The Shadow Forge":** Creation pulls wisps of shadow-stuff from the Shadowfell and forges them into solid matter — a bigger forging with every level poured in.
+
+MINOR — new HTTP endpoint (`/cast_creation`) + new substrate entry + 1 new harness file (8 tests: 4 cube tiers + 4 error paths).
+
+### Added
+- `app/routes/tabletop_routes.py`: new `POST /api/campaign/{campaign_id}/cast_creation` endpoint. Validates missing character_id (400), slot_level < 5 (400), membership/ownership (403), eligible class (409 wrong_class — Sorcerer/Wizard), spell on the list (409 spell_not_known), slot available (409 no_slot), Phase 4 action over-budget (409). On success: decrements the slot, marks the action economy, broadcasts the chat card + `spell_slot_update` + `feature_used` (with `cube_ft`), logs the slot spend for undo, returns `{ok, cast_id, slot_level, cube_ft, range_ft: 30, concentration: false, …}`.
+- `app/routes/tabletop_routes.py`: new `"creation"` entry in `_SPELL_AOE_MAP` (after `"create-or-destroy-water"`). Cube-edge, base 5 ft, +5 ft per slot above L5.
+- `tests/harness/test_cast_creation.py`: new harness file. Four happy-path tests (L5 → 5, L6 → 10, L7 → 15, L9 → 25) + four error-path tests (missing character_id → 400, slot_level < 5 → 400, wrong class → 409, spell not known → 409). Cast by Thalindra Moonwhisper (Wizard Lv 7); the fixture snapshots her spells + wizard slots and restores both on teardown, with a separate strip-fixture for the spell_not_known path.
+
+### Changed
+- `docs/plans/spell-utility-upcast.md`: Phase 2 backlog table flips Creation to ✅ shipped; status header remaining-count updated (one candidate remains — Private Sanctum).
+
 ## [2.411.0] - 2026-06-17 — "The Rising Tide"
 
 **Schema version:** 69

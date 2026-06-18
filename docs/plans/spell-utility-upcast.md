@@ -4,7 +4,7 @@
 >
 > **Status (duration-scaling):** ✅ **PHASE 1 CLOSED** as of v2.408.0 (2026-06-17). Substrate (`_SPELL_DURATION_MAP` + `_spell_duration_rounds_for_slot()` helper) + Hunter's Mark retrofit (v2.405.0) + Hex retrofit (v2.405.1) + Bestow Curse retrofit (v2.405.2, first `"permanent"` marker) + Geas (v2.406.0, first NEW endpoint + day/year markers) + Mass Suggestion (v2.407.0, endpoint-build) + Modify Memory (v2.408.0, final endpoint-build) shipped. **All six in-scope duration-scaling spells are live on the substrate.** See the [Phase 1 section](#phase-1--duration-scaling-substrate-v24050) below.
 >
-> **Status (AoE-radius scaling):** 🟠 **PHASE 2 IN PROGRESS** as of v2.411.0 (2026-06-17). Substrate (`_SPELL_AOE_MAP` + `_spell_aoe_for_slot()` helper) + Fog Cloud (v2.409.0, first consumer, `/cast_fog_cloud`) + Confusion (v2.410.0, second consumer, `/cast_confusion`) + Create or Destroy Water (v2.411.0, third consumer + first cube-edge shape, `/cast_create_or_destroy_water`) shipped. **Two candidates remain** (Creation, Private Sanctum). See the [Phase 2 section](#phase-2--aoe-radius-scaling-substrate-v24090) below.
+> **Status (AoE-radius scaling):** 🟠 **PHASE 2 IN PROGRESS** as of v2.412.0 (2026-06-17). Substrate (`_SPELL_AOE_MAP` + `_spell_aoe_for_slot()` helper) + Fog Cloud (v2.409.0, `/cast_fog_cloud`) + Confusion (v2.410.0, `/cast_confusion`) + Create or Destroy Water (v2.411.0, first cube-edge, `/cast_create_or_destroy_water`) + Creation (v2.412.0, second cube-edge, `/cast_creation`) shipped. **One candidate remains** (Private Sanctum). See the [Phase 2 section](#phase-2--aoe-radius-scaling-substrate-v24090) below.
 
 ## What this plan covered
 
@@ -185,7 +185,7 @@ Each ships as a substrate drop-in + endpoint-build + harness, same shape across 
 | Fog Cloud | L1 | 20-ft radius, +20 ft per slot above 1st | ✅ shipped v2.409.0 ("The Rolling Bank"). First consumer of `_SPELL_AOE_MAP`; sphere-radius shape. Harness: `tests/harness/test_cast_fog_cloud.py` (8 tests). |
 | Confusion | L4 | 10-ft radius, +5 ft per slot above 4th | ✅ shipped v2.410.0 ("The Widening Daze"). Second sphere-radius consumer (new `/cast_confusion` endpoint). Also a WIS-save condition spell; the AoE substrate covers the radius only (per-target save + behavior table filed). Harness: `tests/harness/test_cast_confusion.py` (8 tests). |
 | Create or Destroy Water | L1 | 30-ft cube, +5 ft per slot above 1st (or +10 gal water) | ✅ shipped v2.411.0 ("The Rising Tide"). Third consumer + **first cube-edge shape** (new `/cast_create_or_destroy_water` endpoint, surfaces `cube_ft`). RAW base cube is 30 ft (the +10-gallon branch is a separate non-area scale, filed). Harness: `tests/harness/test_cast_create_or_destroy_water.py` (8 tests). |
-| Creation | L5 | 5-ft cube, +5 ft per slot above 5th | Cube-edge. |
+| Creation | L5 | 5-ft cube, +5 ft per slot above 5th | ✅ shipped v2.412.0 ("The Shadow Forge"). Second cube-edge consumer (new `/cast_creation` endpoint, surfaces `cube_ft`). Harness: `tests/harness/test_cast_creation.py` (8 tests). |
 | Private Sanctum | L4 | 100-ft cube, +100 ft per slot above 4th | Cube-edge; largest increment. |
 
 ---
