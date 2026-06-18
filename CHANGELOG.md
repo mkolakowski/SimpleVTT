@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.423.3] - 2026-06-18 — "The Double-Latched Door"
+
+**Schema version:** 69
+
+**Commit summary:** Sketches the design plan for the v2.423.2 URL-login TODO. New `docs/plans/demo-magic-link.md` covers the threat model, the **double env-var gate** (`SIMPLEVTT_DEMO_MODE=true` **and** `SIMPLEVTT_DEMO_MAGIC_LINK_ENABLED=true`, both deploy-time only and unreachable from the admin UI), HMAC-SHA256 token shape (jti / iat / sub / inst, single-use via a new `demo_magic_links` table, ≤15 min TTL with ±60s skew), the mint + verify endpoints, the canonical fail2ban/CrowdSec log lines (`demo_magic_link.{mint_ok,verify_ok,verify_rejected}` with structured key=value pairs), a three-phase roadmap, and a non-goals section that nails down "this is **not** a production passwordless-login feature."
+
+**Description:** The plan deliberately leans on the existing [`demo-mode.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/demo-mode.md) shell rather than recreating any of it — the hourly-reset shell + the `DEMO_*` env vars are already shipped (v2.3.0+), so this plan just adds the URL-login surface on top with its own independent gate. The **second** env var is the load-bearing safety check: even if `SIMPLEVTT_DEMO_MODE=true` accidentally lands in a production `.env`, the magic-link feature is still off unless the operator separately opts in. Both gates are checked at module import time (the router refuses to register) **and** per-request (defense in depth). There is no settings.json path that can flip them — the threat model explicitly defends against a compromised admin account trying to enable the magic-link surface against a real instance.
+
+The token design is HMAC-over-canonical-payload (not full JWT — the algorithm is fixed, so a JWT header would just be noise), with single-use enforced by an atomic `INSERT` into `demo_magic_links` keyed on the `jti` (16 random bytes, urlsafe-b64). Replay = duplicate key = 401. A periodic GC sweep on the existing `demo_scheduler.py` async loop deletes rows older than 2× TTL so the table stays small.
+
+The plan commits to **canonical log-line shapes** that the sibling fail2ban/CrowdSec TODO can parse with a single regex per event, so picking one engine doesn't fork the log format. Phase 2 is where those reference configs land. Phase 3 (anonymous public-mint endpoint for a "Try the demo" landing button) is hard-blocked on the Cloudflare edge-banning TODO shipping first — without that, an anonymous mint endpoint is a free DoS vector.
+
+The plan also documents a small list of **non-v1 deferred items**: per-visitor ephemeral accounts (already filed in `demo-mode.md`), OAuth/SSO for the demo (defeats the "one-click" goal), captcha on verify (covered by single-use + TTL + Cloudflare).
+
+Wired through all four wiki surfaces per the [Every doc must be surfaced through the wiki](CLAUDE.md#every-doc-must-be-surfaced-through-the-wiki) rule: `_DOC_ALLOWLIST` entry, `wiki.html` "Design plans" table row, `docs/wiki/README.md` table row, new `test_wiki_doc_serves_demo_magic_link_plan` harness test + a new assertion in `test_wiki_home_renders` so a future regression that removes the table row gets caught. Total harness count nudges 3353 → 3354.
+
+**Why "The Double-Latched Door":** the whole plan turns on the **two** locks (env vars) that have to be open at the same time before the magic link is even a thing. One latch is the existing demo-shell switch; the other is the new dedicated one. Either alone is a no-op. Neither is reachable from the admin UI.
+
+PATCH — doc-only addition (~250 lines of plan + 4 wiki-surfacing edits + 1 new test + version + README + CHANGELOG + test-harness-coverage row). No app-code or config touched.
+
+### Added
+- `docs/plans/demo-magic-link.md`: new design plan for the URL-based demo-instance login from the v2.423.2 TODO. Threat model, double-env-var gate, HMAC token shape, single-use enforcement via `demo_magic_links` table, canonical log lines for fail2ban/CrowdSec, three-phase roadmap, non-goals, test contract.
+- `app/routes/wiki_routes.py`: `_DOC_ALLOWLIST` entry `"plan-demo-magic-link": Path("docs") / "plans" / "demo-magic-link.md"`.
+- `app/templates/wiki.html`: new row in the "Design plans" table linking to `/wiki/doc/plan-demo-magic-link`.
+- `docs/wiki/README.md`: matching row in the "Design plans" table.
+- `tests/harness/test_wiki.py`: new `test_wiki_doc_serves_demo_magic_link_plan` smoke test (slug returns 200, body contains "demo magic-link", wiki nav menu injected). Plus a new assertion in `test_wiki_home_renders` for the `/wiki/doc/plan-demo-magic-link` link so the landing-page row regression-guards itself.
+- `docs/test-harness-coverage.md`: new row for `test_wiki_doc_serves_demo_magic_link_plan` in the wiki suite, header total-test-count nudges 3353 → 3354 per the harness-discipline rule.
+
 ## [2.423.2] - 2026-06-18 — "The Watchtower's Brief"
 
 **Schema version:** 69

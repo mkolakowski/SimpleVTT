@@ -105,6 +105,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/bugs" in resp.text
     # v2.393.0: race-features plan listed (closes the SRD Races row to ~100%).
     assert "/wiki/doc/plan-race-features" in resp.text
+    # v2.423.3: demo magic-link login plan listed (URL-login for demo instance only).
+    assert "/wiki/doc/plan-demo-magic-link" in resp.text
     # v2.400.0: SRD race rules implementation guide listed in Available guides.
     assert "/wiki/srd-races-implementation" in resp.text
     # v2.402.0: SRD conditions implementation guide listed in Available guides.
@@ -704,6 +706,22 @@ async def test_wiki_doc_serves_permanent_ability_increase_reconciliation_plan():
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "permanent ability-increase reconciliation" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_demo_magic_link_plan():
+    """v2.423.3: GET /wiki/doc/plan-demo-magic-link — 200 + body
+    contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/demo-magic-link.md``. Proposes
+    URL-based passwordless login for the demo instance only, behind
+    a double-env-var gate (SIMPLEVTT_DEMO_MODE + a separate
+    SIMPLEVTT_DEMO_MAGIC_LINK_ENABLED), single-use HMAC tokens,
+    canonical log lines for the fail2ban/CrowdSec sibling TODO."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-demo-magic-link")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "demo magic-link" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

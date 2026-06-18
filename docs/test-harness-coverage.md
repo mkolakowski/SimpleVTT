@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3353 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.423.0, 2026-06-17).
+**Total tests:** 3354 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.423.3, 2026-06-18).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5306,6 +5306,7 @@ Read-only doc-hub routes added in v2.43.3, expanded in v2.49.9 with the `/wiki/d
 | `test_wiki_doc_serves_str_override_plan` | v2.211.0: `GET /wiki/doc/plan-str-override` → 200, body contains "ability-score override" + the nav menu. Resolves through the allowlist to `docs/plans/str-override.md` (filed to unblock Belt of Giant Strength / Amulet of Health / Potion of Giant Strength — needs an effective-ability-score override substrate with RAW `max(base, set)` semantics). |
 | `test_wiki_doc_serves_charged_items_plan` | v2.262.0: `GET /wiki/doc/plan-charged-items` → 200, body contains "charged magic items" + the nav menu. Resolves through the allowlist to `docs/plans/charged-items.md` (backlog plan for extending the existing charge/recharge substrate to remaining SRD charged items — Staff of Power, Ring of the Ram, Gem of Seeing, Wand of Wonder). |
 | `test_wiki_doc_serves_spell_utility_upcast_plan` | v2.404.10: `GET /wiki/doc/plan-spell-utility-upcast` → 200, body contains "spell utility-upcast" + the nav menu. Resolves through the allowlist to `docs/plans/spell-utility-upcast.md` (the closure-retrospective plan doc for the v2.404.1 → v2.404.9 arc that closed 9 target-scaling utility spells across `_SPELL_BUFF_MAP` + `_SPELL_TARGET_CAPS`). |
+| `test_wiki_doc_serves_demo_magic_link_plan` | v2.423.3: `GET /wiki/doc/plan-demo-magic-link` → 200, body contains "demo magic-link" + the nav menu. Resolves through the allowlist to `docs/plans/demo-magic-link.md` (URL-based passwordless login for the demo instance only, double-env-var gated, single-use HMAC tokens; sibling TODOs for fail2ban/CrowdSec log integration + Cloudflare edge banning). |
 | `test_wiki_doc_unknown_slug_404` | v2.49.9: a slug that isn't in `_DOC_ALLOWLIST` → 404. Important security guarantee — the allowlist is the only way to reach a file outside `docs/wiki/`. |
 | `test_wiki_doc_traversal_blocked` | v2.49.9: directory-traversal characters in the doc slug → 404 / 400, rejected by the slug guard before the allowlist lookup. |
 
