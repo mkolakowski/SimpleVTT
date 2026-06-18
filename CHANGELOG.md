@@ -10,6 +10,41 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.408.0] - 2026-06-17 — "The Rewritten Page"
+
+**Schema version:** 69
+
+**Commit summary:** Ships a new **`/cast_modify_memory`** endpoint — the **sixth consumer** of the duration-scaling substrate, the **third NEW endpoint** built on it (after v2.406.0 `/cast_geas` and v2.407.0 `/cast_mass_suggestion`), and the **final Phase 1 spell**. Like Geas and Mass Suggestion, Modify Memory was catalog-only (`app/data/local/dnd5e/spells/modify-memory.json`, no cast path), so this builds the spell-side audit and wires its per-slot modification window through `_SPELL_DURATION_MAP`. RAW PHB p.262: L5 base, the upcast clause widens how far back the altered memory can reach — surfaced here as an escalating window L5 → 10 min, L6 → 1 hour, L7 → 24 hours, L8 → 7 days, L9 → any time in the target's past (permanent).
+
+**Description:** Same endpoint-build shape as `/cast_geas` and `/cast_mass_suggestion`. Modify Memory is single-target, concentration (RAW: up to 1 minute to perform the edit), 30 ft. Its five windows map one-to-one to slot levels L5-L9, so the substrate entry carries one marker per level:
+
+```python
+_SPELL_DURATION_MAP["modify-memory"] = {
+    "base_level": 5,
+    "tiers": [
+        (5, "10min"),     # L5: 10 minutes
+        (6, "1h"),        # L6: 1 hour
+        (7, "24h"),       # L7: 24 hours
+        (8, "7d"),        # L8: 7 days
+        (9, "permanent"), # L9: any time in the past
+    ],
+}
+```
+
+`/cast_modify_memory` reads `_spell_duration_rounds_for_slot("modify-memory", slot_level, default_rounds="10min")` and surfaces the marker as the response + `feature_used` broadcast `duration_label`. v1 ships the audit; the WIS save resolution + the memory-edit narrative tracking are filed. **This closes Phase 1 of the spell-utility duration-scaling arc** — all six in-scope spells (Hunter's Mark, Hex, Bestow Curse, Geas, Mass Suggestion, Modify Memory) now read their per-slot duration from the substrate.
+
+**Why "The Rewritten Page":** Modify Memory reshapes a creature's recollection of an event — turning a page of its past and writing a new one.
+
+MINOR — new HTTP endpoint (`/cast_modify_memory`) + new substrate entry + 1 new harness file (9 tests: 5 duration tiers + 4 error paths). The substrate-shape `Spells` row ticks up as Modify Memory goes from text-only catalog entry to a live cast path.
+
+### Added
+- `app/routes/tabletop_routes.py`: new `POST /api/campaign/{campaign_id}/cast_modify_memory` endpoint. Validates missing character_id (400), slot_level < 5 (400), membership/ownership (403), Modify-Memory-casting class (409 wrong_class — Bard/Wizard), spell on the list (409 spell_not_known), slot available (409 no_slot), Phase 4 action over-budget (409). On success: decrements the slot, marks the action economy, broadcasts the chat card + `spell_slot_update` + `feature_used` (with `duration_label`), logs the slot spend for undo, returns `{ok, cast_id, slot_level, duration_label, range_ft: 30, concentration: true, …}`.
+- `app/routes/tabletop_routes.py`: new `"modify-memory"` entry in `_SPELL_DURATION_MAP` (after `"mass-suggestion"`). Five markers ("10min" / "1h" / "24h" / "7d" / "permanent"), one per slot level L5-L9.
+- `tests/harness/test_cast_modify_memory.py`: new harness file. Five happy-path tests (L5 → "10min", L6 → "1h", L7 → "24h", L8 → "7d", L9 → "permanent") + four error-path tests (missing character_id → 400, slot_level < 5 → 400, wrong class → 409, spell not known → 409). The fixture snapshots Thalindra Moonwhisper's spells + wizard slots, arms her with Modify Memory + an L5-L9 slot table, and restores both on teardown.
+
+### Changed
+- `docs/plans/spell-utility-upcast.md`: Phase 1 backlog table flips Modify Memory to ✅ shipped (new-endpoint build); status line updated to mark Phase 1 duration-scaling **CLOSED** — all six spells shipped.
+
 ## [2.407.0] - 2026-06-17 — "The Crowd's Whisper"
 
 **Schema version:** 69

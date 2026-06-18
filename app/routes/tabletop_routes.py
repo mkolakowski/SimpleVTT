@@ -2109,6 +2109,23 @@ _SPELL_DURATION_MAP: dict[str, dict] = {
             (9, "1y1d"),        # L9: a year and a day
         ],
     },
+    # v2.408.0 — Modify Memory (Bard / Wizard L5). RAW PHB p.262 base
+    # "Duration: Concentration, up to 1 minute"; the upcast clause
+    # widens how far back the altered memory can reach. SimpleVTT
+    # surfaces that as an escalating modification window: L5 → 10 min,
+    # L6 → 1 hour, L7 → 24 hours, L8 → 7 days, L9 → any time in the
+    # target's past (permanent). All-marker tiers like Geas / Mass
+    # Suggestion; each slot level maps to exactly one window.
+    "modify-memory": {
+        "base_level": 5,
+        "tiers": [
+            (5, "10min"),       # L5: 10 minutes
+            (6, "1h"),          # L6: 1 hour
+            (7, "24h"),         # L7: 24 hours
+            (8, "7d"),          # L8: 7 days
+            (9, "permanent"),   # L9: any time in the past
+        ],
+    },
 }
 
 
@@ -84318,6 +84335,200 @@ async def cast_mass_suggestion(
         "duration_label": ms_duration_label,
         "range_ft": 60,
         "concentration": False,
+    }
+
+
+# ----------- API: cast Modify Memory (5th-level Enchantment, concentration) -----------
+
+@router.post("/api/campaign/{campaign_id}/cast_modify_memory")
+async def cast_modify_memory(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.408.0 — Cast Modify Memory: slot consume + audit +
+    substrate-driven modification window. RAW (PHB p.262): L5
+    Enchantment, 30 ft, Concentration up to 1 minute, single target,
+    WIS save. On a failed save the caster reshapes one of the target's
+    memories of an event within the last 24 hours. The upcast clause
+    widens how far back the altered memory may reach; SimpleVTT
+    surfaces that as an escalating modification window that scales with
+    slot level — L5: 10 minutes, L6: 1 hour, L7: 24 hours, L8: 7 days,
+    L9: any time in the target's past (permanent). Classes: Bard,
+    Wizard.
+
+    Final Phase 1 endpoint built on the duration-scaling substrate
+    (after v2.406.0 /cast_geas and v2.407.0 /cast_mass_suggestion). v1
+    ships the spell-side audit (slot consume + window surfacing); the
+    WIS save resolution + the memory-edit narrative tracking are filed.
+
+    Body: ``{character_id, class_slug, slot_level?, override?}``.
+
+    Validates: missing character_id (400), slot_level < 5 (400),
+    membership (403), ownership/GM (403), Modify-Memory-casting class
+    (409 wrong_class), spell on the list (409 spell_not_known), slot
+    available (409 no_slot), Phase 4 action over-budget (409).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    class_slug = (body.get("class_slug") or "").strip().lower()
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw is not None else 5
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if slot_level < 5:
+        raise HTTPException(400, "slot_level must be >= 5 (Modify Memory is L5)")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    _MODIFY_MEMORY_CLASSES = {"bard", "wizard"}
+    if class_slug not in _MODIFY_MEMORY_CLASSES:
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class",
+            "expected": sorted(_MODIFY_MEMORY_CLASSES),
+            "got": class_slug or "",
+        })
+    primary_class = (sheet.get("class") or "").strip().lower()
+    if primary_class != class_slug:
+        has_class = any(
+            (entry.get("class") or "").strip().lower() == class_slug
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_class:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class",
+                "expected": class_slug,
+                "got": primary_class or "",
+            })
+
+    spells = list(sheet.get("spells") or [])
+    has_mm = any(
+        (s.get("_slug") == "modify-memory") or
+        (str(s.get("name", "")).lower() == "modify memory")
+        for s in spells
+    )
+    if not has_mm:
+        return JSONResponse(status_code=409, content={
+            "error": "spell_not_known",
+            "spell": "modify-memory",
+        })
+
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get(class_slug) or {})
+    slot = dict(per_class.get(str(slot_level)) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": class_slug,
+            "spell_name": "Modify Memory",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "modify-memory",
+            "label": "Modify Memory",
+            "strict": strict,
+        })
+
+    # Commit slot decrement.
+    slot["used"] = used + 1
+    per_class[str(slot_level)] = slot
+    all_slots[class_slug] = per_class
+    sheet["spell_slots"] = all_slots
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # v2.408.0 — duration-scaling substrate. L5 → 10min, L6 → 1h,
+    # L7 → 24h, L8 → 7d, L9 → permanent. All-marker tiers the helper
+    # returns verbatim.
+    raw_dur = _spell_duration_rounds_for_slot(
+        "modify-memory", slot_level, default_rounds="10min",
+    )
+    mm_duration_label = raw_dur if isinstance(raw_dur, str) else "10min"
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    note = (
+        f"🧠 {char.name} casts Modify Memory (L{slot_level}) — "
+        f"30 ft, single target, WIS save (v1 stops at the cast; "
+        f"modification window {mm_duration_label})"
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": "",
+            "total": 0,
+            "breakdown": note,
+            "note": note,
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id,
+            "class_slug": class_slug,
+            "level": slot_level,
+            "total": total,
+            "used": used + 1,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "🧠 Modify Memory",
+            "feature_desc": (
+                f"{char.name} casts Modify Memory. The target makes a "
+                f"WIS save (per-target save + memory-edit narrative "
+                f"tracking filed)."
+            ),
+            "source": "modify-memory",
+            "duration_label": mm_duration_label,
+            "range_ft": 30,
+        },
+    })
+
+    cast_id = _log_spell_slot_spend(
+        campaign_id, char.id, class_slug, slot_level, used, "spell")
+    return {
+        "ok": True,
+        "cast_id": cast_id,
+        "slot_level": slot_level,
+        "slot_used": used + 1,
+        "slot_total": total,
+        "class_slug": class_slug,
+        "duration_label": mm_duration_label,
+        "range_ft": 30,
+        "concentration": True,
     }
 
 

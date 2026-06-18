@@ -2,7 +2,7 @@
 
 > **Status (target-scaling):** ✅ **CLOSED** as of v2.404.9 (2026-06-17). All 9 in-scope target-scaling spells shipped across 9 sequential PATCH commits (v2.404.1 → v2.404.9). Two related substrate facts proven; one helper introduced.
 >
-> **Status (duration-scaling):** 🟠 **PHASE 1 NEARLY DONE** as of v2.407.0 (2026-06-17). Substrate (`_SPELL_DURATION_MAP` + `_spell_duration_rounds_for_slot()` helper) + Hunter's Mark retrofit (v2.405.0) + Hex retrofit (v2.405.1) + Bestow Curse retrofit (v2.405.2, first `"permanent"` marker) + Geas (v2.406.0, first NEW endpoint + day/year markers) + Mass Suggestion (v2.407.0, endpoint-build) shipped. **Only Modify Memory remains** — also a catalog-only endpoint-build. See the [Phase 1 section](#phase-1--duration-scaling-substrate-v24050) below.
+> **Status (duration-scaling):** ✅ **PHASE 1 CLOSED** as of v2.408.0 (2026-06-17). Substrate (`_SPELL_DURATION_MAP` + `_spell_duration_rounds_for_slot()` helper) + Hunter's Mark retrofit (v2.405.0) + Hex retrofit (v2.405.1) + Bestow Curse retrofit (v2.405.2, first `"permanent"` marker) + Geas (v2.406.0, first NEW endpoint + day/year markers) + Mass Suggestion (v2.407.0, endpoint-build) + Modify Memory (v2.408.0, final endpoint-build) shipped. **All six in-scope duration-scaling spells are live on the substrate.** See the [Phase 1 section](#phase-1--duration-scaling-substrate-v24050) below.
 
 ## What this plan covered
 
@@ -129,7 +129,7 @@ Each ships as a registry drop-in + retrofit + harness. Same shape across all of 
 | Bestow Curse | L3 | L3 → 1 min, L4 → 10 min, L5 → 8h, L7 → 24h, L9 → permanent (RAW PHB p.218) | ✅ shipped v2.405.2 ("The Lasting Curse"). First consumer of the `"permanent"` marker. `/cast_bestow_curse` reads the substrate + branches on the marker to derive a `duration_label`. Harness: `tests/harness/test_bestow_curse_duration_scaling.py` (5 tests, one per tier). |
 | Geas | L5 | L5 → 30 days, L7 → 1 year, L9 → permanent | ✅ shipped v2.406.0 ("The Binding Word"). **NOT a retrofit** — Geas had no cast endpoint (catalog-only), so this was a new `/cast_geas` MINOR endpoint built on the substrate from the start. First consumer of the day/year markers (`"30d"`, `"1y"`); reuses `"permanent"`. Harness: `tests/harness/test_cast_geas.py` (7 tests). |
 | Mass Suggestion | L6 | L6 → 24h, L7 → 10d, L8 → 30d, L9 → 1y+1d | ✅ shipped v2.407.0 ("The Crowd's Whisper"). New `/cast_mass_suggestion` endpoint-build (catalog-only before). Four calendar markers, one per slot level. Harness: `tests/harness/test_cast_mass_suggestion.py` (8 tests). |
-| Modify Memory | L5 | L5 → 10 min mod, L6 → 1h, L7 → 24h, L8 → 7d, L9 → permanent | Permanent marker at L9. |
+| Modify Memory | L5 | L5 → 10 min, L6 → 1h, L7 → 24h, L8 → 7d, L9 → permanent | ✅ shipped v2.408.0 ("The Rewritten Page"). New `/cast_modify_memory` endpoint-build (catalog-only before). Final Phase 1 spell — five markers, one per slot level, reusing `"permanent"` at L9. Concentration, single target, 30 ft. Harness: `tests/harness/test_cast_modify_memory.py` (9 tests). |
 | Magic Weapon | L2 | L2-L3 → 1h, L4+ → 1h with attack-bonus increase (bonus scales, duration fixed) | Edge case: scales attack bonus, not duration. Filed as a sub-arc (or covered by Phase 4 rider substrate). |
 | Heroes' Feast | L6 | Fixed 24h RAW; no per-slot scaling | Filed: no substrate consumer needed; documented to prevent rework. |
 | Otiluke's Resilient Sphere | L4 | Fixed 1 min RAW (concentration); no per-slot scaling | Filed: AoE-radius scaling lands in Phase 2 instead. |
@@ -137,7 +137,7 @@ Each ships as a registry drop-in + retrofit + harness. Same shape across all of 
 | Drawmij's Instant Summons | L6 | Fixed (instantaneous summon) | Filed: not a duration spell — moved out of scope. |
 | Glyph of Warding | L3 | Fixed (until triggered) | Filed: trigger-state substrate (out of Phase 1 scope). |
 
-**Real Phase 1 scope (revised):** Hunter's Mark ✅ + Hex ✅ + Bestow Curse ✅ + Geas ✅ + Mass Suggestion ✅ + Modify Memory = **6 spells** with genuine duration scaling. The others get filed out of scope (no per-slot duration ladder) or moved to Phase 2/4. **Scope note:** only the first three were true one-line retrofits (they had endpoints with inline ladders). Geas, Mass Suggestion, and Modify Memory are catalog-only — making them substrate consumers means *building* a `/cast_<spell>` endpoint (MINOR), as Geas demonstrated in v2.406.0. Phase 1 closure: 1 more endpoint-build commit (Modify Memory).
+**Real Phase 1 scope (revised):** Hunter's Mark ✅ + Hex ✅ + Bestow Curse ✅ + Geas ✅ + Mass Suggestion ✅ + Modify Memory ✅ = **6 spells** with genuine duration scaling, all shipped. The others get filed out of scope (no per-slot duration ladder) or moved to Phase 2/4. **Scope note:** only the first three were true one-line retrofits (they had endpoints with inline ladders). Geas, Mass Suggestion, and Modify Memory were catalog-only — making them substrate consumers meant *building* a `/cast_<spell>` endpoint (MINOR), as Geas demonstrated in v2.406.0. **Phase 1 closed at v2.408.0** with the Modify Memory endpoint-build.
 
 ### Markers (sentinel strings the helper returns)
 

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3251 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.407.0, 2026-06-17).
+**Total tests:** 3260 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.408.0, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4961,6 +4961,21 @@ v2.406.0 — new `/cast_geas` endpoint + duration-scaling substrate, fourth cons
 | `test_geas_low_slot_400` | slot_level=4 → 400 (Geas is L5). |
 | `test_geas_wrong_class_409` | class_slug=barbarian (not a Geas class) → 409 `wrong_class`. |
 | `test_geas_spell_not_known_409` | Wizard without Geas on her list → 409 `spell_not_known` (fires before the slot lookup; no slot patching needed). |
+
+### `test_cast_modify_memory.py`
+v2.408.0 — new `/cast_modify_memory` endpoint + duration-scaling substrate, sixth consumer (third NEW endpoint) and the final Phase 1 spell. RAW L5 Enchantment, 30 ft, concentration, single target, WIS save. Substrate `"modify-memory"` entry uses five markers ("10min" / "1h" / "24h" / "7d" / "permanent"), one per slot level L5-L9. Thalindra Moonwhisper is armed with Modify Memory + an L5-L9 wizard slot table (snapshot + restored on teardown).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_modify_memory_l5_routes_10min` | L5 cast → 200; `duration_label == "10min"`, `range_ft == 30`, `concentration is True`. Base tier. |
+| `test_modify_memory_l6_routes_1h` | L6 cast → `duration_label == "1h"`. |
+| `test_modify_memory_l7_routes_24h` | L7 cast → `duration_label == "24h"`. |
+| `test_modify_memory_l8_routes_7d` | L8 cast → `duration_label == "7d"`. |
+| `test_modify_memory_l9_routes_permanent` | L9 cast → `duration_label == "permanent"` (any time in the past). Top tier. |
+| `test_modify_memory_missing_character_id_400` | Missing character_id → 400. |
+| `test_modify_memory_low_slot_400` | slot_level=4 → 400 (Modify Memory is L5). |
+| `test_modify_memory_wrong_class_409` | class_slug=cleric (not a Modify Memory class) → 409 `wrong_class`. |
+| `test_modify_memory_spell_not_known_409` | Wizard without Modify Memory on her list → 409 `spell_not_known` (fires before the slot lookup). |
 
 ### `test_cast_mass_suggestion.py`
 v2.407.0 — new `/cast_mass_suggestion` endpoint + duration-scaling substrate, fifth consumer (second NEW endpoint). RAW L6 Enchantment, 60 ft, not concentration, up to 12 targets. Substrate `"mass-suggestion"` entry uses calendar markers ("24h" / "10d" / "30d" / "1y1d"), one per slot level L6-L9. Thalindra Moonwhisper is armed with Mass Suggestion + an L6-L9 wizard slot table (snapshot + restored on teardown).
