@@ -2316,6 +2316,19 @@ _SPELL_SUMMON_MAP: dict[str, dict] = {
             (9, 3),     # L8–L9: three times as many
         ],
     },
+    # v2.416.0 — Phase 3 multiplier-family third (and final) consumer. RAW
+    # PHB p.225: Conjure Minor Elementals (Druid / Wizard L4) summons twice
+    # as many elementals at a 6th-level slot, three times as many at an
+    # 8th-level slot. Identical ladder to Conjure Woodland Beings — the
+    # last tier carries through L9 via the helper's last-tier fallback.
+    "conjure-minor-elementals": {
+        "base_level": 4,
+        "tiers": [
+            (5, 1),     # L4–L5: ×1 (base option count)
+            (7, 2),     # L6–L7: twice as many
+            (9, 3),     # L8–L9: three times as many
+        ],
+    },
 }
 
 
@@ -4386,6 +4399,15 @@ _COMPANION_TEMPLATES: dict[str, dict] = {
     "fey-spirit": {"name": "Fey Spirit", "ac": 13, "hp": 7,
                    "speed_walk": 30, "size": 1, "team": "hero",
                    "color": "#a48cc8"},
+    # v2.416.0 — Phase 3 (summon-count) third consumer (Conjure Minor
+    # Elementals). RAW PHB p.225: small elementals of air/earth/fire/water.
+    # Stats are a v1 generic-elemental ballpark (sturdier than a fey
+    # spirit: a touch more HP, same light AC, walking speed 30). GM can
+    # hand-edit per encounter; the broadcast name on cast is "Conjured
+    # Elemental N" so the table can narrate the specific element.
+    "elemental-spirit": {"name": "Elemental Spirit", "ac": 13, "hp": 10,
+                         "speed_walk": 30, "size": 1, "team": "hero",
+                         "color": "#d2691e"},
 }
 
 
@@ -61351,6 +61373,145 @@ async def cast_conjure_woodland_beings(
     return {
         "ok": True,
         "feature": "conjure-woodland-beings",
+        "count": len(combatants),
+        "base_count": base_count,
+        "slot_level": slot_level,
+        "multiplier": multiplier,
+        "combatants": combatants,
+        "token_ids": token_ids,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_conjure_minor_elementals")
+async def cast_conjure_minor_elementals(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.416.0 — Phase 3 multiplier-family third (and final) consumer.
+    Conjure Minor Elementals (Druid / Wizard L4, PHB p.225): "You summon
+    elementals... one elemental of CR 2, two of CR 1, four of CR ½, or
+    eight of CR ¼." Mirrors `/cast_conjure_woodland_beings`'s shape
+    (base_level 4, ladder ×2 @6th / ×3 @8th, no ×4) with one difference:
+    a Druid **or Wizard** class gate (Woodland Beings is Druid-only).
+
+    Body: ``{character_id, count?, slot_level?, x?, y?, spacing?,
+    initiative?}``. Each elemental is summoned via `_summon_companion`
+    (the new `elemental-spirit` registry entry) at ``x + i × spacing``.
+    Gates on the caster knowing Conjure Minor Elementals OR being a Druid
+    / Wizard. All summons share the `is_summon` + `summoned_by` tags so
+    the long-rest teardown drops the whole host.
+
+    Response: ``{ok, feature, count, base_count, slot_level, multiplier,
+    combatants: [...], token_ids: [...]}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    try:
+        base_count = int(body.get("count") or 8)
+    except (TypeError, ValueError):
+        base_count = 8
+    # `count` is the chosen summoning option (8 × CR¼, 4 × CR½, 2 × CR1,
+    # 1 × CR2) — clamped to that 1–8 range.
+    base_count = max(1, min(8, base_count))
+    try:
+        slot_level = int(body.get("slot_level") or 4)
+    except (TypeError, ValueError):
+        slot_level = 4
+    multiplier = _spell_summon_multiplier_for_slot(
+        "conjure-minor-elementals", slot_level, default_multiplier=1)
+    count = base_count * multiplier
+    spacing = float(body.get("spacing") or 70)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_cme = any(
+        (s.get("_slug") == "conjure-minor-elementals")
+        or (str(s.get("name", "")).lower() == "conjure minor elementals")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    # RAW Druid / Wizard (Woodland Beings is Druid-only; Minor Elementals
+    # adds Wizard).
+    _caster_classes = {"druid", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_cme and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Conjure Minor Elementals, or druid/wizard",
+            "got_class": _cls,
+        })
+
+    base_x = float(body.get("x") or 0)
+    base_y = float(body.get("y") or 0)
+    initiative = int(body.get("initiative") or 0)
+    combatants = []
+    token_ids = []
+    for i in range(count):
+        res = await _summon_companion(
+            db, campaign_id,
+            owner_char_id=char.id,
+            companion_key="elemental-spirit",
+            name=f"Conjured Elemental {i + 1}",
+            x=base_x + i * spacing,
+            y=base_y,
+            initiative=initiative,
+        )
+        if res:
+            combatants.append(res["combatant"])
+            token_ids.append(res["token_id"])
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": f"🌪️ Conjure Minor Elementals — {len(combatants)} elementals",
+            "feature_desc": (
+                f"{char.name} summons {len(combatants)} elementals as "
+                f"combatants. (Conjure Minor Elementals, L{slot_level}"
+                f"{f', ×{multiplier}' if multiplier > 1 else ''}.)"
+            ),
+            "source": "conjure-minor-elementals",
+            "count": len(combatants),
+            "slot_level": slot_level,
+            "multiplier": multiplier,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "conjure-minor-elementals",
         "count": len(combatants),
         "base_count": base_count,
         "slot_level": slot_level,

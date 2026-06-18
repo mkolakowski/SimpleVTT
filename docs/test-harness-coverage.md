@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3310 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.415.0, 2026-06-17).
+**Total tests:** 3317 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.416.0, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2193,6 +2193,19 @@ v2.415.0 — Phase 3 multiplier-family second consumer. `/cast_conjure_woodland_
 | `test_cwb_l8_triples` | L8 enters the third tier → `multiplier 3`, base 2 → 6 fey. |
 | `test_cwb_l9_last_tier_fallback` | L9 falls through the last-tier fallback → `multiplier 3` (no ×4), base 1 → 3 fey. |
 | `test_cwb_cannot_cast_non_druid` | Krieger (Barbarian) → 409 `cannot_cast` with `expected` mentioning "druid". |
+
+### `test_cast_conjure_minor_elementals.py`
+v2.416.0 — Phase 3 multiplier-family third (and final) consumer, closing the count-multiplier family. `/cast_conjure_minor_elementals` (Druid / Wizard L4) mirrors `/cast_conjure_woodland_beings`'s shape (base_level 4, ×1/×2/×3 ladder, no ×4) with one difference: a Druid **or Wizard** class gate. New `_COMPANION_TEMPLATES["elemental-spirit"]` (AC 13, HP 10, walk 30, ember color `#d2691e`) is the summoned token template. Caster fixtures: Mira Greenleaf (Druid) for the ladder; Thalindra Moonwhisper (Wizard) for the Wizard-branch gate.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cme_base_slot_no_multiplier` | L4 default → `base_count 8`, `multiplier 1`, `count 8`, 8 elemental-spirit summons. |
+| `test_cme_l5_still_base_tier` | L5 stays in the L4–L5 tier → `multiplier 1`, base 2 → 2 elementals. |
+| `test_cme_l6_doubles` | L6 enters the second tier → `multiplier 2`, base 2 → 4 elementals. |
+| `test_cme_l8_triples` | L8 enters the third tier → `multiplier 3`, base 2 → 6 elementals. |
+| `test_cme_l9_last_tier_fallback` | L9 falls through the last-tier fallback → `multiplier 3` (no ×4), base 1 → 3 elementals. |
+| `test_cme_wizard_can_cast` | Thalindra (Wizard) passes the Druid/Wizard gate → L6 base 2 → 4 elementals (the difference from Woodland Beings' Druid-only gate). |
+| `test_cme_cannot_cast_non_caster` | Krieger (Barbarian) → 409 `cannot_cast` with `expected` mentioning "wizard". |
 
 ### `test_cast_gust.py`
 v2.99.445 — Phase 6.3 of `docs/plans/movement-and-summons.md`. Gust (Druid/Sorcerer/Wizard cantrip, Tasha's p.106): the target makes a STR save vs the spell save DC or is pushed 5 ft away via `_force_move`. The last forced-mover. Caster fixture: Thalindra Moonwhisper (demo Wizard).

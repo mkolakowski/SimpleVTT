@@ -10,6 +10,39 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.416.0] - 2026-06-17 — "The Elemental Host"
+
+**Schema version:** 69
+
+**Commit summary:** Closes the **count-multiplier family** of Phase 3 (summon-count scaling). Third consumer of `_SPELL_SUMMON_MAP` after Conjure Animals and Conjure Woodland Beings. Ships a new **`/cast_conjure_minor_elementals`** endpoint (Druid / Wizard L4). RAW PHB p.225: summons elementals twice as many at a 6th-level slot, three times as many at an 8th — the same ×1/×2/×3 ladder as Conjure Woodland Beings.
+
+**Description:** Mirrors `/cast_conjure_woodland_beings`'s shape with one difference — a Druid **or Wizard** class gate (Woodland Beings is Druid-only). Adds a third substrate entry + a new `elemental-spirit` companion template:
+
+```python
+_SPELL_SUMMON_MAP["conjure-minor-elementals"] = {
+    "base_level": 4,
+    "tiers": [
+        (5, 1),     # L4–L5: ×1
+        (7, 2),     # L6–L7: twice as many
+        (9, 3),     # L8–L9: three times as many
+    ],
+}
+```
+
+`count` is the chosen summoning option (clamped 1–8); the total summoned is `base_count × _spell_summon_multiplier_for_slot("conjure-minor-elementals", slot_level)`. With this consumer, **all three count-multiplier conjure spells are wired**; the count-additive (Animate Dead) and CR-increase (Conjure Fey / Elemental / Celestial) families remain as Phase 3 follow-ons.
+
+**Why "The Elemental Host":** a sixth-level slot doubles the summoned elementals, an eighth triples them — a growing host of air, earth, fire, and water.
+
+MINOR — new HTTP endpoint (`/cast_conjure_minor_elementals`) + new substrate entry + new companion template + 7 new harness tests.
+
+### Added
+- `app/routes/tabletop_routes.py`: new `POST /api/campaign/{campaign_id}/cast_conjure_minor_elementals` endpoint (Druid / Wizard L4). Stands up `base_count × multiplier` elemental combatants via `_summon_companion`, gated on knowing the spell OR being a Druid / Wizard. Returns `{ok, feature, count, base_count, slot_level, multiplier, combatants, token_ids}`; broadcasts a `feature_used` card with the slot level + multiplier.
+- `app/routes/tabletop_routes.py`: new `"conjure-minor-elementals"` entry in `_SPELL_SUMMON_MAP` (same ×1/×2/×3 ladder as Conjure Woodland Beings) + a new `elemental-spirit` companion template (AC 13 / HP 10 / walk 30, ember color).
+- `tests/harness/test_cast_conjure_minor_elementals.py`: new harness file (7 tests) — L4 base ×1, L5 same-tier, L6 ×2, L8 ×3, L9 ×3-fallback ladder, a Wizard-caster gate test (Thalindra, proving the Druid/Wizard difference from Woodland Beings), and the 409 cannot_cast on Krieger (Barbarian).
+
+### Changed
+- `docs/plans/spell-utility-upcast.md`: Phase 3 backlog table flips Conjure Minor Elementals to ✅ shipped; status header notes the count-multiplier family is complete (additive + CR-increase remain).
+
 ## [2.415.0] - 2026-06-17 — "The Sylvan Throng"
 
 **Schema version:** 69
