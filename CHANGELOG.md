@@ -10,6 +10,41 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.406.0] - 2026-06-17 — "The Binding Word"
+
+**Schema version:** 69
+
+**Commit summary:** Ships a new **`/cast_geas`** endpoint — the **fourth consumer** of the v2.405.0 duration-scaling substrate and the **first endpoint built around it from the start** (the prior three were retrofits of pre-existing hardcoded ladders). Geas was catalog-only before this: it lived in `app/data/local/dnd5e/spells/geas.json` with no cast path and no buff-map entry, so there was nothing to "retrofit." This commit builds the spell-side audit (slot consume + action-economy gate + chat card + undo logging) and wires its per-slot duration through the substrate. RAW PHB p.244: L5-L6 → 30 days, L7-L8 → 1 year, L9 → until dispelled.
+
+**Description:** A scope correction to the Phase 1 plan. The plan doc assumed Geas / Mass Suggestion / Modify Memory were the same one-line registry drop-ins as Hunter's Mark / Hex / Bestow Curse — but those three had dedicated endpoints with inline `if/elif` duration ladders, whereas Geas has no endpoint at all. Making Geas a real substrate consumer therefore means *building* the cast mechanic, not retrofitting one. The new endpoint mirrors `/cast_bestow_curse`'s validation shape (class gate, spell-list gate, slot gate, Phase 4 action over-budget gate) and adds the substrate-driven duration.
+
+Geas durations are **calendar** durations (days / years), not combat-round counts, so the substrate entry carries marker strings the helper returns verbatim:
+
+```python
+_SPELL_DURATION_MAP["geas"] = {
+    "base_level": 5,
+    "tiers": [
+        (6, "30d"),         # L5-L6: 30 days
+        (8, "1y"),          # L7-L8: 1 year
+        (9, "permanent"),   # L9:    until dispelled
+    ],
+}
+```
+
+`/cast_geas` reads `_spell_duration_rounds_for_slot("geas", slot_level, default_rounds="30d")` and surfaces the marker as the response + `feature_used` broadcast `duration_label`. Geas is NOT concentration (RAW), so the endpoint installs no concentration anchor and reports `concentration: false`. v1 ships the audit; the per-target WIS save resolution + the charmed-condition buff + command tracking are filed.
+
+**Why "The Binding Word":** Geas binds a creature to a command by magical compulsion — for thirty days, a year, or forever.
+
+MINOR — new HTTP endpoint (`/cast_geas`) + new substrate entry + 1 new harness file (7 tests: 3 duration tiers + 4 error paths). The substrate-shape `Spells` row ticks up as Geas goes from text-only catalog entry to a live cast path.
+
+### Added
+- `app/routes/tabletop_routes.py`: new `POST /api/campaign/{campaign_id}/cast_geas` endpoint. Validates missing character_id (400), slot_level < 5 (400), membership/ownership (403), Geas-casting class (409 wrong_class — Bard/Cleric/Druid/Paladin/Wizard), Geas on the spell list (409 spell_not_known), slot available (409 no_slot), Phase 4 action over-budget (409). On success: decrements the slot, marks the action economy, broadcasts the chat card + `spell_slot_update` + `feature_used` (with `duration_label`), logs the slot spend for undo, returns `{ok, cast_id, slot_level, duration_label, range_ft: 60, concentration: false, …}`.
+- `app/routes/tabletop_routes.py`: new `"geas"` entry in `_SPELL_DURATION_MAP` (after `"bestow-curse"`). First substrate consumer to use the day/year markers ("30d" / "1y"); reuses the `"permanent"` marker.
+- `tests/harness/test_cast_geas.py`: new harness file. Three happy-path tests (L5 → "30d", L7 → "1y", L9 → "permanent") + four error-path tests (missing character_id → 400, slot_level < 5 → 400, wrong class → 409, spell not known → 409). The fixture snapshots Thalindra Moonwhisper's spells + wizard slots, arms her with Geas + an L5-L9 slot table, and restores both on teardown.
+
+### Changed
+- `docs/plans/spell-utility-upcast.md`: Phase 1 backlog table flips Geas to ✅ shipped with a note that it was a new-endpoint build, not a retrofit; status line + remaining-scope count updated. Records the scope correction (the remaining Mass Suggestion / Modify Memory are likewise endpoint-builds, not retrofits).
+
 ## [2.405.2] - 2026-06-17 — "The Lasting Curse"
 
 **Schema version:** 69

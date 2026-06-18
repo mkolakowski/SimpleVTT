@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3236 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.405.2, 2026-06-17).
+**Total tests:** 3243 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.406.0, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4948,6 +4948,19 @@ v2.405.2 — spell-utility-mechanical-depth Phase 1: duration-scaling substrate,
 | `test_bestow_curse_l5_routes_8h` | Cast at L5 → 4800 rounds (8 hours); `duration_label == "8h"`, `duration_rounds == 4800`. |
 | `test_bestow_curse_l7_routes_24h` | Cast at L7 → 14400 rounds (24 hours); `duration_label == "24h"`, `duration_rounds == 14400`. |
 | `test_bestow_curse_l9_routes_permanent` | Cast at L9 → `"permanent"` marker (until dispelled); `duration_label == "permanent"`. First consumer of the substrate's marker-string path. |
+
+### `test_cast_geas.py`
+v2.406.0 — new `/cast_geas` endpoint + duration-scaling substrate, fourth consumer (first NEW endpoint built on the substrate). RAW L5 Enchantment, 60 ft, not concentration. Substrate `"geas"` entry uses calendar markers (`"30d"` / `"1y"` / `"permanent"`). Thalindra Moonwhisper is armed with Geas + an L5-L9 wizard slot table (snapshot + restored on teardown).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_geas_l5_routes_30d` | L5 cast → 200; response `duration_label == "30d"`, `range_ft == 60`, `concentration is False`. Base tier. |
+| `test_geas_l7_routes_1y` | L7 cast → `duration_label == "1y"`. Middle tier. |
+| `test_geas_l9_routes_permanent` | L9 cast → `duration_label == "permanent"` (until dispelled). Reuses the marker path. |
+| `test_geas_missing_character_id_400` | Missing character_id → 400. |
+| `test_geas_low_slot_400` | slot_level=4 → 400 (Geas is L5). |
+| `test_geas_wrong_class_409` | class_slug=barbarian (not a Geas class) → 409 `wrong_class`. |
+| `test_geas_spell_not_known_409` | Wizard without Geas on her list → 409 `spell_not_known` (fires before the slot lookup; no slot patching needed). |
 
 ### `test_hex_duration_scaling.py`
 v2.405.1 — spell-utility-mechanical-depth Phase 1: duration-scaling substrate, second consumer. The `_SPELL_DURATION_MAP` "hex" entry + `_spell_duration_rounds_for_slot()` helper replace the hardcoded per-slot duration ladder at `/cast_hex`. Magnus Hexbinder's Pact Magic slot table PATCH'd up to L5 so all three tiers are reachable.

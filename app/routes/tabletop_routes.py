@@ -2073,6 +2073,25 @@ _SPELL_DURATION_MAP: dict[str, dict] = {
             (9, "permanent"),   # L9:    until dispelled
         ],
     },
+    # v2.405.3 — Geas (Bard / Cleric / Druid / Paladin / Wizard L5).
+    # RAW PHB p.244: base "Duration: 30 days" (NOT concentration).
+    # Higher Levels: "When you cast this spell using a spell slot of
+    # 7th or 8th level, the duration is 1 year. When you cast this
+    # spell using a spell slot of 9th level, the spell lasts until it
+    # is ended by one of the spells mentioned above [remove curse,
+    # greater restoration, wish]." These are *calendar* durations, not
+    # combat-round counts, so the tiers carry marker strings the helper
+    # returns verbatim (the `/cast_geas` endpoint renders them as the
+    # display `duration_label`). First substrate consumer to use the
+    # day/year markers; reuses the v2.405.2 ``"permanent"`` marker.
+    "geas": {
+        "base_level": 5,
+        "tiers": [
+            (6, "30d"),         # L5-L6: 30 days
+            (8, "1y"),          # L7-L8: 1 year
+            (9, "permanent"),   # L9:    until dispelled
+        ],
+    },
 }
 
 
@@ -83882,6 +83901,215 @@ async def cast_bestow_curse(
         "concentration": True,
         # v2.99.183 — Twinned auto-route response field.
         "twinned_target_combatant_id_2": _twin_target_2_bc or None,
+    }
+
+
+# ----------- API: cast Geas (5th-level Enchantment, no concentration) -----------
+
+@router.post("/api/campaign/{campaign_id}/cast_geas")
+async def cast_geas(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.405.3 — Cast Geas: slot consume + audit + substrate-driven
+    duration. RAW (PHB p.244): L5 Enchantment, 1 minute casting time,
+    60 ft, NOT concentration. Target a creature you can see; on a
+    failed WIS save it's charmed and magically compelled to carry out
+    your command. Duration scales with slot level — L5-L6: 30 days,
+    L7-L8: 1 year, L9: until dispelled (the v2.405.2 ``"permanent"``
+    substrate marker). Classes: Bard, Cleric, Druid, Paladin, Wizard.
+
+    The first NEW endpoint built around the duration-scaling substrate
+    from the start (after the v2.405.0/.1/.2 Hunter's Mark / Hex /
+    Bestow Curse retrofits of pre-existing endpoints). v1 ships the
+    spell-side audit (slot consume + duration surfacing); the per-
+    target WIS save resolution + the charmed-condition buff + command
+    tracking are filed.
+
+    Body: ``{character_id, class_slug, target_character_id?,
+    target_name?, slot_level?, override?}``.
+
+    Validates: missing character_id (400), slot_level < 5 (400),
+    membership (403), ownership/GM (403), Geas-casting class (409
+    wrong_class), Geas on the spell list (409 spell_not_known), slot
+    available (409 no_slot), Phase 4 action over-budget (409).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    class_slug = (body.get("class_slug") or "").strip().lower()
+    target_character_id = body.get("target_character_id")
+    target_character_id = int(target_character_id) if target_character_id else None
+    target_name = (body.get("target_name") or "").strip() or None
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw is not None else 5
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if slot_level < 5:
+        raise HTTPException(400, "slot_level must be >= 5 (Geas is L5)")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    _GEAS_CLASSES = {"bard", "cleric", "druid", "paladin", "wizard"}
+    if class_slug not in _GEAS_CLASSES:
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class",
+            "expected": sorted(_GEAS_CLASSES),
+            "got": class_slug or "",
+        })
+    primary_class = (sheet.get("class") or "").strip().lower()
+    if primary_class != class_slug:
+        has_class = any(
+            (entry.get("class") or "").strip().lower() == class_slug
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_class:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class",
+                "expected": class_slug,
+                "got": primary_class or "",
+            })
+
+    spells = list(sheet.get("spells") or [])
+    has_geas = any(
+        (s.get("_slug") == "geas") or
+        (str(s.get("name", "")).lower() == "geas")
+        for s in spells
+    )
+    if not has_geas:
+        return JSONResponse(status_code=409, content={
+            "error": "spell_not_known",
+            "spell": "geas",
+        })
+
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get(class_slug) or {})
+    slot = dict(per_class.get(str(slot_level)) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": class_slug,
+            "spell_name": "Geas",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "geas",
+            "label": "Geas",
+            "strict": strict,
+        })
+
+    # Commit slot decrement.
+    slot["used"] = used + 1
+    per_class[str(slot_level)] = slot
+    all_slots[class_slug] = per_class
+    sheet["spell_slots"] = all_slots
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # v2.405.3 — duration-scaling substrate. Geas is the first NEW
+    # endpoint built on _SPELL_DURATION_MAP. RAW: L5-L6 → 30 days,
+    # L7-L8 → 1 year, L9 → until dispelled. The substrate stores these
+    # as marker strings ("30d" / "1y" / "permanent") since they're
+    # calendar durations, not combat-round counts; the helper returns
+    # the marker verbatim and the endpoint renders it as duration_label.
+    raw_dur = _spell_duration_rounds_for_slot(
+        "geas", slot_level, default_rounds="30d",
+    )
+    geas_duration_label = raw_dur if isinstance(raw_dur, str) else "30d"
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    # Resolve target name for the chat card (best-effort).
+    display_target = target_name or "the target"
+    if target_character_id:
+        tgt = db.query(Character).filter(
+            Character.id == target_character_id,
+            Character.campaign_id == campaign_id,
+        ).first()
+        if tgt:
+            display_target = tgt.name
+
+    note = (
+        f"📜 {char.name} casts Geas (L{slot_level}) on {display_target} — "
+        f"60 ft, WIS save (v1 stops at the cast; duration {geas_duration_label})"
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": "",
+            "total": 0,
+            "breakdown": note,
+            "note": note,
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id,
+            "class_slug": class_slug,
+            "level": slot_level,
+            "total": total,
+            "used": used + 1,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "📜 Geas",
+            "feature_desc": (
+                f"{char.name} casts Geas on {display_target}. Target makes "
+                f"a WIS save (per-target save + charmed-condition tracking "
+                f"filed)."
+            ),
+            "source": "geas",
+            "duration_label": geas_duration_label,
+            "range_ft": 60,
+        },
+    })
+
+    cast_id = _log_spell_slot_spend(
+        campaign_id, char.id, class_slug, slot_level, used, "spell")
+    return {
+        "ok": True,
+        "cast_id": cast_id,
+        "slot_level": slot_level,
+        "slot_used": used + 1,
+        "slot_total": total,
+        "class_slug": class_slug,
+        "duration_label": geas_duration_label,
+        "range_ft": 60,
+        "concentration": False,
     }
 
 
