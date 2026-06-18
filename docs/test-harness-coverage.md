@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3342 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.421.0, 2026-06-17).
+**Total tests:** 3347 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.422.0, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2261,6 +2261,17 @@ v2.421.0 — **opens Phase 4** (rider/bonus scaling). `/cast_magic_weapon` (Cler
 | `test_magic_weapon_l6_plus3` | L6 → `bonus 3` (top tier); buff effects carry +3. |
 | `test_magic_weapon_wizard_caster_passes_gate` | Thalindra (Wizard, not Cleric) passes the caster gate → `bonus 1`, `buff_installed True`. |
 | `test_magic_weapon_cannot_cast_non_caster` | Krieger (Barbarian) → 409 `cannot_cast` with `expected` mentioning "cleric". |
+
+### `test_cast_elemental_weapon.py`
+v2.422.0 — second Phase 4 rider/bonus consumer, and the first to scale **two** riders off one tier value. `/cast_elemental_weapon` (Ranger/Paladin L3) reuses `_SPELL_BONUS_MAP` via `_spell_bonus_for_slot()`: the integer N drives both a `+N` attack bonus and an `Nd4` extra-damage die (+1/1d4 @L3–4, +2/2d4 @L5–6, +3/3d4 @L7+). Unlike Magic Weapon it's **concentration** and carries a player-chosen element (acid/cold/fire/lightning/thunder, default fire). The 1-hour buff carries `weapon_attack_bonus` / `weapon_bonus_damage_dice` / `weapon_bonus_damage_type` effects; install requires an active battle. Caster fixtures: Rowan Quickbow (Ranger) for the ladder, Sir Caelan Lightbringer (Paladin) for the gate.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_elemental_weapon_base_slot_plus1_1d4` | Rowan L3 → `bonus 1`, `bonus_dice "1d4"`, `damage_type "fire"`, `buff_installed True`; the persisted `elemental-weapon` buff carries `weapon_attack_bonus == 1`, `weapon_bonus_damage_dice == "1d4"`, `weapon_bonus_damage_type == "fire"`, `concentration True`. |
+| `test_elemental_weapon_l5_plus2_2d4` | L5 → `bonus 2`, `bonus_dice "2d4"` (middle tier); buff effects carry +2 / 2d4. |
+| `test_elemental_weapon_l7_plus3_3d4_cold` | L7 → `bonus 3`, `bonus_dice "3d4"` (top tier); an explicit `damage_type "cold"` is honored end-to-end (response + buff effects). |
+| `test_elemental_weapon_paladin_caster_passes_gate` | Sir Caelan (Paladin, not Ranger) passes the caster gate → `bonus 1`, `buff_installed True`. |
+| `test_elemental_weapon_cannot_cast_non_caster` | Krieger (Barbarian) → 409 `cannot_cast` with `expected` mentioning "ranger". |
 
 ### `test_cast_gust.py`
 v2.99.445 — Phase 6.3 of `docs/plans/movement-and-summons.md`. Gust (Druid/Sorcerer/Wizard cantrip, Tasha's p.106): the target makes a STR save vs the spell save DC or is pushed 5 ft away via `_force_move`. The last forced-mover. Caster fixture: Thalindra Moonwhisper (demo Wizard).

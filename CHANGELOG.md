@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.422.0] - 2026-06-17 — "The Kindled Blade"
+
+**Schema version:** 69
+
+**Commit summary:** Second Phase 4 (rider/bonus scaling) consumer — **Elemental Weapon** (Ranger/Paladin L3), the first to scale **two** riders off one tier value. Adds a `_SPELL_BONUS_MAP` entry + a new **`/cast_elemental_weapon`** endpoint that reuses `_spell_bonus_for_slot()` unchanged. RAW PHB p.237: +1 to attack rolls and +1d4 elemental damage at L3–4, +2/+2d4 at L5–6, +3/+3d4 at L7+.
+
+**Description:** Where Magic Weapon scaled a single attack/damage bonus, Elemental Weapon scales an attack bonus **and** an extra elemental damage die — both keyed off the same tier value N (the integer drives `+N` to attack and `f"{N}d4"` of damage). It's also **concentration** (Magic Weapon isn't) and carries a player-chosen element (acid / cold / fire / lightning / thunder, default fire):
+
+```python
+_SPELL_BONUS_MAP["elemental-weapon"] = {
+    "base_level": 3,
+    "tiers": [(4, 1), (6, 2), (9, 3)],   # +1/1d4 @L3-4, +2/2d4 @L5-6, +3/3d4 @L7+
+}
+```
+
+`/cast_elemental_weapon` reads `_spell_bonus_for_slot("elemental-weapon", slot_level)`, derives `bonus_dice = f"{N}d4"`, and installs a 1-hour concentration buff on the target (caster by default, or `target_character_id`) carrying informational `weapon_attack_bonus` / `weapon_bonus_damage_dice` / `weapon_bonus_damage_type` effects (the display-only convention from Magic Weapon, extended with the die + element). Gates on knowing Elemental Weapon OR being a Ranger / Paladin.
+
+**Why "The Kindled Blade":** the spell wreathes a plain weapon in elemental fury — and the deeper the slot, the fiercer the burn.
+
+MINOR — new HTTP endpoint (`/cast_elemental_weapon`) + new `_SPELL_BONUS_MAP` entry (helper reused) + 5 new harness tests.
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_SPELL_BONUS_MAP["elemental-weapon"]` entry (+1/1d4 @L3–4, +2/2d4 @L5–6, +3/3d4 @L7+). Reuses `_spell_bonus_for_slot()` unchanged — the single tier value N drives both riders.
+- `app/routes/tabletop_routes.py`: new `POST /api/campaign/{campaign_id}/cast_elemental_weapon` endpoint (Ranger/Paladin L3). Computes the per-slot bonus + `f"{N}d4"` die, validates the chosen element, installs a 1-hour **concentration** buff with `weapon_attack_bonus` / `weapon_bonus_damage_dice` / `weapon_bonus_damage_type` effects, gated on knowing Elemental Weapon OR being a Ranger/Paladin. Returns `{ok, feature, bonus, bonus_dice, damage_type, slot_level, buff_installed, target_character_id}`; broadcasts a `feature_used` card.
+- `tests/harness/test_cast_elemental_weapon.py`: new harness file (5 tests) — L3 → +1/1d4, L5 → +2/2d4, L7 → +3/3d4 cold (each verified against the persisted buff effects), the Paladin-caster gate (Sir Caelan), and the 409 cannot_cast on Krieger (Barbarian).
+
+### Changed
+- `docs/plans/spell-utility-upcast.md`: Phase 4 backlog table adds Elemental Weapon as ✅ shipped (second consumer); Phase 4 status line updated.
+
 ## [2.421.0] - 2026-06-17 — "The Tempered Edge"
 
 **Schema version:** 69

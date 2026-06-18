@@ -2577,6 +2577,19 @@ _SPELL_BONUS_MAP: dict[str, dict] = {
             (9, 3),     # L6+:   +3
         ],
     },
+    # Elemental Weapon (PHB p.237, Ranger/Paladin L3): "+1 bonus to attack
+    # rolls and deals an extra 1d4 damage of the chosen type." Upcast: "5th
+    # or 6th level → +2 / 2d4; 7th level or higher → +3 / 3d4." The single
+    # tier-walk value N drives BOTH riders — +N to attack and Nd4 extra
+    # damage — so the endpoint reads one number and derives `f"{N}d4"`.
+    "elemental-weapon": {
+        "base_level": 3,
+        "tiers": [
+            (4, 1),     # L3–L4: +1 / 1d4
+            (6, 2),     # L5–L6: +2 / 2d4
+            (9, 3),     # L7+:   +3 / 3d4
+        ],
+    },
 }
 
 
@@ -62446,6 +62459,170 @@ async def cast_magic_weapon(
         "ok": True,
         "feature": "magic-weapon",
         "bonus": bonus,
+        "slot_level": slot_level,
+        "buff_installed": buff_installed,
+        "target_character_id": target.id,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_elemental_weapon")
+async def cast_elemental_weapon(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.422.0 — Phase 4 rider/bonus scaling, second consumer. Elemental
+    Weapon (Ranger/Paladin L3, PHB p.237): "A nonmagical weapon you touch
+    becomes a magic weapon... the weapon has a +1 bonus to attack rolls and
+    deals an extra 1d4 damage of the chosen type when it hits." Upcast:
+    "When you cast this spell using a spell slot of 5th or 6th level, the
+    bonus to attack rolls increases to +2 and the extra damage increases to
+    2d4. When you use a spell slot of 7th level or higher, the bonus
+    increases to +3 and the extra damage increases to 3d4." (L3–4 → +1/1d4,
+    L5–6 → +2/2d4, L7+ → +3/3d4.)
+
+    Unlike Magic Weapon (one rider, non-concentration), Elemental Weapon
+    scales **two** riders off the same tier value N — a +N attack bonus AND
+    an Nd4 extra-damage die of a chosen element — and is **concentration**
+    (up to 1 hour). It reuses the Phase 4 substrate (`_SPELL_BONUS_MAP` via
+    `_spell_bonus_for_slot()`): the integer N drives both `+N` and
+    `f"{N}d4"`. The element is the caster's choice (`damage_type`, default
+    fire). Installs the buff on the target (caster by default, or
+    `target_character_id`) carrying informational `weapon_attack_bonus` /
+    `weapon_bonus_damage_dice` / `weapon_bonus_damage_type` effects. Gates
+    on knowing Elemental Weapon OR being a Ranger / Paladin.
+
+    Body: ``{character_id, slot_level?, target_character_id?, damage_type?}``.
+
+    Response: ``{ok, feature, bonus, bonus_dice, damage_type, slot_level,
+    buff_installed, target_character_id}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    try:
+        slot_level = int(body.get("slot_level") or 3)
+    except (TypeError, ValueError):
+        slot_level = 3
+    bonus = _spell_bonus_for_slot(
+        "elemental-weapon", slot_level, default_bonus=1)
+    bonus_dice = f"{bonus}d4"
+    _ALLOWED_ELEMENTS = {"acid", "cold", "fire", "lightning", "thunder"}
+    damage_type = str(body.get("damage_type") or "fire").strip().lower()
+    if damage_type not in _ALLOWED_ELEMENTS:
+        damage_type = "fire"
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_ew = any(
+        (s.get("_slug") == "elemental-weapon")
+        or (str(s.get("name", "")).lower() == "elemental weapon")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"ranger", "paladin"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_ew and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Elemental Weapon, or ranger/paladin",
+            "got_class": _cls,
+        })
+
+    target_char_id = body.get("target_character_id")
+    try:
+        target_char_id = int(target_char_id) if target_char_id else char.id
+    except (TypeError, ValueError):
+        target_char_id = char.id
+    target = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target:
+        raise HTTPException(404, "Target character not found")
+
+    buff_installed = await _install_buff(campaign_id, target.id, {
+        "key": "elemental-weapon",
+        "name": f"Elemental Weapon (+{bonus}, {bonus_dice} {damage_type})",
+        "icon": "🔥",
+        "duration_rounds": 600,   # 1 hour @ 6 s/round
+        "duration_max": 600,
+        "concentration": True,
+        "source_char_id": char.id,
+        "effects": {
+            "weapon_attack_bonus": bonus,
+            "weapon_bonus_damage_dice": bonus_dice,
+            "weapon_bonus_damage_type": damage_type,
+        },
+        "desc": (
+            f"Weapon gains +{bonus} to attack rolls and deals an extra "
+            f"{bonus_dice} {damage_type} damage on a hit for 1 hour "
+            f"(concentration). (Elemental Weapon, L{slot_level}.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(
+            db, target.id, _get_buffs(campaign_id, target.id))
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": (
+                f"🔥 Elemental Weapon — +{bonus} / {bonus_dice} {damage_type}"
+            ),
+            "feature_desc": (
+                f"{char.name} charges {target.name}'s weapon with "
+                f"{damage_type} energy: +{bonus} to attack rolls and an "
+                f"extra {bonus_dice} {damage_type} damage on a hit for 1 "
+                f"hour (concentration). (Elemental Weapon, L{slot_level}.)"
+            ),
+            "source": "elemental-weapon",
+            "bonus": bonus,
+            "bonus_dice": bonus_dice,
+            "damage_type": damage_type,
+            "slot_level": slot_level,
+            "target_character_id": target.id,
+            "buff_installed": buff_installed,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "elemental-weapon",
+        "bonus": bonus,
+        "bonus_dice": bonus_dice,
+        "damage_type": damage_type,
         "slot_level": slot_level,
         "buff_installed": buff_installed,
         "target_character_id": target.id,
