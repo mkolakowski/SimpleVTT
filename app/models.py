@@ -777,6 +777,38 @@ class ConcentrationEffect(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class AdminAuditLog(Base):
+    """Generic admin-action audit log (v2.427.0, schema v71).
+
+    Per ``docs/plans/cloudflare-edge-banning.md``. Records every
+    admin-triggered action that has a security or coordination
+    consequence — Phase 1 logs cloudflare-ban / cloudflare-unban;
+    future phases (campaign-delete, user-purge, demo-magic-link
+    mint) drop into the same schema.
+
+    The table is intentionally generic — ``action`` is a free-form
+    ``subsystem.event`` slug, ``target`` is the principal subject
+    of the action (an IP, a user id, a rule id), and ``notes`` is
+    operator commentary. Queries against the table go by
+    ``actor_user_id`` (who's been clicking what) or ``target``
+    (when did anyone touch this IP).
+    """
+    __tablename__ = "admin_audit_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    actor_user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=False,
+    )
+    action: Mapped[str] = mapped_column(String(60), nullable=False)
+    target: Mapped[str] = mapped_column(String(200), nullable=False)
+    scope: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    cloudflare_rule_id: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class DemoMagicLink(Base):
     """Single-use enforcement for demo magic-link tokens (v2.425.0,
     schema v70). See ``docs/plans/demo-magic-link.md``.

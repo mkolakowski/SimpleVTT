@@ -44,8 +44,28 @@ on the integration plan.
 
 ### Cloudflare — edge banning
 
-Status: **Phase 1 unstarted.** See
-[`docs/plans/cloudflare-edge-banning.md`](../plans/cloudflare-edge-banning.md).
+Status: **Phase 1 shipped (v2.427.0).** GM admins can ban IPs at the
+Cloudflare edge via the `/admin` page. Every ban + unban writes a row
+to the `admin_audit_log` table.
+
+Files:
+
+- [`cloudflare/mock/mappings/`](cloudflare/mock/) — wiremock stub
+  responses for dev + integration testing. Documented in
+  [`cloudflare/mock/README.md`](cloudflare/mock/README.md).
+
+Configure (in `.env`):
+
+```env
+CLOUDFLARE_API_TOKEN=<scoped: Zone:Access Rules:Edit only>
+CLOUDFLARE_ZONE_ID=<the zone for your SimpleVTT hostname>
+SIMPLEVTT_CLOUDFLARE_BANNING_ENABLED=true
+```
+
+The UI section on `/admin` lights up when both the client config and
+the `_ENABLED` gate are set. See
+[`docs/plans/cloudflare-edge-banning.md`](../plans/cloudflare-edge-banning.md)
+for the threat model + roadmap.
 
 ---
 
@@ -84,10 +104,12 @@ this only when a known reverse proxy sits in front of the app.
 | `demo_magic_link.verify_ok` | INFO | Demo magic-link verified + consumed. `sub=…` + `jti=…` + `user_id=…`. |
 | `demo_magic_link.verify_rejected` | WARNING | `reason=signature` / `expired` / `payload` / `replay` / `unknown_sub` / `user_missing` / `missing_token`. `reason=replay` is "ban immediately" — never legitimate. |
 
+| `cloudflare.ban_ok` | INFO | Edge-ban succeeded (v2.427.0). `ip_target=…` + `actor_id=…` + `rule_id=…`. |
+| `cloudflare.ban_failed` | WARNING | Edge-ban failed (v2.427.0). `reason=connection|api_error` + `upstream_status=…` when applicable. |
+| `cloudflare.unban_ok` | INFO | Edge-unban succeeded (v2.427.0). |
+| `cloudflare.unban_failed` | WARNING | Edge-unban failed (v2.427.0). |
+
 Planned events (per
-[`docs/plans/fail2ban-crowdsec-integration.md`](../plans/fail2ban-crowdsec-integration.md)
-and
-[`docs/plans/cloudflare-edge-banning.md`](../plans/cloudflare-edge-banning.md)):
+[`docs/plans/fail2ban-crowdsec-integration.md`](../plans/fail2ban-crowdsec-integration.md)):
 
 - `ws.connect_rejected`
-- `cloudflare.ban_ok` / `ban_failed` / `unban_ok` / `unban_failed`

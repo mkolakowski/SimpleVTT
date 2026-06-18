@@ -61,6 +61,17 @@ services:
       # the real client IP, not the proxy's. See
       # docs/plans/fail2ban-crowdsec-integration.md for the threat model.
       TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-0}
+      # v2.427.0 — Cloudflare edge-banning Phase 1.
+      # Three vars configure the OUTBOUND client; the fourth gates the
+      # GM-facing button. CRITICAL: leave all four off in production
+      # unless you're actively operating the ban controls. Default base
+      # URL is the public Cloudflare API; the dev profile's
+      # cloudflare-mock service overrides with a wiremock URL so
+      # integration testing works without burning real quota.
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+      CLOUDFLARE_ZONE_ID: ${CLOUDFLARE_ZONE_ID:-}
+      CLOUDFLARE_API_BASE_URL: ${CLOUDFLARE_API_BASE_URL:-https://api.cloudflare.com/client/v4}
+      SIMPLEVTT_CLOUDFLARE_BANNING_ENABLED: ${SIMPLEVTT_CLOUDFLARE_BANNING_ENABLED:-false}
       # v2.49.12: test-suite knobs (encounter-sim plan, Phase 1).
       # TEST_MODE conditionally mounts /api/test/* endpoints — leave
       # OFF in production. DICE_SEED, when an integer, makes every
@@ -94,6 +105,32 @@ services:
       - ./scripts/backup.sh:/usr/local/bin/backup.sh:ro
       - ./scripts/entrypoint-backup.sh:/usr/local/bin/entrypoint-backup.sh:ro
     entrypoint: ["/bin/sh", "/usr/local/bin/entrypoint-backup.sh"]
+
+  # v2.427.0 — wiremock service that fakes Cloudflare's IP Access
+  # Rules API for dev + integration tests. Gated behind the ``dev``
+  # profile so production stacks don't pull the image; bring up
+  # with ``docker compose --profile dev up cloudflare-mock``. The
+  # fixtures live under ./docs/integrations/cloudflare/mock/ —
+  # canned 200 responses for POST/DELETE/GET on the access_rules
+  # endpoint. To use, set in .env:
+  #   CLOUDFLARE_API_TOKEN=dev-fake-token
+  #   CLOUDFLARE_ZONE_ID=dev-fake-zone
+  #   CLOUDFLARE_API_BASE_URL=http://cloudflare-mock:8080/client/v4
+  #   SIMPLEVTT_CLOUDFLARE_BANNING_ENABLED=true
+  cloudflare-mock:
+    image: wiremock/wiremock:3.10.0
+    container_name: simplevtt-cloudflare-mock
+    profiles:
+      - dev
+    ports:
+      - "8014:8080"
+    volumes:
+      - ./docs/integrations/cloudflare/mock:/home/wiremock:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/__admin/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
 volumes:
   backup_data:

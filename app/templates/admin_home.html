@@ -65,6 +65,104 @@
     </ul>
 </section>
 
+{% if cloudflare_banning_enabled %}
+<section>
+    <h2>Cloudflare edge bans</h2>
+    <p class="muted">
+        Add an IP to your configured Cloudflare zone's IP Access Rules so requests
+        from that IP get 403'd at the edge. Both
+        <code>CLOUDFLARE_API_TOKEN</code>/<code>ZONE_ID</code> and
+        <code>SIMPLEVTT_CLOUDFLARE_BANNING_ENABLED</code> are on, so this section is live.
+        See <a href="/wiki/doc/plan-cloudflare-edge-banning">the design plan</a> for the threat model.
+        Every ban + unban also writes a row to the <code>admin_audit_log</code> table
+        (who clicked, what they banned, when).
+    </p>
+    <form id="ban-ip-form" class="row" onsubmit="return banIpAtEdge(event)">
+        <input name="ip" type="text" placeholder="IP address (e.g. 198.51.100.10)" required style="width:18em">
+        <input name="notes" type="text" placeholder="notes (optional)" style="width:24em">
+        <button type="submit">Ban at edge</button>
+    </form>
+    <div id="ban-ip-result" style="margin-top:8px"></div>
+    <h3 style="margin-top:1em">Recent edge-ban actions</h3>
+    {% if recent_edge_bans %}
+    <table class="data">
+        <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Notes</th><th></th></tr></thead>
+        <tbody>
+            {% for r in recent_edge_bans %}
+            <tr>
+                <td>{{ r.created_at.strftime('%Y-%m-%d %H:%M UTC') if r.created_at else '' }}</td>
+                <td>#{{ r.actor_user_id }}</td>
+                <td>{{ r.action }}</td>
+                <td><code>{{ r.target }}</code></td>
+                <td>{{ r.notes or '' }}</td>
+                <td>
+                    {% if r.action == 'cloudflare.ban_ip' and r.cloudflare_rule_id %}
+                    <button type="button" onclick="unbanIpAtEdge('{{ r.cloudflare_rule_id }}', this)">Unban</button>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No edge-ban actions recorded yet.</p>
+    {% endif %}
+    <script>
+        async function banIpAtEdge(ev) {
+            ev.preventDefault();
+            const form = document.getElementById('ban-ip-form');
+            const result = document.getElementById('ban-ip-result');
+            const ip = form.querySelector('[name=ip]').value.trim();
+            const notes = form.querySelector('[name=notes]').value.trim();
+            if (!ip) { result.textContent = 'Enter an IP.'; return false; }
+            result.textContent = 'Banning…';
+            try {
+                const resp = await fetch('/admin/cloudflare/ban_ip', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ip: ip, notes: notes}),
+                });
+                if (!resp.ok) {
+                    const txt = await resp.text();
+                    result.innerHTML = '<span style="color:#c33">Failed: ' + resp.status +
+                        ' — ' + (txt || 'unknown') + '</span>';
+                    return false;
+                }
+                const j = await resp.json();
+                result.innerHTML = '<span style="color:#2a2">Banned. Rule id: <code>' +
+                    j.rule_id + '</code>. Reload the page to see it in the table.</span>';
+            } catch (e) {
+                result.innerHTML = '<span style="color:#c33">Network error: ' + (e.message || e) + '</span>';
+            }
+            return false;
+        }
+        async function unbanIpAtEdge(ruleId, btn) {
+            btn.disabled = true;
+            btn.textContent = 'Unbanning…';
+            try {
+                const resp = await fetch('/admin/cloudflare/unban_ip', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({rule_id: ruleId}),
+                });
+                if (!resp.ok) {
+                    const txt = await resp.text();
+                    btn.disabled = false;
+                    btn.textContent = 'Unban';
+                    alert('Unban failed: ' + resp.status + ' — ' + (txt || 'unknown'));
+                    return;
+                }
+                btn.textContent = 'Unbanned ✓';
+            } catch (e) {
+                btn.disabled = false;
+                btn.textContent = 'Unban';
+                alert('Network error: ' + (e.message || e));
+            }
+        }
+    </script>
+</section>
+{% endif %}
+
 {% if magic_link_enabled %}
 <section>
     <h2>Demo magic-link login</h2>

@@ -17,6 +17,7 @@ from .auth import register_oauth
 from .config import get_settings
 from .database import init_db, record_schema_version
 from .routes import (
+    admin_audit_routes,
     admin_routes,
     audio_routes,
     auth_routes,
@@ -63,6 +64,14 @@ app.include_router(wiki_routes.router)
 # ``DEMO_MODE`` + ``SIMPLEVTT_DEMO_MAGIC_LINK_ENABLED`` from
 # os.environ on every call so a hot env-var flip is honored.
 app.include_router(demo_magic_link_routes.router)
+
+# v2.427.0 — Phase 1 of docs/plans/cloudflare-edge-banning.md.
+# Admin-only edge-banning endpoints + the generic admin_audit_log
+# table. Like demo_magic_link_routes, the router registers
+# unconditionally and every endpoint guards on the per-request
+# ``cloudflare.cloudflare_banning_enabled()`` predicate, returning
+# 503 when the gates aren't both open.
+app.include_router(admin_audit_routes.router)
 
 # v2.49.12: TEST_MODE-only routes (e.g. dice-seed for the encounter-sim
 # test suite, see docs/plans/encounter-sim-test-suite.md). Conditionally

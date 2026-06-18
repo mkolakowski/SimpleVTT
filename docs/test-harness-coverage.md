@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3384 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.426.0, 2026-06-18).
+**Total tests:** 3395 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.427.0, 2026-06-18).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5311,6 +5311,26 @@ Read-only doc-hub routes added in v2.43.3, expanded in v2.49.9 with the `/wiki/d
 | `test_wiki_doc_serves_cloudflare_edge_banning_plan` | v2.423.5: `GET /wiki/doc/plan-cloudflare-edge-banning` → 200, body contains "cloudflare" + "edge-banning" + the nav menu. Resolves through the allowlist to `docs/plans/cloudflare-edge-banning.md` (outbound Cloudflare API client + GM-only "Ban IP at edge" button + admin-audit log + wiremock service in docker-compose for dev per the third-party-API rule; closes the three-piece security spine started in v2.423.2). |
 | `test_wiki_doc_unknown_slug_404` | v2.49.9: a slug that isn't in `_DOC_ALLOWLIST` → 404. Important security guarantee — the allowlist is the only way to reach a file outside `docs/wiki/`. |
 | `test_wiki_doc_traversal_blocked` | v2.49.9: directory-traversal characters in the doc slug → 404 / 400, rejected by the slug guard before the allowlist lookup. |
+
+---
+
+## Cloudflare edge-banning (Phase 1 — v2.427.0)
+
+Mix of in-process unit tests on `app/integrations/cloudflare.py` predicates + integration tests against the dev container with the gates off. Lives in `tests/harness/test_cloudflare_banning.py`. The actual HTTP-call paths are exercised manually against the wiremock service (`docker compose --profile dev up cloudflare-mock`) + flipped env vars; a permanent end-to-end test is filed for Phase 1B.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_integration_disabled_by_default` | With `CLOUDFLARE_API_TOKEN` + `ZONE_ID` unset, `integration_enabled()` is False and `_read_config()` returns None. |
+| `test_integration_requires_both_token_and_zone` | Either env var alone doesn't enable the client. |
+| `test_integration_uses_custom_base_url` | `CLOUDFLARE_API_BASE_URL` override is honored; trailing slash stripped so URL composition stays clean. |
+| `test_integration_defaults_to_public_api` | Without override, base URL defaults to `https://api.cloudflare.com/client/v4`. |
+| `test_banning_requires_both_client_and_ui_gate` | Client config + `SIMPLEVTT_CLOUDFLARE_BANNING_ENABLED=true` both required for `cloudflare_banning_enabled()` to return True. Either off → False. |
+| `test_banning_gate_accepts_truthy_variants` | Truthy parse for `1/true/yes/on` case-insensitively; falsy parse for `0/false/no/off/empty/garbage`. |
+| `test_ban_ip_returns_503_when_gate_off` | `POST /admin/cloudflare/ban_ip` against the dev container (gates off by default) → 503 even for admin. `detail=cloudflare_banning_not_configured`. |
+| `test_unban_ip_returns_503_when_gate_off` | `POST /admin/cloudflare/unban_ip` → 503. |
+| `test_edge_bans_list_returns_503_when_gate_off` | `GET /admin/cloudflare/edge_bans` → 503. |
+| `test_ban_ip_returns_403_for_non_admin` | Logged-in non-admin (`demo-alice`) → 403 even before the gate check (`require_admin` fires first, by design — preserves the standard `/login` redirect for users exploring the UI). |
+| `test_ban_ip_returns_401_for_anonymous` | Anonymous → 401. |
 
 ---
 

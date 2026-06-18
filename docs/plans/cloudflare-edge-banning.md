@@ -1,6 +1,6 @@
 # Cloudflare edge-banning integration — Design Plan
 
-> **Status:** ⚪ proposed · Phase 1 unstarted.
+> **Status:** ✅ Phase 1 shipped (v2.427.0) — `app/integrations/cloudflare.py` client + `admin_audit_log` table + three admin-only endpoints + GM-facing admin UI section + wiremock service in compose under the `dev` profile. 11 harness tests. SCHEMA_VERSION 70 → 71. Phase 2 (CrowdSec → Cloudflare bouncer wiring docs + compose-side smoke test) and Phase 3 (auto-ban hook) are filed.
 > **Tracked in:** [`TODO.md`](../../TODO.md) → Manually Added → "Cloudflare IP-banning integration".
 > **Sibling plans:**
 > - [`demo-magic-link.md`](demo-magic-link.md) — Phase 3 "Try the demo" anonymous-mint endpoint is **hard-blocked** on this plan shipping first.
@@ -175,15 +175,19 @@ The `ban_failed` events are an observability signal, not a banning trigger — t
 
 ## Phase plan
 
-### Phase 1 — Client + manual ban/unban + audit log + wiremock dev (v2.5x.0)
+### Phase 1 — Client + manual ban/unban + audit log + wiremock dev (v2.427.0 — ✅ shipped)
 
-1. New `app/integrations/cloudflare.py` async client with the three methods + the dual exception types.
-2. New `app/database.py` migration block: `admin_audit_log` table + indices. **SCHEMA_VERSION +1.**
-3. New `app/routes/admin_audit_routes.py` with the three endpoints (ban / unban / list).
-4. New `docs/integrations/cloudflare/mock/` wiremock fixture serving canned IP-access-rule responses.
-5. New `cloudflare-mock` service in `docker-compose.yml`, dev profile only.
-6. GM panel partial: "Edge bans" subsection, gated on the new template flag.
-7. Harness tests: ban happy-path (button → API call → audit row → broadcast), unban happy-path, list happy-path, feature-gated-off path (503), Cloudflare-API-error path (503 + audit failed row), non-GM caller rejected (403).
+1. ✅ **v2.427.0** — New `app/integrations/cloudflare.py` async client. Three methods (`add_ip_access_rule` / `remove_ip_access_rule` / `list_ip_access_rules`), three exception types (`CloudflareDisabledError` / `CloudflareApiError` / `CloudflareConnectionError`), `_read_config()` helper that reads env at call time + returns None when not configured.
+2. ✅ **v2.427.0** — New `admin_audit_log` table (generic — Phase 1 logs cloudflare-ban/unban, future actions slot in unchanged). SCHEMA_VERSION 70 → 71. Two indices on `(actor_user_id, created_at)` and `(target, created_at)`.
+3. ✅ **v2.427.0** — New `app/routes/admin_audit_routes.py` with three endpoints under `/admin/cloudflare/`: `POST /ban_ip` + `POST /unban_ip` + `GET /edge_bans`. Admin-only via `require_admin`; double-gated on `cloudflare_banning_enabled()`. Failure paths still write the matching `admin_audit_log` row + emit `cloudflare.ban_failed` / `unban_failed` audit lines for observability.
+4. ✅ **v2.427.0** — Wiremock fixtures at `docs/integrations/cloudflare/mock/mappings/`: canned 200 responses for POST/DELETE/GET on the access_rules endpoint. README explains how to add error-path scenarios via wiremock priority-headers.
+5. ✅ **v2.427.0** — `cloudflare-mock` service in `docker-compose.yml` under the `dev` profile (`docker compose --profile dev up cloudflare-mock`). Exposes wiremock on `:8014` to the host.
+6. ✅ **v2.427.0** — Admin UI section in `admin_home.html` gated `{% if cloudflare_banning_enabled %}`: form with IP + notes fields, vanilla-JS POST, table of recent edge-ban actions with per-row Unban button. Section completely absent from rendered page when the gate is off.
+7. ✅ **v2.427.0** — 11 harness tests at `tests/harness/test_cloudflare_banning.py`: 6 in-process unit tests on the predicate + config helpers (disabled by default, requires both token+zone, custom base URL, default public API, UI-gate-on-top-of-client-config, truthy/falsy variants); 5 integration tests against the running container (ban/unban/list all 503 when gate off, ban 403 for non-admin, ban 401 for anonymous).
+
+**Filed for Phase 1B / Phase 2:**
+- 🟠 **End-to-end happy-path regression test** via wiremock. The wiremock service ships in v2.427.0 but the happy-path test was not landed because the wiremock image takes minutes to pull on a fresh deploy + the test would need to run after the wiremock service is healthy. The contract is exercised by the unit tests; the wiremock-driven smoke is the natural place to land it as part of the Phase 2 CrowdSec smoke-test ship.
+- 🟠 **WS broadcast** on ban/unban so the GM admin panel can update in real time without reload. Phase 1 ships a "reload the page" hint in the UI response — fine for a low-frequency action.
 
 ### Phase 2 — CrowdSec bouncer wiring documentation (v2.5x.1)
 

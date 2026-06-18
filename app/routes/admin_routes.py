@@ -79,6 +79,18 @@ def admin_home(
     # predicate here keeps the gate logic in one place.
     from ..demo_magic_link import magic_link_enabled
     from ..demo_seed import DEMO_EMAILS as _DEMO_EMAILS
+    from ..integrations.cloudflare import cloudflare_banning_enabled
+    from ..models import AdminAuditLog
+    cf_enabled = cloudflare_banning_enabled()
+    recent_edge_bans = []
+    if cf_enabled:
+        recent_edge_bans = (
+            db.query(AdminAuditLog)
+            .filter(AdminAuditLog.action.in_(["cloudflare.ban_ip", "cloudflare.unban_ip"]))
+            .order_by(AdminAuditLog.created_at.desc())
+            .limit(20)
+            .all()
+        )
     return templates.TemplateResponse(
         "admin_home.html",
         {
@@ -89,6 +101,8 @@ def admin_home(
             "settings": get_settings(),
             "magic_link_enabled": magic_link_enabled(),
             "demo_emails": _DEMO_EMAILS,
+            "cloudflare_banning_enabled": cf_enabled,
+            "recent_edge_bans": recent_edge_bans,
         },
     )
 

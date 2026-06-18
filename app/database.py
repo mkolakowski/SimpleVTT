@@ -796,6 +796,46 @@ def _apply_inline_migrations() -> None:
             ")"
         ))
 
+    # ---- Schema v71 (2.427.0): admin_audit_log table ----
+    # Phase 1 of docs/plans/cloudflare-edge-banning.md. Generic
+    # admin-action audit log — Phase 1 logs cloudflare-ban /
+    # cloudflare-unban; future phases (campaign-delete, user-purge,
+    # demo-magic-link mint events) drop into the same schema. Queries
+    # go by actor_user_id or target. ``Base.metadata.create_all``
+    # already creates the table; this block is a belt-and-suspenders
+    # CREATE TABLE IF NOT EXISTS + the two supporting indices.
+    with engine.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS admin_audit_log ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "actor_user_id INTEGER NOT NULL REFERENCES users(id), "
+            "action VARCHAR(60) NOT NULL, "
+            "target VARCHAR(200) NOT NULL, "
+            "scope VARCHAR(100), "
+            "cloudflare_rule_id VARCHAR(80), "
+            "notes TEXT, "
+            "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            ")" if engine.dialect.name == "sqlite" else
+            "CREATE TABLE IF NOT EXISTS admin_audit_log ("
+            "id BIGSERIAL PRIMARY KEY, "
+            "actor_user_id BIGINT NOT NULL REFERENCES users(id), "
+            "action VARCHAR(60) NOT NULL, "
+            "target VARCHAR(200) NOT NULL, "
+            "scope VARCHAR(100), "
+            "cloudflare_rule_id VARCHAR(80), "
+            "notes TEXT, "
+            "created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()"
+            ")"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS admin_audit_log_actor_idx "
+            "ON admin_audit_log (actor_user_id, created_at)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS admin_audit_log_target_idx "
+            "ON admin_audit_log (target, created_at)"
+        ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

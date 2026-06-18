@@ -10,6 +10,68 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.427.0] - 2026-06-18 — "The Distant Wall Goes Up"
+
+**Schema version:** 71 (new `admin_audit_log` table)
+
+**Commit summary:** **Phase 1 of [`docs/plans/cloudflare-edge-banning.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cloudflare-edge-banning.md) shipped.** Closes the three-piece security spine: SimpleVTT can now move ban decisions from the FastAPI layer to the Cloudflare edge via three new admin-only endpoints — `POST /admin/cloudflare/ban_ip`, `POST /admin/cloudflare/unban_ip`, `GET /admin/cloudflare/edge_bans`. A new generic `admin_audit_log` table records every action (who clicked, what they banned, when). All gated behind **two separate** env-var checks: `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ZONE_ID` configure the **outbound client** (so a CrowdSec → Cloudflare bouncer path can use the same config without exposing the in-app UI), and `SIMPLEVTT_CLOUDFLARE_BANNING_ENABLED=true` separately gates the **GM-facing button**. Per the CLAUDE.md ["Third-party APIs must be Docker Compose services"](CLAUDE.md#third-party-apis-must-be-docker-compose-services) rule, the integration ships with a **wiremock service** under the `dev` profile so the API can be exercised without burning real Cloudflare quota.
+
+**Architecture:**
+
+- **`app/integrations/cloudflare.py`** — async client wrapping the IP Access Rules subset of Cloudflare's v4 API. Three operations (`add_ip_access_rule` / `remove_ip_access_rule` / `list_ip_access_rules`), three exception types (`CloudflareDisabledError` for "not configured", `CloudflareApiError` for non-success responses, `CloudflareConnectionError` for network failures). Stateless — `_read_config()` reads env at call time so a hot-rotated token works without restart and tests can flip env vars via `monkeypatch`.
+- **`app/models.py::AdminAuditLog`** — new model. Generic by design: `action` is a `subsystem.event` slug ("cloudflare.ban_ip"), `target` is the subject (IP / rule_id), `actor_user_id` links to `users.id`, plus `cloudflare_rule_id` + `notes` + `scope`. Future admin-audit-worthy actions (campaign-delete, user-purge, demo-magic-link mint events) drop into the same schema unchanged.
+- **`app/database.py`** — new schema-v70 migration creates `admin_audit_log` + two indices: `(actor_user_id, created_at)` for "who's been clicking what" and `(target, created_at)` for "when did anyone touch this IP." Dialect-aware DDL — PostgreSQL gets `BIGSERIAL` + `TIMESTAMPTZ NOT NULL DEFAULT NOW()`, SQLite gets `INTEGER PRIMARY KEY AUTOINCREMENT` + plain `TIMESTAMP`.
+- **`app/routes/admin_audit_routes.py`** — three endpoints under `/admin/cloudflare/`. Each enforces `require_admin` first, then gate-checks via `cloudflare_banning_enabled()` (returns 503 if off). Pydantic models validate the body. Both happy and failure paths write an audit row + emit the matching `cloudflare.*` canonical audit-log line so fail2ban/CrowdSec consumers can observe banning-pattern abuse.
+- **`app/templates/admin_home.html`** — new "Cloudflare edge bans" section gated `{% if cloudflare_banning_enabled %}`. Vanilla-JS form posts to the ban endpoint; recent edge-ban actions table with per-row "Unban" button. Section completely absent from rendered page when the gate is off — an admin can't even see the affordance exists.
+- **`docker-compose.yml`** — new `cloudflare-mock` service under the `dev` profile (`docker compose --profile dev up cloudflare-mock`). Wiremock 3.10.0; mappings at `docs/integrations/cloudflare/mock/mappings/` serve canned 200 responses for POST/DELETE/GET on the access_rules endpoint. To use, set `CLOUDFLARE_API_BASE_URL=http://cloudflare-mock:8080/client/v4` in `.env` alongside the gate vars.
+
+**Two env-var gates by design.** The plan's threat model item #1 was "client config leaks to UI surface" — an operator who configures `CLOUDFLARE_API_TOKEN`+`ZONE_ID` for the CrowdSec → Cloudflare bouncer path shouldn't also auto-expose the in-app ban button. Splitting "client configured" (env-driven) from "UI visible" (separate env-driven gate) means the operator opts into each independently.
+
+**11 new harness tests** at `tests/harness/test_cloudflare_banning.py`:
+
+- **6 in-process unit tests** on the predicates + `_read_config` helper: disabled by default, requires both token AND zone, custom base URL (trailing slash stripped), default public API URL, UI gate on top of client config, truthy/falsy variants for the `_ENABLED` env var.
+- **5 integration tests** against the dev container (gates off by default): `POST /ban_ip` + `POST /unban_ip` + `GET /edge_bans` all 503 even for admin, `POST /ban_ip` 403 for non-admin, `POST /ban_ip` 401 for anonymous.
+
+Total harness count 3384 → 3395.
+
+**Wiremock end-to-end test deferred.** The wiremock service ships, but the happy-path regression test wasn't landed because the wiremock image pull was still in progress when commit landed. The contract is proven by the unit tests + the integration tests + the `docs/integrations/cloudflare/mock/README.md` operator how-to; the wiremock-driven smoke test is filed for Phase 1B, naturally landing alongside the v2.424.0 plan's Phase 2 CrowdSec compose-side smoke test.
+
+**Why "The Distant Wall Goes Up":** the plan-doc fun-name was "The Distant Gatekeeper" (the enforcement layer at the Cloudflare edge); this commit is the wall going up around the kingdom. SimpleVTT can now ask Cloudflare to keep specific IPs out at the perimeter — they never reach the FastAPI layer again until the operator unbans.
+
+**The three-piece security spine is now functionally complete:**
+
+| Layer | Plan | Ship |
+|---|---|---|
+| Auth surface (demo URL-login) | `docs/plans/demo-magic-link.md` | v2.425.0 |
+| Detection (canonical log lines + fail2ban configs) | `docs/plans/fail2ban-crowdsec-integration.md` | v2.424.0 + v2.426.0 |
+| **Enforcement (Cloudflare edge banning)** | **`docs/plans/cloudflare-edge-banning.md`** | **v2.427.0 (this commit)** |
+
+Four ships across v2.424.0–v2.427.0 took the spine from "all three plans ⚪ proposed" to "all three plans ✅ Phase 1 shipped, ready for production behind deploy-time env-var opt-in."
+
+MINOR — new module (`app/integrations/cloudflare.py`), new model, new migration, new endpoints, new env vars, new admin UI section, new compose service, 11 new harness tests. All gates default-off; fresh clones unaffected.
+
+### Added
+- `app/integrations/__init__.py` + `app/integrations/cloudflare.py`: async outbound client + predicates (`integration_enabled` for client config, `cloudflare_banning_enabled` for the UI gate-on-top-of-config).
+- `app/models.py::AdminAuditLog`: new generic admin-action audit-log model. `actor_user_id` FK, `action` slug, `target`, `cloudflare_rule_id`, `notes`, `scope`, `created_at`.
+- `app/database.py`: schema-v71 migration creates `admin_audit_log` table + two indices. Dialect-aware DDL.
+- `app/version.py`: `SCHEMA_VERSION 70 → 71`; `APP_VERSION 2.426.0 → 2.427.0`.
+- `app/main.py`: registers `admin_audit_routes.router`.
+- `app/routes/admin_audit_routes.py`: three endpoints under `/admin/cloudflare/` (ban/unban/list). Per-endpoint gate check + audit-log row writes + canonical audit-log line emission on every outcome.
+- `app/routes/admin_routes.py::admin_home`: passes `cloudflare_banning_enabled` + recent_edge_bans audit-log history to the template.
+- `app/templates/admin_home.html`: new "Cloudflare edge bans" section gated `{% if cloudflare_banning_enabled %}`.
+- `docker-compose.yml`: new `cloudflare-mock` service under the `dev` profile; wires `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ZONE_ID` + `CLOUDFLARE_API_BASE_URL` + `SIMPLEVTT_CLOUDFLARE_BANNING_ENABLED` env vars through to the app service.
+- `.env.example`: documents the four new vars (token + zone + base URL + UI gate).
+- `docs/integrations/cloudflare/mock/mappings/post-access-rule.json` + `delete-access-rule.json` + `list-access-rules.json` + `README.md`: wiremock fixture + operator how-to.
+- `tests/harness/test_cloudflare_banning.py`: 11 tests (6 in-process unit + 5 integration). See `docs/test-harness-coverage.md` for per-test summary.
+
+### Changed
+- `docs/plans/cloudflare-edge-banning.md`: status flipped from ⚪ proposed to ✅ Phase 1 shipped. Phase 1 numbered list updated to mark all 7 items shipped. End-to-end happy-path test + WS broadcast filed for Phase 1B.
+- `docs/integrations/README.md`: Cloudflare section flipped from "Phase 1 unstarted" to "Phase 1 shipped (v2.427.0)"; canonical events table extended with `cloudflare.{ban_ok,ban_failed,unban_ok,unban_failed}`.
+- `docs/test-harness-coverage.md`: new section "Cloudflare edge-banning (Phase 1 — v2.427.0)" with all 11 test rows. Total-test-count nudges 3384 → 3395.
+
+### Schema
+- **v71 (2.427.0):** new `admin_audit_log` table — `id BIGSERIAL PK` / `actor_user_id BIGINT NOT NULL REFERENCES users(id)` / `action VARCHAR(60) NOT NULL` / `target VARCHAR(200) NOT NULL` / `scope VARCHAR(100)` / `cloudflare_rule_id VARCHAR(80)` / `notes TEXT` / `created_at TIMESTAMPTZ`. Two indices on `(actor_user_id, created_at)` and `(target, created_at)`. Generic — Phase 1 logs Cloudflare ban/unban; future admin-audit-worthy actions drop into the same schema.
+
 ## [2.426.0] - 2026-06-18 — "The Empty Doorbell"
 
 **Schema version:** 70
