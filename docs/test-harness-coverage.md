@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3395 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.427.0, 2026-06-18).
+**Total tests:** 3404 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.428.0, 2026-06-18).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5331,6 +5331,15 @@ Mix of in-process unit tests on `app/integrations/cloudflare.py` predicates + in
 | `test_edge_bans_list_returns_503_when_gate_off` | `GET /admin/cloudflare/edge_bans` → 503. |
 | `test_ban_ip_returns_403_for_non_admin` | Logged-in non-admin (`demo-alice`) → 403 even before the gate check (`require_admin` fires first, by design — preserves the standard `/login` redirect for users exploring the UI). |
 | `test_ban_ip_returns_401_for_anonymous` | Anonymous → 401. |
+| `test_add_ip_access_rule_sends_correct_request` | v2.428.0: monkeypatches `httpx.AsyncClient` with a request-capturing fake. Asserts the POST URL composes correctly from `base + /zones/{zoneId}/firewall/access_rules/rules`, the `Authorization: Bearer <token>` + `Content-Type: application/json` headers are sent, and the JSON body carries the right `mode`/`configuration.target`/`configuration.value`/`notes` fields. Parses `result.id` out of the canned success response. |
+| `test_add_ip_access_rule_raises_on_non_200` | A 500 upstream raises `CloudflareApiError` with `status_code=500`. |
+| `test_add_ip_access_rule_raises_on_success_false` | A 200 response with `success: false` (e.g. invalid token, validation error) raises `CloudflareApiError`. |
+| `test_add_ip_access_rule_raises_disabled_when_env_unset` | With token + zone env unset, the call raises `CloudflareDisabledError` **before** any HTTP attempt. |
+| `test_remove_ip_access_rule_sends_delete` | `DELETE` request, URL composes to `.../rules/{rule_id}`. |
+| `test_remove_ip_access_rule_treats_404_as_success` | A 404 from Cloudflare is logged + treated as success — the rule was already gone (operator removed via dashboard, etc.). Idempotent. |
+| `test_list_ip_access_rules_returns_array` | Parses `result` array out of the response; sends `per_page=100`. |
+| `test_list_ip_access_rules_with_ip_filter` | `ip="..."` argument adds the `configuration.value` query param. |
+| `test_notes_truncated_at_1024_chars` | Notes longer than Cloudflare's 1024-char cap are truncated client-side before being sent. |
 
 ---
 

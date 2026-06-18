@@ -177,3 +177,164 @@ async def test_ban_ip_returns_401_for_anonymous():
             json={"ip": "198.51.100.10"},
         )
     assert resp.status_code == 401
+
+
+# ─── In-process HTTP unit tests via httpx.AsyncClient monkeypatch ─────
+#
+# v2.428.0 — closes the v2.427.0 wiremock-deferred regression test by
+# exercising the real httpx call paths in-process. monkeypatches
+# httpx.AsyncClient with a tiny fake that captures the request and
+# returns canned responses. Covers what the wiremock-driven smoke
+# test would have covered:
+#
+#   - add_ip_access_rule sends the right URL + Bearer header + body
+#     shape, and parses the rule_id out of a success response.
+#   - remove_ip_access_rule treats 404 as idempotent-success (the
+#     rule was already gone — e.g. an operator removed it via the
+#     Cloudflare dashboard).
+#   - list_ip_access_rules returns the result array.
+#   - CloudflareApiError fires on non-200 responses.
+#   - CloudflareApiError fires on success=false responses.
+#   - CloudflareDisabledError fires when env vars are unset, with no
+#     HTTP call attempted.
+
+
+class _FakeResp:
+    def __init__(self, status_code, body):
+        self.status_code = status_code
+        self._body = body
+
+    def json(self):
+        if isinstance(self._body, dict):
+            return self._body
+        import json
+        return json.loads(self._body)
+
+    @property
+    def text(self):
+        if isinstance(self._body, dict):
+            import json
+            return json.dumps(self._body)
+        return self._body
+
+
+class _FakeClient:
+    """Captures the request and returns canned responses."""
+    captured: list = []
+    responses: dict = {}
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def post(self, url, *, headers=None, json=None, **kw):
+        _FakeClient.captured.append({"method": "POST", "url": url, "headers": headers, "body": json})
+        return _FakeClient.responses.get("POST", _FakeResp(200, {"success": True, "result": {"id": "captured-rule-id"}}))
+
+    async def delete(self, url, *, headers=None, **kw):
+        _FakeClient.captured.append({"method": "DELETE", "url": url, "headers": headers})
+        return _FakeClient.responses.get("DELETE", _FakeResp(200, {"success": True, "result": {"id": "removed"}}))
+
+    async def get(self, url, *, headers=None, params=None, **kw):
+        _FakeClient.captured.append({"method": "GET", "url": url, "headers": headers, "params": params})
+        return _FakeClient.responses.get("GET", _FakeResp(200, {
+            "success": True,
+            "result": [{"id": "rule-1", "configuration": {"value": "1.2.3.4"}, "mode": "block"}],
+        }))
+
+
+@pytest.fixture
+def fake_cf_client(monkeypatch):
+    """Wires the FakeClient into httpx + sets the env vars the client
+    code reads at call time. Clears the captured/responses state at
+    setup so tests don't bleed into each other.
+    """
+    import httpx as _httpx
+    monkeypatch.setattr(_httpx, "AsyncClient", _FakeClient)
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "test-token-xyz")
+    monkeypatch.setenv("CLOUDFLARE_ZONE_ID", "test-zone-abc")
+    monkeypatch.setenv("CLOUDFLARE_API_BASE_URL", "https://api.test.example/v4")
+    _FakeClient.captured = []
+    _FakeClient.responses = {}
+    yield _FakeClient
+
+
+async def test_add_ip_access_rule_sends_correct_request(fake_cf_client):
+    rule_id = await cf.add_ip_access_rule("198.51.100.10", notes="test ban")
+    assert rule_id == "captured-rule-id"
+    assert len(fake_cf_client.captured) == 1
+    req = fake_cf_client.captured[0]
+    assert req["method"] == "POST"
+    assert req["url"] == "https://api.test.example/v4/zones/test-zone-abc/firewall/access_rules/rules"
+    assert req["headers"]["Authorization"] == "Bearer test-token-xyz"
+    assert req["headers"]["Content-Type"] == "application/json"
+    body = req["body"]
+    assert body["mode"] == "block"
+    assert body["configuration"]["target"] == "ip"
+    assert body["configuration"]["value"] == "198.51.100.10"
+    assert body["notes"] == "test ban"
+
+
+async def test_add_ip_access_rule_raises_on_non_200(fake_cf_client):
+    fake_cf_client.responses["POST"] = _FakeResp(500, {"success": False, "errors": ["internal"]})
+    with pytest.raises(cf.CloudflareApiError) as exc:
+        await cf.add_ip_access_rule("198.51.100.10")
+    assert exc.value.status_code == 500
+
+
+async def test_add_ip_access_rule_raises_on_success_false(fake_cf_client):
+    fake_cf_client.responses["POST"] = _FakeResp(200, {"success": False, "errors": [{"code": 6003, "message": "Invalid token"}]})
+    with pytest.raises(cf.CloudflareApiError):
+        await cf.add_ip_access_rule("198.51.100.10")
+
+
+async def test_add_ip_access_rule_raises_disabled_when_env_unset(monkeypatch):
+    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
+    monkeypatch.delenv("CLOUDFLARE_ZONE_ID", raising=False)
+    with pytest.raises(cf.CloudflareDisabledError):
+        await cf.add_ip_access_rule("198.51.100.10")
+
+
+async def test_remove_ip_access_rule_sends_delete(fake_cf_client):
+    await cf.remove_ip_access_rule("rule-xyz")
+    req = fake_cf_client.captured[0]
+    assert req["method"] == "DELETE"
+    assert req["url"].endswith("/rules/rule-xyz")
+
+
+async def test_remove_ip_access_rule_treats_404_as_success(fake_cf_client):
+    """Idempotent delete: a 404 from Cloudflare means the rule was
+    already gone (operator removed it via dashboard, etc.). Should
+    not raise."""
+    fake_cf_client.responses["DELETE"] = _FakeResp(404, {"success": False, "errors": ["not found"]})
+    # Should not raise.
+    await cf.remove_ip_access_rule("already-gone")
+
+
+async def test_list_ip_access_rules_returns_array(fake_cf_client):
+    rules = await cf.list_ip_access_rules()
+    assert isinstance(rules, list)
+    assert len(rules) == 1
+    assert rules[0]["id"] == "rule-1"
+    # Verify the GET request shape.
+    req = fake_cf_client.captured[0]
+    assert req["method"] == "GET"
+    assert req["params"] == {"per_page": 100}
+
+
+async def test_list_ip_access_rules_with_ip_filter(fake_cf_client):
+    await cf.list_ip_access_rules(ip="203.0.113.7")
+    req = fake_cf_client.captured[0]
+    assert req["params"]["configuration.value"] == "203.0.113.7"
+
+
+async def test_notes_truncated_at_1024_chars(fake_cf_client):
+    long_notes = "a" * 2000
+    await cf.add_ip_access_rule("198.51.100.10", notes=long_notes)
+    body = fake_cf_client.captured[0]["body"]
+    assert len(body["notes"]) == 1024

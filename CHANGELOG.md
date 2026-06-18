@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.428.0] - 2026-06-18 — "The Captured Bell"
+
+**Schema version:** 71
+
+**Commit summary:** Closes the v2.427.0-deferred happy-path regression test. Instead of waiting for the wiremock image to finish pulling (it didn't — the pull was hung on Docker Hub for 45+ minutes at v2.427.0 commit time), the new tests monkeypatch `httpx.AsyncClient` in-process with a tiny request-capturing fake. Same coverage, zero external dependencies. 9 new tests bring the cloudflare-banning suite from 11 → 20 (3395 → 3404 harness total).
+
+**Description:** The captured-request test pattern matches what the wiremock smoke test would have asserted, just at a lower layer:
+
+- **Request shape**: composed URL (`base + /zones/{zoneId}/firewall/access_rules/rules`), `Authorization: Bearer <token>`, `Content-Type: application/json`, body carries the right `mode`/`configuration.target`/`configuration.value`/`notes`.
+- **Response parsing**: `rule_id` extracted from `result.id`.
+- **Error paths**: non-200 → `CloudflareApiError(status_code=…)`; 200 with `success: false` → `CloudflareApiError`; env vars unset → `CloudflareDisabledError` raised before any HTTP attempt.
+- **Idempotent delete**: 404 from Cloudflare logged + treated as success (the rule was already gone — e.g. operator removed it via the Cloudflare dashboard).
+- **List shape**: result array parsed; `per_page=100` sent by default; `ip=…` argument adds `configuration.value` query param.
+- **Client-side hygiene**: notes longer than Cloudflare's 1024-char cap are truncated client-side before send.
+
+The wiremock service stays in `docker-compose.yml` under the `dev` profile — it remains useful as **operator-side dev convenience** for an integrator who wants to point a live SimpleVTT at the canned Cloudflare API responses without burning real quota. The regression test just no longer depends on it being available.
+
+**Why "The Captured Bell":** the test pattern is "capture the request, ring the bell when SimpleVTT sends the wrong one." A tiny in-process fake answers the doorbell and writes down everything that arrived — the test then asserts the doorbell was rung with the right shape.
+
+PATCH — test-only ship. No app code touched.
+
+### Added
+- `tests/harness/test_cloudflare_banning.py`: new `_FakeResp` + `_FakeClient` test fixtures + `fake_cf_client` pytest fixture + 9 new tests covering the `httpx`-based call paths in `app/integrations/cloudflare.py`. Total cloudflare suite 11 → 20.
+
+### Changed
+- `docs/plans/cloudflare-edge-banning.md`: Phase 1B end-to-end happy-path test flipped from 🟠 filed to ✅ resolved (v2.428.0).
+- `docs/test-harness-coverage.md`: 9 new test rows in the Cloudflare edge-banning section; total-test-count nudges 3395 → 3404.
+
 ## [2.427.0] - 2026-06-18 — "The Distant Wall Goes Up"
 
 **Schema version:** 71 (new `admin_audit_log` table)
