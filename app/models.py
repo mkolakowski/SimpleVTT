@@ -777,6 +777,29 @@ class ConcentrationEffect(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class DemoMagicLink(Base):
+    """Single-use enforcement for demo magic-link tokens (v2.425.0,
+    schema v70). See ``docs/plans/demo-magic-link.md``.
+
+    Every successful verify writes the token's jti (16 random bytes
+    base64url-encoded — 22 chars) so a second attempt with the same
+    token fails the unique-constraint and 401s as a replay.
+
+    The table is intentionally tiny — a GC sweep (out of scope for
+    Phase 1; filed for Phase 2) deletes rows older than 2× the TTL
+    so it stays small even on a busy public demo. SimpleVTT itself
+    never reads these rows except via the atomic INSERT-or-violate
+    path in ``demo_magic_link_routes._consume_jti``.
+    """
+    __tablename__ = "demo_magic_links"
+
+    jti: Mapped[str] = mapped_column(String(40), primary_key=True)
+    sub: Mapped[str] = mapped_column(String(200), nullable=False)
+    consumed_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class Battle(Base):
     """Persistent per-campaign battle / initiative-tracker state.
 

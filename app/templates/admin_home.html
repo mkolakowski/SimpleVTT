@@ -64,4 +64,89 @@
         {% endfor %}
     </ul>
 </section>
+
+{% if magic_link_enabled %}
+<section>
+    <h2>Demo magic-link login</h2>
+    <p class="muted">
+        Mint a one-time login URL for a seeded demo account. The link works exactly once,
+        expires in 15&nbsp;minutes, and only resolves a demo account (never a real user).
+        Both <code>DEMO_MODE</code> and <code>SIMPLEVTT_DEMO_MAGIC_LINK_ENABLED</code>
+        are on, so this section is live. See
+        <a href="/wiki/doc/plan-demo-magic-link">the design plan</a> for the threat model.
+    </p>
+    <form id="mint-magic-link-form" class="row" onsubmit="return mintDemoMagicLink(event)">
+        <select name="sub" required>
+            {% for email in demo_emails %}
+                <option value="{{ email }}">{{ email }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit">Mint link</button>
+    </form>
+    <div id="mint-magic-link-result" style="margin-top:8px"></div>
+    <script>
+        async function mintDemoMagicLink(ev) {
+            ev.preventDefault();
+            const form = document.getElementById('mint-magic-link-form');
+            const result = document.getElementById('mint-magic-link-result');
+            const data = new FormData(form);
+            result.textContent = 'Minting…';
+            try {
+                const resp = await fetch('/admin/demo/mint-magic-link', {
+                    method: 'POST',
+                    body: data,
+                });
+                if (!resp.ok) {
+                    const txt = await resp.text();
+                    result.innerHTML = '<span style="color:#c33">Failed: ' +
+                        resp.status + ' — ' + (txt || 'unknown') + '</span>';
+                    return false;
+                }
+                const j = await resp.json();
+                const url = j.url || '';
+                const ttl = j.expires_in_seconds || 0;
+                // Build a read-only input + copy button so the admin can
+                // grab the URL without right-clicking the text.
+                result.innerHTML = '';
+                const wrap = document.createElement('div');
+                wrap.className = 'row';
+                const inp = document.createElement('input');
+                inp.type = 'text';
+                inp.value = url;
+                inp.readOnly = true;
+                inp.style.width = '34em';
+                inp.style.maxWidth = '100%';
+                inp.onclick = function () { this.select(); };
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.textContent = 'Copy';
+                btn.onclick = async function () {
+                    try {
+                        await navigator.clipboard.writeText(url);
+                        btn.textContent = 'Copied ✓';
+                        setTimeout(function () { btn.textContent = 'Copy'; }, 2000);
+                    } catch (e) {
+                        inp.select();
+                        document.execCommand('copy');
+                        btn.textContent = 'Copied ✓';
+                        setTimeout(function () { btn.textContent = 'Copy'; }, 2000);
+                    }
+                };
+                wrap.appendChild(inp);
+                wrap.appendChild(btn);
+                result.appendChild(wrap);
+                const ttl_p = document.createElement('p');
+                ttl_p.className = 'muted';
+                ttl_p.textContent = 'Expires in ' + Math.round(ttl / 60) +
+                    ' minutes. Single-use — the first click consumes it.';
+                result.appendChild(ttl_p);
+            } catch (e) {
+                result.innerHTML = '<span style="color:#c33">Network error: ' +
+                    (e && e.message ? e.message : e) + '</span>';
+            }
+            return false;
+        }
+    </script>
+</section>
+{% endif %}
 {% endblock %}

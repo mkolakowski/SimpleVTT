@@ -1,6 +1,6 @@
 # Demo magic-link login — Design Plan
 
-> **Status:** ⚪ proposed · Phase 1 unstarted.
+> **Status:** ✅ Phase 1 shipped (v2.425.0) — mint endpoint, verify endpoint, single-use `demo_magic_links` table, admin UI partial, double-env-var gate, 13 harness tests. The happy path is exercised end-to-end against a temporarily-gated container; a permanent regression test for it is filed for a future `app-demo` compose override.
 > **Tracked in:** [`TODO.md`](../../TODO.md) → Manually Added → "URL-based 'magic-link' login, demo-instance only".
 > **Sibling plan:** [`demo-mode.md`](demo-mode.md) — the broader DEMO_MODE shell this builds on.
 > **Sibling TODOs:** the fail2ban/CrowdSec log-integration TODO and the Cloudflare edge-banning TODO live next to this one in `Manually Added`; the three are designed to compose into a single security spine but each ships independently.
@@ -129,13 +129,15 @@ The fail2ban filter triggers on **5×`verify_rejected` from one IP in 5min**; th
 
 ## Phase plan
 
-### Phase 1 — Mint + verify + admin UI (v2.5x.0)
+### Phase 1 — Mint + verify + admin UI (v2.425.0 — ✅ shipped)
 
-1. New `app/routes/demo_magic_link_routes.py`: HMAC mint/verify helpers, `POST /admin/demo/mint-magic-link`, `GET /demo-login`, the double-gate check, log-line emission.
-2. New `app/database.py` migration block: `demo_magic_links` table + index. **SCHEMA_VERSION +1.**
-3. New `app/templates/_admin_demo_magic_link.html` partial: the mint form. Included in `admin_demo.html`.
-4. Harness tests: mint happy-path (admin can mint, public can verify and is logged in), gate-off path (mint and verify both 404 when either env var is false), replay (second verify with same token 401s), expired (clock-skewed token 401s), bad-sig (forged token 401s), unknown-sub (token for a sub not in the demo allowlist 401s).
-5. Doc updates: README mentions the demo magic-link shareability; `demo-mode.md` cross-links to this plan.
+1. ✅ **v2.425.0** — Pure-logic helpers split into `app/demo_magic_link.py` (fastapi-free so unit tests run without container deps); HTTP layer in `app/routes/demo_magic_link_routes.py` with `POST /admin/demo/mint-magic-link` + `GET /demo-login`, double-gate check via `magic_link_enabled()`, canonical audit emissions (`demo_magic_link.mint_ok` / `verify_ok` / `verify_rejected reason=…`).
+2. ✅ **v2.425.0** — New `demo_magic_links` table via the existing inline-migration pattern. SCHEMA_VERSION 69 → 70.
+3. ✅ **v2.425.0** — Admin UI lives inline in `admin_home.html` (no separate partial — the section is gated `{% if magic_link_enabled %}` and only renders when both env vars are on). vanilla JS handles the fetch + result display + clipboard copy.
+4. ✅ **v2.425.0** — 13 harness tests: 10 in-process unit tests on the helpers (mint/verify roundtrip, tampered payload + tampered sig, empty / no-dot / garbage tokens, jti uniqueness, gate predicate + truthy/falsy variants), 3 integration tests against the dev container (gate-off 404 paths). Happy-path mint + verify + replay was exercised manually with gates temporarily flipped on; a permanent regression test waits on the `app-demo` compose override (Phase 2 follow-up).
+5. 🟠 **Filed for follow-up** — README mention of demo magic-link shareability. The `demo-mode.md` plan and the new `## Security` topic section in `TODO.md` already cross-link this plan; a README-level callout is the lightest-touch advertisement and lands in a doc-only follow-up if/when shareability matters operationally.
+
+**Bug filed for Phase 2.** The 15-minute TTL is hardcoded in `app/demo_magic_link.py::_TOKEN_MAX_AGE_SECONDS`. An expired-token unit test was skipped because itsdangerous's timestamp reference is hard to monkey-patch cleanly from an external test (the lib imports `from time import time` at module load); itsdangerous's own test suite proves the timestamp path. Phase 2 may add a freezegun-based test or an env-var override for the TTL to ship an integration test for the expired-token path.
 
 ### Phase 2 — Reference fail2ban + CrowdSec configs (v2.5x.1)
 

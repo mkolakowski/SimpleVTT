@@ -47,6 +47,13 @@ services:
       DEMO_RESET_INTERVAL_MINUTES: ${DEMO_RESET_INTERVAL_MINUTES:-60}
       DEMO_RESET_ON_BOOT: ${DEMO_RESET_ON_BOOT:-true}
       DEMO_CREDENTIALS_VISIBLE: ${DEMO_CREDENTIALS_VISIBLE:-true}
+      # v2.425.0 — demo magic-link login plan Phase 1.
+      # Second gate, on top of DEMO_MODE. URL-based passwordless login
+      # for the demo instance only. Hard-gated at deploy time; never
+      # flippable from the admin UI. Default false — even on a DEMO_MODE
+      # deploy, the magic-link surface stays dormant until you set this
+      # to true. See docs/plans/demo-magic-link.md.
+      SIMPLEVTT_DEMO_MAGIC_LINK_ENABLED: ${SIMPLEVTT_DEMO_MAGIC_LINK_ENABLED:-false}
       # v2.424.0 — fail2ban/CrowdSec integration plan Phase 1.
       # Number of trusted X-Forwarded-For hops behind the app. 0 means
       # never trust the header (default). Set to 1 if exactly one reverse

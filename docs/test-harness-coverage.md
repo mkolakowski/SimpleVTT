@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3368 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.424.0, 2026-06-18).
+**Total tests:** 3381 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.425.0, 2026-06-18).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5311,6 +5311,30 @@ Read-only doc-hub routes added in v2.43.3, expanded in v2.49.9 with the `/wiki/d
 | `test_wiki_doc_serves_cloudflare_edge_banning_plan` | v2.423.5: `GET /wiki/doc/plan-cloudflare-edge-banning` → 200, body contains "cloudflare" + "edge-banning" + the nav menu. Resolves through the allowlist to `docs/plans/cloudflare-edge-banning.md` (outbound Cloudflare API client + GM-only "Ban IP at edge" button + admin-audit log + wiremock service in docker-compose for dev per the third-party-API rule; closes the three-piece security spine started in v2.423.2). |
 | `test_wiki_doc_unknown_slug_404` | v2.49.9: a slug that isn't in `_DOC_ALLOWLIST` → 404. Important security guarantee — the allowlist is the only way to reach a file outside `docs/wiki/`. |
 | `test_wiki_doc_traversal_blocked` | v2.49.9: directory-traversal characters in the doc slug → 404 / 400, rejected by the slug guard before the allowlist lookup. |
+
+---
+
+## Demo magic-link login (Phase 1 — v2.425.0)
+
+Mix of in-process unit tests (helpers in `app/demo_magic_link.py` — `mint_token` / `verify_token` / `magic_link_enabled`) and integration tests against the dev container with the gates off (their default). Lives in `tests/harness/test_demo_magic_link.py`.
+
+The dev container boots with `DEMO_MODE=false` and `SIMPLEVTT_DEMO_MAGIC_LINK_ENABLED=false` so the only integration-level behavior asserted here is the gate-off path (both endpoints 404). The happy-path end-to-end (mint via admin + verify via public URL + replay 401) was exercised manually with both gates flipped on; a permanent regression test for it is filed for a future docker-compose override that boots a second `app-demo` service with the gates on.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_mint_then_verify_roundtrip` | `mint_token(sub)` returns `<payload>.<sig>`; `verify_token(token)` returns `ok=True, sub=sub, jti=<22 chars>` (16 bytes urlsafe-b64). |
+| `test_verify_rejects_tampered_payload` | Flip one byte in the payload → HMAC mismatch → `ok=False, reason="signature"`. |
+| `test_verify_rejects_tampered_signature` | Flip one byte in the signature segment → HMAC mismatch → `ok=False, reason="signature"`. |
+| `test_verify_rejects_empty_token` | Empty string → `ok=False, reason="signature"`. |
+| `test_verify_rejects_token_without_dot` | Tokens with no `.` separator can't be valid itsdangerous blobs → `ok=False`. |
+| `test_verify_rejects_garbage_token` | Bytes that look base64-ish but won't sig-verify → `ok=False, reason="signature"`. |
+| `test_jti_is_unique_per_mint` | 20 successive mints produce 20 distinct jtis — `secrets.token_urlsafe(16)` collision resistance. |
+| `test_gate_off_by_default` | With both env vars unset, `magic_link_enabled()` is False. Protects against `.env.example` typos. |
+| `test_gate_requires_both_env_vars` | Setting only `DEMO_MODE` OR only `SIMPLEVTT_DEMO_MAGIC_LINK_ENABLED` keeps the gate closed; both together open it. |
+| `test_gate_accepts_truthy_variants` | Truthy parse for `1/true/yes/on` + case-insensitive; falsy parse for `0/false/no/off/empty/garbage`. |
+| `test_demo_login_endpoint_404_when_gate_off` | `GET /demo-login?token=anything` against the dev container → 404. Hides whether the feature exists. |
+| `test_mint_endpoint_404_when_gate_off_even_for_admin` | `POST /admin/demo/mint-magic-link` against the dev container → 401/303/404. The admin-auth check fires before the gate check by design — the standard `/login` redirect still works for admins exploring the UI. |
+| `test_admin_home_does_not_show_mint_section_when_gate_off` | `GET /admin` without auth → 401. The `{% if magic_link_enabled %}` gate on the admin_home template means the section literally doesn't render when the gate is off, but the harness has no admin session by default so we settle for the easier check; the gate predicate has its own dedicated unit tests above. |
 
 ---
 

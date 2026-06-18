@@ -73,6 +73,12 @@ def admin_home(
 ):
     users = db.query(User).order_by(User.id).all()
     campaigns = db.query(Campaign).order_by(Campaign.id).all()
+    # v2.425.0 — surface the demo magic-link section only when both
+    # gates are open. The runtime check lives in
+    # ``demo_magic_link_routes.magic_link_enabled``; importing the
+    # predicate here keeps the gate logic in one place.
+    from ..demo_magic_link import magic_link_enabled
+    from ..demo_seed import DEMO_EMAILS as _DEMO_EMAILS
     return templates.TemplateResponse(
         "admin_home.html",
         {
@@ -81,6 +87,8 @@ def admin_home(
             "users": users,
             "campaigns": campaigns,
             "settings": get_settings(),
+            "magic_link_enabled": magic_link_enabled(),
+            "demo_emails": _DEMO_EMAILS,
         },
     )
 

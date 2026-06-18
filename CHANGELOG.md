@@ -10,6 +10,70 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.425.0] - 2026-06-18 — "The Sundered Vault Door"
+
+**Schema version:** 70 (new `demo_magic_links` table)
+
+**Commit summary:** **Phase 1 of [`docs/plans/demo-magic-link.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/demo-magic-link.md) shipped end-to-end.** New `GET /demo-login?token=…` public endpoint + `POST /admin/demo/mint-magic-link` admin endpoint give the public demo a URL-based passwordless login — one click from a shared link, no password, drops the visitor straight onto the demo tabletop. Hard-gated by two **separate** deploy-time env vars (`DEMO_MODE=true` AND `SIMPLEVTT_DEMO_MAGIC_LINK_ENABLED=true`); both must be true or both endpoints 404 — a production deploy with a stray `DEMO_MODE=true` in `.env` still has the magic-link surface dormant until separately enabled.
+
+**Description:** The end-to-end happy path now works against a temporarily-gated container. Walking the audit log from a real session:
+
+```
+auth.login_ok ip=192.168.65.1 ua=curl/8.7.1 user_id=5746
+demo_magic_link.mint_ok ip=192.168.65.1 ua=curl/8.7.1 sub=demo-alice@example.com admin_id=5746
+demo_magic_link.verify_ok ip=192.168.65.1 ua=curl/8.7.1 sub=demo-alice@example.com jti=Beqjdd_6t8oaOYcxxDdtmA user_id=5747
+demo_magic_link.verify_rejected ip=192.168.65.1 ua=curl/8.7.1 reason=replay jti=Beqjdd_6t8oaOYcxxDdtmA
+```
+
+— admin login, mint, first-verify (303 redirect to /), second-verify (401 replay rejection). Every line matches the v2.424.0 canonical parser regex; a fail2ban or CrowdSec config tuned for `reason=replay` would ban the source IP for the rest of the day on the second click.
+
+**Architecture (relevant subset):**
+
+- **`app/demo_magic_link.py`** — pure-logic sibling of `app/audit_log.py`. `mint_token(sub)` returns `<payload>.<sig>` via `itsdangerous.URLSafeTimedSerializer` with HMAC-SHA256 over the app's `SECRET_KEY`. `verify_token(token)` returns a `VerifyResult` with `ok`, `sub`, `jti`, and a typed `reason` on failure (`signature` / `expired` / `payload`). `magic_link_enabled()` is the double-gate predicate. Lives outside `app/routes/` so the unit tests don't need fastapi.
+- **`app/routes/demo_magic_link_routes.py`** — the HTTP layer. Both endpoints re-check `magic_link_enabled()` at request time and 404 when off (defense in depth — even if the router is somehow registered, the handlers fail closed). The mint endpoint additionally requires admin auth and validates `sub` against the `DEMO_EMAILS` allowlist from `app/demo_seed.py`. The verify endpoint atomically `INSERT`s the `jti` into the new `demo_magic_links` table — a unique-constraint violation is the replay signal.
+- **`app/models.py::DemoMagicLink`** — new model. `jti VARCHAR(40) PRIMARY KEY`, `sub VARCHAR(200) NOT NULL`, `consumed_at TIMESTAMP`. Tiny by design; never read except via the consume-or-violate INSERT.
+- **`app/database.py`** — new schema-v70 migration block runs the matching `CREATE TABLE IF NOT EXISTS`. SCHEMA_VERSION 69 → 70.
+- **`app/templates/admin_home.html`** — new "Demo magic-link login" `<section>` gated `{% if magic_link_enabled %}`. Vanilla-JS form posts the chosen `sub` to the mint endpoint, displays the returned URL in a read-only text input with a "Copy" button (uses `navigator.clipboard.writeText` with a `document.execCommand` fallback). Section is **completely absent** from the rendered page when the gate is off — a curious admin can't even see the button exists.
+- **`app/main.py`** — registers the new router. The comment block explains why we don't try to refuse-to-register at module load: keeping the per-request gate as the only check makes the security model easier to reason about + easier to test.
+- **`SIMPLEVTT_DEMO_MAGIC_LINK_ENABLED`** env var wired through `docker-compose.yml` + `.env.example`; default `false` (closed-gate) so a fresh clone is safe out of the box.
+
+**Audit-log integration.** Every mint and every verify (success or fail) flows through the v2.424.0 `audit()` helper:
+
+- Success: `demo_magic_link.mint_ok sub=… admin_id=… ip=… ua=…` and `demo_magic_link.verify_ok sub=… jti=… user_id=… ip=… ua=…` at INFO.
+- Failure: `demo_magic_link.verify_rejected reason=signature|expired|payload|replay|unknown_sub|missing_token|user_missing jti=… ip=… ua=…` at WARNING. A fail2ban or CrowdSec config can ban after N rejected attempts from one IP and treat `reason=replay` as a hard "ban immediately" signal.
+
+**13 new harness tests** in `tests/harness/test_demo_magic_link.py`:
+
+- **10 in-process unit tests** on `app/demo_magic_link.py` — mint/verify roundtrip, tampered payload + tampered sig + empty + no-dot + garbage tokens, jti uniqueness (20 successive mints, 20 distinct jtis), gate predicate (off by default, requires both env vars, accepts truthy variants `1/true/yes/on` case-insensitively, rejects falsy + garbage).
+- **3 integration tests** against the dev container — gate-off path: `/demo-login` returns 404, `/admin/demo/mint-magic-link` returns 401/303/404 even for an admin (the require_admin dep fires first by design so the `/login` redirect still works for admins exploring the UI), admin home with no auth returns 401 (Jinja `{% if %}` gate on the section is unit-tested above).
+
+Total harness count 3368 → 3381.
+
+**The expired-token unit test was skipped on purpose.** itsdangerous binds `from time import time` at module load, so the standard `monkeypatch.setattr('time.time', ...)` doesn't reach the library's clock. itsdangerous's own test suite proves the expiry path. Phase 2 may add a freezegun-based test or an env-var override for the TTL constant so a permanent integration test for the expired-token path can land.
+
+**Why "The Sundered Vault Door":** the demo campaign is called "The Sundered Vault" (per the demo seed). The new endpoint *is* a door to the vault — gated by two locks, single-use, and the door closes for good after one entry.
+
+MINOR — three new endpoints (`POST /admin/demo/mint-magic-link` + `GET /demo-login` + the conditional admin-home section), one new env var, one new schema bump (69 → 70), one new table. 13 new harness tests. All gates default-off so a fresh clone is safe.
+
+### Added
+- `app/demo_magic_link.py`: pure-logic helpers. `mint_token(sub)` / `verify_token(token)` / `magic_link_enabled()` / `VerifyResult` class. HMAC-SHA256 via `itsdangerous.URLSafeTimedSerializer`, 15-minute TTL, payload `{sub, jti, inst}`.
+- `app/routes/demo_magic_link_routes.py`: `POST /admin/demo/mint-magic-link` (admin-only + double-gated) + `GET /demo-login` (public + double-gated + single-use via `demo_magic_links` table). Canonical audit-log emission on every event.
+- `app/models.py::DemoMagicLink`: new model. `jti` primary key, `sub`, `consumed_at`.
+- `app/database.py`: schema-v70 migration block creates `demo_magic_links` table via `CREATE TABLE IF NOT EXISTS`.
+- `app/version.py`: `SCHEMA_VERSION 69 → 70` (matches the new migration block).
+- `app/main.py`: registers `demo_magic_link_routes.router`. Inline comment explains the per-request gate is the single security check.
+- `app/routes/admin_routes.py::admin_home`: imports `magic_link_enabled` + `DEMO_EMAILS`, passes them to the template.
+- `app/templates/admin_home.html`: new "Demo magic-link login" section gated `{% if magic_link_enabled %}`. Vanilla-JS mint form + "Copy" button + 15-minute-expiry hint.
+- `docker-compose.yml` + `.env.example`: new `SIMPLEVTT_DEMO_MAGIC_LINK_ENABLED` env var, default `false`.
+- `tests/harness/test_demo_magic_link.py`: 13 tests (10 in-process unit + 3 integration). See `docs/test-harness-coverage.md` for the per-test summary.
+
+### Changed
+- `docs/plans/demo-magic-link.md`: status flipped from ⚪ proposed to ✅ Phase 1 shipped. Phase 1 numbered list updated to mark all 4 items shipped + items 5/6 (README mention, full happy-path regression test) filed for follow-up.
+- `docs/test-harness-coverage.md`: new section "Demo magic-link login (Phase 1 — v2.425.0)" with all 13 test rows. Total-test-count nudges 3368 → 3381.
+
+### Schema
+- **v70 (2.425.0):** new `demo_magic_links` table — `jti VARCHAR(40) PRIMARY KEY`, `sub VARCHAR(200) NOT NULL`, `consumed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`. Single-use enforcement for demo magic-link tokens. Tiny by design.
+
 ## [2.424.0] - 2026-06-18 — "The First Beacon"
 
 **Schema version:** 69

@@ -777,6 +777,25 @@ def _apply_inline_migrations() -> None:
                 "REFERENCES characters(id) ON DELETE SET NULL"
             ))
 
+    # ---- Schema v70 (2.425.0): demo_magic_links table ----
+    # Phase 1 of docs/plans/demo-magic-link.md. Single-use enforcement
+    # for URL-based passwordless login on the demo instance. PK = jti
+    # (22-char base64url). A duplicate insert is the replay-detection
+    # signal — see app/routes/demo_magic_link_routes::_consume_jti.
+    # Tiny table by design; never read by anything except the consume
+    # path's INSERT-or-violate. ``Base.metadata.create_all`` (earlier
+    # in init_db) already creates the table; this block is a
+    # belt-and-suspenders CREATE TABLE IF NOT EXISTS so the migration
+    # is grep-able + documents the schema bump.
+    with engine.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS demo_magic_links ("
+            "jti VARCHAR(40) PRIMARY KEY, "
+            "sub VARCHAR(200) NOT NULL, "
+            "consumed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            ")"
+        ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

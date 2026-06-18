@@ -19,6 +19,7 @@ from .routes import (
     admin_routes,
     audio_routes,
     auth_routes,
+    demo_magic_link_routes,
     homebrew_routes,
     tabletop_routes,
     user_routes,
@@ -51,6 +52,16 @@ app.include_router(homebrew_routes.router)
 app.include_router(audio_routes.router)
 app.include_router(user_routes.router)
 app.include_router(wiki_routes.router)
+
+# v2.425.0 — Phase 1 of docs/plans/demo-magic-link.md. The router
+# registers regardless of env-var state; every endpoint guards on
+# ``magic_link_enabled()`` at request time + returns 404 when the
+# gates aren't both open, so an attacker probing the path can't
+# distinguish "feature exists but is off" from "feature doesn't
+# exist." Defense-in-depth: ``magic_link_enabled()`` re-reads
+# ``DEMO_MODE`` + ``SIMPLEVTT_DEMO_MAGIC_LINK_ENABLED`` from
+# os.environ on every call so a hot env-var flip is honored.
+app.include_router(demo_magic_link_routes.router)
 
 # v2.49.12: TEST_MODE-only routes (e.g. dice-seed for the encounter-sim
 # test suite, see docs/plans/encounter-sim-test-suite.md). Conditionally
