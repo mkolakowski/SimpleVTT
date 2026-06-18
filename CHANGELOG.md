@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.410.0] - 2026-06-17 — "The Widening Daze"
+
+**Schema version:** 69
+
+**Commit summary:** Second Phase 2 consumer — ships a new **`/cast_confusion`** endpoint on the v2.409.0 AoE-radius scaling substrate. RAW PHB p.224: Confusion is an L4 Enchantment, 90 ft, Concentration up to 1 minute, WIS save, 10-ft-radius sphere; the radius grows +5 ft per slot above 4th (L4 → 10, L5 → 15, … L9 → 35).
+
+**Description:** Same endpoint-build shape as `/cast_fog_cloud` (Confusion was catalog-only). Second `sphere-radius` consumer of `_SPELL_AOE_MAP`, proving the substrate generalizes across base levels and increments:
+
+```python
+_SPELL_AOE_MAP["confusion"] = {
+    "base_level": 4,
+    "base_ft": 10,         # 10-ft-radius sphere at L4
+    "increment_ft": 5,     # +5 ft per slot above L4
+    "shape": "sphere-radius",
+}
+```
+
+`/cast_confusion` reads `_spell_aoe_for_slot("confusion", slot_level, default_ft=10)` and surfaces the scaled radius as the response + `feature_used` broadcast `radius_ft`. v1 ships the audit; the per-target WIS save resolution + the confusion behavior-table buffs are filed.
+
+**Why "The Widening Daze":** Confusion's mind-warping sphere swells outward with every level of power channelled into it.
+
+MINOR — new HTTP endpoint (`/cast_confusion`) + new substrate entry + 1 new harness file (8 tests: 4 radius tiers + 4 error paths).
+
+### Added
+- `app/routes/tabletop_routes.py`: new `POST /api/campaign/{campaign_id}/cast_confusion` endpoint. Validates missing character_id (400), slot_level < 4 (400), membership/ownership (403), Confusion-casting class (409 wrong_class — Bard/Druid/Sorcerer/Wizard), spell on the list (409 spell_not_known), slot available (409 no_slot), Phase 4 action over-budget (409). On success: decrements the slot, marks the action economy, broadcasts the chat card + `spell_slot_update` + `feature_used` (with `radius_ft`), logs the slot spend for undo, returns `{ok, cast_id, slot_level, radius_ft, range_ft: 90, concentration: true, …}`.
+- `app/routes/tabletop_routes.py`: new `"confusion"` entry in `_SPELL_AOE_MAP` (after `"fog-cloud"`). Sphere-radius, base 10 ft, +5 ft per slot above L4.
+- `tests/harness/test_cast_confusion.py`: new harness file. Four happy-path tests (L4 → 10, L5 → 15, L6 → 20, L9 → 35) + four error-path tests (missing character_id → 400, slot_level < 4 → 400, wrong class → 409, spell not known → 409). The fixture snapshots Thalindra Moonwhisper's spells + wizard slots, arms her with Confusion + an L4-L9 slot table, and restores both on teardown.
+
+### Changed
+- `docs/plans/spell-utility-upcast.md`: Phase 2 backlog table flips Confusion to ✅ shipped; status header remaining-count updated (three candidates remain).
+
 ## [2.409.0] - 2026-06-17 — "The Rolling Bank"
 
 **Schema version:** 69

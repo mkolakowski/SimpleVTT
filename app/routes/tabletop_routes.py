@@ -2199,6 +2199,17 @@ _SPELL_AOE_MAP: dict[str, dict] = {
         "increment_ft": 20,     # +20 ft per slot above L1
         "shape": "sphere-radius",
     },
+    # v2.410.0 — Confusion (Bard / Druid / Sorcerer / Wizard L4). RAW
+    # PHB p.224: 90 ft, Concentration up to 1 minute, WIS save, 10-ft-
+    # radius sphere of warped minds. Higher Levels: "the radius of the
+    # sphere increases by 5 feet for each slot level above 4th." Second
+    # sphere-radius consumer (L4 → 10, L5 → 15, … L9 → 35).
+    "confusion": {
+        "base_level": 4,
+        "base_ft": 10,          # 10-ft-radius sphere at L4
+        "increment_ft": 5,      # +5 ft per slot above L4
+        "shape": "sphere-radius",
+    },
 }
 
 
@@ -84769,6 +84780,193 @@ async def cast_fog_cloud(
         "class_slug": class_slug,
         "radius_ft": radius_ft,
         "range_ft": 120,
+        "concentration": True,
+    }
+
+
+# ----------- API: cast Confusion (4th-level Enchantment, concentration, AoE) -----------
+
+@router.post("/api/campaign/{campaign_id}/cast_confusion")
+async def cast_confusion(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.410.0 — Cast Confusion: slot consume + audit + substrate-driven
+    AoE radius. RAW (PHB p.224): L4 Enchantment, 90 ft, Concentration up
+    to 1 minute, WIS save. Creatures in a 10-ft-radius sphere that fail a
+    WIS save are afflicted by the confusion behavior table. The radius
+    scales with slot level — +5 ft per slot above 4th (L4 → 10 ft, L5 →
+    15 ft, … L9 → 35 ft). Classes: Bard, Druid, Sorcerer, Wizard.
+
+    Second consumer of the Phase 2 AoE-radius scaling substrate
+    (``_SPELL_AOE_MAP`` + ``_spell_aoe_for_slot``), after v2.409.0
+    /cast_fog_cloud. v1 ships the spell-side audit (slot consume + radius
+    surfacing); the per-target WIS save resolution + the confusion
+    behavior buffs are filed.
+
+    Body: ``{character_id, class_slug, slot_level?, override?}``.
+
+    Validates: missing character_id (400), slot_level < 4 (400),
+    membership (403), ownership/GM (403), Confusion-casting class
+    (409 wrong_class), spell on the list (409 spell_not_known), slot
+    available (409 no_slot), Phase 4 action over-budget (409).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    class_slug = (body.get("class_slug") or "").strip().lower()
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw is not None else 4
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if slot_level < 4:
+        raise HTTPException(400, "slot_level must be >= 4 (Confusion is L4)")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    _CONFUSION_CLASSES = {"bard", "druid", "sorcerer", "wizard"}
+    if class_slug not in _CONFUSION_CLASSES:
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class",
+            "expected": sorted(_CONFUSION_CLASSES),
+            "got": class_slug or "",
+        })
+    primary_class = (sheet.get("class") or "").strip().lower()
+    if primary_class != class_slug:
+        has_class = any(
+            (entry.get("class") or "").strip().lower() == class_slug
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_class:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class",
+                "expected": class_slug,
+                "got": primary_class or "",
+            })
+
+    spells = list(sheet.get("spells") or [])
+    has_cf = any(
+        (s.get("_slug") == "confusion") or
+        (str(s.get("name", "")).lower() == "confusion")
+        for s in spells
+    )
+    if not has_cf:
+        return JSONResponse(status_code=409, content={
+            "error": "spell_not_known",
+            "spell": "confusion",
+        })
+
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get(class_slug) or {})
+    slot = dict(per_class.get(str(slot_level)) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": class_slug,
+            "spell_name": "Confusion",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "confusion",
+            "label": "Confusion",
+            "strict": strict,
+        })
+
+    # Commit slot decrement.
+    slot["used"] = used + 1
+    per_class[str(slot_level)] = slot
+    all_slots[class_slug] = per_class
+    sheet["spell_slots"] = all_slots
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # v2.410.0 — AoE-radius scaling substrate. L4 → 10 ft, +5 ft per
+    # slot above 4th (L5 → 15, … L9 → 35).
+    radius_ft = _spell_aoe_for_slot("confusion", slot_level, default_ft=10)
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    note = (
+        f"😵 {char.name} casts Confusion (L{slot_level}) — "
+        f"90 ft, {radius_ft}-ft-radius sphere, WIS save (v1 stops at "
+        f"the cast; per-target save + behavior table filed)"
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": "",
+            "total": 0,
+            "breakdown": note,
+            "note": note,
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id,
+            "class_slug": class_slug,
+            "level": slot_level,
+            "total": total,
+            "used": used + 1,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "😵 Confusion",
+            "feature_desc": (
+                f"{char.name} warps minds in a {radius_ft}-ft-radius "
+                f"sphere. Each creature in the area makes a WIS save "
+                f"(per-target save + behavior-table tracking filed)."
+            ),
+            "source": "confusion",
+            "radius_ft": radius_ft,
+            "range_ft": 90,
+        },
+    })
+
+    cast_id = _log_spell_slot_spend(
+        campaign_id, char.id, class_slug, slot_level, used, "spell")
+    return {
+        "ok": True,
+        "cast_id": cast_id,
+        "slot_level": slot_level,
+        "slot_used": used + 1,
+        "slot_total": total,
+        "class_slug": class_slug,
+        "radius_ft": radius_ft,
+        "range_ft": 90,
         "concentration": True,
     }
 
