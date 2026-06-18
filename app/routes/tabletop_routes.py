@@ -2374,6 +2374,57 @@ def _spell_summon_multiplier_for_slot(
     return default_multiplier
 
 
+# ---------------------------------------------------------------------------
+# v2.417.0 — Phase 3 summon-count *additive* family. A second summon-scaling
+# shape: rather than multiplying a chosen base count, these spells add a
+# fixed number of creatures per slot level above the spell's base. Sibling
+# map to ``_SPELL_SUMMON_MAP`` (which holds the multiplier family) so the two
+# helpers stay single-purpose. RAW example:
+#   - Animate Dead (PHB p.212): create one undead servant; +2 undead per
+#     slot level above 3rd (L3 → 1, L4 → 3, L5 → 5, … L9 → 13).
+# Keyed by spell slug; values carry {base_level, base_count, per_slot}.
+# ---------------------------------------------------------------------------
+_SPELL_SUMMON_ADDITIVE_MAP: dict[str, dict] = {
+    "animate-dead": {
+        "base_level": 3,
+        "base_count": 1,    # one undead servant at the base L3 slot
+        "per_slot": 2,      # +2 undead per slot level above 3rd
+    },
+}
+
+
+def _spell_summon_additive_for_slot(
+    spell_slug: str,
+    slot_level: int,
+    default_count: int = 1,
+) -> int:
+    """v2.417.0 — Phase 3 summon-count additive-family helper. Reads
+    ``_SPELL_SUMMON_ADDITIVE_MAP[spell_slug]`` and returns
+    ``base_count + steps * per_slot``, where ``steps`` is the number of
+    slot levels above the spell's ``base_level`` (clamped at 0 so a
+    base-level cast returns ``base_count`` and an under-level cast doesn't
+    go negative). If no entry exists for the slug, returns
+    ``default_count``.
+
+    Pure function — the single source of truth for per-slot additive
+    summon-count math, read by the additive cast endpoints
+    (``/cast_animate_dead`` etc.). Mirrors the ``_spell_aoe_for_slot``
+    linear shape (a count instead of a distance).
+    """
+    entry = _SPELL_SUMMON_ADDITIVE_MAP.get(spell_slug)
+    if not entry:
+        return default_count
+    try:
+        sl = int(slot_level)
+    except (TypeError, ValueError):
+        sl = int(entry.get("base_level") or 1)
+    base_level = int(entry.get("base_level") or 1)
+    base_count = int(entry.get("base_count") or 1)
+    per_slot = int(entry.get("per_slot") or 0)
+    steps = max(0, sl - base_level)
+    return base_count + steps * per_slot
+
+
 _SPELL_BUFF_MAP["resistance-all"] = {
     "key": "resistance-all",
     "name": "Invulnerability (All Damage)",
@@ -4408,6 +4459,14 @@ _COMPANION_TEMPLATES: dict[str, dict] = {
     "elemental-spirit": {"name": "Elemental Spirit", "ac": 13, "hp": 10,
                          "speed_walk": 30, "size": 1, "team": "hero",
                          "color": "#d2691e"},
+    # v2.417.0 — Phase 3 summon-count additive family (Animate Dead). RAW
+    # PHB p.212: the animated corpse/bones becomes a skeleton or zombie.
+    # Stats are a v1 skeleton ballpark (AC 13 armor-scraps, HP 13, walk
+    # 30). GM hand-edits to a zombie (AC 8 / HP 22) per encounter; the
+    # broadcast name on cast is "Undead Servant N".
+    "undead-servant": {"name": "Undead Servant", "ac": 13, "hp": 13,
+                       "speed_walk": 30, "size": 1, "team": "hero",
+                       "color": "#cfcabe"},
 }
 
 
@@ -61516,6 +61575,137 @@ async def cast_conjure_minor_elementals(
         "base_count": base_count,
         "slot_level": slot_level,
         "multiplier": multiplier,
+        "combatants": combatants,
+        "token_ids": token_ids,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_animate_dead")
+async def cast_animate_dead(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.417.0 — Phase 3 summon-count *additive* family, first consumer.
+    Animate Dead (Cleric / Wizard L3, PHB p.212): "you create an undead
+    servant... a skeleton or zombie." Upcast: "you animate or reassert
+    control over two additional undead creatures for each slot level
+    above 3rd." Unlike the conjure spells, the count is **fully
+    slot-determined** — there is no chosen base-option `count`, so the
+    body carries `slot_level` but not `count`. The total is read from the
+    additive substrate: ``base 1 + 2 × (slot − 3)`` (L3 → 1, L4 → 3, …
+    L9 → 13).
+
+    Body: ``{character_id, slot_level?, x?, y?, spacing?, initiative?}``.
+    Each undead is summoned via `_summon_companion` (the new
+    `undead-servant` registry entry) at ``x + i × spacing``. Gates on the
+    caster knowing Animate Dead OR being a Cleric / Wizard. All summons
+    share the `is_summon` + `summoned_by` tags so the long-rest teardown
+    drops the whole host.
+
+    Response: ``{ok, feature, count, slot_level, combatants: [...],
+    token_ids: [...]}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    try:
+        slot_level = int(body.get("slot_level") or 3)
+    except (TypeError, ValueError):
+        slot_level = 3
+    # Count is fully slot-determined from the additive substrate — no
+    # chosen base-option `count` like the conjure spells have.
+    count = _spell_summon_additive_for_slot(
+        "animate-dead", slot_level, default_count=1)
+    spacing = float(body.get("spacing") or 70)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_ad = any(
+        (s.get("_slug") == "animate-dead")
+        or (str(s.get("name", "")).lower() == "animate dead")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"cleric", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_ad and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Animate Dead, or cleric/wizard",
+            "got_class": _cls,
+        })
+
+    base_x = float(body.get("x") or 0)
+    base_y = float(body.get("y") or 0)
+    initiative = int(body.get("initiative") or 0)
+    combatants = []
+    token_ids = []
+    for i in range(count):
+        res = await _summon_companion(
+            db, campaign_id,
+            owner_char_id=char.id,
+            companion_key="undead-servant",
+            name=f"Undead Servant {i + 1}",
+            x=base_x + i * spacing,
+            y=base_y,
+            initiative=initiative,
+        )
+        if res:
+            combatants.append(res["combatant"])
+            token_ids.append(res["token_id"])
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": f"💀 Animate Dead — {len(combatants)} undead",
+            "feature_desc": (
+                f"{char.name} animates {len(combatants)} undead servant"
+                f"{'s' if len(combatants) != 1 else ''} as combatants. "
+                f"(Animate Dead, L{slot_level}.)"
+            ),
+            "source": "animate-dead",
+            "count": len(combatants),
+            "slot_level": slot_level,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "animate-dead",
+        "count": len(combatants),
+        "slot_level": slot_level,
         "combatants": combatants,
         "token_ids": token_ids,
     }

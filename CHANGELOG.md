@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.417.0] - 2026-06-17 — "The Risen Few"
+
+**Schema version:** 69
+
+**Commit summary:** Opens the **count-additive family** of Phase 3 (summon-count scaling) — a second scaling shape after the now-complete count-multiplier family. Builds a sibling `_SPELL_SUMMON_ADDITIVE_MAP` substrate + `_spell_summon_additive_for_slot()` helper and ships a new **`/cast_animate_dead`** endpoint (Cleric / Wizard L3). RAW PHB p.212: create one undead servant; animate two additional undead per slot level above 3rd (L3 → 1, L4 → 3, … L9 → 13).
+
+**Description:** Unlike the conjure spells (which multiply a chosen base-option `count`), Animate Dead's count is **fully slot-determined** — there is no base-option choice, so the endpoint body carries `slot_level` but not `count`. A new sibling map keeps the additive math separate from the multiplier helper:
+
+```python
+_SPELL_SUMMON_ADDITIVE_MAP["animate-dead"] = {
+    "base_level": 3,
+    "base_count": 1,    # one undead servant at L3
+    "per_slot": 2,      # +2 undead per slot above 3rd
+}
+```
+
+`/cast_animate_dead` reads `_spell_summon_additive_for_slot("animate-dead", slot_level)` (= `base + per_slot × steps`) and stands up that many `undead-servant` combatants. The CR-increase family (Conjure Fey / Elemental / Celestial) remains as the last Phase 3 sub-family.
+
+**Why "The Risen Few":** a third-level slot raises one undead servant; a ninth raises thirteen — the dead rise in growing numbers with the slot spent.
+
+MINOR — new HTTP endpoint (`/cast_animate_dead`) + new sibling substrate + new helper + new companion template + 6 new harness tests.
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_SPELL_SUMMON_ADDITIVE_MAP` substrate + `_spell_summon_additive_for_slot()` pure-function helper (linear `base + per_slot × steps`, mirrors `_spell_aoe_for_slot`). First entry: `animate-dead`.
+- `app/routes/tabletop_routes.py`: new `POST /api/campaign/{campaign_id}/cast_animate_dead` endpoint (Cleric / Wizard L3). Count is fully slot-determined; stands up that many `undead-servant` combatants via `_summon_companion`, gated on knowing Animate Dead OR being a Cleric / Wizard. Returns `{ok, feature, count, slot_level, combatants, token_ids}`; broadcasts a `feature_used` card.
+- `app/routes/tabletop_routes.py`: new `undead-servant` companion template (AC 13 / HP 13 / walk 30, bone color).
+- `tests/harness/test_cast_animate_dead.py`: new harness file (6 tests) — L3 → 1, L4 → 3, L5 → 5, L9 → 13 ladder, a Wizard-caster gate test (Thalindra), and the 409 cannot_cast on Krieger (Barbarian).
+
+### Changed
+- `docs/plans/spell-utility-upcast.md`: Phase 3 backlog table flips Animate Dead to ✅ shipped; status header notes the count-additive family is open (CR-increase remains).
+
 ## [2.416.0] - 2026-06-17 — "The Elemental Host"
 
 **Schema version:** 69
