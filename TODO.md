@@ -21,7 +21,7 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 - **Active class-feature automation backlog** → see [Full Class-Feature Automation — remaining backlog](#full-class-feature-automation--remaining-backlog) (just Phase 8 + a few per-feature Phase-2 finishers remain after v2.149.1).
 - **Design plans with deferred phases** → see [Design Plans Backlog](#design-plans-backlog) (every `docs/plans/*.md` indexed with a priority tag).
 - **One-off bugs + UI polish that don't have a design plan** → see [Manually Added](#manually-added).
-- **Big feature buckets that aren't tracked by a plan** → see the topic sections below (Character Sheet, GM Tools, Combat, Maps, Media, Player Features, UI/Mobile, Rules Reference, Legal & Compliance, Test Infrastructure, Integrations, Visual, Class Features (next cycle)). The priority legend doesn't apply to these — they're topic-grouped, not P-tagged.
+- **Big feature buckets that aren't tracked by a plan** → see the topic sections below (Character Sheet, GM Tools, Combat, Maps, Media, Player Features, UI/Mobile, Rules Reference, Legal & Compliance, Security, Test Infrastructure, Integrations, Visual, Class Features (next cycle)). The priority legend doesn't apply to these — they're topic-grouped, not P-tagged. Topic sections may contain entries that *do* have a design plan (e.g. Combat's Advantage & Disadvantage; Security's three v2.423.3–v2.423.5 plans) — the topic split is about audience navigation, not plan-vs.-no-plan status.
 
 ---
 
@@ -691,22 +691,6 @@ Setting-specific subclasses (Tasha's: Beast Barbarian Phase 1 shipped v2.158.20 
 
 ## Manually Added
 
-- 🟡 **P2** — Feature: URL-based "magic-link" login, **demo-instance only**
-    - Single-use signed token in a `?login=<token>` query param that drops the visitor straight into a pre-seeded demo account (no password, no email round-trip). Friction-killer for "click here to try SimpleVTT" links shared on socials / the README / the wiki landing page.
-    - **Hard-gated to the demo instance.** Behavior keyed off a new env var (e.g. `SIMPLEVTT_DEMO_MODE=1`); production / self-hosted instances refuse to mint or accept URL-login tokens regardless of payload. The gate is server-side and **not** flippable from the admin UI — the only way to enable it is at deploy time, so a hardened deployment can't be tricked into accepting magic links by a compromised admin account.
-    - Tokens are short-lived (≤15 min), single-use (consumed on first verify and revoked), signed with the app's secret (HMAC), and carry the seeded-demo user id + an issued-at timestamp. Reject if the demo instance has been seeded with persistent data the visitor shouldn't see (the demo seed already wipes per session; this just hardens the contract).
-    - Auth-success path logs the IP + UA + token id for the [`fail2ban/CrowdSec`](#manually-added) sibling TODO below so abuse of the demo link (mass enumeration of token ids, replay attempts) is visible to log-based banning.
-    - Out of scope: passwordless login for real production accounts (separate feature — email-delivered magic links carry different threat model + UX requirements). This TODO is **strictly** the "anyone can try the demo with one click" affordance.
-- 🟡 **P2** — Feature: fail2ban / CrowdSec log integration out of the box (assumed CrowdSec, not the CrowdStrike endpoint product)
-    - Emit structured auth-failure + abuse-signal log lines in a format both fail2ban regex filters and CrowdSec parsers can consume without per-deployment configuration. Today auth failures are buried in the general FastAPI access log; an operator running SimpleVTT on a public box has no easy way to wire IP banning to it.
-    - Ship two reference configs in-repo under `docs/integrations/` (or similar): (a) a fail2ban `filter.d/*.conf` + `jail.d/*.conf` pair the operator drops into `/etc/fail2ban/`, (b) a CrowdSec `parsers/s01-parse/simplevtt.yaml` + `scenarios/simplevtt-*.yaml` pair the operator drops into `/etc/crowdsec/`. Both should trigger off the same canonical log lines so the operator picks one engine without forking the log format.
-    - Cover the obvious patterns: repeated `/login` failures, repeated demo-magic-link replay attempts (paired with the URL-login TODO above), repeated 401/403 on protected API endpoints from a single IP, and signup-form abuse (if/when signups land). Each should map to a distinct fail2ban/CrowdSec scenario so operators can tune ban durations per attack type.
-    - Validate end-to-end: a harness test (or docker-compose-side smoke check) that runs a CrowdSec container against the dev compose stack and asserts the canonical log lines trigger the canonical scenarios. Doesn't have to ship banning — just the detection contract.
-- 🟡 **P2** — Feature: Cloudflare IP-banning integration
-    - Optional outbound API hook: when SimpleVTT decides to ban an IP (via the in-app rate-limit / admin "kick" / future abuse-detection paths), call the Cloudflare API to add the IP to a configurable Cloudflare WAF custom rule or IP Access Rule, so the ban applies at the edge instead of only at the FastAPI layer. Pairs with the fail2ban/CrowdSec TODO above — CrowdSec already has a Cloudflare bouncer, so this is the in-app sibling for operators who want SimpleVTT itself to surface a "ban this player" button that hits Cloudflare directly.
-    - Config: a new env-var group (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_ACCESS_RULE_GROUP`) wired through to a thin `app/integrations/cloudflare.py` client. Per the [Third-party APIs must be Docker Compose services](CLAUDE.md#third-party-apis-must-be-docker-compose-services) rule, the Cloudflare API endpoint isn't a service we run — but mock it in compose for dev (e.g. a wiremock service serving canned `/zones/.../access_rules` responses) so the integration is testable without burning real Cloudflare quota.
-    - UI surface: GM-only "Ban IP at edge" button in the campaign admin panel (probably alongside any future kick-player / boot-from-campaign affordance) + an "Unban" companion. Visible only when the Cloudflare env vars are set so self-hosted operators without Cloudflare don't see dead UI.
-    - Audit log: every Cloudflare ban call writes an admin-audit log entry (who banned what IP, when, against which scope) so a campaign admin can review their own actions and the ops team can spot abuse of the ban button.
 - 🟢 **P3** — Feature: More pills in the roll log for spells
     - Move spell type, range, action type and details to pills
         - details should be an expanding pill
@@ -915,6 +899,34 @@ Systematic review of all content bundled in or served by SimpleVTT to ensure not
 - **Any AI-generated art** — confirm the generation tool's output licence (some tools claim copyright on outputs; others release CC0); document the tool and settings used for each asset
 
 Output: a `CREDITS.md` file at the repo root listing every third-party asset, its licence, and its source URL, plus a checklist of items that need further review or replacement.
+
+---
+
+## Security
+
+The three-piece security spine planned across v2.423.3 → v2.423.5. Each ships independently, but designed to compose end-to-end: SimpleVTT emits canonical log lines → CrowdSec parses them → CrowdSec's native Cloudflare bouncer (or the in-app "Ban IP at edge" button) enforces at the Cloudflare edge → attacker never reaches the FastAPI layer again.
+
+### URL-based magic-link login (demo instance only)
+
+Single-use signed token in a `?login=<token>` query param that drops the visitor straight into a pre-seeded demo account — no password, no email round-trip. Friction-killer for "click here to try SimpleVTT" links shared on socials / the README / the wiki landing page. **Hard-gated to the demo instance via a deploy-time env var separate from `SIMPLEVTT_DEMO_MODE`** so a compromised admin account can't enable the magic-link surface against a production deploy. Tokens are HMAC-signed, ≤15 min TTL with ±60s skew, single-use enforced by an atomic `INSERT` into a new `demo_magic_links` table. Auth-success and verify-rejected paths emit canonical log lines for the fail2ban/CrowdSec sibling entry below so abuse of the demo link (mass enumeration, replay attempts) is visible to log-based banning. Explicitly **not** a production passwordless-login feature — email-delivered magic links for real accounts are a different threat model and out of scope.
+
+See [`docs/plans/demo-magic-link.md`](docs/plans/demo-magic-link.md) for the threat model, the double-env-var gate, the HMAC token shape, the `demo_magic_links` schema, the canonical log-line list, and the three-phase roadmap (mint+verify+admin UI → reference fail2ban/CrowdSec configs → anonymous public "Try the demo" endpoint hard-blocked on the Cloudflare plan shipping first).
+
+### fail2ban / CrowdSec log integration out of the box
+
+Canonical structured log-line format (`<subsystem.event> ip=… ua=… [key=value …]`) and reference configs shipped in-repo under `docs/integrations/fail2ban/` (3 filter files + 1 jail) and `docs/integrations/crowdsec/` (1 parser + 5 scenarios), so an operator running SimpleVTT on a public box can drop in either engine without authoring custom regex. Both engines target the same canonical log lines so picking one over the other is a deployment choice, not a SimpleVTT change. A new `app/audit_log.py` typed emission module owns the call shape + the `X-Forwarded-For` trust decision in one place (new `TRUSTED_PROXY_HOPS=N` env var, default 0 = never trust the header). Covers 9 canonical events (auth login/signup, demo magic-link mint/verify/reject, API 401/403, WS connect-rejected) across 7 attack-class threat-model rows (credential stuffing → magic-link enumeration → replay → mint abuse → API probing → signup abuse → WS storms). Phase 2 ships a compose-side smoke test that drives a real CrowdSec container against the canonical event stream and asserts scenarios fire.
+
+(Spelled "CrowdSec" intentionally — the open-source IP-reputation engine that reads logs the way fail2ban does. The original v2.423.2 TODO said "crowdstrike"; CrowdStrike Falcon is endpoint protection software and doesn't operate on application logs.)
+
+See [`docs/plans/fail2ban-crowdsec-integration.md`](docs/plans/fail2ban-crowdsec-integration.md) for the per-event table, the parser regex contract that both engines share, the threat-model class-by-class breakdown, non-goals, and the three-phase roadmap (emission + fail2ban → CrowdSec compose smoke test → optional JSON-line side-channel).
+
+### Cloudflare IP-banning integration (enforcement at the edge)
+
+Optional outbound API hook: when SimpleVTT decides to ban an IP (GM clicks "Ban IP at edge" in the campaign admin panel, future auto-ban hook fires from the in-app rate limit, or the CrowdSec → Cloudflare bouncer path translates a CrowdSec decision), call the Cloudflare IP Access Rules API to add the IP to a configured zone rule. Requests from that IP never reach SimpleVTT again until the operator unbans. **Two independent env-var gates**: `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ZONE_ID` configure the *client* (bouncer use case can drive it directly); `SIMPLEVTT_CLOUDFLARE_BANNING_ENABLED=true` gates the *GM-facing button* so operators who only want the CrowdSec → Cloudflare bouncer path can leave the in-app surface off.
+
+Per the [Third-party APIs must be Docker Compose services](CLAUDE.md#third-party-apis-must-be-docker-compose-services) rule, the Cloudflare API endpoint isn't a service we run — but a **wiremock** service in compose (dev profile) serves canned `/zones/<id>/firewall/access_rules/rules` responses from a `docs/integrations/cloudflare/mock/` fixture so the integration is testable without burning real quota. Every ban / unban call writes a row to a new generic `admin_audit_log` table (who banned what IP, when, against which scope) so admin-button abuse is reviewable + reversible. Schema bump filed: SCHEMA_VERSION 69 → 70 when Phase 1 ships.
+
+See [`docs/plans/cloudflare-edge-banning.md`](docs/plans/cloudflare-edge-banning.md) for the threat model (6 attack classes), the two-env-var gate design, the `admin_audit_log` schema, the three GM-only endpoints (`POST /ban_ip` / `POST /unban_ip` / `GET /edge_bans`), the GM panel UI surface, and the three-phase roadmap (manual ban + audit + wiremock dev → CrowdSec bouncer wiring docs + compose-side smoke → auto-ban hook hard-blocked on demo-magic-link Phase 3).
 
 ---
 

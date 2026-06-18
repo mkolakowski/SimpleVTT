@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.423.6] - 2026-06-18 — "The Sorted Vault"
+
+**Schema version:** 69
+
+**Commit summary:** Pure-organization commit on `TODO.md`. Promotes the three v2.423.2-filed security entries from `Manually Added` (where they shared space with P3 UI-polish items) into a dedicated **`## Security`** topic section that sits between Legal & Compliance and Test Infrastructure. The three entries are otherwise unchanged in substance, just rewritten as topic-section prose paragraphs with their plan-doc cross-links inline.
+
+**Description:** The `Manually Added` section is designed as a catch-all for ad-hoc P3-flavored polish items the user surfaces in conversation. By v2.423.5 the three security TODOs had outgrown that container — each carries its own `docs/plans/<slug>.md`, each is paired with the others as one coherent spine, each is substantial enough to merit a section heading instead of a bullet. The reorganization makes them findable: a contributor browsing the topic-section table of contents (Combat / Maps / Visual / etc.) now lands on **Security** as a sibling, with a short intro paragraph that names the three-piece composition and links to each plan.
+
+The header preamble's "Quick map" line was updated in the same edit to list the new section, and to add a one-line clarification that topic sections may contain entries with design plans (Combat already has examples — Advantage/Disadvantage and Death Saves both have plan docs) — the topic split is about audience navigation, not plan-vs.-no-plan status. Without that clarification, a reader following the old quick-map line ("Big feature buckets that aren't tracked by a plan") might miss the Security section because it links to three plans.
+
+The `Manually Added` section reverts to just the four P3 UI-polish bullets that were there before v2.423.2 — pills in the roll log, drawer-over-topbar positioning, logout-button animation reverse, roll-log-spells visual parity.
+
+**Why "The Sorted Vault":** the security tooling has the same content as before — three TODOs, three plans, three sibling pieces — but now it's stored in a vault with its own labeled door instead of a drawer full of polish items.
+
+**Cross-link to substrate (per the [verify substrate before proposing](MEMORY.md) memory):** confirmed the three plan docs all exist and serve at `/wiki/doc/plan-demo-magic-link`, `/wiki/doc/plan-fail2ban-crowdsec-integration`, `/wiki/doc/plan-cloudflare-edge-banning` before promoting them into the topic section — no audit-vs.-substrate drift here.
+
+PATCH — TODO.md reorganization only (~50 lines moved + ~20 lines of section intro + 1-line Quick Map update + version + README + CHANGELOG). No new TODOs filed; no app code touched; no plans changed.
+
+### Changed
+- `TODO.md`: new `## Security` topic section between Legal & Compliance and Test Infrastructure, holding the three v2.423.2-filed entries (URL-based magic-link login / fail2ban+CrowdSec log integration / Cloudflare IP-banning integration) as topic-section prose paragraphs with inline plan-doc cross-links. The `## Manually Added` section reverts to its pre-v2.423.2 contents (four P3 UI-polish bullets). Quick-map line at the top updated to list Security and to clarify that topic sections may contain entries with design plans.
+
 ## [2.423.5] - 2026-06-18 — "The Distant Gatekeeper"
 
 **Schema version:** 69
