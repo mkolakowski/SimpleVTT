@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3356 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.423.5, 2026-06-18).
+**Total tests:** 3368 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.424.0, 2026-06-18).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5311,6 +5311,27 @@ Read-only doc-hub routes added in v2.43.3, expanded in v2.49.9 with the `/wiki/d
 | `test_wiki_doc_serves_cloudflare_edge_banning_plan` | v2.423.5: `GET /wiki/doc/plan-cloudflare-edge-banning` → 200, body contains "cloudflare" + "edge-banning" + the nav menu. Resolves through the allowlist to `docs/plans/cloudflare-edge-banning.md` (outbound Cloudflare API client + GM-only "Ban IP at edge" button + admin-audit log + wiremock service in docker-compose for dev per the third-party-API rule; closes the three-piece security spine started in v2.423.2). |
 | `test_wiki_doc_unknown_slug_404` | v2.49.9: a slug that isn't in `_DOC_ALLOWLIST` → 404. Important security guarantee — the allowlist is the only way to reach a file outside `docs/wiki/`. |
 | `test_wiki_doc_traversal_blocked` | v2.49.9: directory-traversal characters in the doc slug → 404 / 400, rejected by the slug guard before the allowlist lookup. |
+
+---
+
+## Audit-log emission (Phase 1 of fail2ban/CrowdSec — v2.424.0)
+
+Unit tests on the `app.audit_log` typed emission module. Pure in-process (no httpx, no running container) — verify the canonical line shape the fail2ban filters + CrowdSec parsers will consume. Lives in `tests/harness/test_audit_log.py` to keep the audit module's regression net next to the harness suite, even though these tests don't talk to the server.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_emits_canonical_line_with_required_keys` | `audit("auth.login_failed", request=req, username=…)` emits a line that matches the parser regex and carries `ip=…` + `ua="…"` + `username=…` in order. |
+| `test_login_ok_at_info_level` | `audit("auth.login_ok", request=req, user_id=42)` emits at INFO and carries `user_id=42` as a bare token. |
+| `test_x_forwarded_for_ignored_by_default` | With `TRUSTED_PROXY_HOPS` unset, an XFF header is ignored entirely — the audit log records the direct client IP. |
+| `test_x_forwarded_for_trusted_when_hops_set` | With `TRUSTED_PROXY_HOPS=1`, a 2-entry XFF chain returns the leftmost entry (the real client) — protects the fail2ban filter from banning the reverse-proxy's IP instead of the attacker's. |
+| `test_x_forwarded_for_multi_hop` | With `TRUSTED_PROXY_HOPS=2`, a 3-entry XFF chain returns the leftmost entry. Confirms the `parts[-(hops+1)]` index formula. |
+| `test_x_forwarded_for_hops_exceeds_chain` | When `TRUSTED_PROXY_HOPS` exceeds the chain length, the helper clamps to the leftmost entry — defends against a mis-configured hops value reading off the front of the array. |
+| `test_unknown_ip_when_no_request` | `audit(..., request=None, ...)` emits `ip=unknown ua=""` — covers background-task or test-harness call sites that don't have a Request object. |
+| `test_value_quoting_handles_whitespace_and_quotes` | Values with whitespace get double-quoted; embedded quotes are backslash-escaped — so a parser regex can split key=value pairs deterministically. |
+| `test_explicit_ip_kv_overrides_request` | Passing `ip=` as a kwarg overrides the request-extracted IP. |
+| `test_bool_and_int_render_as_bare_tokens` | `bool` → `true`/`false`; `int` → unquoted decimal — so CrowdSec's typed parsers can read them without unquoting. |
+| `test_invalid_trusted_proxy_hops_falls_back_to_zero` | `TRUSTED_PROXY_HOPS="not-a-number"` falls back to 0 (XFF ignored), not a crash. |
+| `test_negative_trusted_proxy_hops_falls_back_to_zero` | `TRUSTED_PROXY_HOPS="-3"` clamps to 0 — defensive against a typo in `.env`. |
 
 ---
 

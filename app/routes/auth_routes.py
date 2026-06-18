@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from .. import auth as auth_mod
+from ..audit_log import audit
 from ..auth import (
     authenticate_local,
     get_or_create_google_user,
@@ -75,6 +76,12 @@ def login_submit(
 ):
     user = authenticate_local(db, email, password)
     if not user:
+        audit(
+            "auth.login_failed",
+            level=logging.WARNING,
+            request=request,
+            username=email.lower().strip(),
+        )
         return templates.TemplateResponse(
             "login.html",
             {
@@ -92,6 +99,7 @@ def login_submit(
         user.is_admin = True
         db.commit()
     login_user(request, user)
+    audit("auth.login_ok", request=request, user_id=user.id)
     return RedirectResponse(_safe_next_path(next), status_code=303)
 
 
@@ -119,6 +127,13 @@ def register_submit(
         raise HTTPException(404, "Registration disabled")
     email_norm = email.lower().strip()
     if len(password) < 8:
+        audit(
+            "auth.signup_failed",
+            level=logging.WARNING,
+            request=request,
+            reason="password_too_short",
+            username=email_norm,
+        )
         return templates.TemplateResponse(
             "register.html",
             {"request": request, "settings": settings, "error": "Password must be at least 8 characters."},
@@ -126,6 +141,13 @@ def register_submit(
         )
     existing = db.query(User).filter(User.email == email_norm).first()
     if existing:
+        audit(
+            "auth.signup_failed",
+            level=logging.WARNING,
+            request=request,
+            reason="email_taken",
+            username=email_norm,
+        )
         return templates.TemplateResponse(
             "register.html",
             {"request": request, "settings": settings, "error": "Email already registered."},

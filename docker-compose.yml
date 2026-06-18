@@ -47,6 +47,13 @@ services:
       DEMO_RESET_INTERVAL_MINUTES: ${DEMO_RESET_INTERVAL_MINUTES:-60}
       DEMO_RESET_ON_BOOT: ${DEMO_RESET_ON_BOOT:-true}
       DEMO_CREDENTIALS_VISIBLE: ${DEMO_CREDENTIALS_VISIBLE:-true}
+      # v2.424.0 — fail2ban/CrowdSec integration plan Phase 1.
+      # Number of trusted X-Forwarded-For hops behind the app. 0 means
+      # never trust the header (default). Set to 1 if exactly one reverse
+      # proxy is in front of SimpleVTT and you want audit logs to record
+      # the real client IP, not the proxy's. See
+      # docs/plans/fail2ban-crowdsec-integration.md for the threat model.
+      TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-0}
       # v2.49.12: test-suite knobs (encounter-sim plan, Phase 1).
       # TEST_MODE conditionally mounts /api/test/* endpoints — leave
       # OFF in production. DICE_SEED, when an integer, makes every

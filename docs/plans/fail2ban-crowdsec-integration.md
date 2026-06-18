@@ -1,6 +1,6 @@
 # fail2ban / CrowdSec log integration — Design Plan
 
-> **Status:** ⚪ proposed · Phase 1 unstarted.
+> **Status:** 🟠 Phase 1 partial (v2.424.0) — emission module + auth canonical events + reference fail2ban configs shipped; CrowdSec configs and the compose-side smoke test land with Phase 2.
 > **Tracked in:** [`TODO.md`](../../TODO.md) → Manually Added → "fail2ban / CrowdSec log integration out of the box".
 > **Sibling plans:**
 > - [`demo-magic-link.md`](demo-magic-link.md) — defines half the consumer side of this contract (the `demo_magic_link.*` log lines).
@@ -157,13 +157,14 @@ Each config block carries a header comment with a short rationale + the threshol
 
 ## Phase plan
 
-### Phase 1 — Emission + canonical events + fail2ban configs (v2.5x.0)
+### Phase 1 — Emission + canonical events + fail2ban configs (v2.424.0 — ✅ initial drop shipped)
 
-1. New `app/audit_log.py` with the `audit()` helper, X-Forwarded-For handling, the canonical event list as a typed enum (so a typo at a call site fails import-time, not at log-parse-time).
-2. Plumb the audit calls at every event site in the table above (auth, signup, API auth/forbid). Skip the magic-link events — those land with [`demo-magic-link.md`](demo-magic-link.md) Phase 1.
-3. Drop the fail2ban configs into `docs/integrations/fail2ban/`. README in `docs/integrations/` explains "copy these into `/etc/fail2ban/` + `fail2ban-client reload`."
-4. Unit tests for the emission module + the filter regexes.
-5. Wire `docs/integrations/` into the wiki — three new allowlist entries (`integrations` README + the two engine sub-READMEs), wiki.html rows, etc.
+1. ✅ **v2.424.0** — New `app/audit_log.py` with the `audit()` helper + `TRUSTED_PROXY_HOPS` env var (default 0 = never trust `X-Forwarded-For`).
+2. ✅ **v2.424.0** — Plumbed the audit calls at `/login` (`auth.login_ok` + `auth.login_failed`) and `/register` (`auth.signup_failed` with `reason=password_too_short` / `reason=email_taken`).
+3. ✅ **v2.424.0** — Reference fail2ban configs landed at `docs/integrations/fail2ban/filter.d/simplevtt-auth.conf` + `docs/integrations/fail2ban/jail.d/simplevtt.conf` + `docs/integrations/README.md` operator how-to.
+4. ✅ **v2.424.0** — Unit tests for the emission module at `tests/harness/test_audit_log.py` (11 tests covering line shape, XFF trust toggling, value quoting, env-var fallback).
+5. 🟠 **Filed for follow-up** — API surface events (`api.unauthorized` + `api.forbidden`) deferred. Plumbing the global 401/403 handler is a separate commit because the FastAPI exception handler at `app/main.py::_auth_redirect_handler` already special-cases the auth-redirect path; landing the audit call there cleanly needs a careful refactor.
+6. 🟠 **Filed for follow-up** — Wiki surfacing for `docs/integrations/README.md`. Skipped in v2.424.0 to keep the commit focused; the plan-doc cross-link is the only reachability path today.
 
 ### Phase 2 — CrowdSec configs + compose-side smoke test (v2.5x.1)
 

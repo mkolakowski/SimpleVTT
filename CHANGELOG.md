@@ -10,6 +10,47 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.424.0] - 2026-06-18 — "The First Beacon"
+
+**Schema version:** 69
+
+**Commit summary:** First implementation ship of the v2.423.2 security spine. Lands **Phase 1 (initial drop) of `docs/plans/fail2ban-crowdsec-integration.md`**: new `app/audit_log.py` typed emission module + canonical-log-line plumbing at the `/login` and `/register` auth call sites + reference fail2ban filter.d/jail.d configs under `docs/integrations/fail2ban/` + 12 unit tests for the emission shape + new `TRUSTED_PROXY_HOPS` env var for opt-in `X-Forwarded-For` trust. The audit module is the foundation the demo-magic-link `verify_rejected` lines (next commit) will ride on.
+
+**Description:** This is the detection-layer substrate. Every banning-relevant event now flows through `audit(event, *, request, **kv)` which formats a single canonical line:
+
+```
+auth.login_failed ip=1.2.3.4 ua="Mozilla/5.0 (...)" username=alice@example.com
+auth.login_ok ip=1.2.3.4 ua="..." user_id=42
+auth.signup_failed ip=1.2.3.4 ua="..." reason=email_taken username=bob@example.com
+```
+
+A single parser regex (`^(?P<event>[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*)\s+(?P<kvs>.*)$`) consumes both the fail2ban filter and (Phase 2) the CrowdSec parser pipeline. Bare-token-safe values (ints, slugs, IPs, emails without spaces) pass through unquoted; values with whitespace or quotes get double-quoted with backslash-escaped inner quotes so the parser can split deterministically.
+
+**X-Forwarded-For trust:** never trusted by default. The new `TRUSTED_PROXY_HOPS=N` env var (set in `docker-compose.yml` and `.env.example`, default 0) opts the deploy into trusting the last N hops of the header chain. With `N=1` and `XFF: "client_ip, proxy_ip"`, the audit log records `ip=client_ip` (the real attacker). With `N=0` the header is ignored entirely. When `N` exceeds the chain length the helper clamps to the leftmost entry — defense against a mis-configured `TRUSTED_PROXY_HOPS` reading off the front of the array.
+
+**Bug caught by the tests:** the first cut of the XFF index formula was off by one — it returned the closest-trusted *proxy's* IP instead of the real client's. The `test_x_forwarded_for_trusted_when_hops_set` test failed, the fix was a single-line change to `parts[-(hops+1)]`, and the rewritten formula now correctly returns the leftmost entry the closest-trusted proxy saw. Without the test this would have shipped silently and banned the wrong IPs in production.
+
+**Reference fail2ban configs:** drop-in files at `docs/integrations/fail2ban/filter.d/simplevtt-auth.conf` (regex filter matching the canonical line shape) and `docs/integrations/fail2ban/jail.d/simplevtt.conf` (jail wiring the filter to a 1h ban after 5 failures in 5min). Plus `docs/integrations/README.md` operator how-to covering install + tuning + the canonical event table. Operators copy two files into `/etc/fail2ban/` and reload — no custom regex authoring.
+
+**What's deferred from Phase 1:** the global 401/403 emission path (`api.unauthorized` + `api.forbidden`) is filed for a follow-up because plumbing it through the existing `app/main.py::_auth_redirect_handler` cleanly needs a careful refactor. Wiki-surfacing for `docs/integrations/README.md` is filed too — the plan-doc cross-link is the only reachability path today.
+
+**Why "The First Beacon":** the plan called the file `lighthouse-code.md` last commit; this is the first beacon actually lit. The canonical log-line format is now real and emitting from a running deploy, not just a doc.
+
+MINOR — new module (`app/audit_log.py`) + new env var (`TRUSTED_PROXY_HOPS`) + new endpoint behavior (audit emission on `/login` + `/register`). 12 new unit tests; harness total 3356 → 3368.
+
+### Added
+- `app/audit_log.py`: new typed emission module. `audit(event, *, level, request, **kv)` helper formats a canonical line and emits to `simplevtt.audit` logger. `_extract_client_ip()` owns the X-Forwarded-For trust decision via `TRUSTED_PROXY_HOPS` env var. `_format_value()` decides bare-token vs. double-quoted-and-escaped.
+- `app/routes/auth_routes.py`: `audit("auth.login_failed", ...)` on bad credentials, `audit("auth.login_ok", ...)` on successful login, `audit("auth.signup_failed", ..., reason=...)` on registration errors (with `reason=password_too_short` or `reason=email_taken`).
+- `app/config.py` + `docker-compose.yml` + `.env.example`: new `TRUSTED_PROXY_HOPS` env var (default `0` = never trust the header). Set `1` if exactly one reverse proxy is in front of SimpleVTT.
+- `docs/integrations/fail2ban/filter.d/simplevtt-auth.conf`: regex filter matching `auth.login_failed` + `auth.signup_failed` canonical lines, extracting the source IP into fail2ban's `<HOST>` group.
+- `docs/integrations/fail2ban/jail.d/simplevtt.conf`: jail wrapping the filter — 5 failures in 5 minutes triggers a 1-hour ban. Operator tunes `bantime` / `findtime` / `maxretry` per threat model.
+- `docs/integrations/README.md`: operator how-to. Covers install, tuning, the canonical event table, and what's coming in Phases 2/3 (CrowdSec configs, Cloudflare).
+- `tests/harness/test_audit_log.py`: 12 in-process unit tests for the emission module — canonical line shape, XFF trust toggling under env-var control, multi-hop chain handling, value quoting, env-var fallback for bad input. Pure-Python, no httpx, no running container.
+
+### Changed
+- `docs/plans/fail2ban-crowdsec-integration.md`: status flipped from ⚪ proposed to 🟠 Phase 1 partial (v2.424.0). Phase 1 numbered list updated to mark items 1–4 ✅ shipped and items 5–6 (API surface + wiki-surface README) filed for follow-up.
+- `docs/test-harness-coverage.md`: new section "Audit-log emission (Phase 1 of fail2ban/CrowdSec — v2.424.0)" with all 12 test rows. Total-test-count nudges 3356 → 3368.
+
 ## [2.423.7] - 2026-06-18 — "The Lit Atrium"
 
 **Schema version:** 69
