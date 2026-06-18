@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3381 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.425.0, 2026-06-18).
+**Total tests:** 3384 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.426.0, 2026-06-18).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5311,6 +5311,20 @@ Read-only doc-hub routes added in v2.43.3, expanded in v2.49.9 with the `/wiki/d
 | `test_wiki_doc_serves_cloudflare_edge_banning_plan` | v2.423.5: `GET /wiki/doc/plan-cloudflare-edge-banning` → 200, body contains "cloudflare" + "edge-banning" + the nav menu. Resolves through the allowlist to `docs/plans/cloudflare-edge-banning.md` (outbound Cloudflare API client + GM-only "Ban IP at edge" button + admin-audit log + wiremock service in docker-compose for dev per the third-party-API rule; closes the three-piece security spine started in v2.423.2). |
 | `test_wiki_doc_unknown_slug_404` | v2.49.9: a slug that isn't in `_DOC_ALLOWLIST` → 404. Important security guarantee — the allowlist is the only way to reach a file outside `docs/wiki/`. |
 | `test_wiki_doc_traversal_blocked` | v2.49.9: directory-traversal characters in the doc slug → 404 / 400, rejected by the slug guard before the allowlist lookup. |
+
+---
+
+## API-surface audit emission (Phase 1 finisher — v2.426.0)
+
+Integration tests for the v2.426.0 `app/main.py::_auth_redirect_handler` plumbing — every protected-endpoint 401/403 response now emits a canonical `api.unauthorized` or `api.forbidden` audit-log line for fail2ban / CrowdSec consumption. The legitimate browser-bounce path (HTML request to a guarded page that gets redirected to `/login`) is explicitly excluded so the log doesn't drown in normal browser noise. Lives in `tests/harness/test_api_audit_emission.py`.
+
+These tests don't verify the audit emission directly (that's covered by `test_audit_log.py`) — they verify the **response codes** that trigger it.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_anonymous_api_request_to_protected_endpoint_returns_401` | `GET /admin` with `Accept: application/json` → 401. Triggers the `api.unauthorized` emit. |
+| `test_anonymous_html_browser_bounce_is_redirect_not_401` | `GET /admin` with `Accept: text/html` → 303 redirect to `/login?next=…`. NO audit emit on this path — legitimate browser navigation. |
+| `test_non_admin_user_hitting_admin_endpoint_returns_403` | Logged-in `demo-alice` (non-admin) hits `/admin` → 403. Triggers the `api.forbidden` emit so an operator can spot privilege-escalation probes. |
 
 ---
 

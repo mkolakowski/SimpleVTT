@@ -1,6 +1,6 @@
 # fail2ban / CrowdSec log integration — Design Plan
 
-> **Status:** 🟠 Phase 1 partial (v2.424.0) — emission module + auth canonical events + reference fail2ban configs shipped; CrowdSec configs and the compose-side smoke test land with Phase 2.
+> **Status:** ✅ Phase 1 effectively complete (v2.426.0) — emission module + auth canonical events + API-surface 401/403 events + demo_magic_link.* events + reference fail2ban configs covering all three families shipped. Only the wiki-surface for `docs/integrations/README.md` remains filed. CrowdSec configs and the compose-side smoke test land with Phase 2.
 > **Tracked in:** [`TODO.md`](../../TODO.md) → Manually Added → "fail2ban / CrowdSec log integration out of the box".
 > **Sibling plans:**
 > - [`demo-magic-link.md`](demo-magic-link.md) — defines half the consumer side of this contract (the `demo_magic_link.*` log lines).
@@ -163,7 +163,7 @@ Each config block carries a header comment with a short rationale + the threshol
 2. ✅ **v2.424.0** — Plumbed the audit calls at `/login` (`auth.login_ok` + `auth.login_failed`) and `/register` (`auth.signup_failed` with `reason=password_too_short` / `reason=email_taken`).
 3. ✅ **v2.424.0** — Reference fail2ban configs landed at `docs/integrations/fail2ban/filter.d/simplevtt-auth.conf` + `docs/integrations/fail2ban/jail.d/simplevtt.conf` + `docs/integrations/README.md` operator how-to.
 4. ✅ **v2.424.0** — Unit tests for the emission module at `tests/harness/test_audit_log.py` (11 tests covering line shape, XFF trust toggling, value quoting, env-var fallback).
-5. 🟠 **Filed for follow-up** — API surface events (`api.unauthorized` + `api.forbidden`) deferred. Plumbing the global 401/403 handler is a separate commit because the FastAPI exception handler at `app/main.py::_auth_redirect_handler` already special-cases the auth-redirect path; landing the audit call there cleanly needs a careful refactor.
+5. ✅ **v2.426.0** — API surface events (`api.unauthorized` + `api.forbidden`) plumbed into the global `_auth_redirect_handler`. Legitimate browser-bounce path (HTML request to guarded page → 303 to `/login`) is explicitly excluded so the log doesn't drown in normal navigation noise. fail2ban filter at `docs/integrations/fail2ban/filter.d/simplevtt-auth.conf` extended to cover the new event tags + the `demo_magic_link.verify_rejected` family. 3 new harness tests at `tests/harness/test_api_audit_emission.py`.
 6. 🟠 **Filed for follow-up** — Wiki surfacing for `docs/integrations/README.md`. Skipped in v2.424.0 to keep the commit focused; the plan-doc cross-link is the only reachability path today.
 
 ### Phase 2 — CrowdSec configs + compose-side smoke test (v2.5x.1)

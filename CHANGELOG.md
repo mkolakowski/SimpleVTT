@@ -10,6 +10,58 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.426.0] - 2026-06-18 — "The Empty Doorbell"
+
+**Schema version:** 70
+
+**Commit summary:** Finishes v2.424.0's deferred API-surface emission. The global `_auth_redirect_handler` in `app/main.py` now emits canonical `api.unauthorized` (on every 401 that isn't a legitimate HTML browser-bounce) and `api.forbidden` (on every 403) so fail2ban / CrowdSec can spot credential-probe and privilege-escalation patterns. The reference fail2ban filter extends to cover the new event tags **plus** the `demo_magic_link.verify_rejected` family that v2.425.0 shipped.
+
+**Description:** The handler already special-cased the browser-bounce 401 (HTML request to a guarded page gets redirected to `/login?next=…`); the audit emit hooks in BEFORE the redirect decision so legitimate browser navigation **doesn't** flood the log. Three response shapes after this commit:
+
+- **Anonymous `GET /admin` with `Accept: application/json`** → 401 + `api.unauthorized ip=… ua=… path=/admin`. This is the credential-probe signal — an attacker hitting an API endpoint without auth.
+- **Anonymous `GET /admin` with `Accept: text/html`** → 303 redirect to `/login?next=/admin`. **No audit emit.** This is normal browser navigation; logging it would drown the real probe signals.
+- **Logged-in non-admin user `GET /admin`** → 403 + `api.forbidden ip=… ua=… path=/admin`. Probable privilege-escalation probe; operator can ban after N hits from one IP.
+
+The `path=…` field carries the requested path (no query string — query params can leak PII). With fail2ban or CrowdSec tuned on `api.unauthorized` from a single IP across multiple paths in a short window, an enumerator probing for unguarded endpoints gets banned at the firewall before they find anything.
+
+**fail2ban filter updated.** The reference `docs/integrations/fail2ban/filter.d/simplevtt-auth.conf` gains two new `failregex` lines covering the `api.*` events and two more covering `demo_magic_link.verify_rejected` (the demo-magic-link family was shipped in v2.425.0 but the filter wasn't extended to cover it yet — that's fixed here). The `ignoreregex` adds `demo_magic_link.mint_ok` and `demo_magic_link.verify_ok` so a legitimate user clicking a working demo link doesn't get banned.
+
+**3 new harness tests** in `tests/harness/test_api_audit_emission.py`:
+
+| Test | Asserts |
+|---|---|
+| `test_anonymous_api_request_to_protected_endpoint_returns_401` | `Accept: application/json` → 401 (triggers `api.unauthorized` emit). |
+| `test_anonymous_html_browser_bounce_is_redirect_not_401` | `Accept: text/html` → 303 redirect (no emit — by design). |
+| `test_non_admin_user_hitting_admin_endpoint_returns_403` | `demo-alice` (non-admin) hits `/admin` → 403 (triggers `api.forbidden` emit). |
+
+Harness count nudges 3381 → 3384. The audit emission itself is unit-tested by `tests/harness/test_audit_log.py` — these new tests verify the **trigger conditions**, not the line shape.
+
+**Audit log proof.** A live run on the dev container after the rebuild:
+
+```
+WARNING simplevtt.audit: api.unauthorized   ip=192.168.65.1 ua=curl/8.7.1 path=/admin
+INFO    simplevtt.audit: auth.login_ok       ip=192.168.65.1 ua=curl/8.7.1 user_id=5753
+WARNING simplevtt.audit: api.forbidden      ip=192.168.65.1 ua=curl/8.7.1 path=/admin
+```
+
+— matching the canonical parser regex; the extended fail2ban filter would ban the probe IP after the 5-in-5-min threshold.
+
+**Why "The Empty Doorbell":** an attacker rings the bell at every locked door (`api.unauthorized`); SimpleVTT now logs each ring so the operator can spot the pattern and ban the IP before the bell-ringer finds an unlocked one.
+
+**Status flips on the plan doc.** `docs/plans/fail2ban-crowdsec-integration.md` Phase 1 is now ✅ effectively complete — only the wiki-surface for `docs/integrations/README.md` remains filed (small doc-only follow-up).
+
+MINOR — new audit emissions on existing endpoints + new harness tests + extended reference fail2ban filter. No new endpoints, no schema change, no new env var.
+
+### Added
+- `app/main.py::_auth_redirect_handler`: new `api.unauthorized` / `api.forbidden` audit emits before the redirect/fall-through logic. Legitimate browser-bounce 401 path explicitly excluded.
+- `tests/harness/test_api_audit_emission.py`: 3 integration tests covering the 401-anon-API + 303-anon-HTML-redirect + 403-non-admin paths.
+
+### Changed
+- `docs/integrations/fail2ban/filter.d/simplevtt-auth.conf`: `failregex` extended to cover `api.unauthorized` / `api.forbidden` / `demo_magic_link.verify_rejected`. `ignoreregex` extended to cover the demo-magic-link success events.
+- `docs/integrations/README.md`: canonical-event table extended with all 5 new event tags + reason vocabularies.
+- `docs/plans/fail2ban-crowdsec-integration.md`: Phase 1 item 5 (API surface emission) flipped from 🟠 filed to ✅ shipped. Header status note flipped from "Phase 1 partial" to "Phase 1 effectively complete".
+- `docs/test-harness-coverage.md`: new section "API-surface audit emission (Phase 1 finisher — v2.426.0)" with 3 test rows. Total-test-count 3381 → 3384.
+
 ## [2.425.0] - 2026-06-18 — "The Sundered Vault Door"
 
 **Schema version:** 70 (new `demo_magic_links` table)

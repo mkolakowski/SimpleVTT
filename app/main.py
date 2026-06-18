@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
+from .audit_log import audit
 from .auth import register_oauth
 from .config import get_settings
 from .database import init_db, record_schema_version
@@ -102,7 +103,37 @@ async def _auth_redirect_handler(request: Request, exc: StarletteHTTPException):
     accept = (request.headers.get("accept") or "").lower()
     wants_html = "text/html" in accept and "application/json" not in accept
 
-    if exc.status_code == 401 and exc.detail == "Login required" and wants_html:
+    # v2.426.0 — finish the v2.424.0 fail2ban/CrowdSec Phase 1 by
+    # emitting canonical audit-log lines for protected-endpoint
+    # 401/403 responses. The intent is to give fail2ban / CrowdSec
+    # filters a clean signal for "this IP just hit a 401 on a path
+    # it isn't authenticated for" (credential-probe pattern). We
+    # SKIP the emit on the legitimate browser-bounce path — when
+    # an HTML request to a guarded page hits 401 + "Login required"
+    # we redirect to /login below, and that flow happens every
+    # time an unauthenticated user clicks any protected link, so
+    # logging it as an audit event would drown the real signals.
+    is_browser_bounce = (
+        exc.status_code == 401
+        and exc.detail == "Login required"
+        and wants_html
+    )
+    if exc.status_code == 401 and not is_browser_bounce:
+        audit(
+            "api.unauthorized",
+            level=logging.WARNING,
+            request=request,
+            path=request.url.path,
+        )
+    elif exc.status_code == 403:
+        audit(
+            "api.forbidden",
+            level=logging.WARNING,
+            request=request,
+            path=request.url.path,
+        )
+
+    if is_browser_bounce:
         next_path = request.url.path
         if request.url.query:
             next_path += "?" + request.url.query

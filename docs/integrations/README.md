@@ -78,13 +78,16 @@ this only when a known reverse proxy sits in front of the app.
 | `auth.login_ok` | INFO | Successful local-password login. |
 | `auth.login_failed` | WARNING | Bad credentials at `/login`. |
 | `auth.signup_failed` | WARNING | Registration error (`reason=email_taken` / `password_too_short`). |
+| `api.unauthorized` | WARNING | Protected endpoint hit without auth (excludes the legitimate HTML browser-bounce to `/login`). `path=…` carries the requested path. |
+| `api.forbidden` | WARNING | Logged-in user hit an endpoint they're not authorised for (e.g. non-admin user hitting `/admin`). Probable privilege-escalation probe. |
+| `demo_magic_link.mint_ok` | INFO | Admin minted a demo magic-link. `sub=…` + `admin_id=…` for audit. |
+| `demo_magic_link.verify_ok` | INFO | Demo magic-link verified + consumed. `sub=…` + `jti=…` + `user_id=…`. |
+| `demo_magic_link.verify_rejected` | WARNING | `reason=signature` / `expired` / `payload` / `replay` / `unknown_sub` / `user_missing` / `missing_token`. `reason=replay` is "ban immediately" — never legitimate. |
 
 Planned events (per
 [`docs/plans/fail2ban-crowdsec-integration.md`](../plans/fail2ban-crowdsec-integration.md)
 and
-[`docs/plans/demo-magic-link.md`](../plans/demo-magic-link.md)):
+[`docs/plans/cloudflare-edge-banning.md`](../plans/cloudflare-edge-banning.md)):
 
-- `demo_magic_link.mint_ok` / `verify_ok` / `verify_rejected`
-- `api.unauthorized` / `api.forbidden`
 - `ws.connect_rejected`
 - `cloudflare.ban_ok` / `ban_failed` / `unban_ok` / `unban_failed`
