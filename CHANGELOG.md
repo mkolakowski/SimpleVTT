@@ -10,6 +10,39 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.413.0] - 2026-06-17 — "The Warded Hold"
+
+**Schema version:** 69
+
+**Commit summary:** Fifth and final Phase 2 consumer, closing the AoE-radius scaling arc. The **third `cube-edge` shape** (after Create or Destroy Water and Creation) and the **largest increment** in the substrate. Ships a new **`/cast_private_sanctum`** endpoint. RAW PHB p.264: Private Sanctum is an L4 Abjuration, 120 ft, 24 hours, no save, not concentration; it secures a cube up to 100 ft on a side whose edge grows +100 ft per slot above 4th (L4 → 100, L5 → 200, … L9 → 600).
+
+**Description:** Same endpoint-build shape as the prior Phase 2 spells (Private Sanctum was catalog-only). Third cube-edge consumer of `_SPELL_AOE_MAP`, with the biggest stride per slot:
+
+```python
+_SPELL_AOE_MAP["private-sanctum"] = {
+    "base_level": 4,
+    "base_ft": 100,        # 100-ft cube at L4
+    "increment_ft": 100,   # +100 ft per slot above L4
+    "shape": "cube-edge",
+}
+```
+
+`/cast_private_sanctum` reads `_spell_aoe_for_slot("private-sanctum", slot_level, default_ft=100)` and surfaces `cube_ft` on the response + `feature_used` broadcast. v1 ships the audit (slot consume + cube surfacing); the per-property security riders (sound-proofing, scry-blocking, planar-travel blocking, etc.) are filed.
+
+With this consumer, **Phase 2 (AoE-radius scaling) is closed** — all five genuine dimension-scalers are wired: Fog Cloud, Confusion (sphere-radius), Create or Destroy Water, Creation, Private Sanctum (cube-edge).
+
+**Why "The Warded Hold":** Private Sanctum wards a chamber against the outside world — the bigger the slot, the bigger the hold you can seal.
+
+MINOR — new HTTP endpoint (`/cast_private_sanctum`) + new substrate entry + 1 new harness file (8 tests: 4 cube tiers + 4 error paths).
+
+### Added
+- `app/routes/tabletop_routes.py`: new `POST /api/campaign/{campaign_id}/cast_private_sanctum` endpoint. Validates missing character_id (400), slot_level < 4 (400), membership/ownership (403), eligible class (409 wrong_class — Wizard), spell on the list (409 spell_not_known), slot available (409 no_slot), Phase 4 action over-budget (409). On success: decrements the slot, marks the action economy, broadcasts the chat card + `spell_slot_update` + `feature_used` (with `cube_ft`), logs the slot spend for undo, returns `{ok, cast_id, slot_level, cube_ft, range_ft: 120, concentration: false, …}`.
+- `app/routes/tabletop_routes.py`: new `"private-sanctum"` entry in `_SPELL_AOE_MAP` (after `"creation"`). Cube-edge, base 100 ft, +100 ft per slot above L4 — the largest increment in the substrate.
+- `tests/harness/test_cast_private_sanctum.py`: new harness file. Four happy-path tests (L4 → 100, L5 → 200, L6 → 300, L9 → 600) + four error-path tests (missing character_id → 400, slot_level < 4 → 400, wrong class → 409, spell not known → 409). Cast by Thalindra Moonwhisper (Wizard Lv 7); the fixture snapshots her spells + wizard slots and restores both on teardown, with a separate strip-fixture for the spell_not_known path.
+
+### Changed
+- `docs/plans/spell-utility-upcast.md`: Phase 2 backlog table flips Private Sanctum to ✅ shipped; status header marks Phase 2 (AoE-radius scaling) CLOSED — all five consumers wired.
+
 ## [2.412.0] - 2026-06-17 — "The Shadow Forge"
 
 **Schema version:** 69

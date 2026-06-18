@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3292 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.412.0, 2026-06-17).
+**Total tests:** 3300 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.413.0, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4961,6 +4961,20 @@ v2.406.0 — new `/cast_geas` endpoint + duration-scaling substrate, fourth cons
 | `test_geas_low_slot_400` | slot_level=4 → 400 (Geas is L5). |
 | `test_geas_wrong_class_409` | class_slug=barbarian (not a Geas class) → 409 `wrong_class`. |
 | `test_geas_spell_not_known_409` | Wizard without Geas on her list → 409 `spell_not_known` (fires before the slot lookup; no slot patching needed). |
+
+### `test_cast_private_sanctum.py`
+v2.413.0 — new `/cast_private_sanctum` endpoint, the fifth and final consumer of the Phase 2 AoE-radius scaling substrate and the third cube-edge shape (after Create or Destroy Water and Creation), closing the arc. RAW L4 Abjuration, 120 ft, 24 hours, no save, not concentration; secures a cube up to 100 ft on a side. The cube edge scales +100 ft per slot above 4th — the largest increment in the substrate (L4 → 100, L5 → 200, L6 → 300, L9 → 600); surfaces `cube_ft`. Cast by Thalindra Moonwhisper (Wizard Lv 7), armed via a snapshot/restore fixture (L4-L9 wizard slots); a separate strip-fixture covers the spell_not_known path.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_private_sanctum_l4_routes_100ft` | L4 cast → 200; `cube_ft == 100`, `range_ft == 120`, `concentration is False`. Base tier. |
+| `test_private_sanctum_l5_routes_200ft` | L5 cast → `cube_ft == 200` (+100 over base). |
+| `test_private_sanctum_l6_routes_300ft` | L6 cast → `cube_ft == 300` (100 + 2×100). |
+| `test_private_sanctum_l9_routes_600ft` | L9 cast → `cube_ft == 600` (100 + 5×100). Top in-table slot. |
+| `test_private_sanctum_missing_character_id_400` | Missing character_id → 400. |
+| `test_private_sanctum_low_slot_400` | slot_level=3 → 400 (Private Sanctum is L4). |
+| `test_private_sanctum_wrong_class_409` | class_slug=cleric (not a Private Sanctum class) → 409 `wrong_class`. |
+| `test_private_sanctum_spell_not_known_409` | Wizard without Private Sanctum on her list → 409 `spell_not_known` (fires before the slot lookup). |
 
 ### `test_cast_creation.py`
 v2.412.0 — new `/cast_creation` endpoint + the Phase 2 AoE-radius scaling substrate, fourth consumer and the second cube-edge shape (after Create or Destroy Water). RAW L5 Illusion, 30 ft, special duration, no save; conjures an object no larger than a 5-ft cube. The cube edge scales +5 ft per slot above 5th (L5 → 5, L6 → 10, L7 → 15, L9 → 25); surfaces `cube_ft`. Cast by Thalindra Moonwhisper (Wizard Lv 7), armed via a snapshot/restore fixture (L5-L9 wizard slots); a separate strip-fixture covers the spell_not_known path.

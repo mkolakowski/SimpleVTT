@@ -2233,6 +2233,17 @@ _SPELL_AOE_MAP: dict[str, dict] = {
         "increment_ft": 5,      # +5 ft per slot above L5
         "shape": "cube-edge",
     },
+    # v2.413.0 — Private Sanctum (Wizard L4). RAW PHB p.264: 120 ft,
+    # 24 hours, no save. Secures a cube up to 100 ft on a side. Higher
+    # Levels: "increase the size of the cube by 100 feet for each slot
+    # level beyond 4th." Largest increment in the table — third cube-edge
+    # consumer and the Phase 2 closer (L4 → 100, L5 → 200, … L9 → 600).
+    "private-sanctum": {
+        "base_level": 4,
+        "base_ft": 100,         # 100-ft cube at L4
+        "increment_ft": 100,    # +100 ft per slot above L4
+        "shape": "cube-edge",
+    },
 }
 
 
@@ -85362,6 +85373,193 @@ async def cast_creation(
         "class_slug": class_slug,
         "cube_ft": cube_ft,
         "range_ft": 30,
+        "concentration": False,
+    }
+
+
+# ----------- API: cast Private Sanctum (4th-level Abjuration, AoE cube) -----------
+
+@router.post("/api/campaign/{campaign_id}/cast_private_sanctum")
+async def cast_private_sanctum(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.413.0 — Cast Private Sanctum: slot consume + audit +
+    substrate-driven AoE cube. RAW (PHB p.264): L4 Abjuration, 120 ft,
+    24 hours, no save. Secures a cube up to 100 ft on a side; the cube
+    edge scales with slot level — +100 ft per slot above 4th (L4 → 100
+    ft, L5 → 200 ft, … L9 → 600 ft). Class: Wizard.
+
+    Fifth and final consumer of the Phase 2 AoE-radius scaling substrate
+    (third ``cube-edge`` shape, largest increment), closing the arc.
+    Surfaces ``cube_ft``. v1 ships the spell-side audit (slot consume +
+    cube surfacing); the per-property security riders (sound-proofing,
+    scry-blocking, etc.) are filed.
+
+    Body: ``{character_id, class_slug, slot_level?, override?}``.
+
+    Validates: missing character_id (400), slot_level < 4 (400),
+    membership (403), ownership/GM (403), eligible class (409
+    wrong_class — Wizard), spell on the list (409 spell_not_known),
+    slot available (409 no_slot), Phase 4 action over-budget (409).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    class_slug = (body.get("class_slug") or "").strip().lower()
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw is not None else 4
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if slot_level < 4:
+        raise HTTPException(400, "slot_level must be >= 4 (Private Sanctum is L4)")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    _PRIVATE_SANCTUM_CLASSES = {"wizard"}
+    if class_slug not in _PRIVATE_SANCTUM_CLASSES:
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class",
+            "expected": sorted(_PRIVATE_SANCTUM_CLASSES),
+            "got": class_slug or "",
+        })
+    primary_class = (sheet.get("class") or "").strip().lower()
+    if primary_class != class_slug:
+        has_class = any(
+            (entry.get("class") or "").strip().lower() == class_slug
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_class:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class",
+                "expected": class_slug,
+                "got": primary_class or "",
+            })
+
+    spells = list(sheet.get("spells") or [])
+    has_ps = any(
+        (s.get("_slug") == "private-sanctum") or
+        (str(s.get("name", "")).lower() == "private sanctum")
+        for s in spells
+    )
+    if not has_ps:
+        return JSONResponse(status_code=409, content={
+            "error": "spell_not_known",
+            "spell": "private-sanctum",
+        })
+
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get(class_slug) or {})
+    slot = dict(per_class.get(str(slot_level)) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": class_slug,
+            "spell_name": "Private Sanctum",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "private-sanctum",
+            "label": "Private Sanctum",
+            "strict": strict,
+        })
+
+    # Commit slot decrement.
+    slot["used"] = used + 1
+    per_class[str(slot_level)] = slot
+    all_slots[class_slug] = per_class
+    sheet["spell_slots"] = all_slots
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # v2.413.0 — AoE-radius scaling substrate (cube-edge shape, largest
+    # increment). L4 → 100 ft, +100 ft per slot above 4th (L5 → 200, …
+    # L9 → 600).
+    cube_ft = _spell_aoe_for_slot("private-sanctum", slot_level, default_ft=100)
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    note = (
+        f"🔒 {char.name} casts Private Sanctum (L{slot_level}) — "
+        f"120 ft, secures a {cube_ft}-ft cube for 24 hours (v1 stops "
+        f"at the cast; per-property security riders filed)"
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": "",
+            "total": 0,
+            "breakdown": note,
+            "note": note,
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id,
+            "class_slug": class_slug,
+            "level": slot_level,
+            "total": total,
+            "used": used + 1,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "🔒 Private Sanctum",
+            "feature_desc": (
+                f"{char.name} secures a {cube_ft}-ft cube for 24 hours. "
+                f"The chosen security properties (sound-proofing, "
+                f"scry-blocking, etc.) are filed."
+            ),
+            "source": "private-sanctum",
+            "cube_ft": cube_ft,
+            "range_ft": 120,
+        },
+    })
+
+    cast_id = _log_spell_slot_spend(
+        campaign_id, char.id, class_slug, slot_level, used, "spell")
+    return {
+        "ok": True,
+        "cast_id": cast_id,
+        "slot_level": slot_level,
+        "slot_used": used + 1,
+        "slot_total": total,
+        "class_slug": class_slug,
+        "cube_ft": cube_ft,
+        "range_ft": 120,
         "concentration": False,
     }
 
