@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.411.0] - 2026-06-17 — "The Rising Tide"
+
+**Schema version:** 69
+
+**Commit summary:** Third Phase 2 consumer and the **first `cube-edge` shape** on the AoE-radius substrate (after the two sphere-radius consumers Fog Cloud + Confusion). Ships a new **`/cast_create_or_destroy_water`** endpoint. RAW PHB p.229: Create or Destroy Water is an L1 Transmutation, 30 ft, Instantaneous, no save; the rain/destroy-fog mode fills a 30-ft cube whose edge grows +5 ft per slot above 1st (L1 → 30, L2 → 35, … L9 → 70).
+
+**Description:** Proves `_SPELL_AOE_MAP` generalizes from spheres to cubes — the scaling math is identical, only the `shape` descriptor and the surfaced field name differ (cube spells return `cube_ft`, spheres return `radius_ft`):
+
+```python
+_SPELL_AOE_MAP["create-or-destroy-water"] = {
+    "base_level": 1,
+    "base_ft": 30,         # 30-ft cube at L1
+    "increment_ft": 5,     # +5 ft per slot above L1
+    "shape": "cube-edge",
+}
+```
+
+Create or Destroy Water was catalog-only, so this is an endpoint-build like the prior Phase 2 spells. `/cast_create_or_destroy_water` reads `_spell_aoe_for_slot("create-or-destroy-water", slot_level, default_ft=30)` and surfaces `cube_ft` on the response + `feature_used` broadcast. v1 ships the audit; the alternate +10-gallon water branch + template placement are filed.
+
+**Why "The Rising Tide":** A cube of conjured rain (or banished fog) swelling wider with every level of the slot poured into it.
+
+MINOR — new HTTP endpoint (`/cast_create_or_destroy_water`) + new substrate entry (first cube-edge) + 1 new harness file (8 tests: 4 cube tiers + 4 error paths).
+
+### Added
+- `app/routes/tabletop_routes.py`: new `POST /api/campaign/{campaign_id}/cast_create_or_destroy_water` endpoint. Validates missing character_id (400), slot_level < 1 (400), membership/ownership (403), eligible class (409 wrong_class — Cleric/Druid), spell on the list (409 spell_not_known), slot available (409 no_slot), Phase 4 action over-budget (409). On success: decrements the slot, marks the action economy, broadcasts the chat card + `spell_slot_update` + `feature_used` (with `cube_ft`), logs the slot spend for undo, returns `{ok, cast_id, slot_level, cube_ft, range_ft: 30, concentration: false, …}`.
+- `app/routes/tabletop_routes.py`: new `"create-or-destroy-water"` entry in `_SPELL_AOE_MAP` (after `"confusion"`). First `cube-edge` shape, base 30 ft, +5 ft per slot above L1.
+- `tests/harness/test_cast_create_or_destroy_water.py`: new harness file. Four happy-path tests (L1 → 30, L2 → 35, L5 → 50, L9 → 70) + four error-path tests (missing character_id → 400, slot_level < 1 → 400, wrong class → 409, spell not known → 409). Cast by Brother Tavik Stonebrow (Cleric Lv 8); the fixture snapshots his spells + cleric slots and restores both on teardown, with a separate strip-fixture for the spell_not_known path.
+
+### Changed
+- `docs/plans/spell-utility-upcast.md`: Phase 2 backlog table flips Create or Destroy Water to ✅ shipped (corrected the base cube to 30 ft per RAW); status header remaining-count updated (two candidates remain).
+
 ## [2.410.0] - 2026-06-17 — "The Widening Daze"
 
 **Schema version:** 69

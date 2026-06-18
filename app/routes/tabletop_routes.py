@@ -2210,6 +2210,18 @@ _SPELL_AOE_MAP: dict[str, dict] = {
         "increment_ft": 5,      # +5 ft per slot above L4
         "shape": "sphere-radius",
     },
+    # v2.411.0 — Create or Destroy Water (Cleric / Druid L1). RAW PHB
+    # p.229: 30 ft, Instantaneous, no save. The rain/destroy-fog mode
+    # fills a 30-ft cube. Higher Levels: "the size of the cube increases
+    # by 5 feet … for each slot level above 1st" (the +10-gallon branch
+    # is a separate non-area scale, filed). First cube-edge consumer
+    # (L1 → 30, L2 → 35, … L9 → 70).
+    "create-or-destroy-water": {
+        "base_level": 1,
+        "base_ft": 30,          # 30-ft cube at L1
+        "increment_ft": 5,      # +5 ft per slot above L1
+        "shape": "cube-edge",
+    },
 }
 
 
@@ -84968,6 +84980,193 @@ async def cast_confusion(
         "radius_ft": radius_ft,
         "range_ft": 90,
         "concentration": True,
+    }
+
+
+# ----------- API: cast Create or Destroy Water (1st-level Transmutation, AoE cube) -----------
+
+@router.post("/api/campaign/{campaign_id}/cast_create_or_destroy_water")
+async def cast_create_or_destroy_water(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.411.0 — Cast Create or Destroy Water: slot consume + audit +
+    substrate-driven AoE cube. RAW (PHB p.229): L1 Transmutation, 30 ft,
+    Instantaneous, no save. The rain/destroy-fog mode fills a 30-ft cube;
+    the cube edge scales with slot level — +5 ft per slot above 1st (L1 →
+    30 ft, L2 → 35 ft, … L9 → 70 ft). Classes: Cleric, Druid.
+
+    Third consumer of the Phase 2 AoE-radius scaling substrate and the
+    FIRST ``cube-edge`` shape (after the two sphere-radius consumers Fog
+    Cloud + Confusion). Surfaces ``cube_ft`` rather than ``radius_ft``.
+    v1 ships the spell-side audit (slot consume + cube surfacing); the
+    +10-gallon water branch + template placement are filed.
+
+    Body: ``{character_id, class_slug, slot_level?, override?}``.
+
+    Validates: missing character_id (400), slot_level < 1 (400),
+    membership (403), ownership/GM (403), eligible class (409
+    wrong_class — Cleric/Druid), spell on the list (409 spell_not_known),
+    slot available (409 no_slot), Phase 4 action over-budget (409).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    class_slug = (body.get("class_slug") or "").strip().lower()
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw is not None else 1
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if slot_level < 1:
+        raise HTTPException(400, "slot_level must be >= 1 (Create or Destroy Water is L1)")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    _CDW_CLASSES = {"cleric", "druid"}
+    if class_slug not in _CDW_CLASSES:
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class",
+            "expected": sorted(_CDW_CLASSES),
+            "got": class_slug or "",
+        })
+    primary_class = (sheet.get("class") or "").strip().lower()
+    if primary_class != class_slug:
+        has_class = any(
+            (entry.get("class") or "").strip().lower() == class_slug
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_class:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class",
+                "expected": class_slug,
+                "got": primary_class or "",
+            })
+
+    spells = list(sheet.get("spells") or [])
+    has_cdw = any(
+        (s.get("_slug") == "create-or-destroy-water") or
+        (str(s.get("name", "")).lower() == "create or destroy water")
+        for s in spells
+    )
+    if not has_cdw:
+        return JSONResponse(status_code=409, content={
+            "error": "spell_not_known",
+            "spell": "create-or-destroy-water",
+        })
+
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get(class_slug) or {})
+    slot = dict(per_class.get(str(slot_level)) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": class_slug,
+            "spell_name": "Create or Destroy Water",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "create-or-destroy-water",
+            "label": "Create or Destroy Water",
+            "strict": strict,
+        })
+
+    # Commit slot decrement.
+    slot["used"] = used + 1
+    per_class[str(slot_level)] = slot
+    all_slots[class_slug] = per_class
+    sheet["spell_slots"] = all_slots
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # v2.411.0 — AoE-radius scaling substrate (cube-edge shape). L1 →
+    # 30 ft, +5 ft per slot above 1st (L2 → 35, … L9 → 70).
+    cube_ft = _spell_aoe_for_slot(
+        "create-or-destroy-water", slot_level, default_ft=30)
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    note = (
+        f"💧 {char.name} casts Create or Destroy Water (L{slot_level}) — "
+        f"30 ft, {cube_ft}-ft cube of rain/destroyed fog (v1 stops at "
+        f"the cast; +10-gallon branch + template filed)"
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": "",
+            "total": 0,
+            "breakdown": note,
+            "note": note,
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id,
+            "class_slug": class_slug,
+            "level": slot_level,
+            "total": total,
+            "used": used + 1,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "💧 Create or Destroy Water",
+            "feature_desc": (
+                f"{char.name} fills a {cube_ft}-ft cube with rain (or "
+                f"destroys fog within it). The +10-gallon water branch "
+                f"+ template placement are filed."
+            ),
+            "source": "create-or-destroy-water",
+            "cube_ft": cube_ft,
+            "range_ft": 30,
+        },
+    })
+
+    cast_id = _log_spell_slot_spend(
+        campaign_id, char.id, class_slug, slot_level, used, "spell")
+    return {
+        "ok": True,
+        "cast_id": cast_id,
+        "slot_level": slot_level,
+        "slot_used": used + 1,
+        "slot_total": total,
+        "class_slug": class_slug,
+        "cube_ft": cube_ft,
+        "range_ft": 30,
+        "concentration": False,
     }
 
 

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3276 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.410.0, 2026-06-17).
+**Total tests:** 3284 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.411.0, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4961,6 +4961,20 @@ v2.406.0 — new `/cast_geas` endpoint + duration-scaling substrate, fourth cons
 | `test_geas_low_slot_400` | slot_level=4 → 400 (Geas is L5). |
 | `test_geas_wrong_class_409` | class_slug=barbarian (not a Geas class) → 409 `wrong_class`. |
 | `test_geas_spell_not_known_409` | Wizard without Geas on her list → 409 `spell_not_known` (fires before the slot lookup; no slot patching needed). |
+
+### `test_cast_create_or_destroy_water.py`
+v2.411.0 — new `/cast_create_or_destroy_water` endpoint + the Phase 2 AoE-radius scaling substrate, third consumer and the FIRST cube-edge shape (after the two sphere-radius consumers Fog Cloud + Confusion). RAW L1 Transmutation, 30 ft, instantaneous, no save; rain/destroy-fog mode fills a 30-ft cube. The cube edge scales +5 ft per slot above 1st (L1 → 30, L2 → 35, L5 → 50, L9 → 70); surfaces `cube_ft`. Cast by Brother Tavik Stonebrow (Cleric Lv 8), armed via a snapshot/restore fixture (L1-L9 cleric slots); a separate strip-fixture covers the spell_not_known path.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cdw_l1_routes_30ft` | L1 cast → 200; `cube_ft == 30`, `range_ft == 30`, `concentration is False`. Base tier. |
+| `test_cdw_l2_routes_35ft` | L2 cast → `cube_ft == 35` (+5 over base). |
+| `test_cdw_l5_routes_50ft` | L5 cast → `cube_ft == 50` (30 + 4×5). |
+| `test_cdw_l9_routes_70ft` | L9 cast → `cube_ft == 70` (30 + 8×5). Top in-table slot. |
+| `test_cdw_missing_character_id_400` | Missing character_id → 400. |
+| `test_cdw_low_slot_400` | slot_level=0 → 400 (Create or Destroy Water is L1). |
+| `test_cdw_wrong_class_409` | class_slug=wizard (not a Create/Destroy Water class) → 409 `wrong_class`. |
+| `test_cdw_spell_not_known_409` | Cleric without the spell on his list → 409 `spell_not_known` (fires before the slot lookup). |
 
 ### `test_cast_confusion.py`
 v2.410.0 — new `/cast_confusion` endpoint + the Phase 2 AoE-radius scaling substrate, second consumer (after `/cast_fog_cloud`). RAW L4 Enchantment, 90 ft, concentration, WIS save, 10-ft-radius sphere. The radius scales +5 ft per slot above 4th (L4 → 10, L5 → 15, L6 → 20, L9 → 35). Thalindra Moonwhisper is armed with Confusion + an L4-L9 wizard slot table (snapshot + restored on teardown).
