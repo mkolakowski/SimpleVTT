@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3225 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.404.11, 2026-06-17).
+**Total tests:** 3228 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.405.0, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4912,6 +4912,15 @@ v2.99.186 — `/npc_cast_spell` mirrors the PC Subtle gate. Closes a v2.99.173 f
 | Test | What it asserts |
 |------|-----------------|
 | `test_npc_cast_subtle_suppresses_counterspell_prompt` | Seed a synthetic NPC with `metamagic-subtle-pending` on its combatant + Thalindra (Counterspell on sheet) as a PC watcher. `/npc_cast_spell` → cast payload carries `was_subtle: True`, the 🤫 `metamagic-subtle-spell-consumed` `feature_used` fires, and no `reaction_prompt(spell_cast_near)` is emitted for the cast. |
+
+### `test_hunters_mark_duration_scaling.py`
+v2.405.0 — spell-utility-mechanical-depth Phase 1: duration-scaling substrate. `_SPELL_DURATION_MAP` registry + `_spell_duration_rounds_for_slot()` helper replace the hardcoded per-slot duration ladder at `/cast_hunters_mark`. Rowan Quickbow's slot table PATCH'd up to L5 so all three tiers are reachable.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_hunters_mark_l1_routes_1h_duration` | Cast at L1 → substrate returns 600 rounds (1 hour); installed buff's `duration_label == "1h"`. Lower-tier branch. |
+| `test_hunters_mark_l3_routes_8h_duration` | Cast at L3 → substrate returns 4800 rounds (8 hours); `duration_label == "8h"`. Middle-tier branch. |
+| `test_hunters_mark_l5_routes_24h_duration` | Cast at L5 → substrate returns 14400 rounds (24 hours); `duration_label == "24h"`. Upper-tier branch. |
 
 ### `test_hunters_mark_twinned_install.py`
 v2.99.187 — `/cast_hunters_mark` folds the Twinned second target into the installed buff's rider field (`effects.weapon_hit_bonus_target_combatant_id`), not just the response. The weapon-hit rider consumer at line ~21498 accepts list-or-string.

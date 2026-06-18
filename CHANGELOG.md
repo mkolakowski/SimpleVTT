@@ -10,6 +10,39 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.405.0] - 2026-06-17 — "The Patient Mark"
+
+**Schema version:** 69
+
+**Commit summary:** Opens the **spell-utility-mechanical-depth Phase 1** arc with the new **duration-scaling substrate** — `_SPELL_DURATION_MAP` registry + `_spell_duration_rounds_for_slot()` helper — and retrofits **Hunter's Mark** as the canonical first consumer. Pre-v2.405.0 the per-slot duration ladder (L1-L2 → 1 hr / L3-L4 → 8 hr / L5+ → 24 hr) was inlined as an `if/elif` block at the `/cast_hunters_mark` endpoint (lines ~81517-81525); this commit moves the math into a data-driven lookup so future per-slot duration changes are data-only + future duration-scaling spells (Bestow Curse, Geas, Mass Suggestion, Modify Memory, Magic Weapon, Heroes' Feast, Otiluke's Resilient Sphere, Tiny Hut, Drawmij's Instant Summons, Glyph of Warding, Hex — 11 more in Phase 1 scope) get a one-line registry drop-in instead of a per-endpoint hardcoded ladder.
+
+**Description:** Mirrors the v2.404.6 Bane substrate-consolidation pattern (which moved Bane's cap math from inline arithmetic to `_SPELL_TARGET_CAPS` + the `_spell_target_cap_for_slot()` helper). The new substrate's shape:
+
+```python
+_SPELL_DURATION_MAP["hunters-mark"] = {
+    "base_level": 1,
+    "tiers": [
+        (2, 600),     # L1-L2: 1 hour
+        (4, 4800),    # L3-L4: 8 hours
+        (9, 14400),   # L5+:   24 hours
+    ],
+}
+```
+
+Each tier carries `(max_slot_inclusive, rounds_or_marker)`. The helper walks the tier list and returns the first matching tier's round count (or a sentinel string like `"permanent"` for spells like Geas at L9). At cast time, `/cast_hunters_mark` reads the substrate-computed value via `_spell_duration_rounds_for_slot("hunters-mark", slot_level, default_rounds=600)` and derives the display `duration_label` from the rounds count.
+
+**Why "The Patient Mark":** Hunter's Mark patiently tracks a target for hours; the new substrate patiently tracks the per-slot duration in a registry rather than per-endpoint `if/elif`. Same patience, different surface.
+
+MINOR — new substrate handler + new helper function + Hunter's Mark retrofit + 1 new harness file (3 tests). The substrate-shape `Spells` row stays at ~83% (Hunter's Mark was already wired pre-v2.405.0; the retrofit moves the same RAW math from inline to data without changing engine behavior). The category will move when subsequent Phase 1 commits ship new duration-scaling spells against the registry. The substrate enables ~11 follow-on spells; combined Phase 1 closure would lift Spells by roughly +3 pts.
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_SPELL_DURATION_MAP` dict at line ~1986 + `_spell_duration_rounds_for_slot(spell_slug, slot_level, default_rounds=0)` helper function. The dict ships with Hunter's Mark as the first entry; future Phase 1 spells get one-line additions. The helper mirrors the v2.404.6 `_spell_target_cap_for_slot` shape — a pure-function lookup callable from both `/cast_spell` (generic dispatcher) and bespoke endpoints.
+- `tests/harness/test_hunters_mark_duration_scaling.py`: new harness file. Three tests assert Hunter's Mark cast at L1 / L3 / L5 lands the correct `duration_label` ("1h" / "8h" / "24h") on the installed buff. Verifies the substrate routes all three tiers correctly.
+
+### Changed
+- `app/routes/tabletop_routes.py`: `/cast_hunters_mark` (line ~81620) retrofits the per-slot duration computation. Replaces the inline `if/elif` block with a single `_spell_duration_rounds_for_slot()` call + a small mapping from rounds → display label. Engine behavior preserved (same display cap, same RAW round counts via the substrate).
+- `docs/plans/spell-utility-upcast.md`: new Phase 1 "duration-scaling substrate" section documenting the substrate + the Hunter's Mark retrofit + the 11 follow-on spells in Phase 1 scope.
+
 ## [2.404.12] - 2026-06-17 — "The Refreshed Surface"
 
 **Schema version:** 69

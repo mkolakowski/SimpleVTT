@@ -1,6 +1,8 @@
 # Spell utility-upcast
 
-> **Status:** ✅ **CLOSED** as of v2.404.9 (2026-06-17). All 9 in-scope spells shipped across 9 sequential PATCH commits (v2.404.1 → v2.404.9). Two related substrate facts proven; one helper introduced.
+> **Status (target-scaling):** ✅ **CLOSED** as of v2.404.9 (2026-06-17). All 9 in-scope target-scaling spells shipped across 9 sequential PATCH commits (v2.404.1 → v2.404.9). Two related substrate facts proven; one helper introduced.
+>
+> **Status (duration-scaling):** 🟠 **PHASE 1 IN FLIGHT** as of v2.405.0 (2026-06-17). Substrate (`_SPELL_DURATION_MAP` + `_spell_duration_rounds_for_slot()` helper) + Hunter's Mark retrofit shipped. 11 follow-on spells in Phase 1 scope: Hex, Bestow Curse, Geas, Mass Suggestion, Modify Memory, Magic Weapon, Heroes' Feast, Otiluke's Resilient Sphere, Tiny Hut, Drawmij's Instant Summons, Glyph of Warding. See the [Phase 1 section](#phase-1--duration-scaling-substrate-v24050) below.
 
 ## What this plan covered
 
@@ -84,6 +86,67 @@ Three reasons the arc shipped 9 commits in one session without architectural sur
 1. **Substrate already existed.** v2.380.0 + v2.381.0 + v2.97.x had built the cap-enforcement readers, the buff-install dispatch, and the save-or-suck condition-install path. The arc was data + small refactors, not engine work.
 2. **The audit was loose.** The pre-arc estimate was "~70 utility spells need upcast fields." Auditing the actual SRD revealed ~16 target-scaling spells; 7 were already wired bespokely; 9 were in scope. Re-scoping early prevented over-committing.
 3. **Every commit was the same shape.** New entry in 1-2 dicts + spell-list demo seed + 4-test harness file + bump + CHANGELOG. The repeated shape kept commits at ~250-300 lines and avoided context drift.
+
+---
+
+## Phase 1 — duration-scaling substrate (v2.405.0)
+
+After the target-scaling arc closed, the next substrate gap on the engine-shaped utility-spell tail is **duration scaling** — RAW spells whose duration grows per slot rather than (or in addition to) target count. Pre-v2.405.0 every such spell hardcoded its per-slot duration ladder at the cast endpoint; the cleanest example was Hunter's Mark with three tiers inlined as an `if/elif` block at `app/routes/tabletop_routes.py:81517-81525`.
+
+### Substrate ship (v2.405.0)
+
+Two pieces added near `_SPELL_TARGET_CAPS` to mirror the v2.404.6 cap-substrate shape:
+
+- **`_SPELL_DURATION_MAP`** — keyed by spell slug; values carry `{base_level, tiers: [(max_slot_inclusive, rounds_or_marker), ...]}`. The first tier whose `max_slot_inclusive` ≥ the cast's slot wins. Marker strings (`"permanent"`, `"until_long_rest"`, etc.) flag non-numeric durations.
+- **`_spell_duration_rounds_for_slot(spell_slug, slot_level, default_rounds=0)`** — pure-function lookup. Returns the matching tier's value or the default. Used by both `/cast_spell` (generic dispatcher) and bespoke endpoints.
+
+Hunter's Mark is the first consumer:
+
+```python
+"hunters-mark": {
+    "base_level": 1,
+    "tiers": [
+        (2, 600),     # L1-L2: 1 hour concentration
+        (4, 4800),    # L3-L4: 8 hours
+        (9, 14400),   # L5+:   24 hours
+    ],
+},
+```
+
+The `/cast_hunters_mark` endpoint reads the substrate via the helper and derives the display `duration_label` ("1h" / "8h" / "24h") from the substrate-returned round count. Engine behavior is preserved end-to-end (same display cap, same RAW duration tiers).
+
+### Tests (v2.405.0)
+
+`tests/harness/test_hunters_mark_duration_scaling.py` ships 3 tests — L1 / L3 / L5 casts each assert the installed buff's `duration_label` lands the right tier. Substrate routing proven across all three RAW tiers.
+
+### Backlog (Phase 1 follow-on spells, ~11 spells)
+
+Each ships as a registry drop-in + retrofit + harness. Same shape across all of them.
+
+| Spell | Base level | RAW tier ladder | Notes |
+|---|---|---|---|
+| Hex | L1 | L1-L2 → 1h, L3-L4 → 8h, L5+ → 24h | Identical to Hunter's Mark; second consumer of the substrate. Endpoint already mirrors the v2.99.187 Hunter's Mark pattern (see `app/routes/tabletop_routes.py:81972-81981` for the duplicate hardcoded ladder). |
+| Bestow Curse | L3 | L3 → 1 min, L4 → 10 min, L5 → 8h, L7 → 24h, L9 → permanent (RAW PHB p.218) | First spell to use the `"permanent"` marker. |
+| Geas | L5 | L5 → 30 days, L7 → 1 year, L9 → permanent | Uses long-marker durations (`"30d"`, `"1y"`, `"permanent"`). |
+| Mass Suggestion | L6 | L6 → 24h, L7 → 10d, L8 → 30d, L9 → 1y+1d | Filed follow-up from the v2.404.x retrospective. |
+| Modify Memory | L5 | L5 → 10 min mod, L6 → 1h, L7 → 24h, L8 → 7d, L9 → permanent | Permanent marker at L9. |
+| Magic Weapon | L2 | L2-L3 → 1h, L4+ → 1h with attack-bonus increase (bonus scales, duration fixed) | Edge case: scales attack bonus, not duration. Filed as a sub-arc (or covered by Phase 4 rider substrate). |
+| Heroes' Feast | L6 | Fixed 24h RAW; no per-slot scaling | Filed: no substrate consumer needed; documented to prevent rework. |
+| Otiluke's Resilient Sphere | L4 | Fixed 1 min RAW (concentration); no per-slot scaling | Filed: AoE-radius scaling lands in Phase 2 instead. |
+| Tiny Hut | L3 (ritual) | Fixed 8h RAW; no per-slot scaling | Filed: no substrate consumer. |
+| Drawmij's Instant Summons | L6 | Fixed (instantaneous summon) | Filed: not a duration spell — moved out of scope. |
+| Glyph of Warding | L3 | Fixed (until triggered) | Filed: trigger-state substrate (out of Phase 1 scope). |
+
+**Real Phase 1 scope (revised):** Hunter's Mark ✅ + Hex + Bestow Curse + Geas + Mass Suggestion + Modify Memory = **6 spells** with genuine duration scaling. The others get filed out of scope (no per-slot duration ladder) or moved to Phase 2/4. Phase 1 closure: ~5 more PATCH commits after v2.405.0.
+
+### Markers (sentinel strings the helper returns)
+
+- `"permanent"` — duration-until-dispelled. Engine clamps `duration_rounds` to the display cap; the buff's `duration_label` flips to a "perm" tag.
+- `"30d"`, `"1y+1d"` — long durations the engine doesn't track minute-by-minute. Same display-cap behavior; the GM resolves expiry at the table.
+
+The helper returns the raw marker string; the caller decides how to render it. Hunter's Mark retrofit demonstrates the numeric path (integer rounds → `duration_label` mapping); marker-string callers will add their own branches.
+
+---
 
 ## References
 

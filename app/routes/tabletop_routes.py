@@ -1981,6 +1981,111 @@ def _spell_target_cap_for_slot(
     return cap_max + max(0, int(slot_level) - cap_base) * cap_extra
 
 
+# v2.405.0 — magic-items-automation Phase 9.3 sister substrate: the
+# spell-utility-mechanical-depth Phase 1 "duration-scaling" registry.
+# Closes the substrate gap the v2.404.x arc left open — RAW utility
+# spells whose **duration** grows per slot (Hunter's Mark, Bestow
+# Curse, Geas, etc.) currently hardcode the per-slot tiers in the
+# cast endpoint. This registry replaces those inline ladders with a
+# data-driven lookup that the `_spell_duration_rounds_for_slot()`
+# helper below consults at cast time.
+#
+# Shape: keyed by spell slug; values carry::
+#
+#   {
+#       "base_level": int,        # the spell's RAW base slot level
+#       "tiers": [                # ascending list of (max_slot, rounds)
+#           (max_slot_inclusive, rounds_or_marker),
+#           ...
+#       ],
+#   }
+#
+# Each tier carries the maximum slot it applies to + the duration in
+# 6-second rounds for that slot range. The first tier whose
+# ``max_slot_inclusive`` ≥ the cast's slot level wins (the list is
+# scanned in order; the last tier should cover "everything above").
+# Use the integer round count for finite durations (10 min = 100
+# rounds, 1 hour = 600 rounds, 8 hours = 4800 rounds, 24 hours =
+# 14400 rounds). The string ``"permanent"`` flags duration-until-
+# dispelled (the helper returns a sentinel value the caller can
+# branch on); ``"until_long_rest"`` and similar markers can land
+# alongside if needed.
+_SPELL_DURATION_MAP: dict[str, dict] = {
+    # v2.405.0 — Hunter's Mark (Ranger L1). RAW PHB p.251: "until
+    # the spell ends, you deal an extra 1d6 damage to the target
+    # whenever you hit it with a weapon attack. Also, you have
+    # advantage on any Wisdom (Perception) or Wisdom (Survival)
+    # check you make to find it. If the target drops to 0 HP
+    # before this spell ends, you can use a bonus action on a
+    # subsequent turn of yours to mark a new creature." Higher
+    # Levels: "When you cast this spell using a spell slot of 3rd
+    # or 4th level, you can maintain your concentration on the
+    # spell for up to 8 hours. When you use a spell slot of 5th
+    # level or higher, you can maintain your concentration on the
+    # spell for up to 24 hours." Pre-v2.405.0 the duration tiers
+    # were hardcoded at the cast endpoint (lines ~81517-81525);
+    # this registry entry + the substrate helper retrofit moves
+    # the math into data.
+    "hunters-mark": {
+        "base_level": 1,
+        "tiers": [
+            (2, 600),     # L1-L2: 1 hour (concentration)
+            (4, 4800),    # L3-L4: 8 hours
+            (9, 14400),   # L5+:   24 hours
+        ],
+    },
+}
+
+
+def _spell_duration_rounds_for_slot(
+    spell_slug: str,
+    slot_level: int,
+    default_rounds: int = 0,
+) -> int | str:
+    """v2.405.0 — Phase 1 duration-scaling substrate helper. Reads
+    ``_SPELL_DURATION_MAP[spell_slug]`` + walks the ``tiers`` list
+    until it finds the first tier whose ``max_slot_inclusive`` ≥ the
+    cast's ``slot_level``. Returns that tier's round count (integer)
+    or marker string (``"permanent"`` etc.). If no entry exists for
+    the slug, returns ``default_rounds``.
+
+    Mirrors the v2.404.6 ``_spell_target_cap_for_slot`` shape — a
+    pure-function helper read by both ``/cast_spell``'s generic
+    dispatcher (folded into the buff-install duration computation)
+    and the bespoke endpoints (``/cast_hunters_mark``,
+    ``/cast_bestow_curse``, etc.). Single source of truth for per-
+    slot duration math; future cap changes are data-only.
+    """
+    entry = _SPELL_DURATION_MAP.get(spell_slug)
+    if not entry:
+        return default_rounds
+    tiers = entry.get("tiers") or []
+    try:
+        sl = int(slot_level)
+    except (TypeError, ValueError):
+        sl = int(entry.get("base_level") or 1)
+    for tier in tiers:
+        try:
+            max_slot = int(tier[0])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if sl <= max_slot:
+            try:
+                return int(tier[1])
+            except (TypeError, ValueError, IndexError):
+                # Marker string ("permanent" etc.) — return as-is.
+                return tier[1]
+    # No matching tier — fall back to the last tier's value (covers
+    # casts above the last declared range).
+    if tiers:
+        last = tiers[-1]
+        try:
+            return int(last[1])
+        except (TypeError, ValueError, IndexError):
+            return last[1]
+    return default_rounds
+
+
 _SPELL_BUFF_MAP["resistance-all"] = {
     "key": "resistance-all",
     "name": "Invulnerability (All Damage)",
@@ -81509,19 +81614,27 @@ async def cast_hunters_mark(
         campaign_id, int(char.id),
     )
 
-    # Duration scales with slot level: L1-L2 = 1 hour (600 rounds), L3-L4
-    # = 8 hours (4800 rounds), L5+ = 24 hours (14400 rounds). For demo
-    # purposes we cap displayed duration at 100 rounds so the chip text
-    # stays compact; the buff persists until removed or concentration
-    # breaks regardless.
-    if slot_level >= 5:
-        duration_rounds = 100  # display cap
+    # v2.405.0 — Phase 1 duration-scaling substrate retrofit. The per-slot
+    # RAW round count (L1-L2 → 600 / L3-L4 → 4800 / L5+ → 14400) now lives
+    # in `_SPELL_DURATION_MAP["hunters-mark"]` and the
+    # `_spell_duration_rounds_for_slot()` helper returns the substrate-
+    # computed value. The display chip still caps at 100 rounds for
+    # compactness (the buff persists until removed or concentration
+    # breaks regardless); the `duration_label` derives from the RAW
+    # round count via a small mapping.
+    raw_rounds = _spell_duration_rounds_for_slot(
+        "hunters-mark", slot_level, default_rounds=600,
+    )
+    try:
+        raw_rounds_int = int(raw_rounds)
+    except (TypeError, ValueError):
+        raw_rounds_int = 600
+    duration_rounds = 100  # display cap; engine-side duration is raw_rounds_int
+    if raw_rounds_int >= 14400:
         duration_label = "24h"
-    elif slot_level >= 3:
-        duration_rounds = 100
+    elif raw_rounds_int >= 4800:
         duration_label = "8h"
     else:
-        duration_rounds = 100  # display cap; RAW 1 hour = 600 rounds
         duration_label = "1h"
 
     # v2.99.187 — when Twinned folded in a second target, the rider
