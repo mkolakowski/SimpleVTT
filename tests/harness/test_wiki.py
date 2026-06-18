@@ -107,6 +107,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-race-features" in resp.text
     # v2.423.3: demo magic-link login plan listed (URL-login for demo instance only).
     assert "/wiki/doc/plan-demo-magic-link" in resp.text
+    # v2.423.4: fail2ban/CrowdSec log integration plan listed.
+    assert "/wiki/doc/plan-fail2ban-crowdsec-integration" in resp.text
     # v2.400.0: SRD race rules implementation guide listed in Available guides.
     assert "/wiki/srd-races-implementation" in resp.text
     # v2.402.0: SRD conditions implementation guide listed in Available guides.
@@ -722,6 +724,23 @@ async def test_wiki_doc_serves_demo_magic_link_plan():
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "demo magic-link" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_fail2ban_crowdsec_integration_plan():
+    """v2.423.4: GET /wiki/doc/plan-fail2ban-crowdsec-integration — 200
+    + body contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/fail2ban-crowdsec-integration.md``.
+    Proposes canonical structured log lines + reference fail2ban
+    filter.d/jail.d configs + reference CrowdSec parsers/scenarios
+    configs shipped in-repo under docs/integrations/, with a Phase 2
+    compose-side smoke test that drives a real CrowdSec container."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-fail2ban-crowdsec-integration")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "fail2ban" in resp.text.lower()
+    assert "crowdsec" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

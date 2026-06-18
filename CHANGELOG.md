@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.423.4] - 2026-06-18 — "The Lighthouse Code"
+
+**Schema version:** 69
+
+**Commit summary:** Sketches the design plan for the v2.423.2 fail2ban/CrowdSec TODO. New `docs/plans/fail2ban-crowdsec-integration.md` covers the canonical structured log-line format (`<event_tag> ip=… ua=… …`), the per-event table (9 canonical events spanning auth / signup / demo-magic-link / API auth-rejections / WS rejections), reference fail2ban configs shipped under `docs/integrations/fail2ban/` (3 filter files + 1 jail), reference CrowdSec configs under `docs/integrations/crowdsec/` (1 parser + 5 scenarios), a `simplevtt.audit` logger + new `app/audit_log.py` typed emission module, a `TRUSTED_PROXY_HOPS` env var for opt-in X-Forwarded-For trust, and a three-phase roadmap.
+
+**Description:** The fail2ban/CrowdSec plan is the **detection** half of the security spine started in v2.423.2 — paired with [`demo-magic-link.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/demo-magic-link.md) (which defines the consumer side of the `demo_magic_link.*` events) and the Cloudflare TODO (which is the **enforcement** counterpart). The plan deliberately keeps SimpleVTT in the "emit canonical events" lane and the engines in the "decide who to ban" lane — there is no in-app banning logic added by this plan, just structured logging shaped so a single regex parses both engine families.
+
+The canonical line format is `<subsystem.event> <key>=<value> [<key>=<value>...]` with `ip` and `ua` required on every event and a parser regex (`^(?<ts>…)\s+(?<lvl>…)\s+(?<event>…)\s+(?<kvs>…)$`) that both fail2ban filters and CrowdSec parsers consume natively. The header comment on every shipped config carries the threshold + the ban duration + a one-line rationale so an operator reading `/etc/fail2ban/jail.d/simplevtt.conf` can change it without re-reading this plan.
+
+Threat-model table calls out 7 attack classes (credential stuffing → magic-link enumeration → magic-link replay → mint-endpoint abuse → API surface 401/403 hammering → signup-form abuse → WS-connection storms) and pairs each with the recommended fail2ban threshold + the CrowdSec scenario shape. The "what we're NOT trying to ban" section explicitly lists application-bug 500s (observability, not security), shared-NAT slowness (false-positive risk — Cloudflare handles it at IP+UA tuple), and successful logins from new devices (different feature — "suspicious login email").
+
+The plan also fixes a load-bearing safety detail: `X-Forwarded-For` is **never** trusted by default. A new `TRUSTED_PROXY_HOPS=N` env var (default 0) is what an operator behind a known reverse proxy opts into so the audit log captures real client IPs instead of the proxy's IP. The decision lives in one place (`app/audit_log.py`) rather than scattered across call sites.
+
+Three-phase roadmap: Phase 1 ships emission + canonical events + fail2ban configs + unit tests; Phase 2 ships CrowdSec configs + a `docker-compose.test.yml` override with a real `crowdsec-test` service that the smoke test drives; Phase 3 (optional, on-demand) adds a JSON-line side-channel for Datadog/Loki/Vector pickup.
+
+Wired through all four wiki surfaces per the [Every doc must be surfaced through the wiki](CLAUDE.md#every-doc-must-be-surfaced-through-the-wiki) rule. Total harness count nudges 3354 → 3355.
+
+**Why "The Lighthouse Code":** the plan is about giving the lighthouse keepers (fail2ban / CrowdSec) a fixed, stable signal pattern they can read at any distance — so any operator who picks one of them lands on the same code and gets the same warning out of the same dark.
+
+PATCH — doc-only addition (~300 lines of plan + 4 wiki-surfacing edits + 1 new test + version + README + CHANGELOG + test-harness-coverage row). No app code or config.
+
+### Added
+- `docs/plans/fail2ban-crowdsec-integration.md`: new design plan for the canonical-log-line + reference-config contract from the v2.423.2 TODO. Per-event table, parser regex, three-phase roadmap, threat model, non-goals, X-Forwarded-For trust handling, test contract.
+- `app/routes/wiki_routes.py`: `_DOC_ALLOWLIST` entry `"plan-fail2ban-crowdsec-integration": Path("docs") / "plans" / "fail2ban-crowdsec-integration.md"`.
+- `app/templates/wiki.html`: new row in the "Design plans" table linking to `/wiki/doc/plan-fail2ban-crowdsec-integration`.
+- `docs/wiki/README.md`: matching row in the "Design plans" table.
+- `tests/harness/test_wiki.py`: new `test_wiki_doc_serves_fail2ban_crowdsec_integration_plan` smoke test + a new assertion in `test_wiki_home_renders` for the `/wiki/doc/plan-fail2ban-crowdsec-integration` link.
+- `docs/test-harness-coverage.md`: new row for `test_wiki_doc_serves_fail2ban_crowdsec_integration_plan` in the wiki suite, header total-test-count nudges 3354 → 3355.
+
 ## [2.423.3] - 2026-06-18 — "The Double-Latched Door"
 
 **Schema version:** 69
