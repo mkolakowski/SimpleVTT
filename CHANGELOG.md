@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.420.0] - 2026-06-17 — "The Empyrean Summons"
+
+**Schema version:** 69
+
+**Commit summary:** **Closes Phase 3** (summon-count scaling). Ships the last consumer — **Conjure Celestial** (Cleric L7) — and the one shape the linear CR helper couldn't express: a **non-linear tier-walk CR ladder**. RAW PHB p.225: a CR-4 celestial at a 7th/8th-level slot, a CR-5 celestial only at a 9th. Adds a sibling `_SPELL_SUMMON_CR_TIER_MAP` + `_spell_summon_cr_tier_for_slot()` helper (the same `tiers` shape as `_SPELL_SUMMON_MAP`) and a new **`/cast_conjure_celestial`** endpoint.
+
+**Description:** Conjure Elemental and Conjure Fey climb +1 CR per slot (the linear `_spell_summon_cr_for_slot()` helper), but Conjure Celestial jumps in a step — CR 4 holds across L7–L8, then bumps to CR 5 at L9. A linear `per_slot` can't express that, so this commit adds a tier-walk sibling that walks a `(max_slot_inclusive, cr)` list (last-tier fallback above the table):
+
+```python
+_SPELL_SUMMON_CR_TIER_MAP["conjure-celestial"] = {
+    "base_level": 7,
+    "tiers": [(8, 4), (9, 5)],   # L7–L8 → CR 4, L9 → CR 5
+}
+```
+
+`/cast_conjure_celestial` reads `_spell_summon_cr_tier_for_slot("conjure-celestial", slot_level)`, stands up a single `celestial-spirit` combatant named with its CR, and gates on a Cleric caster. **This is the final Phase 3 spell** — all three summon-scaling families (count-multiplier, count-additive, CR-increase, the last with both linear and tier-walk variants) are now complete.
+
+**Why "The Empyrean Summons":** the highest-circle conjuration in the family calls a being of the upper planes — and the mightier the slot, the mightier the celestial that answers.
+
+MINOR — new HTTP endpoint (`/cast_conjure_celestial`) + new tier-walk substrate + new helper + new companion template + 4 new harness tests.
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_SPELL_SUMMON_CR_TIER_MAP` substrate + `_spell_summon_cr_tier_for_slot()` pure-function helper (tier walk, mirrors `_spell_summon_multiplier_for_slot`). First entry: `conjure-celestial` (CR 4 at L7–8, CR 5 at L9).
+- `app/routes/tabletop_routes.py`: new `POST /api/campaign/{campaign_id}/cast_conjure_celestial` endpoint (Cleric L7). Count is always 1; the celestial's CR is the non-linear tier. Stands up a single `celestial-spirit` combatant via `_summon_companion`, gated on knowing Conjure Celestial OR being a Cleric. Returns `{ok, feature, count, slot_level, challenge_rating, combatants, token_ids}`; broadcasts a `feature_used` card.
+- `app/routes/tabletop_routes.py`: new `celestial-spirit` companion template (AC 14 / HP 18 / walk 30, gold color).
+- `tests/harness/test_cast_conjure_celestial.py`: new harness file (4 tests) — L7 → CR 4, L8 → CR 4 (same tier), L9 → CR 5 (top tier), and the 409 cannot_cast on Krieger (Barbarian).
+
+### Changed
+- `docs/plans/spell-utility-upcast.md`: Phase 3 backlog table flips Conjure Celestial to ✅ shipped; status header marks **Phase 3 complete**.
+
 ## [2.419.0] - 2026-06-17 — "The Sixth-Circle Court"
 
 **Schema version:** 69

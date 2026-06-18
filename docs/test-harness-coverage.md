@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3333 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.419.0, 2026-06-17).
+**Total tests:** 3337 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.420.0, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2240,6 +2240,16 @@ v2.419.0 — Phase 3 second **CR-increase** consumer, after Conjure Elemental. `
 | `test_conjure_fey_l9_cr9` | L9 → `challenge_rating 9` (top of the ladder), still `count 1`. |
 | `test_conjure_fey_warlock_can_cast` | Magnus (Warlock) passes the Druid/Warlock gate → L6 = CR 6, 1 fey. |
 | `test_conjure_fey_cannot_cast_non_caster` | Krieger (Barbarian) → 409 `cannot_cast` with `expected` mentioning "druid". |
+
+### `test_cast_conjure_celestial.py`
+v2.420.0 — Phase 3's final consumer and the **tier-walk** CR-increase shape (closes Phase 3). `/cast_conjure_celestial` (Cleric L7) reads the new sibling `_SPELL_SUMMON_CR_TIER_MAP` via `_spell_summon_cr_tier_for_slot()`: count fixed at 1, the celestial's CR is a non-linear tier (CR 4 at L7–8, CR 5 at L9) the linear helper can't express. New `_COMPANION_TEMPLATES["celestial-spirit"]` (AC 14, HP 18, walk 30, gold `#f0d060`). Caster fixture: Brother Tavik Stonebrow (Cleric) for the ladder.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_conjure_celestial_base_slot_cr4` | L7 base → `count 1`, `challenge_rating 4`, exactly 1 celestial-spirit summon (`is_summon`, `companion_key == "celestial-spirit"`, `summoned_by` Tavik). |
+| `test_conjure_celestial_l8_still_cr4` | L8 → `challenge_rating 4` (same tier; the bump only lands at L9), still `count 1`. |
+| `test_conjure_celestial_l9_cr5` | L9 → `challenge_rating 5` (top tier), still `count 1`. |
+| `test_conjure_celestial_cannot_cast_non_caster` | Krieger (Barbarian) → 409 `cannot_cast` with `expected` mentioning "cleric". |
 
 ### `test_cast_gust.py`
 v2.99.445 — Phase 6.3 of `docs/plans/movement-and-summons.md`. Gust (Druid/Sorcerer/Wizard cantrip, Tasha's p.106): the target makes a STR save vs the spell save DC or is pushed 5 ft away via `_force_move`. The last forced-mover. Caster fixture: Thalindra Moonwhisper (demo Wizard).

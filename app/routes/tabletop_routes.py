@@ -2487,6 +2487,73 @@ def _spell_summon_cr_for_slot(
     return base_cr + steps * per_slot
 
 
+# ---------------------------------------------------------------------------
+# v2.420.0 — Phase 3 summon CR-increase *tier-walk* variant. Most CR-increase
+# spells climb linearly (+1 CR per slot, handled by the helper above), but
+# Conjure Celestial jumps in a non-linear step — CR 4 at a 7th/8th-level
+# slot, CR 5 only at a 9th. A linear `per_slot` can't express that, so this
+# sibling map carries the same ``tiers`` shape as ``_SPELL_SUMMON_MAP``
+# (a list of ``(max_slot_inclusive, cr)`` walked low→high) and gets its own
+# tier-walk helper. RAW:
+#   - Conjure Celestial (PHB p.225, Cleric L7): CR 4 base; "When you cast
+#     this spell using a 9th-level spell slot, you summon a celestial of CR
+#     5 or lower." (L7–L8 → CR 4, L9 → CR 5.)
+# ---------------------------------------------------------------------------
+_SPELL_SUMMON_CR_TIER_MAP: dict[str, dict] = {
+    "conjure-celestial": {
+        "base_level": 7,
+        "tiers": [
+            (8, 4),     # L7–L8: CR 4
+            (9, 5),     # L9: CR 5
+        ],
+    },
+}
+
+
+def _spell_summon_cr_tier_for_slot(
+    spell_slug: str,
+    slot_level: int,
+    default_cr: int = 0,
+) -> int:
+    """v2.420.0 — Phase 3 summon CR-increase tier-walk helper. Reads
+    ``_SPELL_SUMMON_CR_TIER_MAP[spell_slug]`` + walks the ``tiers`` list
+    until it finds the first tier whose ``max_slot_inclusive`` ≥ the cast's
+    ``slot_level``, returning that tier's integer CR. Casts above the last
+    declared tier fall back to the last tier's CR; if no entry exists for
+    the slug, returns ``default_cr``.
+
+    Pure function — the single source of truth for non-linear per-slot
+    summon-CR math, read by the tier-walk CR cast endpoints
+    (``/cast_conjure_celestial``). Mirrors the
+    ``_spell_summon_multiplier_for_slot`` tier walk (a CR instead of a
+    multiplier).
+    """
+    entry = _SPELL_SUMMON_CR_TIER_MAP.get(spell_slug)
+    if not entry:
+        return default_cr
+    tiers = entry.get("tiers") or []
+    try:
+        sl = int(slot_level)
+    except (TypeError, ValueError):
+        sl = int(entry.get("base_level") or 1)
+    for tier in tiers:
+        try:
+            max_slot = int(tier[0])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if sl <= max_slot:
+            try:
+                return int(tier[1])
+            except (TypeError, ValueError, IndexError):
+                return default_cr
+    if tiers:
+        try:
+            return int(tiers[-1][1])
+        except (TypeError, ValueError, IndexError):
+            return default_cr
+    return default_cr
+
+
 _SPELL_BUFF_MAP["resistance-all"] = {
     "key": "resistance-all",
     "name": "Invulnerability (All Damage)",
@@ -4529,6 +4596,15 @@ _COMPANION_TEMPLATES: dict[str, dict] = {
     "undead-servant": {"name": "Undead Servant", "ac": 13, "hp": 13,
                        "speed_walk": 30, "size": 1, "team": "hero",
                        "color": "#cfcabe"},
+    # v2.420.0 — Phase 3 summon CR-increase family, tier-walk consumer
+    # (Conjure Celestial). RAW PHB p.225: a celestial of CR 4 (or CR 5 at
+    # a 9th-level slot). Stats are a v1 couatl/empyrean-lite ballpark
+    # (better AC + more HP than the lower conjures, walking speed 30 plus
+    # an assumed fly the GM sets per form, gold color). GM hand-edits to
+    # the specific celestial; the broadcast name on cast carries the CR.
+    "celestial-spirit": {"name": "Celestial Spirit", "ac": 14, "hp": 18,
+                         "speed_walk": 30, "size": 1, "team": "hero",
+                         "color": "#f0d060"},
 }
 
 
@@ -62021,6 +62097,137 @@ async def cast_conjure_fey(
     return {
         "ok": True,
         "feature": "conjure-fey",
+        "count": len(combatants),
+        "slot_level": slot_level,
+        "challenge_rating": challenge_rating,
+        "combatants": combatants,
+        "token_ids": token_ids,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_conjure_celestial")
+async def cast_conjure_celestial(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.420.0 — Phase 3 summon CR-increase family, tier-walk consumer
+    (closes Phase 3). Conjure Celestial (Cleric L7, PHB p.225): "You
+    summon a celestial of challenge rating 4 or lower." Upcast: "When you
+    cast this spell using a 9th-level spell slot, you summon a celestial
+    of challenge rating 5 or lower." Unlike Conjure Elemental / Fey (which
+    climb +1 CR per slot), the CR jumps non-linearly — CR 4 at L7/L8, CR 5
+    only at L9 — so it reads the tier-walk substrate
+    (`_SPELL_SUMMON_CR_TIER_MAP` via `_spell_summon_cr_tier_for_slot()`)
+    rather than the linear helper. Exactly **one** celestial is summoned;
+    the body carries `slot_level` but not `count` (always 1).
+
+    Body: ``{character_id, slot_level?, x?, y?, initiative?}``. The
+    celestial is summoned via `_summon_companion` (the `celestial-spirit`
+    registry entry) and tagged `is_summon` + `summoned_by` so the
+    long-rest teardown drops it. Gates on the caster knowing Conjure
+    Celestial OR being a Cleric.
+
+    Response: ``{ok, feature, count, slot_level, challenge_rating,
+    combatants: [...], token_ids: [...]}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    try:
+        slot_level = int(body.get("slot_level") or 7)
+    except (TypeError, ValueError):
+        slot_level = 7
+    # CR-increase family: count is always 1; the celestial's CR is a
+    # non-linear tier (CR 4 at L7/L8, CR 5 at L9).
+    count = 1
+    challenge_rating = _spell_summon_cr_tier_for_slot(
+        "conjure-celestial", slot_level, default_cr=4)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_cc = any(
+        (s.get("_slug") == "conjure-celestial")
+        or (str(s.get("name", "")).lower() == "conjure celestial")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"cleric"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_cc and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Conjure Celestial, or cleric",
+            "got_class": _cls,
+        })
+
+    base_x = float(body.get("x") or 0)
+    base_y = float(body.get("y") or 0)
+    initiative = int(body.get("initiative") or 0)
+    combatants = []
+    token_ids = []
+    res = await _summon_companion(
+        db, campaign_id,
+        owner_char_id=char.id,
+        companion_key="celestial-spirit",
+        name=f"Conjured Celestial (CR {challenge_rating})",
+        x=base_x,
+        y=base_y,
+        initiative=initiative,
+    )
+    if res:
+        combatants.append(res["combatant"])
+        token_ids.append(res["token_id"])
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": f"😇 Conjure Celestial — CR {challenge_rating}",
+            "feature_desc": (
+                f"{char.name} summons a CR-{challenge_rating} celestial as "
+                f"a combatant. (Conjure Celestial, L{slot_level}.)"
+            ),
+            "source": "conjure-celestial",
+            "count": len(combatants),
+            "slot_level": slot_level,
+            "challenge_rating": challenge_rating,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "conjure-celestial",
         "count": len(combatants),
         "slot_level": slot_level,
         "challenge_rating": challenge_rating,
