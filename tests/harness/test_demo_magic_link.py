@@ -29,7 +29,7 @@ import pytest
 
 from app import demo_magic_link as mlr
 
-from .helpers import BASE_URL
+from .helpers import BASE_URL, login_client
 
 
 _DEMO_SUB = "demo-gm@example.com"
@@ -156,6 +156,11 @@ def test_gate_accepts_truthy_variants(monkeypatch):
 async def test_demo_login_endpoint_404_when_gate_off():
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0, follow_redirects=False) as client:
         resp = await client.get("/demo-login?token=anything")
+    if resp.status_code == 401:
+        pytest.skip(
+            "gate is OPEN on the running container — skipping gate-off "
+            "404 assertion. The happy-path tests above cover the gate-on shape."
+        )
     # Gate off → 404. The /login.html bouncer in main.py shouldn't
     # intercept because the request is a raw GET, not a guarded API.
     assert resp.status_code == 404
@@ -179,6 +184,95 @@ async def test_mint_endpoint_404_when_gate_off_even_for_admin():
     # (or 303 redirect to /login if the test framework happens to
     # be logged in, but the harness clients here aren't).
     assert resp.status_code in (401, 303, 404)
+
+
+async def _magic_link_gate_open() -> bool:
+    """Probe whether the running container has both magic-link
+    gates open. Used by the happy-path tests below to auto-skip
+    when the override compose isn't up.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0, follow_redirects=False) as client:
+        resp = await client.get("/demo-login?token=garbage-token")
+    # Gate ON  → 401 (we get past the gate, fail signature verify)
+    # Gate OFF → 404 (route refuses to register effectively)
+    return resp.status_code == 401
+
+
+async def test_happy_path_when_gate_open():
+    """End-to-end mint → verify → replay. Only runs when the
+    container has both gates open (see
+    docs/integrations/demo-magic-link/docker-compose.app-demo.yml
+    for the operator override that flips them on without
+    disturbing the main dev app).
+
+    Verifies:
+      1. Admin can POST /admin/demo/mint-magic-link and gets back a URL.
+      2. The URL's token verifies — second client following the URL
+         lands on / with the demo user's session cookie.
+      3. A second attempt with the same token returns 401 (replay).
+    """
+    if not await _magic_link_gate_open():
+        pytest.skip(
+            "demo magic-link gates closed on the running container — "
+            "bring up the override at "
+            "docs/integrations/demo-magic-link/docker-compose.app-demo.yml "
+            "and point HARNESS_BASE_URL at it (port 8113) to run this test."
+        )
+    # 1. Login as the demo GM (admin) to authorize the mint endpoint.
+    admin = await login_client("demo-gm@example.com", "demopass")
+    try:
+        resp = await admin.post(
+            "/admin/demo/mint-magic-link",
+            data={"sub": "demo-alice@example.com"},
+        )
+        assert resp.status_code == 200, f"mint failed: {resp.status_code} {resp.text[:200]}"
+        body = resp.json()
+        assert body.get("ok") is True
+        url = body.get("url") or ""
+        assert "/demo-login?token=" in url
+        token = url.split("token=", 1)[1]
+        assert body.get("expires_in_seconds") == 15 * 60
+    finally:
+        await admin.aclose()
+
+    # 2. First verify (success → 303 redirect + auth cookie).
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0, follow_redirects=False) as anon:
+        resp = await anon.get(f"/demo-login?token={token}")
+    assert resp.status_code == 303, (
+        f"first verify should 303-redirect on success; got {resp.status_code} {resp.text[:200]}"
+    )
+    # The redirect target is "/" (the home page); the session
+    # cookie is set on the response.
+    assert resp.headers.get("location") == "/"
+    cookies = resp.headers.get("set-cookie") or ""
+    assert "session=" in cookies, "first verify should set the session cookie"
+
+    # 3. Second verify with the SAME token → 401 (replay rejected).
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0, follow_redirects=False) as anon:
+        resp2 = await anon.get(f"/demo-login?token={token}")
+    assert resp2.status_code == 401, (
+        f"second verify should 401 on replay; got {resp2.status_code} {resp2.text[:200]}"
+    )
+
+
+async def test_unknown_sub_when_gate_open():
+    """When the gate is open, requesting a mint for a sub not in
+    DEMO_EMAILS returns 400 — the allowlist is a hard rejection
+    even for admin callers. Protects against an admin accidentally
+    (or maliciously) minting a token for a real user's account.
+    """
+    if not await _magic_link_gate_open():
+        pytest.skip("demo magic-link gates closed on the running container")
+    admin = await login_client("demo-gm@example.com", "demopass")
+    try:
+        resp = await admin.post(
+            "/admin/demo/mint-magic-link",
+            data={"sub": "real-user@example.com"},
+        )
+    finally:
+        await admin.aclose()
+    assert resp.status_code == 400
+    assert resp.json().get("detail") == "unknown_sub"
 
 
 async def test_admin_home_does_not_show_mint_section_when_gate_off():

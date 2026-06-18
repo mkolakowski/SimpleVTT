@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3451 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.429.0, 2026-06-18).
+**Total tests:** 3453 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.430.0, 2026-06-18).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5399,9 +5399,11 @@ The dev container boots with `DEMO_MODE=false` and `SIMPLEVTT_DEMO_MAGIC_LINK_EN
 | `test_gate_off_by_default` | With both env vars unset, `magic_link_enabled()` is False. Protects against `.env.example` typos. |
 | `test_gate_requires_both_env_vars` | Setting only `DEMO_MODE` OR only `SIMPLEVTT_DEMO_MAGIC_LINK_ENABLED` keeps the gate closed; both together open it. |
 | `test_gate_accepts_truthy_variants` | Truthy parse for `1/true/yes/on` + case-insensitive; falsy parse for `0/false/no/off/empty/garbage`. |
-| `test_demo_login_endpoint_404_when_gate_off` | `GET /demo-login?token=anything` against the dev container → 404. Hides whether the feature exists. |
+| `test_demo_login_endpoint_404_when_gate_off` | `GET /demo-login?token=anything` against the dev container → 404. Hides whether the feature exists. Auto-skips (via the v2.430.0 `pytest.skip`) when the running container has both gates open — the happy-path tests below cover the gate-on shape. |
 | `test_mint_endpoint_404_when_gate_off_even_for_admin` | `POST /admin/demo/mint-magic-link` against the dev container → 401/303/404. The admin-auth check fires before the gate check by design — the standard `/login` redirect still works for admins exploring the UI. |
 | `test_admin_home_does_not_show_mint_section_when_gate_off` | `GET /admin` without auth → 401. The `{% if magic_link_enabled %}` gate on the admin_home template means the section literally doesn't render when the gate is off, but the harness has no admin session by default so we settle for the easier check; the gate predicate has its own dedicated unit tests above. |
+| `test_happy_path_when_gate_open` | v2.430.0: auto-detecting end-to-end test. Probes `/demo-login?token=garbage` — if 401 (gate open), runs the full mint→verify→replay flow against the running container; if 404 (gate closed, default), `pytest.skip` with a pointer to the operator-side `docs/integrations/demo-magic-link/docker-compose.app-demo.yml` override. Asserts mint returns the URL + 15-min TTL, first verify returns 303 + session cookie, second verify with the same token returns 401 (replay). |
+| `test_unknown_sub_when_gate_open` | v2.430.0: auto-detecting. With the gate open, requesting a mint for `real-user@example.com` (not in `DEMO_EMAILS`) returns 400 + `detail=unknown_sub`. Defense-in-depth against an admin minting a token for a real user's account. |
 
 ---
 

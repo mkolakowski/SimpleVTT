@@ -1,0 +1,66 @@
+# Operator-side docker-compose override that runs a second
+# SimpleVTT instance with BOTH demo magic-link gates open. Use
+# this to exercise the v2.425.0 mint→verify→replay flow against a
+# real backend without flipping the gates on the main dev app.
+#
+# NOT loaded by the default ``docker compose up`` — invoke with:
+#
+#     docker compose -f docker-compose.yml \
+#         -f docs/integrations/demo-magic-link/docker-compose.app-demo.yml \
+#         up -d app-demo
+#
+# The second instance listens on port 8113 (vs. the main app's
+# 8013), shares the same Postgres + uploads + homebrew volumes
+# as the main app, and intentionally doesn't run the demo
+# reset/reseed scheduler — the main app is the sole seeder so
+# the two instances see a coherent demo dataset.
+#
+# To run the harness happy-path test against this instance:
+#
+#     HARNESS_BASE_URL=http://localhost:8113 \
+#         python3 -m pytest tests/harness/test_demo_magic_link.py
+#
+# The test detects the open gates and runs the full mint→verify→
+# replay flow automatically.
+
+services:
+  app-demo:
+    image: simplevtt-app:latest
+    container_name: simplevtt-app-demo
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Inherit the main app's DB + secret so demo seed accounts work.
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-simplevtt}:${POSTGRES_PASSWORD:-simplevtt}@db:5432/${POSTGRES_DB:-simplevtt}
+      APP_PORT: 8013
+      APP_SECRET_KEY: ${APP_SECRET_KEY}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8113}
+      APP_ALLOW_LOCAL_REGISTRATION: ${APP_ALLOW_LOCAL_REGISTRATION:-true}
+      ADMINS: ${ADMINS:-}
+      CHARACTER_TEMPLATES: ${CHARACTER_TEMPLATES:-generic,dnd5e}
+      APP_DEFAULT_THEME: ${APP_DEFAULT_THEME:-sepia}
+      GOOGLE_SSO_ENABLED: "false"
+      # Demo gates: BOTH on. This is what the override is for.
+      DEMO_MODE: "true"
+      SIMPLEVTT_DEMO_MAGIC_LINK_ENABLED: "true"
+      # The main app is the sole seeder — disable here to avoid the
+      # two instances racing on demo-account reseed.
+      DEMO_RESET_ON_BOOT: "false"
+      DEMO_RESET_INTERVAL_MINUTES: "99999"
+      DEMO_CREDENTIALS_VISIBLE: ${DEMO_CREDENTIALS_VISIBLE:-true}
+      TRUSTED_PROXY_HOPS: "0"
+      # Cloudflare integration off here too — the override is
+      # scoped to demo-magic-link testing.
+      CLOUDFLARE_API_TOKEN: ""
+      CLOUDFLARE_ZONE_ID: ""
+      CLOUDFLARE_API_BASE_URL: "https://api.cloudflare.com/client/v4"
+      SIMPLEVTT_CLOUDFLARE_BANNING_ENABLED: "false"
+      TEST_MODE: "false"
+      DICE_SEED: ""
+    volumes:
+      - uploads_data:/app/app/static/uploads
+      - homebrew_data:/app/app/data/homebrew
+    ports:
+      - "8113:8013"

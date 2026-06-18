@@ -1,6 +1,6 @@
 # Demo magic-link login — Design Plan
 
-> **Status:** ✅ Phase 1 shipped (v2.425.0) — mint endpoint, verify endpoint, single-use `demo_magic_links` table, admin UI partial, double-env-var gate, 13 harness tests. The happy path is exercised end-to-end against a temporarily-gated container; a permanent regression test for it is filed for a future `app-demo` compose override.
+> **Status:** ✅ Phase 1 + 1B shipped (v2.425.0 + v2.430.0). Phase 1 = mint + verify + table + admin UI + double-gate. Phase 1B = `app-demo` compose override + auto-detecting happy-path tests that run against the override when its port is set as `HARNESS_BASE_URL`, skip gracefully against the default gate-off main app.
 > **Tracked in:** [`TODO.md`](../../TODO.md) → Manually Added → "URL-based 'magic-link' login, demo-instance only".
 > **Sibling plan:** [`demo-mode.md`](demo-mode.md) — the broader DEMO_MODE shell this builds on.
 > **Sibling TODOs:** the fail2ban/CrowdSec log-integration TODO and the Cloudflare edge-banning TODO live next to this one in `Manually Added`; the three are designed to compose into a single security spine but each ships independently.
@@ -138,6 +138,26 @@ The fail2ban filter triggers on **5×`verify_rejected` from one IP in 5min**; th
 5. 🟠 **Filed for follow-up** — README mention of demo magic-link shareability. The `demo-mode.md` plan and the new `## Security` topic section in `TODO.md` already cross-link this plan; a README-level callout is the lightest-touch advertisement and lands in a doc-only follow-up if/when shareability matters operationally.
 
 **Bug filed for Phase 2.** The 15-minute TTL is hardcoded in `app/demo_magic_link.py::_TOKEN_MAX_AGE_SECONDS`. An expired-token unit test was skipped because itsdangerous's timestamp reference is hard to monkey-patch cleanly from an external test (the lib imports `from time import time` at module load); itsdangerous's own test suite proves the timestamp path. Phase 2 may add a freezegun-based test or an env-var override for the TTL to ship an integration test for the expired-token path.
+
+### Phase 1B — Happy-path regression test (v2.430.0 — ✅ shipped)
+
+Closes the v2.425.0-deferred follow-up. Two new auto-detecting tests in `tests/harness/test_demo_magic_link.py`:
+
+1. ✅ **v2.430.0** — `test_happy_path_when_gate_open` probes `/demo-login?token=garbage` to detect the gate state. If 401 (gates open), runs the full mint→verify→replay flow: admin POSTs to `/admin/demo/mint-magic-link`, asserts the response carries the URL + 15-min TTL, follows the URL to verify (asserts 303 + session cookie), then re-attempts the same token (asserts 401 = replay rejected). If 404 (gates closed — default), `pytest.skip`s with a pointer to the operator-side compose override.
+
+2. ✅ **v2.430.0** — `test_unknown_sub_when_gate_open` (auto-detecting). With the gate open, requesting a mint for an email not in `DEMO_EMAILS` returns 400 — even for admin callers. Defense-in-depth against an admin accidentally minting a token for a real user's account.
+
+3. ✅ **v2.430.0** — `docs/integrations/demo-magic-link/docker-compose.app-demo.yml` operator override. Spins up a second `simplevtt-app-demo` container on port 8113 with BOTH magic-link gates ON, sharing the main app's database. The main app stays as the demo seeder (the override sets `DEMO_RESET_ON_BOOT=false` to avoid a race). Operator invokes:
+
+```bash
+docker compose \
+    -f docker-compose.yml \
+    -f docs/integrations/demo-magic-link/docker-compose.app-demo.yml \
+    up -d app-demo
+HARNESS_BASE_URL=http://localhost:8113 python3 -m pytest tests/harness/test_demo_magic_link.py
+```
+
+The auto-skip pattern means CI can run the same test file against the main app (gates off — happy-path tests skip) AND against the override (gates on — happy-path tests run); no separate test invocations needed.
 
 ### Phase 2 — Reference fail2ban + CrowdSec configs (v2.5x.1)
 

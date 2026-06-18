@@ -10,6 +10,62 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.430.0] - 2026-06-18 — "The Twinned Doorway"
+
+**Schema version:** 71
+
+**Commit summary:** Closes the v2.425.0-deferred happy-path regression test for demo magic-link login. New operator compose override at `docs/integrations/demo-magic-link/docker-compose.app-demo.yml` brings up a second `app-demo` container on port 8113 with BOTH magic-link gates ON, sharing the main app's database (the override sets `DEMO_RESET_ON_BOOT=false` so the main app stays as the sole demo seeder — no race). Two new auto-detecting tests in `tests/harness/test_demo_magic_link.py` probe the gate state of whatever container `HARNESS_BASE_URL` points at; if the gates are open they run the full mint→verify→replay flow, if closed they `pytest.skip` with a pointer to the override. The existing gate-off test gains a matching `pytest.skip` for the open-gate case so the suite is symmetric.
+
+**Description:** Verified end-to-end against the dev environment by bringing up the override and running the test suite against both ports:
+
+```
+--- Gate-off (main app, port 8013) ---
+13 passed, 2 skipped — happy-path tests skip with the documented pointer
+
+--- Gate-on (app-demo, port 8113) ---
+14 passed, 1 skipped — gate-off 404 test skips, happy-path runs
+```
+
+The happy-path test walks the audit trail:
+
+1. POST `/admin/demo/mint-magic-link` as `demo-gm` (admin) → 200 + URL + 15-min TTL.
+2. GET the URL's `?token=…` from a fresh anon client → 303 redirect to `/` + `session=…` cookie set.
+3. GET the same URL again → 401 (replay rejected by the `demo_magic_links` table's PK constraint).
+
+Auto-detect pattern: probe `/demo-login?token=garbage`; 401 means gates open (route processed, signature failed), 404 means gates closed (route refuses to register effectively). The skip message documents the override path so a developer running the suite locally can opt in.
+
+**Operator-side usage:**
+
+```bash
+docker compose \
+    -f docker-compose.yml \
+    -f docs/integrations/demo-magic-link/docker-compose.app-demo.yml \
+    up -d app-demo
+HARNESS_BASE_URL=http://localhost:8113 python3 -m pytest tests/harness/test_demo_magic_link.py
+```
+
+The override container reuses the same `simplevtt-app:latest` image so no rebuild is needed beyond bringing up the second instance.
+
+**Architectural design notes:**
+
+- **Same DB, different port.** The override container shares the Postgres + uploads + homebrew volumes so it sees the demo accounts the main app seeded. Avoiding a second DB keeps the override lightweight and ensures both instances see the same source of truth.
+- **No double-seeding.** The override explicitly disables `DEMO_RESET_ON_BOOT` and bumps `DEMO_RESET_INTERVAL_MINUTES` to 99999 so it never tries to reseed concurrently with the main app. If the main app is down, the override won't seed either — that's the intended safety constraint (the override is a *consumer* of the demo dataset, not a *producer*).
+- **Gates explicitly inline.** Rather than relying on `extends` (which has cross-file caveats in Compose v2), the override redeclares every env var the main app reads. Verbose but easier to reason about — an operator scanning the file can tell at a glance what's different from the main `app` service.
+- **Cloudflare integration explicitly off.** The override scopes itself to demo-magic-link testing; it doesn't carry the v2.427.0 Cloudflare client config. Operators who want to exercise both stacks together can extend the file or set the env at compose-up time.
+
+**Why "The Twinned Doorway":** the override is a second doorway (port 8113) into the same campaign hall (shared DB), with the magic-link lock opened. Two doors, same kingdom.
+
+MINOR — new operator artifact (compose override + integration directory), new test fixture pattern (gate-state auto-detection via probe), 2 new conditional tests + 1 modified test for the symmetric skip. No app code touched.
+
+### Added
+- `docs/integrations/demo-magic-link/docker-compose.app-demo.yml`: operator compose override. Spins `simplevtt-app-demo` on port 8113 with both magic-link gates ON, shared DB, no seeder.
+- `tests/harness/test_demo_magic_link.py`: `_magic_link_gate_open()` helper + 2 new tests `test_happy_path_when_gate_open` + `test_unknown_sub_when_gate_open`. Both auto-detect gate state and skip with a documented pointer when the override isn't up. Plus `login_client` import added (was missing from the v2.425.0 file).
+
+### Changed
+- `tests/harness/test_demo_magic_link.py::test_demo_login_endpoint_404_when_gate_off`: auto-skips when the running container has both gates open. Keeps the suite passable against either gate state without test-runner forking.
+- `docs/plans/demo-magic-link.md`: status header flipped to "Phase 1 + 1B shipped." New Phase 1B section documents the override + auto-detecting test pattern.
+- `docs/test-harness-coverage.md`: 2 new test rows in the demo magic-link section; the gate-off-404 row's description note updated to mention the auto-skip. Total-test-count nudges 3451 → 3453.
+
 ## [2.429.0] - 2026-06-18 — "The Shared Watchword"
 
 **Schema version:** 71
