@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.423.1] - 2026-06-18 — "The Summon's Reins"
+
+**Schema version:** 69
+
+**Commit summary:** Doc-only commit. New entry in `TODO.md`'s Combat section — **Summon Spells — Creature Picker + Auto-Control + Init Placement** — captures a three-part feature that closes the cast-flow UX gap left by the Phase 3 summon-substrate work: (1) per-spell creature picker UI for all 8+ summon endpoints (Conjure Animals / Woodland Beings / Minor Elementals / Animate Dead / Elemental / Fey / Celestial + Find Familiar + Bag of Tricks), (2) auto-assign control of the summon to the casting player, (3) auto-insert the summon immediately after the caster in initiative.
+
+**Description:** The v2.404.x–v2.420.0 Phase 3 work shipped the summon-count cap-extension substrate and seven summon endpoints — but each cast still requires GM-side hand-holding: the player can't pick which wolf/owl/elemental they want, the GM has to assign control of the summoned token to the player, and the GM has to reorder initiative so the summon acts on the caster's turn. This entry consolidates the three discrete fixes into one feature request so they ship as a coherent UX arc (likely v2.5x).
+
+The entry explicitly includes **familiars** in scope. RAW Find Familiar (Wizard L1 ritual) lists 15 valid creature options (bat / cat / crab / frog / hawk / lizard / octopus / owl / poisonous snake / fish (quipper) / rat / raven / sea horse / spider / weasel); today the v1 summon picks a generic familiar template. Pact of the Chain (Warlock) follows the same shape. Bringing familiars into the picker + control + init flow brings them to parity with the conjure family.
+
+The TODO entry sketches the substrate (`_SPELL_SUMMON_OPTIONS_MAP` covering all summon endpoints with RAW creature lists), the UI work (sheet-side picker JS), the endpoint extensions (`creature_key` body field + `owner_user_id` auto-stamp + initiative auto-compute), and the harness coverage shape. Filed as a candidate `docs/plans/summon-cast-flow.md` for the v2.5x arc planning.
+
+**Why "The Summon's Reins":** the feature is literally about handing the reins of the summoned creature to the player who cast it — picker control over which beast appears, control authority over its movement, and an initiative slot ready for the player to step into.
+
+PATCH — TODO.md addition (~30 lines). No code touched.
+
+### Changed
+- `TODO.md`: new `### Summon Spells — Creature Picker + Auto-Control + Init Placement` entry in the Combat section, between Combat 2.0 and the Maps section header.
+
 ## [2.423.0] - 2026-06-17 — "The Borrowed Breath"
 
 **Schema version:** 69
