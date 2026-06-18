@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3231 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.405.1, 2026-06-17).
+**Total tests:** 3236 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.405.2, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4937,6 +4937,17 @@ v2.99.188 — `/cast_hunters_mark` install broadcast names both targets when Twi
 |------|-----------------|
 | `test_twinned_install_broadcast_names_both_targets` | Rowan casts Hunter's Mark with Twinned armed. The `feature_used` install broadcast's `feature_name` + `feature_desc` mention both targets, and the new metadata fields fire: `target_names` is a 2-element list, `twinned_target_combatant_id_2` matches the second target ID, `twinned_target_name` resolves to the second target's display name. |
 | `test_no_twinned_broadcast_keeps_single_target` | Control: cast without Twinned pending. The install broadcast keeps the single-target shape — `target_names` is a singleton, `twinned_target_combatant_id_2` + `twinned_target_name` are falsy. |
+
+### `test_bestow_curse_duration_scaling.py`
+v2.405.2 — spell-utility-mechanical-depth Phase 1: duration-scaling substrate, third consumer + first `"permanent"` marker. The `_SPELL_DURATION_MAP` "bestow-curse" entry replaces `/cast_bestow_curse`'s flat 10-round stamp with the RAW 5-tier upcast ladder. Thalindra Moonwhisper is armed with Bestow Curse + an L1-L9 wizard slot table (snapshot + restored on teardown — the spell isn't on any demo PC's native list).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_bestow_curse_l3_routes_1min` | Cast at L3 → 10 rounds (1 min); response `duration_label == "1min"`, `duration_rounds == 10`. Base tier. |
+| `test_bestow_curse_l4_routes_10min` | Cast at L4 → 100 rounds (10 min); `duration_label == "10min"`, `duration_rounds == 100`. |
+| `test_bestow_curse_l5_routes_8h` | Cast at L5 → 4800 rounds (8 hours); `duration_label == "8h"`, `duration_rounds == 4800`. |
+| `test_bestow_curse_l7_routes_24h` | Cast at L7 → 14400 rounds (24 hours); `duration_label == "24h"`, `duration_rounds == 14400`. |
+| `test_bestow_curse_l9_routes_permanent` | Cast at L9 → `"permanent"` marker (until dispelled); `duration_label == "permanent"`. First consumer of the substrate's marker-string path. |
 
 ### `test_hex_duration_scaling.py`
 v2.405.1 — spell-utility-mechanical-depth Phase 1: duration-scaling substrate, second consumer. The `_SPELL_DURATION_MAP` "hex" entry + `_spell_duration_rounds_for_slot()` helper replace the hardcoded per-slot duration ladder at `/cast_hex`. Magnus Hexbinder's Pact Magic slot table PATCH'd up to L5 so all three tiers are reachable.

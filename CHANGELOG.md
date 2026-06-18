@@ -10,6 +10,41 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.405.2] - 2026-06-17 — "The Lasting Curse"
+
+**Schema version:** 69
+
+**Commit summary:** Retrofits **Bestow Curse** (Bard / Cleric / Wizard L3) as the **third consumer** of the v2.405.0 duration-scaling substrate — and the **first to use the `"permanent"` marker**. Pre-v2.405.2 `/cast_bestow_curse` stamped a flat 10-round (1 min) duration regardless of slot level, with a TODO comment admitting the upcast ladder was unwired. This commit adds a 5-tier `"bestow-curse"` entry to `_SPELL_DURATION_MAP` and makes the RAW upcast real: L3 → 1 min, L4 → 10 min, L5-L6 → 8 h, L7-L8 → 24 h, L9 → until dispelled.
+
+**Description:** The first two substrate consumers (Hunter's Mark v2.405.0, Hex v2.405.1) shared one numeric ladder. Bestow Curse exercises the substrate's full range: five tiers including the sentinel `"permanent"` marker the helper was designed to return for until-dispelled durations. The registry entry:
+
+```python
+_SPELL_DURATION_MAP["bestow-curse"] = {
+    "base_level": 3,
+    "tiers": [
+        (3, 10),            # L3:    1 minute
+        (4, 100),           # L4:    10 minutes
+        (6, 4800),          # L5-L6: 8 hours
+        (8, 14400),         # L7-L8: 24 hours
+        (9, "permanent"),   # L9:    until dispelled
+    ],
+}
+```
+
+`/cast_bestow_curse` now reads `_spell_duration_rounds_for_slot("bestow-curse", slot_level, default_rounds=10)`, branches on the `"permanent"` marker, and derives a display `duration_label` ("1min" / "10min" / "8h" / "24h" / "permanent"). The computed duration feeds the caster concentration anchor, the `feature_used` broadcast, and the response body (which gains a `duration_label` field). RAW's L5+ concentration-drop (Bestow Curse becomes a set duration, not concentration, at 5th-level slots) stays filed alongside the per-target WIS save + curse-effect picker — this commit is duration-only.
+
+**Why "The Lasting Curse":** Bestow Curse can now last from one minute to forever; the L9 cast is the first curse the engine treats as permanent.
+
+PATCH — one registry entry + one endpoint retrofit + 1 new harness file (5 tests, one per tier). The Spells substrate-shape row stays at ~83% (Bestow Curse was already wired pre-v2.405.2; the retrofit moves the duration math from a flat stamp to the data-driven ladder without changing the cast contract beyond the additive `duration_label` field).
+
+### Added
+- `app/routes/tabletop_routes.py`: new `"bestow-curse"` entry in `_SPELL_DURATION_MAP` (after `"hex"`, line ~2050). Five tiers spanning 1 min → permanent; first entry to use the `"permanent"` marker.
+- `tests/harness/test_bestow_curse_duration_scaling.py`: new harness file. Five tests assert L3 / L4 / L5 / L7 / L9 casts land the correct `duration_label` ("1min" / "10min" / "8h" / "24h" / "permanent") on the response. The fixture snapshots Thalindra Moonwhisper's spells + wizard slot table, arms her with Bestow Curse + an L1-L9 slot table, and restores both on teardown (Bestow Curse isn't on any demo PC's native list).
+
+### Changed
+- `app/routes/tabletop_routes.py`: `/cast_bestow_curse` retrofits the per-slot duration computation. Replaces the flat `duration_rounds=10` stamp (concentration anchor + `feature_used` broadcast + response) with a `_spell_duration_rounds_for_slot()` call + a rounds→label mapping that handles the `"permanent"` marker. The response + broadcast gain a `duration_label` field.
+- `docs/plans/spell-utility-upcast.md`: Phase 1 backlog table flips Bestow Curse to ✅ shipped; status line updated.
+
 ## [2.405.1] - 2026-06-17 — "The Second Curse"
 
 **Schema version:** 69

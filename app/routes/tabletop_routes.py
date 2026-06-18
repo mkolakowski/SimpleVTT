@@ -2052,6 +2052,27 @@ _SPELL_DURATION_MAP: dict[str, dict] = {
             (9, 14400),   # L5+:   24 hours
         ],
     },
+    # v2.405.2 — Bestow Curse (Bard / Cleric / Wizard L3). RAW PHB
+    # p.218: base "Concentration, up to 1 minute." Higher Levels: "If
+    # you cast this spell using a spell slot of 4th level or higher,
+    # the duration is concentration, up to 10 minutes. If you use a
+    # spell slot of 5th or 6th level, the duration is 8 hours. If you
+    # use a spell slot of 7th or 8th level, the duration is 24 hours.
+    # If you use a 9th level spell slot, the spell lasts until it is
+    # dispelled." First consumer of the ``"permanent"`` marker (L9 =
+    # until dispelled). Pre-v2.405.2 the cast endpoint stamped a flat
+    # 10-round (1 min) duration regardless of slot level with a TODO
+    # comment; this entry + the retrofit make the upcast ladder real.
+    "bestow-curse": {
+        "base_level": 3,
+        "tiers": [
+            (3, 10),            # L3:    1 minute  (10 rounds)
+            (4, 100),           # L4:    10 minutes (100 rounds)
+            (6, 4800),          # L5-L6: 8 hours
+            (8, 14400),         # L7-L8: 24 hours
+            (9, "permanent"),   # L9:    until dispelled
+        ],
+    },
 }
 
 
@@ -83745,13 +83766,39 @@ async def cast_bestow_curse(
     flag_modified(char, "sheet")
     db.commit()
 
-    # Caster concentration anchor (1 minute = 10 rounds at base L3;
-    # upcast at L4-L8 → 10 min concentration; L9 → 1 day. v1 stamps
-    # the base 10 rounds, callers can adjust the anchor's duration
-    # downstream if upcast handling is wired).
+    # v2.405.2 — duration-scaling substrate retrofit. Was a flat
+    # 10-round (1 min) stamp regardless of slot level; now reads the
+    # data-driven _SPELL_DURATION_MAP via the shared helper (mirrors
+    # the v2.405.0/.1 Hunter's Mark + Hex retrofits). RAW: L3 → 1 min,
+    # L4 → 10 min, L5-L6 → 8 h, L7-L8 → 24 h, L9 → until dispelled.
+    raw_rounds = _spell_duration_rounds_for_slot(
+        "bestow-curse", slot_level, default_rounds=10,
+    )
+    if raw_rounds == "permanent":
+        bc_duration_label = "permanent"
+        bc_duration_rounds = 14400  # display cap; RAW = until dispelled
+    else:
+        try:
+            bc_duration_rounds = int(raw_rounds)
+        except (TypeError, ValueError):
+            bc_duration_rounds = 10
+        if bc_duration_rounds >= 14400:
+            bc_duration_label = "24h"
+        elif bc_duration_rounds >= 4800:
+            bc_duration_label = "8h"
+        elif bc_duration_rounds >= 100:
+            bc_duration_label = "10min"
+        else:
+            bc_duration_label = "1min"
+
+    # Caster concentration anchor. Note RAW: at L5+ Bestow Curse drops
+    # concentration (set duration); the anchor still carries the
+    # computed duration so the chat-card timer reads correctly. The
+    # concentration-drop behavior at L5+ is filed alongside the
+    # per-target WIS save + curse-effect picker.
     await _install_caster_concentration_anchor(
         campaign_id, char, "bestow-curse", "Bestow Curse",
-        duration_rounds=10, icon="🕷️",
+        duration_rounds=bc_duration_rounds, icon="🕷️",
     )
     # v2.99.183 — Twinned Spell auto-route. Surfaces the second
     # target on the response. Per-target buff install on the
@@ -83810,7 +83857,8 @@ async def cast_bestow_curse(
                 else "bestow-curse"
             ),
             "via_invocation": via_invocation or None,
-            "duration_rounds": 10,
+            "duration_rounds": bc_duration_rounds,
+            "duration_label": bc_duration_label,
             "range_ft": 5,
         },
     })
@@ -83826,8 +83874,11 @@ async def cast_bestow_curse(
         "slot_total": total,
         "class_slug": class_slug,
         "via_invocation": via_invocation or None,
-        "duration_rounds": 10,
+        "duration_rounds": bc_duration_rounds,
+        "duration_label": bc_duration_label,
         "range_ft": 5,
+        # RAW: L5+ drops concentration; the concentration-drop behavior
+        # is filed. v1 keeps the anchor + reports concentration True.
         "concentration": True,
         # v2.99.183 — Twinned auto-route response field.
         "twinned_target_combatant_id_2": _twin_target_2_bc or None,
