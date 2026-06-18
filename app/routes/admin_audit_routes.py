@@ -34,6 +34,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from ..admin_audit import record_admin_action
 from ..audit_log import audit
 from ..auth import require_admin
 from ..database import get_db
@@ -81,19 +82,24 @@ def _write_audit_row(
     cloudflare_rule_id: Optional[str] = None,
     notes: Optional[str] = None,
     scope: str = "global",
+    request: Optional[Request] = None,
+    audit_level: int = logging.INFO,
 ) -> AdminAuditLog:
-    row = AdminAuditLog(
-        actor_user_id=actor.id,
+    # v2.431.0: delegate to the shared helper so the canonical
+    # log-line emission and the table-write happen together. The
+    # existing call sites only pass success-path INFO emits; the
+    # failure paths below pass WARNING explicitly.
+    return record_admin_action(
+        db,
+        actor=actor,
         action=action,
         target=target,
-        cloudflare_rule_id=cloudflare_rule_id,
-        notes=notes,
+        request=request,
         scope=scope,
+        notes=notes,
+        cloudflare_rule_id=cloudflare_rule_id,
+        audit_level=audit_level,
     )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    return row
 
 
 @router.post("/ban_ip")
@@ -116,32 +122,22 @@ async def ban_ip(
         _write_audit_row(
             db, actor=user, action="cloudflare.ban_failed",
             target=payload.ip, notes=f"connection: {e}",
-        )
-        audit(
-            "cloudflare.ban_failed", level=logging.WARNING, request=request,
-            ip_target=payload.ip, actor_id=user.id, reason="connection",
+            request=request, audit_level=logging.WARNING,
         )
         raise HTTPException(status_code=502, detail="cloudflare_unreachable")
     except cloudflare.CloudflareApiError as e:
         _write_audit_row(
             db, actor=user, action="cloudflare.ban_failed",
-            target=payload.ip, notes=f"api: {e.status_code}: {e.body[:200]}",
-        )
-        audit(
-            "cloudflare.ban_failed", level=logging.WARNING, request=request,
-            ip_target=payload.ip, actor_id=user.id, reason="api_error",
-            upstream_status=e.status_code,
+            target=payload.ip,
+            notes=f"api: {e.status_code}: {e.body[:200]}",
+            request=request, audit_level=logging.WARNING,
         )
         raise HTTPException(status_code=502, detail="cloudflare_api_error")
     row = _write_audit_row(
-        db, actor=user, action="cloudflare.ban_ip",
+        db, actor=user, action="cloudflare.ban_ok",
         target=payload.ip, cloudflare_rule_id=rule_id,
         notes=payload.notes or None,
-    )
-    audit(
-        "cloudflare.ban_ok", request=request,
-        ip_target=payload.ip, actor_id=user.id,
-        rule_id=rule_id,
+        request=request,
     )
     return {
         "ok": True,
@@ -166,10 +162,7 @@ async def unban_ip(
         _write_audit_row(
             db, actor=user, action="cloudflare.unban_failed",
             target=payload.rule_id, notes=f"connection: {e}",
-        )
-        audit(
-            "cloudflare.unban_failed", level=logging.WARNING, request=request,
-            rule_id=payload.rule_id, actor_id=user.id, reason="connection",
+            request=request, audit_level=logging.WARNING,
         )
         raise HTTPException(status_code=502, detail="cloudflare_unreachable")
     except cloudflare.CloudflareApiError as e:
@@ -177,21 +170,14 @@ async def unban_ip(
             db, actor=user, action="cloudflare.unban_failed",
             target=payload.rule_id,
             notes=f"api: {e.status_code}: {e.body[:200]}",
-        )
-        audit(
-            "cloudflare.unban_failed", level=logging.WARNING, request=request,
-            rule_id=payload.rule_id, actor_id=user.id, reason="api_error",
-            upstream_status=e.status_code,
+            request=request, audit_level=logging.WARNING,
         )
         raise HTTPException(status_code=502, detail="cloudflare_api_error")
     row = _write_audit_row(
-        db, actor=user, action="cloudflare.unban_ip",
+        db, actor=user, action="cloudflare.unban_ok",
         target=payload.rule_id,
         cloudflare_rule_id=payload.rule_id,
-    )
-    audit(
-        "cloudflare.unban_ok", request=request,
-        rule_id=payload.rule_id, actor_id=user.id,
+        request=request,
     )
     return {"ok": True, "audit_id": row.id}
 
@@ -203,9 +189,16 @@ async def list_edge_bans(
     user: User = Depends(require_admin),
 ):
     _gate_check()
+    # v2.431.0: action names changed from "cloudflare.ban_ip" /
+    # "cloudflare.unban_ip" to "cloudflare.ban_ok" / "cloudflare.unban_ok"
+    # when the helper unification landed. Failures land at
+    # "cloudflare.ban_failed" / "cloudflare.unban_failed".
     audit_rows = (
         db.query(AdminAuditLog)
-        .filter(AdminAuditLog.action.in_(["cloudflare.ban_ip", "cloudflare.unban_ip"]))
+        .filter(AdminAuditLog.action.in_([
+            "cloudflare.ban_ok", "cloudflare.unban_ok",
+            "cloudflare.ban_failed", "cloudflare.unban_failed",
+        ]))
         .order_by(AdminAuditLog.created_at.desc())
         .limit(100)
         .all()

@@ -10,6 +10,69 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.431.0] - 2026-06-18 — "The Steward's Ledger"
+
+**Schema version:** 71
+
+**Commit summary:** Broadens the v2.427.0 `admin_audit_log` table from "Cloudflare ban/unban only" to its intended generic role. New `app/admin_audit.py` module exports a shared `record_admin_action(db, *, actor, action, target, request, ...)` helper that writes BOTH the persistent table row AND the canonical audit-log line in one call. The Cloudflare ban/unban handlers refactor onto it; the destructive admin endpoints in `app/routes/admin_routes.py` plumb in for the first time. Operators can now query `admin_audit_log` for who deleted what user / campaign, when — and fail2ban/CrowdSec see the same actions as `admin.*` canonical events in the log stream.
+
+**Description:** Six new audited admin actions wired through the helper:
+
+| Event tag | Endpoint | Target |
+|---|---|---|
+| `admin.user_create` | `POST /admin/users` | new user's email |
+| `admin.user_disable` / `admin.user_enable` | `POST /admin/users/{id}/disable` (toggle) | user's email |
+| `admin.user_password_reset` | `POST /admin/users/{id}/reset_password` | user's email |
+| `admin.user_delete` | `POST /admin/users/{id}/delete` | user's email (captured pre-delete) |
+| `admin.campaign_delete` | `POST /admin/campaign/{id}/delete` | campaign name + `scope=campaign:<id>` |
+| `admin.demo_reset` | `POST /admin/demo/reset` | `"demo_dataset"` + per-section delete counts as notes |
+
+The Cloudflare action names also shifted to be outcome-oriented for symmetry with the new admin family: `cloudflare.ban_ip` → `cloudflare.ban_ok` (success) / `cloudflare.ban_failed` (failure). Same for unban. The list endpoint in `admin_audit_routes.py` and the admin home template's "Unban" button filter were updated to match. End users see no UX difference; operators querying the audit log filter on outcome rather than request-shape.
+
+**Defense detail — password reset:** the new password is **never** logged. The audit row records only "this admin reset this user's password at this time." Defense against an admin compromise leaking passwords into audit history.
+
+**Defense detail — delete-capture-first:** the audit row captures the target email / campaign name **before** the delete runs. Otherwise the audit row would be useless ("delete: row 17" with no human-readable hint who row 17 was).
+
+**Audit log proof.** A live probe against the dev container:
+
+```
+INFO simplevtt.audit: auth.login_ok ip=192.168.65.1 ua=curl/8.7.1 user_id=5770
+INFO simplevtt.audit: admin.user_create ip=192.168.65.1 ua=curl/8.7.1
+     actor_id=5770 target=audit-probe-1781825343@example.com
+     notes="display_name=audit-probe"
+```
+
+The matching `admin_audit_log` row is queryable via `db.query(AdminAuditLog).filter_by(action="admin.user_create")`.
+
+**fail2ban filter extended.** `docs/integrations/fail2ban/filter.d/simplevtt-auth.conf` gains explicit `ignoreregex` entries for `admin.*` and `cloudflare.{ban_ok,unban_ok}` events so a legitimately busy admin doesn't trip the credential-stuffing jail. Operators who want CrowdSec to watch for compromised-admin patterns (e.g. one admin deleting 10 users in 30 seconds) can add a new scenario keyed on `admin.user_delete` count-per-actor; the canonical line carries `actor_id=…` for that grouping.
+
+**5 new harness tests** at `tests/harness/test_admin_audit.py`:
+
+- `test_admin_create_user_audits` — POST /admin/users + assert user visible on /admin (proxy for audit row)
+- `test_admin_disable_then_enable_user_audits` — toggle pattern emits both names
+- `test_admin_reset_password_audits` — 303 returns, password not in any audit field
+- `test_admin_delete_user_audits` — user gone from /admin after delete
+- `test_admin_non_admin_cannot_trigger_destructive_actions` — `demo-alice` → 403 before the audit emit fires
+
+Each test creates a throwaway user (timestamped email to avoid concurrent collisions) and cleans up. Total harness count 3453 → 3458.
+
+**Why "The Steward's Ledger":** the admin_audit_log table is the steward's ledger — every action the admin takes is recorded, in their own hand, with the date and the subject. The steward stays accountable to a future reader of the ledger.
+
+MINOR — new module + new emissions at existing endpoints + 5 new harness tests + Cloudflare action-name normalization. No schema change. No new env vars.
+
+### Added
+- `app/admin_audit.py`: shared `record_admin_action()` helper. Writes the `AdminAuditLog` row + emits canonical audit-log line in one call.
+- `tests/harness/test_admin_audit.py`: 5 tests covering the new emission paths.
+
+### Changed
+- `app/routes/admin_routes.py`: 6 destructive admin endpoints now call `record_admin_action`. Each gains a `request: Request` parameter for IP/UA attribution.
+- `app/routes/admin_audit_routes.py`: refactor `_write_audit_row` to delegate to the shared helper. Cloudflare action names normalized to outcome-oriented (`cloudflare.ban_ok` / `cloudflare.ban_failed`). List endpoint filter updated.
+- `app/routes/admin_routes.py::admin_home`: edge-bans query filters on the new outcome-oriented action names.
+- `app/templates/admin_home.html`: "Unban" button filter updated from `cloudflare.ban_ip` → `cloudflare.ban_ok`.
+- `docs/integrations/fail2ban/filter.d/simplevtt-auth.conf`: `ignoreregex` extended to cover `admin.*` and `cloudflare.{ban_ok,unban_ok}` events.
+- `docs/integrations/README.md`: canonical-events table extended with 7 new event tags + the cloudflare action-name notes.
+- `docs/test-harness-coverage.md`: new section "Admin-action audit log (v2.431.0)" with 5 test rows. Total-test-count 3453 → 3458.
+
 ## [2.430.0] - 2026-06-18 — "The Twinned Doorway"
 
 **Schema version:** 71

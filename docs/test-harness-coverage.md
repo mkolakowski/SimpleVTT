@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3453 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.430.0, 2026-06-18).
+**Total tests:** 3458 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.431.0, 2026-06-18).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5335,6 +5335,22 @@ YAML syntax + schema validation for the CrowdSec parser + scenarios at `docs/int
 | `test_parser_has_required_keys[path0]` | `name` / `filter` / `nodes` all present. |
 | `test_parser_has_audit_log_type_static[path0]` | Parser emits `meta: log_type, value: simplevtt-audit` somewhere in its nodes — without it, every scenario silently no-ops. |
 | `test_readme_documents_all_scenarios` | README's scenario table mentions every shipped scenario by name. Catches doc-vs.-files drift. |
+
+---
+
+## Admin-action audit log (v2.431.0)
+
+Verifies the v2.431.0 plumbing that wires destructive admin endpoints in `app/routes/admin_routes.py` through `app/admin_audit.py::record_admin_action`. Each test creates a throwaway user, exercises a destructive action, asserts the user-side effect happened (proxy for the audit row being written), and cleans up. Lives in `tests/harness/test_admin_audit.py`.
+
+The canonical-line emission is unit-tested by `test_audit_log.py`; verifying it fires from here would require log-scraping. The table-write is verified indirectly via observable user-side effects (the new user exists / is deleted).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_admin_create_user_audits` | `POST /admin/users` as admin creates the user (visible on `/admin` page) — triggers the `admin.user_create` audit row + log line. Cleans up the test user. |
+| `test_admin_disable_then_enable_user_audits` | `POST /admin/users/{id}/disable` twice — first call disables (emits `admin.user_disable`), second re-enables (emits `admin.user_enable`). Cleans up. |
+| `test_admin_reset_password_audits` | `POST /admin/users/{id}/reset_password` returns 303 — triggers `admin.user_password_reset`. The new password is NOT logged (defense against an admin compromise leaking passwords into audit history). |
+| `test_admin_delete_user_audits` | `POST /admin/users/{id}/delete` returns 303 + the user is gone from `/admin`. Triggers `admin.user_delete` (target captured before delete so the audit row keeps a human-readable target). |
+| `test_admin_non_admin_cannot_trigger_destructive_actions` | Logged-in non-admin (`demo-alice`) hits `POST /admin/users` → 403. The audit-log emission is never reached because `require_admin` fires first. |
 
 ---
 

@@ -19,6 +19,7 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
+from ..admin_audit import record_admin_action
 from ..auth import hash_password, require_admin
 from ..config import get_settings
 from ..database import get_db
@@ -84,9 +85,14 @@ def admin_home(
     cf_enabled = cloudflare_banning_enabled()
     recent_edge_bans = []
     if cf_enabled:
+        # v2.431.0: action names are outcome-shaped post-helper-
+        # unification. ok/failed pairs for every action.
         recent_edge_bans = (
             db.query(AdminAuditLog)
-            .filter(AdminAuditLog.action.in_(["cloudflare.ban_ip", "cloudflare.unban_ip"]))
+            .filter(AdminAuditLog.action.in_([
+                "cloudflare.ban_ok", "cloudflare.unban_ok",
+                "cloudflare.ban_failed", "cloudflare.unban_failed",
+            ]))
             .order_by(AdminAuditLog.created_at.desc())
             .limit(20)
             .all()
@@ -111,6 +117,7 @@ def admin_home(
 
 @router.post("/users")
 def admin_create_user(
+    request: Request,
     email: str = Form(...),
     display_name: str = Form(...),
     password: str = Form(...),
@@ -129,21 +136,46 @@ def admin_create_user(
     )
     db.add(u)
     db.commit()
+    # v2.431.0 — audit admin-initiated user creation.
+    record_admin_action(
+        db, actor=user, request=request,
+        action="admin.user_create", target=email_n,
+        notes=f"display_name={display_name.strip()[:60]}",
+    )
     return RedirectResponse("/admin", status_code=303)
 
 
 @router.post("/users/{user_id}/disable")
-def admin_disable_user(user_id: int, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+def admin_disable_user(
+    request: Request,
+    user_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
     u = db.query(User).filter(User.id == user_id).first()
     if not u:
         raise HTTPException(404)
     u.is_disabled = not u.is_disabled
     db.commit()
+    # v2.431.0 — audit. New disabled state encoded as the action
+    # suffix (user_disable / user_enable) so an operator filtering
+    # by action name can tell which direction was flipped.
+    action = "admin.user_disable" if u.is_disabled else "admin.user_enable"
+    record_admin_action(
+        db, actor=user, request=request,
+        action=action, target=u.email,
+    )
     return RedirectResponse("/admin", status_code=303)
 
 
 @router.post("/users/{user_id}/reset_password")
-def admin_reset_password(user_id: int, new_password: str = Form(...), db: Session = Depends(get_db), user: User = Depends(require_admin)):
+def admin_reset_password(
+    request: Request,
+    user_id: int,
+    new_password: str = Form(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
     u = db.query(User).filter(User.id == user_id).first()
     if not u:
         raise HTTPException(404)
@@ -151,18 +183,37 @@ def admin_reset_password(user_id: int, new_password: str = Form(...), db: Sessio
         raise HTTPException(400, "Password too short")
     u.password_hash = hash_password(new_password)
     db.commit()
+    # v2.431.0 — audit. The new password is NEVER logged; we only
+    # record that a reset happened to this user.
+    record_admin_action(
+        db, actor=user, request=request,
+        action="admin.user_password_reset", target=u.email,
+    )
     return RedirectResponse("/admin", status_code=303)
 
 
 @router.post("/users/{user_id}/delete")
-def admin_delete_user(user_id: int, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+def admin_delete_user(
+    request: Request,
+    user_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
     if user_id == user.id:
         raise HTTPException(400, "Can't delete yourself")
     u = db.query(User).filter(User.id == user_id).first()
     if not u:
         raise HTTPException(404)
+    # v2.431.0 — capture the target email BEFORE the delete so the
+    # audit row keeps a human-readable target even though the User
+    # row is gone.
+    target_email = u.email
     db.delete(u)
     db.commit()
+    record_admin_action(
+        db, actor=user, request=request,
+        action="admin.user_delete", target=target_email,
+    )
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -394,14 +445,26 @@ def admin_activate_map(campaign_id: int, map_id: int, db: Session = Depends(get_
 
 
 @router.post("/campaign/{campaign_id}/delete")
-def admin_delete_campaign(campaign_id: int, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+def admin_delete_campaign(
+    request: Request,
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
     c = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not c:
         raise HTTPException(404)
+    # v2.431.0 — capture campaign name BEFORE delete for the audit row.
+    target_name = c.name
     c.active_map_id = None
     db.commit()
     db.delete(c)
     db.commit()
+    record_admin_action(
+        db, actor=user, request=request,
+        action="admin.campaign_delete", target=target_name,
+        scope=f"campaign:{campaign_id}",
+    )
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -658,6 +721,7 @@ def admin_stubs_clear(user: User = Depends(require_admin)):
 
 @router.post("/demo/reset")
 def admin_demo_reset(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_admin),
 ):
@@ -672,6 +736,13 @@ def admin_demo_reset(
     from ..demo_seed import reset_and_reseed
     counts = reset_and_reseed(db)
     log.info("admin %s triggered demo reset: %s", user.email, counts)
+    # v2.431.0 — audit the demo-reset action with the per-section
+    # delete counts as notes.
+    record_admin_action(
+        db, actor=user, request=request,
+        action="admin.demo_reset", target="demo_dataset",
+        notes=str(counts)[:500],
+    )
     return {"ok": True, "counts": counts}
 
 

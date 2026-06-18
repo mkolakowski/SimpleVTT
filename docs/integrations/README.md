@@ -120,10 +120,17 @@ this only when a known reverse proxy sits in front of the app.
 | `demo_magic_link.verify_ok` | INFO | Demo magic-link verified + consumed. `sub=…` + `jti=…` + `user_id=…`. |
 | `demo_magic_link.verify_rejected` | WARNING | `reason=signature` / `expired` / `payload` / `replay` / `unknown_sub` / `user_missing` / `missing_token`. `reason=replay` is "ban immediately" — never legitimate. |
 
-| `cloudflare.ban_ok` | INFO | Edge-ban succeeded (v2.427.0). `ip_target=…` + `actor_id=…` + `rule_id=…`. |
-| `cloudflare.ban_failed` | WARNING | Edge-ban failed (v2.427.0). `reason=connection|api_error` + `upstream_status=…` when applicable. |
-| `cloudflare.unban_ok` | INFO | Edge-unban succeeded (v2.427.0). |
-| `cloudflare.unban_failed` | WARNING | Edge-unban failed (v2.427.0). |
+| `cloudflare.ban_ok` | INFO | Edge-ban succeeded (v2.427.0; refactored v2.431.0 to ride the `admin_audit.record_admin_action` helper). `actor_id=…` + `target=<ip>` + `rule_id=…`. |
+| `cloudflare.ban_failed` | WARNING | Edge-ban failed. `notes=…` carries `connection:…` or `api:<code>:<body>`. |
+| `cloudflare.unban_ok` | INFO | Edge-unban succeeded. |
+| `cloudflare.unban_failed` | WARNING | Edge-unban failed. |
+| `admin.user_create` | INFO | Admin created a user (v2.431.0). `actor_id=…` + `target=<email>` + `notes=display_name=…`. |
+| `admin.user_disable` | INFO | Admin disabled a user account. |
+| `admin.user_enable` | INFO | Admin re-enabled a previously-disabled user account. |
+| `admin.user_password_reset` | INFO | Admin reset a user's password. The new password is **never** logged — only the fact of the reset. |
+| `admin.user_delete` | INFO | Admin deleted a user account. `target` captured pre-delete so the row keeps a human-readable email. |
+| `admin.campaign_delete` | INFO | Admin deleted a campaign. `scope=campaign:<id>` + `target=<campaign_name>`. |
+| `admin.demo_reset` | INFO | Admin manually triggered a demo-dataset reset. `notes` carries the per-section delete counts. |
 
 Planned events (per
 [`docs/plans/fail2ban-crowdsec-integration.md`](../plans/fail2ban-crowdsec-integration.md)):

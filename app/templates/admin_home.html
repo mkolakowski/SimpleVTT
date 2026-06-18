@@ -96,7 +96,7 @@
                 <td><code>{{ r.target }}</code></td>
                 <td>{{ r.notes or '' }}</td>
                 <td>
-                    {% if r.action == 'cloudflare.ban_ip' and r.cloudflare_rule_id %}
+                    {% if r.action == 'cloudflare.ban_ok' and r.cloudflare_rule_id %}
                     <button type="button" onclick="unbanIpAtEdge('{{ r.cloudflare_rule_id }}', this)">Unban</button>
                     {% endif %}
                 </td>
