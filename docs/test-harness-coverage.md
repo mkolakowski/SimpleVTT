@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3347 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.422.0, 2026-06-17).
+**Total tests:** 3353 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.423.0, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2272,6 +2272,18 @@ v2.422.0 — second Phase 4 rider/bonus consumer, and the first to scale **two**
 | `test_elemental_weapon_l7_plus3_3d4_cold` | L7 → `bonus 3`, `bonus_dice "3d4"` (top tier); an explicit `damage_type "cold"` is honored end-to-end (response + buff effects). |
 | `test_elemental_weapon_paladin_caster_passes_gate` | Sir Caelan (Paladin, not Ranger) passes the caster gate → `bonus 1`, `buff_installed True`. |
 | `test_elemental_weapon_cannot_cast_non_caster` | Krieger (Barbarian) → 409 `cannot_cast` with `expected` mentioning "ranger". |
+
+### `test_cast_false_life.py`
+v2.423.0 — third Phase 4 rider/bonus consumer, and the first **linear-additive** shape. `/cast_false_life` (Sorcerer/Wizard L1) reads the new sibling `_SPELL_BONUS_ADDITIVE_MAP` via `_spell_bonus_additive_for_slot()`: a flat +5 temp HP per slot above 1st (no plateau, unlike the tier-walk weapon buffs). The endpoint rolls the 1d4+4 base server-side, adds the additive bonus, and grants the total via `_grant_temp_hp` (RAW non-stacking) — self-only, non-concentration, no battle needed. Deterministic assertions target the additive `bonus` and the `temp_hp == base_roll + bonus` identity (the 1d4+4 base is range-checked, not pinned). Caster fixtures: Thalindra Moonwhisper (Wizard) for the ladder, Zara Emberfire (Sorcerer) for the gate.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_false_life_base_slot_bonus0` | Thalindra L1 → `bonus 0`, `base_roll` in [5, 8], `temp_hp == base_roll`, `temp_hp_applied` a bool. |
+| `test_false_life_l2_bonus5` | L2 → `bonus 5`; `temp_hp == base_roll + 5`. |
+| `test_false_life_l3_bonus10` | L3 → `bonus 10` (linear, no plateau). |
+| `test_false_life_l5_bonus20` | L5 → `bonus 20` (4 slots above 1st × 5); confirms the unbounded climb. |
+| `test_false_life_sorcerer_caster_passes_gate` | Zara (Sorcerer, not Wizard) passes the caster gate → `bonus 0`, `feature "false-life"`. |
+| `test_false_life_cannot_cast_non_caster` | Krieger (Barbarian) → 409 `cannot_cast` with `expected` mentioning "sorcerer". |
 
 ### `test_cast_gust.py`
 v2.99.445 — Phase 6.3 of `docs/plans/movement-and-summons.md`. Gust (Druid/Sorcerer/Wizard cantrip, Tasha's p.106): the target makes a STR save vs the spell save DC or is pushed 5 ft away via `_force_move`. The last forced-mover. Caster fixture: Thalindra Moonwhisper (demo Wizard).

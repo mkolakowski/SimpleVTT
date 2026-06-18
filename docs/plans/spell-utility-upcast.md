@@ -6,7 +6,7 @@
 >
 > **Status (AoE-radius scaling):** ✅ **PHASE 2 CLOSED** as of v2.413.0 (2026-06-17). Substrate (`_SPELL_AOE_MAP` + `_spell_aoe_for_slot()` helper) + Fog Cloud (v2.409.0, `/cast_fog_cloud`) + Confusion (v2.410.0, `/cast_confusion`) + Create or Destroy Water (v2.411.0, first cube-edge, `/cast_create_or_destroy_water`) + Creation (v2.412.0, second cube-edge, `/cast_creation`) + Private Sanctum (v2.413.0, third cube-edge, largest increment, `/cast_private_sanctum`) shipped. **All five in-scope AoE-radius scalers are live on the substrate.** See the [Phase 2 section](#phase-2--aoe-radius-scaling-substrate-v24090) below.
 >
-> **Status (rider/bonus scaling):** 🟠 **PHASE 4 OPEN** as of v2.421.0 (2026-06-17). New family — scales a flat numeric *rider* a spell grants its target (an attack/damage bonus, a temp-HP bump) as the cast slot climbs. Tier-walk substrate (`_SPELL_BONUS_MAP` + `_spell_bonus_for_slot()`, the same `(max_slot_inclusive, bonus)` shape as the Phase 3 CR ladder): **Magic Weapon** (v2.421.0, `/cast_magic_weapon`; +1 @L2–3, +2 @L4–5, +3 @L6+; Cleric/Wizard gate; installs a 1-hour non-concentration buff carrying `weapon_attack_bonus` / `weapon_damage_bonus` effects) + **Elemental Weapon** (v2.422.0, `/cast_elemental_weapon`; +1/1d4 @L3–4, +2/2d4 @L5–6, +3/3d4 @L7+; Ranger/Paladin gate; **two** riders off one tier value — attack bonus AND Nd4 elemental damage — concentration). See the [Phase 4 section](#phase-4--riderbonus-scaling-substrate-v24210) below.
+> **Status (rider/bonus scaling):** 🟠 **PHASE 4 OPEN** as of v2.421.0 (2026-06-17). New family — scales a flat numeric *rider* a spell grants its target (an attack/damage bonus, a temp-HP bump) as the cast slot climbs. Tier-walk substrate (`_SPELL_BONUS_MAP` + `_spell_bonus_for_slot()`, the same `(max_slot_inclusive, bonus)` shape as the Phase 3 CR ladder): **Magic Weapon** (v2.421.0, `/cast_magic_weapon`; +1 @L2–3, +2 @L4–5, +3 @L6+; Cleric/Wizard gate; installs a 1-hour non-concentration buff carrying `weapon_attack_bonus` / `weapon_damage_bonus` effects) + **Elemental Weapon** (v2.422.0, `/cast_elemental_weapon`; +1/1d4 @L3–4, +2/2d4 @L5–6, +3/3d4 @L7+; Ranger/Paladin gate; **two** riders off one tier value — attack bonus AND Nd4 elemental damage — concentration) + **False Life** (v2.423.0, `/cast_false_life`; first **linear-additive** shape via the sibling `_SPELL_BONUS_ADDITIVE_MAP` + `_spell_bonus_additive_for_slot()` — +5 temp HP/slot, no plateau; Sorcerer/Wizard gate; grants temp HP via `_grant_temp_hp`). See the [Phase 4 section](#phase-4--riderbonus-scaling-substrate-v24210) below.
 >
 > **Status (summon-count scaling):** ✅ **PHASE 3 COMPLETE** as of v2.420.0 (2026-06-17). Multiplier substrate (`_SPELL_SUMMON_MAP` + `_spell_summon_multiplier_for_slot()`): Conjure Animals retrofit (v2.414.0, ×1/×2/×3/×4) + Conjure Woodland Beings (v2.415.0, `/cast_conjure_woodland_beings` + `fey-spirit` template) + Conjure Minor Elementals (v2.416.0, `/cast_conjure_minor_elementals` + `elemental-spirit` template; Druid/Wizard gate) — **count-multiplier family complete**. Additive substrate (`_SPELL_SUMMON_ADDITIVE_MAP` + `_spell_summon_additive_for_slot()`): Animate Dead (v2.417.0, `/cast_animate_dead` + `undead-servant` template; 1 + 2/slot above 3rd) — **count-additive family complete**. CR-increase substrate — linear (`_SPELL_SUMMON_CR_MAP` + `_spell_summon_cr_for_slot()`): Conjure Elemental (v2.418.0, `/cast_conjure_elemental`; CR 5 base +1/slot above 5th) + Conjure Fey (v2.419.0, `/cast_conjure_fey`; CR 6 base +1/slot above 6th, Druid/Warlock gate, reuses `fey-spirit`) — and tier-walk (`_SPELL_SUMMON_CR_TIER_MAP` + `_spell_summon_cr_tier_for_slot()`): Conjure Celestial (v2.420.0, `/cast_conjure_celestial` + `celestial-spirit` template; CR 4 at L7–8, CR 5 at L9, Cleric gate) — **CR-increase family complete**. All three summon-scaling families are shipped. See the [Phase 3 section](#phase-3--summon-count-scaling-substrate-v24140) below.
 
@@ -246,11 +246,12 @@ Conjure Animals is the first consumer:
 
 ## Phase 4 — rider/bonus scaling substrate (v2.421.0)
 
-Where Phase 3 scaled *summons* (count or CR), Phase 4 scales a flat numeric **rider** a spell grants its target — an attack/damage bonus, a temp-HP bump — as the cast slot climbs. The bonus typically steps in non-linear breakpoints, so the substrate borrows the Phase 3 CR tier-walk shape exactly.
+Where Phase 3 scaled *summons* (count or CR), Phase 4 scales a flat numeric **rider** a spell grants its target — an attack/damage bonus, a temp-HP bump — as the cast slot climbs. Two shapes have shipped, mirroring the two Phase 3 sub-families: a **tier-walk** bonus (plateaus at breakpoints) and a **linear-additive** bonus (a flat amount per slot, no plateau).
 
 ### Substrate
 
 ```python
+# Tier-walk shape — plateaus at breakpoints (Magic Weapon, Elemental Weapon).
 _SPELL_BONUS_MAP: dict[str, dict] = {
     "magic-weapon": {
         "base_level": 2,
@@ -262,9 +263,24 @@ _SPELL_BONUS_MAP: dict[str, dict] = {
 def _spell_bonus_for_slot(spell_slug, slot_level, default_bonus=0) -> int:
     """Walk the (max_slot_inclusive, bonus) tiers low→high; last-tier
     fallback above the table. Mirrors _spell_summon_cr_tier_for_slot."""
+
+
+# Linear-additive shape — flat per-slot climb, no plateau (False Life).
+_SPELL_BONUS_ADDITIVE_MAP: dict[str, dict] = {
+    "false-life": {
+        "base_level": 1,
+        "base_bonus": 0,    # the 1d4+4 base is rolled separately
+        "per_slot": 5,      # +5 temp HP per slot above 1st
+    },
+}
+
+
+def _spell_bonus_additive_for_slot(spell_slug, slot_level, default_bonus=0):
+    """base_bonus + max(0, slot − base_level) × per_slot. Mirrors
+    _spell_summon_additive_for_slot."""
 ```
 
-A cast endpoint reads `_spell_bonus_for_slot(slug, slot_level)` and installs a buff carrying the scaled bonus as informational `effects` (the same display-only convention as Bless's `bless_attack_bonus` — the buff records the number; the player adds it to their weapon rolls). The buff install requires an active battle.
+A weapon-buff consumer reads `_spell_bonus_for_slot(slug, slot_level)` and installs a buff carrying the scaled bonus as informational `effects` (the display-only convention from Bless's `bless_attack_bonus` — the buff records the number; the player adds it to their rolls). The buff install requires an active battle. A temp-HP consumer (False Life) reads `_spell_bonus_additive_for_slot()`, adds the per-slot bonus to a rolled base, and grants the total via `_grant_temp_hp` (RAW non-stacking) — no battle needed, the temp HP persists on the PC sheet.
 
 ### Tests (v2.421.0)
 
@@ -276,6 +292,7 @@ A cast endpoint reads `_spell_bonus_for_slot(slug, slot_level)` and installs a b
 |---|---|---|---|
 | Magic Weapon | L2 | +1 @L2–3, +2 @L4–5, +3 @L6+ (attack & damage) | ✅ shipped v2.421.0 ("The Tempered Edge"). First consumer: new `_SPELL_BONUS_MAP` + `_spell_bonus_for_slot()` tier-walk helper + new `/cast_magic_weapon` endpoint (Cleric/Wizard gate). Installs a 1-hour non-concentration buff with `weapon_attack_bonus` / `weapon_damage_bonus` effects. **Opens Phase 4.** |
 | Elemental Weapon | L3 | +1/1d4 @L3–4, +2/2d4 @L5–6, +3/3d4 @L7+ (attack bonus + elemental damage die) | ✅ shipped v2.422.0 ("The Kindled Blade"). Second consumer — first to scale **two** riders off one tier value N (`+N` attack and `Nd4` damage). New `_SPELL_BONUS_MAP["elemental-weapon"]` entry + new `/cast_elemental_weapon` endpoint (Ranger/Paladin gate). **Concentration** (Magic Weapon isn't); carries a player-chosen element (acid/cold/fire/lightning/thunder). Buff effects: `weapon_attack_bonus` / `weapon_bonus_damage_dice` / `weapon_bonus_damage_type`. |
+| False Life | L1 | +5 temp HP per slot above 1st (linear, no plateau) on top of a 1d4+4 base | ✅ shipped v2.423.0 ("The Borrowed Breath"). Third consumer — first **linear-additive** shape: new sibling `_SPELL_BONUS_ADDITIVE_MAP` + `_spell_bonus_additive_for_slot()` helper + new `/cast_false_life` endpoint (Sorcerer/Wizard gate). Grants **temp HP** directly via `_grant_temp_hp` (RAW non-stacking) rather than a buff effect; self-only, non-concentration, no battle needed. **Opens the linear-additive sub-shape.** |
 
 ---
 

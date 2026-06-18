@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.423.0] - 2026-06-17 — "The Borrowed Breath"
+
+**Schema version:** 69
+
+**Commit summary:** Third Phase 4 (rider/bonus scaling) consumer — **False Life** (Sorcerer/Wizard L1), the first to use a **linear-additive** bonus shape (a flat +5 per slot, no plateau) rather than the tier-walk used by Magic Weapon / Elemental Weapon. Adds a sibling `_SPELL_BONUS_ADDITIVE_MAP` + `_spell_bonus_additive_for_slot()` helper and a new **`/cast_false_life`** endpoint. RAW PHB p.238: 1d4+4 temp HP base; +5 temp HP for each slot level above 1st.
+
+**Description:** Where the tier-walk bonus plateaus at breakpoints, False Life's upcast climbs a flat amount per slot with no ceiling — the same linear shape as the Phase 3 count-additive summon family. This commit adds the additive sibling map + helper (`base_bonus + max(0, slot − base_level) × per_slot`):
+
+```python
+_SPELL_BONUS_ADDITIVE_MAP["false-life"] = {
+    "base_level": 1,
+    "base_bonus": 0,    # the 1d4+4 base is rolled separately
+    "per_slot": 5,      # +5 temp HP per slot above 1st
+}
+```
+
+Unlike the two weapon buffs (which install display-only buff effects), False Life grants **temporary HP** directly via the canonical `_grant_temp_hp` (RAW non-stacking — takes the higher pool). `/cast_false_life` rolls the 1d4+4 base server-side, adds `_spell_bonus_additive_for_slot("false-life", slot_level)` on top, and applies the total to the caster (self-only RAW range, non-concentration, 1 hour). Gates on knowing False Life OR being a Sorcerer / Wizard. No active battle needed — temp HP persists on the PC sheet.
+
+**Why "The Borrowed Breath":** a necromantic facsimile of life loaned against the dark — the deeper you reach, the longer the borrowed breath lasts.
+
+MINOR — new HTTP endpoint (`/cast_false_life`) + new linear-additive rider/bonus substrate + new helper + 6 new harness tests.
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_SPELL_BONUS_ADDITIVE_MAP` substrate + `_spell_bonus_additive_for_slot()` pure-function helper (linear additive, mirrors `_spell_summon_additive_for_slot`). First entry: `false-life` (+0 @L1, +5/slot above 1st).
+- `app/routes/tabletop_routes.py`: new `POST /api/campaign/{campaign_id}/cast_false_life` endpoint (Sorcerer/Wizard L1). Rolls 1d4+4, adds the per-slot additive temp-HP bonus, grants the total via `_grant_temp_hp` (RAW non-stacking), gated on knowing False Life OR being a Sorcerer/Wizard. Returns `{ok, feature, base_roll, bonus, temp_hp, slot_level, temp_hp_applied}`; broadcasts a `feature_used` card + the `character_hp_update` from the grant.
+- `tests/harness/test_cast_false_life.py`: new harness file (6 tests) — L1 → +0, L2 → +5, L3 → +10, L5 → +20 (each asserting `temp_hp == base_roll + bonus` with the 1d4+4 base range-checked), the Sorcerer-caster gate (Zara), and the 409 cannot_cast on Krieger (Barbarian).
+
+### Changed
+- `docs/plans/spell-utility-upcast.md`: Phase 4 backlog table adds False Life as ✅ shipped (third consumer, first linear-additive shape); Phase 4 status line updated.
+
 ## [2.422.0] - 2026-06-17 — "The Kindled Blade"
 
 **Schema version:** 69

@@ -2636,6 +2636,62 @@ def _spell_bonus_for_slot(
     return default_bonus
 
 
+# ---------------------------------------------------------------------------
+# v2.423.0 — Phase 4 rider/bonus *linear-additive* variant. Magic Weapon and
+# Elemental Weapon step their bonus in tiers (handled by the helper above),
+# but many riders climb a flat amount **per slot level** with no plateau —
+# the same linear shape as the Phase 3 count-additive family
+# (`_SPELL_SUMMON_ADDITIVE_MAP`). This sibling map carries
+# ``{base_level, base_bonus, per_slot}`` and gets its own helper returning
+# ``base_bonus + max(0, slot − base_level) × per_slot``. RAW for the first
+# consumer:
+#   - False Life (PHB p.238, Sorcerer/Wizard L1): 1d4+4 temp HP base; "When
+#     you cast this spell using a spell slot of 2nd level or higher, you gain
+#     5 additional temporary hit points for each slot level above 1st." The
+#     rolled 1d4+4 base is separate; this helper returns only the per-slot
+#     *additive* temp-HP bonus (0 at L1, +5 at L2, +10 at L3, …).
+# ---------------------------------------------------------------------------
+_SPELL_BONUS_ADDITIVE_MAP: dict[str, dict] = {
+    "false-life": {
+        "base_level": 1,
+        "base_bonus": 0,    # the 1d4+4 base is rolled separately
+        "per_slot": 5,      # +5 temp HP per slot above 1st
+    },
+}
+
+
+def _spell_bonus_additive_for_slot(
+    spell_slug: str,
+    slot_level: int,
+    default_bonus: int = 0,
+) -> int:
+    """v2.423.0 — Phase 4 rider/bonus linear-additive helper. Reads
+    ``_SPELL_BONUS_ADDITIVE_MAP[spell_slug]`` and returns
+    ``base_bonus + steps × per_slot``, where ``steps`` is the number of
+    slot levels above the spell's ``base_level`` (clamped at 0 so a
+    base-level cast returns ``base_bonus`` and an under-level cast doesn't
+    go negative). If no entry exists for the slug, returns
+    ``default_bonus``.
+
+    Pure function — the single source of truth for per-slot *linear*
+    rider-bonus math, read by the additive bonus cast endpoints
+    (``/cast_false_life``). Mirrors the count-additive helper's linear
+    shape (a flat bonus instead of a creature count).
+    """
+    entry = _SPELL_BONUS_ADDITIVE_MAP.get(spell_slug)
+    if not entry:
+        return default_bonus
+    try:
+        sl = int(slot_level)
+    except (TypeError, ValueError):
+        sl = int(entry.get("base_level") or 1)
+    base_level = int(entry.get("base_level") or 1)
+    base_bonus = int(entry.get("base_bonus") or 0)
+    per_slot = int(entry.get("per_slot") or 0)
+    steps = max(0, sl - base_level)
+    return base_bonus + steps * per_slot
+
+
 _SPELL_BUFF_MAP["resistance-all"] = {
     "key": "resistance-all",
     "name": "Invulnerability (All Damage)",
@@ -62626,6 +62682,129 @@ async def cast_elemental_weapon(
         "slot_level": slot_level,
         "buff_installed": buff_installed,
         "target_character_id": target.id,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_false_life")
+async def cast_false_life(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.423.0 — Phase 4 rider/bonus scaling, third consumer and the first
+    *linear-additive* shape. False Life (Sorcerer/Wizard L1, PHB p.238):
+    "you gain 1d4 + 4 temporary hit points for the duration." Upcast: "When
+    you cast this spell using a spell slot of 2nd level or higher, you gain
+    5 additional temporary hit points for each slot level above 1st." (+0
+    at L1, +5 at L2, +10 at L3, …, with no plateau.)
+
+    Unlike Magic Weapon / Elemental Weapon (tier-walk bonuses installed as
+    buff effects), False Life grants **temporary HP** directly via the
+    canonical `_grant_temp_hp` (RAW non-stacking — takes the higher pool),
+    and its per-slot bonus climbs linearly, so it reads the new
+    `_SPELL_BONUS_ADDITIVE_MAP` via `_spell_bonus_additive_for_slot()`. The
+    1d4+4 base is rolled server-side; the additive bonus is added on top.
+    Self-only (RAW range Self), non-concentration, 1 hour. Gates on knowing
+    False Life OR being a Sorcerer / Wizard.
+
+    Body: ``{character_id, slot_level?}``.
+
+    Response: ``{ok, feature, base_roll, bonus, temp_hp, slot_level,
+    temp_hp_applied}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    try:
+        slot_level = int(body.get("slot_level") or 1)
+    except (TypeError, ValueError):
+        slot_level = 1
+    bonus = _spell_bonus_additive_for_slot(
+        "false-life", slot_level, default_bonus=0)
+    import random as _rand
+    base_roll = _rand.randint(1, 4) + 4
+    temp_hp = base_roll + bonus
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_fl = any(
+        (s.get("_slug") == "false-life")
+        or (str(s.get("name", "")).lower() == "false life")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"sorcerer", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_fl and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows False Life, or sorcerer/wizard",
+            "got_class": _cls,
+        })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": f"🩸 False Life — {temp_hp} temp HP",
+            "feature_desc": (
+                f"{char.name} bolsters themselves with a necromantic "
+                f"facsimile of life: {temp_hp} temporary HP "
+                f"(1d4+4 = {base_roll}"
+                + (f", +{bonus} from upcast" if bonus else "")
+                + f") for 1 hour. (False Life, L{slot_level}.)"
+            ),
+            "source": "false-life",
+            "base_roll": base_roll,
+            "bonus": bonus,
+            "temp_hp": temp_hp,
+            "slot_level": slot_level,
+        },
+    })
+
+    gr = await _grant_temp_hp(
+        db, campaign_id, {"char_id": char.id}, temp_hp,
+        source="false-life",
+    )
+
+    return {
+        "ok": True,
+        "feature": "false-life",
+        "base_roll": base_roll,
+        "bonus": bonus,
+        "temp_hp": temp_hp,
+        "slot_level": slot_level,
+        "temp_hp_applied": gr["temp_after"] > 0,
     }
 
 
