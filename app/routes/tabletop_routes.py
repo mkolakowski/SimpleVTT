@@ -2277,6 +2277,77 @@ def _spell_aoe_for_slot(
     return base_ft + steps * increment_ft
 
 
+# ---------------------------------------------------------------------------
+# v2.414.0 — Phase 3 summon-count scaling substrate. A family of SRD conjure
+# spells scale the *number* of summoned creatures on upcast: the chosen
+# summoning option's base count is multiplied by a slot-dependent factor.
+# RAW examples:
+#   - Conjure Animals (PHB p.225): ×2 with a 5th-level slot, ×3 with a 7th,
+#     ×4 with a 9th (×1 at the base 3rd–4th).
+#   - Conjure Woodland Beings (PHB p.227): ×2 with a 6th, ×3 with an 8th.
+#   - Conjure Minor Elementals (PHB p.226): ×2 with a 6th, ×3 with an 8th.
+# Keyed by spell slug; values carry {base_level, tiers}. ``tiers`` is a list
+# of (max_slot_inclusive, multiplier) — walked low→high, returning the first
+# tier whose ceiling ≥ the cast's slot level. Mirrors the v2.405.0
+# ``_SPELL_DURATION_MAP`` tier shape; the additive (Animate Dead) and
+# CR-increase (Conjure Fey/Elemental/Celestial) families are filed as Phase 3
+# follow-ons with their own helpers when built.
+# ---------------------------------------------------------------------------
+_SPELL_SUMMON_MAP: dict[str, dict] = {
+    "conjure-animals": {
+        "base_level": 3,
+        "tiers": [
+            (4, 1),     # L3–L4: ×1 (base option count)
+            (6, 2),     # L5–L6: twice as many
+            (8, 3),     # L7–L8: three times as many
+            (9, 4),     # L9: four times as many
+        ],
+    },
+}
+
+
+def _spell_summon_multiplier_for_slot(
+    spell_slug: str,
+    slot_level: int,
+    default_multiplier: int = 1,
+) -> int:
+    """v2.414.0 — Phase 3 summon-count scaling substrate helper. Reads
+    ``_SPELL_SUMMON_MAP[spell_slug]`` + walks the ``tiers`` list until it
+    finds the first tier whose ``max_slot_inclusive`` ≥ the cast's
+    ``slot_level``, returning that tier's integer multiplier. Casts above
+    the last declared tier fall back to the last tier's multiplier; if no
+    entry exists for the slug, returns ``default_multiplier``.
+
+    Pure function — the single source of truth for per-slot summon-count
+    math, read by the conjure cast endpoints (``/cast_conjure_animals``
+    etc.). Mirrors the ``_spell_duration_rounds_for_slot`` tier walk.
+    """
+    entry = _SPELL_SUMMON_MAP.get(spell_slug)
+    if not entry:
+        return default_multiplier
+    tiers = entry.get("tiers") or []
+    try:
+        sl = int(slot_level)
+    except (TypeError, ValueError):
+        sl = int(entry.get("base_level") or 1)
+    for tier in tiers:
+        try:
+            max_slot = int(tier[0])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if sl <= max_slot:
+            try:
+                return int(tier[1])
+            except (TypeError, ValueError, IndexError):
+                return default_multiplier
+    if tiers:
+        try:
+            return int(tiers[-1][1])
+        except (TypeError, ValueError, IndexError):
+            return default_multiplier
+    return default_multiplier
+
+
 _SPELL_BUFF_MAP["resistance-all"] = {
     "key": "resistance-all",
     "name": "Invulnerability (All Damage)",
@@ -60991,25 +61062,45 @@ async def cast_conjure_animals(
     eight of CR 1/4." v1 stands up ``count`` identical beasts (wolves) as
     real combatants, each on its own grid cell.
 
-    Body: ``{character_id, count?, x?, y?, spacing?, initiative?}``.
-    `count` is clamped to 1–8 (default 8). Each beast is summoned via
-    `_summon_companion` (the `wolf` registry entry) at ``x + i × spacing``
-    so the tokens don't stack. Gates on the caster knowing Conjure
-    Animals OR being a Druid / Ranger. All summons share the
-    `is_summon` + `summoned_by` tags, so the long-rest teardown drops the
-    whole pack.
+    v2.414.0 — Phase 3 summon-count scaling. `count` is now the *base*
+    summoning-option count (8 × CR¼, 4 × CR½, 2 × CR1, 1 × CR2, clamped
+    1–8); the total summoned is ``base_count × multiplier`` where the
+    multiplier is read from the `_SPELL_SUMMON_MAP` substrate by
+    `slot_level` (RAW: ×2 @5th, ×3 @7th, ×4 @9th; ×1 at the base L3–L4).
+    A base-slot cast keeps the legacy ×1 behavior, so existing
+    `count`-only callers are unchanged.
 
-    Response: ``{ok, feature, count, combatants: [...], token_ids: [...]}``.
+    Body: ``{character_id, count?, slot_level?, x?, y?, spacing?,
+    initiative?}``. Each beast is summoned via `_summon_companion` (the
+    `wolf` registry entry) at ``x + i × spacing`` so the tokens don't
+    stack. Gates on the caster knowing Conjure Animals OR being a Druid /
+    Ranger. All summons share the `is_summon` + `summoned_by` tags, so
+    the long-rest teardown drops the whole pack.
+
+    Response: ``{ok, feature, count, base_count, slot_level, multiplier,
+    combatants: [...], token_ids: [...]}``.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
     try:
-        count = int(body.get("count") or 8)
+        base_count = int(body.get("count") or 8)
     except (TypeError, ValueError):
-        count = 8
-    count = max(1, min(8, count))
+        base_count = 8
+    # `count` is the chosen summoning option (8 × CR¼, 4 × CR½, 2 × CR1,
+    # 1 × CR2) — clamped to that 1–8 range.
+    base_count = max(1, min(8, base_count))
+    try:
+        slot_level = int(body.get("slot_level") or 3)
+    except (TypeError, ValueError):
+        slot_level = 3
+    # v2.414.0 — Phase 3 summon-count substrate. RAW: ×2 @5th, ×3 @7th,
+    # ×4 @9th. A base-slot (L3–L4) cast keeps the ×1 multiplier, so the
+    # legacy `count`-only callers are unchanged.
+    multiplier = _spell_summon_multiplier_for_slot(
+        "conjure-animals", slot_level, default_multiplier=1)
+    count = base_count * multiplier
     spacing = float(body.get("spacing") or 70)
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
@@ -61083,10 +61174,13 @@ async def cast_conjure_animals(
             "feature_name": f"🐾 Conjure Animals — {len(combatants)} wolves",
             "feature_desc": (
                 f"{char.name} summons {len(combatants)} fey spirits in "
-                f"wolf form as combatants. (Conjure Animals, L3.)"
+                f"wolf form as combatants. (Conjure Animals, L{slot_level}"
+                f"{f', ×{multiplier}' if multiplier > 1 else ''}.)"
             ),
             "source": "conjure-animals",
             "count": len(combatants),
+            "slot_level": slot_level,
+            "multiplier": multiplier,
         },
     })
 
@@ -61094,6 +61188,9 @@ async def cast_conjure_animals(
         "ok": True,
         "feature": "conjure-animals",
         "count": len(combatants),
+        "base_count": base_count,
+        "slot_level": slot_level,
+        "multiplier": multiplier,
         "combatants": combatants,
         "token_ids": token_ids,
     }

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3300 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.413.0, 2026-06-17).
+**Total tests:** 3304 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.414.0, 2026-06-17).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2170,12 +2170,16 @@ v2.99.442 — Phase 7.2 of `docs/plans/movement-and-summons.md`. The fourth summ
 | `test_steel_defender_wrong_subclass` | Default Thalindra (Evocation) → 409 `wrong_subclass_or_level`. |
 
 ### `test_cast_conjure_animals.py`
-v2.99.443 — Phase 7.2 of `docs/plans/movement-and-summons.md`. The first *multi*-summon: `/cast_conjure_animals` (Druid/Ranger L3) stands up `count` (1–8) wolf combatants on their own grid cells via repeated `_summon_companion` calls. Gates on knowing Conjure Animals OR being a Druid / Ranger. Caster fixture: Mira Greenleaf (demo Druid).
+v2.99.443 — Phase 7.2 of `docs/plans/movement-and-summons.md`; v2.414.0 — Phase 3 summon-count scaling (first consumer of `_SPELL_SUMMON_MAP`). The first *multi*-summon: `/cast_conjure_animals` (Druid/Ranger L3) stands up wolf combatants on their own grid cells via repeated `_summon_companion` calls. `count` is now the *base* summoning option (1–8); the total = `base_count × multiplier`, where the multiplier is read from the substrate by `slot_level` (×2 @5th, ×3 @7th, ×4 @9th; ×1 at base L3–L4). Gates on knowing Conjure Animals OR being a Druid / Ranger. Caster fixture: Mira Greenleaf (demo Druid).
 
 | Test | What it asserts |
 |------|-----------------|
 | `test_conjure_animals_eight_wolves` | The default → `count == 8`, 8 distinct summon combatants (all `is_summon`, `companion_key == "wolf"`, `summoned_by` Mira) + 8 tokens at x positions spaced 70 px apart from 700. All dismissed after. |
 | `test_conjure_animals_count_clamp` | `count=2` → exactly two wolves. |
+| `test_conjure_animals_base_slot_multiplier_one` | Explicit `slot_level=3` → `base_count 2`, `multiplier 1`, `count 2` (legacy behavior preserved at base slot). |
+| `test_conjure_animals_l5_doubles` | `slot_level=5`, base 2 → `multiplier 2`, `count 4`, 4 wolves. |
+| `test_conjure_animals_l7_triples` | `slot_level=7`, base 2 → `multiplier 3`, `count 6`, 6 wolves. |
+| `test_conjure_animals_l9_quadruples` | `slot_level=9`, base 1 → `multiplier 4`, `count 4`, 4 wolves. |
 | `test_conjure_animals_cannot_cast` | Krieger (Barbarian) → 409 `cannot_cast`. |
 
 ### `test_cast_gust.py`

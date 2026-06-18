@@ -5,6 +5,8 @@
 > **Status (duration-scaling):** ✅ **PHASE 1 CLOSED** as of v2.408.0 (2026-06-17). Substrate (`_SPELL_DURATION_MAP` + `_spell_duration_rounds_for_slot()` helper) + Hunter's Mark retrofit (v2.405.0) + Hex retrofit (v2.405.1) + Bestow Curse retrofit (v2.405.2, first `"permanent"` marker) + Geas (v2.406.0, first NEW endpoint + day/year markers) + Mass Suggestion (v2.407.0, endpoint-build) + Modify Memory (v2.408.0, final endpoint-build) shipped. **All six in-scope duration-scaling spells are live on the substrate.** See the [Phase 1 section](#phase-1--duration-scaling-substrate-v24050) below.
 >
 > **Status (AoE-radius scaling):** ✅ **PHASE 2 CLOSED** as of v2.413.0 (2026-06-17). Substrate (`_SPELL_AOE_MAP` + `_spell_aoe_for_slot()` helper) + Fog Cloud (v2.409.0, `/cast_fog_cloud`) + Confusion (v2.410.0, `/cast_confusion`) + Create or Destroy Water (v2.411.0, first cube-edge, `/cast_create_or_destroy_water`) + Creation (v2.412.0, second cube-edge, `/cast_creation`) + Private Sanctum (v2.413.0, third cube-edge, largest increment, `/cast_private_sanctum`) shipped. **All five in-scope AoE-radius scalers are live on the substrate.** See the [Phase 2 section](#phase-2--aoe-radius-scaling-substrate-v24090) below.
+>
+> **Status (summon-count scaling):** 🟠 **PHASE 3 IN PROGRESS** as of v2.414.0 (2026-06-17). Substrate (`_SPELL_SUMMON_MAP` + `_spell_summon_multiplier_for_slot()` helper) + Conjure Animals retrofit (v2.414.0, `/cast_conjure_animals` now routes its summon count ×1/×2/×3/×4 by slot level). **First of the count-multiplier family shipped**; Conjure Woodland Beings + Conjure Minor Elementals (multiplier), Animate Dead (additive), and Conjure Fey / Elemental / Celestial (CR-increase) remain. See the [Phase 3 section](#phase-3--summon-count-scaling-substrate-v24140) below.
 
 ## What this plan covered
 
@@ -187,6 +189,53 @@ Each ships as a substrate drop-in + endpoint-build + harness, same shape across 
 | Create or Destroy Water | L1 | 30-ft cube, +5 ft per slot above 1st (or +10 gal water) | ✅ shipped v2.411.0 ("The Rising Tide"). Third consumer + **first cube-edge shape** (new `/cast_create_or_destroy_water` endpoint, surfaces `cube_ft`). RAW base cube is 30 ft (the +10-gallon branch is a separate non-area scale, filed). Harness: `tests/harness/test_cast_create_or_destroy_water.py` (8 tests). |
 | Creation | L5 | 5-ft cube, +5 ft per slot above 5th | ✅ shipped v2.412.0 ("The Shadow Forge"). Second cube-edge consumer (new `/cast_creation` endpoint, surfaces `cube_ft`). Harness: `tests/harness/test_cast_creation.py` (8 tests). |
 | Private Sanctum | L4 | 100-ft cube, +100 ft per slot above 4th | ✅ shipped v2.413.0 ("The Warded Hold"). Fifth and final consumer + **third cube-edge shape** (new `/cast_private_sanctum` endpoint, surfaces `cube_ft`); largest increment in the substrate. v1 ships the cube audit; per-property security riders filed. Harness: `tests/harness/test_cast_private_sanctum.py` (8 tests). **Closes Phase 2.** |
+
+---
+
+## Phase 3 — summon-count scaling substrate (v2.414.0)
+
+A family of SRD conjure spells scale the **number** (or **CR**) of summoned creatures on upcast rather than duration, area, or target count. Phase 3 introduces a dedicated substrate for the count math, structurally parallel to Phases 1 and 2. The family splits three ways:
+
+- **Count-multiplier** — the chosen summoning option's base count is multiplied by a slot-dependent factor (Conjure Animals ×2/×3/×4; Conjure Woodland Beings + Conjure Minor Elementals ×2/×3).
+- **Count-additive** — a fixed number of extra creatures per slot above base (Animate Dead, +2 undead per slot above 3rd).
+- **CR-increase** — the count stays fixed at 1 but the summoned creature's challenge rating climbs with slot level (Conjure Elemental +1 CR/slot above 5th; Conjure Fey +1 CR/slot above 6th; Conjure Celestial CR 4 base → CR 5 @9th).
+
+### Substrate
+
+- **`_SPELL_SUMMON_MAP`** — keyed by spell slug; the count-multiplier entries carry `{base_level, tiers}` where `tiers` is a list of `(max_slot_inclusive, multiplier)` walked low→high (the same tier shape as `_SPELL_DURATION_MAP`). The additive + CR-increase families will extend the substrate (or add sibling maps) with their own helpers when built.
+- **`_spell_summon_multiplier_for_slot(spell_slug, slot_level, default_multiplier=1)`** — pure-function lookup. Returns the first tier's multiplier whose ceiling ≥ the cast's slot level (last-tier fallback above the table), or `default_multiplier` when the slug has no entry. Single source of truth for per-slot summon-count math.
+
+Conjure Animals is the first consumer:
+
+```python
+"conjure-animals": {
+    "base_level": 3,
+    "tiers": [
+        (4, 1),     # L3–L4: ×1 (base option count)
+        (6, 2),     # L5–L6: twice as many
+        (8, 3),     # L7–L8: three times as many
+        (9, 4),     # L9: four times as many
+    ],
+},
+```
+
+`/cast_conjure_animals` already existed (v2.99.443, the first multi-summon); the v2.414.0 retrofit makes `count` the *base* summoning option and multiplies it by the slot-derived factor. A base-slot cast keeps the ×1 multiplier, so the retrofit is backward-compatible.
+
+### Tests (v2.414.0)
+
+`tests/harness/test_cast_conjure_animals.py` gains four tests — base-slot ×1 (L3), L5 doubles (base 2 → 4), L7 triples (base 2 → 6), L9 quadruples (base 1 → 4) — asserting `base_count`, `multiplier`, `slot_level`, `count`, and the summoned-combatant tally.
+
+### Backlog (Phase 3 follow-on spells)
+
+| Spell | Base level | RAW summon ladder | Family | Notes |
+|---|---|---|---|---|
+| Conjure Animals | L3 | ×2 @5th, ×3 @7th, ×4 @9th | count-multiplier | ✅ shipped v2.414.0 ("The Doubling Pack"). First consumer of `_SPELL_SUMMON_MAP`. Harness: `tests/harness/test_cast_conjure_animals.py`. |
+| Conjure Woodland Beings | L4 | ×2 @6th, ×3 @8th | count-multiplier | Substrate drop-in; needs a `/cast_conjure_woodland_beings` endpoint-build (currently catalog-only). |
+| Conjure Minor Elementals | L4 | ×2 @6th, ×3 @8th | count-multiplier | Substrate drop-in; endpoint-build. Same ladder as Woodland Beings. |
+| Animate Dead | L3 | +2 undead per slot above 3rd | count-additive | New additive helper (`base + (slot − base_level) × per_slot`); endpoint-build. |
+| Conjure Elemental | L5 | CR +1 per slot above 5th | CR-increase | New CR helper; count fixed at 1; endpoint-build. |
+| Conjure Fey | L6 | CR +1 per slot above 6th | CR-increase | New CR helper; endpoint-build. |
+| Conjure Celestial | L7 | CR 4 base → CR 5 @9th | CR-increase | Special two-tier CR ladder; endpoint-build. |
 
 ---
 

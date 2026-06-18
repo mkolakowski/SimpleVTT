@@ -101,6 +101,94 @@ async def test_conjure_animals_count_clamp(gm_client, roster):
         await _dismiss_all(gm_client, ids)
 
 
+async def test_conjure_animals_base_slot_multiplier_one(gm_client, roster):
+    """v2.414.0 — an explicit base-slot (L3) cast keeps the ×1
+    multiplier: base_count 2 → 2 wolves, multiplier 1."""
+    mira = roster["Mira Greenleaf"]
+    await _seed_battle(gm_client, [_pc_cb(mira)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_animals",
+        json={"character_id": mira["id"], "count": 2, "slot_level": 3,
+              "x": 700.0, "y": 700.0},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    ids = [c["id"] for c in body["combatants"]]
+    try:
+        assert body["base_count"] == 2
+        assert body["multiplier"] == 1
+        assert body["slot_level"] == 3
+        assert body["count"] == 2
+        assert len(ids) == 2
+    finally:
+        await _dismiss_all(gm_client, ids)
+
+
+async def test_conjure_animals_l5_doubles(gm_client, roster):
+    """v2.414.0 — a 5th-level slot doubles the count: base_count 2 ×2 →
+    4 wolves."""
+    mira = roster["Mira Greenleaf"]
+    await _seed_battle(gm_client, [_pc_cb(mira)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_animals",
+        json={"character_id": mira["id"], "count": 2, "slot_level": 5,
+              "x": 700.0, "y": 700.0},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    ids = [c["id"] for c in body["combatants"]]
+    try:
+        assert body["base_count"] == 2
+        assert body["multiplier"] == 2
+        assert body["count"] == 4
+        assert len(ids) == 4
+    finally:
+        await _dismiss_all(gm_client, ids)
+
+
+async def test_conjure_animals_l7_triples(gm_client, roster):
+    """v2.414.0 — a 7th-level slot triples the count: base_count 2 ×3 →
+    6 wolves."""
+    mira = roster["Mira Greenleaf"]
+    await _seed_battle(gm_client, [_pc_cb(mira)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_animals",
+        json={"character_id": mira["id"], "count": 2, "slot_level": 7,
+              "x": 700.0, "y": 700.0},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    ids = [c["id"] for c in body["combatants"]]
+    try:
+        assert body["multiplier"] == 3
+        assert body["count"] == 6
+        assert len(ids) == 6
+    finally:
+        await _dismiss_all(gm_client, ids)
+
+
+async def test_conjure_animals_l9_quadruples(gm_client, roster):
+    """v2.414.0 — a 9th-level slot quadruples the count: base_count 1 ×4
+    → 4 wolves (the single CR-2 option, scaled)."""
+    mira = roster["Mira Greenleaf"]
+    await _seed_battle(gm_client, [_pc_cb(mira)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_animals",
+        json={"character_id": mira["id"], "count": 1, "slot_level": 9,
+              "x": 700.0, "y": 700.0},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    ids = [c["id"] for c in body["combatants"]]
+    try:
+        assert body["base_count"] == 1
+        assert body["multiplier"] == 4
+        assert body["count"] == 4
+        assert len(ids) == 4
+    finally:
+        await _dismiss_all(gm_client, ids)
+
+
 async def test_conjure_animals_cannot_cast(gm_client, roster):
     """Krieger (Barbarian) → 409 cannot_cast."""
     krieger = roster["Krieger Stonefist"]

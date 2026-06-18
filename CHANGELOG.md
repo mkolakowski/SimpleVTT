@@ -10,6 +10,40 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.414.0] - 2026-06-17 — "The Doubling Pack"
+
+**Schema version:** 69
+
+**Commit summary:** Opens **Phase 3 (summon-count scaling)**. Builds the `_SPELL_SUMMON_MAP` substrate + `_spell_summon_multiplier_for_slot()` helper and retrofits the existing **`/cast_conjure_animals`** endpoint to route its summon count through it. RAW PHB p.225: Conjure Animals summons twice as many beasts with a 5th-level slot, three times with a 7th, four times with a 9th — the chosen summoning option's base count is now multiplied by the slot-derived factor instead of the client passing a free count.
+
+**Description:** First consumer of the third scaling substrate, structurally parallel to Phase 1 (duration) and Phase 2 (AoE-radius). The substrate carries a per-slug tier table walked low→high:
+
+```python
+_SPELL_SUMMON_MAP["conjure-animals"] = {
+    "base_level": 3,
+    "tiers": [
+        (4, 1),     # L3–L4: ×1
+        (6, 2),     # L5–L6: twice as many
+        (8, 3),     # L7–L8: three times as many
+        (9, 4),     # L9: four times as many
+    ],
+}
+```
+
+`/cast_conjure_animals` now reads `count` as the *base* summoning option (8 × CR¼, 4 × CR½, 2 × CR1, 1 × CR2, clamped 1–8) and summons `base_count × _spell_summon_multiplier_for_slot("conjure-animals", slot_level)`. A base-slot (L3–L4) cast keeps the ×1 multiplier, so the legacy `count`-only callers are unchanged — the retrofit is backward-compatible. The additive (Animate Dead, +2/slot) and CR-increase (Conjure Fey / Elemental / Celestial) summon families are filed as Phase 3 follow-ons with their own helpers.
+
+**Why "The Doubling Pack":** a fifth-level slot doubles the conjured pack, a seventh triples it, a ninth quadruples it — the wolves multiply with the slot poured in.
+
+MINOR — new substrate (`_SPELL_SUMMON_MAP`) + helper + endpoint retrofit (additive `slot_level`/`multiplier` fields, backward-compatible) + 4 new harness tests.
+
+### Added
+- `app/routes/tabletop_routes.py`: new `_SPELL_SUMMON_MAP` substrate + `_spell_summon_multiplier_for_slot()` pure-function helper (mirrors the `_SPELL_DURATION_MAP` tier walk). First entry: `conjure-animals`.
+- `tests/harness/test_cast_conjure_animals.py`: four new tests — base-slot ×1 (L3 → multiplier 1), L5 doubles (base 2 → 4), L7 triples (base 2 → 6), L9 quadruples (base 1 → 4). Assert `base_count`, `multiplier`, `slot_level`, `count`, and the actual summoned-combatant tally.
+
+### Changed
+- `app/routes/tabletop_routes.py`: `/cast_conjure_animals` now treats `count` as the base summoning-option count and multiplies it by the slot-derived factor from the substrate. Accepts a new `slot_level` body field (default 3). Response + `feature_used` broadcast gain `base_count`, `slot_level`, and `multiplier`; the feature card shows the slot level + multiplier. Existing `count`-only callers are unchanged at the base slot.
+- `docs/plans/spell-utility-upcast.md`: new Phase 3 section (substrate + first consumer + backlog table for the additive / CR-increase summon families); status header marks Phase 3 IN PROGRESS.
+
 ## [2.413.0] - 2026-06-17 — "The Warded Hold"
 
 **Schema version:** 69
