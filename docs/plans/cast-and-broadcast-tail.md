@@ -248,6 +248,15 @@ closure — runs indefinitely until Bucket A is exhausted.
   permanently GM-narrated; the engine surfaces the flag so the
   table can see Tongues is active. 3 harness tests.
 
+- **Bless Water (L1)** — ✅ shipped v2.447.0. New
+  `_SPELL_BUFF_MAP["holy-water-flask"]` substrate (14400 rounds
+  = 24 h, non-concentration, `effects.holy_water_charges: 1`) +
+  new `/cast_bless_water` endpoint. Self-targeted — the caster
+  consumes a flask of water and gains a marker buff representing
+  the new flask of holy water. The 2d6 radiant splash damage on
+  undead/fiends per RAW stays GM-narrated. Gates cleric/paladin.
+  3 harness tests.
+
 - **Hellish Rebuke auto-damage-roll** — ✅ shipped v2.446.0.
   Phase 2 #5. Closes the v2.71.0 filed "Auto-roll +
   auto-damage-to-attacker" gap on the existing slot-based

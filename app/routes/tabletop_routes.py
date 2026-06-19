@@ -2809,6 +2809,37 @@ _SPELL_BUFF_MAP["spider-climb"] = {
     ),
 }
 
+# v2.447.0 — Bless Water (RAW PHB p.219, L1 evocation ritual,
+# Cleric/Paladin): "You touch one flask of water and cause it to
+# become holy water." Action, V/S/M (25 gp silver powder), Touch,
+# Instantaneous.
+#
+# Phase 2 #6 of cast-and-broadcast-tail.md. RAW is instantaneous —
+# the spell ends immediately and the holy water persists until used.
+# This v1 installs a long-duration (24h) marker buff on the caster
+# representing the new holy water flask, with
+# `effects.holy_water_charges: 1`. The GM/player dismisses the buff
+# when the flask is used (splash damage on undead/fiends, etc.).
+# Closest existing precedent: the Speak with Animals (v2.438.0) flag
+# buff, but with a charges field instead of a binary flag, mirroring
+# the v2.158.x potion-charge substrate.
+_SPELL_BUFF_MAP["holy-water-flask"] = {
+    "key": "holy-water-flask",
+    "name": "Holy Water Flask",
+    "icon": "💧",
+    "duration_rounds": 14400,  # 24 hours @ 6 s/round (essentially "until used")
+    "duration_max": 14400,
+    "concentration": False,
+    "effects": {
+        "holy_water_charges": 1,
+    },
+    "desc": (
+        "1 flask of holy water (consecrated via Bless Water). "
+        "Splashing it deals 2d6 radiant damage to undead or fiends "
+        "on a hit (GM-narrated)."
+    ),
+}
+
 # v2.445.0 — Tongues (RAW PHB p.284, L3 divination, Bard/Cleric/
 # Sorcerer/Warlock/Wizard): "This spell grants the creature you touch
 # the ability to understand any spoken language it hears. Moreover,
@@ -64388,6 +64419,124 @@ async def cast_tongues(
         "ok": True,
         "feature": "tongues",
         "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_bless_water")
+async def cast_bless_water(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.447.0 — Phase 2 #6 of
+    docs/plans/cast-and-broadcast-tail.md. Bless Water (L1
+    evocation ritual, Cleric/Paladin, PHB p.219):
+
+      "You touch one flask of water and cause it to become holy
+       water."
+
+    Action, V/S/M (25 gp silver powder), Touch, Instantaneous.
+
+    Implementation: installs the v2.447.0 ``holy-water-flask`` buff
+    on the caster with `effects.holy_water_charges: 1`. The buff is
+    a marker that the caster carries a new flask of holy water.
+    24-hour duration (essentially "until used"), non-concentration.
+    The actual splash damage when the flask is used (2d6 radiant on
+    undead/fiends per RAW) stays GM-narrated — the engine doesn't
+    track flask-thrown attacks as a class.
+
+    Body: ``{character_id}``. Self-targeted — the spell consumes
+    the caster's flask of water and produces holy water.
+
+    Response: ``{ok, feature, buff_installed, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_bw = any(
+        (s.get("_slug") == "bless-water")
+        or (str(s.get("name", "")).lower() == "bless water")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"cleric", "paladin"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_bw and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Bless Water, or cleric/paladin",
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("holy-water-flask") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 14400)
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "holy-water-flask",
+        "name": template.get("name") or "Holy Water Flask",
+        "icon": template.get("icon") or "💧",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": dict(template.get("effects") or {"holy_water_charges": 1}),
+        "desc": template.get("desc") or (
+            "1 flask of holy water (consecrated via Bless Water). "
+            "Splashing it deals 2d6 radiant damage to undead or fiends "
+            "on a hit (GM-narrated)."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "💧 Bless Water",
+            "feature_desc": (
+                f"{char.name} consecrates a flask of water — now a "
+                "flask of holy water."
+            ),
+            "source": "bless-water",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "bless-water",
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,
     }

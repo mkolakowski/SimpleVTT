@@ -10,6 +10,51 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.447.0] - 2026-06-19 — "The Consecrated Flask"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #6 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Bless Water** (L1 ritual, Cleric/Paladin, RAW PHB p.219). New `_SPELL_BUFF_MAP["holy-water-flask"]` substrate (24-hour marker buff with `effects.holy_water_charges: 1`) + new `/cast_bless_water` endpoint installs the buff on the caster. Eleventh consecutive cast-and-broadcast tail ship in the session.
+
+**Description:** RAW: "You touch one flask of water and cause it to become holy water." Action, V/S/M (25 gp silver powder), Touch, Instantaneous. The spell's result (a flask of holy water) persists until used.
+
+**Implementation:**
+
+- Body: `{character_id}`. Self-targeted — the spell consumes the caster's flask of water and produces holy water.
+- Caster gate: knows Bless Water OR is in `{cleric, paladin}`. 409 cannot_cast otherwise.
+- New `_SPELL_BUFF_MAP["holy-water-flask"]` substrate entry — 14400 rounds (24 h @ 6 s/round, essentially "until used"), non-concentration, `effects.holy_water_charges: 1`.
+- The 2d6 radiant splash damage on undead/fiends per RAW stays GM-narrated. The engine doesn't model flask-thrown improvised attacks (they ride the existing improvised-weapon path in the GM's narration).
+- `feature_used` broadcast for the roll-log card names the consecration.
+
+**Why a marker buff vs. real item creation:** modifying the caster's inventory to add a new "Holy Water" item would require either a TokenTemplate-style item registry write or a sheet-mutation path. SimpleVTT's v2.x equipment model doesn't have an "add item to inventory" endpoint outside the character-sheet editor; the GM normally PATCHes the sheet manually. The marker buff is the lightest-weight way to surface "the caster has a new flask of holy water" without touching the inventory substrate. When the holy water is used, the GM/player dismisses the buff manually (matches the existing potion-of-climbing / fire-breathing precedent).
+
+**Why "The Consecrated Flask":** RAW frames the spell as a touch-blessing of a water flask. The marker buff is the consecrated flask's engine-side handle.
+
+**RAW timing:** RAW Bless Water is *instantaneous*; the spell ends immediately and the holy water persists indefinitely. The 24-hour duration on the marker buff is a soft cap — the holy water itself doesn't decay, but a marker buff that never expires would clutter the buffs list across sessions. 24 hours assumes "use it this session or it ends with a long rest." File a Phase 3 ship for a permanent-marker variant if needed.
+
+**3 new harness tests** at `tests/harness/test_cast_bless_water.py`:
+
+- `test_cast_bless_water_installs_buff` — Cleric casts; buff lands with `holy_water_charges: 1`.
+- `test_cast_bless_water_buff_is_24_hours_non_concentration` — duration_rounds=14400, concentration=false.
+- `test_cast_bless_water_non_caster_rejected` — Krieger (Barbarian) → 409.
+
+Canonical caster is Brother Tavik Stonebrow (Cleric); Dame Seraphine Vael (Paladin) is the fallback.
+
+Total harness count 3495 → 3498.
+
+**Phase 2 status after this ship:** 6 spells shipped under Phase 2 (Shield of Faith, Mage Armor, Feather Fall, Tongues, Hellish Rebuke auto-damage, Bless Water). The recipe degrades gracefully across substrate-already-wired endpoint exposure (Shield of Faith / Mage Armor), new-substrate flag buffs (Tongues / Bless Water), multi-target flag buffs (Feather Fall), and existing-flow modification (Hellish Rebuke auto-damage). Phase 2 continues indefinitely against Bucket A.
+
+MINOR — new HTTP endpoint + new substrate entry + 3 new harness tests. No schema change.
+
+### Added
+- `app/routes/tabletop_routes.py::_SPELL_BUFF_MAP["holy-water-flask"]`: new substrate entry. Non-concentration, 14400 rounds, `holy_water_charges: 1` effect.
+- `app/routes/tabletop_routes.py::cast_bless_water`: new `POST /api/campaign/{campaign_id}/cast_bless_water` endpoint. Installs the holy-water-flask buff on the caster.
+- `tests/harness/test_cast_bless_water.py`: 3 tests covering install + buff shape + caster gate.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Bless Water marked ✅ shipped v2.447.0 under Phase 2's Shipped subsection. Phase 2 has now shipped 6 spells.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3495 → 3498.
+
 ## [2.446.0] - 2026-06-19 — "The Auto-Lit Rebuke"
 
 **Schema version:** 71
