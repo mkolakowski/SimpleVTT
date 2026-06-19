@@ -2780,6 +2780,35 @@ _SPELL_BUFF_MAP["climbing"] = {
     ),
 }
 
+# v2.439.0 — Spider Climb (RAW PHB p.277, L2 transmutation,
+# Druid/Sorcerer/Warlock/Wizard): touch buff giving "a climbing speed
+# equal to its walking speed" + the ability to move up/down/across
+# vertical surfaces and upside-down on ceilings. Concentration, up to
+# 1 hour. Phase 1 demonstrator #5 of cast-and-broadcast-tail.md.
+#
+# Distinct from the v2.195.0 `climbing` Potion entry: Spider Climb has
+# no RAW "advantage on Strength (Athletics) climb checks" — that's a
+# Potion of Climbing extra. The flag effect ``climb_speed_equals_walk``
+# is the mechanic the engine surfaces; the actual climb speed itself
+# (and the "stick to walls" affordance) stays GM-narrated, same shape
+# as Speak with Animals' `speaks_with_animals` flag (v2.438.0).
+_SPELL_BUFF_MAP["spider-climb"] = {
+    "key": "spider-climb",
+    "name": "Spider Climb",
+    "icon": "🕷️",
+    "duration_rounds": 600,  # 1 hour @ 6 s/round
+    "duration_max": 600,
+    "concentration": True,
+    "effects": {
+        "climb_speed_equals_walk": True,
+    },
+    "desc": (
+        "Climbing speed equal to your walking speed; can move up, down, "
+        "and across vertical surfaces and upside-down on ceilings, hands "
+        "free. Concentration, up to 1 hour."
+    ),
+}
+
 # v2.196.0 — Potion of Water Breathing (RAW DMG p.188, uncommon): breathe
 # underwater for 1 hour. The engine tracks no suffocation/drowning rule,
 # so this is a purely descriptive buff — it surfaces on the init strip
@@ -63104,6 +63133,152 @@ async def cast_speak_with_animals(
     return {
         "ok": True,
         "feature": "speak-with-animals",
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_spider_climb")
+async def cast_spider_climb(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.439.0 — Phase 1 demonstrator #5 of
+    docs/plans/cast-and-broadcast-tail.md. Spider Climb (L2
+    transmutation, Druid/Sorcerer/Warlock/Wizard, PHB p.277):
+
+      "Until the spell ends, one willing creature you touch gains
+       the ability to move up, down, and across vertical surfaces
+       and upside down along ceilings, while leaving its hands
+       free. The target also gains a climbing speed equal to its
+       walking speed."
+
+    Action, V/S/M (drop of bitumen + spider), Touch, Concentration,
+    up to 1 hour.
+
+    Implementation: installs the v2.439.0 ``spider-climb`` buff on
+    the chosen target (caster or another willing creature). The
+    buff's ``effects.climb_speed_equals_walk`` flag IS the
+    mechanic — same shape as Speak with Animals' flag (v2.438.0).
+    The climb speed itself + the "stick to walls" affordance stay
+    GM-narrated; the engine surfaces the flag on the init strip
+    and via the buffs API so the table can see it's active.
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster targets themself
+    (RAW "one willing creature you touch" — the caster counts).
+
+    Response:
+    ``{ok, feature, target_character_id, buff_installed, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_sc = any(
+        (s.get("_slug") == "spider-climb")
+        or (str(s.get("name", "")).lower() == "spider climb")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"druid", "sorcerer", "warlock", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_sc and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": (
+                "knows Spider Climb, or druid/sorcerer/warlock/wizard"
+            ),
+            "got_class": _cls,
+        })
+
+    DURATION_ROUNDS = 600  # 1 hour
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "spider-climb",
+        "name": "Spider Climb",
+        "icon": "🕷️",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": True,
+        "source_char_id": char.id,
+        "effects": {
+            "climb_speed_equals_walk": True,
+        },
+        "desc": (
+            "Climbing speed equal to your walking speed; can move up, "
+            "down, and across vertical surfaces and upside-down on "
+            "ceilings, hands free. Concentration, up to 1 hour."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    if target_char.id == char.id:
+        feature_desc = (
+            f"{char.name} gains a climbing speed equal to walking "
+            "speed and can scale walls or ceilings for up to 1 hour "
+            "(concentration)."
+        )
+    else:
+        feature_desc = (
+            f"{char.name} grants {target_char.name} a climbing speed "
+            "equal to walking speed; can scale walls or ceilings for "
+            "up to 1 hour (concentration)."
+        )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🕷️ Spider Climb",
+            "feature_desc": feature_desc,
+            "source": "spider-climb",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "spider-climb",
+        "target_character_id": target_char.id,
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,
     }

@@ -1,6 +1,6 @@
 # Cast-and-broadcast utility-spell tail — Design Plan
 
-> **Status:** 🟠 Phase 1 in progress. Plan opens at v2.436.0; True Strike (#1) ✅ shipped v2.437.0; Speak with Animals (#3) ✅ shipped v2.438.0. Find Steed (#2) / Pass Without Trace (#4) / Spider Climb (#5) pending.
+> **Status:** 🟠 Phase 1 in progress. Plan opens at v2.436.0; True Strike (#1) ✅ shipped v2.437.0; Speak with Animals (#3) ✅ shipped v2.438.0; Spider Climb (#5) ✅ shipped v2.439.0. Find Steed (#2) / Pass Without Trace (#4) pending.
 > **Tracked in:** [`TODO.md`](../../TODO.md) → SRD 5e Audit
 > (v2.434.0 refresh) → "P2: Cast-and-broadcast utility-spell
 > mechanical depth."
@@ -125,7 +125,7 @@ except by magical means."
 **Harness:** 3 tests — buff installs, Stealth check rolls +10,
 buff drops on concentration end.
 
-### 5. Spider Climb (L2)
+### 5. Spider Climb (L2) — ✅ shipped v2.439.0
 
 RAW PHB p.277: "Until the spell ends, one willing creature you
 touch gains the ability to move up, down, and across vertical
@@ -133,17 +133,37 @@ surfaces and upside down along ceilings, while leaving its hands
 free. The target also gains a climbing speed equal to its walking
 speed."
 
-**Implementation sketch:**
+**Implementation (v2.439.0):**
 
-- The existing `_SPELL_BUFF_MAP["climbing"]` entry (already
-  wired) is the substrate. This phase repurposes / extends it
-  for Spider Climb specifically with the right name/icon.
-- Single target, concentration, 1-hour duration.
-- No new mechanical hook needed beyond the existing climb-speed
-  effect.
+- New `_SPELL_BUFF_MAP["spider-climb"]` substrate entry —
+  distinct from the v2.195.0 `climbing` (Potion of Climbing)
+  substrate, which carries an `advantage_on: ["str_check"]` extra
+  that's RAW-specific to the potion. Spider Climb has no such
+  advantage; reusing the climbing entry would have leaked the
+  potion's effect onto the spell. The spider-climb entry stands
+  alone with the right flag.
+- New `/cast_spider_climb` endpoint. Body: `{character_id,
+  target_character_id?}`. If `target_character_id` is omitted
+  the caster targets themself (the caster counts as a willing
+  creature per RAW).
+- Caster gate: knows Spider Climb OR is in `{druid, sorcerer,
+  warlock, wizard}`.
+- Buff carries `effects.climb_speed_equals_walk: true`,
+  concentration, 600 rounds (1 hour). The flag IS the mechanic
+  — same shape as Speak with Animals' `speaks_with_animals`
+  flag (v2.438.0).
 
-**Harness:** 2 tests — buff installs on cast, target's climbing
-speed = walking speed.
+**Why GM-narrated for the climb speed itself:** the engine
+tracks no climb-speed attribute on PC sheets and the
+"stick to walls" affordance interacts with map terrain that
+v2.x doesn't model. Closing the climb-speed numeric is filed
+against Maps 2.0.
+
+**Harness:** 3 tests (`tests/harness/test_cast_spider_climb.py`):
+
+- Buff installs with `climb_speed_equals_walk: true` effect.
+- Buff carries `concentration: true` + `duration_rounds: 600`.
+- Krieger Stonefist (Barbarian) → 409 cannot_cast.
 
 ---
 

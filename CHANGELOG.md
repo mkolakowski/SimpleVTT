@@ -10,6 +10,50 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.439.0] - 2026-06-19 — "The Eight-Legged Step"
+
+**Schema version:** 71
+
+**Commit summary:** Third Phase 1 demonstrator of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Spider Climb** (L2 transmutation, Druid/Sorcerer/Warlock/Wizard, RAW PHB p.277). New `_SPELL_BUFF_MAP["spider-climb"]` substrate entry + new `/cast_spider_climb` endpoint installs the buff on the chosen target (caster or another willing creature) with `effects.climb_speed_equals_walk: true` for 1 hour, concentration. The buff's flag IS the mechanic — same shape as Speak with Animals' `speaks_with_animals` flag (v2.438.0). 3 of 5 Phase 1 demonstrators now shipped.
+
+**Description:** RAW: "Until the spell ends, one willing creature you touch gains the ability to move up, down, and across vertical surfaces and upside down along ceilings, while leaving its hands free. The target also gains a climbing speed equal to its walking speed." Action, V/S/M, Touch, Concentration, up to 1 hour.
+
+**Implementation:**
+
+- Body: `{character_id, target_character_id?}`. If `target_character_id` is omitted the caster targets themself (RAW "one willing creature you touch" — the caster counts).
+- Caster gate: knows Spider Climb OR is in `{druid, sorcerer, warlock, wizard}`. 409 cannot_cast otherwise.
+- Target validation: target character must exist in the campaign (404 otherwise).
+- New `_SPELL_BUFF_MAP["spider-climb"]` substrate entry — concentration, 600 rounds (1 hour), `effects.climb_speed_equals_walk: true`.
+- Buff installed via `_install_buff` on the target with `source_char_id: <caster_id>` for the concentration anchor.
+- `feature_used` broadcast for the roll-log card. Self-target and other-target variants get distinct descriptions.
+
+**Why distinct from the v2.195.0 `climbing` (Potion of Climbing) substrate:** Potion of Climbing gives "advantage on Strength (Athletics) checks to climb" — a RAW-specific extra. Spider Climb does NOT have that advantage (just climb-speed and stick-to-walls per RAW). Reusing the climbing entry would have leaked the potion's advantage onto Spider Climb. The spider-climb entry stands alone with the right effect flag.
+
+**Why GM-narrated for the climb-speed itself:** the engine tracks no climb-speed attribute on PC sheets, and the "stick to walls" affordance interacts with map terrain that the v2.x engine doesn't track either. The buff's flag surfaces on the buffs API and the init strip so the table can see Spider Climb is active; the GM narrates the actual movement. Closing the climb-speed mechanic is filed against Maps 2.0.
+
+**3 new harness tests** at `tests/harness/test_cast_spider_climb.py`:
+
+- `test_cast_spider_climb_installs_buff` — Wizard self-targets; buff lands with `climb_speed_equals_walk: true`.
+- `test_cast_spider_climb_buff_is_1_hour_concentration` — duration_rounds=600, concentration=true.
+- `test_cast_spider_climb_non_caster_rejected` — Krieger (Barbarian) → 409.
+
+The two "buff installs" tests `pytest.skip` gracefully if the demo roster ever drops Druid/Sorcerer/Warlock/Wizard (defensive against future demo-seed changes). Canonical caster is Thalindra Moonwhisper (Wizard); Mira Greenleaf (Druid) is the fallback.
+
+Total harness count 3467 → 3470.
+
+**Why "The Eight-Legged Step":** the spell is named for the eight-legged climbers that scale walls effortlessly. The plan calls it "Phase 1 #5" but it ships third — the per-commit recipe is the same as the prior two demonstrators (substrate entry + endpoint + 3 tests). The arc keeps walking the eight legs of Phase 1 one at a time.
+
+MINOR — new HTTP endpoint + new substrate entry + 3 new harness tests. No schema change. No new env var. No new attack/save-pipeline hooks — the buff stands on its own flag.
+
+### Added
+- `app/routes/tabletop_routes.py::_SPELL_BUFF_MAP["spider-climb"]`: new substrate entry. Concentration, 600 rounds, `climb_speed_equals_walk: true` effect, spider icon.
+- `app/routes/tabletop_routes.py::cast_spider_climb`: new `POST /api/campaign/{campaign_id}/cast_spider_climb` endpoint. Installs the spider-climb buff on a chosen target.
+- `tests/harness/test_cast_spider_climb.py`: 3 tests covering install + buff shape + caster gate.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Spider Climb (#5) marked ✅ shipped v2.439.0. Status header updated to reflect 3 of 5 Phase 1 demonstrators done.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3467 → 3470.
+
 ## [2.438.0] - 2026-06-19 — "The Common Tongue"
 
 **Schema version:** 71
