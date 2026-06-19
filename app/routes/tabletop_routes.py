@@ -4835,6 +4835,29 @@ _COMPANION_TEMPLATES: dict[str, dict] = {
     "celestial-spirit": {"name": "Celestial Spirit", "ac": 14, "hp": 18,
                          "speed_walk": 30, "size": 1, "team": "hero",
                          "color": "#f0d060"},
+    # v2.441.0 — Find Steed (RAW PHB p.240, Paladin L2). Phase 1
+    # demonstrator #2 of cast-and-broadcast-tail.md. Five steed templates
+    # per RAW: warhorse / pony / camel / elk / mastiff. Stats sourced from
+    # the SRD monster stat blocks at app/data/local/dnd5e/monsters/.
+    # Large steeds (warhorse / camel / elk) use size=2; Medium (pony /
+    # mastiff) use size=1. The caster chooses on cast. Concentration-
+    # bound by default — losing concentration RAW-correctly dismisses the
+    # steed via the v2.113.0 _drop_paired_concentration_buffs cascade.
+    "find-steed-warhorse": {"name": "Warhorse (Find Steed)",
+                            "ac": 11, "hp": 19, "speed_walk": 60,
+                            "size": 2, "team": "hero", "color": "#a78b6a"},
+    "find-steed-pony": {"name": "Pony (Find Steed)",
+                        "ac": 10, "hp": 11, "speed_walk": 40,
+                        "size": 1, "team": "hero", "color": "#c8a87c"},
+    "find-steed-camel": {"name": "Camel (Find Steed)",
+                         "ac": 9, "hp": 15, "speed_walk": 50,
+                         "size": 2, "team": "hero", "color": "#d2b48c"},
+    "find-steed-elk": {"name": "Elk (Find Steed)",
+                       "ac": 10, "hp": 13, "speed_walk": 50,
+                       "size": 2, "team": "hero", "color": "#8b6f47"},
+    "find-steed-mastiff": {"name": "Mastiff (Find Steed)",
+                           "ac": 12, "hp": 5, "speed_walk": 40,
+                           "size": 1, "team": "hero", "color": "#6b4226"},
 }
 
 
@@ -63523,6 +63546,145 @@ async def cast_pass_without_trace(
         "targets": buffs_installed,
         "buffs_installed": len(buffs_installed),
         "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+_FIND_STEED_TYPES = {
+    "warhorse": "find-steed-warhorse",
+    "pony": "find-steed-pony",
+    "camel": "find-steed-camel",
+    "elk": "find-steed-elk",
+    "mastiff": "find-steed-mastiff",
+}
+
+
+@router.post("/api/campaign/{campaign_id}/cast_find_steed")
+async def cast_find_steed(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.441.0 — Phase 1 demonstrator #2 of
+    docs/plans/cast-and-broadcast-tail.md (the closer — Phase 1
+    closes with this ship). Find Steed (L2 conjuration, Paladin,
+    PHB p.240):
+
+      "You summon a spirit that assumes the form of an unusually
+       intelligent, strong, and loyal steed... Appearing in an
+       unoccupied space within range, the steed takes on a form
+       that you choose: a warhorse, a pony, a camel, an elk, or a
+       mastiff."
+
+    Action, V/S, 30 ft, Instantaneous (the steed persists until
+    dismissed or killed — v1 binds it to concentration so a
+    future concentration-drop hook can dismiss it RAW-correctly).
+
+    Implementation: spawns one of five SRD-stat-block steeds via
+    the existing v2.99.437 ``_summon_companion`` path. Each steed
+    is tagged ``is_summon`` + ``summoned_by`` for teardown and
+    rides the existing damage / HP pipeline + ``_force_move`` for
+    free. ``concentration_bound: True`` plugs into the v2.113.0
+    ``_drop_paired_concentration_buffs`` cascade so future
+    concentration breaks (incapacitated paladin, save fails,
+    etc.) dismiss the steed RAW-correctly.
+
+    Body: ``{character_id, steed_type, x?, y?, initiative?}``.
+    ``steed_type`` is one of ``warhorse / pony / camel / elk /
+    mastiff`` per RAW. 400 missing_or_invalid_steed_type otherwise.
+
+    Response: ``{ok, feature, steed_type, combatant, token_id}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    steed_type = str(body.get("steed_type") or "").strip().lower()
+    if steed_type not in _FIND_STEED_TYPES:
+        raise HTTPException(400, (
+            "steed_type must be one of "
+            f"{sorted(_FIND_STEED_TYPES.keys())}"
+        ))
+    companion_key = _FIND_STEED_TYPES[steed_type]
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_fs = any(
+        (s.get("_slug") == "find-steed")
+        or (str(s.get("name", "")).lower() == "find steed")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"paladin"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_fs and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Find Steed, or paladin",
+            "got_class": _cls,
+        })
+
+    summon = await _summon_companion(
+        db, campaign_id,
+        owner_char_id=char.id,
+        companion_key=companion_key,
+        name=f"{char.name}'s {steed_type.title()}",
+        x=float(body.get("x") or 0),
+        y=float(body.get("y") or 0),
+        initiative=int(body.get("initiative") or 0),
+        concentration_bound=True,
+    )
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    combatant_id = (summon or {}).get("combatant", {}).get("id")
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🐎 Find Steed",
+            "feature_desc": (
+                f"{char.name} summons a spirit in the form of a "
+                f"{steed_type} that bonds as a faithful steed."
+            ),
+            "source": "find-steed",
+            "steed_type": steed_type,
+            "combatant_id": combatant_id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "find-steed",
+        "steed_type": steed_type,
+        "combatant": (summon or {}).get("combatant"),
+        "token_id": (summon or {}).get("token_id"),
     }
 
 

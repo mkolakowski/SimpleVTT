@@ -1,6 +1,6 @@
 # Cast-and-broadcast utility-spell tail — Design Plan
 
-> **Status:** 🟠 Phase 1 in progress. Plan opens at v2.436.0; True Strike (#1) ✅ shipped v2.437.0; Speak with Animals (#3) ✅ shipped v2.438.0; Spider Climb (#5) ✅ shipped v2.439.0; Pass without Trace (#4) ✅ shipped v2.440.0. Find Steed (#2) pending.
+> **Status:** ✅ **Phase 1 CLOSED v2.441.0.** Plan opens at v2.436.0; True Strike (#1) ✅ shipped v2.437.0; Speak with Animals (#3) ✅ shipped v2.438.0; Spider Climb (#5) ✅ shipped v2.439.0; Pass without Trace (#4) ✅ shipped v2.440.0; Find Steed (#2) ✅ shipped v2.441.0. Phase 2+ now opens against Bucket A (Shield of Faith, Feather Fall, Mage Armor, Hellish Rebuke spell variant, Tongues, …).
 > **Tracked in:** [`TODO.md`](../../TODO.md) → SRD 5e Audit
 > (v2.434.0 refresh) → "P2: Cast-and-broadcast utility-spell
 > mechanical depth."
@@ -66,24 +66,44 @@ hasn't ended."
 - Non-caster (Krieger Stonefist, Barbarian) → 409 cannot_cast.
 - Missing `target_combatant_id` → 400.
 
-### 2. Find Steed (L2 paladin)
+### 2. Find Steed (L2 paladin) — ✅ shipped v2.441.0 (Phase 1 closer)
 
 RAW PHB p.240: "You summon a spirit that assumes the form of an
-unusually intelligent, strong, and loyal steed."
+unusually intelligent, strong, and loyal steed... the steed takes
+on a form that you choose: a warhorse, a pony, a camel, an elk, or
+a mastiff."
 
-**Implementation sketch:**
+**Implementation (v2.441.0):**
 
-- Reuses the existing `_summon_companion` path (the Phase 3
-  Conjure/Animate Dead machinery).
-- New `/cast_find_steed` endpoint that takes the chosen steed
-  type (warhorse, pony, camel, elk, mastiff per RAW), spawns it
-  via `_summon_companion` with the appropriate stat block from
-  the SRD monster catalog, binds to the caster's concentration
-  via the `concentration_bound` path.
+- Five new `_COMPANION_TEMPLATES` entries — `find-steed-warhorse`
+  / `find-steed-pony` / `find-steed-camel` / `find-steed-elk` /
+  `find-steed-mastiff`. Stats sourced from the SRD monster JSON
+  files at `app/data/local/dnd5e/monsters/`. Large steeds
+  (warhorse / camel / elk) use `size=2`; Medium (pony / mastiff)
+  use `size=1`.
+- New `/cast_find_steed` endpoint. Body: `{character_id,
+  steed_type, x?, y?, initiative?}`. Caster gate: knows Find
+  Steed OR is a paladin. 400 if `steed_type` is missing or not
+  one of the five RAW choices.
+- Spawned via the v2.99.437 `_summon_companion` path with
+  `concentration_bound=True` — plugs into the v2.113.0
+  `_drop_paired_concentration_buffs` cascade so future
+  concentration breaks (incapacitated paladin, hit-save fails,
+  etc.) dismiss the steed RAW-correctly.
+- The summon is a real combatant: own token + init slot + HP /
+  AC dict + the existing damage / HP pipeline + `_force_move`
+  movement. The caster can dismiss it manually via
+  `/dismiss_companion`.
 
-**Harness:** 3 tests — cast spawns the steed, the steed is
-controllable by the caster, dismissing the steed (concentration
-drop) removes it.
+**Harness:** 4 tests (`tests/harness/test_cast_find_steed.py`):
+
+- Warhorse happy path: summon spawns + tagged
+  `is_summon` + `summoned_by` = caster +
+  `concentration_bound: true`; HP/AC/speed match the SRD warhorse.
+- Mastiff variant: a second steed type uses the smaller stat
+  block (HP 5, AC 12, 40-ft speed).
+- Krieger (Barbarian) → 409 cannot_cast.
+- Missing or unknown `steed_type` → 400.
 
 ### 3. Speak with Animals (L1 ritual) — ✅ shipped v2.438.0
 

@@ -10,6 +10,62 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.441.0] - 2026-06-19 — "The Loyal Steed"
+
+**Schema version:** 71
+
+**Commit summary:** Fifth and final Phase 1 demonstrator of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Find Steed** (L2 conjuration, Paladin, RAW PHB p.240). Five new `_COMPANION_TEMPLATES` entries (warhorse / pony / camel / elk / mastiff) + new `/cast_find_steed` endpoint summons the chosen steed via the v2.99.437 `_summon_companion` path with `concentration_bound=True`. **Phase 1 ✅ CLOSED** — all 5 demonstrators (True Strike, Find Steed, Speak with Animals, Pass without Trace, Spider Climb) now wired. Phase 2+ now opens against Bucket A indefinitely.
+
+**Description:** RAW: "You summon a spirit that assumes the form of an unusually intelligent, strong, and loyal steed... the steed takes on a form that you choose: a warhorse, a pony, a camel, an elk, or a mastiff." Action, V/S, 30 ft, Instantaneous (v1 binds to concentration so a future drop dismisses the steed).
+
+**Implementation:**
+
+- Body: `{character_id, steed_type, x?, y?, initiative?}`. `steed_type` is one of `warhorse / pony / camel / elk / mastiff` per RAW. 400 missing_or_invalid otherwise.
+- Caster gate: knows Find Steed OR is a paladin. 409 cannot_cast otherwise.
+- Five new companion templates added to `_COMPANION_TEMPLATES`:
+  - `find-steed-warhorse` (Large, AC 11 / HP 19 / 60-ft walk)
+  - `find-steed-pony` (Medium, AC 10 / HP 11 / 40-ft walk)
+  - `find-steed-camel` (Large, AC 9 / HP 15 / 50-ft walk)
+  - `find-steed-elk` (Large, AC 10 / HP 13 / 50-ft walk)
+  - `find-steed-mastiff` (Medium, AC 12 / HP 5 / 40-ft walk)
+- Stats match the SRD monster JSON files at `app/data/local/dnd5e/monsters/`. Each spawned via `_summon_companion` with `concentration_bound=True` so the v2.113.0 `_drop_paired_concentration_buffs` cascade dismisses the steed when the caster's concentration breaks.
+- The summon is a real combatant: own token + init slot + HP / AC dict, rides the existing damage / HP pipeline + `_force_move` movement for free.
+- `feature_used` broadcast for the roll-log card carries the chosen steed type + the new combatant id.
+
+**Why concentration-bound:** RAW says the steed disappears when the caster casts the spell again or dies, or after 24 hours of bonding-rest. The engine doesn't model the 24-hour rest cycle for summons; the closest existing primitive is concentration. Binding to concentration RAW-bends slightly (the caster *could* drop concentration on a different spell while the steed persists) but it gets the bookkeeping right for the common case — the paladin loses HP, fails the concentration check, the cascade dismisses the steed. A future v2.5x.x summon-duration substrate could replace this with a real "until dismissed or 24 h" anchor; until then, concentration is the cleanest hook.
+
+**Phase 1 closure:** all 5 demonstrators are now wired:
+1. ✅ True Strike (v2.437.0) — `attack_advantage_vs_target_combatant_id` flag, rides the existing `/attack` Vow of Enmity helper.
+2. ✅ Find Steed (v2.441.0) — summon companion, concentration-bound.
+3. ✅ Speak with Animals (v2.438.0) — `speaks_with_animals` flag buff.
+4. ✅ Pass without Trace (v2.440.0) — `stealth_bonus: 10` persistent buff + new `/roll` read site.
+5. ✅ Spider Climb (v2.439.0) — `climb_speed_equals_walk` flag buff.
+
+**Phase 2+ opens.** The same recipe (substrate entry / endpoint / 2-4 harness tests) now runs indefinitely against Bucket A. The plan's Phase 2 candidate list opens with Shield of Faith, Feather Fall, Mage Armor, Hellish Rebuke spell variant, Tongues.
+
+**4 new harness tests** at `tests/harness/test_cast_find_steed.py`:
+
+- `test_cast_find_steed_warhorse` — Seraphine summons a warhorse; combatant is tagged `is_summon` + `summoned_by` + `concentration_bound`; HP/AC/speed match SRD.
+- `test_cast_find_steed_mastiff_variant` — the same caster, different steed, lands the mastiff stat block.
+- `test_cast_find_steed_non_paladin_rejected` — Krieger (Barbarian) → 409 cannot_cast.
+- `test_cast_find_steed_invalid_steed_type_400` — unknown `steed_type: "dragon"` → 400.
+
+Total harness count 3474 → 3478.
+
+**Why "The Loyal Steed":** the RAW emphasizes "loyal" twice. The paladin's bond with the steed is the spell's flavor; the plan's "Phase 1 closer" loyalty is the meta-flavor. Five demonstrators, one same-shape recipe per commit, all five shipped under one Phase 1 banner.
+
+MINOR — new HTTP endpoint + 5 new companion templates + 4 new harness tests. No schema change. No new env var.
+
+### Added
+- `app/routes/tabletop_routes.py::_COMPANION_TEMPLATES`: 5 new steed templates (`find-steed-warhorse` / `-pony` / `-camel` / `-elk` / `-mastiff`).
+- `app/routes/tabletop_routes.py::cast_find_steed`: new `POST /api/campaign/{campaign_id}/cast_find_steed` endpoint. Body validates `steed_type`; gates caster as paladin; spawns the summon via `_summon_companion` with `concentration_bound=True`.
+- `app/routes/tabletop_routes.py::_FIND_STEED_TYPES`: small module-level dict mapping the 5 RAW steed-type slugs to companion-template keys.
+- `tests/harness/test_cast_find_steed.py`: 4 tests covering 2 happy paths + caster gate + invalid steed-type validation.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Find Steed (#2) marked ✅ shipped v2.441.0. Plan status flipped to ✅ **Phase 1 CLOSED v2.441.0**. Phase 2+ opens against Bucket A.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3474 → 3478.
+
 ## [2.440.0] - 2026-06-19 — "The Veil of Shadows"
 
 **Schema version:** 71
