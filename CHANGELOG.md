@@ -10,6 +10,47 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.445.0] - 2026-06-19 — "The Common Word"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #4 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Tongues** (L3 divination, Bard/Cleric/Sorcerer/Warlock/Wizard, RAW PHB p.284). New `_SPELL_BUFF_MAP["tongues"]` substrate (600 rounds, non-concentration, `effects.tongues: True` flag) + new `/cast_tongues` endpoint installs the buff on a touch target. Same flag-buff shape as Speak with Animals (v2.438.0) but for any spoken language. Ninth consecutive cast-and-broadcast tail ship in the session (v2.437.0 → v2.445.0).
+
+**Description:** RAW: "This spell grants the creature you touch the ability to understand any spoken language it hears. Moreover, when the target speaks, any creature that knows at least one language and can hear the target understands what it says." Action, V/M, Touch, 1 hour, non-concentration.
+
+**Implementation:**
+
+- Body: `{character_id, target_character_id?}`. If `target_character_id` is omitted the caster targets themself (RAW Touch — the caster counts as a willing creature).
+- Caster gate: knows Tongues OR is in `{bard, cleric, sorcerer, warlock, wizard}`. 409 cannot_cast otherwise.
+- New `_SPELL_BUFF_MAP["tongues"]` substrate entry — 600 rounds (1 hour @ 6 s/round), non-concentration, `effects.tongues: True`.
+- The buff's flag IS the mechanic — the GM reads it to know the target understands and is understood by any language-speaker in earshot. The "understands any language" rider is permanently GM-narrated (no language-comprehension substrate in v2.x).
+- `feature_used` broadcast for the roll-log card; self-target and other-target variants get distinct descriptions.
+
+**Why this is the cleanest possible Phase 2 ship:** Tongues is structurally identical to Speak with Animals (the v2.438.0 Phase 1 #3 demonstrator) — flag buff, touch range, 1-hour duration, non-concentration, no engine hook. The only differences are the spell's caster list (5 classes vs 3), the duration (1 hour vs 10 min), and the flag's semantic meaning. Same recipe, same per-commit footprint. Phase 2's "Bucket A pattern" continues to degrade gracefully.
+
+**3 new harness tests** at `tests/harness/test_cast_tongues.py`:
+
+- `test_cast_tongues_installs_buff` — Wizard self-targets; buff lands with `tongues: true`.
+- `test_cast_tongues_buff_is_1_hour_non_concentration` — duration_rounds=600, concentration=false.
+- `test_cast_tongues_non_caster_rejected` — Krieger (Barbarian) → 409.
+
+The two "buff installs" tests `pytest.skip` gracefully if the demo roster ever drops Bard/Cleric/Sorcerer/Warlock/Wizard. Canonical caster is Thalindra Moonwhisper (Wizard).
+
+Total harness count 3491 → 3494.
+
+**Why "The Common Word":** Tongues makes a common tongue out of every spoken language, and the cast-and-broadcast Phase 2 batch has now shipped four spells whose "common word" is the same per-commit recipe. The substrate piles up; the consumer count grows.
+
+MINOR — new HTTP endpoint + new substrate entry + 3 new harness tests. No schema change.
+
+### Added
+- `app/routes/tabletop_routes.py::_SPELL_BUFF_MAP["tongues"]`: new substrate entry. Non-concentration, 600 rounds, `tongues: true` flag effect.
+- `app/routes/tabletop_routes.py::cast_tongues`: new `POST /api/campaign/{campaign_id}/cast_tongues` endpoint. Single-target touch buff install.
+- `tests/harness/test_cast_tongues.py`: 3 tests covering install + buff shape + caster gate.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Tongues marked ✅ shipped v2.445.0 under Phase 2's Shipped subsection. Phase 2 has shipped 4 spells (Shield of Faith, Mage Armor, Feather Fall, Tongues).
+- `docs/test-harness-coverage.md`: total-test-count nudges 3491 → 3494.
+
 ## [2.444.0] - 2026-06-19 — "The Light Touch"
 
 **Schema version:** 71

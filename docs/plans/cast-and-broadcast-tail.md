@@ -238,6 +238,16 @@ closure — runs indefinitely until Bucket A is exhausted.
   elevation tracking) so the flag IS the mechanic; the GM
   narrates the "no falling damage" rider. 5 harness tests.
 
+- **Tongues (L3)** — ✅ shipped v2.445.0. New
+  `_SPELL_BUFF_MAP["tongues"]` substrate (600 rounds = 1 hour,
+  non-concentration, `effects.tongues: True` flag) + new
+  `/cast_tongues` endpoint. Single-target touch (caster or
+  another willing creature). Same flag-buff shape as Speak with
+  Animals (v2.438.0) but for any spoken language, not just
+  beast-speech. The "understands and is understood" rider is
+  permanently GM-narrated; the engine surfaces the flag so the
+  table can see Tongues is active. 3 harness tests.
+
 ### Remaining candidates (filed)
 
 Next 4 highest-leverage spells from Bucket A:

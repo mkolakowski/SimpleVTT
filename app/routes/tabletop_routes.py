@@ -2809,6 +2809,36 @@ _SPELL_BUFF_MAP["spider-climb"] = {
     ),
 }
 
+# v2.445.0 — Tongues (RAW PHB p.284, L3 divination, Bard/Cleric/
+# Sorcerer/Warlock/Wizard): "This spell grants the creature you touch
+# the ability to understand any spoken language it hears. Moreover,
+# when the target speaks, any creature that knows at least one
+# language and can hear the target understands what it says."
+# 1 action, V/M, Touch, 1 hour, non-concentration.
+#
+# Phase 2 #4 of cast-and-broadcast-tail.md. Universal-speech flag
+# buff — same shape as Speak with Animals (v2.438.0) but for any
+# language instead of just beast-speech. The buff's
+# `effects.tongues: True` flag IS the mechanic; GMs read it to know
+# the target understands and is understood by any language-speaker
+# in earshot. No engine hook needed.
+_SPELL_BUFF_MAP["tongues"] = {
+    "key": "tongues",
+    "name": "Tongues",
+    "icon": "🗣️",
+    "duration_rounds": 600,  # 1 hour @ 6 s/round
+    "duration_max": 600,
+    "concentration": False,
+    "effects": {
+        "tongues": True,
+    },
+    "desc": (
+        "Understand any spoken language; speakers of any language "
+        "in earshot understand the target's speech. 1 hour, no "
+        "concentration."
+    ),
+}
+
 # v2.444.0 — Feather Fall (RAW PHB p.239, L1 transmutation reaction,
 # Bard/Sorcerer/Wizard): "Choose up to five falling creatures within
 # range. A falling creature's rate of descent slows to 60 feet per
@@ -64162,6 +64192,147 @@ async def cast_feather_fall(
         "feature": "feather-fall",
         "targets": buffs_installed,
         "buffs_installed": len(buffs_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_tongues")
+async def cast_tongues(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.445.0 — Phase 2 #4 of
+    docs/plans/cast-and-broadcast-tail.md. Tongues (L3 divination,
+    Bard/Cleric/Sorcerer/Warlock/Wizard, PHB p.284):
+
+      "This spell grants the creature you touch the ability to
+       understand any spoken language it hears. Moreover, when the
+       target speaks, any creature that knows at least one language
+       and can hear the target understands what it says."
+
+    Action, V/M, Touch, 1 hour, non-concentration.
+
+    Implementation: installs the v2.445.0 ``tongues`` buff on the
+    chosen target (caster or another willing creature). The buff's
+    `effects.tongues: True` flag IS the mechanic — same shape as
+    Speak with Animals (v2.438.0). The "understands and is
+    understood" rider is permanently GM-narrated; the engine
+    surfaces the flag so the table can see Tongues is active.
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster targets themself
+    (RAW Touch — the caster counts as a willing creature).
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_t = any(
+        (s.get("_slug") == "tongues")
+        or (str(s.get("name", "")).lower() == "tongues")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"bard", "cleric", "sorcerer", "warlock", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_t and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": (
+                "knows Tongues, or bard/cleric/sorcerer/warlock/wizard"
+            ),
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("tongues") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 600)
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "tongues",
+        "name": template.get("name") or "Tongues",
+        "icon": template.get("icon") or "🗣️",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": dict(template.get("effects") or {"tongues": True}),
+        "desc": template.get("desc") or (
+            "Understand any spoken language; speakers of any language "
+            "in earshot understand the target's speech. 1 hour, no "
+            "concentration."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    if target_char.id == char.id:
+        feature_desc = (
+            f"{char.name} can understand and be understood by speakers "
+            "of any language for 1 hour."
+        )
+    else:
+        feature_desc = (
+            f"{char.name} grants {target_char.name} universal speech — "
+            "understand and be understood by any language-speaker in "
+            "earshot for 1 hour."
+        )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🗣️ Tongues",
+            "feature_desc": feature_desc,
+            "source": "tongues",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "tongues",
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,
     }
 
