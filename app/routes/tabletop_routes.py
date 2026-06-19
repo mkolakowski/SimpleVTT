@@ -1866,6 +1866,36 @@ _SPELL_BUFF_MAP: dict[str, dict] = {
             "learn the school of any visible magical creature/object."
         ),
     },
+    # v2.458.0 — Phase 2 #15 of docs/plans/cast-and-broadcast-tail.md.
+    # Detect Poison and Disease (Cleric / Druid / Paladin / Ranger L1,
+    # ritual): RAW PHB p.231: "For the duration, you can sense the
+    # presence and location of poisons, poisonous creatures, and
+    # diseases within 30 feet of you. You also identify the kind of
+    # poison, poisonous creature, or disease in each case." 1 action
+    # (ritual), V/S/M (a yew leaf), Self, Concentration up to 10
+    # minutes.
+    #
+    # Flag-buff shape (same as Detect Evil and Good v2.456.0 / Detect
+    # Magic v2.457.0): the flag IS the mechanic. The GM narrates which
+    # surrounding creatures/areas ping the sense. The engine doesn't
+    # model item-poison or NPC-disease metadata as a perception trait
+    # yet, so the flag-buff pattern is the correct boundary.
+    "detect-poison-and-disease": {
+        "key": "detect-poison-and-disease",
+        "name": "Detect Poison and Disease",
+        "icon": "🧪",
+        "duration_rounds": 100,  # 10 minutes RAW
+        "duration_max": 100,
+        "concentration": True,
+        "effects": {
+            "senses_poison_and_disease_within_30ft": True,
+        },
+        "desc": (
+            "You sense the presence and location of poisons, "
+            "poisonous creatures, and diseases within 30 ft for 10 "
+            "min (concentration). You identify the kind in each case."
+        ),
+    },
     # v2.453.0 — Phase 2 #10 of docs/plans/cast-and-broadcast-tail.md.
     # Jump (Druid / Ranger / Sorcerer / Wizard L1): RAW PHB p.250:
     # "You touch a creature. The creature's jump distance is tripled
@@ -65774,6 +65804,137 @@ async def cast_detect_magic(
     return {
         "ok": True,
         "feature": "detect-magic",
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_detect_poison_and_disease")
+async def cast_detect_poison_and_disease(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.458.0 — Phase 2 #15 of
+    docs/plans/cast-and-broadcast-tail.md. Detect Poison and
+    Disease (L1 divination ritual, Cleric/Druid/Paladin/Ranger,
+    PHB p.231):
+
+      "For the duration, you can sense the presence and location
+       of poisons, poisonous creatures, and diseases within 30
+       feet of you. You also identify the kind of poison,
+       poisonous creature, or disease in each case."
+
+    1 action (or ritual), V/S/M (a yew leaf), Self, Concentration
+    up to 10 minutes.
+
+    Implementation: installs the v2.458.0
+    ``detect-poison-and-disease`` buff carrying
+    ``effects.senses_poison_and_disease_within_30ft: True``.
+    Flag-buff shape — same as Detect Evil and Good (v2.456.0) /
+    Detect Magic (v2.457.0). Completes the L1-ritual detection
+    trio on the cast-and-broadcast arc.
+
+    Body: ``{character_id}``. Self-targeted per RAW.
+
+    Response: ``{ok, feature, buff_installed, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_dpd = any(
+        (s.get("_slug") == "detect-poison-and-disease")
+        or (
+            str(s.get("name", "")).lower()
+            == "detect poison and disease"
+        )
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"cleric", "druid", "paladin", "ranger"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_dpd and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": (
+                "knows Detect Poison and Disease, or "
+                "cleric/druid/paladin/ranger"
+            ),
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("detect-poison-and-disease") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 100)
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "detect-poison-and-disease",
+        "name": template.get("name") or "Detect Poison and Disease",
+        "icon": template.get("icon") or "🧪",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": True,
+        "source_char_id": char.id,
+        "effects": dict(
+            template.get("effects")
+            or {"senses_poison_and_disease_within_30ft": True},
+        ),
+        "desc": template.get("desc") or (
+            "You sense the presence and location of poisons, "
+            "poisonous creatures, and diseases within 30 ft for 10 "
+            "min (concentration). You identify the kind in each case."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🧪 Detect Poison and Disease",
+            "feature_desc": (
+                f"{char.name} senses the presence and location of "
+                "poisons, poisonous creatures, and diseases within "
+                "30 ft for 10 min (concentration). You identify the "
+                "kind in each case."
+            ),
+            "source": "detect-poison-and-disease",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "detect-poison-and-disease",
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,
     }

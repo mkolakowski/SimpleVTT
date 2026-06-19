@@ -10,6 +10,46 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.458.0] - 2026-06-19 — "The Yew Leaf"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #15 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Detect Poison and Disease** (L1 divination ritual, Cleric/Druid/Paladin/Ranger, RAW PHB p.231). New `_SPELL_BUFF_MAP["detect-poison-and-disease"]` substrate (100 rounds = 10 min, concentration, `effects.senses_poison_and_disease_within_30ft: True` flag) + new `/cast_detect_poison_and_disease` endpoint. Flag-buff shape (same as Detect Evil and Good v2.456.0 / Detect Magic v2.457.0). Completes the L1-ritual detection trio on the cast-and-broadcast arc.
+
+**Description:** RAW: "For the duration, you can sense the presence and location of poisons, poisonous creatures, and diseases within 30 feet of you. You also identify the kind of poison, poisonous creature, or disease in each case." 1 action (or ritual), V/S/M (a yew leaf), Self, Concentration up to 10 minutes.
+
+**Implementation:**
+
+- Body: `{character_id}`. Self-targeted per RAW.
+- Caster gate: knows Detect Poison and Disease OR is in `{cleric, druid, paladin, ranger}` — divine + primal only (no arcane casters per RAW). 409 cannot_cast otherwise.
+- New `_SPELL_BUFF_MAP["detect-poison-and-disease"]` substrate entry — 100 rounds (10 minutes), concentration, `effects.senses_poison_and_disease_within_30ft: True`.
+- The flag IS the mechanic. The engine doesn't model item-poison or NPC-disease metadata as a perception trait yet, so the flag-buff pattern is the correct boundary.
+- `feature_used` broadcast for the roll-log card.
+
+**Why "The Yew Leaf":** RAW lists `M (a yew leaf)` as the material component. Yew has folkloric associations with poison and death — its needles, seeds, and bark are toxic in real life. Resumes the v2.452.0–v2.455.0 material-component naming theme (Pinch of Dirt → Grasshopper's Leg → Silver Mirror → Powdered Silver) after the v2.456.0–v2.457.0 perceptual-theme detour (The Sixth Sense → The Faint Aura) — three consecutive ingredients-themed names on either side of two perception spells.
+
+**Why this completes the L1-ritual detection trio:** Detect Evil and Good (v2.456.0) + Detect Magic (v2.457.0) + Detect Poison and Disease (v2.458.0) are the three L1 divination rituals in the SRD, all sharing the same flag-buff structure. With #15 shipped the cast-and-broadcast arc has covered the entire L1-divination-ritual surface area.
+
+**4 new harness tests** at `tests/harness/test_cast_detect_poison_and_disease.py`:
+
+- `test_cast_dpd_installs_buff` — Tavik self-casts; buff lands with `senses_poison_and_disease_within_30ft: true`.
+- `test_cast_dpd_buff_is_10_min_concentration` — duration_rounds=100, concentration=true.
+- `test_cast_dpd_non_caster_rejected` — Krieger (Barbarian) → 409.
+- `test_cast_dpd_wizard_rejected` — Thalindra (Wizard) → 409 (Wizards are NOT on this spell's class list per RAW; asserts the narrow divine+primal gate).
+
+Total harness count 3531 → 3535.
+
+MINOR — new HTTP endpoint + new substrate + 4 new harness tests. No schema change.
+
+### Added
+- `app/routes/tabletop_routes.py::_SPELL_BUFF_MAP["detect-poison-and-disease"]`: new substrate entry. Concentration, 100 rounds, `senses_poison_and_disease_within_30ft: true` flag effect.
+- `app/routes/tabletop_routes.py::cast_detect_poison_and_disease`: new `POST /api/campaign/{campaign_id}/cast_detect_poison_and_disease` endpoint. Self-cast on a `cleric/druid/paladin/ranger` caster.
+- `tests/harness/test_cast_detect_poison_and_disease.py`: 4 tests covering self-install + buff shape + narrow class gate (asserts both Krieger and Thalindra → 409).
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Detect Poison and Disease marked ✅ shipped v2.458.0 under Phase 2's Shipped subsection. Phase 2 has now shipped 15 spells/contracts; L1-divination-ritual trio complete.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3531 → 3535.
+
 ## [2.457.0] - 2026-06-19 — "The Faint Aura"
 
 **Schema version:** 71

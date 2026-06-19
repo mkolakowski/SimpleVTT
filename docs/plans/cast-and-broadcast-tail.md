@@ -248,6 +248,20 @@ closure — runs indefinitely until Bucket A is exhausted.
   permanently GM-narrated; the engine surfaces the flag so the
   table can see Tongues is active. 3 harness tests.
 
+- **Detect Poison and Disease (L1 ritual)** — ✅ shipped
+  v2.458.0. New
+  `_SPELL_BUFF_MAP["detect-poison-and-disease"]` substrate (100
+  rounds = 10 min, concentration,
+  `effects.senses_poison_and_disease_within_30ft: True` flag) +
+  new `/cast_detect_poison_and_disease` endpoint. Flag-buff
+  shape (same as Detect Evil and Good v2.456.0 / Detect Magic
+  v2.457.0). Self-cast only per RAW. Gates cleric/druid/paladin/
+  ranger — divine + primal only (no arcane casters per RAW).
+  Completes the L1-ritual detection trio on the cast-and-
+  broadcast arc; the three spells share the same flag-buff
+  structure and together cover every L1 divination ritual in
+  the SRD. 4 harness tests including Wizard → 409.
+
 - **Detect Magic (L1 ritual)** — ✅ shipped v2.457.0. New
   `_SPELL_BUFF_MAP["detect-magic"]` substrate (100 rounds = 10
   min, concentration, `effects.senses_magic_within_30ft: True`
