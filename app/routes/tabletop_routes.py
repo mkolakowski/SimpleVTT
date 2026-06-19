@@ -64822,6 +64822,146 @@ async def cast_comprehend_languages(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_longstrider")
+async def cast_longstrider(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.452.0 — Phase 2 #9 of
+    docs/plans/cast-and-broadcast-tail.md. Longstrider
+    (L1 transmutation, Bard/Druid/Ranger/Wizard, PHB p.251):
+
+      "You touch a creature. The target's speed increases by 10
+       feet until the spell ends."
+
+    1 action, V/S/M (a pinch of dirt), Touch, 1 hour,
+    non-concentration.
+
+    Implementation: rides the existing
+    ``_SPELL_BUFF_MAP["longstrider"]`` substrate
+    (``speed_bonus_ft: 10``, 600 rounds, non-concentration) + the
+    pre-existing ``effective_speed_walk`` reader that the move
+    endpoint already calls (same reader the v2.368.0 Aura of
+    Glory ship lit up). ZERO new mechanical code — the substrate
+    AND the speed-cap read site were both already wired; this
+    commit just exposes the cast endpoint so the substrate is
+    reachable.
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster targets
+    themself (RAW "you touch a creature" — the caster touches
+    their own arm, which is fine). The "touch" range stays
+    GM-tracked.
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_ls = any(
+        (s.get("_slug") == "longstrider")
+        or (str(s.get("name", "")).lower() == "longstrider")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"bard", "druid", "ranger", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_ls and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Longstrider, or bard/druid/ranger/wizard",
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("longstrider") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 600)
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "longstrider",
+        "name": template.get("name") or "Longstrider",
+        "icon": template.get("icon") or "🏃",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": dict(template.get("effects") or {"speed_bonus_ft": 10}),
+        "desc": template.get("desc") or (
+            "Speed increases by 10 ft for 1 hour."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    if target_char.id == char.id:
+        feature_desc = (
+            f"{char.name} touches themself — +10 ft walking speed for "
+            "1 hour."
+        )
+    else:
+        feature_desc = (
+            f"{char.name} touches {target_char.name} — +10 ft walking "
+            "speed for 1 hour."
+        )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🏃 Longstrider",
+            "feature_desc": feature_desc,
+            "source": "longstrider",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "longstrider",
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_gust")
 async def cast_gust(
     campaign_id: int,

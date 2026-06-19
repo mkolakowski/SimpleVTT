@@ -10,6 +10,45 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.452.0] - 2026-06-19 — "The Pinch of Dirt"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #9 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Longstrider** (L1 transmutation, Bard/Druid/Ranger/Wizard, RAW PHB p.251). Rides the existing `_SPELL_BUFF_MAP["longstrider"]` substrate + the pre-existing `effective_speed_walk` reader; new `/cast_longstrider` endpoint exposes it. Same shape as Shield of Faith (v2.442.0) and Mage Armor (v2.443.0) — zero new mechanical code, just an endpoint that reaches a pre-wired substrate.
+
+**Description:** RAW: "You touch a creature. The target's speed increases by 10 feet until the spell ends." 1 action, V/S/M (a pinch of dirt), Touch, 1 hour, non-concentration. Self-or-touch target shape; the touch range stays GM-tracked.
+
+**Implementation:**
+
+- Body: `{character_id, target_character_id?}`. If `target_character_id` is omitted the caster targets themself.
+- Caster gate: knows Longstrider OR is in `{bard, druid, ranger, wizard}`. 409 cannot_cast otherwise.
+- Existing `_SPELL_BUFF_MAP["longstrider"]` substrate: `speed_bonus_ft: 10`, 600 rounds (1 hour), non-concentration.
+- Existing `effective_speed_walk` reader (the same site lit by Aura of Glory v2.368.0) sums `effects.speed_bonus_ft` across active buffs → the move-endpoint speed cap rises automatically.
+- `feature_used` broadcast for the roll-log card.
+
+**Why "The Pinch of Dirt":** RAW lists `M (a pinch of dirt)` as the spell's material component. The earthy, grounded vibe matches a spell that just makes your character run a little faster — no fancy magic, just dirt + walking.
+
+**4 new harness tests** at `tests/harness/test_cast_longstrider.py`:
+
+- `test_cast_longstrider_self_installs_buff` — Wizard self-casts; buff lands with `speed_bonus_ft: 10`, target id mirrors caster.
+- `test_cast_longstrider_buff_is_1_hour_non_concentration` — duration_rounds=600, concentration=false.
+- `test_cast_longstrider_on_ally_installs_on_ally` — targeting Krieger installs on Krieger, not the caster.
+- `test_cast_longstrider_non_caster_rejected` — Krieger (Barbarian) → 409.
+
+Canonical caster is Thalindra Moonwhisper (Wizard); Lyra Sunstrider (Bard) is the fallback.
+
+Total harness count 3506 → 3510.
+
+MINOR — new HTTP endpoint + 4 new harness tests. No schema change. No new substrate (rides the existing one).
+
+### Added
+- `app/routes/tabletop_routes.py::cast_longstrider`: new `POST /api/campaign/{campaign_id}/cast_longstrider` endpoint. Self-or-touch install on a `bard/druid/ranger/wizard` caster.
+- `tests/harness/test_cast_longstrider.py`: 4 tests covering self-install + buff shape + ally-target routing + caster gate.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Longstrider marked ✅ shipped v2.452.0 under Phase 2's Shipped subsection. Phase 2 has now shipped 9 spells/contracts.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3506 → 3510.
+
 ## [2.451.0] - 2026-06-19 — "The Honest Feint"
 
 **Schema version:** 71

@@ -248,6 +248,19 @@ closure — runs indefinitely until Bucket A is exhausted.
   permanently GM-narrated; the engine surfaces the flag so the
   table can see Tongues is active. 3 harness tests.
 
+- **Longstrider (L1)** — ✅ shipped v2.452.0. Same shape as
+  Shield of Faith / Mage Armor — the
+  `_SPELL_BUFF_MAP["longstrider"]` substrate was wired
+  pre-v2.452.0 (`speed_bonus_ft: 10`, 600 rounds = 1 h,
+  non-concentration); this ship just adds the
+  `/cast_longstrider` endpoint. Body: `{character_id,
+  target_character_id?}`. Gates bard/druid/ranger/wizard. The
+  pre-existing `effective_speed_walk` reader (lit by the v2.368.0
+  Aura of Glory ship) sums `effects.speed_bonus_ft` across active
+  buffs, so the move-endpoint speed cap rises automatically — no
+  new mechanical code. 4 harness tests including a self-vs-ally
+  routing split.
+
 - **Comprehend Languages (L1 ritual)** — ✅ shipped v2.450.0.
   New `_SPELL_BUFF_MAP["comprehend-languages"]` substrate (600
   rounds = 1 hour, non-concentration,
