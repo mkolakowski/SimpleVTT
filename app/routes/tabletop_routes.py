@@ -2656,6 +2656,7 @@ _SPELL_BONUS_ADDITIVE_MAP: dict[str, dict] = {
         "base_level": 1,
         "base_bonus": 0,    # the 1d4+4 base is rolled separately
         "per_slot": 5,      # +5 temp HP per slot above 1st
+        # ``step_size`` omitted — defaults to 1 (every level adds).
     },
     # v2.432.0 — Phase 4 fourth consumer. Aid was wired in v2.371.0
     # with a bespoke ``max(5, 5 + 5 * max(0, slot - 2))`` inline
@@ -2668,6 +2669,21 @@ _SPELL_BONUS_ADDITIVE_MAP: dict[str, dict] = {
         "base_bonus": 5,    # +5 HP at base L2 cast
         "per_slot": 5,      # +5 HP per slot above 2nd
     },
+    # v2.433.0 — Phase 4 fifth consumer. Spiritual Weapon was wired
+    # in v2.99.438 with a bespoke ``extra_dice = max(0, (slot - 2) // 2)``
+    # inline calculation. Opens the **step-N additive** sub-shape via
+    # the new ``step_size`` field — Spiritual Weapon's damage adds
+    # one die per *two* slot levels above 2nd, not per level. RAW
+    # PHB p.278: 1d8 force at L2-L3, 2d8 at L4-L5, 3d8 at L6-L7,
+    # 4d8 at L8-L9. The substrate generalization keeps the existing
+    # entries (False Life, Aid) working unchanged with the default
+    # ``step_size: 1``.
+    "spiritual-weapon": {
+        "base_level": 2,
+        "base_bonus": 1,    # 1d8 base at L2
+        "per_slot": 1,      # +1d8 per step
+        "step_size": 2,     # one step = 2 slot levels
+    },
 }
 
 
@@ -2679,15 +2695,19 @@ def _spell_bonus_additive_for_slot(
     """v2.423.0 — Phase 4 rider/bonus linear-additive helper. Reads
     ``_SPELL_BONUS_ADDITIVE_MAP[spell_slug]`` and returns
     ``base_bonus + steps × per_slot``, where ``steps`` is the number of
-    slot levels above the spell's ``base_level`` (clamped at 0 so a
-    base-level cast returns ``base_bonus`` and an under-level cast doesn't
-    go negative). If no entry exists for the slug, returns
-    ``default_bonus``.
+    completed step intervals above the spell's ``base_level``. The
+    default ``step_size`` is 1 (every slot level above base adds
+    ``per_slot``); v2.433.0 opens a ``step_size > 1`` variant for
+    spells that only scale every N levels (e.g. Spiritual Weapon's
+    +1d8 per two slot levels above 2nd → ``step_size: 2``). Clamped
+    at 0 so a base-level cast returns ``base_bonus`` and an
+    under-level cast doesn't go negative. If no entry exists for
+    the slug, returns ``default_bonus``.
 
-    Pure function — the single source of truth for per-slot *linear*
-    rider-bonus math, read by the additive bonus cast endpoints
-    (``/cast_false_life``). Mirrors the count-additive helper's linear
-    shape (a flat bonus instead of a creature count).
+    Pure function — the single source of truth for per-slot
+    additive rider-bonus math, read by the additive bonus cast
+    endpoints (``/cast_false_life``, ``/use_spiritual_weapon``,
+    Aid install at ``/cast_spell``).
     """
     entry = _SPELL_BONUS_ADDITIVE_MAP.get(spell_slug)
     if not entry:
@@ -2699,7 +2719,8 @@ def _spell_bonus_additive_for_slot(
     base_level = int(entry.get("base_level") or 1)
     base_bonus = int(entry.get("base_bonus") or 0)
     per_slot = int(entry.get("per_slot") or 0)
-    steps = max(0, sl - base_level)
+    step_size = max(1, int(entry.get("step_size") or 1))
+    steps = max(0, (sl - base_level) // step_size)
     return base_bonus + steps * per_slot
 
 
@@ -60884,9 +60905,16 @@ async def use_spiritual_weapon(
         concentration_bound=True,
     )
 
-    # Damage dice: 1d8 + 1d8 per two slot levels above 2nd.
-    extra_dice = max(0, (slot_level - 2) // 2)
-    n_dice = 1 + extra_dice
+    # Damage dice: 1d8 + 1d8 per two slot levels above 2nd (RAW
+    # PHB p.278). v2.433.0 — refactored onto the Phase 4 step-N
+    # additive substrate (``_SPELL_BONUS_ADDITIVE_MAP["spiritual-weapon"]``
+    # with ``step_size: 2``). The math `base + (slot-base)//step *
+    # per` with base_level=2, base_bonus=1, per_slot=1, step_size=2
+    # reproduces the v2.99.438 inline `1 + max(0, (slot - 2) // 2)`
+    # expression exactly across L2-L9 (1/1/2/2/3/3/4/4 dice).
+    n_dice = _spell_bonus_additive_for_slot(
+        "spiritual-weapon", slot_level, default_bonus=1,
+    )
     dmg_dice = f"{n_dice}d8"
 
     attacked = False

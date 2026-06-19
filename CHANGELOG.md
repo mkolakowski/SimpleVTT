@@ -10,6 +10,75 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.433.0] - 2026-06-18 — "The Floating Strike"
+
+**Schema version:** 71
+
+**Commit summary:** **Phase 4 fifth consumer: Spiritual Weapon, with a substrate generalization.** Adds a new `step_size` field to `_SPELL_BONUS_ADDITIVE_MAP` (default `1`, preserving False Life + Aid behavior unchanged) so `_spell_bonus_additive_for_slot()` can compute `floor((slot - base) / step_size)` steps. **Opens the step-N additive sub-shape** for spells that scale every N levels rather than every level. Spiritual Weapon (Cleric L2, RAW PHB p.278 — +1d8 force per **two** slot levels above 2nd) wires `step_size: 2` and refactors its v2.99.438 inline bespoke math onto the substrate.
+
+**Description:** The substrate formula generalizes from `base_bonus + max(0, slot - base) * per_slot` to `base_bonus + max(0, (slot - base) // step_size) * per_slot`. Default `step_size=1` makes this a pure superset — False Life (every level adds 5 HP) and Aid (every level adds 5 HP) keep working without modification.
+
+Spiritual Weapon's substrate entry:
+
+```python
+_SPELL_BONUS_ADDITIVE_MAP["spiritual-weapon"] = {
+    "base_level": 2,
+    "base_bonus": 1,    # 1d8 at base L2
+    "per_slot": 1,      # +1d8 per step
+    "step_size": 2,     # one step = 2 slot levels
+}
+```
+
+Math verification (RAW: 1/1/2/2/3/3/4/4 dice at L2-L9):
+
+| Slot | `(slot - 2) // 2` | bonus | RAW |
+|---|---|---|---|
+| L2 | 0 | 1 | 1d8 ✓ |
+| L3 | 0 | 1 | 1d8 ✓ |
+| L4 | 1 | 2 | 2d8 ✓ |
+| L5 | 1 | 2 | 2d8 ✓ |
+| L6 | 2 | 3 | 3d8 ✓ |
+| L7 | 2 | 3 | 3d8 ✓ |
+| L8 | 3 | 4 | 4d8 ✓ |
+| L9 | 3 | 4 | 4d8 ✓ |
+
+Refactor at `/use_spiritual_weapon`:
+
+```python
+# Before (v2.99.438):
+extra_dice = max(0, (slot_level - 2) // 2)
+n_dice = 1 + extra_dice
+dmg_dice = f"{n_dice}d8"
+
+# After (v2.433.0):
+n_dice = _spell_bonus_additive_for_slot("spiritual-weapon", slot_level, default_bonus=1)
+dmg_dice = f"{n_dice}d8"
+```
+
+**New L6 harness test** at `test_cast_spiritual_weapon.py::test_upcast_l6_adds_two_extra_dice` exercises the third tier (3d8) through the substrate end-to-end. Seeds dice rolls until a hit exceeds 16+mod (the 2d8 ceiling) — impossible for two dice — proving the third die landed. The pre-existing L2 + L4 tests pass unchanged; substrate generalization is behavior-equivalent by construction.
+
+**Substrate state after v2.433.0:**
+
+- **Tier-walk shape** (`_SPELL_BONUS_MAP`): Magic Weapon (v2.421.0), Elemental Weapon (v2.422.0)
+- **Step-1 additive shape** (`_SPELL_BONUS_ADDITIVE_MAP` default): False Life (v2.423.0), Aid (v2.432.0)
+- **Step-N additive shape** (`_SPELL_BONUS_ADDITIVE_MAP` + `step_size: 2`): Spiritual Weapon (v2.433.0)
+
+**5 total Phase 4 consumers across 3 sub-shapes.** The natural next ship in the additive family would be a fresh consumer that exercises both a non-default base_bonus AND step_size, but no SRD spell currently fits — most step-N scalers either don't have an additive rider or use a step_size of 1 implicitly.
+
+**Why "The Floating Strike":** Spiritual Weapon is a floating, spectral weapon that strikes from the side. The substrate generalization made the strike "land" cleanly without disturbing the spells already on the prior step-1 default.
+
+MINOR — new substrate field opens a sub-shape; refactor of one existing endpoint; 1 new harness test. No behavior change for existing consumers.
+
+### Added
+- `app/routes/tabletop_routes.py::_SPELL_BONUS_ADDITIVE_MAP`: new `"spiritual-weapon"` entry with `step_size: 2`.
+- `app/routes/tabletop_routes.py::_spell_bonus_additive_for_slot`: new `step_size` parameter handling (default 1; clamped to `max(1, …)`). Docstring updated to document the new sub-shape.
+- `tests/harness/test_cast_spiritual_weapon.py::test_upcast_l6_adds_two_extra_dice`: new test exercising the third tier (3d8 ceiling) through the substrate.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_spiritual_weapon`: inline `extra_dice = max(0, (slot_level - 2) // 2); n_dice = 1 + extra_dice` refactored to a single `_spell_bonus_additive_for_slot("spiritual-weapon", slot_level, default_bonus=1)` call. Comment block records the v2.433.0 alignment.
+- `docs/plans/spell-utility-upcast.md`: status header updated to record Spiritual Weapon as the 5th Phase 4 consumer + the new step-N additive sub-shape. Backlog table gains a Spiritual Weapon row.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3458 → 3459.
+
 ## [2.432.0] - 2026-06-18 — "The Aligned Boon"
 
 **Schema version:** 71

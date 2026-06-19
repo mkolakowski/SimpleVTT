@@ -194,6 +194,41 @@ async def test_upcast_adds_a_die_per_two_levels(gm_client, gm_ws, roster):
         await _clear_concentration(gm_client, caster["id"])
 
 
+async def test_upcast_l6_adds_two_extra_dice(gm_client, gm_ws, roster):
+    """v2.433.0 — exercises the Phase 4 step-N additive substrate. Cast
+    at a 6th-level slot → step_size=2 means floor((6-2)/2) = 2 extra
+    dice on top of the base 1d8 = 3d8. A hit can exceed 16 + mod (a
+    2d8 ceiling), which is impossible for two dice — proving the
+    third tier landed correctly through the substrate. Seeds until
+    such a hit appears."""
+    caster = roster[_CASTER]
+    mod = _spc_mod(await _sheet(gm_client, caster["id"]))
+    ceiling_for_two_dice = 16 + mod
+    try:
+        found = None
+        for seed in range(1, 90):
+            await _seed_dice(gm_client, seed)
+            await _seed_battle(gm_client, caster, "tok_sw_l6")
+            r = await _cast(gm_client, caster["id"], 6, "tok_sw_l6")
+            assert r.status_code == 200, r.text
+            data = r.json()
+            await _dismiss(gm_client, data["combatant"]["id"])
+            assert data["slot_level"] == 6, data
+            if data.get("hit") and int(data["damage_rolled"]) > ceiling_for_two_dice:
+                found = data
+                break
+        assert found is not None, (
+            f"no 6th-level hit exceeded a two-d8 ceiling ({ceiling_for_two_dice}); "
+            "the substrate's step_size=2 third tier did not add a third die"
+        )
+        assert found["damage_type"] == "force", found
+        assert int(found["damage_rolled"]) <= 24 + mod, (
+            f"3d8+{mod} caps at {24 + mod}; got {found['damage_rolled']}"
+        )
+    finally:
+        await _clear_concentration(gm_client, caster["id"])
+
+
 async def test_cast_binds_concentration_despite_catalog_flag(gm_client, gm_ws, roster):
     """House-rule divergence: the catalog flags Spiritual Weapon
     ``concentration: false`` (RAW it needs no concentration), but the
