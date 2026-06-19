@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.435.0] - 2026-06-18 — "The Wider View"
+
+**Schema version:** 71
+
+**Commit summary:** Fresh SRD 5e audit refresh at v2.434.0 state. New top-of-`TODO.md` section "SRD 5e Audit (v2.434.0 refresh)" carries the per-category coverage forward + records the v2.405.0 → v2.434.0 ship train (Phase 1 duration-scaling closure, Phase 4 rider/bonus-scaling closure, security spine end-to-end). The `/wiki` landing-page banner version stamp + Spells row bump from ~83% to ~85% match. Quick-map link at the top of TODO.md updated to the new section anchor.
+
+**Description:** No code shipped — the audit is a doc-only artifact. The meaningful shifts since v2.404.10:
+
+- **Spells: ~83% → ~85%.** Phase 1 (duration scaling) added 3 net-new mechanized utility spells via endpoint-builds (Geas / Mass Suggestion / Modify Memory — catalog-only before v2.406.0–v2.408.0). Phase 4 (rider/bonus scaling) added 3 net-new mechanized utility spells via endpoint-builds (Magic Weapon / Elemental Weapon / False Life — catalog-only before v2.421.0–v2.423.0). Hunter's Mark + Hex + Aid + Spiritual Weapon were already partly wired and moved onto substrates as refactors (no behavior change).
+- **Phase 1 closed.** 6 spells substrate-wired via `_SPELL_DURATION_MAP` + `_spell_duration_rounds_for_slot()`. Closure noted in the audit's "remaining gaps" list.
+- **Phase 4 closed.** 5 consumers across 3 sub-shapes (tier-walk + step-1 additive + step-N additive). v2.434.0 closure audit confirmed no remaining SRD candidates fit.
+- **Security spine end-to-end (v2.424.0–v2.431.0).** Not an SRD shift but the headline non-SRD ship since v2.404.10 — recorded in the audit's "what shipped" narrative so future readers see the full session arc.
+
+**Overall ~97%** stays unchanged at the per-category roll-up rounding (the Spells nudge from ~83% → ~85% doesn't move the overall rounded figure). Four of six categories remain strictly-✅ 100% (Races, Monsters, Class features, Magic items).
+
+**Why "The Wider View":** the audit is the wider view from atop the work shipped — a step-back retrospective that records what the per-category gaps look like now.
+
+**Cross-link to substrate (per the [verify substrate before proposing](MEMORY.md) memory):** confirmed the v2.405-v2.408 + v2.421-v2.423 + v2.432-v2.434 ships all show in the running container's `/version` (2.434.0 baseline at audit time) + the relevant `_SPELL_DURATION_MAP` / `_SPELL_BONUS_MAP` / `_SPELL_BONUS_ADDITIVE_MAP` substrate entries exist in `app/routes/tabletop_routes.py`.
+
+MINOR — new TODO section + wiki banner version stamp update + Spells row coverage bump. No code touched.
+
+### Added
+- `TODO.md`: new "SRD 5e Audit (v2.434.0 refresh)" section at the top of the audit history. Per-category table, "what shipped since v2.404.10" narrative, remaining gaps (priority order), "what's left in 2.x" outlook.
+
+### Changed
+- `TODO.md`: Quick-map line at the very top updated to point at the new v2.434.0 audit anchor.
+- `app/templates/wiki.html`: `/wiki` landing banner version stamp updated from v2.404.10 → v2.434.0; Spells row coverage bumped from ~83% → ~85%.
+
 ## [2.434.0] - 2026-06-18 — "The Empty Backlog"
 
 **Schema version:** 71

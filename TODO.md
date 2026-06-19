@@ -17,11 +17,78 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 
 **Quick map of where to look:**
 
-- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (v2.404.0 refresh)](#srd-5e-audit-v24040-refresh) for the current per-category coverage (overall **~97%** — **Magic items joins Monsters + Class features + Races as a strictly-✅ 100% surface** via the v2.403.0–v2.404.0 Phase 9.2 + 9.3 arc). Prior passes: [v2.399.0](#srd-5e-audit-v23990-refresh), [v2.390.0](#srd-5e-audit-v23900-refresh), [v2.382.0](#srd-5e-audit-v23820-refresh), [v2.379.0](#srd-5e-audit-v23790-refresh), [v2.376.0](#srd-5e-audit-v23760-refresh), [v2.344.1](#srd-5e-audit-v23441-refresh), [v2.315.0](#srd-5e-audit-v23150-refresh), [2026-06-14](#srd-5e-audit-2026-06-14-refresh), [2026-06-13](#srd-5e-audit-2026-06-13-refresh), [2026-06-11](#srd-5e-audit-2026-06-11-refresh), [2026-06-10](#srd-5e-audit-2026-06-10). The v2.315.0 refresh **corrects two denominators** that all prior passes got wrong: magic items now sit at **239/239 wired (100%)** post-v2.404.0 — the old "292" figure counted total equipment (239 magic + 37 mundane weapons + 18 mundane armor); class features are **222 per-row entries (strictly-✅ 100%)**, not the stale "133".
+- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (v2.434.0 refresh)](#srd-5e-audit-v24340-refresh) for the current per-category coverage (overall **~97%** — **Magic items joins Monsters + Class features + Races as a strictly-✅ 100% surface** via the v2.403.0–v2.404.0 Phase 9.2 + 9.3 arc). Prior passes: [v2.399.0](#srd-5e-audit-v23990-refresh), [v2.390.0](#srd-5e-audit-v23900-refresh), [v2.382.0](#srd-5e-audit-v23820-refresh), [v2.379.0](#srd-5e-audit-v23790-refresh), [v2.376.0](#srd-5e-audit-v23760-refresh), [v2.344.1](#srd-5e-audit-v23441-refresh), [v2.315.0](#srd-5e-audit-v23150-refresh), [2026-06-14](#srd-5e-audit-2026-06-14-refresh), [2026-06-13](#srd-5e-audit-2026-06-13-refresh), [2026-06-11](#srd-5e-audit-2026-06-11-refresh), [2026-06-10](#srd-5e-audit-2026-06-10). The v2.315.0 refresh **corrects two denominators** that all prior passes got wrong: magic items now sit at **239/239 wired (100%)** post-v2.404.0 — the old "292" figure counted total equipment (239 magic + 37 mundane weapons + 18 mundane armor); class features are **222 per-row entries (strictly-✅ 100%)**, not the stale "133".
 - **Active class-feature automation backlog** → see [Full Class-Feature Automation — remaining backlog](#full-class-feature-automation--remaining-backlog) (just Phase 8 + a few per-feature Phase-2 finishers remain after v2.149.1).
 - **Design plans with deferred phases** → see [Design Plans Backlog](#design-plans-backlog) (every `docs/plans/*.md` indexed with a priority tag).
 - **One-off bugs + UI polish that don't have a design plan** → see [Manually Added](#manually-added).
 - **Big feature buckets that aren't tracked by a plan** → see the topic sections below (Character Sheet, GM Tools, Combat, Maps, Media, Player Features, UI/Mobile, Rules Reference, Legal & Compliance, Security, Test Infrastructure, Integrations, Visual, Class Features (next cycle)). The priority legend doesn't apply to these — they're topic-grouped, not P-tagged. Topic sections may contain entries that *do* have a design plan (e.g. Combat's Advantage & Disadvantage; Security's three v2.423.3–v2.423.5 plans) — the topic split is about audience navigation, not plan-vs.-no-plan status.
+
+---
+
+## SRD 5e Audit (v2.434.0 refresh)
+
+**Audit scope.** Recomputed against the codebase as of v2.434.0, capturing the **v2.405.0 → v2.434.0 ship train** that closed two more spell-utility-upcast phases end-to-end:
+
+- **v2.405.0 → v2.408.0 — Phase 1 (duration scaling) closed.** 6 spells substrate-wired across the `_SPELL_DURATION_MAP` + `_spell_duration_rounds_for_slot()` helper. Hunter's Mark / Hex got one-line retrofits onto the new substrate; Bestow Curse + Geas + Mass Suggestion + Modify Memory got new endpoint-builds (catalog-only before). The substrate's `"permanent"` / `"30d"` / `"1y"` markers handle non-numeric durations.
+- **v2.421.0 → v2.423.0 — Phase 4 (rider/bonus scaling) opens.** 3 consumers across two sub-shapes — Magic Weapon (tier-walk, opens Phase 4), Elemental Weapon (tier-walk, two riders off one tier), False Life (linear-additive, opens the additive shape).
+- **v2.424.0 → v2.431.0 — Security spine end-to-end (8 commits).** Not an SRD shift but worth noting because it consumed most of the v2.434.0 session: `app/audit_log.py` canonical-line emission + demo magic-link URL-login + `api.unauthorized` / `api.forbidden` + Cloudflare edge-banning + CrowdSec configs + admin_audit_log destructive-action audit. 15 canonical event tags + 97 new harness tests + SCHEMA_VERSION 69 → 71.
+- **v2.432.0 → v2.434.0 — Phase 4 close.** Aid refactor (4th consumer), Spiritual Weapon + `step_size` substrate generalization (5th consumer, opens step-N additive sub-shape), Phase 4 closure audit confirming no remaining SRD candidates fit. Phase 4 ✅ CLOSED.
+
+### Per-category coverage (the headline numbers)
+
+| Category | SRD count | Automated | Notes |
+|---|---|---|---|
+| Races | 9 | **✅ ~100%** | Unchanged from v2.404.10. |
+| Monsters | 322 | **✅ ~100%** | Unchanged. |
+| Conditions | 15 | **~92%** | Unchanged. |
+| Class features | **222 rows** | **✅ 100%** | Unchanged. |
+| Spells | 319 | **~85%** | **+2 pts vs. v2.404.10 (~83% → ~85%).** Phase 1 (duration scaling) added 3 net-new mechanized utility spells via endpoint-builds (Geas / Mass Suggestion / Modify Memory — catalog-only before v2.406.0–v2.408.0). Phase 4 added 3 net-new mechanized utility spells via endpoint-builds (Magic Weapon / Elemental Weapon / False Life — catalog-only before v2.421.0–v2.423.0). Aid + Spiritual Weapon were already wired but moved onto the Phase 4 substrate for symmetry. Hunter's Mark + Hex got duration-substrate retrofits (no behavior change). Remaining ~15% is the cast-and-broadcast utility tail with no per-slot scaling RAW (Detect Magic, Identify, Counterspell, Comprehend Languages, etc.) + the permanently-GM-narrated spell mechanics. |
+| Magic items | **239 / 239 wired** | **✅ 100%** | Unchanged. |
+
+**Overall ~97%** automated across the SRD ruleset (unchanged headline; Spells nudged from ~83% to ~85% but the per-category roll-up rounds to the same overall). Four of six categories are strictly-✅ 100% (Races, Monsters, Class features, Magic items); Conditions sits at ~92% with the permanently-GM-narrated clauses noted v2.384.0 (Charmed social-check advantage, Grappled out-of-reach, Deafened hearing-narrative); Spells sits at ~85% with the cast-and-broadcast tail accounting for nearly all of the remaining gap.
+
+### Remaining gaps (priority order — toward full SRD automation)
+
+After Phase 1 + Phase 4 closure, the engine-shaped gaps are narrower still:
+
+1. 🟡 **P2 — Cast-and-broadcast utility-spell mechanical depth.** Unchanged framing from v2.404.10 but with a smaller scope after the Phase 1 + Phase 4 closures. The remaining ~250 SRD utility spells either don't scale RAW (True Strike / Identify / Heroes' Feast / Detect Magic) or scale via mechanisms that don't fit the existing substrates (true polymorph form-pool depth, glyph trigger-state, conjure family summon catalog — see filed Phase 3 follow-ups). Pick the next 3–5 highest-leverage spells per commit if a contributor wants to drive this surface.
+2. 🟠 **Filed follow-up — PC save-or-suck install for condition-shape spells.** Unchanged from v2.404.10. The condition-install path at `tabletop_routes.py:~22165` is NPC-only in v1; PC save-or-suck spells (Charm Person / Hold Person / Command / Animal Friendship / Blindness-Deafness etc.) ride the cap substrate for the target-count gate but the per-target condition install on a failed save still requires the v2.32.0 PC-save roll-response hook. Filed for a future v2.5x.x arc.
+3. 🟠 **Filed follow-up — Bucket D announce-only mechanization (Path C from v2.403.x).** Unchanged. ~60 SRD magic items have catalog rows + charge counters wired but mechanical effects stay GM-narrated by design. Filed for v3.x scope expansion.
+4. 🟠 **Filed follow-up — race-features Phases 1b/1c + 4b/5b + 7.** Unchanged.
+5. ✅ **DONE — Spell utility-upcast Phase 1 (duration scaling).** Closed v2.405.0–v2.408.0. 6 spells substrate-wired.
+6. ✅ **DONE — Spell utility-upcast Phase 4 (rider/bonus scaling).** Closed v2.421.0–v2.434.0. 5 consumers across 3 sub-shapes. Closure audit at v2.434.0 confirms no remaining SRD candidates.
+7. ✅ **DONE — Spell target-scaling cap+upcast arc (v2.404.1–v2.404.10).** Unchanged.
+8. ✅ **DONE — Magic-items closure arc (v2.403.0–v2.404.0).** Unchanged.
+9. ✅ **DONE — Security spine end-to-end (v2.424.0–v2.431.0).** Not an SRD shift, but the operational closure of the three-piece security spine (audit-log + demo magic-link + fail2ban/CrowdSec configs + Cloudflare edge banning + admin destructive-action audit) is the headline non-SRD ship since v2.404.10. See [`docs/plans/demo-magic-link.md`](plans/demo-magic-link.md) / [`docs/plans/fail2ban-crowdsec-integration.md`](plans/fail2ban-crowdsec-integration.md) / [`docs/plans/cloudflare-edge-banning.md`](plans/cloudflare-edge-banning.md).
+10. ✅ **DONE — Charmed-gate mirror onto `/cast_spell` + `/use_feature` (v2.399.2).** Unchanged.
+11. ✅ **DONE — Race tail (v2.392.0–v2.399.0).** Unchanged.
+12. ✅ **DONE — Condition-enforcement audit clauses #1–#4.** Closed v2.385.0–v2.390.0.
+13. ✅ **DONE — Class-feature ⚪ tail.** Closed v2.368.0–v2.370.1.
+14. ✅ **DONE — Spell area-effect automation.** Closed v2.373.0–v2.376.0.
+15. ✅ **DONE — Spell upcast dice/heal scaling.** Effectively complete (v2.344.2).
+16. ✅ **DONE — Magic-item content tail.** Closed v2.316.0–v2.344.0.
+17. ✅ **DONE — Legendary + Lair Actions arc.** Closed v2.159.32–v2.382.0.
+
+### Out-of-scope (unchanged)
+
+Tasha's, Xanathar's-beyond-SRD, Strixhaven, post-SRD feats, backgrounds beyond Acolyte stay future-3.x scope. **2024 rules + Mythic Actions** likewise stay future-3.x scope. **Charmed clause 2** (social-check advantage), **Grappled clause 3** (out-of-reach), **Deafened** (mostly hearing-narrative): permanently GM-narrated per the v2.384.0 audit doc.
+
+### What's left to ship in SimpleVTT 2.x?
+
+The SRD ruleset stays at ~97% automated end-to-end. With Phase 1 + Phase 4 closed, the remaining ~3% gap is dominated by:
+
+- **Cast-and-broadcast utility-spell mechanical depth** — the ~250 spells with no per-slot scaling RAW (filed gap #1). Substrate-extension work, not engine.
+- **PC save-or-suck install hook** (filed gap #2) — affects ~10 condition-shape spells.
+- **Bucket D announce-only mechanization** (filed gap #3) — magic-item mechanical depth.
+- **race-features substrate-dependent phases** (filed gap #4) — Halfling Nimbleness / Naturally Stealthy full enforcement.
+
+Each of these is filed in its own plan doc. The natural next-arc inflection points are unchanged from v2.404.10:
+
+- **3.0 scope expansion** — post-SRD content (Tasha's, Xanathar's, 2024-PHB rule changes, Mythic Actions). Plus the Bucket D announce-only mechanization arc.
+- **v2.5x utility-spell mechanical-depth arcs** — opens after the cast-and-broadcast tail gets a substrate.
+- **Polish + UX** — Manually Added P3 polish items + Combat / GM Tools sections.
+- **Test-infrastructure hardening** — spell-validation suite Phase 5 + pytest-xdist parallelization.
+- **Maps 2.0 / Stealth-cover substrates** — would unlock Phases 4b + 5b of race-features.
 
 ---
 
