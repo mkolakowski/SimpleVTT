@@ -248,6 +248,21 @@ closure — runs indefinitely until Bucket A is exhausted.
   permanently GM-narrated; the engine surfaces the flag so the
   table can see Tongues is active. 3 harness tests.
 
+- **Identify (L1 ritual)** — ✅ shipped v2.459.0. **First
+  non-buff cast on the arc.** No substrate entry, no buff
+  install — Identify is RAW-instantaneous, so the new
+  `/cast_identify` endpoint broadcasts a `feature_used` card
+  naming what's being identified without any on-going effect to
+  track. The GM types the learned properties in chat. Body:
+  `{character_id, target_character_id?, target_item_name?}` —
+  both targets optional, four feature-card sentence shapes
+  based on which targets are provided. Gates bard/wizard only
+  per RAW. 4 harness tests including an explicit "no buff
+  installed" assertion. Proves the cast-and-broadcast arc
+  generalizes beyond buff-shaped spells; future instantaneous
+  spells (Purify Food and Drink, Spare the Dying, Cure Wounds,
+  etc.) can mirror this shape.
+
 - **Detect Poison and Disease (L1 ritual)** — ✅ shipped
   v2.458.0. New
   `_SPELL_BUFF_MAP["detect-poison-and-disease"]` substrate (100

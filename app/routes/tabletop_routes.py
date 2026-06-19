@@ -65940,6 +65940,158 @@ async def cast_detect_poison_and_disease(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_identify")
+async def cast_identify(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.459.0 — Phase 2 #16 of
+    docs/plans/cast-and-broadcast-tail.md. Identify (L1
+    divination ritual, Bard/Wizard, PHB p.252):
+
+      "You choose one object that you must touch throughout the
+       casting of the spell. If it is a magic item or some other
+       magic-imbued object, you learn its properties and how to
+       use them, whether it requires attunement to use, and how
+       many charges it has, if any. You learn whether any spells
+       are affecting the item and what they are. If the item was
+       created by a spell, you learn which spell created it. If
+       you instead touch a creature throughout the casting, you
+       learn what spells, if any, are currently affecting it."
+
+    1 minute (ritual), V/S/M (a pearl worth at least 100 gp and
+    an owl feather), Touch, Instantaneous (no duration, no
+    concentration).
+
+    **First non-buff cast in the Phase 2 arc.** Identify is RAW-
+    instantaneous: there's no duration to track and no on-going
+    effect to install. The endpoint broadcasts a `feature_used`
+    card naming what's being identified; the GM types the
+    learned properties in chat. The engine doesn't model
+    arbitrary item/creature magic-property metadata, so the cast
+    surface is intentionally narrative.
+
+    Body: ``{character_id, target_character_id?, target_item_name?}``.
+    Both target params optional — if both omitted the broadcast
+    still says "Caster casts Identify" with no target named (GM
+    fills in the rest).
+
+    Response: ``{ok, feature, target_character_id, target_item_name}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id_raw = body.get("target_character_id")
+    target_char_id = (
+        int(target_char_id_raw) if target_char_id_raw else None
+    )
+    target_item_name = (
+        str(body.get("target_item_name") or "").strip()[:120] or None
+    )
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    # Resolve the target creature name (if provided), but don't 404
+    # on a missing creature — the GM may be identifying an NPC or
+    # an off-roster object. Just gracefully default to the supplied
+    # id without the lookup if the row is missing.
+    target_char_name: "str | None" = None
+    if target_char_id is not None:
+        target_char = db.query(Character).filter(
+            Character.id == target_char_id,
+            Character.campaign_id == campaign_id,
+        ).first()
+        if target_char:
+            target_char_name = target_char.name
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_id = any(
+        (s.get("_slug") == "identify")
+        or (str(s.get("name", "")).lower() == "identify")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"bard", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_id and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Identify, or bard/wizard",
+            "got_class": _cls,
+        })
+
+    # Build the descriptive sentence for the chat card.
+    if target_item_name and target_char_name:
+        feature_desc = (
+            f"{char.name} casts Identify on the "
+            f"{target_item_name} held by {target_char_name}."
+        )
+    elif target_item_name:
+        feature_desc = (
+            f"{char.name} casts Identify on the {target_item_name}."
+        )
+    elif target_char_name:
+        feature_desc = (
+            f"{char.name} casts Identify on {target_char_name}, "
+            "learning what spells are currently affecting them."
+        )
+    else:
+        feature_desc = (
+            f"{char.name} casts Identify."
+        )
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🔮 Identify",
+            "feature_desc": feature_desc,
+            "source": "identify",
+            "target_character_id": target_char_id,
+            "target_character_name": target_char_name,
+            "target_item_name": target_item_name,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "identify",
+        "target_character_id": target_char_id,
+        "target_character_name": target_char_name,
+        "target_item_name": target_item_name,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_gust")
 async def cast_gust(
     campaign_id: int,

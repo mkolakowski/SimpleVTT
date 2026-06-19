@@ -10,6 +10,46 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.459.0] - 2026-06-19 — "The Hundred-Gold Pearl"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #16 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Identify** (L1 divination ritual, Bard/Wizard, RAW PHB p.252). **First non-buff cast in the Phase 2 arc** — Identify is RAW-instantaneous, so the endpoint broadcasts a `feature_used` card naming what's being identified without installing any buff. The GM types the learned properties in chat. New `/cast_identify` endpoint accepting either a `target_character_id` (identify spells on a creature) or a `target_item_name` (identify a magical object).
+
+**Description:** RAW: "You choose one object that you must touch throughout the casting of the spell. If it is a magic item or some other magic-imbued object, you learn its properties and how to use them, whether it requires attunement to use, and how many charges it has, if any. You learn whether any spells are affecting the item and what they are. If the item was created by a spell, you learn which spell created it. If you instead touch a creature throughout the casting, you learn what spells, if any, are currently affecting it." 1 minute (ritual), V/S/M (a pearl worth at least 100 gp and an owl feather), Touch, Instantaneous.
+
+**Implementation:**
+
+- Body: `{character_id, target_character_id?, target_item_name?}`. Both target params optional — if both omitted the broadcast still says "Caster casts Identify" with no target named.
+- Caster gate: knows Identify OR is in `{bard, wizard}`. 409 cannot_cast otherwise. RAW restricts Identify to Bard and Wizard only — the narrowest gate alongside Detect Evil and Good's cleric+paladin and Detect Poison and Disease's divine+primal.
+- **No substrate entry, no buff install.** Identify is RAW-instantaneous; there's nothing to track post-cast. The cast surface is intentionally narrative — the engine doesn't model arbitrary item/creature magic-property metadata, so the GM fills in what the caster learns.
+- Target name resolution: if `target_character_id` is provided AND a matching Character row exists, the response and broadcast include the resolved `target_character_name`. Missing-row case falls through gracefully (the GM may be identifying an NPC or off-roster object).
+- Feature-card sentence varies based on which targets were provided (four shapes: item + creature, item only, creature only, no target) so the chat surfaces context without forcing a follow-up message.
+- Response and `feature_used` broadcast carry `target_character_id`, `target_character_name`, `target_item_name`.
+
+**Why "The Hundred-Gold Pearl":** RAW lists `M (a pearl worth at least 100 gp and an owl feather)` as the material component. The pearl is the costly ingredient — RAW says it's NOT consumed by the spell, so a single 100-gp pearl serves an Identify-prepping caster forever. The "hundred-gold" anchor pins the spell in 5e's economy: 100 gp is the cost of a small Bag of Holding, two Healing Potions, or a Sword of Vengeance attunement check. Continues the material-component naming theme (Pinch of Dirt → Grasshopper's Leg → Silver Mirror → Powdered Silver → Yew Leaf → Hundred-Gold Pearl), now interleaved with the v2.456.0–v2.457.0 perceptual-theme detour.
+
+**Why "first non-buff cast in the Phase 2 arc":** the prior 15 ships all installed a buff (with the v2.451.0 Feinting Attack opt-in path also conditionally installing one). Identify breaks the pattern — there's no on-going effect, no duration, no concentration. The endpoint shape is broadcast-only, which proves the cast-and-broadcast arc generalizes beyond buff-shaped spells. Future instantaneous spells (Purify Food and Drink, Resistance, Spare the Dying, Guidance, Healing Word, Cure Wounds, etc.) can mirror this shape.
+
+**4 new harness tests** at `tests/harness/test_cast_identify.py`:
+
+- `test_cast_identify_on_item_no_buff_installed` — Thalindra casts with `target_item_name`; response echoes the item name; `/buffs` reports no `identify` buff (asserts the new non-buff shape).
+- `test_cast_identify_on_creature_echoes_target` — Cast on Krieger; response carries `target_character_id` AND the resolved `target_character_name`.
+- `test_cast_identify_with_no_target_still_broadcasts` — Cast with no targets; response is still 200 with both target fields null.
+- `test_cast_identify_non_caster_rejected` — Krieger (Barbarian) → 409.
+
+Total harness count 3535 → 3539.
+
+MINOR — new HTTP endpoint + 4 new harness tests. No schema change. No new substrate (Identify needs no buff to install).
+
+### Added
+- `app/routes/tabletop_routes.py::cast_identify`: new `POST /api/campaign/{campaign_id}/cast_identify` endpoint. Broadcast-only cast — no buff installed. Body accepts optional `target_character_id` and `target_item_name`; response and broadcast echo both back.
+- `tests/harness/test_cast_identify.py`: 4 tests covering item-target + creature-target + no-target paths + caster gate. The item-target test explicitly asserts no buff is installed.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Identify marked ✅ shipped v2.459.0 under Phase 2's Shipped subsection. Phase 2 has now shipped 16 spells/contracts; first non-buff cast on the arc.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3535 → 3539.
+
 ## [2.458.0] - 2026-06-19 — "The Yew Leaf"
 
 **Schema version:** 71
