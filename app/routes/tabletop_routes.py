@@ -63290,10 +63290,18 @@ async def cast_true_strike(
         "source_char_id": char.id,
         "effects": {
             "attack_advantage_vs_target_combatant_id": target_combatant_id,
+            # v2.449.0 — Phase 1.5: opt into the generic
+            # consume-on-attack contract on /attack so the advantage
+            # drops after the FIRST attack vs. the marked target,
+            # matching RAW "your first attack roll" (vs. v2.437.0's
+            # v1 which granted advantage on every attack while the
+            # buff was active).
+            "consume_on_attack": True,
         },
         "desc": (
             "Your next attack roll against the marked target has "
-            "advantage if you make it before the end of your next turn."
+            "advantage. The buff is consumed by the first /attack "
+            "you make (v2.449.0 consume-on-attack contract)."
         ),
     })
 
@@ -98879,6 +98887,43 @@ async def use_attack(
                             "attack_name": name,
                         },
                     )
+    except Exception:
+        pass
+    # v2.449.0 — Phase 1.5 of cast-and-broadcast-tail.md. Generic
+    # consume-on-attack contract: walk the attacker's buffs and drop
+    # any with `effects.consume_on_attack: True`. Closes the v2.437.0
+    # True Strike RAW-bend (RAW says advantage on "your *first* attack
+    # roll" — the v1 buff persists for 1 round and granted advantage
+    # on every attack). New consume contract drops the buff after the
+    # first /attack the attacker makes, matching RAW semantics. Other
+    # "next attack" effects (Feinting Attack already names
+    # `next_attack_advantage: true` in its broadcast) can opt in by
+    # setting the same flag on their buff entries.
+    #
+    # Why placed here (post-attack-resolution, pre-return): the
+    # advantage read site at `_attacker_has_vow_of_enmity_vs_target`
+    # has already fired and granted advantage; dropping the buff now
+    # ensures the NEXT attack from the same attacker doesn't see it.
+    try:
+        consume_state = hub.get_battle(campaign_id)
+        if consume_state:
+            for _cc in (consume_state.get("combatants") or []):
+                if _cc.get("char_id") != char.id:
+                    continue
+                _consume_keys: list[str] = []
+                for _cb in (_cc.get("buffs") or []):
+                    if not isinstance(_cb, dict):
+                        continue
+                    _ceffects = _cb.get("effects") or {}
+                    if not isinstance(_ceffects, dict):
+                        continue
+                    if _ceffects.get("consume_on_attack"):
+                        _ckey = _cb.get("key") or ""
+                        if _ckey:
+                            _consume_keys.append(str(_ckey))
+                for _ck in _consume_keys:
+                    await _remove_buff(campaign_id, char.id, _ck)
+                break
     except Exception:
         pass
     # Return the attack + damage totals so the sheet's .atk-strike handler can

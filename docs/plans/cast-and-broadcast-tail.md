@@ -248,6 +248,19 @@ closure — runs indefinitely until Bucket A is exhausted.
   permanently GM-narrated; the engine surfaces the flag so the
   table can see Tongues is active. 3 harness tests.
 
+- **Phase 1.5 — buff-consume-on-attack contract** — ✅ shipped
+  v2.449.0. Closes the v2.437.0 True Strike RAW-bend. New
+  contract in the `/attack` endpoint walks the attacker's buffs
+  after the attack resolves and drops any buff with
+  `effects.consume_on_attack: True`. True Strike's buff entry
+  (v2.437.0) updated to opt into the contract via the new flag.
+  RAW "your *first* attack roll" now matches engine behavior:
+  the advantage drops after the first /attack. The contract is
+  generic — any future "next attack" effect (Feinting Attack,
+  Vow of Enmity, etc.) can opt in by setting the same flag. 2
+  new harness tests covering the consumer path + a no-op
+  control.
+
 - **Hellish Rebuke DEX save-for-half** — ✅ shipped v2.448.0.
   Phase 2 #7. Builds on v2.446.0: adds the attacker's DEX save
   vs the caster's spell save DC. Halves damage on success per

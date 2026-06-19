@@ -10,6 +10,48 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.449.0] - 2026-06-19 — "The First Strike"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 1.5 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — generic **buff-consume-on-attack contract** on the `/attack` endpoint. Closes the v2.437.0 True Strike RAW-bend ("advantage on your *first* attack roll" → v1 granted advantage on every attack while the buff was active). The new contract walks the attacker's buffs after every /attack and drops any buff carrying `effects.consume_on_attack: True`. True Strike's v2.437.0 buff entry opts in. Thirteenth consecutive cast-and-broadcast tail ship in the session.
+
+**Description:** The contract is generic: any buff opts in by setting `effects.consume_on_attack: True`. After an /attack resolves, the endpoint walks the attacker's combatant buffs and removes any consuming buffs in a single pass. The placement (post-resolution, pre-return) ensures the advantage-grant read site at `_attacker_has_vow_of_enmity_vs_target` has already fired for THIS attack — the buff drops AFTER granting advantage, so the consumer benefits once before being consumed.
+
+**Implementation:**
+
+- New consume-on-attack loop in `app/routes/tabletop_routes.py::use_attack` (line ~98884, right before the return dict).
+- Walks `hub.get_battle(campaign_id).combatants` for the attacker's combatant. Reads `combatant.buffs`. For each dict buff with `effects.consume_on_attack: True`, collects the buff key. After walking, calls `_remove_buff(campaign_id, char.id, key)` for each consumed key (separate phase to avoid mutating the iteration target).
+- Wrapped in try/except so a failure to walk doesn't fail the /attack response — the consume is best-effort.
+
+**True Strike (v2.437.0) opts in:** `cast_true_strike`'s buff dict gains `consume_on_attack: True` alongside the existing `attack_advantage_vs_target_combatant_id`. The buff's `desc` string updates to reference the consume contract.
+
+**Why this closes a RAW-bend rather than ships a new spell:** Phase 1.5 of the plan was filed to close the gap between RAW "first attack roll" and v1 "advantage on every attack." Shipping it makes the engine's True Strike behavior RAW-correct. The same contract will also fix Feinting Attack (the v2.99.x Battle Master maneuver already names `next_attack_advantage: true` in its broadcast) once that endpoint opts in — a follow-up commit.
+
+**Generic for future spells:** any "next attack" effect can ride this contract. Phase 2's Vow of Enmity (Vengeance Paladin Channel Divinity) intentionally does NOT opt in — RAW Vow lasts 1 minute and grants advantage on every attack against the marked target, so the consume contract doesn't apply. The flag is opt-in by design; legacy buffs without it stay around for their full duration.
+
+**Why "The First Strike":** True Strike's name now matches its behavior — the advantage is real for the *first* strike, then gone. The plan's Phase 1.5 was the first identified RAW-bend in the cast-and-broadcast tail; this ship is the first one closed.
+
+**2 new harness tests** at `tests/harness/test_true_strike_consume_on_attack.py`:
+
+- `test_true_strike_buff_consumed_after_first_attack` — Magnus casts True Strike → buff installs with `consume_on_attack: True` → Magnus attacks → buff is GONE from his combatant.
+- `test_attack_without_consume_on_attack_buff_no_op` — sanity: an /attack with no consume-on-attack buffs is a no-op for the contract (the attack returns normally).
+
+**Regression coverage:** existing `tests/harness/test_cast_true_strike.py` (4 tests) — the v2.437.0 install + buff shape + caster gate + missing target tests all continue to pass; the new `consume_on_attack: True` flag is additive to the existing effects dict.
+
+Total harness count 3498 → 3500.
+
+MINOR — new contract on /attack (additive only) + True Strike buff entry updated to opt in + 2 new harness tests. No schema change. No new env var. No new spell ship.
+
+### Added
+- `app/routes/tabletop_routes.py::use_attack` post-resolution consume-on-attack walker. Drops any attacker buff with `effects.consume_on_attack: True`.
+- `tests/harness/test_true_strike_consume_on_attack.py`: 2 tests covering the consumer path + a no-op control.
+
+### Changed
+- `app/routes/tabletop_routes.py::cast_true_strike`: buff's `effects` dict gains `consume_on_attack: True`; `desc` updates to reference the contract.
+- `docs/plans/cast-and-broadcast-tail.md`: Phase 1.5 marked ✅ shipped v2.449.0 under Phase 2's Shipped subsection.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3498 → 3500.
+
 ## [2.448.0] - 2026-06-19 — "The Adjudicated Save"
 
 **Schema version:** 71
