@@ -66196,6 +66196,172 @@ async def cast_purify_food_and_drink(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_spare_the_dying")
+async def cast_spare_the_dying(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.461.0 — Phase 2 #18 of
+    docs/plans/cast-and-broadcast-tail.md. Spare the Dying
+    (cantrip necromancy, Cleric, PHB p.277):
+
+      "You touch a living creature that has 0 hit points. The
+       creature becomes stable. This spell has no effect on
+       undead or constructs."
+
+    1 action, V/S, Touch, Instantaneous.
+
+    **First mechanical non-buff cast in the Phase 2 arc.** Unlike
+    Identify (v2.459.0) and Purify Food and Drink (v2.460.0) —
+    both broadcast-only — Spare the Dying actually mutates engine
+    state: it flips the target's ``death_saves.status`` to
+    ``stable`` (zeroing successes + failures) and broadcasts the
+    standard ``character_death_save`` event the death-save UI
+    already listens for. Mirrors the v-existing
+    ``stabilize_with_medicine`` endpoint's success path but
+    without the d20+Medicine roll (RAW Spare the Dying is
+    automatic).
+
+    Body: ``{character_id, target_character_id}``. Both required.
+
+    Errors:
+      - 400 missing_character_id / missing_target_character_id
+      - 404 caster / target not found
+      - 409 cannot_cast (not a cleric)
+      - 409 target_not_at_zero_hp (RAW requires 0 HP)
+
+    Response: ``{ok, feature, target_character_id, stabilized}``
+    plus ``death_saves`` snapshot on success.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id_raw = body.get("target_character_id")
+    if not target_char_id_raw:
+        raise HTTPException(400, "target_character_id is required")
+    target_char_id = int(target_char_id_raw)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_std = any(
+        (s.get("_slug") == "spare-the-dying")
+        or (str(s.get("name", "")).lower() == "spare the dying")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"cleric"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_std and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Spare the Dying, or cleric",
+            "got_class": _cls,
+        })
+
+    # RAW gate: target must be at 0 HP. Read hp.current from the
+    # target's sheet; gracefully fall back to 0 if missing.
+    target_sheet = dict(target_char.sheet or {})
+    try:
+        target_hp_current = int(
+            (target_sheet.get("hp") or {}).get("current") or 0
+        )
+    except (TypeError, ValueError):
+        target_hp_current = 0
+    if target_hp_current != 0:
+        return JSONResponse(status_code=409, content={
+            "error": "target_not_at_zero_hp",
+            "expected": "target.hp.current == 0",
+            "got_hp_current": target_hp_current,
+        })
+
+    # Stabilize: flip death_saves.status → "stable", zero successes
+    # and failures. Mirrors the v-existing stabilize_with_medicine
+    # success path.
+    new_ds = _set_death_save_state(
+        target_char, status="stable", successes=0, failures=0,
+    )
+    db.commit()
+
+    # Broadcast the canonical death-save event so the death-save UI
+    # picks it up. Mirrors the existing medicine_check broadcast.
+    await hub.broadcast(campaign_id, {
+        "type": "character_death_save",
+        "data": {
+            "character_id": target_char.id,
+            "status": "stable",
+            "successes": 0,
+            "failures": 0,
+            "hp": dict(target_sheet.get("hp") or {}),
+            "source": "spare-the-dying",
+            "healer_char_id": char.id,
+            "healer_char_name": char.name,
+        },
+    })
+
+    # Also broadcast a feature_used card for the chat log.
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "💀 Spare the Dying",
+            "feature_desc": (
+                f"{char.name} stabilizes {target_char.name} with a "
+                "touch — no death saves needed."
+            ),
+            "source": "spare-the-dying",
+            "target_character_id": target_char.id,
+            "target_character_name": target_char.name,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "spare-the-dying",
+        "target_character_id": target_char.id,
+        "target_character_name": target_char.name,
+        "stabilized": True,
+        "death_saves": dict(new_ds),
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_gust")
 async def cast_gust(
     campaign_id: int,

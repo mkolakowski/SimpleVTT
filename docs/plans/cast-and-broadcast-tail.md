@@ -248,6 +248,22 @@ closure — runs indefinitely until Bucket A is exhausted.
   permanently GM-narrated; the engine surfaces the flag so the
   table can see Tongues is active. 3 harness tests.
 
+- **Spare the Dying (Cantrip)** — ✅ shipped v2.461.0. **First
+  mechanical non-buff cast on the arc** — unlike Identify
+  (v2.459.0) and Purify Food and Drink (v2.460.0), Spare the
+  Dying actually mutates engine state. New `/cast_spare_the_dying`
+  endpoint validates the target is at 0 HP, flips
+  `death_saves.status` → `stable` via the existing
+  `_set_death_save_state` helper, and broadcasts the canonical
+  `character_death_save` event the death-save UI already listens
+  for. Body: `{character_id, target_character_id}` (both
+  required). Class gate: cleric only. Error gates: 409
+  `target_not_at_zero_hp` (RAW requires 0 HP) + 400 missing
+  target + 409 non-cleric. Opens the "mechanical non-buff"
+  pattern bucket for future ships that need surgical state
+  mutation (Lesser Restoration, Mass Healing Word, etc.). 4
+  harness tests including a sheet round-trip after the cast.
+
 - **Purify Food and Drink (L1 ritual)** — ✅ shipped v2.460.0.
   **Second non-buff cast on the arc** (after Identify v2.459.0).
   No substrate entry, no buff install — RAW-instantaneous,

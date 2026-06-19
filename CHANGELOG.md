@@ -10,6 +10,54 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.461.0] - 2026-06-19 — "The Sparing Touch"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #18 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Spare the Dying** (cantrip necromancy, Cleric, RAW PHB p.277). **First mechanical non-buff cast in the Phase 2 arc** — unlike Identify (v2.459.0) and Purify Food and Drink (v2.460.0), which are broadcast-only, Spare the Dying actually mutates engine state. The new `/cast_spare_the_dying` endpoint validates the target is at 0 HP, flips `death_saves.status` to `stable` (zeroing successes + failures), and broadcasts the canonical `character_death_save` event the death-save UI already listens for.
+
+**Description:** RAW: "You touch a living creature that has 0 hit points. The creature becomes stable." 1 action, V/S, Touch, Instantaneous.
+
+**Implementation:**
+
+- Body: `{character_id, target_character_id}`. Both required (unlike Identify where both target params were optional).
+- Caster gate: knows Spare the Dying OR is `cleric`. Artificer (PHB 2024 / Tasha's) also has Spare the Dying but isn't SRD; the gate stays cleric-only.
+- RAW gate: target must be at `hp.current == 0`. The endpoint reads `target.sheet.hp.current` and returns `409 target_not_at_zero_hp` if non-zero.
+- Mutation: calls the existing `_set_death_save_state(target, status="stable", successes=0, failures=0)` helper — the same one used by `stabilize_with_medicine`'s success path and `override_death_save`. The endpoint then commits the DB so the state survives a sheet re-read.
+- Broadcasts: `character_death_save` (so the death-save UI updates the dot tracker) + `feature_used` (for the chat-card log). The death-save broadcast carries `source: "spare-the-dying"` distinguishing it from the medicine-check path's `source: "medicine_check"`.
+- Response: `{ok, feature, target_character_id, target_character_name, stabilized, death_saves}`.
+
+**Why "The Sparing Touch":** the spell's name verbs the act — "spare." The caster's touch withdraws the target from death's edge without rolling a die. "Sparing" doubles as both "withholding" (sparing them from death) and "merciful" (sparing them the indignity of three death saves). Touch-based mechanical cantrips are uncommon in the SRD; the name highlights that the touch IS the spell.
+
+**The "mechanical non-buff" pattern:** the prior 17 ships fall into two buckets:
+- **Buff-installing casts** (15 ships): install a substrate-backed buff with one or more `effects.*` flags. The engine reads the flags later.
+- **Pure-broadcast casts** (2 ships, v2.459.0 + v2.460.0): no engine state change, just a chat-card broadcast. The GM narrates the result.
+
+Spare the Dying opens a **third bucket**: the cast immediately writes to a non-buff sheet field (here `death_saves.status`) and broadcasts the existing event the UI already listens for. No new substrate, no new read site, no new event type. Future Phase 2 ships that need surgical state mutation (Lesser Restoration's condition-removal flavor, Mass Healing Word's HP write at point of cast, etc.) can mirror this shape.
+
+**4 new harness tests** at `tests/harness/test_cast_spare_the_dying.py`:
+
+- `test_cast_std_stabilizes_target_at_zero_hp` — drops Krieger to 0 HP via `/sheet-fields`, casts Spare the Dying, asserts `stabilized: True` + `death_saves.status == "stable"` in both the response AND a re-read of the target's sheet (verifies the DB commit landed).
+- `test_cast_std_rejects_target_above_zero_hp` — Krieger at full HP → 409 `target_not_at_zero_hp` with the actual `hp.current` echoed in the error body.
+- `test_cast_std_missing_target_returns_400` — omitting `target_character_id` → 400.
+- `test_cast_std_non_cleric_rejected` — Thalindra (Wizard) → 409 (cleric-only gate).
+
+Each test that mutates Krieger's HP restores via `/rest` `{"type": "long"}` in a try/finally to keep the demo state clean for the next test.
+
+Canonical caster is Brother Tavik Stonebrow (Cleric 5); canonical target is Krieger Stonefist (Barbarian, the demo punching bag).
+
+Total harness count 3543 → 3547.
+
+MINOR — new HTTP endpoint + 4 new harness tests. No schema change. No new substrate.
+
+### Added
+- `app/routes/tabletop_routes.py::cast_spare_the_dying`: new `POST /api/campaign/{campaign_id}/cast_spare_the_dying` endpoint. Body: `{character_id, target_character_id}`. Stabilizes a 0-HP target by flipping `death_saves.status → "stable"` and broadcasting the canonical death-save event.
+- `tests/harness/test_cast_spare_the_dying.py`: 4 tests covering the happy path (0 HP → stable + sheet round-trip) + 3 error paths (above 0 HP / missing target / non-cleric).
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Spare the Dying marked ✅ shipped v2.461.0 under Phase 2's Shipped subsection. Phase 2 has now shipped 18 spells/contracts; first mechanical non-buff cast on the arc.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3543 → 3547.
+
 ## [2.460.0] - 2026-06-19 — "The Cleansing Sphere"
 
 **Schema version:** 71
