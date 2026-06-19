@@ -10,6 +10,38 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.434.0] - 2026-06-18 — "The Empty Backlog"
+
+**Schema version:** 71
+
+**Commit summary:** Closes Phase 4 of [`docs/plans/spell-utility-upcast.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/spell-utility-upcast.md) at 5 consumers. Plan-doc-only commit — no code touched. Records the v2.434.0 audit finding that the SRD doesn't have a sixth Phase 4 candidate: every remaining bespoke-endpoint spell with per-slot scaling either rides a different substrate already (Phase 1 duration, Phase 2 AoE-radius, Phase 3 count) OR has no per-slot scaling RAW.
+
+**Description:** The audit walked the bespoke `/cast_*` and `/use_*` endpoints + the catalog-driven `/cast_spell` prose-parser path. Findings:
+
+- **Heal** is the closest candidate, but it's already handled by the v2.130.0 `parse_upcast_dice()` → `flat_healing_per_slot: 10` → `_scale_flat_for_upcast()` chain. No bespoke endpoint to refactor; moving it onto `_SPELL_BONUS_ADDITIVE_MAP` would be redundant.
+- **Hunter's Mark / Hex / Bestow Curse / Geas / Mass Suggestion / Modify Memory** all scale duration, not riders → Phase 1 (closed v2.405.0–v2.408.0).
+- **Bane / Charm Person / Hold Person family / Animal Friendship / Command / Blindness-Deafness / Invisibility / Fly / Enhance Ability / Longstrider** all scale targets, not riders → Phase 3 / target-cap substrate (closed v2.404.x).
+- **Animate Dead** scales summon count → Phase 3 (already shipped).
+- **Create or Destroy Water / Private Sanctum / Confusion / Fog Cloud** all scale AoE radius → Phase 2 (already shipped).
+- **Heroes' Feast / Aura of Vitality / Stoneskin / Mind Blank / Death Ward** — no per-slot scaling RAW. Filed in-place.
+
+**The 5 shipped consumers cover all three Phase 4 sub-shapes:**
+
+| Sub-shape | Substrate | Consumers |
+|---|---|---|
+| Tier-walk | `_SPELL_BONUS_MAP` + `_spell_bonus_for_slot()` | Magic Weapon (v2.421.0), Elemental Weapon (v2.422.0) |
+| Step-1 additive | `_SPELL_BONUS_ADDITIVE_MAP` (default `step_size: 1`) | False Life (v2.423.0), Aid (v2.432.0) |
+| Step-N additive | `_SPELL_BONUS_ADDITIVE_MAP` + `step_size: 2` | Spiritual Weapon (v2.433.0) |
+
+**Closing Phase 4 doesn't preclude a sixth consumer landing in a future SRD update** — the substrate is open and ready when a candidate appears. The plan-doc status header flips from 🟠 PHASE 4 OPEN to ✅ PHASE 4 CLOSED to record the conclusion.
+
+**Why "The Empty Backlog":** the audit found the backlog empty. Calling it out explicitly so a future contributor doesn't repeat the search.
+
+PATCH — plan doc only, no code changes.
+
+### Changed
+- `docs/plans/spell-utility-upcast.md`: new "Phase 4 closure audit (v2.434.0)" section under the Phase 4 backlog table, recording the per-candidate "why not Phase 4" rationale. Status header flipped from "🟠 PHASE 4 OPEN" to "✅ PHASE 4 CLOSED" with the same content summary.
+
 ## [2.433.0] - 2026-06-18 — "The Floating Strike"
 
 **Schema version:** 71
