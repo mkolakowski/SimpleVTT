@@ -66092,6 +66092,110 @@ async def cast_identify(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_purify_food_and_drink")
+async def cast_purify_food_and_drink(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.460.0 — Phase 2 #17 of
+    docs/plans/cast-and-broadcast-tail.md. Purify Food and Drink
+    (L1 transmutation ritual, Cleric/Druid/Paladin, PHB p.270):
+
+      "All nonmagical food and drink within a 5-foot-radius
+       sphere centered on a point of your choice within range is
+       purified and rendered free of poison and disease."
+
+    1 action (ritual), V/S, 10 ft, Instantaneous (no duration,
+    no concentration).
+
+    **Second non-buff cast in the Phase 2 arc** (after Identify
+    v2.459.0). Purify Food and Drink is RAW-instantaneous and
+    affects environmental food/drink that the engine doesn't
+    model as objects. The endpoint broadcasts a `feature_used`
+    card naming the caster + the spell; the GM narrates which
+    rations/wineskins were purified.
+
+    Body: ``{character_id}``. No target — the spell affects
+    everything within the 5-ft sphere, which is itself GM-placed.
+
+    Response: ``{ok, feature}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_pfd = any(
+        (s.get("_slug") == "purify-food-and-drink")
+        or (
+            str(s.get("name", "")).lower() == "purify food and drink"
+        )
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"cleric", "druid", "paladin"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_pfd and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": (
+                "knows Purify Food and Drink, or "
+                "cleric/druid/paladin"
+            ),
+            "got_class": _cls,
+        })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🍞 Purify Food and Drink",
+            "feature_desc": (
+                f"{char.name} purifies all nonmagical food and drink "
+                "within a 5 ft sphere — free of poison and disease."
+            ),
+            "source": "purify-food-and-drink",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "purify-food-and-drink",
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_gust")
 async def cast_gust(
     campaign_id: int,

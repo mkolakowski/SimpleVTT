@@ -10,6 +10,44 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.460.0] - 2026-06-19 — "The Cleansing Sphere"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #17 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Purify Food and Drink** (L1 transmutation ritual, Cleric/Druid/Paladin, RAW PHB p.270). Second non-buff cast in the Phase 2 arc (after Identify v2.459.0). New `/cast_purify_food_and_drink` endpoint broadcasts a `feature_used` card without installing any buff — the spell is RAW-instantaneous and affects environmental food/drink that the engine doesn't model.
+
+**Description:** RAW: "All nonmagical food and drink within a 5-foot-radius sphere centered on a point of your choice within range is purified and rendered free of poison and disease." 1 action (or ritual), V/S, 10 ft, Instantaneous.
+
+**Implementation:**
+
+- Body: `{character_id}`. No target — the spell affects everything within the 5-ft sphere, which is itself GM-placed; the engine doesn't model arbitrary food-item objects.
+- Caster gate: knows Purify Food and Drink OR is in `{cleric, druid, paladin}`. 409 cannot_cast otherwise.
+- **No substrate entry, no buff install.** Mirrors the Identify v2.459.0 shape — broadcast-only.
+- `feature_used` broadcast for the roll-log card. The GM narrates which rations/wineskins were purified.
+
+**Why "The Cleansing Sphere":** RAW spells out a 5-foot-radius sphere as the area of effect. The sphere is the spell's distinguishing geometric feature — unlike Bless Water (single flask), unlike Detect Evil and Good (sense outward from the caster), this one carves out an explicit volume. Diverges from the material-component naming theme because Purify Food and Drink has no material component (V/S only per RAW) — same break as v2.456.0 "The Sixth Sense" and v2.457.0 "The Faint Aura."
+
+**Two non-buff casts in a row:** v2.459.0 Identify + v2.460.0 Purify Food and Drink. Both prove that the cast-and-broadcast arc can ship spells where the engine has nothing to track — the broadcast IS the ship. Future instantaneous spells (Spare the Dying, Cure Wounds at point-blank, etc.) can mirror this shape.
+
+**4 new harness tests** at `tests/harness/test_cast_purify_food_and_drink.py`:
+
+- `test_cast_pfd_cleric_no_buff_installed` — Tavik casts; response carries the feature slug, and `/buffs` reports no purify buff (asserts the non-buff shape).
+- `test_cast_pfd_druid_succeeds` — Mira (Druid) succeeds; asserts the gate covers Druids.
+- `test_cast_pfd_paladin_succeeds` — Caelan (Paladin) succeeds; asserts the gate covers Paladins.
+- `test_cast_pfd_non_caster_rejected` — Krieger (Barbarian) → 409.
+
+Total harness count 3539 → 3543.
+
+MINOR — new HTTP endpoint + 4 new harness tests. No schema change. No new substrate.
+
+### Added
+- `app/routes/tabletop_routes.py::cast_purify_food_and_drink`: new `POST /api/campaign/{campaign_id}/cast_purify_food_and_drink` endpoint. Broadcast-only cast — no buff installed. Body: `{character_id}`. Class gate: cleric/druid/paladin.
+- `tests/harness/test_cast_purify_food_and_drink.py`: 4 tests covering Cleric + Druid + Paladin happy paths (the three RAW casters) + Barbarian → 409.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Purify Food and Drink marked ✅ shipped v2.460.0 under Phase 2's Shipped subsection. Phase 2 has now shipped 17 spells/contracts; second consecutive non-buff cast on the arc.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3539 → 3543.
+
 ## [2.459.0] - 2026-06-19 — "The Hundred-Gold Pearl"
 
 **Schema version:** 71

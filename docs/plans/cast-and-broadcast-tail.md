@@ -248,6 +248,19 @@ closure — runs indefinitely until Bucket A is exhausted.
   permanently GM-narrated; the engine surfaces the flag so the
   table can see Tongues is active. 3 harness tests.
 
+- **Purify Food and Drink (L1 ritual)** — ✅ shipped v2.460.0.
+  **Second non-buff cast on the arc** (after Identify v2.459.0).
+  No substrate entry, no buff install — RAW-instantaneous,
+  affects environmental food/drink the engine doesn't model.
+  New `/cast_purify_food_and_drink` endpoint broadcasts a
+  `feature_used` card; the GM narrates which rations/wineskins
+  were purified. Body: `{character_id}` — no target, since the
+  5-ft sphere is GM-placed. Gates cleric/druid/paladin (the
+  three RAW casters). 4 harness tests covering all three caster
+  classes + Barbarian → 409. Two non-buff casts in a row proves
+  the cast-and-broadcast arc can ship spells where the engine
+  has nothing to track — the broadcast IS the ship.
+
 - **Identify (L1 ritual)** — ✅ shipped v2.459.0. **First
   non-buff cast on the arc.** No substrate entry, no buff
   install — Identify is RAW-instantaneous, so the new
