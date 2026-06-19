@@ -248,6 +248,21 @@ closure — runs indefinitely until Bucket A is exhausted.
   permanently GM-narrated; the engine surfaces the flag so the
   table can see Tongues is active. 3 harness tests.
 
+- **Protection from Evil and Good (L1)** — ✅ shipped v2.455.0.
+  Rides the existing
+  `_SPELL_BUFF_MAP["protection-from-evil-and-good"]` substrate +
+  the pre-existing /use_attack attacker-disadvantage gate + the
+  condition-install gate + the save-roll suffix. New
+  `/cast_protection_from_evil_and_good` endpoint exposes the
+  substrate. Body: `{character_id, target_character_id?}`. Self-
+  or-touch. Gates cleric/paladin/warlock/wizard. All four RAW
+  benefits (disadvantage on attacks from 6 creature types,
+  immunity to their charm/frighten/possess, advantage on new
+  saves vs ongoing effects from them, the protected-types list)
+  are pre-wired into the engine — zero new mechanical code. 4
+  harness tests including a protected_types round-trip vs the
+  RAW 6-type list.
+
 - **Sanctuary (L1)** — ✅ shipped v2.454.0. Rides the existing
   `_SPELL_BUFF_MAP["sanctuary"]` substrate + the v2.97.52 install-
   time DC bake-in + the pre-existing /use_attack attacker-Wis-save

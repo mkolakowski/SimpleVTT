@@ -65280,6 +65280,174 @@ async def cast_sanctuary(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_protection_from_evil_and_good")
+async def cast_protection_from_evil_and_good(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.455.0 — Phase 2 #12 of
+    docs/plans/cast-and-broadcast-tail.md. Protection from Evil
+    and Good (L1 abjuration, Cleric/Paladin/Warlock/Wizard, PHB
+    p.270):
+
+      "Until the spell ends, one willing creature you touch is
+       protected against certain types of creatures: aberrations,
+       celestials, elementals, fey, fiends, and undead. The
+       protection grants several benefits. Creatures of those
+       types have disadvantage on attack rolls against the
+       target. The target also can't be charmed, frightened, or
+       possessed by them. If the target is already charmed,
+       frightened, or possessed by such a creature, the target
+       has advantage on any new saving throw against the relevant
+       effect."
+
+    1 action, V/S/M (powdered silver and iron), Touch,
+    Concentration up to 10 minutes.
+
+    Implementation: rides the existing
+    ``_SPELL_BUFF_MAP["protection-from-evil-and-good"]`` substrate
+    (``pfeag_protected_types`` list of 6 creature types +
+    ``pfeag_attackers_have_disadvantage`` +
+    ``pfeag_immune_to_charm_frighten_possess`` +
+    ``pfeag_advantage_on_saves_vs_types``, 100 rounds = 10 min,
+    concentration). All four flags are already consumed by the
+    /use_attack disadvantage gate, the condition-install gate,
+    and the save-roll suffix — ZERO new mechanical code.
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster targets
+    themself (RAW "one willing creature you touch" — the caster
+    qualifies as the target of their own touch). The touch range
+    stays GM-tracked.
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    duration_rounds, protected_types}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_pfeag = any(
+        (s.get("_slug") == "protection-from-evil-and-good")
+        or (
+            str(s.get("name", "")).lower()
+            == "protection from evil and good"
+        )
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"cleric", "paladin", "warlock", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_pfeag and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": (
+                "knows Protection from Evil and Good, or "
+                "cleric/paladin/warlock/wizard"
+            ),
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("protection-from-evil-and-good") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 100)
+    protected_types = list(
+        template.get("effects", {}).get("pfeag_protected_types") or [
+            "aberration", "celestial", "elemental",
+            "fey", "fiend", "undead",
+        ]
+    )
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "protection-from-evil-and-good",
+        "name": template.get("name") or "Protection from Evil and Good",
+        "icon": template.get("icon") or "🛐",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": True,
+        "source_char_id": char.id,
+        "effects": dict(template.get("effects") or {}),
+        "desc": template.get("desc") or (
+            "Aberrations/celestials/elementals/fey/fiends/undead "
+            "have disadvantage to attack you; you're immune to "
+            "their charm/frighten/possess; advantage on saves vs "
+            "ongoing effects from those types. 10 min concentration."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    if target_char.id == char.id:
+        feature_desc = (
+            f"{char.name} wards themself — aberrations, celestials, "
+            "elementals, fey, fiends, and undead get disadvantage on "
+            "attacks. 10 min concentration."
+        )
+    else:
+        feature_desc = (
+            f"{char.name} wards {target_char.name} — aberrations, "
+            "celestials, elementals, fey, fiends, and undead get "
+            f"disadvantage on attacks vs {target_char.name}. 10 min "
+            "concentration."
+        )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🛐 Protection from Evil and Good",
+            "feature_desc": feature_desc,
+            "source": "protection-from-evil-and-good",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "protection-from-evil-and-good",
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+        "protected_types": protected_types,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_gust")
 async def cast_gust(
     campaign_id: int,

@@ -10,6 +10,46 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.455.0] - 2026-06-19 — "The Powdered Silver"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #12 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Protection from Evil and Good** (L1 abjuration, Cleric/Paladin/Warlock/Wizard, RAW PHB p.270). Rides the existing `_SPELL_BUFF_MAP["protection-from-evil-and-good"]` substrate + the pre-existing /use_attack attacker-disadvantage gate + the condition-install gate + the save-roll suffix. New `/cast_protection_from_evil_and_good` endpoint exposes the substrate as a dedicated cast path. All four RAW benefits (disadvantage on attacks from listed types, immunity to charm/frighten/possession by them, advantage on new saves vs ongoing effects from those types, the 6-type protected list) are pre-wired into the engine — zero new mechanical code at the read sites.
+
+**Description:** RAW: "Until the spell ends, one willing creature you touch is protected against certain types of creatures: aberrations, celestials, elementals, fey, fiends, and undead." 1 action, V/S/M (powdered silver and iron), Touch, Concentration up to 10 minutes.
+
+**Implementation:**
+
+- Body: `{character_id, target_character_id?}`. Self-or-touch shape. Defaults to caster when target omitted.
+- Caster gate: knows PfE&G OR is in `{cleric, paladin, warlock, wizard}`. 409 cannot_cast otherwise.
+- Existing `_SPELL_BUFF_MAP["protection-from-evil-and-good"]` substrate: 100 rounds (10 minutes), concentration, four-flag effects dict.
+- Engine reads of the four flags are all pre-wired (search confirmed the pfeag flags are consumed at the /use_attack disadvantage gate, the condition-install gate, and the save-roll suffix — six read sites total).
+- Response and `feature_used` broadcast surface `target_character_id`; response additionally carries the resolved `protected_types` list so clients/tests can verify the RAW 6-type list propagates from substrate to buff.
+
+**Why "The Powdered Silver":** RAW lists `M (powdered silver and iron worth at least 10 gp, which the spell consumes)` as the material component. The two metals are RAW's nod to anti-fiend/anti-fey folklore. Continues the v2.452.0+v2.453.0+v2.454.0 material-component naming theme — four consecutive L1 spells named after their ingredients.
+
+**4 new harness tests** at `tests/harness/test_cast_protection_from_evil_and_good.py`:
+
+- `test_cast_pfeag_self_installs_buff` — Thalindra self-wards; buff lands with all 4 pfeag effect flags + the RAW 6-type protected list (asserted as a set).
+- `test_cast_pfeag_buff_is_10_min_concentration` — duration_rounds=100, concentration=true.
+- `test_cast_pfeag_on_ally_installs_on_ally` — targeting Krieger installs on Krieger, not the caster.
+- `test_cast_pfeag_non_caster_rejected` — Krieger (Barbarian) → 409.
+
+Canonical caster is Thalindra Moonwhisper (Wizard); Brother Tavik Stonebrow (Cleric) is the fallback.
+
+Total harness count 3519 → 3523.
+
+MINOR — new HTTP endpoint + 4 new harness tests. No schema change. No new substrate (rides the existing one).
+
+### Added
+- `app/routes/tabletop_routes.py::cast_protection_from_evil_and_good`: new `POST /api/campaign/{campaign_id}/cast_protection_from_evil_and_good` endpoint. Self-or-touch install on a `cleric/paladin/warlock/wizard` caster.
+- Response gains a `protected_types` list field echoing the RAW 6-type list alongside `buff_installed`, `target_character_id`, `duration_rounds`.
+- `tests/harness/test_cast_protection_from_evil_and_good.py`: 4 tests covering self-install + buff shape + ally-target routing + caster gate.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: PfE&G marked ✅ shipped v2.455.0 under Phase 2's Shipped subsection. Phase 2 has now shipped 12 spells/contracts.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3519 → 3523.
+
 ## [2.454.0] - 2026-06-19 — "The Silver Mirror"
 
 **Schema version:** 71
