@@ -10,6 +10,46 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.456.0] - 2026-06-19 — "The Sixth Sense"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #13 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Detect Evil and Good** (L1 divination, Cleric/Paladin, RAW PHB p.231). New `_SPELL_BUFF_MAP["detect-evil-and-good"]` substrate (100 rounds = 10 min, concentration, `effects.senses_evil_and_good_within_30ft: True` flag) + new `/cast_detect_evil_and_good` endpoint. Flag-buff shape — same as Tongues (v2.445.0) / Comprehend Languages (v2.450.0) / Jump (v2.453.0): the flag IS the mechanic, the GM narrates what the caster senses.
+
+**Description:** RAW: "For the duration, you know if there is an aberration, celestial, elemental, fey, fiend, or undead within 30 feet of you, as well as where the creature is located. Similarly, you know if there is a place or object within 30 feet of you that has been magically consecrated or desecrated." 1 action, V/S, Self, Concentration up to 10 minutes.
+
+**Implementation:**
+
+- Body: `{character_id}`. Self-targeted per RAW (no `target_character_id` — the spell affects only the caster's own perception).
+- Caster gate: knows Detect Evil and Good OR is in `{cleric, paladin}` — narrowest gate on the cast-and-broadcast arc so far, because RAW restricts D&D divine-sense spells to the two faith classes. 409 cannot_cast otherwise.
+- New `_SPELL_BUFF_MAP["detect-evil-and-good"]` substrate entry — 100 rounds (10 minutes), concentration, `effects.senses_evil_and_good_within_30ft: True`.
+- The flag IS the mechanic. The engine doesn't model creature-type metadata for arbitrary combatants at the perception layer, so the flag-buff pattern is the correct boundary: the buff says "this creature has the sense"; the GM says what they detect.
+- `feature_used` broadcast for the roll-log card.
+
+**Why "The Sixth Sense":** the spell grants a sixth perceptual sense beyond the canonical five — a sense of evil and good. Diverges from the v2.452.0–v2.455.0 material-component naming theme (the Pinch of Dirt → Grasshopper's Leg → Silver Mirror → Powdered Silver run) because Detect Evil and Good has no material component (V/S only per RAW). A perception-themed name fits the spell's "you just know" flavor.
+
+**4 new harness tests** at `tests/harness/test_cast_detect_evil_and_good.py`:
+
+- `test_cast_deg_installs_buff` — Tavik self-casts; buff lands with `senses_evil_and_good_within_30ft: true`.
+- `test_cast_deg_buff_is_10_min_concentration` — duration_rounds=100, concentration=true.
+- `test_cast_deg_non_caster_rejected` — Krieger (Barbarian) → 409.
+- `test_cast_deg_wizard_rejected` — Thalindra (Wizard) → 409 (Wizards are NOT on this spell's class list per RAW; this asserts the narrow class gate).
+
+Canonical caster is Brother Tavik Stonebrow (Cleric 5).
+
+Total harness count 3523 → 3527.
+
+MINOR — new HTTP endpoint + new substrate + 4 new harness tests. No schema change.
+
+### Added
+- `app/routes/tabletop_routes.py::_SPELL_BUFF_MAP["detect-evil-and-good"]`: new substrate entry. Concentration, 100 rounds, `senses_evil_and_good_within_30ft: true` flag effect.
+- `app/routes/tabletop_routes.py::cast_detect_evil_and_good`: new `POST /api/campaign/{campaign_id}/cast_detect_evil_and_good` endpoint. Self-cast on a `cleric/paladin` caster.
+- `tests/harness/test_cast_detect_evil_and_good.py`: 4 tests covering self-install + buff shape + narrow class gate (asserts both Krieger and Thalindra → 409).
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Detect Evil and Good marked ✅ shipped v2.456.0 under Phase 2's Shipped subsection. Phase 2 has now shipped 13 spells/contracts.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3523 → 3527.
+
 ## [2.455.0] - 2026-06-19 — "The Powdered Silver"
 
 **Schema version:** 71

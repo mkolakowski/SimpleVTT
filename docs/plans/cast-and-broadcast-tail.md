@@ -248,6 +248,18 @@ closure — runs indefinitely until Bucket A is exhausted.
   permanently GM-narrated; the engine surfaces the flag so the
   table can see Tongues is active. 3 harness tests.
 
+- **Detect Evil and Good (L1)** — ✅ shipped v2.456.0. New
+  `_SPELL_BUFF_MAP["detect-evil-and-good"]` substrate (100 rounds
+  = 10 min, concentration,
+  `effects.senses_evil_and_good_within_30ft: True` flag) + new
+  `/cast_detect_evil_and_good` endpoint. Flag-buff shape — same
+  as Tongues (v2.445.0) / Comprehend Languages (v2.450.0) / Jump
+  (v2.453.0): the flag IS the mechanic, the GM narrates what the
+  caster senses. Self-cast only per RAW. Gates cleric/paladin
+  (narrowest class gate on the cast-and-broadcast arc so far).
+  4 harness tests including Wizard → 409 (Wizards are NOT on
+  this spell's RAW class list).
+
 - **Protection from Evil and Good (L1)** — ✅ shipped v2.455.0.
   Rides the existing
   `_SPELL_BUFF_MAP["protection-from-evil-and-good"]` substrate +
