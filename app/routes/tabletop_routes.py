@@ -1803,6 +1803,30 @@ _SPELL_BUFF_MAP: dict[str, dict] = {
         "extra_targets_per_slot_above_base": 1,
         "desc": "Speed increases by 10 ft for 1 hour.",
     },
+    # v2.453.0 — Phase 2 #10 of docs/plans/cast-and-broadcast-tail.md.
+    # Jump (Druid / Ranger / Sorcerer / Wizard L1): RAW PHB p.250:
+    # "You touch a creature. The creature's jump distance is tripled
+    # until the spell ends." 1 action, V/S/M (grasshopper's hind leg),
+    # Touch, 1 minute, non-concentration.
+    #
+    # Modeled as a flag buff (`effects.jump_distance_tripled: True`)
+    # mirroring the v2.99.x Monk Step of the Wind precedent that uses
+    # `jump_distance_doubled: True`. The flag IS the mechanic — the
+    # engine doesn't model jump distance directly (no elevation /
+    # forced-movement substrate for jumps), so the GM narrates the
+    # tripled distance with the flag as the rules reminder.
+    "jump": {
+        "key": "jump",
+        "name": "Jump",
+        "icon": "🦘",
+        "duration_rounds": 10,  # 1 minute RAW
+        "duration_max": 10,
+        "concentration": False,
+        "effects": {
+            "jump_distance_tripled": True,
+        },
+        "desc": "Jump distance is tripled for 1 minute.",
+    },
 }
 
 
@@ -64956,6 +64980,143 @@ async def cast_longstrider(
     return {
         "ok": True,
         "feature": "longstrider",
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_jump")
+async def cast_jump(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.453.0 — Phase 2 #10 of
+    docs/plans/cast-and-broadcast-tail.md. Jump (L1 transmutation,
+    Druid/Ranger/Sorcerer/Wizard, PHB p.250):
+
+      "You touch a creature. The creature's jump distance is
+       tripled until the spell ends."
+
+    1 action, V/S/M (a grasshopper's hind leg), Touch, 1 minute,
+    non-concentration.
+
+    Implementation: installs the v2.453.0 ``jump`` buff carrying
+    ``effects.jump_distance_tripled: True`` (the flag IS the
+    mechanic — the engine doesn't model jump distance directly,
+    so the GM narrates the tripled distance with the flag as the
+    rules reminder). Mirrors the v2.99.x Monk Step of the Wind
+    precedent that uses ``jump_distance_doubled: True``.
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster targets
+    themself. Touch range stays GM-tracked.
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_jump = any(
+        (s.get("_slug") == "jump")
+        or (str(s.get("name", "")).lower() == "jump")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"druid", "ranger", "sorcerer", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_jump and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Jump, or druid/ranger/sorcerer/wizard",
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("jump") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 10)
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "jump",
+        "name": template.get("name") or "Jump",
+        "icon": template.get("icon") or "🦘",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": dict(
+            template.get("effects") or {"jump_distance_tripled": True},
+        ),
+        "desc": template.get("desc") or (
+            "Jump distance is tripled for 1 minute."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    if target_char.id == char.id:
+        feature_desc = (
+            f"{char.name} touches themself — jump distance tripled for "
+            "1 minute."
+        )
+    else:
+        feature_desc = (
+            f"{char.name} touches {target_char.name} — jump distance "
+            "tripled for 1 minute."
+        )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🦘 Jump",
+            "feature_desc": feature_desc,
+            "source": "jump",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "jump",
         "target_character_id": target_char.id,
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,

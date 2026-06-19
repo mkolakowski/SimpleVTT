@@ -248,6 +248,17 @@ closure — runs indefinitely until Bucket A is exhausted.
   permanently GM-narrated; the engine surfaces the flag so the
   table can see Tongues is active. 3 harness tests.
 
+- **Jump (L1)** — ✅ shipped v2.453.0. New
+  `_SPELL_BUFF_MAP["jump"]` substrate (10 rounds = 1 min,
+  non-concentration, `effects.jump_distance_tripled: True` flag)
+  + new `/cast_jump` endpoint. Flag-buff shape (same as Tongues
+  v2.445.0 / Comprehend Languages v2.450.0): the flag IS the
+  mechanic, the GM narrates the tripled distance. Mirrors the
+  v2.99.x Monk Step of the Wind precedent that uses
+  `jump_distance_doubled: True` for its own jump rider. Single-
+  target self-or-touch. Gates druid/ranger/sorcerer/wizard. 4
+  harness tests.
+
 - **Longstrider (L1)** — ✅ shipped v2.452.0. Same shape as
   Shield of Faith / Mage Armor — the
   `_SPELL_BUFF_MAP["longstrider"]` substrate was wired

@@ -10,6 +10,47 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.453.0] - 2026-06-19 — "The Grasshopper's Leg"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #10 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Jump** (L1 transmutation, Druid/Ranger/Sorcerer/Wizard, RAW PHB p.250). New `_SPELL_BUFF_MAP["jump"]` substrate (10 rounds = 1 minute, non-concentration, `effects.jump_distance_tripled: True` flag) + new `/cast_jump` endpoint. Flag-buff shape — same as Tongues (v2.445.0) / Comprehend Languages (v2.450.0): the flag IS the mechanic and the GM narrates the actual tripled distance.
+
+**Description:** RAW: "You touch a creature. The creature's jump distance is tripled until the spell ends." 1 action, V/S/M (a grasshopper's hind leg), Touch, 1 minute, non-concentration.
+
+**Implementation:**
+
+- Body: `{character_id, target_character_id?}`. Self-or-touch shape.
+- Caster gate: knows Jump OR is in `{druid, ranger, sorcerer, wizard}`. 409 cannot_cast otherwise.
+- New `_SPELL_BUFF_MAP["jump"]` substrate entry — 10 rounds (1 minute), non-concentration, `effects.jump_distance_tripled: True`.
+- The flag IS the mechanic. The engine doesn't model jump distance directly (no elevation/jump-pathing substrate), so the GM narrates the tripled-distance jump with the flag as the on-sheet rules reminder.
+- Mirrors the v2.99.x Monk Step of the Wind precedent that uses `jump_distance_doubled: True` for its own (different-multiplier) jump rider — both flags live on the same surface so a future jump-pathing substrate can read either.
+- `feature_used` broadcast for the roll-log card.
+
+**Why "The Grasshopper's Leg":** RAW lists `M (a grasshopper's hind leg)` as the spell's material component. The vibe is the same earthy/material-component thread as v2.452.0 "The Pinch of Dirt" (Longstrider) — two consecutive L1 transmutation spells that turn modest ingredients into mobility boosts.
+
+**4 new harness tests** at `tests/harness/test_cast_jump.py`:
+
+- `test_cast_jump_self_installs_buff` — Wizard self-casts; buff lands with `jump_distance_tripled: true`, target id mirrors caster.
+- `test_cast_jump_buff_is_1_minute_non_concentration` — duration_rounds=10, concentration=false.
+- `test_cast_jump_on_ally_installs_on_ally` — targeting Krieger installs on Krieger, not the caster.
+- `test_cast_jump_non_caster_rejected` — Krieger (Barbarian) → 409.
+
+Canonical caster is Thalindra Moonwhisper (Wizard). Bard isn't on the Jump class list per RAW.
+
+Total harness count 3510 → 3514.
+
+MINOR — new HTTP endpoint + new substrate + 4 new harness tests. No schema change.
+
+### Added
+- `app/routes/tabletop_routes.py::_SPELL_BUFF_MAP["jump"]`: new substrate entry. Non-concentration, 10 rounds, `jump_distance_tripled: true` flag effect.
+- `app/routes/tabletop_routes.py::cast_jump`: new `POST /api/campaign/{campaign_id}/cast_jump` endpoint. Self-or-touch install on a `druid/ranger/sorcerer/wizard` caster.
+- `tests/harness/test_cast_jump.py`: 4 tests covering self-install + buff shape + ally-target routing + caster gate.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Jump marked ✅ shipped v2.453.0 under Phase 2's Shipped subsection. Phase 2 has now shipped 10 spells/contracts.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3510 → 3514.
+
 ## [2.452.0] - 2026-06-19 — "The Pinch of Dirt"
 
 **Schema version:** 71
