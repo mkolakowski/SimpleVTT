@@ -248,6 +248,18 @@ closure — runs indefinitely until Bucket A is exhausted.
   permanently GM-narrated; the engine surfaces the flag so the
   table can see Tongues is active. 3 harness tests.
 
+- **Hellish Rebuke DEX save-for-half** — ✅ shipped v2.448.0.
+  Phase 2 #7. Builds on v2.446.0: adds the attacker's DEX save
+  vs the caster's spell save DC. Halves damage on success per
+  RAW. v1 supports PC attackers only (the attacker_char_id
+  lookup yields a Character row); NPC attackers fall through to
+  the v2.446.0 full-damage behavior (filed for a future NPC-save
+  ship). Broadcast now carries `save_dc`, `save_total`,
+  `save_breakdown`, `save_passed` alongside the v2.446.0 damage
+  fields. The existing v2.446.0 test got extra assertions to
+  verify the save half-damages correctly (damage_total ∈ [2, 20]
+  when save passes vs [4, 40] when save fails).
+
 - **Bless Water (L1)** — ✅ shipped v2.447.0. New
   `_SPELL_BUFF_MAP["holy-water-flask"]` substrate (14400 rounds
   = 24 h, non-concentration, `effects.holy_water_charges: 1`) +

@@ -28586,6 +28586,10 @@ async def use_reaction(
             damage_total = 0
             damage_applied = 0
             damage_breakdown = ""
+            save_total = 0
+            save_breakdown = ""
+            save_dc = 0
+            save_passed = False
             attacker_combatant_id = params.get("attacker_combatant_id")
             # v2.446.0 — the damage_taken context built at
             # _apply_hp_change (~line 9960) carries attacker_char_id
@@ -28607,6 +28611,59 @@ async def use_reaction(
                 damage_breakdown = str(_hr_roll.breakdown or "")
             except dice_mod.DiceParseError:
                 damage_total = 0
+            # v2.448.0 — Phase 2 #7 of cast-and-broadcast-tail.md.
+            # Add the attacker's DEX save vs the caster's spell save
+            # DC. Halve damage on success per RAW. Closes the v2.446.0
+            # filed "DEX save-for-half stays GM-narrated" gap.
+            #
+            # v1 supports PC attackers only (the attacker_char_id
+            # lookup yields a Character row). NPC attackers (no
+            # char_id) fall through to the v2.446.0 behavior of
+            # applying FULL damage — filed for a future
+            # NPC-save-roll ship.
+            try:
+                save_dc = int(_compute_spell_save_dc_from_sheet(sheet))
+                if (
+                    damage_total > 0
+                    and attacker_char_id_param
+                    and save_dc > 0
+                ):
+                    _atk_char = db.query(Character).filter(
+                        Character.id == int(attacker_char_id_param),
+                    ).first()
+                    if _atk_char and _atk_char.sheet:
+                        _atk_sheet = _atk_char.sheet or {}
+                        _atk_dex = int(
+                            (_atk_sheet.get("abilities") or {}).get("DEX", 10),
+                        )
+                        _atk_dex_mod = (_atk_dex - 10) // 2
+                        # Proficiency on DEX save? Check save_proficiencies.
+                        _atk_prof = int(
+                            _atk_sheet.get("proficiency_bonus") or 2,
+                        )
+                        _sav_prof = (
+                            _atk_sheet.get("save_proficiencies") or {}
+                        )
+                        if isinstance(_sav_prof, dict) and (
+                            _sav_prof.get("DEX") or _sav_prof.get("dex")
+                        ):
+                            _save_mod = _atk_dex_mod + _atk_prof
+                        else:
+                            _save_mod = _atk_dex_mod
+                        _save_expr = f"1d20{_save_mod:+d}"
+                        try:
+                            _save_roll = dice_mod.roll(_save_expr)
+                            save_total = int(_save_roll.total or 0)
+                            save_breakdown = str(_save_roll.breakdown or "")
+                        except dice_mod.DiceParseError:
+                            save_total = 0
+                        save_passed = save_total >= save_dc
+                        if save_passed:
+                            damage_total = damage_total // 2
+            except Exception:
+                # Save-roll failure falls through to no-save full damage
+                # (matches v2.446.0 behavior). The slot is still consumed.
+                pass
             if damage_total > 0 and attacker_combatant_id:
                 _atk_combatant = _lookup_combatant(
                     campaign_id, str(attacker_combatant_id),
@@ -28629,6 +28686,16 @@ async def use_reaction(
                     "user_color": watcher_char.color,
                     "feature_name": "🔥 Hellish Rebuke cast",
                     "feature_desc": (
+                        # v2.448.0 — save-roll resolved server-side.
+                        f"Reaction. {attacker_name} {'passes' if save_passed else 'fails'} "
+                        f"DEX save (DC {save_dc}; rolled {save_total}) — "
+                        f"takes {damage_total} fire damage "
+                        f"({'half' if save_passed else 'full'} of "
+                        f"{damage_dice}d10). Consumed 1× L{slot_level} slot."
+                    ) if damage_total > 0 and save_dc > 0 else (
+                        # v2.446.0 fallback (NPC attacker / save-roll
+                        # failed): full damage was applied, save stays
+                        # GM-narrated.
                         f"Reaction. {attacker_name} takes {damage_total} "
                         f"fire damage ({damage_dice}d10; DEX save DC = "
                         f"caster's spell save DC for half). Consumed "
@@ -28647,6 +28714,11 @@ async def use_reaction(
                     "damage_total": damage_total,
                     "damage_breakdown": damage_breakdown,
                     "damage_applied": damage_applied,
+                    # v2.448.0 — DEX save adjudicated server-side.
+                    "save_dc": save_dc,
+                    "save_total": save_total,
+                    "save_breakdown": save_breakdown,
+                    "save_passed": save_passed,
                     "rebuke_target_name": attacker_name,
                     "rebuke_target_char_id": params.get("attacker_char_id"),
                     "rebuke_target_combatant_id": attacker_combatant_id,

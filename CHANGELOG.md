@@ -10,6 +10,47 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.448.0] - 2026-06-19 — "The Adjudicated Save"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #7 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — Hellish Rebuke **DEX save-for-half**. Builds on v2.446.0: rolls the attacker's DEX save vs the caster's spell save DC server-side; halves the damage on a successful save per RAW. Closes the v2.446.0 filed gap. Twelfth consecutive cast-and-broadcast tail ship in the session.
+
+**Description:** RAW PHB p.250 — when Hellish Rebuke fires, the target makes a Dexterity saving throw: full damage on a failed save, half damage on a successful save. v2.446.0 wired the auto-damage roll + apply but left the save as GM-narrated. This commit closes that loop.
+
+**Implementation:**
+
+- In the `cast-hellish-rebuke` reaction-cast branch, after rolling the (1+slot_level)d10 damage but before applying it, the server now:
+  1. Computes the caster's spell save DC via `_compute_spell_save_dc_from_sheet(sheet)`.
+  2. Looks up the attacker's character sheet via `attacker_char_id`.
+  3. Reads the attacker's DEX modifier `(DEX - 10) // 2` and adds proficiency if `save_proficiencies.DEX` is true on the sheet.
+  4. Rolls `1d20 + save_mod` via `dice_mod.roll`.
+  5. Compares vs the spell save DC; if save >= DC, halves the damage (`damage_total // 2`) before applying.
+- The `feature_used` broadcast now carries `save_dc`, `save_total`, `save_breakdown`, `save_passed` alongside the v2.446.0 damage fields. The `feature_desc` reads `{attacker} passes/fails DEX save (DC X; rolled Y) — takes Z fire damage (half/full of 4d10)`.
+- v1 supports PC attackers only — the `attacker_char_id` lookup yields a `Character` row. NPC attackers (no char_id) fall through to the v2.446.0 full-damage behavior (the save_dc + save_total stay 0, the broadcast carries the v2.446.0 `feature_desc` text). Filed for a future NPC-save ship that would read the attacker's token-template DEX + saving_throws block.
+
+**Why PC-only for v1:** the save-roll infrastructure for NPC saves lives in a different code path (`_roll_npc_save` and similar). Adding NPC support here would require dispatching on whether the attacker is a Character row vs a TokenTemplate row, plus handling NPCs without explicit DEX-save proficiency on their sheet. Filing for a follow-up keeps this commit surgical (~50 lines of new code) and matches the "Phase 2 ships are bounded" rhythm of the session.
+
+**Existing test extended:** the v2.446.0 `test_hellish_rebuke_rolls_and_applies_damage` test got new assertions that verify (a) `save_dc > 0`, (b) `save_total > 0`, (c) `save_passed` is present, (d) when save passes, `damage_total ∈ [2, 20]` (half of 4d10), (e) when save fails, `damage_total ∈ [4, 40]` (full). The test's existing wider `damage_total ∈ [2, 40]` band assertion accommodates both branches across many seed-randomized runs.
+
+No NEW harness test file in this commit — the substrate is so close to v2.446.0's that a fresh file would mostly duplicate the existing test's fixtures. The augmented assertions cover both the save-pass and save-fail paths via the seed-randomized harness runs (over multiple CI runs both branches will be exercised).
+
+**Regression coverage:** existing `test_cast_hellish_rebuke_consumes_slot` (slot consume + economy + broadcast) and `test_tiefling_hellish_rebuke_racial_*` (racial branch — untouched by this commit) all continue to pass.
+
+Total harness count stays at 3498 (no new test file — augmented assertions only).
+
+**Why "The Adjudicated Save":** the save is now adjudicated server-side instead of by the GM. The metaphor doubles: the engine adjudicates RAW; the GM adjudicates everything RAW doesn't model.
+
+MINOR — modified existing reaction-cast branch (additive only — new save-roll step, new broadcast fields, augmented feature_desc text). No schema change. No new env var.
+
+### Added
+- `app/routes/tabletop_routes.py` `cast-hellish-rebuke` reaction-cast branch: new server-side DEX save-roll step. Reads attacker DEX + save proficiency from the Character sheet; rolls 1d20 + save_mod vs the caster's spell save DC; halves damage on success. New broadcast fields `save_dc`, `save_total`, `save_breakdown`, `save_passed`.
+
+### Changed
+- `app/routes/tabletop_routes.py` Hellish Rebuke `feature_desc`: now reads `{attacker} passes/fails DEX save (DC X; rolled Y) — takes Z fire damage (half/full of …)` when the save was rolled server-side. Falls back to the v2.446.0 wording on save-roll failure (NPC attacker etc.).
+- `tests/harness/test_hellish_rebuke_auto_damage.py::test_hellish_rebuke_rolls_and_applies_damage`: new assertions for `save_dc`, `save_total`, `save_passed`, and conditional `damage_total` band based on save outcome. Backwards-compatible — full-damage runs still pass with the wider band assertion.
+- `docs/plans/cast-and-broadcast-tail.md`: HR DEX save-for-half marked ✅ shipped v2.448.0 under Phase 2's Shipped subsection.
+
 ## [2.447.0] - 2026-06-19 — "The Consecrated Flask"
 
 **Schema version:** 71

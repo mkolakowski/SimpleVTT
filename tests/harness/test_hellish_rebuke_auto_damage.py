@@ -175,23 +175,59 @@ async def test_hellish_rebuke_rolls_and_applies_damage(
     damage_applied = int(last.get("damage_applied") or 0)
     damage_breakdown = str(last.get("damage_breakdown") or "")
 
-    # Magnus's slot is L3 → damage_dice = 1 + 3 = 4 → 4d10 = [4, 40].
-    assert 4 <= damage_total <= 40, (
-        f"damage_total should be 4d10 = [4, 40]; got {damage_total}"
+    # v2.448.0 — Phase 2 #7 adds DEX save-for-half. Damage range:
+    #   - save fails: 4d10 = [4, 40] (full)
+    #   - save passes: 4d10 // 2 = [2, 20] (half)
+    # Combined range: [2, 40]. damage_applied always equals damage_total
+    # because the halve happens BEFORE the apply.
+    assert 2 <= damage_total <= 40, (
+        f"damage_total should be 4d10 = [4, 40] (full) or [2, 20] (half); "
+        f"got {damage_total}"
     )
     assert damage_breakdown, (
         f"damage_breakdown should be non-empty; got {damage_breakdown!r}"
     )
-    # v1: full damage is applied (no DEX save adjudicated server-side).
     assert damage_applied > 0, (
         f"damage_applied should be > 0 (the attacker takes damage); got "
         f"{damage_applied}"
     )
-    # The applied damage should match damage_total in v1 (no save halving).
     assert damage_applied == damage_total, (
-        f"v1 applies full damage; expected damage_applied=={damage_total}, "
-        f"got {damage_applied}"
+        f"damage_applied should match damage_total (halve happens before "
+        f"apply); expected {damage_total}, got {damage_applied}"
     )
+
+    # v2.448.0 — save-roll fields surfaced.
+    save_dc = int(last.get("save_dc") or 0)
+    save_total = int(last.get("save_total") or 0)
+    assert save_dc > 0, (
+        f"save_dc should be > 0; got {save_dc}"
+    )
+    assert save_total > 0, (
+        f"save_total should be > 0 (1d20 + DEX); got {save_total}"
+    )
+    assert "save_passed" in last, (
+        f"save_passed should be present; got keys {list(last.keys())}"
+    )
+    save_passed = bool(last.get("save_passed"))
+    # Sanity: when save passes, damage_total is half (2-20 for 4d10);
+    # when save fails, damage_total is full (4-40). The save outcome
+    # matches the rolled save vs DC.
+    if save_passed:
+        assert save_total >= save_dc, (
+            f"save_passed=True but save_total({save_total}) < dc({save_dc})"
+        )
+        assert 2 <= damage_total <= 20, (
+            f"save passed → half damage 4d10//2 = [2, 20]; got "
+            f"damage_total={damage_total}"
+        )
+    else:
+        assert save_total < save_dc, (
+            f"save_passed=False but save_total({save_total}) >= dc({save_dc})"
+        )
+        assert 4 <= damage_total <= 40, (
+            f"save failed → full damage 4d10 = [4, 40]; got "
+            f"damage_total={damage_total}"
+        )
 
     # Legacy fields still present.
     assert last.get("damage_expr") == "4d10"
