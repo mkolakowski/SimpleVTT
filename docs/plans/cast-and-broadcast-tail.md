@@ -219,6 +219,15 @@ closure — runs indefinitely until Bucket A is exhausted.
   cleric/paladin. 4 harness tests including a target_ac round-trip
   via /attack that verifies the +2 lands.
 
+- **Mage Armor (L1)** — ✅ shipped v2.443.0. Same shape as Shield
+  of Faith — the `_SPELL_BUFF_MAP["mage-armor"]` substrate was
+  wired v2.99.422 (`ac_bonus: 3`, 4800 rounds = 8 h, non-
+  concentration); this ship just added the `/cast_mage_armor`
+  endpoint. Body: `{character_id, target_character_id?}`. Gates
+  sorcerer/wizard. 4 harness tests including a target_ac
+  round-trip via /attack that verifies the +3 lands. The "while
+  unarmored" RAW rider stays GM-tracked.
+
 ### Remaining candidates (filed)
 
 Next 4 highest-leverage spells from Bucket A:

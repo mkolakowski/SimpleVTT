@@ -10,6 +10,50 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.443.0] - 2026-06-19 — "The Protective Force"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #2 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Mage Armor** (L1 abjuration, Sorcerer/Wizard, RAW PHB p.256). New `/cast_mage_armor` endpoint exposes the existing v2.99.422 `_SPELL_BUFF_MAP["mage-armor"]` substrate + the v2.97.39 `_read_target_ac` ac_bonus walker. Same shape as v2.442.0 Shield of Faith — ZERO new mechanical code, pure endpoint exposure. Validates that the "Phase 2 against pre-wired substrate" pattern holds for a second consecutive ship.
+
+**Description:** RAW: "You touch a willing creature who isn't wearing armor, and a protective magical force surrounds it until the spell ends. The target's base AC becomes 13 + its Dexterity modifier." Action, V/S/M, Touch, 8 hours, non-concentration.
+
+**Implementation:**
+
+- Body: `{character_id, target_character_id?}`. If `target_character_id` is omitted the caster targets themself (RAW "a willing creature" includes the caster).
+- Caster gate: knows Mage Armor OR is in `{sorcerer, wizard}`. 409 cannot_cast otherwise.
+- The buff installation reads the existing `_SPELL_BUFF_MAP["mage-armor"]` template (v2.99.422: `ac_bonus: 3`, 4800 rounds @ 6 s/round = 8 h, non-concentration). The +3 models the difference between Mage Armor's "13 + DEX" and the unarmored base "10 + DEX" that `sheet["ac"]` already reflects — simplification: the buff adds +3 unconditionally; the "while unarmored" rider stays GM-tracked (the GM casts on unarmored targets per the v2.99.422 design note).
+- The +3 AC takes effect via the v2.97.39 `_read_target_ac` walker. Verified by the harness test that reads `target_ac` from /attack before + after the cast and asserts the delta is exactly +3.
+- Touch range stays GM-tracked.
+- `feature_used` broadcast for the roll-log card; self-target and other-target variants get distinct descriptions.
+
+**Why this is the second Phase 2 ship and not an upcast-substrate ship:** Mage Armor doesn't scale RAW (no per-slot upcast), so the upcast-substrate work doesn't apply here. The Phase 2 "Bucket A against pre-wired substrate" pattern works exactly the same way for both Shield of Faith (cleric/paladin +2 AC) and Mage Armor (wizard/sorcerer +3 AC). The two endpoints share a near-identical shape — the only differences are caster classes, ac_bonus magnitude, concentration flag, and duration.
+
+**6 commits in this Phase 2 opening session so far** (v2.437.0 → v2.443.0). The per-commit recipe is now well-established and degrades gracefully when the substrate is pre-wired.
+
+**Why "The Protective Force":** RAW description leads with "a protective magical force surrounds it." The endpoint is the protective force's first reachable cast button — same five-years-shelf-life pattern as Shield of Faith's substrate.
+
+**4 new harness tests** at `tests/harness/test_cast_mage_armor.py`:
+
+- `test_cast_mage_armor_installs_buff` — Wizard self-targets; buff lands with `ac_bonus: 3`.
+- `test_cast_mage_armor_buff_is_8_hours_non_concentration` — duration_rounds=4800, concentration=false.
+- `test_mage_armor_raises_target_ac_by_3` — read target_ac via /attack before/after cast; delta is exactly +3. Validates the round-trip through `_read_target_ac`.
+- `test_cast_mage_armor_non_caster_rejected` — Krieger (Barbarian) → 409.
+
+The two "buff installs" tests `pytest.skip` gracefully if the demo roster ever drops Sorcerer/Wizard. Canonical caster is Thalindra Moonwhisper (Wizard).
+
+Total harness count 3482 → 3486.
+
+MINOR — new HTTP endpoint + 4 new harness tests. No schema change. No new env var. No new substrate (rides the existing v2.99.422 + v2.97.39 wiring).
+
+### Added
+- `app/routes/tabletop_routes.py::cast_mage_armor`: new `POST /api/campaign/{campaign_id}/cast_mage_armor` endpoint. Installs the existing `mage-armor` buff template on the caster or chosen target.
+- `tests/harness/test_cast_mage_armor.py`: 4 tests covering install + buff shape + target_ac round-trip + caster gate.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Mage Armor marked ✅ shipped v2.443.0 under Phase 2's Shipped subsection. Phase 2's pattern validated for two consecutive ships.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3482 → 3486.
+
 ## [2.442.0] - 2026-06-19 — "The Shimmering Field"
 
 **Schema version:** 71

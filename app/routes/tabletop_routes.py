@@ -63826,6 +63826,151 @@ async def cast_shield_of_faith(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_mage_armor")
+async def cast_mage_armor(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.443.0 — Phase 2 #2 of
+    docs/plans/cast-and-broadcast-tail.md. Mage Armor (L1
+    abjuration, Sorcerer/Wizard, PHB p.256):
+
+      "You touch a willing creature who isn't wearing armor, and a
+       protective magical force surrounds it until the spell ends.
+       The target's base AC becomes 13 + its Dexterity modifier."
+
+    Action, V/S/M (a piece of cured leather), Touch, 8 hours,
+    non-concentration. The spell ends if the target dons armor.
+
+    Implementation: same shape as v2.442.0 cast_shield_of_faith.
+    Rides the existing v2.99.422 ``_SPELL_BUFF_MAP["mage-armor"]``
+    substrate (`ac_bonus: 3`, 4800 rounds, non-concentration) + the
+    v2.97.39 `_read_target_ac` ac_bonus walker. ZERO new mechanical
+    code — both pieces of the substrate were already wired; this
+    commit just exposes the cast endpoint.
+
+    The +3 models the difference between Mage Armor's "13 + DEX"
+    and the unarmored base "10 + DEX" that ``sheet["ac"]`` already
+    reflects. Simplification: the buff adds +3 unconditionally; RAW
+    it only applies while unarmored. The GM casts it on unarmored
+    targets (matches the v2.99.422 design note).
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster targets themself
+    (RAW "a willing creature" includes the caster). Touch range
+    stays GM-tracked.
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_ma = any(
+        (s.get("_slug") == "mage-armor")
+        or (str(s.get("name", "")).lower() == "mage armor")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"sorcerer", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_ma and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Mage Armor, or sorcerer/wizard",
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("mage-armor") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 4800)
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "mage-armor",
+        "name": template.get("name") or "Mage Armor",
+        "icon": template.get("icon") or "🪄",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": dict(template.get("effects") or {"ac_bonus": 3}),
+        "desc": template.get("desc") or (
+            "AC 13 + Dex while unarmored (+3 vs unarmored base) "
+            "for 8 hours."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    if target_char.id == char.id:
+        feature_desc = (
+            f"{char.name} surrounds themself in a protective magical "
+            "force — AC becomes 13 + Dex while unarmored, for 8 hours."
+        )
+    else:
+        feature_desc = (
+            f"{char.name} surrounds {target_char.name} in a protective "
+            "magical force — AC becomes 13 + Dex while unarmored, "
+            "for 8 hours."
+        )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🪄 Mage Armor",
+            "feature_desc": feature_desc,
+            "source": "mage-armor",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "mage-armor",
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_gust")
 async def cast_gust(
     campaign_id: int,
