@@ -65123,6 +65123,163 @@ async def cast_jump(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_sanctuary")
+async def cast_sanctuary(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.454.0 — Phase 2 #11 of
+    docs/plans/cast-and-broadcast-tail.md. Sanctuary (L1
+    abjuration, Cleric, PHB p.272):
+
+      "You ward a creature within range against attack. Until the
+       spell ends, any creature who targets the warded creature
+       with an attack or a harmful spell must first make a Wisdom
+       saving throw. On a failed save, the creature must choose a
+       new target or lose the attack or spell."
+
+    1 bonus action, V/S/M (small silver mirror), 30 ft, 1 minute,
+    non-concentration. The buff ends if the warded creature
+    attacks or casts a harmful spell.
+
+    Implementation: rides the existing
+    ``_SPELL_BUFF_MAP["sanctuary"]`` substrate
+    (``sanctuary_attacker_must_save: True`` +
+    ``sanctuary_ends_on_offense: True``, 10 rounds, non-
+    concentration) + the v2.97.52 install-time DC bake-in (``8 +
+    prof + spellcasting_mod``) which the existing /use_attack Wis-
+    save gate reads back. ZERO new mechanical code — the substrate
+    AND the attacker-save gate are pre-wired; this commit just
+    exposes a dedicated cast endpoint so the substrate is reachable
+    via a one-click sheet action.
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster wards themself
+    (RAW "a creature within range" — the caster qualifies). The
+    30-ft range stays GM-tracked.
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    duration_rounds, dc}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_sanc = any(
+        (s.get("_slug") == "sanctuary")
+        or (str(s.get("name", "")).lower() == "sanctuary")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"cleric"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_sanc and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Sanctuary, or cleric",
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("sanctuary") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 10)
+    # v2.97.52 — per-cast DC bake-in. The attacker Wis-save gate in
+    # /use_attack reads `effects.dc` to resolve a fresh save without
+    # re-resolving the caster's stats at attack time.
+    prof = int(sheet.get("proficiency_bonus") or 2)
+    spell_mod = _caster_spellcasting_mod(sheet)
+    save_dc = 8 + prof + spell_mod
+    effects = dict(template.get("effects") or {})
+    effects["dc"] = save_dc
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "sanctuary",
+        "name": template.get("name") or "Sanctuary",
+        "icon": template.get("icon") or "🕊️",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": effects,
+        "desc": template.get("desc") or (
+            "Attackers must Wis-save vs caster's DC or pick a new "
+            "target. Ends if warded creature attacks or harms an enemy."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    if target_char.id == char.id:
+        feature_desc = (
+            f"{char.name} wards themself — attackers must WIS save "
+            f"(DC {save_dc}) or pick a new target. 1 minute, ends on "
+            "offense."
+        )
+    else:
+        feature_desc = (
+            f"{char.name} wards {target_char.name} — attackers must "
+            f"WIS save (DC {save_dc}) or pick a new target. 1 minute, "
+            "ends on offense."
+        )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": f"🕊️ Sanctuary (DC {save_dc})",
+            "feature_desc": feature_desc,
+            "source": "sanctuary",
+            "target_character_id": target_char.id,
+            "dc": save_dc,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "sanctuary",
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+        "dc": save_dc,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_gust")
 async def cast_gust(
     campaign_id: int,

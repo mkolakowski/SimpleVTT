@@ -10,6 +10,47 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.454.0] - 2026-06-19 — "The Silver Mirror"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #11 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Sanctuary** (L1 abjuration, Cleric, RAW PHB p.272). Rides the existing `_SPELL_BUFF_MAP["sanctuary"]` substrate + the v2.97.52 install-time DC bake-in + the pre-existing /use_attack attacker Wis-save gate. New `/cast_sanctuary` endpoint exposes the substrate as a one-click action. First Phase 2 ship to install a save-DC effect — the response and broadcast surface the computed DC so the GM can read it without opening the warded creature's sheet.
+
+**Description:** RAW: "You ward a creature within range against attack. Until the spell ends, any creature who targets the warded creature with an attack or a harmful spell must first make a Wisdom saving throw. On a failed save, the creature must choose a new target or lose the attack or spell." 1 bonus action, V/S/M (a small silver mirror), 30 ft, 1 minute, non-concentration. Ends if the warded creature attacks or casts a harmful spell.
+
+**Implementation:**
+
+- Body: `{character_id, target_character_id?}`. Self-or-touch shape. Defaults to caster when target omitted.
+- Caster gate: knows Sanctuary OR is `cleric` (RAW restricts to Cleric — no broader gate). 409 cannot_cast otherwise.
+- Existing `_SPELL_BUFF_MAP["sanctuary"]` substrate: 10 rounds (1 minute), non-concentration, `sanctuary_attacker_must_save: True` + `sanctuary_ends_on_offense: True`.
+- Per-cast DC bake-in: `effects.dc = 8 + proficiency_bonus + _caster_spellcasting_mod(sheet)`. The /use_attack attacker-Wis-save gate (v2.97.52) reads `effects.dc` back — zero new mechanical code at the read site.
+- Response and `feature_used` broadcast both carry `dc` so any chat/sheet card can render "DC N" without recomputing.
+
+**Why "The Silver Mirror":** RAW lists `M (a small silver mirror)` as Sanctuary's material component. The mirror is a magical-tradition stand-in for deflection — the would-be attacker sees their own intent reflected back and reconsiders. Material-component naming convention continues from v2.452.0 "The Pinch of Dirt" + v2.453.0 "The Grasshopper's Leg."
+
+**5 new harness tests** at `tests/harness/test_cast_sanctuary.py`:
+
+- `test_cast_sanctuary_self_installs_buff` — Tavik self-wards; buff lands with all three effect flags + a positive int dc; target id mirrors caster.
+- `test_cast_sanctuary_buff_is_1_minute_non_concentration` — duration_rounds=10, concentration=false.
+- `test_cast_sanctuary_on_ally_installs_on_ally` — targeting Krieger installs on Krieger, not Tavik.
+- `test_cast_sanctuary_non_cleric_rejected` — Thalindra (Wizard) → 409 cannot_cast.
+- `test_cast_sanctuary_dc_matches_caster_profile` — DC equals `8 + prof + WIS_mod` for Tavik (Cleric 5, WIS 16, prof +3 → DC 14). Reads the sheet via `/sheet-json` and recomputes.
+
+Canonical caster is Brother Tavik Stonebrow (Cleric 5, Life Domain).
+
+Total harness count 3514 → 3519.
+
+MINOR — new HTTP endpoint + 5 new harness tests. No schema change. No new substrate (rides the existing one).
+
+### Added
+- `app/routes/tabletop_routes.py::cast_sanctuary`: new `POST /api/campaign/{campaign_id}/cast_sanctuary` endpoint. Self-or-touch install on a cleric caster; bakes `8 + prof + spellcasting_mod` into `effects.dc`.
+- Response + `feature_used` broadcast carry `dc` field alongside `buff_installed`, `target_character_id`, `duration_rounds`.
+- `tests/harness/test_cast_sanctuary.py`: 5 tests covering self-install + buff shape + ally-target routing + caster gate + DC computation round-trip.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Sanctuary marked ✅ shipped v2.454.0 under Phase 2's Shipped subsection. Phase 2 has now shipped 11 spells/contracts; first save-DC consumer.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3514 → 3519.
+
 ## [2.453.0] - 2026-06-19 — "The Grasshopper's Leg"
 
 **Schema version:** 71

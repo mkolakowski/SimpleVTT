@@ -248,6 +248,18 @@ closure — runs indefinitely until Bucket A is exhausted.
   permanently GM-narrated; the engine surfaces the flag so the
   table can see Tongues is active. 3 harness tests.
 
+- **Sanctuary (L1)** — ✅ shipped v2.454.0. Rides the existing
+  `_SPELL_BUFF_MAP["sanctuary"]` substrate + the v2.97.52 install-
+  time DC bake-in + the pre-existing /use_attack attacker-Wis-save
+  gate. New `/cast_sanctuary` endpoint adds a one-click cleric
+  cast path. Body: `{character_id, target_character_id?}`. Self-
+  or-touch. Gates cleric only (RAW). Response + broadcast surface
+  `dc = 8 + prof + spellcasting_mod` so any chat/sheet card can
+  render it without recomputing. First Phase 2 ship to install a
+  save-DC effect — the pattern future save-or-suck spells will
+  follow. 5 harness tests including a DC round-trip vs the
+  caster's sheet.
+
 - **Jump (L1)** — ✅ shipped v2.453.0. New
   `_SPELL_BUFF_MAP["jump"]` substrate (10 rounds = 1 min,
   non-concentration, `effects.jump_distance_tripled: True` flag)
