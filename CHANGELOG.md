@@ -10,6 +10,52 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.440.0] - 2026-06-19 — "The Veil of Shadows"
+
+**Schema version:** 71
+
+**Commit summary:** Fourth Phase 1 demonstrator of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Pass without Trace** (L2 abjuration, Druid/Ranger, RAW PHB p.264). New `_SPELL_BUFF_MAP["pass-without-trace"]` substrate entry + new persistent (non-consuming) Stealth-roll read site + new `/cast_pass_without_trace` endpoint installs the buff on the caster (always) and on each chosen companion. The +10 Stealth bonus fires on every Stealth /roll while the buff is active — same shape as Emboldening Bond's +1d4 read site, not Hide in Plain Sight's consume-on-use shape. 4 of 5 Phase 1 demonstrators now shipped; only Find Steed (#2) remains.
+
+**Description:** RAW: "A veil of shadows and silence radiates from you, masking you and your companions from detection. For the duration, each creature you choose within 30 feet of you (including you) has a +10 bonus to Dexterity (Stealth) checks and can't be tracked except by magical means." Action, V/S/M, Self, Concentration, up to 1 hour.
+
+**Implementation:**
+
+- Body: `{character_id, target_character_ids?}`. The caster is always added to the list automatically (RAW "including you"). Companion targets each get their own buff install — concentration is on the caster's buff only (RAW — ending the caster's concentration drops the bonus for everyone, but per-target buff entries make the bonus discoverable on each companion's buff list).
+- Caster gate: knows Pass without Trace OR is in `{druid, ranger}`. 409 cannot_cast otherwise.
+- New `_SPELL_BUFF_MAP["pass-without-trace"]` substrate entry — concentration, 600 rounds (1 hour), `effects.stealth_bonus: 10`.
+- New Stealth-roll read site in the `/roll` handler (third block, right after Supreme Sneak's consume-on-use read). Persistent — doesn't drop the buff after the roll. Composes after the consumer reads so a Hide in Plain Sight burst stacks on top of a persistent Pass without Trace buff.
+- The 30-ft companion radius stays GM-tracked (Maps 2.0 / range substrate filed elsewhere). The "can't be tracked except by magical means" rider stays permanently GM-narrated (no tracking-check substrate in v2.x).
+- `feature_used` broadcast for the roll-log card names the buff installed-on-N count.
+
+**Why persistent (non-consuming):** RAW says the +10 lasts the spell's duration on every Stealth check, not just the first one. The Emboldening Bond pattern (v2.158.47, peace-domain cleric) is the closest existing read site — both fire on every qualifying roll without dropping the buff. Hide in Plain Sight (Ranger Lv 10+) and Supreme Sneak (Rogue Lv 9+ Thief) are the *other* shape — single-use bursts that consume the buff after the next Stealth roll. This commit composes the new persistent read AFTER the consumer reads so a HiPS burst can still stack on top of a persistent Pass without Trace buff (a Ranger Lv 10+ Druid 2 multiclass can chain both — situational but RAW-correct).
+
+**Why concentration only on the caster:** the engine's concentration substrate is per-buff-per-combatant. If every companion's buff were marked concentration, ending the caster's concentration wouldn't drop the companion buffs (each is its own anchor). Marking only the caster's buff as concentration matches RAW exactly — the caster maintains the spell, and a future v2.5x.x companion-drop hook can read `source_char_id == caster` to drop all companion buffs when the caster's concentration breaks.
+
+**4 new harness tests** at `tests/harness/test_cast_pass_without_trace.py`:
+
+- `test_cast_pass_without_trace_installs_buff` — Druid self-targets; buff lands with `stealth_bonus: 10`.
+- `test_cast_pass_without_trace_buff_is_1_hour_concentration` — duration_rounds=600, concentration=true.
+- `test_pass_without_trace_adds_10_to_stealth_roll` — Stealth /roll adds +10 with "Pass without Trace" breakdown; second roll still gets the bonus (persistent, vs. consume-on-use Hide in Plain Sight).
+- `test_cast_pass_without_trace_non_caster_rejected` — Krieger (Barbarian) → 409.
+
+The two "buff installs" tests `pytest.skip` gracefully if the demo roster ever drops Druid/Ranger. Canonical caster is Mira Greenleaf (Druid); Rowan Quickbow (Ranger) is the fallback.
+
+Total harness count 3470 → 3474.
+
+**Why "The Veil of Shadows":** the spell literally calls itself "a veil of shadows and silence." The veil makes a party of adventurers vanish from a tracker's eye — the engine now mechanizes the +10 part of that vanishing, leaving the magical-tracking rider for the GM.
+
+MINOR — new HTTP endpoint + new substrate entry + new /roll Stealth read site + 4 new harness tests. No schema change. No new env var. No new attack/save-pipeline hooks.
+
+### Added
+- `app/routes/tabletop_routes.py::_SPELL_BUFF_MAP["pass-without-trace"]`: new substrate entry. Concentration, 600 rounds, `stealth_bonus: 10` effect.
+- `app/routes/tabletop_routes.py` /roll handler: new persistent (non-consuming) Stealth-bonus read block after Supreme Sneak — reads the pass-without-trace buff's `stealth_bonus` and adds it to the total without dropping the buff.
+- `app/routes/tabletop_routes.py::cast_pass_without_trace`: new `POST /api/campaign/{campaign_id}/cast_pass_without_trace` endpoint. Installs the buff on caster + optional companion list.
+- `tests/harness/test_cast_pass_without_trace.py`: 4 tests covering install + buff shape + Stealth-roll persistence + caster gate.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Pass without Trace (#4) marked ✅ shipped v2.440.0. Status header updated to reflect 4 of 5 Phase 1 demonstrators done.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3470 → 3474.
+
 ## [2.439.0] - 2026-06-19 — "The Eight-Legged Step"
 
 **Schema version:** 71

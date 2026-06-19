@@ -1,6 +1,6 @@
 # Cast-and-broadcast utility-spell tail — Design Plan
 
-> **Status:** 🟠 Phase 1 in progress. Plan opens at v2.436.0; True Strike (#1) ✅ shipped v2.437.0; Speak with Animals (#3) ✅ shipped v2.438.0; Spider Climb (#5) ✅ shipped v2.439.0. Find Steed (#2) / Pass Without Trace (#4) pending.
+> **Status:** 🟠 Phase 1 in progress. Plan opens at v2.436.0; True Strike (#1) ✅ shipped v2.437.0; Speak with Animals (#3) ✅ shipped v2.438.0; Spider Climb (#5) ✅ shipped v2.439.0; Pass without Trace (#4) ✅ shipped v2.440.0. Find Steed (#2) pending.
 > **Tracked in:** [`TODO.md`](../../TODO.md) → SRD 5e Audit
 > (v2.434.0 refresh) → "P2: Cast-and-broadcast utility-spell
 > mechanical depth."
@@ -104,7 +104,7 @@ minutes, non-concentration. Bard/Druid/Ranger.
 - Buff carries `duration_rounds: 100` + `concentration: false`.
 - Krieger Stonefist (Barbarian) → 409 cannot_cast.
 
-### 4. Pass Without Trace (L2)
+### 4. Pass Without Trace (L2) — ✅ shipped v2.440.0
 
 RAW PHB p.264: "A veil of shadows and silence radiates from you,
 masking you and your companions from detection. For the duration,
@@ -112,18 +112,32 @@ each creature you choose within 30 feet of you (including you) has
 a +10 bonus to Dexterity (Stealth) checks and can't be tracked
 except by magical means."
 
-**Implementation sketch:**
+**Implementation (v2.440.0):**
 
-- New `_SPELL_BUFF_MAP["pass-without-trace"]` with
-  `stealth_bonus: 10`. Multi-target (caster + companions in 30
-  ft); reuses the existing buff multi-target install path.
-- Concentration, 1-hour duration (600 rounds).
-- Hook on Stealth-check rolls: if buff is present, add +10.
-- 30-ft radius gate stays GM-tracked (Maps 2.0 / range substrate
-  is filed elsewhere).
+- New `_SPELL_BUFF_MAP["pass-without-trace"]` substrate entry —
+  concentration, 600 rounds, `effects.stealth_bonus: 10`.
+- New persistent (non-consuming) Stealth-roll read site in the
+  `/roll` handler (right after Supreme Sneak's consume read).
+  Same shape as the v2.158.47 Emboldening Bond read site — fires
+  on every Stealth check while the buff is active, doesn't drop
+  the buff after a single use.
+- New `/cast_pass_without_trace` endpoint. Body: `{character_id,
+  target_character_ids?}`. The caster is always added to the list
+  (RAW "including you"); companion targets each get their own
+  buff install. Concentration is on the caster's buff only (RAW —
+  ending concentration drops the bonus for everyone).
+- Caster gate: knows Pass without Trace OR is in `{druid, ranger}`.
+- 30-ft companion radius + "can't be tracked except by magical
+  means" rider stay GM-tracked.
 
-**Harness:** 3 tests — buff installs, Stealth check rolls +10,
-buff drops on concentration end.
+**Harness:** 4 tests (`tests/harness/test_cast_pass_without_trace.py`):
+
+- Buff installs with `stealth_bonus: 10` effect (self-target).
+- Buff carries `concentration: true` + `duration_rounds: 600`.
+- A Stealth `/roll` while the buff is active gets `+10 (Pass without
+  Trace)` in the breakdown; a second Stealth roll still gets the
+  bonus (persistent, vs. consume-on-use Hide in Plain Sight).
+- Krieger Stonefist (Barbarian) → 409 cannot_cast.
 
 ### 5. Spider Climb (L2) — ✅ shipped v2.439.0
 

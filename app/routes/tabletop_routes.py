@@ -2809,6 +2809,37 @@ _SPELL_BUFF_MAP["spider-climb"] = {
     ),
 }
 
+# v2.440.0 — Pass without Trace (RAW PHB p.264, L2 abjuration,
+# Druid/Ranger): "A veil of shadows and silence radiates from you,
+# masking you and your companions from detection. For the duration,
+# each creature you choose within 30 feet of you (including you) has
+# a +10 bonus to Dexterity (Stealth) checks and can't be tracked
+# except by magical means." Concentration, up to 1 hour.
+#
+# Phase 1 demonstrator #4 of cast-and-broadcast-tail.md. Persistent
+# (non-consuming) +10 Stealth bonus that fires on every Stealth /roll
+# while the buff is active — same shape as Emboldening Bond's +1d4
+# read site (v2.158.47), not Hide in Plain Sight's consume-on-use
+# shape. The 30-ft companion radius stays GM-tracked (Maps 2.0).
+# The "can't be tracked except by magical means" rider is permanently
+# GM-narrated — the engine tracks no tracking-check substrate.
+_SPELL_BUFF_MAP["pass-without-trace"] = {
+    "key": "pass-without-trace",
+    "name": "Pass without Trace",
+    "icon": "🌫️",
+    "duration_rounds": 600,  # 1 hour @ 6 s/round
+    "duration_max": 600,
+    "concentration": True,
+    "effects": {
+        "stealth_bonus": 10,
+    },
+    "desc": (
+        "+10 bonus to Dexterity (Stealth) checks; can't be tracked "
+        "except by magical means (GM-narrated). Concentration, "
+        "up to 1 hour."
+    ),
+}
+
 # v2.196.0 — Potion of Water Breathing (RAW DMG p.188, uncommon): breathe
 # underwater for 1 hour. The engine tracks no suffocation/drowning rule,
 # so this is a purely descriptive buff — it surfaces on the init strip
@@ -19295,6 +19326,45 @@ async def roll_dice(
                 _mirror_buffs_to_sheet(
                     db, int(_char.id),
                     _get_buffs(campaign_id, int(_char.id)),
+                )
+            except Exception:
+                pass
+            break
+
+    # v2.440.0 — Pass without Trace (L2 Druid/Ranger, PHB p.264) +10
+    # Stealth read site. Phase 1 demonstrator #4 of
+    # docs/plans/cast-and-broadcast-tail.md. Persistent (non-consuming)
+    # bonus — fires on every Stealth check while the buff is active,
+    # same shape as Emboldening Bond's +1d4 read site below, not the
+    # Hide in Plain Sight / Supreme Sneak consume-on-use shape above.
+    # Composes after the consumer reads so a Hide in Plain Sight burst
+    # stacks on top of a persistent Pass without Trace buff.
+    if (
+        _char
+        and stat_key_lc == "stealth"
+        and isinstance(_char.sheet, dict)
+    ):
+        for _b in (_char.sheet.get("_buffs_active") or []):
+            if not isinstance(_b, dict):
+                continue
+            if (
+                (_b.get("key") or "").strip().lower()
+                != "pass-without-trace"
+            ):
+                continue
+            _effects = _b.get("effects") or {}
+            if not isinstance(_effects, dict):
+                continue
+            _bonus = int(_effects.get("stealth_bonus") or 0)
+            if _bonus <= 0:
+                continue
+            try:
+                import copy
+                result = copy.copy(result)
+                result.total = int(result.total or 0) + _bonus
+                result.breakdown = (
+                    f"{result.breakdown} + {_bonus} "
+                    f"(Pass without Trace)"
                 )
             except Exception:
                 pass
@@ -63280,6 +63350,178 @@ async def cast_spider_climb(
         "feature": "spider-climb",
         "target_character_id": target_char.id,
         "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_pass_without_trace")
+async def cast_pass_without_trace(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.440.0 — Phase 1 demonstrator #4 of
+    docs/plans/cast-and-broadcast-tail.md. Pass without Trace (L2
+    abjuration, Druid/Ranger, PHB p.264):
+
+      "A veil of shadows and silence radiates from you, masking you
+       and your companions from detection. For the duration, each
+       creature you choose within 30 feet of you (including you) has
+       a +10 bonus to Dexterity (Stealth) checks and can't be
+       tracked except by magical means."
+
+    Action, V/S/M, Self, Concentration, up to 1 hour.
+
+    Implementation: installs the v2.440.0 ``pass-without-trace`` buff
+    on the caster (always) and on each chosen companion (optional
+    ``target_character_ids`` list). The +10 Stealth bonus is read by
+    the v2.440.0 Stealth-roll persistent-bonus block in the /roll
+    handler — same shape as Emboldening Bond's +1d4 read site, not
+    the consume-on-use shape of Hide in Plain Sight / Supreme Sneak.
+
+    The "can't be tracked except by magical means" rider is
+    permanently GM-narrated — the engine tracks no tracking-check
+    substrate. The 30-ft companion radius stays GM-tracked too
+    (Maps 2.0 / range substrate filed elsewhere); the endpoint
+    accepts whatever companion list the caster claims is in range.
+
+    Body: ``{character_id, target_character_ids?}``. Companions in
+    the list each get their own buff install (concentration is on
+    the caster only — RAW). If the caster's id is omitted from the
+    list, it's added automatically (RAW: "including you").
+
+    Response:
+    ``{ok, feature, targets, buffs_installed, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    raw_targets = body.get("target_character_ids") or []
+    if not isinstance(raw_targets, list):
+        raise HTTPException(400, "target_character_ids must be a list")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_pwt = any(
+        (s.get("_slug") == "pass-without-trace")
+        or (str(s.get("name", "")).lower() in (
+            "pass without trace", "pass without trace",
+        ))
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"druid", "ranger"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_pwt and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Pass without Trace, or druid/ranger",
+            "got_class": _cls,
+        })
+
+    target_ids: list[int] = []
+    seen: set[int] = set()
+    for raw in raw_targets:
+        try:
+            tid = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if tid <= 0 or tid in seen:
+            continue
+        seen.add(tid)
+        target_ids.append(tid)
+    if char.id not in seen:
+        target_ids.insert(0, char.id)
+
+    DURATION_ROUNDS = 600  # 1 hour
+    buffs_installed: list[int] = []
+    mirrored: set[int] = set()
+    for tid in target_ids:
+        target = db.query(Character).filter(
+            Character.id == tid,
+            Character.campaign_id == campaign_id,
+        ).first()
+        if not target:
+            continue
+        installed = await _install_buff(campaign_id, target.id, {
+            "key": "pass-without-trace",
+            "name": "Pass without Trace",
+            "icon": "🌫️",
+            "duration_rounds": DURATION_ROUNDS,
+            "duration_max": DURATION_ROUNDS,
+            "concentration": (target.id == char.id),
+            "source_char_id": char.id,
+            "effects": {
+                "stealth_bonus": 10,
+            },
+            "desc": (
+                "+10 Dexterity (Stealth); can't be tracked except by "
+                "magical means (GM-narrated). Concentration on caster, "
+                "up to 1 hour."
+            ),
+        })
+        if installed:
+            buffs_installed.append(target.id)
+            if target.id not in mirrored:
+                _mirror_buffs_to_sheet(
+                    db, target.id,
+                    _get_buffs(campaign_id, target.id),
+                )
+                mirrored.add(target.id)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    feature_desc = (
+        f"{char.name} casts Pass without Trace — +10 Stealth and "
+        f"can't be tracked (except by magical means) for "
+        f"{len(buffs_installed)} creature"
+        f"{'s' if len(buffs_installed) != 1 else ''} for up to 1 hour "
+        "(concentration)."
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🌫️ Pass without Trace",
+            "feature_desc": feature_desc,
+            "source": "pass-without-trace",
+            "target_character_ids": buffs_installed,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "pass-without-trace",
+        "targets": buffs_installed,
+        "buffs_installed": len(buffs_installed),
         "duration_rounds": DURATION_ROUNDS,
     }
 
