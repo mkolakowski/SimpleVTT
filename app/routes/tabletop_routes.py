@@ -2809,6 +2809,34 @@ _SPELL_BUFF_MAP["spider-climb"] = {
     ),
 }
 
+# v2.450.0 — Comprehend Languages (RAW PHB p.224, L1 divination
+# ritual, Bard/Sorcerer/Warlock/Wizard): "For the duration, you
+# understand the literal meaning of any spoken language that you
+# hear. You also understand any written language that you see, but
+# you must be touching the surface on which the words are written."
+# 1 action / ritual, V/S/M, Self, 1 hour, non-concentration.
+#
+# Phase 2 #8 of cast-and-broadcast-tail.md. Same flag-buff shape as
+# Tongues (v2.445.0) but understand-only (not speak-also). The
+# `effects.comprehends_languages: True` flag IS the mechanic; the GM
+# narrates the literal-meaning translation.
+_SPELL_BUFF_MAP["comprehend-languages"] = {
+    "key": "comprehend-languages",
+    "name": "Comprehend Languages",
+    "icon": "📖",
+    "duration_rounds": 600,  # 1 hour @ 6 s/round
+    "duration_max": 600,
+    "concentration": False,
+    "effects": {
+        "comprehends_languages": True,
+    },
+    "desc": (
+        "You understand the literal meaning of any spoken language "
+        "you hear, and any written language you can touch. 1 hour, "
+        "no concentration."
+    ),
+}
+
 # v2.447.0 — Bless Water (RAW PHB p.219, L1 evocation ritual,
 # Cleric/Paladin): "You touch one flask of water and cause it to
 # become holy water." Action, V/S/M (25 gp silver powder), Touch,
@@ -64617,6 +64645,127 @@ async def cast_bless_water(
     return {
         "ok": True,
         "feature": "bless-water",
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_comprehend_languages")
+async def cast_comprehend_languages(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.450.0 — Phase 2 #8 of
+    docs/plans/cast-and-broadcast-tail.md. Comprehend Languages
+    (L1 divination ritual, Bard/Sorcerer/Warlock/Wizard, PHB
+    p.224):
+
+      "For the duration, you understand the literal meaning of any
+       spoken language that you hear. You also understand any
+       written language that you see, but you must be touching the
+       surface on which the words are written."
+
+    1 action (or ritual), V/S/M, Self, 1 hour, non-concentration.
+
+    Implementation: installs the v2.450.0 ``comprehend-languages``
+    buff on the caster with `effects.comprehends_languages: True`.
+    Same shape as Tongues (v2.445.0) but understand-only (not
+    speak-also) and self-targeted.
+
+    Body: ``{character_id}``. Self-targeted per RAW.
+
+    Response: ``{ok, feature, buff_installed, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_cl = any(
+        (s.get("_slug") == "comprehend-languages")
+        or (str(s.get("name", "")).lower() == "comprehend languages")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"bard", "sorcerer", "warlock", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_cl and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": (
+                "knows Comprehend Languages, or bard/sorcerer/warlock/wizard"
+            ),
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("comprehend-languages") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 600)
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "comprehend-languages",
+        "name": template.get("name") or "Comprehend Languages",
+        "icon": template.get("icon") or "📖",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": dict(
+            template.get("effects") or {"comprehends_languages": True},
+        ),
+        "desc": template.get("desc") or (
+            "You understand the literal meaning of any spoken language "
+            "you hear, and any written language you can touch. 1 hour, "
+            "no concentration."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "📖 Comprehend Languages",
+            "feature_desc": (
+                f"{char.name} can understand any spoken language they "
+                "hear and any written language they can touch for 1 hour."
+            ),
+            "source": "comprehend-languages",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "comprehend-languages",
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,
     }

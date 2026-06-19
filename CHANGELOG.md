@@ -10,6 +10,47 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.450.0] - 2026-06-19 — "The Literal Meaning"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #8 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Comprehend Languages** (L1 ritual, Bard/Sorcerer/Warlock/Wizard, RAW PHB p.224). New `_SPELL_BUFF_MAP["comprehend-languages"]` substrate (600 rounds, non-concentration, `effects.comprehends_languages: True` flag) + new `/cast_comprehend_languages` endpoint. Same flag-buff shape as Tongues (v2.445.0) but understand-only and self-targeted. Fourteenth consecutive cast-and-broadcast tail ship in the session.
+
+**Description:** RAW: "For the duration, you understand the literal meaning of any spoken language that you hear. You also understand any written language that you see, but you must be touching the surface on which the words are written." 1 action / ritual, V/S/M, Self, 1 hour, non-concentration.
+
+**Implementation:**
+
+- Body: `{character_id}`. Self-targeted per RAW.
+- Caster gate: knows Comprehend Languages OR is in `{bard, sorcerer, warlock, wizard}`. 409 cannot_cast otherwise.
+- New `_SPELL_BUFF_MAP["comprehend-languages"]` substrate entry — 600 rounds (1 hour), non-concentration, `effects.comprehends_languages: True`.
+- The buff's flag IS the mechanic — the GM narrates the literal-meaning translation when the buff is active. The "must touch the surface" rider for written text stays GM-tracked.
+- `feature_used` broadcast for the roll-log card.
+
+**Why Tongues + Comprehend Languages and not just one?** Tongues (v2.445.0) covers spoken-and-spoken (both directions) for any language; Comprehend Languages covers receive-only (you understand but can't speak). Different flags, different gates (Tongues includes Cleric; Comprehend Languages doesn't). A Bard/Sorcerer/Warlock/Wizard with both prepared can broadcast and receive — useful for the demo's Wizard fixture.
+
+**Why "The Literal Meaning":** the RAW description leads with "the literal meaning of any spoken language." The spell isn't about subtext; the engine's flag is similarly literal.
+
+**3 new harness tests** at `tests/harness/test_cast_comprehend_languages.py`:
+
+- `test_cast_comprehend_languages_installs_buff` — Wizard casts; buff lands with `comprehends_languages: true`.
+- `test_cast_comprehend_languages_buff_is_1_hour_non_concentration` — duration_rounds=600, concentration=false.
+- `test_cast_comprehend_languages_non_caster_rejected` — Krieger (Barbarian) → 409.
+
+Canonical caster is Thalindra Moonwhisper (Wizard); Lyra Sunstrider (Bard) is the fallback.
+
+Total harness count 3500 → 3503.
+
+MINOR — new HTTP endpoint + new substrate + 3 new harness tests. No schema change.
+
+### Added
+- `app/routes/tabletop_routes.py::_SPELL_BUFF_MAP["comprehend-languages"]`: new substrate entry. Non-concentration, 600 rounds, `comprehends_languages: true` flag effect.
+- `app/routes/tabletop_routes.py::cast_comprehend_languages`: new `POST /api/campaign/{campaign_id}/cast_comprehend_languages` endpoint. Self-target install.
+- `tests/harness/test_cast_comprehend_languages.py`: 3 tests covering install + buff shape + caster gate.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Comprehend Languages marked ✅ shipped v2.450.0 under Phase 2's Shipped subsection. Phase 2 has now shipped 8 spells/contracts.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3500 → 3503.
+
 ## [2.449.0] - 2026-06-19 — "The First Strike"
 
 **Schema version:** 71

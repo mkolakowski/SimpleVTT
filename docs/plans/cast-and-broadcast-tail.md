@@ -248,6 +248,15 @@ closure — runs indefinitely until Bucket A is exhausted.
   permanently GM-narrated; the engine surfaces the flag so the
   table can see Tongues is active. 3 harness tests.
 
+- **Comprehend Languages (L1 ritual)** — ✅ shipped v2.450.0.
+  New `_SPELL_BUFF_MAP["comprehend-languages"]` substrate (600
+  rounds = 1 hour, non-concentration,
+  `effects.comprehends_languages: True` flag) + new
+  `/cast_comprehend_languages` endpoint. Same flag-buff shape as
+  Tongues (v2.445.0) but understand-only (not speak-also) and
+  self-targeted. Gates bard/sorcerer/warlock/wizard. 3 harness
+  tests.
+
 - **Phase 1.5 — buff-consume-on-attack contract** — ✅ shipped
   v2.449.0. Closes the v2.437.0 True Strike RAW-bend. New
   contract in the `/attack` endpoint walks the attacker's buffs
