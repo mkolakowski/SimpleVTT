@@ -248,6 +248,17 @@ closure — runs indefinitely until Bucket A is exhausted.
   permanently GM-narrated; the engine surfaces the flag so the
   table can see Tongues is active. 3 harness tests.
 
+- **Detect Magic (L1 ritual)** — ✅ shipped v2.457.0. New
+  `_SPELL_BUFF_MAP["detect-magic"]` substrate (100 rounds = 10
+  min, concentration, `effects.senses_magic_within_30ft: True`
+  flag) + new `/cast_detect_magic` endpoint. Flag-buff shape
+  (same as Detect Evil and Good v2.456.0). Self-cast only per
+  RAW. Gates bard/cleric/druid/paladin/ranger/sorcerer/wizard —
+  the widest class gate on the cast-and-broadcast arc (7 of 11
+  SRD caster classes, all except Barbarian/Fighter/Monk/Rogue).
+  4 harness tests including Wizard + Cleric happy paths to
+  exercise both arcane and divine sides of the wide gate.
+
 - **Detect Evil and Good (L1)** — ✅ shipped v2.456.0. New
   `_SPELL_BUFF_MAP["detect-evil-and-good"]` substrate (100 rounds
   = 10 min, concentration,

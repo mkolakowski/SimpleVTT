@@ -1835,6 +1835,37 @@ _SPELL_BUFF_MAP: dict[str, dict] = {
             "10 min (concentration)."
         ),
     },
+    # v2.457.0 — Phase 2 #14 of docs/plans/cast-and-broadcast-tail.md.
+    # Detect Magic (Bard / Cleric / Druid / Paladin / Ranger /
+    # Sorcerer / Wizard L1, ritual): RAW PHB p.231: "For the duration,
+    # you sense the presence of magic within 30 feet of you. If you
+    # sense magic in this way, you can use your action to see a faint
+    # aura around any visible creature or object in the area that
+    # bears magic, and you learn its school of magic, if any." 1
+    # action (or ritual), V/S, Self, Concentration up to 10 minutes.
+    #
+    # Flag-buff shape (same as Detect Evil and Good v2.456.0 / Tongues
+    # v2.445.0 / Comprehend Languages v2.450.0): the flag IS the
+    # mechanic. The GM narrates which surrounding creatures/items
+    # carry magic auras (the engine doesn't model item-magicness as
+    # a perception trait yet — magic items carry the _slug rider but
+    # not a generic "this thing is magic" sense surface).
+    "detect-magic": {
+        "key": "detect-magic",
+        "name": "Detect Magic",
+        "icon": "✨",
+        "duration_rounds": 100,  # 10 minutes RAW
+        "duration_max": 100,
+        "concentration": True,
+        "effects": {
+            "senses_magic_within_30ft": True,
+        },
+        "desc": (
+            "You sense the presence of magic within 30 ft for 10 min "
+            "(concentration). With an action you can see the aura and "
+            "learn the school of any visible magical creature/object."
+        ),
+    },
     # v2.453.0 — Phase 2 #10 of docs/plans/cast-and-broadcast-tail.md.
     # Jump (Druid / Ranger / Sorcerer / Wizard L1): RAW PHB p.250:
     # "You touch a creature. The creature's jump distance is tripled
@@ -65609,6 +65640,140 @@ async def cast_detect_evil_and_good(
     return {
         "ok": True,
         "feature": "detect-evil-and-good",
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_detect_magic")
+async def cast_detect_magic(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.457.0 — Phase 2 #14 of
+    docs/plans/cast-and-broadcast-tail.md. Detect Magic (L1
+    divination ritual, Bard/Cleric/Druid/Paladin/Ranger/Sorcerer/
+    Wizard, PHB p.231):
+
+      "For the duration, you sense the presence of magic within 30
+       feet of you. If you sense magic in this way, you can use
+       your action to see a faint aura around any visible creature
+       or object in the area that bears magic, and you learn its
+       school of magic, if any."
+
+    1 action (or ritual), V/S, Self, Concentration up to 10
+    minutes.
+
+    Implementation: installs the v2.457.0 ``detect-magic`` buff
+    carrying ``effects.senses_magic_within_30ft: True``. Flag-buff
+    shape (same as Detect Evil and Good v2.456.0 / Tongues
+    v2.445.0 / Comprehend Languages v2.450.0) — the flag IS the
+    mechanic. The GM narrates which surrounding creatures/items
+    carry magic auras.
+
+    Widest class gate on the Phase 2 arc so far: 7 of the 11 SRD
+    caster classes can prepare Detect Magic per RAW.
+
+    Body: ``{character_id}``. Self-targeted per RAW.
+
+    Response: ``{ok, feature, buff_installed, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_dm = any(
+        (s.get("_slug") == "detect-magic")
+        or (str(s.get("name", "")).lower() == "detect magic")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {
+        "bard", "cleric", "druid", "paladin",
+        "ranger", "sorcerer", "wizard",
+    }
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_dm and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": (
+                "knows Detect Magic, or bard/cleric/druid/paladin/"
+                "ranger/sorcerer/wizard"
+            ),
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("detect-magic") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 100)
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "detect-magic",
+        "name": template.get("name") or "Detect Magic",
+        "icon": template.get("icon") or "✨",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": True,
+        "source_char_id": char.id,
+        "effects": dict(
+            template.get("effects")
+            or {"senses_magic_within_30ft": True},
+        ),
+        "desc": template.get("desc") or (
+            "You sense the presence of magic within 30 ft for 10 "
+            "min (concentration)."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "✨ Detect Magic",
+            "feature_desc": (
+                f"{char.name} senses the presence of magic within 30 "
+                "ft for 10 min (concentration). With an action, "
+                f"{char.name} can see the aura and learn the school "
+                "of any visible magical creature or object."
+            ),
+            "source": "detect-magic",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "detect-magic",
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,
     }

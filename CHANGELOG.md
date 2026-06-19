@@ -10,6 +10,44 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.457.0] - 2026-06-19 — "The Faint Aura"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #14 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Detect Magic** (L1 divination ritual, Bard/Cleric/Druid/Paladin/Ranger/Sorcerer/Wizard, RAW PHB p.231). New `_SPELL_BUFF_MAP["detect-magic"]` substrate (100 rounds = 10 min, concentration, `effects.senses_magic_within_30ft: True` flag) + new `/cast_detect_magic` endpoint. Flag-buff shape (same as Detect Evil and Good v2.456.0). Widest class gate on the Phase 2 arc: 7 of 11 SRD caster classes can prepare Detect Magic per RAW.
+
+**Description:** RAW: "For the duration, you sense the presence of magic within 30 feet of you. If you sense magic in this way, you can use your action to see a faint aura around any visible creature or object in the area that bears magic, and you learn its school of magic, if any." 1 action (or ritual), V/S, Self, Concentration up to 10 minutes.
+
+**Implementation:**
+
+- Body: `{character_id}`. Self-targeted per RAW.
+- Caster gate: knows Detect Magic OR is in `{bard, cleric, druid, paladin, ranger, sorcerer, wizard}` — widest gate on the arc. The 4 classes that CAN'T cast Detect Magic per RAW are Barbarian/Fighter/Monk/Rogue. 409 cannot_cast otherwise.
+- New `_SPELL_BUFF_MAP["detect-magic"]` substrate entry — 100 rounds (10 minutes), concentration, `effects.senses_magic_within_30ft: True`.
+- The flag IS the mechanic. The engine doesn't model item-magicness as a perception trait yet (magic items carry `_slug` riders for combat hooks but no generic "this thing is magic" sense surface), so the GM narrates which surrounding creatures/items ping the sense.
+- `feature_used` broadcast for the roll-log card.
+
+**Why "The Faint Aura":** the RAW spell description says the caster "see[s] a faint aura around any visible creature or object in the area that bears magic." The aura is the flavor lynchpin — divination-style soft narration over mechanical certainty. Continues the v2.456.0 "The Sixth Sense" perceptual-theme thread (Detect Evil and Good + Detect Magic are two consecutive perception spells).
+
+**4 new harness tests** at `tests/harness/test_cast_detect_magic.py`:
+
+- `test_cast_dm_wizard_installs_buff` — Thalindra self-casts; buff lands with `senses_magic_within_30ft: true`.
+- `test_cast_dm_buff_is_10_min_concentration` — duration_rounds=100, concentration=true.
+- `test_cast_dm_cleric_also_succeeds` — Tavik (non-arcane caster) succeeds; asserts the wide class gate covers divine casters too.
+- `test_cast_dm_non_caster_rejected` — Krieger (Barbarian) → 409. Barbarian is one of the 4 RAW non-Detect-Magic classes.
+
+Total harness count 3527 → 3531.
+
+MINOR — new HTTP endpoint + new substrate + 4 new harness tests. No schema change.
+
+### Added
+- `app/routes/tabletop_routes.py::_SPELL_BUFF_MAP["detect-magic"]`: new substrate entry. Concentration, 100 rounds, `senses_magic_within_30ft: true` flag effect.
+- `app/routes/tabletop_routes.py::cast_detect_magic`: new `POST /api/campaign/{campaign_id}/cast_detect_magic` endpoint. Self-cast on a `bard/cleric/druid/paladin/ranger/sorcerer/wizard` caster.
+- `tests/harness/test_cast_detect_magic.py`: 4 tests covering self-install + buff shape + wide-gate happy path (Wizard + Cleric) + Barbarian → 409.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Detect Magic marked ✅ shipped v2.457.0 under Phase 2's Shipped subsection. Phase 2 has now shipped 14 spells/contracts.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3527 → 3531.
+
 ## [2.456.0] - 2026-06-19 — "The Sixth Sense"
 
 **Schema version:** 71
