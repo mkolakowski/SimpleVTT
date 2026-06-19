@@ -10,6 +10,53 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.444.0] - 2026-06-19 — "The Light Touch"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #3 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Feather Fall** (L1 reaction, Bard/Sorcerer/Wizard, RAW PHB p.239). New `_SPELL_BUFF_MAP["feather-fall"]` substrate (10 rounds, non-concentration, `effects.feather_fall: True` flag) + new `/cast_feather_fall` endpoint installs the buff on the caster + up to 4 chosen companions (RAW cap of 5 total). Same flag-buff shape as Speak with Animals (v2.438.0) and Spider Climb (v2.439.0) — the engine doesn't model falling damage at all (no elevation tracking) so the flag IS the mechanic; the GM narrates the "no falling damage" rider.
+
+**Description:** RAW: "Choose up to five falling creatures within range. A falling creature's rate of descent slows to 60 feet per round until the spell ends. If the creature lands before the spell ends, it takes no falling damage and can land on its feet, and the spell ends for that creature." 1 reaction (taken when you or a creature within 60 ft falls), V/M, 60 ft, 1 minute, non-concentration.
+
+**Implementation:**
+
+- Body: `{character_id, target_character_ids?}`. The caster is always added to the target list automatically (RAW "you or a creature within 60 ft" includes the caster). 400 if more than 5 unique targets are supplied (the new `_FEATHER_FALL_MAX_TARGETS = 5` module-level constant enforces the cap).
+- Caster gate: knows Feather Fall OR is in `{bard, sorcerer, wizard}`. 409 cannot_cast otherwise.
+- New `_SPELL_BUFF_MAP["feather-fall"]` substrate entry — 10 rounds (1 min), non-concentration, `effects.feather_fall: True`.
+- Each target gets their own buff install; no concentration on any buff (RAW — Feather Fall is non-concentration).
+- 60-ft range stays GM-tracked.
+- `feature_used` broadcast for the roll-log card names the install-on-N count.
+
+**Why the flag IS the mechanic:** SimpleVTT v2.x doesn't track elevation or compute falling damage. There's no `/fall` endpoint, no Z-axis on tokens, no `fall_damage_dice` calculator. Adding all of that to enable a single mechanical hook for one L1 reaction spell would be a Maps 2.0-scoped undertaking. Instead, the flag buff surfaces on the buffs API and the init strip so the table can see Feather Fall is active; when the GM applies falling damage manually, they check the buff and skip it for affected targets. This is the same precedent as the v2.158.x Ring of Feather Falling magic item, which has carried a `feather_fall: True` passive flag for the same reason.
+
+**RAW timing simplification:** RAW Feather Fall is a *reaction* triggered by a falling event, with a 1-minute duration. The v1 endpoint exposes the install as a generic POST — the GM/player triggers it when the fall starts. The "must be cast as a reaction to a falling creature" timing rider stays GM-narrated.
+
+**5 new harness tests** at `tests/harness/test_cast_feather_fall.py`:
+
+- `test_cast_feather_fall_installs_buff` — Wizard self-targets; buff lands with `feather_fall: true`.
+- `test_cast_feather_fall_buff_is_1_minute_non_concentration` — duration_rounds=10, concentration=false.
+- `test_cast_feather_fall_multi_target` — caster + 4 companions ⇒ 5 buffs installed across the targets.
+- `test_cast_feather_fall_over_cap_400` — caster + 5 companions (6 unique) → 400.
+- `test_cast_feather_fall_non_caster_rejected` — Krieger (Barbarian) → 409.
+
+The two "buff installs" tests `pytest.skip` gracefully if the demo roster ever drops Bard/Sorcerer/Wizard. Canonical caster is Thalindra Moonwhisper (Wizard).
+
+Total harness count 3486 → 3491.
+
+**Why "The Light Touch":** RAW components include "a small feather or piece of down." The endpoint is the lightest-touch substrate ship of the Phase 2 batch so far — a single flag buff + a cap-enforced multi-target install, no engine hooks. The arc continues with this rhythm.
+
+MINOR — new HTTP endpoint + new substrate entry + 5 new harness tests. No schema change. No new env var. No new attack/save-pipeline hooks.
+
+### Added
+- `app/routes/tabletop_routes.py::_SPELL_BUFF_MAP["feather-fall"]`: new substrate entry. Non-concentration, 10 rounds, `feather_fall: true` flag effect.
+- `app/routes/tabletop_routes.py::_FEATHER_FALL_MAX_TARGETS`: module-level constant `5` enforcing the RAW target cap.
+- `app/routes/tabletop_routes.py::cast_feather_fall`: new `POST /api/campaign/{campaign_id}/cast_feather_fall` endpoint. Installs the buff on caster + optional companions (RAW cap 5).
+- `tests/harness/test_cast_feather_fall.py`: 5 tests covering install + buff shape + multi-target + over-cap rejection + caster gate.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Feather Fall marked ✅ shipped v2.444.0 under Phase 2's Shipped subsection. Phase 2 now has three shipped: Shield of Faith, Mage Armor, Feather Fall.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3486 → 3491.
+
 ## [2.443.0] - 2026-06-19 — "The Protective Force"
 
 **Schema version:** 71

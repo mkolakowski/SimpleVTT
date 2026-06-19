@@ -228,6 +228,16 @@ closure — runs indefinitely until Bucket A is exhausted.
   round-trip via /attack that verifies the +3 lands. The "while
   unarmored" RAW rider stays GM-tracked.
 
+- **Feather Fall (L1 reaction)** — ✅ shipped v2.444.0. New
+  `_SPELL_BUFF_MAP["feather-fall"]` substrate (10 rounds = 1 min,
+  non-concentration, `effects.feather_fall: True` flag) + new
+  `/cast_feather_fall` endpoint. Multi-target up to 5 per RAW;
+  the caster is always added automatically. Same flag-buff shape
+  as Speak with Animals (v2.438.0) and Spider Climb (v2.439.0)
+  — the engine doesn't model falling damage at all (no
+  elevation tracking) so the flag IS the mechanic; the GM
+  narrates the "no falling damage" rider. 5 harness tests.
+
 ### Remaining candidates (filed)
 
 Next 4 highest-leverage spells from Bucket A:

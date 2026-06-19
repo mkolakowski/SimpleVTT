@@ -2809,6 +2809,36 @@ _SPELL_BUFF_MAP["spider-climb"] = {
     ),
 }
 
+# v2.444.0 — Feather Fall (RAW PHB p.239, L1 transmutation reaction,
+# Bard/Sorcerer/Wizard): "Choose up to five falling creatures within
+# range. A falling creature's rate of descent slows to 60 feet per
+# round until the spell ends. If the creature lands before the spell
+# ends, it takes no falling damage and can land on its feet, and the
+# spell ends for that creature." 1 minute, non-concentration.
+#
+# Phase 2 #3 of cast-and-broadcast-tail.md. Same flag-buff shape as
+# Speak with Animals (v2.438.0) and Spider Climb (v2.439.0). The
+# engine doesn't model falling damage at all — there's no /fall
+# endpoint and no elevation tracking — so the flag buff IS the
+# mechanic. GMs read `effects.feather_fall: True` to know the
+# target dodges the next applicable falling-damage event. Mirrors
+# the v2.158.x Ring of Feather Falling flag substrate.
+_SPELL_BUFF_MAP["feather-fall"] = {
+    "key": "feather-fall",
+    "name": "Feather Fall",
+    "icon": "🪶",
+    "duration_rounds": 10,  # 1 minute @ 6 s/round
+    "duration_max": 10,
+    "concentration": False,
+    "effects": {
+        "feather_fall": True,
+    },
+    "desc": (
+        "Descent slows to 60 ft/round; no falling damage on landing "
+        "(GM-narrated). 1 minute, no concentration."
+    ),
+}
+
 # v2.440.0 — Pass without Trace (RAW PHB p.264, L2 abjuration,
 # Druid/Ranger): "A veil of shadows and silence radiates from you,
 # masking you and your companions from detection. For the duration,
@@ -63967,6 +63997,171 @@ async def cast_mage_armor(
         "feature": "mage-armor",
         "target_character_id": target_char.id,
         "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+_FEATHER_FALL_MAX_TARGETS = 5
+
+
+@router.post("/api/campaign/{campaign_id}/cast_feather_fall")
+async def cast_feather_fall(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.444.0 — Phase 2 #3 of
+    docs/plans/cast-and-broadcast-tail.md. Feather Fall (L1
+    transmutation reaction, Bard/Sorcerer/Wizard, PHB p.239):
+
+      "Choose up to five falling creatures within range. A falling
+       creature's rate of descent slows to 60 feet per round until
+       the spell ends. If the creature lands before the spell ends,
+       it takes no falling damage and can land on its feet, and the
+       spell ends for that creature."
+
+    1 reaction (taken when you or a creature within 60 feet falls),
+    V/M (a small feather or piece of down), 60 ft, 1 minute, non-
+    concentration.
+
+    Implementation: installs the v2.444.0 `feather-fall` buff on the
+    caster (always) and up to 4 chosen companions for a total of 5
+    per RAW. The buff carries the flag effect
+    `effects.feather_fall: True` — same shape as Speak with Animals'
+    (v2.438.0) `speaks_with_animals` flag and Spider Climb's
+    (v2.439.0) `climb_speed_equals_walk` flag. The engine doesn't
+    model falling damage; the flag IS the mechanic, and the GM
+    narrates the "no falling damage" rider.
+
+    Body: ``{character_id, target_character_ids?}``. The caster is
+    always added to the target list automatically (RAW "you or a
+    creature within 60 ft" includes the caster). 400 if more than
+    5 unique targets are supplied. 60-ft range stays GM-tracked.
+
+    Response: ``{ok, feature, targets, buffs_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    raw_targets = body.get("target_character_ids") or []
+    if not isinstance(raw_targets, list):
+        raise HTTPException(400, "target_character_ids must be a list")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_ff = any(
+        (s.get("_slug") == "feather-fall")
+        or (str(s.get("name", "")).lower() == "feather fall")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"bard", "sorcerer", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_ff and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Feather Fall, or bard/sorcerer/wizard",
+            "got_class": _cls,
+        })
+
+    target_ids: list[int] = []
+    seen: set[int] = set()
+    for raw in raw_targets:
+        try:
+            tid = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if tid <= 0 or tid in seen:
+            continue
+        seen.add(tid)
+        target_ids.append(tid)
+    if char.id not in seen:
+        target_ids.insert(0, char.id)
+    if len(target_ids) > _FEATHER_FALL_MAX_TARGETS:
+        raise HTTPException(400, (
+            f"Feather Fall affects up to {_FEATHER_FALL_MAX_TARGETS} "
+            f"creatures (RAW); got {len(target_ids)} including the caster."
+        ))
+
+    template = _SPELL_BUFF_MAP.get("feather-fall") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 10)
+    buffs_installed: list[int] = []
+    for tid in target_ids:
+        target = db.query(Character).filter(
+            Character.id == tid,
+            Character.campaign_id == campaign_id,
+        ).first()
+        if not target:
+            continue
+        installed = await _install_buff(campaign_id, target.id, {
+            "key": "feather-fall",
+            "name": template.get("name") or "Feather Fall",
+            "icon": template.get("icon") or "🪶",
+            "duration_rounds": DURATION_ROUNDS,
+            "duration_max": DURATION_ROUNDS,
+            "concentration": False,
+            "source_char_id": char.id,
+            "effects": dict(template.get("effects") or {"feather_fall": True}),
+            "desc": template.get("desc") or (
+                "Descent slows to 60 ft/round; no falling damage on "
+                "landing (GM-narrated). 1 minute, no concentration."
+            ),
+        })
+        if installed:
+            buffs_installed.append(target.id)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    feature_desc = (
+        f"{char.name} casts Feather Fall — slow descent + no falling "
+        f"damage for {len(buffs_installed)} creature"
+        f"{'s' if len(buffs_installed) != 1 else ''} for 1 minute."
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🪶 Feather Fall",
+            "feature_desc": feature_desc,
+            "source": "feather-fall",
+            "target_character_ids": buffs_installed,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "feather-fall",
+        "targets": buffs_installed,
+        "buffs_installed": len(buffs_installed),
         "duration_rounds": DURATION_ROUNDS,
     }
 
