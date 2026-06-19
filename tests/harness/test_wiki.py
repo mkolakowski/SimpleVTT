@@ -111,6 +111,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-fail2ban-crowdsec-integration" in resp.text
     # v2.423.5: Cloudflare edge-banning integration plan listed.
     assert "/wiki/doc/plan-cloudflare-edge-banning" in resp.text
+    # v2.436.0: cast-and-broadcast tail plan listed.
+    assert "/wiki/doc/plan-cast-and-broadcast-tail" in resp.text
     # v2.423.7: Security spine banner rendered at the top of the landing page.
     assert "Security spine" in resp.text
     assert 'id="security-spine"' in resp.text
@@ -746,6 +748,23 @@ async def test_wiki_doc_serves_fail2ban_crowdsec_integration_plan():
     assert "text/html" in resp.headers.get("content-type", "")
     assert "fail2ban" in resp.text.lower()
     assert "crowdsec" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_cast_and_broadcast_tail_plan():
+    """v2.436.0: GET /wiki/doc/plan-cast-and-broadcast-tail — 200 +
+    body contains the plan's H1 + the nav menu. Resolves through
+    the _DOC_ALLOWLIST to ``docs/plans/cast-and-broadcast-tail.md``.
+    Plan opens an arc for mechanizing Bucket A utility spells
+    (True Strike, Find Steed, Speak with Animals, Pass Without
+    Trace, Spider Climb) that currently cast + broadcast without
+    a server-side effect."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-cast-and-broadcast-tail")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "cast-and-broadcast" in resp.text.lower()
+    assert "true strike" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

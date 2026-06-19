@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.436.0] - 2026-06-18 — "The Opened Tail"
+
+**Schema version:** 71
+
+**Commit summary:** Opens the cast-and-broadcast utility-spell tail arc — the v2.434.0 audit's P2 follow-up surface. New `docs/plans/cast-and-broadcast-tail.md` plan doc scopes the work (Bucket A = mechanizable, Bucket B = permanently GM-narrated), identifies the first 5 Phase 1 demonstrators (True Strike, Find Steed, Speak with Animals, Pass Without Trace, Spider Climb), and files Phase 2+ candidates (Shield of Faith, Feather Fall, Mage Armor, Hellish Rebuke spell variant, Tongues).
+
+**Description:** Wires the plan through all four wiki surfaces per the [Every doc must be surfaced through the wiki](CLAUDE.md#every-doc-must-be-surfaced-through-the-wiki) rule. The plan deliberately splits the ~250-spell tail into two buckets:
+
+- **Bucket A — mechanically simple but unwired.** Spells with a clear server-side effect (a self-buff with `next_attack_advantage` for True Strike, a summon for Find Steed, a multi-target Stealth-bonus buff for Pass Without Trace). Each becomes one or two commits.
+- **Bucket B — RAW-narrative by design.** Spells whose effect is inherently narrative or session-context-dependent (Detect Magic, Prestidigitation, Identify, Comprehend Languages). Filed permanently as GM-narrated.
+
+The Phase 1 list isn't exhaustive — it's a starter set proving the arc's pattern. Phase 2+ continues against Bucket A indefinitely. Each Phase 1 ship lands one substrate entry (buff map / summon map / etc.) OR one new bespoke endpoint, plus 2–3 harness tests covering install + the mechanical effect.
+
+**Why open this now:** the v2.434.0 audit explicitly called it out as the remaining ~15% of the Spells category after Phase 1 (duration scaling) and Phase 4 (rider/bonus scaling) closed. With both prior phases closed, this is the natural next surface.
+
+**Why "The Opened Tail":** the plan opens (gives shape and a Phase 1 menu) what was previously the unstructured "long tail" of utility spells.
+
+PATCH — plan-doc + 1 new harness test wiring it through `/wiki`. No code.
+
+### Added
+- `docs/plans/cast-and-broadcast-tail.md`: new design plan. Bucket A vs. B framing, Phase 1's 5 demonstrators with implementation sketches + harness contracts, Phase 2+ candidate list, non-goals.
+- `app/routes/wiki_routes.py`: new `_DOC_ALLOWLIST` entry mapping `plan-cast-and-broadcast-tail` → the plan path.
+- `app/templates/wiki.html`: new row in the Design plans table.
+- `docs/wiki/README.md`: matching row in the on-disk Design plans table.
+- `tests/harness/test_wiki.py::test_wiki_doc_serves_cast_and_broadcast_tail_plan`: smoke test for the new slug. Plus a new assertion in `test_wiki_home_renders` so a future regression that removes the table row gets caught.
+- `docs/test-harness-coverage.md`: new row for the wiki smoke test. Total-test-count nudges 3459 → 3460.
+
 ## [2.435.0] - 2026-06-18 — "The Wider View"
 
 **Schema version:** 71
