@@ -248,6 +248,21 @@ closure — runs indefinitely until Bucket A is exhausted.
   permanently GM-narrated; the engine surfaces the flag so the
   table can see Tongues is active. 3 harness tests.
 
+- **Hellish Rebuke auto-damage-roll** — ✅ shipped v2.446.0.
+  Phase 2 #5. Closes the v2.71.0 filed "Auto-roll +
+  auto-damage-to-attacker" gap on the existing slot-based
+  Hellish Rebuke reaction-cast flow. The v2.71.0 ship wired the
+  reaction-watcher branch but left the damage roll + apply as
+  GM-narrated; this commit rolls server-side and applies via
+  `_apply_damage_to_combatant` when the attacker's combatant_id
+  is in the reaction params. v1 applies FULL damage; the RAW DEX
+  save-for-half stays GM-narrated (GM can `/undo_attack_damage`
+  with the cast_id to halve). Broadcast now carries
+  `damage_total`, `damage_applied`, and `damage_breakdown`
+  alongside the legacy `damage_expr`. 1 new harness test
+  exercising the end-to-end Krieger-hits-Magnus → Hellish Rebuke
+  → damage-applied-to-Krieger flow.
+
 ### Remaining candidates (filed)
 
 Next 4 highest-leverage spells from Bucket A:

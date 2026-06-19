@@ -28542,6 +28542,54 @@ async def use_reaction(
                     "total": total,
                 },
             })
+            # v2.446.0 — Phase 2 #5 of cast-and-broadcast-tail.md.
+            # Auto-roll the (1+slot_level)d10 fire damage server-side
+            # and apply it to the attacker if their combatant id is
+            # in params. Closes the v2.71.0 filed "Auto-roll +
+            # auto-damage-to-attacker" gap. v1 applies the FULL damage;
+            # the RAW DEX-save-for-half stays GM-narrated (the GM can
+            # adjudicate via /undo_attack_damage with the cast_id if
+            # the attacker passes the save). Damage rolling failures
+            # (no attacker combatant, parse error) fall through to the
+            # legacy GM-narrated chat card so this is backward-safe.
+            damage_total = 0
+            damage_applied = 0
+            damage_breakdown = ""
+            attacker_combatant_id = params.get("attacker_combatant_id")
+            # v2.446.0 — the damage_taken context built at
+            # _apply_hp_change (~line 9960) carries attacker_char_id
+            # but NOT attacker_combatant_id (the attacker's combatant
+            # id isn't in scope there). Derive it here from the hub
+            # state by walking for the attacker's char_id. NPCs would
+            # surface attacker_char_id=None; we'd then need a different
+            # derivation (filed for the NPC-rebuke path).
+            attacker_char_id_param = params.get("attacker_char_id")
+            if not attacker_combatant_id and attacker_char_id_param:
+                _hr_state = hub.get_battle(campaign_id) or {}
+                for _c in _hr_state.get("combatants") or []:
+                    if _c.get("char_id") == int(attacker_char_id_param):
+                        attacker_combatant_id = _c.get("id")
+                        break
+            try:
+                _hr_roll = dice_mod.roll(f"{damage_dice}d10")
+                damage_total = max(0, int(_hr_roll.total or 0))
+                damage_breakdown = str(_hr_roll.breakdown or "")
+            except dice_mod.DiceParseError:
+                damage_total = 0
+            if damage_total > 0 and attacker_combatant_id:
+                _atk_combatant = _lookup_combatant(
+                    campaign_id, str(attacker_combatant_id),
+                )
+                if _atk_combatant:
+                    _hr_apply = await _apply_damage_to_combatant(
+                        db, campaign_id, _atk_combatant, damage_total,
+                        "fire",
+                        is_attack=False,
+                        is_spell=True,
+                        attack_id=hellish_rebuke_cast_id,
+                        attacker_char_id=int(watcher_char_id),
+                    )
+                    damage_applied = int(_hr_apply.get("applied") or 0)
             await hub.broadcast(campaign_id, {
                 "type": "feature_used",
                 "data": {
@@ -28550,6 +28598,11 @@ async def use_reaction(
                     "user_color": watcher_char.color,
                     "feature_name": "🔥 Hellish Rebuke cast",
                     "feature_desc": (
+                        f"Reaction. {attacker_name} takes {damage_total} "
+                        f"fire damage ({damage_dice}d10; DEX save DC = "
+                        f"caster's spell save DC for half). Consumed "
+                        f"1× L{slot_level} slot."
+                    ) if damage_total > 0 else (
                         f"Reaction. {attacker_name} takes {damage_dice}d10 "
                         f"fire damage (DEX save DC = caster's spell save DC "
                         f"for half). Consumed 1× L{slot_level} slot."
@@ -28560,9 +28613,12 @@ async def use_reaction(
                     "slot_level": slot_level,
                     "damage_expr": f"{damage_dice}d10",
                     "damage_type": "fire",
+                    "damage_total": damage_total,
+                    "damage_breakdown": damage_breakdown,
+                    "damage_applied": damage_applied,
                     "rebuke_target_name": attacker_name,
                     "rebuke_target_char_id": params.get("attacker_char_id"),
-                    "rebuke_target_combatant_id": params.get("attacker_combatant_id"),
+                    "rebuke_target_combatant_id": attacker_combatant_id,
                 },
             })
         except HTTPException:

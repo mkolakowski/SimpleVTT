@@ -10,6 +10,52 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.446.0] - 2026-06-19 — "The Auto-Lit Rebuke"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #5 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Hellish Rebuke auto-damage-roll + auto-apply**. The v2.71.0 ship wired the slot-based Hellish Rebuke reaction-cast branch but left the damage roll + apply as GM-narrated (the broadcast carried the formula and the GM rolled). This commit closes that filed gap by rolling the `(1 + slot_level) d10` fire damage server-side and applying it via `_apply_damage_to_combatant` when the attacker's combatant id is in the reaction params. Tenth consecutive cast-and-broadcast tail ship in the session.
+
+**Description:** RAW PHB p.250: Hellish Rebuke is a 1-reaction L1 fire-damage spell triggered by taking damage. RAW says the attacker makes a DEX save for half. The v2.71.0 ship wired the reaction-watcher + slot consumption + chat-card; v2.446.0 now adds the actual damage roll + auto-apply.
+
+**Implementation:**
+
+- The `cast-hellish-rebuke` branch of `/use_reaction` (line ~28534) now:
+  1. Rolls `(1 + slot_level)d10` via `dice_mod.roll`.
+  2. Looks up the attacker's combatant via `_lookup_combatant(campaign_id, attacker_combatant_id)`. The attacker's combatant id is already in `params` — it was set when the reaction watcher was triggered by the original `damage_taken` event.
+  3. Applies the damage via `_apply_damage_to_combatant` with `is_spell=True`, `attack_id=hellish_rebuke_cast_id` (so `/undo_attack_damage` can revert it), and `attacker_char_id=int(watcher_char_id)`.
+  4. Includes `damage_total`, `damage_applied`, and `damage_breakdown` in the `feature_used` broadcast alongside the legacy `damage_expr`.
+- The `feature_desc` text now reads `{attacker_name} takes {damage_total} fire damage ({damage_dice}d10; …)` when the roll succeeded; falls back to the legacy `{damage_dice}d10` formula when the roll failed (no attacker combatant or parse error) so the legacy GM-narrated path stays intact.
+- Failure modes (no attacker combatant id, dice parse error, lookup miss) all gracefully fall through to a damage_total=0 / damage_applied=0 state. The slot is always consumed, the reaction is always marked, and the broadcast always fires — so a failure here doesn't strand the player in a half-cast state.
+
+**RAW-bent v1:** The DEX save-for-half stays GM-narrated. The reason: the existing reaction-watcher pattern doesn't roll saves for the attacker (NPC or PC) automatically — adding a save-roll branch for the attacker, factoring in the caster's spell save DC, the attacker's DEX modifier, and PC-vs-NPC save-roll semantics, is a substantially larger ship that would touch the save-roll infrastructure. v1 applies FULL damage; the GM can use `/undo_attack_damage` with the cast_id to halve the applied damage if they adjudicate the attacker as passing the save. Filed for a future commit (parallels Phase 1.5's buff-consume-on-hit contract — both are "RAW says one thing, v1 simplifies, save-roll integration is a separate substrate work").
+
+**Why this is the largest Phase 2 ship so far:** the five preceding Phase 2 ships were either pure substrate-already-wired endpoint exposure (Shield of Faith v2.442.0, Mage Armor v2.443.0) or new-substrate-and-endpoint flag buffs (Feather Fall v2.444.0, Tongues v2.445.0). Hellish Rebuke is the first Phase 2 ship that modifies an existing engine flow — the v2.71.0 reaction-cast branch — to close a filed gap. The change is surgical (~50 lines of new code in one branch) but touches a path with multiple existing tests, so regression risk is real. Verified by running the existing `test_hellish_rebuke_prompt_fires_on_pc_damage` + `test_cast_hellish_rebuke_consumes_slot` tests post-bump (no regressions).
+
+**Why "The Auto-Lit Rebuke":** the rebuke now lights its own fire — the damage rolls and applies automatically instead of waiting for the GM to roll. The metaphor doubles for the engine: the cast-and-broadcast tail's Phase 2 fifth ship is its first auto-lit (auto-damage-applied) one.
+
+**1 new harness test** at `tests/harness/test_hellish_rebuke_auto_damage.py`:
+
+- `test_hellish_rebuke_rolls_and_applies_damage` — end-to-end: Krieger hits Magnus → reaction prompt fires → Magnus casts Hellish Rebuke → broadcast carries `damage_total` in `[4, 40]` (4d10 = L3 slot), `damage_applied == damage_total`, and a non-empty `damage_breakdown` string.
+
+**Existing regression coverage:**
+
+- `test_cast_hellish_rebuke_consumes_slot` (v2.71.0 reaction-prompt test) — verifies the slot decrement + economy flip + feature_used broadcast still fire. Continues to pass post-bump (added new fields are additive, not replacements).
+- `test_tiefling_hellish_rebuke_racial_consumes_resource_not_slot` (v2.395.0) — the racial branch is untouched by this commit. Continues to pass.
+
+Total harness count 3494 → 3495.
+
+MINOR — modified existing reaction-cast branch (additive only — new fields in broadcast, new roll + apply step, no contract-breaking change) + 1 new harness test. No schema change. No new env var.
+
+### Added
+- `app/routes/tabletop_routes.py` `cast-hellish-rebuke` reaction-cast branch: new auto-damage-roll + auto-apply step that runs after the slot consumption + economy mark. New broadcast fields `damage_total`, `damage_applied`, `damage_breakdown`.
+- `tests/harness/test_hellish_rebuke_auto_damage.py`: 1 test covering the end-to-end auto-damage path.
+
+### Changed
+- `app/routes/tabletop_routes.py` Hellish Rebuke `feature_desc`: now reads `{attacker_name} takes {damage_total} fire damage` when the roll succeeded; falls back to the legacy formula text on roll failure.
+- `docs/plans/cast-and-broadcast-tail.md`: Hellish Rebuke auto-damage marked ✅ shipped v2.446.0 under Phase 2's Shipped subsection. Phase 2 has shipped 5 spells in this session.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3494 → 3495.
+
 ## [2.445.0] - 2026-06-19 — "The Common Word"
 
 **Schema version:** 71
