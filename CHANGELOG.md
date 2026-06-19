@@ -10,6 +10,47 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.438.0] - 2026-06-19 — "The Common Tongue"
+
+**Schema version:** 71
+
+**Commit summary:** Second Phase 1 demonstrator of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Speak with Animals** (Ritual L1, Bard/Druid/Ranger, RAW PHB p.277). New `/cast_speak_with_animals` endpoint installs a self-buff with `effects.speaks_with_animals: true` for 10 minutes. The buff's presence IS the mechanic — no downstream hook needed. Proves the pattern for the long tail of "buff with a flag" utility spells.
+
+**Description:** RAW: "You gain the ability to comprehend and verbally communicate with beasts for the duration." Action, V/S, Self, 10 minutes, non-concentration.
+
+**Implementation:**
+
+- Body: `{character_id}` (self-targeted).
+- Caster gate: knows Speak with Animals OR is in `{bard, druid, ranger}`. 409 cannot_cast otherwise.
+- Buff installed via `_install_buff`: key `speak-with-animals`, duration 100 rounds (10 min @ 6 s/round), non-concentration, `effects.speaks_with_animals: true`.
+- `feature_used` broadcast for the roll-log card.
+
+**Why no mechanical hook:** the buff is a state-flag. GMs and players read it directly to know that the beast-conversation is in scope. The spell's mechanical effect is inherently RP-bound (the beast's response IS GM-narrated by design), so the only "engine" work is making the buff visible.
+
+**This is the simplest possible Bucket A pattern** and validates the v2.437.0 design lesson: most cast-and-broadcast spells need only one new endpoint + one buff entry, not new attack-pipeline or save-pipeline hooks.
+
+**3 new harness tests** at `tests/harness/test_cast_speak_with_animals.py`:
+
+- `test_cast_speak_with_animals_installs_buff` — buff lands with the `speaks_with_animals: true` effect.
+- `test_cast_speak_with_animals_buff_is_10_minutes_non_concentration` — duration_rounds=100, concentration=false.
+- `test_cast_speak_with_animals_non_caster_rejected` — Krieger (Barbarian) → 409.
+
+The two "buff installs" tests `pytest.skip` gracefully if the demo roster doesn't carry a Bard/Druid/Ranger (defensive against future demo-seed changes). Current demo roster has Lyra Sunstrider (Bard), Mira Greenleaf (Druid), Rowan Quickbow (Ranger) — Mira is the canonical caster in the test.
+
+Total harness count 3464 → 3467.
+
+**Why "The Common Tongue":** the spell gives the caster a "common tongue" with beasts. The endpoint gives the engine a common pattern for the long tail of flag-only buff spells.
+
+MINOR — new HTTP endpoint + 3 new harness tests. No schema change. No new env var. No new attack/save-pipeline hooks — the buff stands on its own.
+
+### Added
+- `app/routes/tabletop_routes.py::cast_speak_with_animals`: new `POST /api/campaign/{campaign_id}/cast_speak_with_animals` endpoint. Installs the self-buff with the `speaks_with_animals: true` flag.
+- `tests/harness/test_cast_speak_with_animals.py`: 3 tests covering install + buff shape + caster gate.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Speak with Animals (#3) marked ✅ shipped v2.438.0. Status header updated to reflect 2 of 5 Phase 1 demonstrators done.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3464 → 3467.
+
 ## [2.437.0] - 2026-06-18 — "The Pointed Finger"
 
 **Schema version:** 71

@@ -1,6 +1,6 @@
 # Cast-and-broadcast utility-spell tail — Design Plan
 
-> **Status:** 🟠 Phase 1 in progress. Plan opens at v2.436.0; True Strike (demonstrator #1) ✅ shipped v2.437.0. Find Steed / Speak with Animals / Pass Without Trace / Spider Climb pending.
+> **Status:** 🟠 Phase 1 in progress. Plan opens at v2.436.0; True Strike (#1) ✅ shipped v2.437.0; Speak with Animals (#3) ✅ shipped v2.438.0. Find Steed (#2) / Pass Without Trace (#4) / Spider Climb (#5) pending.
 > **Tracked in:** [`TODO.md`](../../TODO.md) → SRD 5e Audit
 > (v2.434.0 refresh) → "P2: Cast-and-broadcast utility-spell
 > mechanical depth."
@@ -85,20 +85,24 @@ unusually intelligent, strong, and loyal steed."
 controllable by the caster, dismissing the steed (concentration
 drop) removes it.
 
-### 3. Speak with Animals (L1 ritual)
+### 3. Speak with Animals (L1 ritual) — ✅ shipped v2.438.0
 
 RAW PHB p.277: "You gain the ability to comprehend and verbally
-communicate with beasts for the duration."
+communicate with beasts for the duration." Action, V/S, Self, 10
+minutes, non-concentration. Bard/Druid/Ranger.
 
-**Implementation sketch:**
+**Implementation (v2.438.0):**
 
-- Self-buff install with `speaks_with_animals: true` flag.
-- 10-minute duration, non-concentration.
-- No mechanical hook needed (the buff is the proof — GMs can let
-  PCs converse with beasts when the buff is active).
+- New `/cast_speak_with_animals` endpoint. Body: `{character_id}`.
+- Installs a self-buff with `effects.speaks_with_animals: true`. Duration 100 rounds (10 min @ 6 s/round); non-concentration.
+- Caster gate: knows Speak with Animals OR is in `{bard, druid, ranger}`.
+- **No mechanical hook needed.** The buff's presence IS the mechanic — GMs / players read the flag directly. Proves the pattern for the long tail of "buff with a flag" utility spells.
 
-**Harness:** 2 tests — buff installs on cast, buff times out after
-100 rounds.
+**Harness:** 3 tests (`tests/harness/test_cast_speak_with_animals.py`):
+
+- Buff installs with `speaks_with_animals: true` effect.
+- Buff carries `duration_rounds: 100` + `concentration: false`.
+- Krieger Stonefist (Barbarian) → 409 cannot_cast.
 
 ### 4. Pass Without Trace (L2)
 

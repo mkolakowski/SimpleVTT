@@ -62991,6 +62991,124 @@ async def cast_true_strike(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_speak_with_animals")
+async def cast_speak_with_animals(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.438.0 — Phase 1 demonstrator #2 of
+    docs/plans/cast-and-broadcast-tail.md. Speak with Animals
+    (Ritual L1, Bard/Druid/Ranger, PHB p.277):
+
+      "You gain the ability to comprehend and verbally communicate
+       with beasts for the duration."
+
+    Action, V/S, Self, 10 minutes, non-concentration.
+
+    Implementation: self-buff install carrying
+    ``effects.speaks_with_animals: true``. The buff's presence IS
+    the mechanic — GMs can let PCs converse with beasts when the
+    buff is active. No mechanical hook needed; the buff is a
+    state-flag that downstream GM tools (or the player's
+    interpretation at the table) read directly.
+
+    Duration: 100 rounds (10 minutes × 10 rounds/minute @ 6 s/round).
+
+    Body: ``{character_id}``.
+
+    Response: ``{ok, feature, buff_installed, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_swa = any(
+        (s.get("_slug") == "speak-with-animals")
+        or (str(s.get("name", "")).lower() == "speak with animals")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"bard", "druid", "ranger"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_swa and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Speak with Animals, or bard/druid/ranger",
+            "got_class": _cls,
+        })
+
+    DURATION_ROUNDS = 100  # 10 minutes
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "speak-with-animals",
+        "name": "Speak with Animals",
+        "icon": "🦅",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "speaks_with_animals": True,
+        },
+        "desc": (
+            "You can comprehend and verbally communicate with beasts "
+            "for the duration."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🦅 Speak with Animals",
+            "feature_desc": (
+                f"{char.name} can comprehend and verbally communicate "
+                "with beasts for 10 minutes."
+            ),
+            "source": "speak-with-animals",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "speak-with-animals",
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_gust")
 async def cast_gust(
     campaign_id: int,
