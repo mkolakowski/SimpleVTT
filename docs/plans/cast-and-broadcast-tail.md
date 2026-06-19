@@ -1,8 +1,6 @@
 # Cast-and-broadcast utility-spell tail — Design Plan
 
-> **Status:** ⚪ proposed · Phase 1 unstarted. Opens at v2.436.0
-> after the v2.434.0 SRD audit refresh identified this as the
-> remaining ~15% of the Spells category.
+> **Status:** 🟠 Phase 1 in progress. Plan opens at v2.436.0; True Strike (demonstrator #1) ✅ shipped v2.437.0. Find Steed / Speak with Animals / Pass Without Trace / Spider Climb pending.
 > **Tracked in:** [`TODO.md`](../../TODO.md) → SRD 5e Audit
 > (v2.434.0 refresh) → "P2: Cast-and-broadcast utility-spell
 > mechanical depth."
@@ -43,29 +41,30 @@ substrate entry on an existing buff/condition/summon map.
 The following spells are the highest-leverage Bucket A candidates.
 Each becomes one or two commits.
 
-### 1. True Strike (Cantrip)
+### 1. True Strike (Cantrip) — ✅ shipped v2.437.0
 
-RAW PHB p.284: "You point a finger at a target in range. Your next
-attack roll against the target has advantage if you make it before
-the end of your next turn. The spell ends if you attack a target
-other than the one you pointed at."
+RAW PHB p.284: "You extend your hand and point a finger at a
+target in range. Your magic grants you a brief insight into the
+target's defenses. On your next turn, you gain advantage on your
+first attack roll against the target, provided that this spell
+hasn't ended."
 
-**Implementation sketch:**
+**Implementation (v2.437.0):**
 
-- New `_SPELL_BUFF_MAP["true-strike"]` entry. Effects carry
-  `next_attack_advantage: true` + a `target_combatant_id` field
-  that the install endpoint stamps from the cast payload.
-- Concentration, 1-round duration (`duration_rounds: 1`).
-- Hook in `/attack` endpoint's roll-construction branch: if the
-  attacker carries a True Strike buff AND `target_combatant_id`
-  matches the attack's target, override the d20 expression to
-  `2d20kh1` and remove the buff.
-- If the attacker hits a different target while concentrating,
-  the buff drops naturally on concentration sweep (no new code).
+- New `/cast_true_strike` endpoint. Body: `{character_id, target_combatant_id}`.
+- Installs a 1-round concentration buff on the caster carrying `effects.attack_advantage_vs_target_combatant_id` bound to the chosen target's combatant id.
+- **No new attack-pipeline hook needed.** Rides the existing v2.158.53 `_attacker_has_vow_of_enmity_vs_target` helper that the `/attack` endpoint already calls — that helper is generic across all buff keys and picks up the effect regardless of who installed it.
+- Caster gate: knows True Strike OR is in `{bard, sorcerer, warlock, wizard}` per RAW.
+- Concentration replaces any existing concentration buff on the caster (Hunter's Mark / Hex semantics).
 
-**Harness:** 3 tests — buff installs on cast, the next attack against
-the marked target rolls 2d20kh1 (assert via the breakdown), the
-buff is gone after the attack.
+**RAW-bent v1:** RAW says "*first* attack roll." This v1 grants advantage on *every* attack against the marked target while the buff is active. Bounded by the 1-round duration — a multi-attack character at high level gets advantage on every attack against the marked target in that one turn. Filed for Phase 1.5: a generic buff-consume-on-hit contract (the existing Feinting Attack broadcast already names `next_attack_advantage: true` and would benefit from the same hook).
+
+**Harness:** 4 tests (`tests/harness/test_cast_true_strike.py`):
+
+- Buff installs with the right target-binding effect (`attack_advantage_vs_target_combatant_id`).
+- Buff carries `concentration: true` + `duration_rounds: 1`.
+- Non-caster (Krieger Stonefist, Barbarian) → 409 cannot_cast.
+- Missing `target_combatant_id` → 400.
 
 ### 2. Find Steed (L2 paladin)
 

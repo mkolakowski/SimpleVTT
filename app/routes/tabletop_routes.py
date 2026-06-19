@@ -62853,6 +62853,144 @@ async def cast_false_life(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_true_strike")
+async def cast_true_strike(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.437.0 — Phase 1 demonstrator #1 of
+    docs/plans/cast-and-broadcast-tail.md. True Strike (Cantrip,
+    Bard/Sorcerer/Warlock/Wizard, PHB p.284):
+
+      "You extend your hand and point a finger at a target in
+       range. Your magic grants you a brief insight into the
+       target's defenses. On your next turn, you gain advantage
+       on your first attack roll against the target, provided
+       that this spell hasn't ended."
+
+    Action, V/S/M (focus), 30 ft, 1 round, concentration.
+
+    Implementation: rides the v2.158.53 generic
+    ``_attacker_has_vow_of_enmity_vs_target`` helper that the
+    /attack endpoint already calls. That helper grants advantage
+    when the attacker carries any buff with
+    ``effects.attack_advantage_vs_target_combatant_id == <target>``.
+    True Strike installs exactly that effect on a 1-round
+    concentration buff — no new attack-pipeline hook needed.
+
+    RAW-bent v1 (filed as Phase 1.5 follow-up): RAW says "your
+    *first* attack roll against the target." This v1 grants
+    advantage on *every* attack against the marked target while
+    the buff is active. The 1-round duration cap means at most
+    one turn of advantage, so the divergence is bounded — a
+    multi-attack character at high level gets advantage on
+    multiple attacks against the marked target in that one
+    turn. The "consume on first attack" hook lands when the
+    /attack endpoint gains a generic buff-consume-on-hit
+    contract; that refactor benefits other "next attack" effects
+    too (Feinting Attack's broadcast already names this), so it
+    pays for itself.
+
+    Body: ``{character_id, target_combatant_id}``.
+
+    Response: ``{ok, feature, target_combatant_id, buff_installed}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_combatant_id = body.get("target_combatant_id")
+    if not target_combatant_id:
+        raise HTTPException(400, "target_combatant_id is required")
+    target_combatant_id = str(target_combatant_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_ts = any(
+        (s.get("_slug") == "true-strike")
+        or (str(s.get("name", "")).lower() == "true strike")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"bard", "sorcerer", "warlock", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_ts and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows True Strike, or bard/sorcerer/warlock/wizard",
+            "got_class": _cls,
+        })
+
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "true-strike",
+        "name": "True Strike",
+        "icon": "🎯",
+        "duration_rounds": 1,
+        "duration_max": 1,
+        "concentration": True,
+        "source_char_id": char.id,
+        "effects": {
+            "attack_advantage_vs_target_combatant_id": target_combatant_id,
+        },
+        "desc": (
+            "Your next attack roll against the marked target has "
+            "advantage if you make it before the end of your next turn."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🎯 True Strike",
+            "feature_desc": (
+                f"{char.name} marks a target with True Strike — advantage "
+                "on attack rolls against the marked target until end of "
+                "next turn (concentration)."
+            ),
+            "source": "true-strike",
+            "target_combatant_id": target_combatant_id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "true-strike",
+        "target_combatant_id": target_combatant_id,
+        "buff_installed": bool(buff_installed),
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_gust")
 async def cast_gust(
     campaign_id: int,

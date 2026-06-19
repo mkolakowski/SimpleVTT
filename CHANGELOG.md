@@ -10,6 +10,46 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.437.0] - 2026-06-18 — "The Pointed Finger"
+
+**Schema version:** 71
+
+**Commit summary:** First Phase 1 demonstrator of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **True Strike** (Cantrip, Bard/Sorcerer/Warlock/Wizard). New `/cast_true_strike` endpoint installs a 1-round concentration buff on the caster carrying `effects.attack_advantage_vs_target_combatant_id` bound to the chosen target's combatant id. The v2.158.53 `_attacker_has_vow_of_enmity_vs_target` helper that the `/attack` endpoint already calls is **generic across all buff keys** — it picks up the effect without modification. Zero new attack-pipeline code.
+
+**Description:** RAW PHB p.284: "You extend your hand and point a finger at a target in range. Your magic grants you a brief insight into the target's defenses. On your next turn, you gain advantage on your first attack roll against the target, provided that this spell hasn't ended."
+
+**Implementation:**
+
+- Body: `{character_id, target_combatant_id}`.
+- Caster gate: knows True Strike OR is in `{bard, sorcerer, warlock, wizard}` per RAW. 409 cannot_cast otherwise.
+- Buff installed via `_install_buff`: key `true-strike`, concentration, 1-round duration, effects carry `attack_advantage_vs_target_combatant_id: <target_id>`. Concentration semantics drop any existing concentration buff on the caster.
+- `feature_used` broadcast for the roll-log card.
+
+**Why zero new attack-pipeline code:** the v2.158.53 generic helper iterates the attacker's buffs and returns True whenever ANY buff carries `attack_advantage_vs_target_combatant_id` matching the current attack's target. It was written for Vow of Enmity but is key-agnostic. True Strike's buff sets the same effect; the helper picks it up automatically. **This is the design lesson the cast-and-broadcast tail arc was meant to demonstrate** — most Bucket A spells can ride existing generic substrates with zero new mechanical hooks.
+
+**RAW-bent v1:** RAW says "first attack roll." This v1 grants advantage on every attack against the marked target while the buff is active. The 1-round duration bounds the divergence (multi-attack characters get advantage on multiple attacks but only for one turn). Filed for Phase 1.5: a generic buff-consume-on-hit contract that benefits other "next attack" effects too (Feinting Attack's broadcast already names `next_attack_advantage: true` and would land on the same hook).
+
+**4 new harness tests** at `tests/harness/test_cast_true_strike.py`:
+
+- `test_cast_true_strike_installs_buff_with_target_binding` — buff lands with the right target id.
+- `test_cast_true_strike_buff_is_concentration_one_round` — concentration=true + duration_rounds=1.
+- `test_cast_true_strike_non_caster_rejected` — Krieger (Barbarian) → 409.
+- `test_cast_true_strike_missing_target_400` — missing target id → 400.
+
+Total harness count 3460 → 3464.
+
+**Why "The Pointed Finger":** the cast literally has you "point a finger at a target." The metaphor doubles as the design: point one finger (set one effect), let the existing substrate do the rest.
+
+MINOR — new HTTP endpoint + 4 new harness tests. No schema change. No new env var. Uses zero new mechanical hooks — rides the existing `_attacker_has_vow_of_enmity_vs_target` chain.
+
+### Added
+- `app/routes/tabletop_routes.py::cast_true_strike`: new `POST /api/campaign/{campaign_id}/cast_true_strike` endpoint. Installs the True Strike buff with the target-bound advantage-grant effect.
+- `tests/harness/test_cast_true_strike.py`: 4 tests covering install + buff shape + caster gate + missing-target validation.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: status flips from ⚪ proposed to 🟠 Phase 1 in progress. True Strike entry marked ✅ shipped v2.437.0 with the implementation notes folded in.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3460 → 3464.
+
 ## [2.436.0] - 2026-06-18 — "The Opened Tail"
 
 **Schema version:** 71
