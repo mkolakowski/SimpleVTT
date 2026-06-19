@@ -201,12 +201,28 @@ against Maps 2.0.
 
 ---
 
-## Phase 2+ candidates (filed)
+## Phase 2 — Bucket A continuation
 
-After Phase 1 ships, the next 5 highest-leverage spells from
-Bucket A:
+Opened v2.442.0 after Phase 1 closed at v2.441.0. Each ship adds
+one more Bucket A spell on the same per-commit recipe (substrate
+or endpoint + 2-4 harness tests + plan-doc flip). No phase
+closure — runs indefinitely until Bucket A is exhausted.
 
-- **Shield of Faith (L1)** — +2 AC buff, concentration, 10 minutes.
+### Shipped
+
+- **Shield of Faith (L1)** — ✅ shipped v2.442.0. The
+  `_SPELL_BUFF_MAP["shield-of-faith"]` substrate + the
+  `_read_target_ac` ac_bonus walker were already wired
+  (v2.97.38 / v2.97.39); this ship just added the
+  `/cast_shield_of_faith` endpoint so the substrate is reachable.
+  Body: `{character_id, target_character_id?}`. Gates
+  cleric/paladin. 4 harness tests including a target_ac round-trip
+  via /attack that verifies the +2 lands.
+
+### Remaining candidates (filed)
+
+Next 4 highest-leverage spells from Bucket A:
+
 - **Feather Fall (L1 reaction)** — slow-fall buff that triggers on
   the next falling-damage event.
 - **Mage Armor (L1)** — set AC to 13 + DEX modifier; persists 8 h.

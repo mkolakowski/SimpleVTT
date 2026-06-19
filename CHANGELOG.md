@@ -10,6 +10,48 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.442.0] - 2026-06-19 — "The Shimmering Field"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 opener of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Shield of Faith** (L1 abjuration, Cleric/Paladin, RAW PHB p.275). New `/cast_shield_of_faith` endpoint exposes the existing v2.97.38 `_SPELL_BUFF_MAP["shield-of-faith"]` substrate + the v2.97.39 `_read_target_ac` ac_bonus walker. ZERO new mechanical code — both pieces of the substrate were already wired; this commit just makes the substrate reachable from a cast button. Phase 2 of the cast-and-broadcast tail now in motion (Phase 1 closed v2.441.0).
+
+**Description:** RAW: "A shimmering field appears and surrounds a creature of your choice within range, granting it a +2 bonus to AC for the duration." Bonus action, V/S/M, 60 ft, Concentration, up to 10 minutes.
+
+**Implementation:**
+
+- Body: `{character_id, target_character_id?}`. If `target_character_id` is omitted the caster targets themself (RAW "a creature of your choice" includes the caster).
+- Caster gate: knows Shield of Faith OR is in `{cleric, paladin}`. 409 cannot_cast otherwise.
+- The buff installation reads the existing `_SPELL_BUFF_MAP["shield-of-faith"]` template (v2.97.38: `ac_bonus: 2`, concentration, 100 rounds = 10 min @ 6 s/round) and copies the fields onto the install dict. No duplication — single source of truth stays at the substrate.
+- The +2 AC takes effect via the v2.97.39 `_read_target_ac` walker that sums `effects.ac_bonus` across the target's buffs. Verified by the harness test that reads `target_ac` from /attack before + after the cast and asserts the delta is exactly +2.
+- 60-ft range stays GM-tracked (Maps 2.0 / range substrate filed elsewhere).
+- `feature_used` broadcast for the roll-log card; self-target and other-target variants get distinct descriptions.
+
+**Why this is the smallest viable Phase 2 ship:** the Phase 1 demonstrators each landed at least one new substrate piece (buff entry, summon template, /roll read site, or generic helper). Shield of Faith landed ZERO new substrate — the substrate AND the read site were already wired five years ago in the v2.97.x AC-buff scaffolding. The only missing piece was a cast endpoint to fire the install. This proves the recipe degrades gracefully: when the substrate already exists, Phase 2 commits are pure endpoint exposure. The pattern continues against Bucket A indefinitely.
+
+**Why "The Shimmering Field":** the RAW description leads with "A shimmering field appears." The endpoint is the field's first reachable summon button — the substrate's been waiting in the catalog for five years.
+
+**4 new harness tests** at `tests/harness/test_cast_shield_of_faith.py`:
+
+- `test_cast_shield_of_faith_installs_buff` — Cleric self-targets; buff lands with `ac_bonus: 2`.
+- `test_cast_shield_of_faith_buff_is_10_minutes_concentration` — duration_rounds=100, concentration=true.
+- `test_shield_of_faith_raises_target_ac_by_2` — read target_ac via /attack before/after cast; delta is exactly +2. Validates the round-trip through `_read_target_ac`.
+- `test_cast_shield_of_faith_non_caster_rejected` — Krieger (Barbarian) → 409.
+
+The two "buff installs" tests `pytest.skip` gracefully if the demo roster ever drops Cleric/Paladin. Canonical caster is Brother Tavik Stonebrow (Cleric); Dame Seraphine Vael (Paladin) is the fallback.
+
+Total harness count 3478 → 3482.
+
+MINOR — new HTTP endpoint + 4 new harness tests. No schema change. No new env var. No new substrate (rides the existing v2.97.38 + v2.97.39 wiring).
+
+### Added
+- `app/routes/tabletop_routes.py::cast_shield_of_faith`: new `POST /api/campaign/{campaign_id}/cast_shield_of_faith` endpoint. Installs the existing `shield-of-faith` buff template on the caster or chosen target.
+- `tests/harness/test_cast_shield_of_faith.py`: 4 tests covering install + buff shape + target_ac round-trip + caster gate.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Phase 2 section renamed from "Phase 2+ candidates (filed)" to "Phase 2 — Bucket A continuation" with a new "Shipped" subsection listing Shield of Faith. The "Remaining candidates (filed)" subsection still lists the next 4 high-leverage spells.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3478 → 3482.
+
 ## [2.441.0] - 2026-06-19 — "The Loyal Steed"
 
 **Schema version:** 71

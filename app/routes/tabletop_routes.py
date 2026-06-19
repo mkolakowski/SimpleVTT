@@ -63688,6 +63688,144 @@ async def cast_find_steed(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_shield_of_faith")
+async def cast_shield_of_faith(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.442.0 — Phase 2 opener of
+    docs/plans/cast-and-broadcast-tail.md (Phase 1 closed v2.441.0;
+    Phase 2 runs indefinitely against Bucket A). Shield of Faith
+    (L1 abjuration, Cleric/Paladin, PHB p.275):
+
+      "A shimmering field appears and surrounds a creature of your
+       choice within range, granting it a +2 bonus to AC for the
+       duration."
+
+    Bonus action, V/S/M, 60 ft, Concentration, up to 10 minutes.
+
+    Implementation: rides the existing v2.97.38
+    ``_SPELL_BUFF_MAP["shield-of-faith"]`` substrate (`ac_bonus: 2`,
+    concentration, 100 rounds) + the v2.97.39 `_read_target_ac`
+    walker that sums `effects.ac_bonus` across the target's active
+    buffs. ZERO new mechanical code — the substrate AND the AC
+    read site were both already wired; this commit just exposes
+    the cast endpoint so the substrate is reachable.
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster targets themself
+    (RAW "a creature of your choice" — the caster counts as a
+    creature). 60-ft range stays GM-tracked.
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_sof = any(
+        (s.get("_slug") == "shield-of-faith")
+        or (str(s.get("name", "")).lower() == "shield of faith")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"cleric", "paladin"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_sof and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Shield of Faith, or cleric/paladin",
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("shield-of-faith") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 100)
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "shield-of-faith",
+        "name": template.get("name") or "Shield of Faith",
+        "icon": template.get("icon") or "🛡️",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": True,
+        "source_char_id": char.id,
+        "effects": dict(template.get("effects") or {"ac_bonus": 2}),
+        "desc": template.get("desc") or (
+            "+2 to AC for up to 10 minutes (concentration)."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    if target_char.id == char.id:
+        feature_desc = (
+            f"{char.name} surrounds themself in a shimmering field — "
+            "+2 AC for up to 10 minutes (concentration)."
+        )
+    else:
+        feature_desc = (
+            f"{char.name} surrounds {target_char.name} in a shimmering "
+            "field — +2 AC for up to 10 minutes (concentration)."
+        )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🛡️ Shield of Faith",
+            "feature_desc": feature_desc,
+            "source": "shield-of-faith",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "shield-of-faith",
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_gust")
 async def cast_gust(
     campaign_id: int,
