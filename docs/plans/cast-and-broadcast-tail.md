@@ -258,17 +258,24 @@ closure — runs indefinitely until Bucket A is exhausted.
   tests.
 
 - **Phase 1.5 — buff-consume-on-attack contract** — ✅ shipped
-  v2.449.0. Closes the v2.437.0 True Strike RAW-bend. New
-  contract in the `/attack` endpoint walks the attacker's buffs
-  after the attack resolves and drops any buff with
-  `effects.consume_on_attack: True`. True Strike's buff entry
-  (v2.437.0) updated to opt into the contract via the new flag.
-  RAW "your *first* attack roll" now matches engine behavior:
-  the advantage drops after the first /attack. The contract is
-  generic — any future "next attack" effect (Feinting Attack,
-  Vow of Enmity, etc.) can opt in by setting the same flag. 2
-  new harness tests covering the consumer path + a no-op
-  control.
+  v2.449.0; **Feinting Attack opt-in** ✅ shipped v2.451.0. Closes
+  the v2.437.0 True Strike RAW-bend. New contract in the
+  `/attack` endpoint walks the attacker's buffs after the attack
+  resolves and drops any buff with `effects.consume_on_attack:
+  True`. True Strike's buff entry (v2.437.0) updated to opt into
+  the contract via the new flag. RAW "your *first* attack roll"
+  now matches engine behavior: the advantage drops after the
+  first /attack. The contract is generic — any future "next
+  attack" effect (Vow of Enmity, etc.) can opt in by setting the
+  same flag. **v2.451.0** wired Feinting Attack as the second
+  consumer: optional `target_combatant_id` body param on
+  `/use_feinting_attack` installs a `feinting-attack` buff
+  carrying both `attack_advantage_vs_target_combatant_id` (lit by
+  the v2.158.53 helper) AND `consume_on_attack: True`. Zero new
+  attack-pipeline code — same lesson as True Strike. Legacy
+  `target_name`-only path stays GM-narrated. **2 v2.449.0 tests**
+  (consumer path + no-op control) + **3 v2.451.0 tests** (legacy
+  path, opt-in install, /attack consumes).
 
 - **Hellish Rebuke DEX save-for-half** — ✅ shipped v2.448.0.
   Phase 2 #7. Builds on v2.446.0: adds the attacker's DEX save

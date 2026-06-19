@@ -10,6 +10,48 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.451.0] - 2026-06-19 — "The Honest Feint"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 1.5 follow-up of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Feinting Attack opts into the v2.449.0 buff-consume-on-attack contract**. The v2.99.259 endpoint already broadcasts `next_attack_advantage: true` in the chat card; v2.451.0 wires the actual mechanical advantage by installing a `feinting-attack` buff carrying both `attack_advantage_vs_target_combatant_id` (for the v2.158.53 /attack helper) AND `consume_on_attack: True` (for the v2.449.0 walker). The buff drops after the first /attack, matching RAW "your next attack roll." Second consumer of the v2.449.0 contract (first was True Strike v2.449.0).
+
+**Description:** Battle Master maneuver 9 (PHB p.74): "you have advantage on your next attack roll against that creature this turn." The v2.99.259 ship landed the bonus-action endpoint + the +superiority-die damage rider but left the actual advantage as GM-narrated text on the broadcast. v2.451.0 closes the gap by installing the same kind of opt-in buff True Strike's v2.449.0 ship installed: when the caller supplies `target_combatant_id`, the endpoint installs a buff that lights up the existing generic advantage read in `_attacker_has_vow_of_enmity_vs_target` (the helper isn't buff-key-gated — it walks for any buff carrying the `attack_advantage_vs_target_combatant_id` marker). Zero new attack-pipeline code; the consume contract handles the drop.
+
+**Implementation:**
+
+- `use_feinting_attack` accepts an optional `target_combatant_id` body param (stringified). When supplied, after the chip gate + resource decrement, the endpoint calls `_install_buff` with `{key: "feinting-attack", duration_rounds: 1, duration_max: 1, concentration: False, effects: {attack_advantage_vs_target_combatant_id, consume_on_attack: True}}`.
+- Buff installs on the caster's combatant. The 1-round duration is a safety net — the consume contract is the primary drop trigger.
+- Response + `feature_used` broadcast carry `buff_installed: bool` and `target_combatant_id: str | None` alongside the legacy `next_attack_advantage: True` field.
+- Omitting `target_combatant_id` preserves the v2.99.259 GM-narrated path verbatim (no buff, broadcast still flags advantage for the GM to apply manually).
+
+**Why opt-in rather than always-on:** the caller might not have a combatant id for the target (target_name-only flows from the chat or hotkey). The legacy GM-narrated path stays intact for those flows. Once the sheet UI is upgraded to always supply `target_combatant_id` when the target is on the battle map, the opt-in collapses into the always-on path naturally.
+
+**Why "The Honest Feint":** the maneuver's name implies deception — the fighter pretends to strike one way, then strikes another. The mechanical implementation is now also honest: the advantage is server-enforced rather than relying on the GM remembering the broadcast. The feint is real and adjudicated.
+
+**3 new harness tests** at `tests/harness/test_feinting_attack_consume.py`:
+
+- `test_feinting_attack_without_target_combatant_no_buff` — legacy path: omit `target_combatant_id` → response + broadcast carry `buff_installed: False`, no buff installed on Garrik.
+- `test_feinting_attack_with_target_installs_buff` — opt-in path: supply `target_combatant_id` → response + broadcast carry `buff_installed: True` + the target id; buff is present with both flags in the effects dict.
+- `test_feinting_attack_buff_consumed_after_attack` — end-to-end: install buff → Garrik fires Greatsword (`attack_index: 0`) → v2.449.0 walker drops the buff post-resolution.
+
+Tests use a `garrik_battle_master` fixture mirroring `tests/harness/test_feinting_attack.py:52-71` — patches Garrik's subclass to Battle Master + adds a `superiority-dice` resource row, restores to Champion on teardown.
+
+**Regression coverage:** the existing `tests/harness/test_feinting_attack.py` (3 tests) + `tests/harness/test_true_strike_consume_on_attack.py` (2 tests) all continue to pass — the new `target_combatant_id` param is additive and the legacy path with `target_name`-only is unchanged.
+
+Total harness count 3503 → 3506.
+
+MINOR — additive body param on existing endpoint + buff install + 3 new harness tests. No schema change. No new env var. No new spell ship.
+
+### Added
+- `app/routes/tabletop_routes.py::use_feinting_attack` accepts optional `target_combatant_id`. When supplied, installs a `feinting-attack` buff carrying `attack_advantage_vs_target_combatant_id` + `consume_on_attack: True`.
+- Response + `feature_used` broadcast gain `buff_installed: bool` and `target_combatant_id: str | None` fields.
+- `tests/harness/test_feinting_attack_consume.py`: 3 tests covering the legacy path (no buff) + the opt-in path (buff installs) + the consume contract round-trip (/attack drops the buff).
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Phase 1.5 entry expanded to note Feinting Attack as the second consumer of the consume-on-attack contract.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3503 → 3506; new `test_feinting_attack_consume.py` section added.
+
 ## [2.450.0] - 2026-06-19 — "The Literal Meaning"
 
 **Schema version:** 71

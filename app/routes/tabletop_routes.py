@@ -59662,13 +59662,30 @@ async def use_feinting_attack(
     this turn. If that attack hits, add the superiority die to
     the attack's damage roll."
 
-    Body: ``{character_id, target_name?, override?}``. First
-    maneuver to gate on a Phase 4 BONUS chip — prior 8 maneuvers
-    are part of the Attack action and don't consume a chip.
+    Body: ``{character_id, target_name?, target_combatant_id?,
+    override?}``. First maneuver to gate on a Phase 4 BONUS chip —
+    prior 8 maneuvers are part of the Attack action and don't
+    consume a chip.
+
+    v2.451.0 — when ``target_combatant_id`` is supplied, the
+    endpoint opts into the v2.449.0 buff-consume-on-attack
+    contract by installing a ``feinting-attack`` buff with both
+    ``attack_advantage_vs_target_combatant_id`` and
+    ``consume_on_attack: True``. The v2.158.53
+    ``_attacker_has_vow_of_enmity_vs_target`` helper that /attack
+    already calls picks up the advantage automatically (zero new
+    attack-pipeline code, same lesson as True Strike v2.437.0),
+    and the buff drops after the first /attack via the v2.449.0
+    contract. Omitting the param keeps the v2.99.259 GM-narrated
+    path intact (broadcast carries next_attack_advantage: True;
+    GM applies advantage manually).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     target_name = (str(body.get("target_name") or "")).strip()[:80]
+    target_combatant_id = body.get("target_combatant_id") or None
+    if target_combatant_id is not None:
+        target_combatant_id = str(target_combatant_id)
     override = bool(body.get("override"))
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
@@ -59757,6 +59774,36 @@ async def use_feinting_attack(
         },
     })
 
+    # v2.451.0 — Phase 1.5 follow-up: opt into the v2.449.0
+    # buff-consume-on-attack contract when target_combatant_id is
+    # supplied. Installs a feinting-attack buff carrying both the
+    # target-bound advantage marker (so the v2.158.53 /attack helper
+    # picks it up) and the consume_on_attack flag (so the v2.449.0
+    # walker drops it after the first /attack).
+    buff_installed = False
+    if target_combatant_id:
+        buff_installed = await _install_buff(campaign_id, char.id, {
+            "key": "feinting-attack",
+            "name": "Feinting Attack",
+            "icon": "🃏",
+            "duration_rounds": 1,
+            "duration_max": 1,
+            "concentration": False,
+            "source_char_id": char.id,
+            "effects": {
+                "attack_advantage_vs_target_combatant_id": (
+                    target_combatant_id
+                ),
+                "consume_on_attack": True,
+            },
+            "desc": (
+                "Advantage on your next attack roll vs the marked "
+                "target this turn. The buff is consumed by the first "
+                "/attack you make (v2.449.0 consume-on-attack "
+                "contract)."
+            ),
+        })
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -59787,8 +59834,10 @@ async def use_feinting_attack(
             ),
             "source": "feinting-attack",
             "target_name": target_name,
+            "target_combatant_id": target_combatant_id,
             "extra_damage_on_hit": damage,
             "next_attack_advantage": True,
+            "buff_installed": buff_installed,
             "die_size": die_size,
             "dice_remaining": new_sd,
             "over_budget": was_used,
@@ -59800,8 +59849,10 @@ async def use_feinting_attack(
         "ok": True,
         "feature": "feinting-attack",
         "target_name": target_name,
+        "target_combatant_id": target_combatant_id,
         "extra_damage_on_hit": damage,
         "next_attack_advantage": True,
+        "buff_installed": buff_installed,
         "die_size": die_size,
         "dice_remaining": new_sd,
         "over_budget": was_used,

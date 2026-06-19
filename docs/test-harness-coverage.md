@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3503 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.450.0, 2026-06-19).
+**Total tests:** 3506 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.451.0, 2026-06-19).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2029,6 +2029,15 @@ v2.99.259 — Battle Master maneuver 9 of 16 — Feinting Attack (PHB p.74). Fir
 | `test_use_fa_happy` | Lv 9 Garrik d8 → `next_attack_advantage: True`, `extra_damage_on_hit` 1..8, `target_name == "Bandit Alpha"`, dice 4 → 3, broadcast. |
 | `test_use_fa_out_of_dice` | Dice 0 → 409. |
 | `test_use_fa_wrong_subclass` | Default Champion → 409. |
+
+### `test_feinting_attack_consume.py`
+v2.451.0 — Phase 1.5 follow-up of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). Feinting Attack opts into the v2.449.0 buff-consume-on-attack contract via an optional `target_combatant_id` body param. When supplied, a `feinting-attack` buff installs carrying both `attack_advantage_vs_target_combatant_id` (lit by the v2.158.53 helper for actual /attack advantage) AND `consume_on_attack: True` (dropped by the v2.449.0 walker after the first /attack). Tests reuse the Battle Master patch fixture from `test_feinting_attack.py`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_feinting_attack_without_target_combatant_no_buff` | Omit `target_combatant_id` → response + `feature_used` broadcast carry `buff_installed: False`; no `feinting-attack` buff on Garrik's combatant. Legacy GM-narrated path intact. |
+| `test_feinting_attack_with_target_installs_buff` | Supply `target_combatant_id` → response + broadcast carry `buff_installed: True` + target id; buff present on Garrik with both `attack_advantage_vs_target_combatant_id` matching the target id AND `consume_on_attack: True`. |
+| `test_feinting_attack_buff_consumed_after_attack` | Install buff → Garrik fires Greatsword (`attack_index: 0`) vs the marked target → v2.449.0 walker drops the buff post-resolution (verified via `/buffs`). |
 
 ### `test_sweeping_attack.py`
 v2.99.258 — Battle Master maneuver 8 of 16 — Sweeping Attack (PHB p.74). Die becomes damage on a *second* target within 5 ft of the original if the same attack roll hits both.
