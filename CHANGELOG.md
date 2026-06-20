@@ -10,6 +10,60 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.471.0] - 2026-06-19 — "The Envsubst Sentry"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 4c of [`docs/plans/fail2ban-crowdsec-integration.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/fail2ban-crowdsec-integration.md). Lifts the previously-hardcoded jail thresholds (`maxretry`, `findtime`, `bantime`, `logpath`) out of `docs/integrations/fail2ban/jail.d/simplevtt.conf` into envsubst-style `${VAR}` placeholders, backed by FAIL2BAN_* env vars in `.env.example` and `docker-compose.yml`. New `render-jail.sh` entrypoint resolves the placeholders at container start. The Phase 4a `AUDIT_LOG_PATH` also flows through so a single env var change reaches both the writer (app) and reader (fail2ban) sides of the audit log.
+
+**Description:** Operators tuning fail2ban no longer need to hand-edit jail configs and `docker compose --profile fail2ban restart`. Set the FAIL2BAN_* vars in `.env`, then `docker compose --profile fail2ban up -d` and the new values flow into the running jail. The render-jail.sh script logs how many configs it rendered so a misfire shows up in `docker compose --profile fail2ban logs fail2ban`.
+
+**Implementation:**
+
+- `docs/integrations/fail2ban/jail.d/simplevtt.conf`: replaces hardcoded `maxretry = 5`/`findtime = 5m`/`bantime = 1h`/`logpath = /var/log/simplevtt/app.log` with `${FAIL2BAN_LOGIN_MAXRETRY}`, `${FAIL2BAN_LOGIN_FINDTIME}`, `${FAIL2BAN_LOGIN_BANTIME}`, `${FAIL2BAN_AUDIT_LOG_PATH}`. Updated header comment explains both flows — docker-compose (auto-rendered by render-jail.sh) and host-side (operator runs `envsubst` manually before copying to `/etc/fail2ban/`).
+- `docs/integrations/fail2ban/scripts/render-jail.sh` (new, executable): reads `/etc/fail2ban/jail.d.template/*.conf`, runs `envsubst` against an explicit allowlist of FAIL2BAN_* placeholders, writes to `/etc/fail2ban/jail.d/` (a writable in-container path), then `exec`s the image's standard entrypoint at `/entrypoint.sh`. The allowlist matters — `envsubst` without args would replace EVERY `${...}` pattern, including ones an operator left literal in custom config additions.
+- `docker-compose.yml`: 
+  - The `fail2ban` service's `volumes` block changes the jail mount path from `:/etc/fail2ban/jail.d:ro` to `:/etc/fail2ban/jail.d.template:ro` (separating the read-only source from the render destination).
+  - Adds `./docs/integrations/fail2ban/scripts/render-jail.sh:/scripts/render-jail.sh:ro` mount.
+  - New `entrypoint: [/bin/sh, /scripts/render-jail.sh]` override.
+  - New `environment` keys: `FAIL2BAN_AUDIT_LOG_PATH` (default: passes through `AUDIT_LOG_PATH`), `FAIL2BAN_LOGIN_MAXRETRY` (default 5), `FAIL2BAN_LOGIN_FINDTIME` (5m), `FAIL2BAN_LOGIN_BANTIME` (1h), `FAIL2BAN_MAGIC_LINK_REPLAY_BANTIME` (24h), `FAIL2BAN_API_PROBE_MAXRETRY` (20), `FAIL2BAN_DEFAULT_BANTIME` (1h).
+- `.env.example`: adds a documented FAIL2BAN_* section under the existing Audit logging block. Defaults match the thresholds the v2.424.0 reference jail shipped with.
+
+**Why split the jail mount into `template:ro` + writable destination instead of running `envsubst` in place:** mounting the source as read-only is a structural safety guarantee — fail2ban-server can't accidentally clobber the operator's edits. The render step writes into the container's writable filesystem (not the host bind mount), so editing the host file + restarting the container re-renders cleanly.
+
+**Why an allowlist-style envsubst instead of unbounded substitution:** the jail config file can legitimately carry literal `${...}` patterns in regex strings or operator-added jails. Allowlisting only the FAIL2BAN_* names prevents `envsubst` from replacing them with empty strings (which would silently break a custom jail). The allowlist lives at the top of `render-jail.sh` and is the canonical list of "knobs this commit gives the operator."
+
+**Why "The Envsubst Sentry":** envsubst is the small, sharp tool that gates every config change at the boundary between `.env` and the running jail. "Sentry" names its watching role — every container start, render-jail.sh inspects the templates and resolves the placeholders before fail2ban can read them. Continues the operator-affordance naming theme from v2.468.0 / v2.470.0.
+
+**Why `FAIL2BAN_MAGIC_LINK_REPLAY_BANTIME` ships in .env.example but isn't yet wired into the jail config:** the v2.424.0 reference jail only covers the `simplevtt-auth` jail; a dedicated `simplevtt-magic-link-replay` jail with the 24h ban hasn't shipped yet. Phase 4c reserves the env-var slot so the future jail can pick it up without a `.env.example` edit.
+
+**7 new harness tests** at `tests/harness/test_fail2ban_env_threshold_wiring.py`. YAML + text-file-validation pattern matching the Phase 4b sibling.
+
+- `test_jail_config_uses_envsubst_placeholders` — anchors all required `${FAIL2BAN_*}` placeholders appear in `simplevtt.conf` and no `maxretry = <number>` line hardcodes the value.
+- `test_env_example_carries_fail2ban_defaults` — every FAIL2BAN_* default the jail needs is uncommented in `.env.example` so `cp .env.example .env` Just Works.
+- `test_compose_passes_fail2ban_env_vars` — the compose service's `environment` block plumbs every placeholder through.
+- `test_render_script_exists_and_is_executable` — the helper exists at the expected path with `+x` mode.
+- `test_compose_uses_render_jail_entrypoint` — the service overrides the image entrypoint to run the render script.
+- `test_compose_mounts_jail_as_template` — the read-only template mount is at `:/etc/fail2ban/jail.d.template` (not the writable destination).
+- `test_compose_mounts_render_script` — the helper is mounted into `/scripts/render-jail.sh` read-only.
+
+All 18 existing audit-related tests (`test_audit_log.py`, `test_api_audit_emission.py`, `test_audit_log_file_handler.py`) continue to pass — Phase 4c only touches the fail2ban side.
+
+Total harness count 3586 → 3593.
+
+MINOR — envsubst-templated reference config + new helper script + 6 new env vars + 7 new harness tests. No schema change. No new app code.
+
+### Added
+- `docs/integrations/fail2ban/scripts/render-jail.sh`: envsubst entrypoint helper. Allowlist-rendered against the FAIL2BAN_* placeholder set; exec's the image's standard entrypoint as the final step.
+- `docker-compose.yml`: 6 new `FAIL2BAN_*` env-var pass-throughs on the fail2ban service + entrypoint override + render-script mount.
+- `.env.example`: documented FAIL2BAN_* section under the Audit logging block with defaults matching the v2.424.0 reference jail.
+- `tests/harness/test_fail2ban_env_threshold_wiring.py`: 7 wiring-contract tests anchoring the placeholder set + env-example defaults + compose pass-through + entrypoint + mount paths.
+
+### Changed
+- `docs/integrations/fail2ban/jail.d/simplevtt.conf`: hardcoded thresholds replaced with `${FAIL2BAN_*}` placeholders. Header comment expanded to cover both deploy flows (docker-compose auto-rendered + host-side manual envsubst).
+- `docker-compose.yml`: fail2ban service's jail mount path changes from `:/etc/fail2ban/jail.d:ro` to `:/etc/fail2ban/jail.d.template:ro` (template + writable destination split).
+- `docs/test-harness-coverage.md`: total-test-count nudges 3586 → 3593.
+
 ## [2.470.0] - 2026-06-19 — "The Profile-Gated Banhammer"
 
 **Schema version:** 71

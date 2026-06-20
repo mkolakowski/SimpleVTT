@@ -160,6 +160,23 @@ services:
       F2B_LOG_LEVEL: ${F2B_LOG_LEVEL:-INFO}
       F2B_LOG_TARGET: STDOUT
       F2B_DB_PURGE_AGE: ${F2B_DB_PURGE_AGE:-1d}
+      # v2.471.0 — Phase 4c. Env-driven jail thresholds. The
+      # render-jail.sh entrypoint envsubsts these into
+      # jail.d/simplevtt.conf at startup.
+      FAIL2BAN_AUDIT_LOG_PATH: ${AUDIT_LOG_PATH:-/var/log/simplevtt/audit.log}
+      FAIL2BAN_LOGIN_MAXRETRY: ${FAIL2BAN_LOGIN_MAXRETRY:-5}
+      FAIL2BAN_LOGIN_FINDTIME: ${FAIL2BAN_LOGIN_FINDTIME:-5m}
+      FAIL2BAN_LOGIN_BANTIME: ${FAIL2BAN_LOGIN_BANTIME:-1h}
+      FAIL2BAN_MAGIC_LINK_REPLAY_BANTIME: ${FAIL2BAN_MAGIC_LINK_REPLAY_BANTIME:-24h}
+      FAIL2BAN_API_PROBE_MAXRETRY: ${FAIL2BAN_API_PROBE_MAXRETRY:-20}
+      FAIL2BAN_DEFAULT_BANTIME: ${FAIL2BAN_DEFAULT_BANTIME:-1h}
+    # v2.471.0 — Phase 4c. Override the image's entrypoint with the
+    # render-jail.sh helper that envsubsts the FAIL2BAN_* placeholders
+    # into the jail.d configs before exec'ing the image's standard
+    # entrypoint chain.
+    entrypoint:
+      - /bin/sh
+      - /scripts/render-jail.sh
     volumes:
       # Persist the ban database across restarts so a fresh container
       # starts with the existing bans (matches how operators expect
@@ -168,11 +185,19 @@ services:
       # Read-only tail of the app's audit log volume. Phase 4a owns
       # the writer side; this is the consumer.
       - audit_logs:/var/log/simplevtt:ro
-      # Read-only mounts of the v2.424.0 reference filter + jail.
+      # Read-only mount of the v2.424.0 reference filter.
       # Operator edits to the on-disk files take effect after
       # `fail2ban-client reload`.
       - ./docs/integrations/fail2ban/filter.d:/etc/fail2ban/filter.d:ro
-      - ./docs/integrations/fail2ban/jail.d:/etc/fail2ban/jail.d:ro
+      # v2.471.0 — Phase 4c. The jail config gets mounted as a
+      # template at /etc/fail2ban/jail.d.template/ (read-only);
+      # render-jail.sh envsubsts it into the writable
+      # /etc/fail2ban/jail.d/ volume at startup. This split lets
+      # operator edits to the source template still land (re-render
+      # on container restart) while keeping the rendered destination
+      # writable so envsubst can drop a file there.
+      - ./docs/integrations/fail2ban/jail.d:/etc/fail2ban/jail.d.template:ro
+      - ./docs/integrations/fail2ban/scripts/render-jail.sh:/scripts/render-jail.sh:ro
     # No port mappings — fail2ban-client is reached via
     # `docker compose exec`. Banning runs inside the container via
     # the image's default iptables action (talks to the in-container
