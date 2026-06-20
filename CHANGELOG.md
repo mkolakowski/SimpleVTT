@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.485.8] - 2026-06-20 — "The Second Factor (Drawn)"
+
+**Schema version:** 71
+
+**Commit summary:** Adds a **design plan** for opt-in TOTP MFA on the Admin Center login, plus an env-set recovery code for the TOTP-loss case (blank by default, accepting nothing). Plan only — no implementation yet — surfaced through the wiki.
+
+**Description:** Captures the design the operator asked for: a TOTP second factor on the v2.485.3 admin-center login that can be turned on via env, and an `ADMIN_CENTER_RECOVERY_CODE` env var whose **blank default rejects every code** (closing the empty==empty bypass), with the service failing closed if MFA is enabled but no TOTP secret is configured. Documents the login-flow branch, the three new env vars, the recovery-code safety property, the module/file layout, and the harness tests for when it's built.
+
+**Implementation:**
+
+- `docs/plans/admin-center-mfa.md` (new): the design plan (goals/non-goals, env vars, login flow, recovery-code rules, fail-closed behavior, TOTP impl notes, file plan, test plan, rollout).
+- Wiki surfacing: `_DOC_ALLOWLIST` slug `plan-admin-center-mfa`; "Design plans" rows in `app/templates/wiki.html` + `docs/wiki/README.md`.
+
+**Harness changes:**
+
+- `tests/harness/test_wiki.py`: `test_wiki_doc_serves_admin_center_mfa_plan` (slug → 200 + "totp"/"recovery code" + nav) and the `/wiki/doc/plan-admin-center-mfa` link added to `test_wiki_home_renders`.
+
+Total harness count → 3700 (+1).
+
+PATCH — a new design-plan doc + its wiki plumbing + one harness test. No feature code, no schema change.
+
+### Added
+- `docs/plans/admin-center-mfa.md` — design plan for opt-in admin-center TOTP MFA + env recovery code, surfaced through `/wiki/doc/plan-admin-center-mfa`.
+
 ## [2.485.7] - 2026-06-20 — "The Pardon"
 
 **Schema version:** 71

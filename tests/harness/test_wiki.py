@@ -117,6 +117,7 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-fail2ban-crowdsec-integration" in resp.text
     # v2.423.5: Cloudflare edge-banning integration plan listed.
     assert "/wiki/doc/plan-cloudflare-edge-banning" in resp.text
+    assert "/wiki/doc/plan-admin-center-mfa" in resp.text
     # v2.436.0: cast-and-broadcast tail plan listed.
     assert "/wiki/doc/plan-cast-and-broadcast-tail" in resp.text
     # v2.423.7: Security spine banner rendered at the top of the landing page.
@@ -858,6 +859,21 @@ async def test_wiki_doc_serves_cloudflare_edge_banning_plan():
     assert "text/html" in resp.headers.get("content-type", "")
     assert "cloudflare" in resp.text.lower()
     assert "edge-banning" in resp.text.lower() or "edge banning" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_admin_center_mfa_plan():
+    """v2.485.8: GET /wiki/doc/plan-admin-center-mfa — 200 + body
+    contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/admin-center-mfa.md``. Proposes an
+    opt-in TOTP second factor on the admin-center login plus an
+    env-set recovery code whose blank default accepts nothing."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-admin-center-mfa")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "totp" in resp.text.lower()
+    assert "recovery code" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 
