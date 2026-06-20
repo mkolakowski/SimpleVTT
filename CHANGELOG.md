@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.485.0] - 2026-06-20 — "The Census"
+
+**Schema version:** 71
+
+**Commit summary:** Adds the **data-inventory panel** to the Admin Center — read-only database row counts (Users, Campaigns, Characters, Dice rolls, …) plus an account breakdown. This is the by-the-numbers companion to the privacy policy's data inventory, and completes the Admin Center feature (audit log + traffic stats + fail2ban + inventory).
+
+**Description:** The v2.483.0/v2.484.0 Admin Center surfaced the audit log, traffic stats, and fail2ban bans. This commit answers "how much of each thing is in the database?" — the third leg of "show all the details that are now collected." The admin-center service connects to the same database as the main app and runs only `COUNT` queries; it never writes.
+
+**Implementation:**
+
+- `app/admin_center/inventory.py` (new): `read_inventory()` returns `{available, counts, breakdown}`. `counts` is per-table row counts (Users / Campaigns / Characters / Campaign memberships / Dice rolls / Maps / Tokens / Encounters / Playlists); `breakdown` is the account shape (admins, disabled accounts, Google-SSO vs password sign-ins — mirrors the privacy ledger). DB-layer imports are **lazy** (inside the function) so importing the module never triggers engine creation — keeps the other admin-center modules host-unit-testable. Returns `available=False` with a reason when the DB is unreachable.
+- `app/admin_center/main.py`: `GET /api/inventory` + the inventory panel in the dashboard context.
+- `app/admin_center/templates/dashboard.html`: data-inventory cards + account-breakdown chips, cross-linked to the privacy policy.
+- `docker-compose.yml`: admin-center gains `DATABASE_URL` (same connection string as the app) + `depends_on: db (service_healthy)`.
+- `docs/wiki/admin-center.md`: data-inventory capability flipped to ✅; phase status marked complete.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py`: +3 live tests — `/api/inventory` shape (200 + `{available, counts}`, `Users` a non-negative int when available), its auth gate (401), and the dashboard "Data inventory" panel.
+
+Total harness count → 3673 (+3).
+
+MINOR — additive panel completing the Admin Center. No schema change, no app-surface change.
+
+### Added
+- `app/admin_center/inventory.py` + `GET /api/inventory` + the dashboard data-inventory panel: read-only database row counts + account breakdown.
+- `docker-compose.yml`: `DATABASE_URL` on the admin-center service for the inventory queries.
+
 ## [2.484.0] - 2026-06-20 — "The Ban Ledger"
 
 **Schema version:** 71

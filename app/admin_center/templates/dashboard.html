@@ -102,6 +102,28 @@
       {% endfor %}
     </div>
 
+    <h2>Data inventory</h2>
+    {% if not inventory.available %}
+    <div class="banner empty">🗄️ Database inventory unavailable: {{ inventory.reason }}</div>
+    {% else %}
+    <div class="cards">
+      {% for label, n in inventory.counts.items() %}
+      <div class="card"><div class="n">{{ n }}</div><div class="l">{{ label }}</div></div>
+      {% endfor %}
+    </div>
+    {% if inventory.breakdown %}
+    <p class="muted" style="margin:-6px 0 8px">
+      Accounts:
+      {% for label, n in inventory.breakdown.items() %}<span class="tag">{{ label }}: {{ n }}</span> {% endfor %}
+    </p>
+    {% endif %}
+    <p class="muted" style="font-size:12.5px;margin-bottom:8px">
+      Row counts straight from the database — the by-the-numbers
+      companion to the <a href="/wiki/privacy">privacy policy</a>'s data
+      inventory.
+    </p>
+    {% endif %}
+
     <div class="grid2">
       <div>
         <h2>Top source IPs</h2>
@@ -210,7 +232,7 @@
     <p class="muted" style="margin-top:30px;font-size:12.5px">
       Read-only view of <code>{{ audit_log_path }}</code>. JSON APIs:
       <a href="/api/stats">/api/stats</a> · <a href="/api/events">/api/events</a> ·
-      <a href="/api/fail2ban">/api/fail2ban</a>.
+      <a href="/api/fail2ban">/api/fail2ban</a> · <a href="/api/inventory">/api/inventory</a>.
       See <code>/wiki/admin-center</code> on the main app for docs.
     </p>
   </main>

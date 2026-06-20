@@ -295,3 +295,30 @@ def test_dashboard_shows_fail2ban_panel():
     r = httpx.get(f"{ADMIN_BASE_URL}/", auth=_AUTH, timeout=5.0)
     assert r.status_code == 200
     assert "fail2ban" in r.text
+
+
+@_LIVE
+def test_api_inventory_shape():
+    """/api/inventory returns DB row counts. The container has a
+    database, so available is True and Users is a non-negative int."""
+    r = httpx.get(f"{ADMIN_BASE_URL}/api/inventory", auth=_AUTH, timeout=5.0)
+    assert r.status_code == 200
+    body = r.json()
+    assert "available" in body and "counts" in body
+    if body["available"]:
+        assert "Users" in body["counts"]
+        assert isinstance(body["counts"]["Users"], int)
+        assert body["counts"]["Users"] >= 0
+
+
+@_LIVE
+def test_api_inventory_requires_auth():
+    r = httpx.get(f"{ADMIN_BASE_URL}/api/inventory", timeout=5.0)
+    assert r.status_code == 401
+
+
+@_LIVE
+def test_dashboard_shows_data_inventory():
+    r = httpx.get(f"{ADMIN_BASE_URL}/", auth=_AUTH, timeout=5.0)
+    assert r.status_code == 200
+    assert "Data inventory" in r.text

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3670 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.484.0, 2026-06-20).
+**Total tests:** 3673 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.485.0, 2026-06-20).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5530,6 +5530,9 @@ The standalone read-only dashboard on port 8015. Unit tests (host-side) for the 
 | `test_api_fail2ban_shape` | `/api/fail2ban` → 200 + the ban-status envelope keys (same shape whether or not the fail2ban profile is up). |
 | `test_api_fail2ban_requires_auth` | `/api/fail2ban` without creds → 401. |
 | `test_dashboard_shows_fail2ban_panel` | The dashboard HTML includes the fail2ban panel. |
+| `test_api_inventory_shape` | `/api/inventory` → 200 + `{available, counts}`; when available, `Users` is a non-negative int. |
+| `test_api_inventory_requires_auth` | `/api/inventory` without creds → 401. |
+| `test_dashboard_shows_data_inventory` | The dashboard HTML includes the "Data inventory" panel. |
 
 ---
 

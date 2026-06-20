@@ -11,9 +11,9 @@ reuses the main app's Docker image but runs a separate ASGI app
 (`app.admin_center.main:app`) and mounts the shared volumes
 **read-only**.
 
-> **Phase status.** v2.483.0 ships the scaffold + audit-log viewer +
-> traffic stats; v2.484.0 adds the fail2ban ban panel. The database
-> data-inventory summary lands in a follow-up commit.
+> **Phase status.** Complete as of v2.485.0: audit-log viewer +
+> traffic stats (v2.483.0), fail2ban ban panel (v2.484.0), and the
+> database data-inventory summary (v2.485.0).
 
 ---
 
@@ -24,7 +24,7 @@ reuses the main app's Docker image but runs a separate ASGI app
 | Audit-event viewer (filterable) | `audit_logs` volume → `audit.log` | ✅ v2.483.0 |
 | Traffic statistics (top IPs, paths, signal counters) | parsed audit log | ✅ v2.483.0 |
 | fail2ban status + currently-banned IPs | `fail2ban_data` volume → `fail2ban.sqlite3` | ✅ v2.484.0 |
-| Database data-inventory (users, campaigns, …) | app database (read-only) | 🟠 follow-up |
+| Database data-inventory (users, campaigns, …) | app database (read-only) | ✅ v2.485.0 |
 
 ---
 
@@ -107,6 +107,17 @@ error.
 > lost on every container recreate. If you ran an earlier version,
 > existing bans will repopulate as fail2ban re-bans offenders.
 
+### Data inventory (v2.485.0)
+
+A read-only row-count of the database — Users, Campaigns, Characters,
+Campaign memberships, Dice rolls, Maps, Tokens, Encounters,
+Playlists — plus an account breakdown (admins, disabled accounts,
+Google-SSO vs password sign-ins). It is the by-the-numbers companion
+to the [privacy policy](/wiki/privacy)'s data inventory: "here's what
+we hold, by count." The admin-center service connects to the same
+database as the main app (read-only use; it only runs `COUNT`
+queries).
+
 ### JSON APIs
 
 For scripting / scraping:
@@ -115,6 +126,7 @@ For scripting / scraping:
 - `GET /api/events?event=<prefix>&limit=<n>` — recent parsed events
   (filter by tag prefix, e.g. `auth.` or the exact `visitor.request`).
 - `GET /api/fail2ban` — current ban state (jails + banned IPs).
+- `GET /api/inventory` — database row counts.
 
 All require basic-auth.
 

@@ -20,7 +20,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from ..version import APP_VERSION
-from . import audit_parse, fail2ban, stats
+from . import audit_parse, fail2ban, inventory, stats
 from .basic_auth import header_authorizes, is_default_password
 
 log = logging.getLogger("simplevtt.admin_center")
@@ -134,6 +134,12 @@ def api_fail2ban():
     return JSONResponse(fail2ban.read_status(now=time.time()))
 
 
+@app.get("/api/inventory")
+def api_inventory():
+    """Read-only database data-inventory (row counts per table)."""
+    return JSONResponse(inventory.read_inventory())
+
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, event: str | None = None):
     events = audit_parse.load_events(
@@ -148,6 +154,7 @@ def dashboard(request: Request, event: str | None = None):
     # Distinct event tags present, for the filter dropdown.
     event_tags = sorted(summary["by_event"].keys())
     bans = fail2ban.read_status(now=time.time())
+    data_inventory = inventory.read_inventory()
     return templates.TemplateResponse(
         "dashboard.html",
         {
@@ -161,5 +168,6 @@ def dashboard(request: Request, event: str | None = None):
             "event_tags": event_tags,
             "active_filter": event or "",
             "bans": bans,
+            "inventory": data_inventory,
         },
     )
