@@ -23,7 +23,15 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from ..audit_log import _extract_client_ip
 from ..version import APP_VERSION
-from . import audit_parse, dns_lookup, fail2ban, inventory, login_guard, stats
+from . import (
+    audit_parse,
+    dns_lookup,
+    event_help,
+    fail2ban,
+    inventory,
+    login_guard,
+    stats,
+)
 from .basic_auth import check_credentials, header_authorizes, is_default_password
 
 log = logging.getLogger("simplevtt.admin_center")
@@ -80,6 +88,7 @@ def _fmt_duration(s) -> str:
 
 templates.env.filters["epoch"] = _fmt_epoch
 templates.env.filters["duration"] = _fmt_duration
+templates.env.filters["explain"] = event_help.explain
 
 app = FastAPI(title="SimpleVTT Admin Center", version=APP_VERSION)
 

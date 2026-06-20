@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3686 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.485.5, 2026-06-20).
+**Total tests:** 3692 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.485.6, 2026-06-20).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5535,6 +5535,12 @@ The standalone read-only dashboard on port 8015. Unit tests (host-side) for the 
 | `test_dns_resolve_many_dedupes_skips_and_caps` | `resolve_many` dedupes, skips empty/`unknown`, and caps new lookups at the limit. |
 | `test_dashboard_dns_toggle_renders_column` | `?dns=1` adds the "Host (DNS)" column; off by default. |
 | `test_api_events_dns_adds_ptr_field` | `/api/events?dns=1` adds a `ptr` field per event. |
+| `test_event_help_exact_match` | `event_help.explain` returns the right text for known tags (login_failed → "credential stuffing", not_found → "scanner"). |
+| `test_event_help_prefix_fallback` | `admin.*` / `cloudflare.*` tags fall back to the family explanation. |
+| `test_event_help_generic_fallback` | An unknown tag → generic "audit event" help. |
+| `test_event_help_empty` | Empty tag → the generic fallback. |
+| `test_event_help_covers_every_signal_event` | Every named traffic-signal event has a non-generic explanation. |
+| `test_dashboard_renders_event_hover_help` | The events table carries the `.evt` hover affordance + `role="tooltip"`. |
 | `test_api_stats_shape` | `/api/stats` → 200 + the roll-up keys. |
 | `test_api_events_shape` | `/api/events?limit=10` → 200 + `{count, events: []}`. |
 | `test_api_events_requires_auth` | `/api/events` without creds → 401. |

@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.485.6] - 2026-06-20 — "The Margin Notes"
+
+**Schema version:** 71
+
+**Commit summary:** Adds hover "why is this here?" help to every event in the Admin Center log table — hover (or focus) an event tag and a tooltip explains what the event means and why it appears.
+
+**Description:** The canonical event tags (`auth.login_failed`, `api.not_found`, `visitor.request`, …) are terse. This adds a plain-English explanation behind a hover/focus tooltip on each event row, so an operator doesn't have to memorize the taxonomy or cross-reference the privacy policy to know that, say, a burst of `api.not_found` is a scanner footprint.
+
+**Implementation:**
+
+- `app/admin_center/event_help.py` (new): an `explain(tag)` lookup — exact match → longest family-prefix match (`admin.`, `cloudflare.`, `auth.`, …) → generic fallback, so every tag gets some help. Pure + stdlib-only.
+- `app/admin_center/main.py`: registers `explain` as a Jinja filter.
+- `app/admin_center/templates/dashboard.html`: each event row's tag is wrapped in an `.evt` span (with a small "?" marker) carrying a CSS hover/focus tooltip (`role="tooltip"`). The interactive target is the whole event-name span — comfortably larger than the 44px minimum and as tall as the table row — so the tiny "?" glyph isn't itself the tap target (noted in a CSS comment per the touch-target rule). Keyboard-accessible via `tabindex`/`:focus`.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py`: +6 tests. 5 unit (`explain` exact/prefix/generic/empty + "every signal event has a non-generic explanation") + 1 live (the dashboard renders the `.evt` hover affordance + `role="tooltip"`).
+
+Total harness count → 3692 (+6).
+
+PATCH — additive hover help on the Admin Center. No main-app or schema change.
+
+### Added
+- `app/admin_center/event_help.py` + per-row hover/focus tooltips explaining each audit event tag in the dashboard log table.
+
 ## [2.485.5] - 2026-06-20 — "The Name Resolver"
 
 **Schema version:** 71

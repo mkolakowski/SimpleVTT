@@ -21,6 +21,7 @@ from app.admin_center import (
     audit_parse,
     basic_auth,
     dns_lookup,
+    event_help,
     fail2ban,
     login_guard,
     stats,
@@ -295,6 +296,37 @@ def test_dns_resolve_many_dedupes_skips_and_caps():
     assert "unknown" not in out and "" not in out
 
 
+# ---- event help -----------------------------------------------------
+
+def test_event_help_exact_match():
+    assert "credential stuffing" in event_help.explain("auth.login_failed")
+    assert "scanner" in event_help.explain("api.not_found").lower()
+
+
+def test_event_help_prefix_fallback():
+    # An admin.* tag with a suffix not individually listed falls back to
+    # the admin family explanation.
+    assert "admin" in event_help.explain("admin.user_delete").lower()
+    assert "cloudflare" in event_help.explain("cloudflare.ban_ok").lower()
+
+
+def test_event_help_generic_fallback():
+    out = event_help.explain("totally.unknown")
+    assert "audit event" in out.lower()
+
+
+def test_event_help_empty():
+    assert event_help.explain("") == event_help._GENERIC
+
+
+def test_event_help_covers_every_signal_event():
+    # Every named traffic-signal event has a real (non-generic)
+    # explanation so the dashboard's signal cards all hover-explain.
+    from app.admin_center.stats import _SIGNAL_EVENTS
+    for tag in _SIGNAL_EVENTS:
+        assert event_help.explain(tag) != event_help._GENERIC, tag
+
+
 # ---- basic auth -----------------------------------------------------
 
 def test_header_authorizes_valid(monkeypatch):
@@ -500,6 +532,15 @@ def test_dashboard_dns_toggle_renders_column():
     # Off by default — no column.
     r2 = httpx.get(f"{ADMIN_BASE_URL}/", auth=_AUTH, timeout=5.0)
     assert "Host (DNS)" not in r2.text
+
+
+@_LIVE
+def test_dashboard_renders_event_hover_help():
+    """Each event row carries the hover-help affordance + tooltip."""
+    r = httpx.get(f"{ADMIN_BASE_URL}/", auth=_AUTH, timeout=5.0)
+    assert r.status_code == 200
+    assert 'class="evt"' in r.text
+    assert 'role="tooltip"' in r.text
 
 
 @_LIVE
