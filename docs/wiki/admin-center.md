@@ -39,24 +39,35 @@ http://localhost:8015
 
 ### Authentication
 
-It is protected by **HTTP basic-auth**, independent of the main app's
-session login. Two environment variables (set in `.env`):
+Sign in via the Admin Center's own **login page** (`/login`) — a real
+HTML form, not the browser's native basic-auth popup. A successful
+login sets a session cookie (named `admin_center_session`, distinct
+from the main app's so the two never collide on the same host). This
+is independent of the main app's session login. Configuration
+(`.env`):
 
 | Env var | Default | Effect |
 |---|---|---|
-| `ADMIN_CENTER_USER` | `admin` | Basic-auth username. |
-| `ADMIN_CENTER_PASS` | `changeme` | Basic-auth password. |
+| `ADMIN_CENTER_USER` | `admin` | Login username. |
+| `ADMIN_CENTER_PASS` | `changeme` | Login password. |
 | `ADMIN_CENTER_PORT` | `8015` | Host + container port. |
+| `ADMIN_CENTER_SECRET_KEY` | _(falls back to `APP_SECRET_KEY`)_ | Signs the login session cookie. |
 
 > ⚠️ **Change the default password before exposing this off-host.**
-> While `ADMIN_CENTER_PASS` is the shipped default, the dashboard
-> renders a warning banner. The basic-auth check uses a constant-time
-> comparison so it doesn't leak which half of the credential was
-> wrong.
+> While `ADMIN_CENTER_PASS` is the shipped default, the login page +
+> dashboard render a warning banner. The credential check uses a
+> constant-time comparison so it doesn't leak which half was wrong.
 
-The `/healthz` endpoint is intentionally **unauthenticated** so the
-docker-compose healthcheck can probe liveness without baking
-credentials into the compose file. Every other path requires auth.
+A **"Log out"** control sits in the dashboard header (clears the
+session). `/healthz` is intentionally **unauthenticated** so the
+docker-compose healthcheck can probe liveness without credentials.
+
+> **Scripting the JSON APIs.** The `/api/*` endpoints also accept an
+> HTTP basic-auth `Authorization` header (same `ADMIN_CENTER_USER` /
+> `ADMIN_CENTER_PASS`), so a script can skip the login form:
+> `curl -u admin:… http://host:8015/api/stats`. The server never
+> *challenges* with `WWW-Authenticate`, so browsers always get the
+> login page rather than a popup — but a header you supply is honored.
 
 ---
 

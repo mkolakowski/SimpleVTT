@@ -10,6 +10,42 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.485.3] - 2026-06-20 — "The Front Door"
+
+**Schema version:** 71
+
+**Commit summary:** Replaces the Admin Center's HTTP basic-auth popup with a proper **login page** (form + session cookie + logout). Also folds in a `.env.example` tweak that documents the default `FAIL2BAN_ACTION` value.
+
+**Description:** The Admin Center previously used HTTP basic-auth, which surfaces as the browser's native credential popup. This commit gives it a real sign-in page at `/login` — a styled HTML form that validates the same `ADMIN_CENTER_USER` / `ADMIN_CENTER_PASS` credentials, sets a session cookie, and redirects to the dashboard. A "Log out" control sits in the dashboard header. Unauthenticated browser navigations are redirected to `/login` (303) — and the server never emits `WWW-Authenticate`, so no popup ever appears.
+
+**Implementation:**
+
+- `app/admin_center/main.py`:
+  - Added Starlette `SessionMiddleware` (cookie `admin_center_session`, distinct from the main app's so they never collide on the same host; secret from `ADMIN_CENTER_SECRET_KEY` → `APP_SECRET_KEY` → dev default). Registered after the auth middleware so it sits outermost (session decoded before auth runs).
+  - Rewrote the auth middleware: allow `/login` + `/healthz` + `/static`; otherwise require a login session **or** a valid basic-auth header. Unauthenticated `/api/*` → 401 JSON; unauthenticated browser paths → 303 to `/login?next=…`. No `WWW-Authenticate` is ever sent (so browsers get the page, not the popup).
+  - `GET /login` (renders the form, redirects away if already authed), `POST /login` (validates → session → redirect to a sanitized `next`), `GET /logout` (clears session). Open-redirect-safe `next` handling.
+- `app/admin_center/templates/login.html` (new): dark-theme sign-in form (44px touch targets, default-credential warning, error state).
+- `app/admin_center/templates/dashboard.html`: header gains the logged-in username + a "Log out" link.
+- `docker-compose.yml`: admin-center gains `ADMIN_CENTER_SECRET_KEY` + `APP_SECRET_KEY` passthrough for the session cookie.
+- `.env.example`: admin-center block reworded for the login page + new `ADMIN_CENTER_SECRET_KEY` knob; **plus the operator-contributed line documenting the default `FAIL2BAN_ACTION=%(action_)s`** in the action-selector comment.
+- `docs/wiki/admin-center.md`: Authentication section rewritten (login page, session cookie, logout, and the kept basic-auth-header scripting path).
+
+**Scripting still works:** the `/api/*` endpoints continue to accept an `Authorization: Basic` header (same creds), so `curl -u admin:… /api/stats` keeps working — the change only affects how *browsers* are challenged (page, not popup).
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py`: replaced the two basic-auth-popup live tests with six login-flow tests — unauthenticated→login-page-no-popup, login page renders, full login→session→dashboard flow, wrong-password rejection, logout clears session, and basic-auth-header still grants access. The live tests now read `ADMIN_CENTER_USER`/`PASS` from the repo-root `.env` (falling back to compose defaults) so they match a stack with operator-customized credentials. Net +3 tests.
+
+Total harness count → 3676 (+3).
+
+PATCH — auth-UX change to the standalone Admin Center service (no main-app or schema change) + a config-doc tweak.
+
+### Changed
+- `app/admin_center/`: HTTP basic-auth popup replaced with a session-backed login page (`/login` + `/logout`); dashboard header gains a logout control. JSON APIs still accept a basic-auth header for scripting.
+- `docker-compose.yml`: `ADMIN_CENTER_SECRET_KEY` + `APP_SECRET_KEY` on the admin-center service.
+- `.env.example`: admin-center login-page wording + `ADMIN_CENTER_SECRET_KEY`; documented the default `FAIL2BAN_ACTION` value in the action-selector comment.
+- `docs/wiki/admin-center.md`: Authentication section updated for the login page.
+
 ## [2.485.2] - 2026-06-20 — "The Token Recipe"
 
 **Schema version:** 71

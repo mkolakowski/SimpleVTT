@@ -22,6 +22,15 @@
     }
     header h1 { margin: 0; font-size: 20px; }
     header .ver { color: var(--muted); font-size: 13px; }
+    header .spacer { flex: 1; }
+    /* 44px touch target for the logout control. */
+    header .logout {
+      min-height: 44px; display: inline-flex; align-items: center;
+      padding: 0 14px; border: 1px solid var(--line); border-radius: 8px;
+      color: var(--fg); text-decoration: none; font-size: 14px;
+    }
+    header .logout:hover { background: var(--panel2); }
+    header .who { color: var(--muted); font-size: 13px; }
     main { padding: 24px; max-width: 1200px; margin: 0 auto; }
     .banner {
       background: #3a2a12; border: 1px solid var(--warn); color: var(--warn);
@@ -69,6 +78,9 @@
   <header>
     <h1>🛡️ SimpleVTT Admin Center</h1>
     <span class="ver">v{{ app_version }}</span>
+    <span class="spacer"></span>
+    {% if admin_user %}<span class="who">{{ admin_user }}</span>{% endif %}
+    <a class="logout" href="/logout">Log out</a>
   </header>
   <main>
 

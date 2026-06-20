@@ -12,6 +12,7 @@ Three layers, mirroring the module split:
 """
 import os
 import sqlite3
+from pathlib import Path
 
 import httpx
 import pytest
@@ -19,10 +20,28 @@ import pytest
 from app.admin_center import audit_parse, basic_auth, fail2ban, stats
 
 ADMIN_BASE_URL = os.getenv("ADMIN_CENTER_BASE_URL", "http://localhost:8015")
-_AUTH = httpx.BasicAuth(
-    os.getenv("ADMIN_CENTER_USER", "admin"),
-    os.getenv("ADMIN_CENTER_PASS", "changeme"),
-)
+
+
+def _admin_creds() -> tuple[str, str]:
+    """The creds the *running* admin-center container uses. Read from
+    the repo-root .env (the same file docker-compose reads) so a local
+    operator who customized ADMIN_CENTER_USER/PASS still has passing
+    tests; fall back to the compose defaults (what CI's credential-less
+    stack uses). An explicit shell env var wins over both."""
+    user, pw = "admin", "changeme"
+    env_path = Path(__file__).resolve().parents[2] / ".env"
+    if env_path.is_file():
+        for line in env_path.read_text().splitlines():
+            s = line.strip()
+            if s.startswith("ADMIN_CENTER_USER=") and "=" in s:
+                user = s.split("=", 1)[1].strip() or user
+            elif s.startswith("ADMIN_CENTER_PASS=") and "=" in s:
+                pw = s.split("=", 1)[1].strip() or pw
+    return os.getenv("ADMIN_CENTER_USER", user), os.getenv("ADMIN_CENTER_PASS", pw)
+
+
+_ADMIN_USER, _ADMIN_PASS = _admin_creds()
+_AUTH = httpx.BasicAuth(_ADMIN_USER, _ADMIN_PASS)
 
 _SAMPLE = """\
 2026-06-20 01:00:00,001 WARNING simplevtt.audit: auth.login_failed ip=203.0.113.7 ua="Mozilla/5.0 (x)" username=alice@example.com
@@ -225,22 +244,66 @@ def test_healthz_open_without_auth():
 
 
 @_LIVE
-def test_dashboard_requires_auth():
-    r = httpx.get(f"{ADMIN_BASE_URL}/", timeout=5.0)
-    assert r.status_code == 401
-    assert "basic" in r.headers.get("www-authenticate", "").lower()
+def test_unauthenticated_bounces_to_login_page_not_popup():
+    """A browser navigation with no session is redirected to the login
+    PAGE — and crucially never gets a WWW-Authenticate challenge (which
+    is what triggers the native basic-auth popup)."""
+    r = httpx.get(f"{ADMIN_BASE_URL}/", timeout=5.0, follow_redirects=False)
+    assert r.status_code == 303
+    assert "/login" in r.headers.get("location", "")
+    assert "www-authenticate" not in {k.lower() for k in r.headers}
 
 
 @_LIVE
-def test_dashboard_rejects_wrong_creds():
-    r = httpx.get(
-        f"{ADMIN_BASE_URL}/", auth=httpx.BasicAuth("admin", "nope"), timeout=5.0,
-    )
-    assert r.status_code == 401
+def test_login_page_renders():
+    r = httpx.get(f"{ADMIN_BASE_URL}/login", timeout=5.0)
+    assert r.status_code == 200
+    assert "Sign in" in r.text
+    assert 'name="password"' in r.text
 
 
 @_LIVE
-def test_dashboard_renders_with_creds():
+def test_login_flow_sets_session_and_grants_access():
+    """POST valid creds → 303 + session cookie → dashboard renders."""
+    with httpx.Client(base_url=ADMIN_BASE_URL, timeout=5.0, follow_redirects=False) as c:
+        r = c.post(
+            "/login",
+            data={"username": _ADMIN_USER, "password": _ADMIN_PASS, "next": "/"},
+        )
+        assert r.status_code == 303
+        assert "admin_center_session" in r.headers.get("set-cookie", "")
+        # The cookie is now in the client jar — the dashboard loads.
+        dash = c.get("/", follow_redirects=False)
+        assert dash.status_code == 200
+        assert "Admin Center" in dash.text
+        assert "Log out" in dash.text
+
+
+@_LIVE
+def test_login_rejects_wrong_password():
+    with httpx.Client(base_url=ADMIN_BASE_URL, timeout=5.0, follow_redirects=False) as c:
+        r = c.post("/login", data={"username": "admin", "password": "nope", "next": "/"})
+        assert r.status_code == 303
+        assert "/login" in r.headers.get("location", "")
+        assert "error" in r.headers.get("location", "")
+
+
+@_LIVE
+def test_logout_clears_session():
+    with httpx.Client(base_url=ADMIN_BASE_URL, timeout=5.0, follow_redirects=False) as c:
+        c.post("/login", data={
+            "username": _ADMIN_USER, "password": _ADMIN_PASS, "next": "/",
+        })
+        assert c.get("/", follow_redirects=False).status_code == 200
+        c.get("/logout")
+        # After logout the dashboard bounces back to the login page.
+        assert c.get("/", follow_redirects=False).status_code == 303
+
+
+@_LIVE
+def test_dashboard_renders_with_basic_auth_header():
+    """Basic-auth header still works for scripts (no popup is ever
+    challenged, but a supplied header is accepted)."""
     r = httpx.get(f"{ADMIN_BASE_URL}/", auth=_AUTH, timeout=5.0)
     assert r.status_code == 200
     assert "Admin Center" in r.text

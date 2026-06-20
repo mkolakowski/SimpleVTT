@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3673 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.485.0, 2026-06-20).
+**Total tests:** 3676 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.485.3, 2026-06-20).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5519,9 +5519,12 @@ The standalone read-only dashboard on port 8015. Unit tests (host-side) for the 
 | `test_header_authorizes_rejects_bad` | Wrong password / missing / non-basic / non-b64 headers all rejected. |
 | `test_is_default_password` | `is_default_password()` true on `changeme`, false otherwise (UI nag signal). |
 | `test_healthz_open_without_auth` | `/healthz` → 200 without creds (for the compose healthcheck). |
-| `test_dashboard_requires_auth` | `/` without creds → 401 + `WWW-Authenticate: Basic`. |
-| `test_dashboard_rejects_wrong_creds` | `/` with wrong creds → 401. |
-| `test_dashboard_renders_with_creds` | `/` with valid creds → 200 + "Admin Center" / "Traffic signals". |
+| `test_unauthenticated_bounces_to_login_page_not_popup` | `/` with no session → 303 to `/login` and NO `WWW-Authenticate` header (login page, not a basic-auth popup). |
+| `test_login_page_renders` | `/login` → 200 + a real sign-in form (`name="password"`). |
+| `test_login_flow_sets_session_and_grants_access` | POST valid creds → 303 + `admin_center_session` cookie → dashboard renders with "Log out". |
+| `test_login_rejects_wrong_password` | POST wrong password → 303 back to `/login?...error`. |
+| `test_logout_clears_session` | After `/logout`, the dashboard 303s back to `/login`. |
+| `test_dashboard_renders_with_basic_auth_header` | A supplied basic-auth header still grants access (scripting path) — but no popup is ever challenged. |
 | `test_api_stats_shape` | `/api/stats` → 200 + the roll-up keys. |
 | `test_api_events_shape` | `/api/events?limit=10` → 200 + `{count, events: []}`. |
 | `test_api_events_requires_auth` | `/api/events` without creds → 401. |

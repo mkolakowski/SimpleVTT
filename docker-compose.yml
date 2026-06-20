@@ -120,6 +120,10 @@ services:
       ADMIN_CENTER_USER: ${ADMIN_CENTER_USER:-admin}
       ADMIN_CENTER_PASS: ${ADMIN_CENTER_PASS:-changeme}
       ADMIN_CENTER_PORT: ${ADMIN_CENTER_PORT:-8015}
+      # v2.485.3 — secret for the login-page session cookie. Falls back
+      # to APP_SECRET_KEY, then a dev default, inside the app.
+      ADMIN_CENTER_SECRET_KEY: ${ADMIN_CENTER_SECRET_KEY:-}
+      APP_SECRET_KEY: ${APP_SECRET_KEY:-}
       # v2.484.0 — path to fail2ban's sqlite ban db (read-only mount
       # below). When the --profile fail2ban service isn't running the
       # shared volume is empty and the dashboard shows an empty state.

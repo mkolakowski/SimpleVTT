@@ -14,16 +14,29 @@ import logging
 import os
 import time
 from pathlib import Path
+from urllib.parse import quote
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 
 from ..version import APP_VERSION
 from . import audit_parse, fail2ban, inventory, stats
-from .basic_auth import header_authorizes, is_default_password
+from .basic_auth import check_credentials, header_authorizes, is_default_password
 
 log = logging.getLogger("simplevtt.admin_center")
+
+# Secret for the login session cookie. Prefer a dedicated key; fall
+# back to the main app's secret (same operator-set value), then a dev
+# default. The cookie name is admin-center-specific so it never
+# collides with the main app's `session` cookie on the same host
+# (cookies ignore port).
+_SESSION_SECRET = (
+    os.environ.get("ADMIN_CENTER_SECRET_KEY")
+    or os.environ.get("APP_SECRET_KEY")
+    or "admin-center-dev-secret-change-me"
+)
 
 # Same default as the main app's RotatingFileHandler. The admin-center
 # service mounts the audit_logs volume read-only at this path.
@@ -69,25 +82,100 @@ templates.env.filters["duration"] = _fmt_duration
 
 app = FastAPI(title="SimpleVTT Admin Center", version=APP_VERSION)
 
-# Paths reachable without auth: the healthcheck only (so docker
-# compose can probe liveness without baking creds into the
-# healthcheck). Everything else is behind basic-auth.
-_PUBLIC_PATHS = {"/healthz"}
+
+def _safe_next(raw: str | None) -> str:
+    """Sanitize a ``?next=`` redirect target to an in-site path so the
+    login form can't be turned into an open redirect."""
+    if raw and raw.startswith("/") and not raw.startswith("//"):
+        return raw
+    return "/"
+
+
+def _is_authed(request: Request) -> bool:
+    """A request is authorized if it carries a valid login session OR a
+    valid basic-auth header (the latter kept so scripts can still hit
+    the JSON APIs without the login dance). We never emit a
+    ``WWW-Authenticate`` challenge, so browsers get the login PAGE
+    instead of the native popup."""
+    if request.session.get("admin_authed"):
+        return True
+    return header_authorizes(request.headers.get("authorization"))
+
+
+# Paths reachable without auth: the login page + the healthcheck (so
+# docker compose can probe liveness without creds).
+def _is_public(path: str) -> bool:
+    return path == "/healthz" or path == "/login" or path.startswith("/static")
 
 
 @app.middleware("http")
-async def _basic_auth_mw(request: Request, call_next):
-    if request.url.path in _PUBLIC_PATHS:
+async def _auth_mw(request: Request, call_next):
+    path = request.url.path
+    if _is_public(path) or _is_authed(request):
         return await call_next(request)
-    if not header_authorizes(request.headers.get("authorization")):
-        return Response(
-            "Authentication required.\n",
+    # Unauthenticated. API callers get a clean 401 JSON (no
+    # WWW-Authenticate → no browser popup); browser navigations get
+    # bounced to the login page with a return path.
+    if path.startswith("/api/"):
+        return JSONResponse(
+            {"detail": "Authentication required. Log in at /login."},
             status_code=401,
-            headers={
-                "WWW-Authenticate": 'Basic realm="SimpleVTT Admin Center"',
-            },
         )
-    return await call_next(request)
+    nxt = path + ("?" + request.url.query if request.url.query else "")
+    return RedirectResponse(f"/login?next={quote(nxt, safe='')}", status_code=303)
+
+
+# SessionMiddleware is added AFTER the auth middleware so it sits
+# OUTERMOST — the session is decoded before _auth_mw reads it. The
+# admin-center-specific cookie name avoids colliding with the main
+# app's `session` cookie on the same host.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=_SESSION_SECRET,
+    session_cookie="admin_center_session",
+    https_only=False,
+)
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_form(request: Request, next: str = "/", error: str = ""):
+    # Already logged in → straight to the dashboard (or the next path).
+    if request.session.get("admin_authed"):
+        return RedirectResponse(_safe_next(next), status_code=303)
+    return templates.TemplateResponse(
+        "login.html",
+        {
+            "request": request,
+            "app_version": APP_VERSION,
+            "next": _safe_next(next),
+            "error": error,
+            "default_password": is_default_password(),
+        },
+    )
+
+
+@app.post("/login")
+def login_submit(
+    request: Request,
+    username: str = Form(""),
+    password: str = Form(""),
+    next: str = Form("/"),
+):
+    if check_credentials(username, password):
+        request.session["admin_authed"] = True
+        request.session["admin_user"] = username
+        return RedirectResponse(_safe_next(next), status_code=303)
+    # Re-render the form with an error (303→GET keeps it refresh-safe).
+    return RedirectResponse(
+        f"/login?next={quote(_safe_next(next), safe='')}&error=1",
+        status_code=303,
+    )
+
+
+@app.get("/logout")
+def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse("/login", status_code=303)
 
 
 @app.get("/healthz")
@@ -169,5 +257,6 @@ def dashboard(request: Request, event: str | None = None):
             "active_filter": event or "",
             "bans": bans,
             "inventory": data_inventory,
+            "admin_user": request.session.get("admin_user", ""),
         },
     )
