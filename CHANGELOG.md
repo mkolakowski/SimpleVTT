@@ -10,6 +10,74 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.477.0] - 2026-06-20 — "The Scanner Trap"
+
+**Schema version:** 71
+
+**Commit summary:** Opens Phase 5 of [`docs/plans/fail2ban-crowdsec-integration.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/fail2ban-crowdsec-integration.md). New canonical `api.not_found` audit event emitted on every HTTP 404 + new `simplevtt-scanner` fail2ban jail that bans IPs probing many missing paths in a short window. Default threshold: 20 distinct 404s in 5 minutes → 6 hour ban. Catches vulnerability scanners (`/.env`, `/wp-admin`, `/phpinfo.php`, etc.) without false-positiving casual users hitting 1–3 stale URLs.
+
+**Description:** Phase 4 wired the deployment vehicle; Phase 5 adds a new event class to it. The 404-probing pattern is one of the highest-signal scanner indicators on a public web stack — bots pump out hundreds per minute against a stable corpus of well-known probe paths. A real user hits 0–3 404s in a normal browsing session, so the discrimination threshold is wide.
+
+**Implementation:**
+
+- `app/main.py::_auth_redirect_handler`: new `elif exc.status_code == 404:` branch that emits `audit("api.not_found", level=WARNING, request=request, path=request.url.path)`. Sits in the existing 401/403 elif chain so every 404 — Starlette routing-layer misses AND explicit `raise HTTPException(404)` calls in app code — gets logged. The path is included so an operator inspecting the audit log can distinguish scanner activity (many distinct paths) from "one stale link hit 20×" (same path repeated).
+- `docs/integrations/fail2ban/filter.d/simplevtt-scanner.conf` (new): regex matches the canonical `api.not_found ip=<HOST>` line shape. Companion to the existing `simplevtt-auth.conf` filter; kept separate so scanner thresholds tune independently of credential-stuffing thresholds. Reserves an `ignoreregex` slot for a future `api.not_found_static` event (static asset 404s, browser noise).
+- `docs/integrations/fail2ban/jail.d/simplevtt.conf`: new `[simplevtt-scanner]` block below `[simplevtt-auth]`. Env-templated thresholds: `${FAIL2BAN_SCANNER_MAXRETRY}` / `_FINDTIME` / `_BANTIME`. Shares the `${FAIL2BAN_ACTION}` selector with the auth jail so an operator who's wired Cloudflare or ipset gets both jails on the same edge.
+- `docs/integrations/fail2ban/scripts/render-jail.sh`: allowlist extended with the three new placeholders.
+- `docker-compose.yml`: three new env-var pass-throughs on the fail2ban service (`FAIL2BAN_SCANNER_MAXRETRY` default 20, `_FINDTIME` default 5m, `_BANTIME` default 6h).
+- `.env.example`: documented defaults for all three.
+
+**Why the threshold defaults (20 / 5min → 6h):**
+
+- **20 in 5 min.** A casual user browsing a SimpleVTT instance generally hits 0–3 404s in a session — broken links happen but not in bursts. 20 in 5 min is two orders of magnitude above casual-user noise. Most scanners pump out hundreds per minute, so they cross the threshold within seconds.
+- **6h ban (vs. 1h for auth-bruteforce).** 404 probing is unambiguous in a way credential-stuffing isn't — there's no "I forgot my password 30 times" scenario. The longer ban reduces the rate at which a scanner can recycle through cloud-provider IPs.
+- **Operator override via `.env`.** The defaults err on the safe side. Sites with lots of legitimate cross-NAT traffic (corporate, university) might raise to 50; sites with strict shared-tenancy budgets might lower to 10.
+
+**Why we emit on browser-bounce-redirected 404s too:**
+
+The existing handler redirects logged-in HTML 404s to `/` (UX nicety). The redirect doesn't change the fact that the IP hit a missing URL — and a scanner with a stolen session cookie would still benefit from being banned. The audit emit happens before the redirect decision; both paths land in the log.
+
+**Why "The Scanner Trap":** v2.470.0 was "The Profile-Gated Banhammer" (the vehicle). v2.475.0 was "The Banhammer Lives" (proving it fires). v2.477.0 turns the banhammer on a new kind of prey — vulnerability scanners that probe for un-defended endpoints. The trap is the threshold gap: too narrow for users to trip, too tight for scanners to slip through.
+
+**Live verification:** with `--profile fail2ban` up, 25 distinct 404 GETs from one source IP → `fail2ban-client status simplevtt-scanner` shows `Currently banned: 1` within ~3 s. The new `test_repeated_404s_trigger_scanner_jail_ban` end-to-end test (gated on the profile being up) asserts this contract; locally: passed in 6.5 s.
+
+**9 new harness tests** spread across 3 files:
+
+- `tests/harness/test_api_not_found_audit.py` (3 tests):
+  - `test_unknown_path_returns_404` — sanity check that GET on a non-existent path returns 404 (the audit emit's prerequisite).
+  - `test_unknown_api_path_returns_404` — same shape for `/api/*` paths.
+  - `test_404_emits_canonical_audit_log_line` — fire a 404 with a unique probe token, `docker compose exec app tail audit.log`, assert both `api.not_found` and the unique token appear. Anchors the line shape the fail2ban filter consumes.
+- `tests/harness/test_fail2ban_scanner_jail_wiring.py` (6 tests, no docker dependency):
+  - Filter file exists.
+  - Filter regex references `api.not_found` and `<HOST>`.
+  - Jail config has the `[simplevtt-scanner]` block with all three threshold placeholders.
+  - `.env.example` has all three uncommented defaults.
+  - Compose service environment plumbs all three.
+  - render-jail.sh allowlist covers all three.
+- `tests/harness/test_fail2ban_end_to_end.py` (+2 tests, gated on profile up):
+  - `test_repeated_404s_trigger_scanner_jail_ban` — the canonical live end-to-end.
+  - `test_scanner_jail_loaded_with_env_thresholds` — anti-regression for env pass-through (anchors 20 / 300 / 21600).
+
+All 33 prior Phase 4 + v2.474.0 non-root tests continue to pass.
+
+Total harness count 3615 → 3624.
+
+MINOR — new audit event + new filter + new jail block + 3 new env vars + 9 harness tests. No schema change.
+
+### Added
+- `app/main.py::_auth_redirect_handler`: new 404 branch emitting `api.not_found`.
+- `docs/integrations/fail2ban/filter.d/simplevtt-scanner.conf`: new fail2ban filter for scanner detection.
+- `docs/integrations/fail2ban/jail.d/simplevtt.conf`: new `[simplevtt-scanner]` jail block.
+- `docker-compose.yml`: three new `FAIL2BAN_SCANNER_*` env-var pass-throughs.
+- `.env.example`: documented scanner-jail defaults.
+- `tests/harness/test_api_not_found_audit.py`: 3 tests covering the 404 emission path.
+- `tests/harness/test_fail2ban_scanner_jail_wiring.py`: 6 static-validation tests.
+- `tests/harness/test_fail2ban_end_to_end.py`: 2 new live end-to-end tests for the scanner jail.
+
+### Changed
+- `docs/integrations/fail2ban/scripts/render-jail.sh`: allowlist extended with three new placeholders.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3615 → 3624.
+
 ## [2.476.0] - 2026-06-20 — "The Operator's Wiki"
 
 **Schema version:** 71

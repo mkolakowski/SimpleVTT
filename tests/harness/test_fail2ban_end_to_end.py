@@ -172,3 +172,98 @@ async def test_jail_loaded_with_env_thresholds():
         f"bantime mismatch — expected 3600 (1h), got "
         f"{r_bantime.stdout!r}"
     )
+
+
+async def test_repeated_404s_trigger_scanner_jail_ban():
+    """v2.477.0 — fire 25 distinct 404 GETs and assert the
+    simplevtt-scanner jail bans the offending IP. The default
+    threshold is 20 / 5min, so 25 crosses it with a margin.
+
+    This is the canonical end-to-end test for the v2.477.0 wiring:
+    404 → app/main.py emits api.not_found → audit log file
+    handler → fail2ban tail → simplevtt-scanner filter match →
+    ban decision."""
+    if not _fail2ban_container_running():
+        pytest.skip(
+            "fail2ban container not running — run "
+            "`docker compose --profile fail2ban up -d` first "
+            "to enable this end-to-end test"
+        )
+
+    # Reset prior bans on BOTH jails so the test starts clean.
+    _fail2ban_client("unban", "--all", timeout=5.0)
+
+    # Fire 25 distinct 404 GETs. The path uniqueness exercises
+    # the "scanner probes many different paths" pattern, which is
+    # the threat model this jail catches.
+    async with httpx.AsyncClient(
+        base_url=BASE_URL,
+        timeout=10.0,
+        follow_redirects=False,
+    ) as client:
+        for i in range(25):
+            await client.get(
+                f"/probe-not-a-real-path-{i}",
+                headers={"Accept": "application/json"},
+            )
+
+    # Poll fail2ban-client until the simplevtt-scanner jail bans
+    # something. fail2ban's pyinotify backend usually reacts within
+    # ~1 s of the log lines landing.
+    deadline = time.time() + 30
+    banned_count = 0
+    last_output = ""
+    while time.time() < deadline:
+        r = _fail2ban_client("status", "simplevtt-scanner")
+        last_output = r.stdout
+        banned_count = _currently_banned(last_output)
+        if banned_count > 0:
+            break
+        time.sleep(1)
+
+    assert banned_count > 0, (
+        "fail2ban didn't ban anyone after 25 distinct 404 GETs "
+        "within 30 s. The v2.477.0 wiring may have regressed "
+        "(api.not_found event → file handler → scanner filter → "
+        "ban decision). fail2ban-client status output:\n"
+        f"{last_output}"
+    )
+
+
+async def test_scanner_jail_loaded_with_env_thresholds():
+    """v2.477.0 — verify the simplevtt-scanner jail is loaded with
+    the env-derived defaults (MAXRETRY=20, FINDTIME=5m=300s,
+    BANTIME=6h=21600s)."""
+    if not _fail2ban_container_running():
+        pytest.skip(
+            "fail2ban container not running — run "
+            "`docker compose --profile fail2ban up -d` first"
+        )
+
+    r = _fail2ban_client("status", "simplevtt-scanner")
+    assert r.returncode == 0, (
+        f"fail2ban-client status simplevtt-scanner failed: "
+        f"{r.stderr}"
+    )
+    r_maxretry = _fail2ban_client(
+        "get", "simplevtt-scanner", "maxretry",
+    )
+    r_findtime = _fail2ban_client(
+        "get", "simplevtt-scanner", "findtime",
+    )
+    r_bantime = _fail2ban_client(
+        "get", "simplevtt-scanner", "bantime",
+    )
+
+    assert "20" in r_maxretry.stdout, (
+        f"scanner maxretry mismatch — expected 20, got "
+        f"{r_maxretry.stdout!r}"
+    )
+    assert "300" in r_findtime.stdout, (
+        f"scanner findtime mismatch — expected 300 (5m), got "
+        f"{r_findtime.stdout!r}"
+    )
+    assert "21600" in r_bantime.stdout, (
+        f"scanner bantime mismatch — expected 21600 (6h), got "
+        f"{r_bantime.stdout!r}"
+    )

@@ -170,6 +170,16 @@ services:
       FAIL2BAN_MAGIC_LINK_REPLAY_BANTIME: ${FAIL2BAN_MAGIC_LINK_REPLAY_BANTIME:-24h}
       FAIL2BAN_API_PROBE_MAXRETRY: ${FAIL2BAN_API_PROBE_MAXRETRY:-20}
       FAIL2BAN_DEFAULT_BANTIME: ${FAIL2BAN_DEFAULT_BANTIME:-1h}
+      # v2.477.0 — Phase 5. Scanner-detection jail thresholds.
+      # Catches IPs that probe many missing paths in a short
+      # window (vulnerability scanners hitting /.env, /wp-admin,
+      # /phpinfo.php, etc.). Defaults: 20 distinct 404s in 5min
+      # → 6h ban. The threshold is high enough to swallow normal
+      # browser noise from stale bookmarks; tight enough to catch
+      # any real scanner pump.
+      FAIL2BAN_SCANNER_MAXRETRY: ${FAIL2BAN_SCANNER_MAXRETRY:-20}
+      FAIL2BAN_SCANNER_FINDTIME: ${FAIL2BAN_SCANNER_FINDTIME:-5m}
+      FAIL2BAN_SCANNER_BANTIME: ${FAIL2BAN_SCANNER_BANTIME:-6h}
       # v2.472.0 — Phase 4d. Ban-action selector. Default is the
       # fail2ban built-in iptables/nftables shorthand. Set to
       # `cloudflare-bouncer` (Phase 4d) or `ipset-bouncer` (Phase

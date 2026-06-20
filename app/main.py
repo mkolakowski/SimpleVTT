@@ -176,6 +176,27 @@ async def _auth_redirect_handler(request: Request, exc: StarletteHTTPException):
             request=request,
             path=request.url.path,
         )
+    elif exc.status_code == 404:
+        # v2.477.0 — Phase 5 of fail2ban-crowdsec-integration.md.
+        # Emit a canonical audit event for every 404 so the new
+        # ``simplevtt-scanner`` fail2ban jail can ban IPs that probe
+        # many missing paths in a short window. A casual user might
+        # hit 1–3 stale URLs in a browsing session; a vulnerability
+        # scanner pumps out hundreds per minute against /.env,
+        # /wp-admin, /admin.php, etc. The default threshold
+        # (FAIL2BAN_SCANNER_MAXRETRY=20 / 5min) catches the latter
+        # without false-positiving the former.
+        #
+        # We emit the path on every event so an operator inspecting
+        # the audit log can distinguish scanner activity (many
+        # distinct paths) from "one stale link hit 20×" (same path
+        # repeated).
+        audit(
+            "api.not_found",
+            level=logging.WARNING,
+            request=request,
+            path=request.url.path,
+        )
 
     if is_browser_bounce:
         next_path = request.url.path
