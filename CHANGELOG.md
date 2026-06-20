@@ -10,6 +10,60 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.463.0] - 2026-06-19 — "The Closed Wound"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #20 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Cure Wounds** (L1 evocation, Bard/Cleric/Druid/Paladin/Ranger, RAW PHB p.230). **Third mechanical non-buff cast in the Phase 2 arc** — third bucket exemplar after Spare the Dying (death-save flip, v2.461.0) and Lesser Restoration (buff-strip, v2.462.0). New `/cast_cure_wounds` endpoint rolls `1d8 + spellcasting_mod`, mutates the target's HP through the canonical `_apply_hp_change` helper, and broadcasts `character_hp_update`. A heal at 0 HP automatically flips `death_saves.status` from dying/stable/dead back to alive — RAW revival semantics for free.
+
+**Description:** RAW: "A creature you touch regains a number of hit points equal to 1d8 + your spellcasting ability modifier." 1 action, V/S, Touch, Instantaneous.
+
+**Implementation:**
+
+- Body: `{character_id, target_character_id}`. Both required.
+- Caster gate: knows Cure Wounds OR is in `{bard, cleric, druid, paladin, ranger}`. 409 cannot_cast otherwise. Same five-class list as Lesser Restoration (v2.462.0).
+- Heal roll: `dice_mod.roll("1d8")` plus `_caster_spellcasting_mod(sheet)` for the modifier. Capped at the target's `hp.max`. v1 skips upcast scaling — each slot above L1 adds another d8 per RAW; a future commit can layer in a `slot_level` body param.
+- Mutation: calls the canonical `_apply_hp_change(target_char, new_current)` helper — the single source of truth for HP transitions in v2.1.0+. The helper auto-revives dying/stable/dead targets when `new_current > 0` (RAW: any heal revives), so the endpoint gets "heal a downed PC back to consciousness" semantics without any extra code.
+- Broadcasts: `character_hp_update` (source `"cure-wounds"`) so the sheet UI + battle map reflect the heal; `feature_used` for the chat-card roll log (carries `heal_rolled`, `heal_dice_total`, `heal_breakdown`, `spellcasting_mod`, `revived`).
+- Response: `{ok, feature, target_character_id, target_character_name, heal_rolled, heal_dice_total, heal_breakdown, spellcasting_mod, hp_before, hp_after, revived}`.
+
+**Why "The Closed Wound":** the spell's name verbs the cure — "Cure Wounds." The closed wound is the literal mechanical outcome at a 5e table: HP go up, the wound is closed. Pairs thematically with v2.462.0 "The Cured Affliction" — both ships close an active state on a target with a touch. "Closed Wound" is more evocative than "Healed HP" for a release-notes scan.
+
+**Mechanical non-buff pattern, third exemplar.** The bucket vocabulary is fully tooled now:
+
+- **Buff-installing casts** (15 ships): substrate write + flag-read elsewhere.
+- **Pure-broadcast casts** (2 ships): no state change, just narration.
+- **Mechanical non-buff casts** (3 ships): surgical state mutation + canonical event broadcast.
+  - v2.461.0 Spare the Dying: flips `death_saves.status`.
+  - v2.462.0 Lesser Restoration: strips a named buff via `_remove_buff`.
+  - v2.463.0 Cure Wounds: writes HP via `_apply_hp_change` and broadcasts `character_hp_update`.
+
+All three mechanical-mutation ships wire into existing engine paths without inventing new substrate. Future ships in this bucket (Mass Healing Word, Greater Restoration, etc.) can mirror the same pattern.
+
+**5 new harness tests** at `tests/harness/test_cast_cure_wounds.py`:
+
+- `test_cast_cw_partial_hp_heals` — drop Krieger to 5 HP, cast Cure Wounds; assert `1 ≤ heal_dice_total ≤ 8`, `spellcasting_mod == 3` (Tavik's WIS +3), `heal_rolled == dice + mod`, and the sheet round-trip confirms the new HP.
+- `test_cast_cw_at_full_hp_zero_delta` — cast on a target at max HP → `heal_rolled == 0` and `hp_before == hp_after` (RAW: heal capped at max).
+- `test_cast_cw_at_zero_hp_revives` — drop Caelan to 0 HP with damage reason (flips to dying), cast Cure Wounds → `revived: True` + `/sheet-json` reads back `death_saves.status == "alive"`. Uses Caelan (Human Paladin) rather than Krieger because Krieger's Half-Orc Relentless Endurance auto-bumps him back to 1 HP on the damage event, masking the dying state.
+- `test_cast_cw_missing_target_returns_400` — omit `target_character_id` → 400.
+- `test_cast_cw_non_caster_rejected` — Krieger (Barbarian) → 409.
+
+Each test that mutates HP restores via `/rest` `{"type": "long"}` in a try/finally to keep the demo state clean.
+
+Canonical caster is Brother Tavik Stonebrow (Cleric 5).
+
+Total harness count 3552 → 3557.
+
+MINOR — new HTTP endpoint + 5 new harness tests. No schema change. No new substrate.
+
+### Added
+- `app/routes/tabletop_routes.py::cast_cure_wounds`: new `POST /api/campaign/{campaign_id}/cast_cure_wounds` endpoint. Body: `{character_id, target_character_id}`. Rolls `1d8 + spellcasting_mod`, calls `_apply_hp_change`, broadcasts `character_hp_update` (source: `"cure-wounds"`) + `feature_used`.
+- `tests/harness/test_cast_cure_wounds.py`: 5 tests covering the happy path (partial-HP heal + sheet round-trip) + full-HP no-op + 0-HP revival + 2 error paths.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Cure Wounds marked ✅ shipped v2.463.0 under Phase 2's Shipped subsection. Phase 2 has now shipped 20 spells/contracts; third mechanical non-buff cast on the arc, fully tooling the bucket vocabulary.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3552 → 3557.
+
 ## [2.462.0] - 2026-06-19 — "The Cured Affliction"
 
 **Schema version:** 71

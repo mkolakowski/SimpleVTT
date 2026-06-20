@@ -66533,6 +66533,193 @@ async def cast_lesser_restoration(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_cure_wounds")
+async def cast_cure_wounds(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.463.0 — Phase 2 #20 of
+    docs/plans/cast-and-broadcast-tail.md. Cure Wounds (L1
+    evocation, Bard/Cleric/Druid/Paladin/Ranger, PHB p.230):
+
+      "A creature you touch regains a number of hit points equal
+       to 1d8 + your spellcasting ability modifier."
+
+    1 action, V/S, Touch, Instantaneous. RAW doesn't affect
+    undead or constructs (skipped here for v1 since the engine
+    doesn't model PC type metadata at heal time; a future
+    pre-heal type-gate can layer in).
+
+    **Third mechanical non-buff cast in the Phase 2 arc** —
+    third bucket exemplar after Spare the Dying (death-save
+    flip, v2.461.0) and Lesser Restoration (buff-strip,
+    v2.462.0). This one writes HP via the canonical
+    ``_apply_hp_change`` helper (the single source of truth for
+    HP transitions in v2.1.0+), so a heal at 0 HP automatically
+    flips ``death_saves.status`` from dying/stable/dead back to
+    alive — RAW revival semantics for free.
+
+    Body: ``{character_id, target_character_id}``. Both required.
+
+    Heal math: ``1d8 + _caster_spellcasting_mod(sheet)``. v1
+    skips upcast scaling (each slot above L1 adds another d8 per
+    RAW); a future commit can layer the slot_level body param.
+
+    Response: ``{ok, feature, target_character_id, heal_rolled,
+    heal_dice_total, spellcasting_mod, hp_before, hp_after,
+    revived}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id_raw = body.get("target_character_id")
+    if not target_char_id_raw:
+        raise HTTPException(400, "target_character_id is required")
+    target_char_id = int(target_char_id_raw)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_cw = any(
+        (s.get("_slug") == "cure-wounds")
+        or (str(s.get("name", "")).lower() == "cure wounds")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {
+        "bard", "cleric", "druid", "paladin", "ranger",
+    }
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_cw and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": (
+                "knows Cure Wounds, or bard/cleric/druid/paladin/ranger"
+            ),
+            "got_class": _cls,
+        })
+
+    # Roll the heal: 1d8 + caster's spellcasting mod.
+    try:
+        roll = dice_mod.roll("1d8")
+        heal_dice_total = int(roll.total)
+        heal_breakdown = roll.breakdown
+    except dice_mod.DiceParseError:
+        heal_dice_total = 1
+        heal_breakdown = "1d8"
+    spell_mod = _caster_spellcasting_mod(sheet)
+    heal_amount = max(0, heal_dice_total + spell_mod)
+
+    # Compute the new HP value, clamped at the target's max.
+    target_sheet = dict(target_char.sheet or {})
+    target_hp = dict(target_sheet.get("hp") or {})
+    hp_before = int(target_hp.get("current") or 0)
+    hp_max = int(target_hp.get("max") or 0)
+    new_current = (
+        min(hp_max, hp_before + heal_amount) if hp_max > 0
+        else (hp_before + heal_amount)
+    )
+    delta = new_current - hp_before
+
+    # Mutate HP through the canonical helper so death-save state
+    # revives cleanly on a 0-HP heal (dying/stable/dead → alive).
+    ds_before = (
+        target_sheet.get("death_saves") or {}
+    ).get("status", "alive")
+    result = _apply_hp_change(target_char, new_current)
+    db.commit()
+    ds_after = result["death_saves"]["status"]
+    revived = ds_before != "alive" and ds_after == "alive"
+
+    # Broadcast the canonical HP-update event so the sheet UI +
+    # battle map reflect the heal. Mirrors the heal_amount path in
+    # _apply_heal_to_combatant.
+    await hub.broadcast(campaign_id, {
+        "type": "character_hp_update",
+        "data": {
+            "character_id": target_char.id,
+            "hp": result["hp"],
+            "delta": delta,
+            "source": "cure-wounds",
+        },
+    })
+
+    # And a chat card for the roll log.
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": (
+                f"💗 Cure Wounds (+{delta} HP)"
+            ),
+            "feature_desc": (
+                f"{char.name} heals {target_char.name} for {delta} HP "
+                f"(rolled {heal_dice_total} + {spell_mod} spellcasting "
+                f"mod)."
+            ),
+            "source": "cure-wounds",
+            "target_character_id": target_char.id,
+            "target_character_name": target_char.name,
+            "heal_rolled": delta,
+            "heal_dice_total": heal_dice_total,
+            "heal_breakdown": heal_breakdown,
+            "spellcasting_mod": spell_mod,
+            "revived": revived,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "cure-wounds",
+        "target_character_id": target_char.id,
+        "target_character_name": target_char.name,
+        "heal_rolled": delta,
+        "heal_dice_total": heal_dice_total,
+        "heal_breakdown": heal_breakdown,
+        "spellcasting_mod": spell_mod,
+        "hp_before": hp_before,
+        "hp_after": int(result["hp"].get("current") or 0),
+        "revived": revived,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_gust")
 async def cast_gust(
     campaign_id: int,

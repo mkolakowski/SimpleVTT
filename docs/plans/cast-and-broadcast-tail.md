@@ -248,6 +248,23 @@ closure — runs indefinitely until Bucket A is exhausted.
   permanently GM-narrated; the engine surfaces the flag so the
   table can see Tongues is active. 3 harness tests.
 
+- **Cure Wounds (L1)** — ✅ shipped v2.463.0. **Third
+  mechanical non-buff cast on the arc.** New `/cast_cure_wounds`
+  endpoint rolls `1d8 + spellcasting_mod`, mutates the target's
+  HP through the canonical `_apply_hp_change` helper, and
+  broadcasts `character_hp_update`. A heal at 0 HP automatically
+  flips `death_saves.status` from dying/stable/dead back to
+  alive — RAW revival semantics for free. Body:
+  `{character_id, target_character_id}`. Class gate: bard/cleric/
+  druid/paladin/ranger. v1 skips upcast scaling (each slot above
+  L1 adds another d8 per RAW); a future commit can layer in a
+  `slot_level` body param. 5 harness tests including a 0-HP
+  revival path (uses Caelan rather than Krieger because Krieger's
+  Half-Orc Relentless Endurance interferes with the dying-state
+  setup). The mechanical-non-buff bucket now has three exemplars:
+  death-save flip (v2.461.0), buff-strip (v2.462.0), HP-write
+  (v2.463.0) — fully tooling the pattern.
+
 - **Lesser Restoration (L2)** — ✅ shipped v2.462.0. **Second
   mechanical non-buff cast on the arc** (after Spare the Dying
   v2.461.0). New `/cast_lesser_restoration` endpoint takes a
