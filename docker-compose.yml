@@ -124,6 +124,10 @@ services:
       # to APP_SECRET_KEY, then a dev default, inside the app.
       ADMIN_CENTER_SECRET_KEY: ${ADMIN_CENTER_SECRET_KEY:-}
       APP_SECRET_KEY: ${APP_SECRET_KEY:-}
+      # v2.485.4 — login brute-force throttle: lock an IP out after N
+      # failed sign-ins within the window (seconds).
+      ADMIN_CENTER_LOGIN_MAX_ATTEMPTS: ${ADMIN_CENTER_LOGIN_MAX_ATTEMPTS:-5}
+      ADMIN_CENTER_LOGIN_WINDOW_SECONDS: ${ADMIN_CENTER_LOGIN_WINDOW_SECONDS:-900}
       # v2.484.0 — path to fail2ban's sqlite ban db (read-only mount
       # below). When the --profile fail2ban service isn't running the
       # shared volume is empty and the dashboard shows an empty state.

@@ -55,7 +55,12 @@
     <h1>🛡️ Admin Center</h1>
     <p class="sub">Sign in to view logs, traffic, and bans.</p>
 
-    {% if error %}
+    {% if locked %}
+    <div class="error">
+      🔒 Too many failed attempts. Try again in about
+      {{ (locked // 60) + 1 }} minute{{ 's' if locked >= 60 else '' }}.
+    </div>
+    {% elif error %}
     <div class="error">Incorrect username or password.</div>
     {% endif %}
     {% if default_password %}

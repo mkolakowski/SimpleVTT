@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.485.4] - 2026-06-20 — "The Bouncer at the Door"
+
+**Schema version:** 71
+
+**Commit summary:** Adds a per-IP brute-force throttle to the Admin Center login page — after N failed sign-ins within a window, that IP is locked out for the rest of the window. Closes the "the login form is currently unthrottled" gap noted when the login page shipped (v2.485.3).
+
+**Description:** The new `/login` form accepted unlimited password guesses. This adds an in-process per-IP rate limiter: 5 failed attempts within 15 minutes (both tunable) locks that IP out until the window clears; a successful login resets its counter. Lockouts + failures are logged to the admin-center container's stdout (the shared audit log is mounted read-only, so the admin center can't write to it).
+
+**Implementation:**
+
+- `app/admin_center/login_guard.py` (new): pure, stdlib-only per-IP failure tracker — `lockout_remaining()`, `record_failure()`, `reset()`, with env-driven `ADMIN_CENTER_LOGIN_MAX_ATTEMPTS` (5) / `ADMIN_CENTER_LOGIN_WINDOW_SECONDS` (900). The window/threshold logic takes an injectable store + clock so it's unit-testable without the web stack.
+- `app/admin_center/main.py`: `POST /login` resolves the client IP via the audit log's `_extract_client_ip` (honors `TRUSTED_PROXY_HOPS`), bounces locked-out IPs before checking creds, records failures, and resets on success. `GET /login` accepts a `locked` param.
+- `app/admin_center/templates/login.html`: a "🔒 Too many failed attempts — try again in ~N minutes" banner.
+- `docker-compose.yml` + `.env.example`: the two throttle knobs, with a note that `TRUSTED_PROXY_HOPS` must be set behind a proxy/tunnel so the throttle keys on the real client IP (not the proxy's — otherwise one lockout blocks everyone).
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py`: +5 unit tests on `login_guard` (under-threshold, locks-at-threshold, reset clears, window expiry, per-IP isolation). The lockout is deliberately NOT exercised live — a live test would lock out `localhost` and break the other login tests in the same window; the pure unit tests cover the logic deterministically.
+
+Total harness count → 3681 (+5).
+
+PATCH — security hardening on the standalone Admin Center login. No main-app or schema change.
+
+### Added
+- `app/admin_center/login_guard.py` + `/login` brute-force throttle (per-IP, env-tunable); lockout banner on the login page.
+- `docker-compose.yml` / `.env.example`: `ADMIN_CENTER_LOGIN_MAX_ATTEMPTS` (5) + `ADMIN_CENTER_LOGIN_WINDOW_SECONDS` (900).
+
 ## [2.485.3] - 2026-06-20 — "The Front Door"
 
 **Schema version:** 71

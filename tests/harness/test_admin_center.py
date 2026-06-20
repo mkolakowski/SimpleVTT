@@ -17,7 +17,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from app.admin_center import audit_parse, basic_auth, fail2ban, stats
+from app.admin_center import audit_parse, basic_auth, fail2ban, login_guard, stats
 
 ADMIN_BASE_URL = os.getenv("ADMIN_CENTER_BASE_URL", "http://localhost:8015")
 
@@ -189,6 +189,57 @@ def test_fail2ban_reads_active_and_permanent_only(tmp_path):
     assert s["total_historical"] == 4
     assert s["jails"] == ["simplevtt-auth", "simplevtt-scanner"]
     assert s["by_jail"]["simplevtt-auth"] == 2
+
+
+# ---- login brute-force guard ----------------------------------------
+
+def test_login_guard_not_locked_under_threshold():
+    store = {}
+    for _ in range(4):
+        login_guard.record_failure("1.2.3.4", now=1000.0, window_seconds=900, store=store)
+    assert login_guard.lockout_remaining(
+        "1.2.3.4", now=1000.0, max_attempts=5, window_seconds=900, store=store
+    ) == 0
+
+
+def test_login_guard_locks_at_threshold():
+    store = {}
+    for _ in range(5):
+        login_guard.record_failure("1.2.3.4", now=1000.0, window_seconds=900, store=store)
+    remaining = login_guard.lockout_remaining(
+        "1.2.3.4", now=1000.0, max_attempts=5, window_seconds=900, store=store
+    )
+    assert remaining == 900  # full window left, oldest failure was just now
+
+
+def test_login_guard_reset_clears():
+    store = {}
+    for _ in range(5):
+        login_guard.record_failure("1.2.3.4", now=1000.0, window_seconds=900, store=store)
+    login_guard.reset("1.2.3.4", store=store)
+    assert login_guard.lockout_remaining(
+        "1.2.3.4", now=1000.0, max_attempts=5, window_seconds=900, store=store
+    ) == 0
+
+
+def test_login_guard_window_expires_old_failures():
+    store = {}
+    for _ in range(5):
+        login_guard.record_failure("1.2.3.4", now=1000.0, window_seconds=900, store=store)
+    # 901s later the original failures have aged out of the window.
+    assert login_guard.lockout_remaining(
+        "1.2.3.4", now=1901.0, max_attempts=5, window_seconds=900, store=store
+    ) == 0
+
+
+def test_login_guard_is_per_ip():
+    store = {}
+    for _ in range(5):
+        login_guard.record_failure("1.1.1.1", now=1000.0, window_seconds=900, store=store)
+    # A different IP is unaffected.
+    assert login_guard.lockout_remaining(
+        "2.2.2.2", now=1000.0, max_attempts=5, window_seconds=900, store=store
+    ) == 0
 
 
 # ---- basic auth -----------------------------------------------------

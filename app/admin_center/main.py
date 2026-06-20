@@ -21,8 +21,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
+from ..audit_log import _extract_client_ip
 from ..version import APP_VERSION
-from . import audit_parse, fail2ban, inventory, stats
+from . import audit_parse, fail2ban, inventory, login_guard, stats
 from .basic_auth import check_credentials, header_authorizes, is_default_password
 
 log = logging.getLogger("simplevtt.admin_center")
@@ -138,7 +139,7 @@ app.add_middleware(
 
 
 @app.get("/login", response_class=HTMLResponse)
-def login_form(request: Request, next: str = "/", error: str = ""):
+def login_form(request: Request, next: str = "/", error: str = "", locked: int = 0):
     # Already logged in → straight to the dashboard (or the next path).
     if request.session.get("admin_authed"):
         return RedirectResponse(_safe_next(next), status_code=303)
@@ -149,6 +150,7 @@ def login_form(request: Request, next: str = "/", error: str = ""):
             "app_version": APP_VERSION,
             "next": _safe_next(next),
             "error": error,
+            "locked": max(0, int(locked or 0)),
             "default_password": is_default_password(),
         },
     )
@@ -161,15 +163,30 @@ def login_submit(
     password: str = Form(""),
     next: str = Form("/"),
 ):
+    ip = _extract_client_ip(request)
+    nxt = quote(_safe_next(next), safe="")
+
+    # Brute-force throttle: bounce locked-out IPs before checking creds.
+    remaining = login_guard.lockout_remaining(ip, now=time.time())
+    if remaining > 0:
+        log.warning("admin-center login locked out ip=%s retry_after=%ss", ip, remaining)
+        return RedirectResponse(f"/login?next={nxt}&locked={remaining}", status_code=303)
+
     if check_credentials(username, password):
+        login_guard.reset(ip)
         request.session["admin_authed"] = True
         request.session["admin_user"] = username
         return RedirectResponse(_safe_next(next), status_code=303)
-    # Re-render the form with an error (303→GET keeps it refresh-safe).
-    return RedirectResponse(
-        f"/login?next={quote(_safe_next(next), safe='')}&error=1",
-        status_code=303,
-    )
+
+    # Failed: record the attempt; if that tipped the IP over the
+    # threshold, show the lockout state instead of the generic error.
+    login_guard.record_failure(ip, now=time.time())
+    log.warning("admin-center login failed ip=%s username=%r", ip, username[:64])
+    remaining = login_guard.lockout_remaining(ip, now=time.time())
+    if remaining > 0:
+        return RedirectResponse(f"/login?next={nxt}&locked={remaining}", status_code=303)
+    # 303→GET keeps the form refresh-safe.
+    return RedirectResponse(f"/login?next={nxt}&error=1", status_code=303)
 
 
 @app.get("/logout")
