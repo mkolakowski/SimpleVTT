@@ -10,6 +10,62 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.472.0] - 2026-06-19 — "The Edge Bouncer"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 4d of [`docs/plans/fail2ban-crowdsec-integration.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/fail2ban-crowdsec-integration.md). Adds the Cloudflare bouncer ban action — when fail2ban decides to ban an IP, the new action POSTs it to the v2.430.0 Cloudflare access-rules API with `mode=block`. Reuses the existing `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ZONE_ID` / `CLOUDFLARE_API_BASE_URL` env vars so an operator who already has the in-app ban button working just sets `FAIL2BAN_ACTION=cloudflare-bouncer` to wire fail2ban into the same Cloudflare list.
+
+**Description:** Phase 4b–c shipped the operator-facing fail2ban container with env-driven thresholds, but the only ban action available was the image's in-container iptables (which doesn't reach the host firewall and is mostly cosmetic for the dev profile). Phase 4d adds the first real reach: bans land at the Cloudflare edge, blocking the offending IP before traffic ever hits the SimpleVTT host. Zero host-side privilege required. Default behavior unchanged — the jail still uses fail2ban's `%(action_)s` shorthand until the operator opts in.
+
+**Implementation:**
+
+- **New file: `docs/integrations/fail2ban/action.d/cloudflare-bouncer.conf`.** Defines `actionban` (curl POST to `/zones/<zone>/firewall/access_rules/rules` with `{"mode":"block","configuration":{"target":"ip","value":"<ip>"},"notes":"fail2ban <name> banned <ip> for <bantime>s"}`) and `actionunban` (curl GET to look up the rule by IP via the `configuration.target=ip&configuration.value=<ip>` filter, then DELETE the matching rule). The `<ip>` / `<name>` / `<bantime>` tokens are fail2ban built-ins it substitutes at action-fire time; the `<cloudflare_api_token>` / `<cloudflare_zone_id>` / `<cloudflare_api_base_url>` tokens are defined in the `[Init]` block as envsubst-rendered `${CLOUDFLARE_*}` placeholders.
+- **Jail config (`docs/integrations/fail2ban/jail.d/simplevtt.conf`):** the previously-commented `action = %(action_)s` line becomes `action = ${FAIL2BAN_ACTION}`. render-jail.sh resolves the placeholder at startup from the env var; default `%(action_)s` (fail2ban's iptables shorthand) keeps the no-config behavior unchanged.
+- **`render-jail.sh`:** allowlist extended with `${FAIL2BAN_ACTION}` + `${CLOUDFLARE_API_TOKEN}` + `${CLOUDFLARE_ZONE_ID}` + `${CLOUDFLARE_API_BASE_URL}`. New rendering pass over `/etc/fail2ban/action.d.template/*.conf` → `/etc/fail2ban/action.d/`. The image's built-in action files at `/etc/fail2ban/action.d/` (iptables, mail, etc.) are unaffected — render-jail.sh only writes new files into the directory, alongside the built-ins.
+- **`docker-compose.yml`:** the fail2ban service's environment block gains `FAIL2BAN_ACTION` (default `%(action_)s`), `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID`, and `CLOUDFLARE_API_BASE_URL` (default `https://api.cloudflare.com/client/v4`). New mount: `./docs/integrations/fail2ban/action.d:/etc/fail2ban/action.d.template:ro`.
+- **`.env.example`:** new `FAIL2BAN_ACTION=%(action_)s` line below the FAIL2BAN_* block, with a doc-comment naming both Phase 4d and Phase 4e values.
+
+**Why mount the action.d template separately from the jail.d template:** the image's `action.d/` is pre-populated with built-in actions. If we bind-mounted our action.d directly there, we'd shadow them. The template-then-render pattern keeps the source read-only AND only adds files to the writable destination — built-ins stay intact, new files (cloudflare-bouncer.conf) land alongside.
+
+**Why no jq for the rule-id lookup:** the crazymax/fail2ban image is alpine + busybox; no jq. Sed extracts the first `"id":"..."` match from the access-rules list, which works because the Cloudflare response shape is stable and the filter constrains the list to at most a few results. If the filter ever changes shape, the sed expression breaks safely (sed yields empty, the `if [ -n "$rule_id" ]` short-circuits the DELETE).
+
+**Why the default `%(action_)s` stays in v2.472.0:** the operator must consciously opt into hitting Cloudflare's API on every ban — burning quota, leaving an audit trail in the Cloudflare dashboard, potentially blocking shared NAT IPs at the edge. Default-safe (no API calls) lets an operator bring up `--profile fail2ban` for testing without touching their Cloudflare account. Phase 4e (ipset) will follow the same default-safe pattern.
+
+**Why "The Edge Bouncer":** the action lives at the network edge — Cloudflare's globally-distributed access-rules layer evaluates it before the request reaches the SimpleVTT origin. "Edge Bouncer" names the geographic location AND the role (turning away traffic). Continues the operator-affordance theme from v2.468.0 / v2.470.0 / v2.471.0.
+
+**Why the action has empty `actionstart` / `actionstop` / `actioncheck`:** there's no persistent state to set up or tear down. Each ban/unban is a discrete API call. fail2ban requires those keys to exist (parser errors otherwise) but accepts empty values.
+
+**Live API smoke test deferred to Phase 4f.** Phase 4d ships the config-contract validation (the action file parses, the env vars plumb through, the render script knows the new placeholders). The end-to-end test that brings up the profile + replays a synthetic ban + asserts the wiremock saw the POST lives in Phase 4f's harness test where the container is genuinely up.
+
+**8 new harness tests** at `tests/harness/test_fail2ban_cloudflare_bouncer.py`. Pattern matches the Phase 4b/4c siblings — YAML + text-file-validation, no docker subprocess dependency.
+
+- `test_cloudflare_action_file_exists` — sanity check on the action.d config.
+- `test_cloudflare_action_has_post_ban_and_delete_unban` — both `actionban` and `actionunban` defined; both invoke curl; the URL path matches the v2.430.0 access-rules API.
+- `test_cloudflare_action_init_uses_env_placeholders` — `[Init]` block envsubst-resolves all three CLOUDFLARE_* vars.
+- `test_jail_config_action_line_is_env_driven` — the uncommented `action = ...` line uses `${FAIL2BAN_ACTION}`, not a hardcoded shorthand.
+- `test_env_example_carries_fail2ban_action_default` — `.env.example` has an uncommented `FAIL2BAN_ACTION=...` line.
+- `test_compose_passes_fail2ban_action_and_cloudflare_vars` — every Phase 4d env var is in the fail2ban service environment block.
+- `test_render_script_allowlist_includes_new_placeholders` — render-jail.sh's allowlist covers FAIL2BAN_ACTION + CLOUDFLARE_*.
+- `test_compose_mounts_action_d_template` — the new action.d mount is read-only at the template path.
+
+All 14 prior Phase 4a–c tests continue to pass.
+
+Total harness count 3593 → 3601.
+
+MINOR — new action.d config + new env vars + extended render script + extended jail config + 8 new harness tests. No schema change. No new app code.
+
+### Added
+- `docs/integrations/fail2ban/action.d/cloudflare-bouncer.conf`: new fail2ban action invoking Cloudflare API on ban/unban.
+- `docker-compose.yml`: `FAIL2BAN_ACTION` + three `CLOUDFLARE_*` env-var pass-throughs on the fail2ban service. New action.d template mount.
+- `.env.example`: documented `FAIL2BAN_ACTION` default with both Phase 4d (cloudflare-bouncer) and Phase 4e (ipset-bouncer) values named.
+- `tests/harness/test_fail2ban_cloudflare_bouncer.py`: 8 wiring-contract tests covering the action file shape + jail action-line + env-example default + compose env block + render-script allowlist + action.d mount.
+
+### Changed
+- `docs/integrations/fail2ban/jail.d/simplevtt.conf`: the previously-commented action= line becomes uncommented + env-driven (`action = ${FAIL2BAN_ACTION}`).
+- `docs/integrations/fail2ban/scripts/render-jail.sh`: allowlist extended with the four new placeholders; new rendering pass over action.d/*.conf.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3593 → 3601.
+
 ## [2.471.0] - 2026-06-19 — "The Envsubst Sentry"
 
 **Schema version:** 71

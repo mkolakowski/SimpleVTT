@@ -170,6 +170,19 @@ services:
       FAIL2BAN_MAGIC_LINK_REPLAY_BANTIME: ${FAIL2BAN_MAGIC_LINK_REPLAY_BANTIME:-24h}
       FAIL2BAN_API_PROBE_MAXRETRY: ${FAIL2BAN_API_PROBE_MAXRETRY:-20}
       FAIL2BAN_DEFAULT_BANTIME: ${FAIL2BAN_DEFAULT_BANTIME:-1h}
+      # v2.472.0 — Phase 4d. Ban-action selector. Default is the
+      # fail2ban built-in iptables/nftables shorthand. Set to
+      # `cloudflare-bouncer` (Phase 4d) or `ipset-bouncer` (Phase
+      # 4e) to swap. Multiple actions can be space-separated.
+      FAIL2BAN_ACTION: ${FAIL2BAN_ACTION:-%(action_)s}
+      # v2.472.0 — Phase 4d. CLOUDFLARE_* pass-through so the
+      # action.d/cloudflare-bouncer.conf [Init] block can resolve
+      # its placeholders via render-jail.sh. Reuses the v2.430.0
+      # cloudflare-edge-banning env vars; same token + zone the
+      # in-app ban button uses.
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+      CLOUDFLARE_ZONE_ID: ${CLOUDFLARE_ZONE_ID:-}
+      CLOUDFLARE_API_BASE_URL: ${CLOUDFLARE_API_BASE_URL:-https://api.cloudflare.com/client/v4}
     # v2.471.0 — Phase 4c. Override the image's entrypoint with the
     # render-jail.sh helper that envsubsts the FAIL2BAN_* placeholders
     # into the jail.d configs before exec'ing the image's standard
@@ -197,6 +210,12 @@ services:
       # on container restart) while keeping the rendered destination
       # writable so envsubst can drop a file there.
       - ./docs/integrations/fail2ban/jail.d:/etc/fail2ban/jail.d.template:ro
+      # v2.472.0 — Phase 4d. Mount action.d/ as a read-only template.
+      # render-jail.sh envsubsts its [Init] blocks (Cloudflare token,
+      # zone id, base URL) and writes the resolved configs into the
+      # container's writable /etc/fail2ban/action.d/, alongside the
+      # image's built-in action files (iptables, etc.).
+      - ./docs/integrations/fail2ban/action.d:/etc/fail2ban/action.d.template:ro
       - ./docs/integrations/fail2ban/scripts/render-jail.sh:/scripts/render-jail.sh:ro
     # No port mappings — fail2ban-client is reached via
     # `docker compose exec`. Banning runs inside the container via
