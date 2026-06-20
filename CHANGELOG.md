@@ -10,6 +10,86 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.474.0] - 2026-06-20 — "The Unprivileged App"
+
+**Schema version:** 71
+
+**Commit summary:** Security hardening — the SimpleVTT app container no longer runs as root. Previously the `Dockerfile` had no `USER` directive, so every uvicorn worker ran with uid 0; a container escape would land in a root shell on the host. v2.474.0 adds a `gosu`-based `docker-entrypoint.sh` that starts as root, chowns the named-volume mount points (`uploads_data`, `homebrew_data`, `audit_logs`), then drops privileges to the new `appuser` system account (uid 999) before exec'ing uvicorn. `/healthz` gains `process_uid` + `process_user` so an operator (and a harness test) can verify the drop landed.
+
+**Description:** The chown-then-drop pattern handles BOTH fresh deploys AND existing pre-v2.474.0 deploys cleanly. Volume mount points whose owner is `root:root` from a prior install get chowned on every startup (idempotent — `chown -R` on already-owned paths is a no-op). No operator-side `chown` or `docker compose down -v` required.
+
+**Implementation:**
+
+- `Dockerfile`:
+  - Adds `gosu` to the apt install line (single Go binary, no PAM / TTY churn — signals reach uvicorn directly).
+  - Adds the system-user creation: `groupadd --system appuser && useradd --system --gid appuser --home /app --shell /sbin/nologin appuser`. `--system` flag picks an `appuser` uid in the 100–999 range (999 in practice), conventional for non-login service accounts.
+  - Bakes the audit-log directory: `mkdir -p /var/log/simplevtt` joins the existing `mkdir -p` line for uploads + homebrew + thumbnails + audio. This means the v2.469.0 RotatingFileHandler has a path it can write to even before the entrypoint chown fires (defense in depth).
+  - Final `chown -R appuser:appuser /app /var/log/simplevtt` so the image's baked paths land owned by appuser; the entrypoint only re-chowns volume-mount paths whose ownership comes from the host.
+  - New `COPY scripts/docker-entrypoint.sh /usr/local/bin/` + `ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]`.
+  - `CMD` switched from string form to JSON-array form `["sh", "-c", "..."]` so it composes cleanly with `ENTRYPOINT` (Docker passes CMD as args to ENTRYPOINT only in JSON-array form).
+- `scripts/docker-entrypoint.sh` (new):
+  ```sh
+  set -e
+  for p in /app/app/static/uploads /app/app/data/homebrew /var/log/simplevtt; do
+      [ -d "$p" ] && chown -R appuser:appuser "$p" 2>/dev/null || true
+  done
+  exec gosu appuser "$@"
+  ```
+  Three lines of mount-point chown + an `exec gosu appuser "$@"`. The trailing `|| true` makes the chowns best-effort — a read-only mount or an unwritable filesystem doesn't fail container startup.
+- `app/main.py::healthz` — surfaces `process_uid` (via `os.getuid()`) and `process_user` (via `pwd.getpwuid(uid).pw_name`). Both wrapped in try/except so a non-posix host (Windows test runner) still gets a 200 response with both fields set to `None`.
+
+**Why gosu and not su / sudo / runuser:**
+
+- gosu is a single-file ~1.5 MB Go binary; no PAM stack, no TTY allocation, no `init`-style reparenting.
+- `exec gosu appuser ...` replaces the current process so PID 1 stays clean — signals from `docker stop` reach uvicorn directly.
+- `su` adds login-shell behavior + reparents the child; `sudo` requires `/etc/sudoers` + PAM; `runuser` is glibc-specific.
+- This is the documented Docker pattern (also used by official postgres / nginx / etc. images).
+
+**Why the entrypoint chown is best-effort (`|| true`):**
+
+- A read-only bind mount can't be chowned. Failing hard there would make `docker compose up` brittle for operators who bind-mount configs read-only.
+- Idempotent chown on an already-correct path is a no-op — no measurable startup cost.
+- If a chown genuinely fails on a required write path, the app will fail at first write attempt with a clear `PermissionError` — much easier to diagnose than a cryptic entrypoint exit.
+
+**Why the audit-log directory is baked into the image:**
+
+The v2.469.0 RotatingFileHandler tries to mkdir + open `/var/log/simplevtt/audit.log` at app startup. If the named volume hadn't mounted yet (or the entrypoint chown hadn't run), the app would fall through to its stdout-only fallback with a warning. Baking `/var/log/simplevtt` into the image with the right ownership means the file handler attaches reliably on first start, before the entrypoint even runs.
+
+**Operator notes:**
+
+- **Existing deploys upgrade in place** with `docker compose up -d --build app`. The entrypoint chowns the existing volumes on first start. No data loss, no volume wipe.
+- **The backup container still runs as root.** That's intentional — `pg_dump` accesses the postgres socket which requires shared-process or specific user mapping. The backup container is short-lived (runs on cron, exits) and never accepts network traffic. Scoped out of this commit.
+- **The fail2ban container still runs as root.** That's how the upstream image is built; `fail2ban-server` needs root to manage iptables. The container is profile-gated and opt-in. Scoped out.
+- **Existing `docker compose exec app <cmd>` still defaults to root** — that's Docker's behavior, not a regression. Add `--user appuser` to exec as the running user.
+
+**Why "The Unprivileged App":** root inside the container is a stepping stone for an attacker. Dropping to `appuser` shrinks the blast radius of any exploitable bug in uvicorn / FastAPI / one of the deps. The fun name describes the new posture; the ship implements it.
+
+**3 new harness tests** at `tests/harness/test_app_runs_as_non_root.py`:
+
+- `test_app_process_is_not_root` — anchors the entrypoint drop. If a future edit removes the ENTRYPOINT, removes the gosu call, or strips the appuser creation, the process_uid lands at 0 and this test fails.
+- `test_app_process_user_is_appuser` — anchors the user *name*. Anti-regression against someone renaming the system user without updating tests.
+- `test_app_still_serves_audit_log_to_writable_path` — anchors that the chown didn't break the v2.469.0 RotatingFileHandler write path.
+
+All 30 prior Phase 4a–e fail2ban tests still pass; the audit log file handler attaches as appuser cleanly.
+
+Total harness count 3609 → 3612.
+
+MINOR — new system user + new entrypoint + new /healthz fields + 3 harness tests. No schema change. No API breakage. Existing operator workflows unchanged.
+
+### Added
+- `scripts/docker-entrypoint.sh`: chown-then-drop entrypoint using `gosu`.
+- `Dockerfile`: `gosu` apt package, `appuser` system user, `chown -R appuser:appuser /app /var/log/simplevtt`, `ENTRYPOINT` directive.
+- `app/main.py::healthz`: new fields `process_uid` + `process_user`.
+- `tests/harness/test_app_runs_as_non_root.py`: 3 tests anchoring the non-root posture.
+
+### Changed
+- `Dockerfile` `CMD` switched from shell-string form to JSON-array form so it composes with the new `ENTRYPOINT`.
+- `Dockerfile`'s pre-existing `mkdir -p` line now also bakes `/var/log/simplevtt` so the v2.469.0 audit-log handler attaches cleanly even before the entrypoint chown fires.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3609 → 3612.
+
+### Security
+- App container no longer runs as root. Container escape blast radius shrunk from "root on host" to "appuser inside container" (uid 999, no login shell).
+
 ## [2.473.1] - 2026-06-19 — "The Restart Loop"
 
 **Schema version:** 71

@@ -346,6 +346,22 @@ async def on_shutdown() -> None:
 
 @app.get("/healthz")
 def healthz():
+    # v2.474.0 — surface the running uid/user name so a harness test
+    # (and operators) can verify the non-root hardening landed. On
+    # a healthy v2.474.0+ deploy this reports `appuser` / a non-zero
+    # uid. Posix-only path; on Windows / non-posix host these fall
+    # back to None so the endpoint still responds.
+    try:
+        _uid = os.getuid()
+    except AttributeError:
+        _uid = None
+    _user_name = None
+    if _uid is not None:
+        try:
+            import pwd
+            _user_name = pwd.getpwuid(_uid).pw_name
+        except (KeyError, ImportError):
+            _user_name = None
     return {
         "ok": True,
         "app_version": APP_VERSION,
@@ -356,6 +372,9 @@ def healthz():
         # flag tells the operator the file handler isn't active.
         "audit_log_path": AUDIT_LOG_PATH,
         "audit_log_enabled": _AUDIT_LOG_ENABLED,
+        # v2.474.0 — non-root hardening signal.
+        "process_uid": _uid,
+        "process_user": _user_name,
     }
 
 

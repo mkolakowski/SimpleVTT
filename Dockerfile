@@ -2,10 +2,14 @@
 FROM python:3.12-slim
 
 # System deps
+# v2.474.0 — add `gosu` so the entrypoint can drop from root to
+# `appuser` after fixing volume permissions. gosu is a single-file
+# Go binary that does setuid+setgid+exec without PAM / TTY churn.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         libpq-dev \
         curl \
+        gosu \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -52,11 +56,36 @@ COPY BUGS.md /app/BUGS.md
 # Create dirs for uploaded maps and tokens, and the homebrew volume mountpoint
 # (so the volume can mount cleanly on a fresh container before anything is
 # written to it).
-RUN mkdir -p /app/app/static/uploads/maps /app/app/static/uploads/tokens /app/app/data/homebrew
+# v2.474.0 — also bake the audit-log directory (/var/log/simplevtt) so the
+# v2.469.0 RotatingFileHandler has a path it can write to even before
+# the entrypoint chown runs.
+RUN mkdir -p /app/app/static/uploads/maps \
+             /app/app/static/uploads/tokens \
+             /app/app/static/uploads/thumbnails \
+             /app/app/static/uploads/audio \
+             /app/app/data/homebrew \
+             /var/log/simplevtt
+
+# v2.474.0 — non-root hardening. Create an unprivileged `appuser`
+# system account + own the runtime-writable paths. The container
+# still starts as root so the entrypoint can chown named-volume
+# mount points (whose owner is determined by first-touch, not by
+# the image), then drops via gosu to `appuser` before exec'ing
+# uvicorn. App listens on port 8013 (>1024), so no capability
+# inheritance is required.
+RUN groupadd --system appuser \
+    && useradd --system --gid appuser --home /app --shell /sbin/nologin appuser \
+    && chown -R appuser:appuser /app /var/log/simplevtt
+
+# Install the entrypoint that does chown-then-drop.
+COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 # Listening port — overridable via APP_PORT env var.
 ENV APP_PORT=8013
 EXPOSE 8013
 
-# Use sh -c so APP_PORT is expanded at container start.
-CMD sh -c 'uvicorn app.main:app --host 0.0.0.0 --port "${APP_PORT:-8013}" --proxy-headers'
+# v2.474.0 — entrypoint chowns the volume mount points (idempotent)
+# then `exec gosu appuser ...`. CMD is the uvicorn invocation; the
+# entrypoint forwards "$@" to gosu.
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port \"${APP_PORT:-8013}\" --proxy-headers"]
