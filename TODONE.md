@@ -40,6 +40,8 @@ Nearly all 24 buttons share the same inline style (`font-size:11px; padding:2px 
 
 ## Manually Added — shipped
 
+- ✅ **DONE (v2.480.0 "The Visitor's Ledger")** — **Cloudflare-tunnel visitor IP logging.** Opt-in per-request `visitor.request` audit event — full visitor accounting (path, method, status, response time, IP, UA) for operators behind a Cloudflare Tunnel. Shipped as an `@app.middleware("http")` in `app/main.py` backed by `app/visitor_log.py`'s two-gate interlock (`VISITOR_REQUEST_LOG_ENABLED=true` + `TRUSTED_PROXY_HOPS>=1`), DEFAULT OFF for privacy + log-volume. Reuses `audit()` / `_extract_client_ip` so the recorded IP matches every other audit event for the same client (fail2ban consistency). The originally-filed "reads `CF-Connecting-IP`" detail was implemented as the existing `X-Forwarded-For`/`TRUSTED_PROXY_HOPS` path instead — Cloudflare Tunnel populates XFF, and reusing the shared extractor keeps IPs uniform across event tags. 8 in-process unit tests in `tests/harness/test_visitor_log.py`; privacy wiki + `.env.example` updated to document the now-shipped knob.
+
 - ✅ **DONE** — GM and player do not get popup notification that opportunity attack can be used. **Design doc: [`docs/plans/movement-oa-flow.md`](docs/plans/movement-oa-flow.md)** (added v2.99.50). All 6 phases shipped v2.99.52–v2.99.57:
     - Phase 1 ✅ v2.99.52 — Team data model + same-team filter
     - Phase 2 ✅ v2.99.53 — Token Management UI overhaul (edit button, pills, remove upload art)

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -29,6 +30,7 @@ from .routes import (
     wiki_routes,
 )
 from .version import APP_VERSION, SCHEMA_VERSION
+from .visitor_log import emit_visitor_request, visitor_request_log_enabled
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("simplevtt")
@@ -71,6 +73,37 @@ settings = get_settings()
 app = FastAPI(title="SimpleVTT", version=APP_VERSION)
 
 app.add_middleware(SessionMiddleware, secret_key=settings.app.secret_key, https_only=False)
+
+
+# v2.480.0 — opt-in per-request visitor logging (TODO.md P2 follow-up
+# to the v2.424.0–v2.477.0 security/audit arc). When the two-gate
+# interlock in app/visitor_log.py is open (VISITOR_REQUEST_LOG_ENABLED
+# + TRUSTED_PROXY_HOPS>=1), emit a ``visitor.request`` audit event for
+# every HTTP request — path, method, status, response time, plus the
+# ip/ua audit() extracts. DEFAULT OFF: per-request logging is high-
+# volume + privacy-sensitive (see docs/wiki/privacy.md).
+#
+# Registered via @app.middleware AFTER SessionMiddleware so it sits
+# OUTERMOST in the stack — the ``ms`` it records is the full
+# request wall-time including session decode + routing, which is the
+# figure an operator watching for traffic-pattern alarms wants.
+@app.middleware("http")
+async def _visitor_request_log_mw(request: Request, call_next):
+    # Fast path: when the gate is closed (the default on every normal
+    # deploy) skip the clock read + emit entirely so the middleware
+    # adds ~no overhead to the hot path.
+    if not visitor_request_log_enabled():
+        return await call_next(request)
+    start = time.perf_counter()
+    response = await call_next(request)
+    emit_visitor_request(
+        request,
+        method=request.method,
+        path=request.url.path,
+        status=response.status_code,
+        ms=int((time.perf_counter() - start) * 1000),
+    )
+    return response
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 STATIC_DIR.mkdir(exist_ok=True)

@@ -10,6 +10,45 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.480.0] - 2026-06-20 — "The Visitor's Ledger"
+
+**Schema version:** 71
+
+**Commit summary:** Ships the opt-in **per-request visitor logging** filed as a P2 follow-up to the v2.424.0–v2.477.0 security/audit arc. When an operator opts in, every HTTP request emits a canonical `visitor.request` audit event — full visitor accounting (path, method, status, response time, IP, UA) for deploys behind a Cloudflare Tunnel. DEFAULT OFF, behind a two-gate interlock.
+
+**Description:** Until now the `simplevtt.audit` logger recorded a client IP only when a *banning-relevant* event fired (`auth.login_failed`, `api.unauthorized`, `api.not_found`). Operators who wanted full visitor accounting — every request, every IP, irrespective of outcome — had no built-in surface. v2.480.0 adds one as an outermost ASGI middleware backed by a small, unit-testable `app/visitor_log.py` module. It reuses the existing `audit()` / `_extract_client_ip` path so the IP recorded on a `visitor.request` line is byte-identical to what every other audit event records for the same client — a fail2ban filter banning on request rate sees the same IPs as the login-failure and scanner filters.
+
+**Implementation:**
+
+- `app/visitor_log.py` (new): `visitor_request_log_enabled()` two-gate predicate + `emit_visitor_request()` emitter. Both read env at call time (never cached) so a hot flip is honored, mirroring the demo-magic-link / cloudflare-banning gates.
+- `app/main.py`: new `@app.middleware("http")` registered after `SessionMiddleware` so it sits **outermost** — the `ms` it records is the full request wall-time including session decode + routing. Fast-path early-return when the gate is closed (the default) so the middleware adds ~no overhead on a normal deploy. The emitter never raises — a logging failure can't break the response.
+- `.env.example`: documents `VISITOR_REQUEST_LOG_ENABLED` (commented, default `false`) with the `TRUSTED_PROXY_HOPS>=1` requirement noted.
+- `docs/wiki/privacy.md`: Section 6 "deliberately don't collect" bullet rewritten to describe the now-shipped opt-in knob; Section 10 operator-knobs table gains a `VISITOR_REQUEST_LOG_ENABLED` row flagging it as a material change to data processing.
+- `TODO.md` → `TODONE.md`: the P2 item moves to the shipped archive with an implementation note on why the originally-filed "reads `CF-Connecting-IP`" detail landed as the shared `X-Forwarded-For`/`TRUSTED_PROXY_HOPS` path instead (Cloudflare Tunnel populates XFF; reusing the shared extractor keeps IPs uniform across event tags).
+
+**Two-gate interlock — BOTH must hold for an event to fire:**
+
+1. `VISITOR_REQUEST_LOG_ENABLED` in {1,true,yes,on} — the explicit operator opt-in.
+2. `TRUSTED_PROXY_HOPS >= 1` — without a trusted proxy hop the only recordable IP is the tunnel/proxy's own internal address, which is useless for visitor accounting and would mislead a fail2ban filter into banning the proxy. The trusted-hop requirement is a safety interlock, not belt-and-suspenders.
+
+**Harness changes:**
+
+- `tests/harness/test_visitor_log.py` (new): 8 in-process unit tests (caplog + monkeypatch, same pattern as `test_audit_log.py`). Gate predicate: default OFF, flag-only stays closed, hop-only stays closed, both-open fires, truthy-synonym matrix. Emission: no-op when disabled, canonical line shape when enabled (asserts the trusted-XFF IP, ua, method, path, status, ms fields), path-quoting for non-bare-token paths.
+
+Total harness count → 3635 (+8 from this commit's `test_visitor_log.py`).
+
+MINOR — new opt-in feature (middleware + module), default OFF, no behavior change on existing deploys. No schema change.
+
+### Added
+- `app/visitor_log.py`: opt-in per-request `visitor.request` audit event with a two-gate (`VISITOR_REQUEST_LOG_ENABLED` + `TRUSTED_PROXY_HOPS>=1`) interlock.
+- `app/main.py`: outermost `@app.middleware("http")` that emits `visitor.request` per request when the gate is open.
+- `.env.example`: `VISITOR_REQUEST_LOG_ENABLED` knob (commented, default `false`).
+- `tests/harness/test_visitor_log.py`: 8 unit tests for the gate predicate + emission line shape.
+
+### Changed
+- `docs/wiki/privacy.md`: Section 6 + Section 10 updated to document the now-shipped opt-in visitor-logging knob as a material change to data processing.
+- `TODO.md` / `TODONE.md`: the P2 Cloudflare-tunnel visitor-logging item moves to the shipped archive.
+
 ## [2.479.0] - 2026-06-20 — "The Compliance Frame"
 
 **Schema version:** 71

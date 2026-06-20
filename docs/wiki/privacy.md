@@ -356,11 +356,18 @@ of the alleged infringement.
 
 ## 6 — Data we deliberately don't collect
 
-- **No per-request access log.** SimpleVTT does **not** log
-  every HTTP request. Only banning-relevant events (Section 2.3)
-  get logged. A future opt-in Cloudflare-tunnel-aware visitor
-  request log is filed as a TODO but is intentionally OFF by
-  default.
+- **No per-request access log (by default).** SimpleVTT does
+  **not** log every HTTP request out of the box. Only
+  banning-relevant events (Section 2.3) get logged. An operator
+  who wants full visitor accounting behind a Cloudflare Tunnel
+  can opt in with `VISITOR_REQUEST_LOG_ENABLED=true`
+  (Section 10), which emits a `visitor.request` audit event per
+  request (path, method, status, response time, IP, user agent).
+  It is **OFF by default** for privacy + log-volume reasons and
+  additionally requires `TRUSTED_PROXY_HOPS>=1` so the recorded
+  IP is the real visitor rather than the tunnel's internal
+  address. Enabling it is a material change to data processing —
+  see Section 11.
 - **No browser fingerprinting.** No canvas / font / WebGL probes.
   No third-party trackers.
 - **No password content.** Plaintext passwords are never
@@ -440,6 +447,7 @@ match their threat model + jurisdiction.
 |---|---|---|
 | `AUDIT_LOG_PATH` | `/var/log/simplevtt/audit.log` | File path for the audit log tee. Set to empty string to disable file logging (stdout-only). |
 | `TRUSTED_PROXY_HOPS` | `0` | Trust depth for `X-Forwarded-For`. Set `1` behind one reverse proxy, etc. **Required for accurate IP attribution behind Cloudflare / nginx.** |
+| `VISITOR_REQUEST_LOG_ENABLED` | `false` | Opt into a per-request `visitor.request` audit event (full visitor accounting: path, method, status, response time, IP, UA). OFF by default; also requires `TRUSTED_PROXY_HOPS>=1`. Enabling it is a material change to data processing — disclose it in your published policy. |
 | `APP_ALLOW_LOCAL_REGISTRATION` | `true` | Whether anyone can self-register. `false` to require operator-managed account creation. |
 | `GOOGLE_SSO_ENABLED` | `false` | Whether Google SSO is offered. Disable to remove Google as a recipient (Section 3.2). |
 | `SIMPLEVTT_CLOUDFLARE_BANNING_ENABLED` | `false` | Whether the in-app Cloudflare ban + fail2ban Cloudflare bouncer can talk to the Cloudflare API. Disable to remove Cloudflare as a recipient. |
