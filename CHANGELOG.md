@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.485.2] - 2026-06-20 — "The Token Recipe"
+
+**Schema version:** 71
+
+**Commit summary:** Expands the Cloudflare section of `.env.example` with step-by-step instructions for obtaining `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ZONE_ID`. Config-doc-only.
+
+**Description:** The Cloudflare edge-banning vars shipped with only a one-line scope note, leaving operators to figure out the dashboard navigation themselves. This adds the actual click-path for creating a correctly-scoped token, finding the zone ID, and verifying both with a curl probe.
+
+**Implementation:**
+
+- `.env.example`: rewrote the Cloudflare edge-banning block —
+  - **Token how-to:** dashboard path (My Profile → API Tokens → Create Custom Token), the exact permission to pick (**Zone · Firewall Services · Edit** — the group that backs the `firewall/access_rules/rules` API the client calls), zone-resource scoping to a single domain, and the "don't grant broader scope" caution.
+  - **Zone-ID how-to:** the domain Overview page → API box → Zone ID.
+  - **Verify:** a `curl … /firewall/access_rules/rules` probe that returns `"success": true` when the token + zone are valid.
+
+PATCH — config-doc-only edit to `.env.example`. No code, schema, or endpoint change. (Harness-test exempt; `.env.example` is config, not a wiki-surfaced doc.)
+
+### Changed
+- `.env.example`: added how-to-obtain instructions for the Cloudflare API token + zone ID (with a verify-curl), and corrected the token-scope label to `Zone:Firewall Services:Edit`.
+
 ## [2.485.1] - 2026-06-20 — "The Tunnel Map"
 
 **Schema version:** 71
