@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3681 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.485.4, 2026-06-20).
+**Total tests:** 3686 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.485.5, 2026-06-20).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5530,6 +5530,11 @@ The standalone read-only dashboard on port 8015. Unit tests (host-side) for the 
 | `test_login_guard_reset_clears` | `reset()` (called on successful login) clears the lockout. |
 | `test_login_guard_window_expires_old_failures` | Failures older than the window age out → no lockout. |
 | `test_login_guard_is_per_ip` | One IP's failures don't lock out a different IP. |
+| `test_dns_reverse_lookup_uses_cache` | `dns_lookup.reverse_lookup` caches — a repeat IP doesn't re-invoke the resolver. |
+| `test_dns_reverse_lookup_failure_caches_none` | A resolver error → None, cached (no repeated slow failures). |
+| `test_dns_resolve_many_dedupes_skips_and_caps` | `resolve_many` dedupes, skips empty/`unknown`, and caps new lookups at the limit. |
+| `test_dashboard_dns_toggle_renders_column` | `?dns=1` adds the "Host (DNS)" column; off by default. |
+| `test_api_events_dns_adds_ptr_field` | `/api/events?dns=1` adds a `ptr` field per event. |
 | `test_api_stats_shape` | `/api/stats` → 200 + the roll-up keys. |
 | `test_api_events_shape` | `/api/events?limit=10` → 200 + `{count, events: []}`. |
 | `test_api_events_requires_auth` | `/api/events` without creds → 401. |

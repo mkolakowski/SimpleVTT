@@ -23,7 +23,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from ..audit_log import _extract_client_ip
 from ..version import APP_VERSION
-from . import audit_parse, fail2ban, inventory, login_guard, stats
+from . import audit_parse, dns_lookup, fail2ban, inventory, login_guard, stats
 from .basic_auth import check_credentials, header_authorizes, is_default_password
 
 log = logging.getLogger("simplevtt.admin_center")
@@ -212,17 +212,23 @@ def version():
 
 
 @app.get("/api/events")
-def api_events(event: str | None = None, limit: int = 500):
+def api_events(event: str | None = None, limit: int = 500, dns: int = 0):
     """Recent parsed audit events, newest first. ``event`` filters by
-    tag prefix (e.g. ``auth.`` or the exact ``visitor.request``)."""
+    tag prefix (e.g. ``auth.`` or the exact ``visitor.request``).
+    ``dns=1`` adds a ``ptr`` reverse-DNS hostname to each event (opt-in
+    — it costs a lookup per unique IP)."""
     limit = max(1, min(int(limit), 5000))
     events = audit_parse.load_events(
         AUDIT_LOG_PATH,
         max_lines=5000,
         event_prefix=event or None,
         newest_first=True,
-    )
-    return JSONResponse({"count": len(events), "events": events[:limit]})
+    )[:limit]
+    if dns:
+        ptr = dns_lookup.resolve_many(e["fields"].get("ip", "") for e in events)
+        for e in events:
+            e["ptr"] = ptr.get(e["fields"].get("ip", ""))
+    return JSONResponse({"count": len(events), "events": events})
 
 
 @app.get("/api/stats")
@@ -246,7 +252,7 @@ def api_inventory():
 
 
 @app.get("/", response_class=HTMLResponse)
-def dashboard(request: Request, event: str | None = None):
+def dashboard(request: Request, event: str | None = None, dns: int = 0):
     events = audit_parse.load_events(
         AUDIT_LOG_PATH,
         max_lines=5000,
@@ -260,6 +266,14 @@ def dashboard(request: Request, event: str | None = None):
     event_tags = sorted(summary["by_event"].keys())
     bans = fail2ban.read_status(now=time.time())
     data_inventory = inventory.read_inventory()
+    # Opt-in reverse-DNS column: resolve the IPs visible on this render
+    # (the event rows + the top-IPs table), deduped + cached.
+    dns_on = bool(dns)
+    dns_map: dict = {}
+    if dns_on:
+        ips = [e["fields"].get("ip", "") for e in events[:500]]
+        ips += [ip for ip, _ in summary["top_ips"]]
+        dns_map = dns_lookup.resolve_many(ips)
     return templates.TemplateResponse(
         "dashboard.html",
         {
@@ -275,5 +289,7 @@ def dashboard(request: Request, event: str | None = None):
             "bans": bans,
             "inventory": data_inventory,
             "admin_user": request.session.get("admin_user", ""),
+            "dns_on": dns_on,
+            "dns_map": dns_map,
         },
     )

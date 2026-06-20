@@ -64,6 +64,13 @@
     .tag.warn { color: var(--warn); border-color: var(--warn); }
     .tag.bad { color: var(--bad); border-color: var(--bad); }
     .filterbar { display: flex; gap: 10px; align-items: center; margin: 18px 0 8px; flex-wrap: wrap; }
+    /* 44px touch target for the DNS toggle label. */
+    .dns-toggle {
+      min-height: 44px; display: inline-flex; align-items: center; gap: 8px;
+      padding: 0 12px; border: 1px solid var(--line); border-radius: 8px;
+      color: var(--muted); font-size: 14px; cursor: pointer;
+    }
+    .dns-toggle input { width: 18px; height: 18px; }
     /* 44px minimum touch targets per the project HIG rule. */
     select, .btn {
       min-height: 44px; background: var(--panel); color: var(--fg);
@@ -143,7 +150,13 @@
           <thead><tr><th>IP</th><th>Events</th></tr></thead>
           <tbody>
             {% for ip, n in summary.top_ips %}
-            <tr><td><code>{{ ip }}</code></td><td>{{ n }}</td></tr>
+            <tr>
+              <td>
+                <code>{{ ip }}</code>
+                {% if dns_on %}{% set h = dns_map.get(ip) %}{% if h %}<div class="muted" style="font-size:12px"><code>{{ h }}</code></div>{% endif %}{% endif %}
+              </td>
+              <td>{{ n }}</td>
+            </tr>
             {% else %}
             <tr><td colspan="2" class="muted">No IPs recorded yet.</td></tr>
             {% endfor %}
@@ -213,11 +226,15 @@
         <option value="{{ tag }}" {{ 'selected' if tag == active_filter else '' }}>{{ tag }}</option>
         {% endfor %}
       </select>
+      <label class="dns-toggle">
+        <input type="checkbox" name="dns" value="1" {{ 'checked' if dns_on else '' }} onchange="this.form.submit()">
+        Resolve DNS names
+      </label>
       <noscript><button class="btn" type="submit">Apply</button></noscript>
       <span class="muted">showing {{ events|length }} most recent</span>
     </form>
     <table>
-      <thead><tr><th>Time</th><th>Level</th><th>Event</th><th>IP</th><th>Details</th></tr></thead>
+      <thead><tr><th>Time</th><th>Level</th><th>Event</th><th>IP</th>{% if dns_on %}<th>Host (DNS)</th>{% endif %}<th>Details</th></tr></thead>
       <tbody>
         {% for e in events %}
         <tr>
@@ -227,6 +244,9 @@
           </td>
           <td><code>{{ e.event }}</code></td>
           <td><code>{{ e.fields.ip or '' }}</code></td>
+          {% if dns_on %}
+          <td class="muted">{% set h = dns_map.get(e.fields.ip) %}{% if h %}<code>{{ h }}</code>{% else %}—{% endif %}</td>
+          {% endif %}
           <td>
             {% set rest = [] %}
             {% for k, v in e.fields.items() if k != 'ip' %}
@@ -236,7 +256,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="5" class="muted">No events match.</td></tr>
+        <tr><td colspan="{{ 6 if dns_on else 5 }}" class="muted">No events match.</td></tr>
         {% endfor %}
       </tbody>
     </table>

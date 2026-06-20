@@ -17,7 +17,14 @@ from pathlib import Path
 import httpx
 import pytest
 
-from app.admin_center import audit_parse, basic_auth, fail2ban, login_guard, stats
+from app.admin_center import (
+    audit_parse,
+    basic_auth,
+    dns_lookup,
+    fail2ban,
+    login_guard,
+    stats,
+)
 
 ADMIN_BASE_URL = os.getenv("ADMIN_CENTER_BASE_URL", "http://localhost:8015")
 
@@ -242,6 +249,52 @@ def test_login_guard_is_per_ip():
     ) == 0
 
 
+# ---- reverse-DNS lookup ---------------------------------------------
+
+def test_dns_reverse_lookup_uses_cache():
+    cache = {}
+    calls = []
+
+    def fake(ip, timeout):
+        calls.append(ip)
+        return "host.example.com"
+
+    assert dns_lookup.reverse_lookup("1.2.3.4", resolver=fake, cache=cache) == "host.example.com"
+    # Second call is served from cache — resolver not invoked again.
+    assert dns_lookup.reverse_lookup("1.2.3.4", resolver=fake, cache=cache) == "host.example.com"
+    assert calls == ["1.2.3.4"]
+
+
+def test_dns_reverse_lookup_failure_caches_none():
+    cache = {}
+
+    def boom(ip, timeout):
+        raise OSError("no PTR")
+
+    assert dns_lookup.reverse_lookup("9.9.9.9", resolver=boom, cache=cache) is None
+    assert cache["9.9.9.9"] is None
+
+
+def test_dns_resolve_many_dedupes_skips_and_caps():
+    cache = {}
+    seen = []
+
+    def fake(ip, timeout):
+        seen.append(ip)
+        return f"host-{ip}"
+
+    out = dns_lookup.resolve_many(
+        ["1.1.1.1", "1.1.1.1", "unknown", "", "2.2.2.2", "3.3.3.3"],
+        limit=2, resolver=fake, cache=cache,
+    )
+    # Deduped + sentinels skipped; only 2 *new* lookups performed (cap).
+    assert seen == ["1.1.1.1", "2.2.2.2"]
+    assert out["1.1.1.1"] == "host-1.1.1.1"
+    assert out["2.2.2.2"] == "host-2.2.2.2"
+    assert out["3.3.3.3"] is None  # over the cap this render
+    assert "unknown" not in out and "" not in out
+
+
 # ---- basic auth -----------------------------------------------------
 
 def test_header_authorizes_valid(monkeypatch):
@@ -436,3 +489,24 @@ def test_dashboard_shows_data_inventory():
     r = httpx.get(f"{ADMIN_BASE_URL}/", auth=_AUTH, timeout=5.0)
     assert r.status_code == 200
     assert "Data inventory" in r.text
+
+
+@_LIVE
+def test_dashboard_dns_toggle_renders_column():
+    """With ?dns=1 the events table gains a Host (DNS) column."""
+    r = httpx.get(f"{ADMIN_BASE_URL}/?dns=1", auth=_AUTH, timeout=15.0)
+    assert r.status_code == 200
+    assert "Host (DNS)" in r.text
+    # Off by default — no column.
+    r2 = httpx.get(f"{ADMIN_BASE_URL}/", auth=_AUTH, timeout=5.0)
+    assert "Host (DNS)" not in r2.text
+
+
+@_LIVE
+def test_api_events_dns_adds_ptr_field():
+    r = httpx.get(f"{ADMIN_BASE_URL}/api/events?limit=5&dns=1", auth=_AUTH, timeout=15.0)
+    assert r.status_code == 200
+    events = r.json()["events"]
+    if events:
+        # ptr key present (value may be None for IPs with no PTR).
+        assert "ptr" in events[0]

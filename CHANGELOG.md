@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.485.5] - 2026-06-20 — "The Name Resolver"
+
+**Schema version:** 71
+
+**Commit summary:** Adds an opt-in reverse-DNS (PTR) column to the Admin Center — a "Resolve DNS names" toggle that resolves the IPs in the events table + top-IPs list to hostnames. Off by default (a network lookup per IP).
+
+**Description:** IP addresses alone don't tell an operator much; a PTR hostname (`crawl-66-x.googlebot.com`, `scan-12.censys.io`, an ISP rDNS) often does. This adds a toggle that resolves the visible IPs to hostnames, with dedupe + caching + a per-render cap so a busy page never stalls on DNS.
+
+**Implementation:**
+
+- `app/admin_center/dns_lookup.py` (new): `reverse_lookup(ip)` (cached, bounded-timeout PTR lookup) + `resolve_many(ips, limit=...)` (de-dupes, skips empty/`unknown`, caps *new* lookups per render; already-cached IPs are free). The resolver is injectable so the dedupe/cache/cap logic is unit-testable without real DNS.
+- `app/admin_center/main.py`: the dashboard accepts `?dns=1` → resolves the visible event IPs + top-IPs and passes a `dns_map` to the template; `/api/events?dns=1` adds a `ptr` field to each event.
+- `app/admin_center/templates/dashboard.html`: a "Resolve DNS names" checkbox toggle (44px target) in the events filter bar; a "Host (DNS)" column in the events table and a hostname line under each top-IP, both shown only when the toggle is on.
+
+**Why opt-in:** reverse DNS is a network round-trip per unique IP. Default-off keeps the dashboard instant; when toggled on, results are cached for the container's lifetime so subsequent renders are fast.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py`: +5 tests. 3 unit (cache reuse, failure→None caching, `resolve_many` dedupe/skip/cap with an injected resolver) + 2 live (`?dns=1` renders the column / is off by default; `/api/events?dns=1` adds the `ptr` field).
+
+Total harness count → 3686 (+5).
+
+PATCH — additive opt-in column on the Admin Center. No main-app or schema change.
+
+### Added
+- `app/admin_center/dns_lookup.py` + a "Resolve DNS names" toggle: opt-in reverse-DNS column in the events table + top-IPs, and a `ptr` field on `/api/events?dns=1`.
+
 ## [2.485.4] - 2026-06-20 — "The Bouncer at the Door"
 
 **Schema version:** 71
