@@ -62,6 +62,15 @@ fi
 
 echo "[render-jail.sh] rendered $jail_count jail + $action_count action config file(s) into /data/"
 
+# v2.485.7 — launch the unban-request watcher in the background (if
+# present) so the admin-center "Unban" button has a drain. It polls a
+# shared control spool and runs `fail2ban-client unban`. Backgrounded
+# before the exec below so it survives as a sibling of the server.
+if [ -f /scripts/unban-watcher.sh ]; then
+    sh /scripts/unban-watcher.sh &
+    echo "[render-jail.sh] unban-watcher started (pid $!)"
+fi
+
 # Hand off to the upstream crazymax/fail2ban entrypoint. It
 # symlinks /data/{jail,action,filter}.d into /etc/fail2ban/ as
 # part of its init.

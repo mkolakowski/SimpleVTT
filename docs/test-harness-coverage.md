@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3692 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.485.6, 2026-06-20).
+**Total tests:** 3699 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.485.7, 2026-06-20).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5541,6 +5541,13 @@ The standalone read-only dashboard on port 8015. Unit tests (host-side) for the 
 | `test_event_help_empty` | Empty tag → the generic fallback. |
 | `test_event_help_covers_every_signal_event` | Every named traffic-signal event has a non-generic explanation. |
 | `test_dashboard_renders_event_hover_help` | The events table carries the `.evt` hover affordance + `role="tooltip"`. |
+| `test_unban_request_writes_spool_file` | `fail2ban_control.request_unban` writes one `unban-*.req` file with the IP as content. |
+| `test_unban_request_accepts_ipv6` | IPv6 addresses are accepted + spooled. |
+| `test_unban_request_rejects_invalid_ip` | Garbage / injection / empty IPs rejected; nothing written. |
+| `test_unban_request_filename_is_sanitized` | The spool filename stays within the dir (no `/` or `..`). |
+| `test_unban_endpoint_accepts_valid_ip` | `POST /fail2ban/unban` (authed) with a valid IP → 303 to `/?unbanned=…`. |
+| `test_unban_endpoint_rejects_invalid_ip` | Invalid IP → 303 to `/?unban_error=…`. |
+| `test_unban_endpoint_requires_auth` | Unauthenticated POST → 303 to `/login` (not executed). |
 | `test_api_stats_shape` | `/api/stats` → 200 + the roll-up keys. |
 | `test_api_events_shape` | `/api/events?limit=10` → 200 + `{count, events: []}`. |
 | `test_api_events_requires_auth` | `/api/events` without creds → 401. |

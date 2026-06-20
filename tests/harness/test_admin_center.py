@@ -23,6 +23,7 @@ from app.admin_center import (
     dns_lookup,
     event_help,
     fail2ban,
+    fail2ban_control,
     login_guard,
     stats,
 )
@@ -296,6 +297,39 @@ def test_dns_resolve_many_dedupes_skips_and_caps():
     assert "unknown" not in out and "" not in out
 
 
+# ---- fail2ban unban spool -------------------------------------------
+
+def test_unban_request_writes_spool_file(tmp_path):
+    res = fail2ban_control.request_unban("203.0.113.7", spool_dir=str(tmp_path))
+    assert res["ok"] is True
+    files = list(tmp_path.glob("unban-*.req"))
+    assert len(files) == 1
+    # The real IP is the file content (the watcher reads + re-sanitizes).
+    assert files[0].read_text().strip() == "203.0.113.7"
+
+
+def test_unban_request_accepts_ipv6(tmp_path):
+    res = fail2ban_control.request_unban("2001:db8::5", spool_dir=str(tmp_path))
+    assert res["ok"] is True
+    assert list(tmp_path.glob("unban-*.req"))
+
+
+def test_unban_request_rejects_invalid_ip(tmp_path):
+    for bad in ("notanip", "999.999.1.1", "1.2.3.4; rm -rf /", ""):
+        res = fail2ban_control.request_unban(bad, spool_dir=str(tmp_path))
+        assert res["ok"] is False, bad
+    # Nothing written for any rejected input.
+    assert list(tmp_path.glob("*")) == []
+
+
+def test_unban_request_filename_is_sanitized(tmp_path):
+    # A hostile "IP" never reaches the filesystem (rejected as invalid),
+    # but confirm the sanitizer keeps written names within the spool.
+    fail2ban_control.request_unban("10.0.0.1", spool_dir=str(tmp_path))
+    for f in tmp_path.glob("unban-*.req"):
+        assert "/" not in f.name and ".." not in f.name
+
+
 # ---- event help -----------------------------------------------------
 
 def test_event_help_exact_match():
@@ -532,6 +566,45 @@ def test_dashboard_dns_toggle_renders_column():
     # Off by default — no column.
     r2 = httpx.get(f"{ADMIN_BASE_URL}/", auth=_AUTH, timeout=5.0)
     assert "Host (DNS)" not in r2.text
+
+
+def _logged_in_client() -> httpx.Client:
+    c = httpx.Client(base_url=ADMIN_BASE_URL, timeout=15.0, follow_redirects=False)
+    c.post("/login", data={"username": _ADMIN_USER, "password": _ADMIN_PASS, "next": "/"})
+    return c
+
+
+@_LIVE
+def test_unban_endpoint_accepts_valid_ip():
+    c = _logged_in_client()
+    try:
+        r = c.post("/fail2ban/unban", data={"ip": "203.0.113.250"})
+        assert r.status_code == 303
+        assert "unbanned" in r.headers.get("location", "")
+    finally:
+        c.close()
+
+
+@_LIVE
+def test_unban_endpoint_rejects_invalid_ip():
+    c = _logged_in_client()
+    try:
+        r = c.post("/fail2ban/unban", data={"ip": "not-an-ip"})
+        assert r.status_code == 303
+        assert "unban_error" in r.headers.get("location", "")
+    finally:
+        c.close()
+
+
+@_LIVE
+def test_unban_endpoint_requires_auth():
+    # No session → the POST is bounced to the login page, not executed.
+    r = httpx.post(
+        f"{ADMIN_BASE_URL}/fail2ban/unban", data={"ip": "203.0.113.250"},
+        timeout=5.0, follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert "/login" in r.headers.get("location", "")
 
 
 @_LIVE

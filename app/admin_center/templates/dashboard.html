@@ -71,6 +71,15 @@
       color: var(--muted); font-size: 14px; cursor: pointer;
     }
     .dns-toggle input { width: 18px; height: 18px; }
+    /* Unban action in the dense bans table. 32px min per the
+       compact-panel exception to the 44px touch-target rule. */
+    .unban-btn {
+      min-height: 32px; padding: 0 12px; cursor: pointer;
+      background: transparent; color: var(--bad); border: 1px solid var(--bad);
+      border-radius: 7px; font: 600 13px/1 inherit;
+      display: inline-flex; align-items: center;
+    }
+    .unban-btn:hover { background: var(--bad); color: #1a0e0e; }
     /* 44px minimum touch targets per the project HIG rule. */
     select, .btn {
       min-height: 44px; background: var(--panel); color: var(--fg);
@@ -198,6 +207,13 @@
     </div>
 
     <h2>fail2ban — banned IPs</h2>
+    {% if unbanned %}
+    <div class="banner" style="background:#13301f;border-color:var(--ok);color:var(--ok)">
+      ✅ Unban queued for <code>{{ unbanned }}</code> — it clears from every jail within a few seconds.
+    </div>
+    {% elif unban_error %}
+    <div class="banner">⚠️ Unban failed: {{ unban_error }}</div>
+    {% endif %}
     {% if not bans.available %}
     <div class="banner empty">
       🚫 {{ bans.reason }}
@@ -216,7 +232,7 @@
     </p>
     {% endif %}
     <table>
-      <thead><tr><th>IP</th><th>Jail</th><th>Banned at</th><th>Expires in</th><th>Times banned</th></tr></thead>
+      <thead><tr><th>IP</th><th>Jail</th><th>Banned at</th><th>Expires in</th><th>Times banned</th><th></th></tr></thead>
       <tbody>
         {% for b in bans.banned %}
         <tr>
@@ -228,9 +244,15 @@
             {% else %}{{ b.remaining_seconds|duration }}{% endif %}
           </td>
           <td>{{ b.bancount }}</td>
+          <td>
+            <form method="post" action="/fail2ban/unban" onsubmit="return confirm('Unban {{ b.ip }} from all jails?');">
+              <input type="hidden" name="ip" value="{{ b.ip }}">
+              <button class="unban-btn" type="submit">Unban</button>
+            </form>
+          </td>
         </tr>
         {% else %}
-        <tr><td colspan="5" class="muted">No IPs currently banned. 🎉</td></tr>
+        <tr><td colspan="6" class="muted">No IPs currently banned. 🎉</td></tr>
         {% endfor %}
       </tbody>
     </table>

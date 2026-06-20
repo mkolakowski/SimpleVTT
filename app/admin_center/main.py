@@ -28,6 +28,7 @@ from . import (
     dns_lookup,
     event_help,
     fail2ban,
+    fail2ban_control,
     inventory,
     login_guard,
     stats,
@@ -260,8 +261,32 @@ def api_inventory():
     return JSONResponse(inventory.read_inventory())
 
 
+@app.post("/fail2ban/unban")
+def fail2ban_unban(request: Request, ip: str = Form("")):
+    """Queue an unban for ``ip``. The admin center can't reach
+    fail2ban's root-only control socket as the non-root appuser, so it
+    writes a request to a shared spool that the fail2ban container's
+    watcher drains via ``fail2ban-client unban``. Form POST → redirects
+    back to the dashboard (the button lives in the bans table)."""
+    result = fail2ban_control.request_unban(ip)
+    if result.get("ok"):
+        log.info("admin-center queued unban ip=%s by=%r", result["ip"],
+                 request.session.get("admin_user", ""))
+        return RedirectResponse(f"/?unbanned={quote(result['ip'], safe='')}", status_code=303)
+    return RedirectResponse(
+        f"/?unban_error={quote(result.get('error', 'failed'), safe='')}",
+        status_code=303,
+    )
+
+
 @app.get("/", response_class=HTMLResponse)
-def dashboard(request: Request, event: str | None = None, dns: int = 0):
+def dashboard(
+    request: Request,
+    event: str | None = None,
+    dns: int = 0,
+    unbanned: str = "",
+    unban_error: str = "",
+):
     events = audit_parse.load_events(
         AUDIT_LOG_PATH,
         max_lines=5000,
@@ -300,5 +325,7 @@ def dashboard(request: Request, event: str | None = None, dns: int = 0):
             "admin_user": request.session.get("admin_user", ""),
             "dns_on": dns_on,
             "dns_map": dns_map,
+            "unbanned": unbanned,
+            "unban_error": unban_error,
         },
     )

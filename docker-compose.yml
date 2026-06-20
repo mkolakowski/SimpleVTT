@@ -132,12 +132,19 @@ services:
       # below). When the --profile fail2ban service isn't running the
       # shared volume is empty and the dashboard shows an empty state.
       FAIL2BAN_DB_PATH: ${FAIL2BAN_DB_PATH:-/data/db/fail2ban.sqlite3}
+      # v2.485.7 — shared spool the "Unban" button writes unban
+      # requests into; the fail2ban watcher drains it.
+      FAIL2BAN_CONTROL_DIR: ${FAIL2BAN_CONTROL_DIR:-/data/control}
     volumes:
       # Read-only consumer of the app's audit-log volume.
       - audit_logs:/var/log/simplevtt:ro
       # Read-only consumer of fail2ban's ban database (same named
       # volume the fail2ban service writes at /data/db).
       - fail2ban_data:/data/db:ro
+      # v2.485.7 — write side of the unban control spool drained by the
+      # fail2ban watcher. Read-write here; the admin center only ever
+      # writes small request files (no fail2ban control-socket access).
+      - fail2ban_control:/data/control
     ports:
       - "${ADMIN_CENTER_PORT:-8015}:${ADMIN_CENTER_PORT:-8015}"
     command:
@@ -308,6 +315,11 @@ services:
       # image's built-in action files (iptables, etc.).
       - ./docs/integrations/fail2ban/action.d:/etc/fail2ban/action.d.template:ro
       - ./docs/integrations/fail2ban/scripts/render-jail.sh:/scripts/render-jail.sh:ro
+      # v2.485.7 — unban-request watcher + the shared control spool the
+      # admin-center "Unban" button writes to. The watcher (root, here)
+      # drains it via fail2ban-client so admin-center stays non-root.
+      - ./docs/integrations/fail2ban/scripts/unban-watcher.sh:/scripts/unban-watcher.sh:ro
+      - fail2ban_control:/data/control
     # No port mappings — fail2ban-client is reached via
     # `docker compose exec`. Banning runs inside the container via
     # the image's default iptables action (talks to the in-container
@@ -344,3 +356,6 @@ volumes:
   # restarts. Empty for the default `docker compose up` flow since
   # the fail2ban service is profile-gated.
   fail2ban_data:
+  # v2.485.7 — unban control spool shared between admin-center (writer,
+  # non-root) and fail2ban (watcher, root). Small request files only.
+  fail2ban_control:

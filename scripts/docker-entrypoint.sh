@@ -26,6 +26,7 @@ APP_PATHS="
 /app/app/static/uploads
 /app/app/data/homebrew
 /var/log/simplevtt
+/data/control
 "
 
 for p in $APP_PATHS; do

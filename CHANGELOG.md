@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.485.7] - 2026-06-20 — "The Pardon"
+
+**Schema version:** 71
+
+**Commit summary:** Adds an **Unban button** to the Admin Center fail2ban panel — one click queues an IP to be cleared from every jail. Implemented without breaking the admin center's non-root hardening: it writes to a shared control spool that a watcher inside the (root) fail2ban container drains via `fail2ban-client unban`.
+
+**Description:** The fail2ban panel was read-only — you could see bans but not lift them. fail2ban's control socket is root-only (`srwx------`), and the admin center runs as the unprivileged `appuser` (v2.474.0), so it can't call `fail2ban-client` directly. Rather than regress to root or mount the docker socket, the unban button drops a small request file into a shared volume; a tiny `unban-watcher.sh` running in the fail2ban container polls the spool and runs the actual unban. The admin center never touches the control socket.
+
+**Implementation:**
+
+- `app/admin_center/fail2ban_control.py` (new): `request_unban(ip)` — validates the IP (v4/v6), writes a sanitized `unban-<ip>.req` file (IP as content) into the spool via temp-then-rename so the watcher never reads a partial write. Rejects malformed/injection input.
+- `app/admin_center/main.py`: `POST /fail2ban/unban` (form) → queue + 303 back to the dashboard with an `unbanned` / `unban_error` flash.
+- `app/admin_center/templates/dashboard.html`: an "Unban" button per banned-IP row (confirm dialog) + a success/error banner; new bans-table column.
+- `docs/integrations/fail2ban/scripts/unban-watcher.sh` (new): POSIX/busybox watcher — re-sanitizes each request to an IP charset (no shell injection), runs `fail2ban-client unban`, deletes the file. Launched in the background by `render-jail.sh` before it exec's the server.
+- `docker-compose.yml`: new `fail2ban_control` volume shared rw between admin-center (writer, non-root) and fail2ban (watcher, root); the watcher script mount; `FAIL2BAN_CONTROL_DIR` env on both.
+- `scripts/docker-entrypoint.sh`: added `/data/control` to the startup chown list so the non-root `appuser` can write the spool (the named volume otherwise mounts root-owned). The path is guarded by an `is-dir` check, so the main app container — which doesn't mount it — skips it.
+
+**Security posture:** the spool only ever triggers *unbans*, the IP is validated on write and re-sanitized to `[0-9A-Fa-f:.]` on read (so a hostile request file can't inject a shell command), and the admin center still never gets root or socket access. The button is behind the login + the brute-force throttle.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py`: +7 tests. 4 unit (`request_unban` writes the spool file with the IP as content; accepts IPv6; rejects garbage/injection/empty with nothing written; filename stays in-dir) + 3 live (`POST /fail2ban/unban` valid → 303 `?unbanned`; invalid → 303 `?unban_error`; unauthenticated → bounced to `/login`). The cross-container drain (watcher → `fail2ban-client`) is verified manually, not in the timing-sensitive automated suite.
+
+Total harness count → 3699 (+7).
+
+PATCH — additive action on the Admin Center fail2ban panel; keeps the non-root posture. No main-app or schema change.
+
+### Added
+- `app/admin_center/fail2ban_control.py` + `POST /fail2ban/unban` + a per-row "Unban" button: queue an IP to be unbanned from all jails via a shared spool drained by a fail2ban-side watcher.
+- `docs/integrations/fail2ban/scripts/unban-watcher.sh`; `fail2ban_control` shared volume + `FAIL2BAN_CONTROL_DIR`.
+
 ## [2.485.6] - 2026-06-20 — "The Margin Notes"
 
 **Schema version:** 71
