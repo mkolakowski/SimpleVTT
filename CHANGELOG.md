@@ -10,6 +10,62 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.478.0] - 2026-06-20 — "The Privacy Ledger"
+
+**Schema version:** 71
+
+**Commit summary:** New `docs/wiki/privacy.md` page documenting every piece of data SimpleVTT collects: account fields, session cookies, audit-log events (including the new v2.477.0 `api.not_found`), game state, uploads, backups, third-party data flows, the env-var-driven knobs an operator can flip, and a "what do you have on me?" SQL recipe for handling user data-access requests. Companion TODO entry filed for the Cloudflare-tunnel visitor-IP logging that would extend per-event logging into per-request logging.
+
+**Description:** Phase 4 + Phase 5 made SimpleVTT trustworthy by adding banning + scanner-detection wiring. v2.478.0 makes it *legible* — an operator (or a curious user) can now find a single page that says "here's what we collect, here's where it lives, here's how to turn it off." Discoverability completes the security spine.
+
+**Implementation:**
+
+- `docs/wiki/privacy.md` (new): ~250-line reference page structured as:
+  - **Quick map.** 7-row table mapping data buckets to storage + retention at a glance.
+  - **Account data.** Email, password hash (bcrypt, never logged), display name, color, role, optional Google SSO uid.
+  - **Session data.** Starlette `SessionMiddleware` cookie shape, signed-not-encrypted clarification, expiry.
+  - **Audit log events.** Full catalog of 10 canonical event tags including the v2.477.0 `api.not_found` addition. Notes on the `username` field privacy posture + the IP-attribution model with `TRUSTED_PROXY_HOPS`.
+  - **Game state.** Campaigns, characters, battle state, chat, rolls.
+  - **Uploaded assets.** Maps / tokens / audio / thumbnails in `uploads_data` volume; notes the orphan-file cleanup gap.
+  - **Database backups.** `pg_dump` cron + retention pattern + the operator obligation to protect the backup volume.
+  - **Third-party data flows.** Exactly two: Google SSO (opt-in) and Cloudflare API (opt-in). Explicitly: no analytics, no telemetry.
+  - **Data we deliberately *don't* track.** Includes the "no per-request access log" policy + the filed Cloudflare-tunnel TODO.
+  - **Operator-controlled env vars.** 6-row table mapping each privacy-relevant env var to its default and effect.
+  - **User data-access recipe.** SQL queries an operator can run when a user asks "what do you have on me?" + grep recipe for the audit log.
+  - **See also.** Cross-links to fail2ban deployment, fail2ban / CrowdSec plan, Cloudflare edge-banning plan, demo magic-link plan.
+- `TODO.md`: new P2 entry under "Manually Added" filing the Cloudflare-tunnel visitor IP logging. Explains the threat model addition (scanner forensics + traffic alarms + richer fail2ban surface), the default-OFF privacy posture, the env-var gate (`VISITOR_REQUEST_LOG_ENABLED=true` + `TRUSTED_PROXY_HOPS≥1`), and cross-links to the privacy wiki page that documents the current opt-out policy.
+- `app/templates/wiki.html`: landing-page row added under the v2.476.0 fail2ban deployment row.
+- `docs/wiki/README.md`: matching index-table row.
+- `tests/harness/test_wiki.py::test_wiki_home_renders` landing-page assertion gains `/wiki/privacy`.
+- `tests/harness/test_wiki.py::test_wiki_privacy_doc_renders` (new) — anchors that the slug returns 200, the H1 + nav are present, and three operator-critical content tokens (`AUDIT_LOG_PATH`, `TRUSTED_PROXY_HOPS`, `api.not_found`) appear in the rendered body. The content anchors guard against future edits that accidentally truncate or rename critical sections.
+
+**Why a privacy page now (not earlier):** before v2.477.0 the audit log catalog was small enough that an operator could read `docs/plans/fail2ban-crowdsec-integration.md`'s threat model and figure out what's tracked. v2.477.0 added `api.not_found`, bringing the catalog to 10 events — that's the size where a dedicated reference page beats spelunking through a design plan. Plus the audit log is now actively used (Phase 4 + Phase 5 shipping), so users have a legitimate "what's recorded about me?" question for the first time.
+
+**Why the Cloudflare-tunnel TODO is filed, not shipped:** per-request logging is a major posture change with real privacy + log-volume implications. The right shape needs a design plan (what event tag, what keys, what storage, what retention), an env-var gate, and a thoughtful default. Filing it as P2 (medium priority, not blocking anyone) keeps it visible without committing to a design that hasn't been reviewed. The TODO's prose names the threat-model addition + the constraints so a future contributor doesn't have to start from scratch.
+
+**Why "The Privacy Ledger":** "Ledger" frames the document — every piece of data is named + accounted for. "Privacy" names what the ledger is *about*. The page itself reads like a balance sheet of recorded data, not a marketing piece.
+
+**1 new harness test** at `tests/harness/test_wiki.py`:
+
+- `test_wiki_privacy_doc_renders` — 200 + H1 + nav + 3 content anchors.
+
+The existing `test_wiki_home_renders` gains a 1-line landing-page link assertion.
+
+Total harness count 3624 → 3625.
+
+PATCH — doc-only change + TODO entry + 1 new wiki test. No app code change. No schema change.
+
+### Added
+- `docs/wiki/privacy.md`: reference page documenting what SimpleVTT tracks + how operators control it.
+- `app/templates/wiki.html`: landing-page row for the privacy reference.
+- `docs/wiki/README.md`: matching index-table row.
+- `TODO.md`: P2 entry for Cloudflare-tunnel visitor IP logging.
+- `tests/harness/test_wiki.py::test_wiki_privacy_doc_renders`: per-slug harness test with three operator-critical content anchors.
+
+### Changed
+- `tests/harness/test_wiki.py::test_wiki_home_renders`: landing-page assertion list gains `/wiki/privacy`.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3624 → 3625.
+
 ## [2.477.0] - 2026-06-20 — "The Scanner Trap"
 
 **Schema version:** 71

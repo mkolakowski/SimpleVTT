@@ -758,6 +758,8 @@ Setting-specific subclasses (Tasha's: Beast Barbarian Phase 1 shipped v2.158.20 
 
 ## Manually Added
 
+- 🟡 **P2** — **Cloudflare-tunnel visitor IP logging.** Today the `simplevtt.audit` logger records IPs only when a *banning-relevant event* fires (`auth.login_failed`, `api.unauthorized`, `api.not_found`, etc.). Operators behind Cloudflare Tunnel who want full visitor accounting — every request, every IP, every path, irrespective of outcome — have no built-in surface. Filed for a follow-up: add an opt-in middleware that reads `CF-Connecting-IP` from the tunnel and emits a `visitor.request` audit event per request (path, method, status, IP, UA, response time). The threat model adds: scanner footprint forensics ("which paths did 192.0.2.x probe before getting banned?"), traffic-pattern alarms ("one IP requested 10,000 endpoints in 60 seconds"), and a richer fail2ban filter surface ("ban IPs that hit any path at >100 req/s"). Pairs with the v2.426.0 audit log and the v2.430.0 Cloudflare integration. Should default OFF for privacy + log-volume reasons; gated behind `VISITOR_REQUEST_LOG_ENABLED=true` + `TRUSTED_PROXY_HOPS≥1`. See the privacy wiki page ([`docs/wiki/privacy.md`](docs/wiki/privacy.md)) "Data we deliberately *don't* track" section for the current policy this TODO would change.
+
 - 🟢 **P3** — Feature: More pills in the roll log for spells
     - Move spell type, range, action type and details to pills
         - details should be an expanding pill

@@ -68,6 +68,8 @@ async def test_wiki_home_renders():
     assert "/wiki/pc-vs-npc-systems" in resp.text
     # v2.476.0: fail2ban deployment operator guide listed.
     assert "/wiki/fail2ban-deployment" in resp.text
+    # v2.478.0: privacy reference listed.
+    assert "/wiki/privacy" in resp.text
     # v2.49.168: targeting system visual guide listed.
     assert "/wiki/targeting-system-guide" in resp.text
     # v2.49.182: Battle & Characters tab sheets visual guide listed.
@@ -227,6 +229,35 @@ async def test_wiki_fail2ban_deployment_guide_renders():
     # tuning section). Anchors against a future edit that
     # accidentally truncates the guide.
     assert "FAIL2BAN_LOGIN_MAXRETRY" in resp.text
+
+
+async def test_wiki_privacy_doc_renders():
+    """v2.478.0: GET /wiki/privacy — markdown source under
+    docs/wiki/ rendered + wrapped + nav-injected. Privacy
+    reference page documenting every piece of data SimpleVTT
+    collects, surfaced through the wiki per the doc-surfacing
+    rule in CLAUDE.md."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/privacy")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    # H1 contains "Privacy".
+    assert "privacy" in resp.text.lower()
+    assert "<h1" in resp.text
+    assert 'class="wiki-nav"' in resp.text
+    # Spot-check key sections that an operator needs to find.
+    # Anchors against future edits that truncate or rename
+    # critical content.
+    assert "AUDIT_LOG_PATH" in resp.text, (
+        "privacy doc missing AUDIT_LOG_PATH env var reference"
+    )
+    assert "TRUSTED_PROXY_HOPS" in resp.text, (
+        "privacy doc missing TRUSTED_PROXY_HOPS env var reference"
+    )
+    # The events catalog must reference the canonical event tags.
+    assert "api.not_found" in resp.text, (
+        "privacy doc missing api.not_found event in the catalog"
+    )
 
 
 async def test_wiki_targeting_system_guide_renders():
