@@ -10,6 +10,64 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.475.0] - 2026-06-20 — "The Banhammer Lives"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 4f of [`docs/plans/fail2ban-crowdsec-integration.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/fail2ban-crowdsec-integration.md). End-to-end smoke test that proves the v2.469.0–v2.473.1 wiring fires a ban when a real attacker triggers the canonical events. Tests skip cleanly if the `--profile fail2ban` container isn't running (operator/CI prereq); otherwise they replay 6 failed `POST /login` attempts and poll `fail2ban-client status simplevtt-auth` for up to 30 s, asserting the banned-count rises above zero.
+
+**Description:** All five prior Phase 4 ships (4a–4e) anchored individual pieces of the chain via YAML/text-file contract tests. Phase 4f is the load-bearing assertion: that the chain *as a whole* works. It catches the kind of regression no static test can — a fail2ban version that changes pyinotify polling, an image upgrade that breaks env-templating, a downstream change to the audit-log line shape that misses the filter regex.
+
+**Implementation:**
+
+- `tests/harness/test_fail2ban_end_to_end.py` (new):
+  - `_fail2ban_container_running()` — subprocess to `docker compose --profile fail2ban ps -q fail2ban`; returns True iff a running container ID comes back. Catches `FileNotFoundError` (no docker CLI) + `subprocess.TimeoutExpired` (slow daemon) so the test skips cleanly on CI that doesn't have docker available.
+  - `_fail2ban_client(*args)` — thin subprocess wrapper around `docker compose --profile fail2ban exec -T fail2ban fail2ban-client`. Returns the raw CompletedProcess so the caller inspects stdout/returncode.
+  - `_currently_banned(output)` — regex extractor for the `"Currently banned: N"` line in `fail2ban-client status` output.
+  - `test_failed_logins_trigger_fail2ban_ban`:
+    1. Skip if the container isn't running.
+    2. `fail2ban-client unban --all` to reset prior bans (repeatable test).
+    3. Fire 6 failed POST /login attempts via a bare httpx.AsyncClient (raw, not gm_client — login failures fire `auth.login_failed` regardless of session state).
+    4. Poll `fail2ban-client status simplevtt-auth` every 1 s for up to 30 s; break on `banned_count > 0`.
+    5. Assert `banned_count > 0`. The error message includes the final fail2ban-client output for debug.
+  - `test_jail_loaded_with_env_thresholds`:
+    - Reads back `maxretry` / `findtime` / `bantime` via `fail2ban-client get simplevtt-auth <field>`.
+    - Asserts `5` / `300` / `3600` — the v2.471.0 .env-example defaults.
+    - Anti-regression for env-var pass-through (a future Phase 4c edit that drops a `FAIL2BAN_*` env var lands here as a missing value).
+
+**Why we don't bring up the profile inside the test:** docker-compose lifecycle inside pytest fights with the operator/CI's compose state. If the test brings the profile up + tears it down, a developer running the suite with their dev fail2ban container already running gets unpredictable behavior. The "operator brings it up, the test reads from it" pattern matches the CrowdSec sibling's "Phase 2B gated" approach.
+
+**Why we don't spoof X-Forwarded-For:** the audit log records whatever source IP the connection comes from. fail2ban only needs to see N attempts from one IP within `findtime` — the specific IP doesn't matter, only the count. The httpx client connects from a docker bridge IP (or `host.docker.internal` etc.); whatever it is, fail2ban can ban it. (For production the operator sets `TRUSTED_PROXY_HOPS=1` so XFF flows through, but the test doesn't need that.)
+
+**Why "The Banhammer Lives":** v2.470.0 was "The Profile-Gated Banhammer" — the deployment vehicle. v2.475.0 is the deployment vehicle's first actually-firing ban in this codebase's test suite. The banhammer doesn't just exist; it works.
+
+**Operator notes:**
+
+- The two tests are tagged via their skip behavior — if you don't run `docker compose --profile fail2ban up -d` first, both skip with an actionable message. Default `python3 -m pytest tests/harness/` runs them as skips; they don't gate the normal suite.
+- Run them explicitly with:
+  ```
+  docker compose --profile fail2ban up -d
+  python3 -m pytest tests/harness/test_fail2ban_end_to_end.py -v
+  docker compose --profile fail2ban down
+  ```
+
+**2 new harness tests** (passing locally with the profile up):
+
+- `test_failed_logins_trigger_fail2ban_ban` — the canonical end-to-end assertion.
+- `test_jail_loaded_with_env_thresholds` — env-var pass-through anchor.
+
+All 33 prior Phase 4a–e static-validation tests continue to pass.
+
+Total harness count 3612 → 3614.
+
+MINOR — new harness test file. No app code change. No schema change.
+
+### Added
+- `tests/harness/test_fail2ban_end_to_end.py`: 2 end-to-end smoke tests against the live `--profile fail2ban` container.
+
+### Changed
+- `docs/test-harness-coverage.md`: total-test-count nudges 3612 → 3614.
+
 ## [2.474.0] - 2026-06-20 — "The Unprivileged App"
 
 **Schema version:** 71
