@@ -25,6 +25,8 @@ banned traffic at the host firewall or the Cloudflare edge.
 | 4d | v2.472.0 | Cloudflare bouncer action — bans land in the v2.430.0 Cloudflare access-rule list. No host privilege. |
 | 4e | v2.473.0 | ipset bouncer action — bans land in host iptables via `ipset`. Requires `network_mode: host` + `cap_add: [NET_ADMIN]` via an opt-in compose override. |
 | 4f | v2.475.0 | End-to-end smoke test that verifies the whole chain bans an IP after 6 failed logins. |
+| 5 | v2.477.0 | `simplevtt-scanner` jail — bans IPs that probe many missing paths (404s) in a short window. On by default. |
+| — | v2.481.0 | `simplevtt-flood` jail — bans IPs that hammer the app with a high request volume regardless of outcome. **Opt-in** (pairs with v2.480.0 per-request logging). |
 
 ---
 
@@ -268,6 +270,63 @@ TRUSTED_PROXY_HOPS=1
 Then restart the app container. fail2ban will start banning the
 real client IPs (which Cloudflare passes in `CF-Connecting-IP` /
 `X-Forwarded-For`).
+
+---
+
+## Optional: the request-flood jail (`simplevtt-flood`)
+
+The `simplevtt-auth` and `simplevtt-scanner` jails ban on *failures*
+— failed logins and 404 probes. Neither catches an IP that hammers
+**valid** endpoints at high speed (credential-free scraping, a
+runaway script, a layer-7 flood). The `simplevtt-flood` jail
+(v2.481.0) closes that gap by banning on raw request *rate*,
+counting every request regardless of status.
+
+It rides the opt-in per-request `visitor.request` audit event
+(v2.480.0), so arming it is a **two-switch** operation — both must
+be on:
+
+```bash
+# 1. App side — emit a visitor.request audit line per request.
+VISITOR_REQUEST_LOG_ENABLED=true
+TRUSTED_PROXY_HOPS=1            # required: record the real client IP,
+                               # not the tunnel/proxy's internal one
+
+# 2. fail2ban side — arm the flood jail.
+FAIL2BAN_FLOOD_ENABLED=true
+FAIL2BAN_FLOOD_MAXRETRY=300    # ban after 300 requests…
+FAIL2BAN_FLOOD_FINDTIME=1m     # …within 1 minute…
+FAIL2BAN_FLOOD_BANTIME=1h      # …for 1 hour.
+```
+
+Then `docker compose up -d app` (to pick up the app-side flag) and
+`docker compose --profile fail2ban up -d fail2ban` (to render the
+jail with `enabled = true`).
+
+**Why it's OFF by default.** Per-request logging is high-volume and
+privacy-sensitive (see the [privacy policy](/wiki/privacy)), and a
+mis-tuned rate ceiling can ban legitimate heavy users. Both
+switches default OFF so an operator turns them on deliberately, as a
+pair. With `VISITOR_REQUEST_LOG_ENABLED=false`, no `visitor.request`
+lines exist and the jail matches nothing even if armed.
+
+**Tuning the ceiling.** A normal page load fires a few dozen
+requests (HTML + CSS/JS assets + token polls + WS upgrade). 300/min
+sits well above human browsing but trips a scripted hammer. If you
+serve image-heavy maps or run aggressive client polling, watch
+`fail2ban-client status simplevtt-flood` for false positives after
+enabling and raise `FAIL2BAN_FLOOD_MAXRETRY` if your real users trip
+it.
+
+**Verify:**
+
+```bash
+docker compose exec fail2ban fail2ban-client status simplevtt-flood
+```
+
+If you see `Sorry but the jail 'simplevtt-flood' does not exist`,
+`FAIL2BAN_FLOOD_ENABLED` rendered as `false` — check your `.env` and
+the `[render-jail.sh] rendered N jail` startup log line.
 
 ---
 

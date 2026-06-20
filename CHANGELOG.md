@@ -10,6 +10,42 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.481.0] - 2026-06-20 — "The Flood Gate"
+
+**Schema version:** 71
+
+**Commit summary:** Adds the `simplevtt-flood` fail2ban jail — the natural consumer of the v2.480.0 `visitor.request` event. It bans IPs on raw request *rate* (every request, regardless of outcome), closing the gap left by the auth + scanner jails, which only count *failures* (failed logins / 404s). Opt-in and OFF by default; pairs with per-request logging as a deliberate two-switch arm.
+
+**Description:** v2.480.0 shipped the `visitor.request` per-request audit event. This commit gives it a fail2ban consumer: a request-flood jail that catches an IP hammering **valid** endpoints at high speed (credential-free scraping, a runaway script, a layer-7 flood) — traffic the `simplevtt-auth` and `simplevtt-scanner` jails are blind to because those filters only match failures. Because the jail rides the opt-in `visitor.request` event and a mis-tuned rate ceiling can ban legitimate heavy users, both switches default OFF and travel together: `VISITOR_REQUEST_LOG_ENABLED=true` (app side) + `FAIL2BAN_FLOOD_ENABLED=true` (jail side).
+
+**Implementation:**
+
+- `docs/integrations/fail2ban/filter.d/simplevtt-flood.conf` (new): matches `visitor.request ip=<HOST>` (both the audit-logger-prefix and bare-event variants). Counts every request line — `maxretry` is a raw request-rate ceiling, not an error count.
+- `docs/integrations/fail2ban/jail.d/simplevtt.conf`: new `[simplevtt-flood]` block. `enabled = ${FAIL2BAN_FLOOD_ENABLED}` (env-gated, NOT hardcoded `true`) + `${FAIL2BAN_FLOOD_MAXRETRY/_FINDTIME/_BANTIME}` thresholds. Shares the `${FAIL2BAN_ACTION}` ban-action selector with the other jails.
+- `docs/integrations/fail2ban/scripts/render-jail.sh`: allowlist extended with the four `FAIL2BAN_FLOOD_*` placeholders so they get substituted at container start.
+- `docker-compose.yml`: fail2ban service plumbs `FAIL2BAN_FLOOD_ENABLED` (default `false`) + the three thresholds (default 300 req / 1m / 1h).
+- `.env.example`: uncommented `FAIL2BAN_FLOOD_*` defaults with `FAIL2BAN_FLOOD_ENABLED=false`, documented as the second half of the two-switch arm.
+- `docs/wiki/fail2ban-deployment.md`: "At a glance" table rows for the scanner (v2.477.0) + flood (v2.481.0) jails + a new "Optional: the request-flood jail" section walking through the two-switch arm, the default-OFF rationale, ceiling tuning, and the `fail2ban-client status simplevtt-flood` verify step.
+
+**Default thresholds (when armed):** 300 requests in 1 minute → 1 hour ban. A normal page load fires a few dozen requests (HTML + assets + polls + WS upgrade); 300/min sits well above human browsing but trips a scripted hammer.
+
+**Harness changes:**
+
+- `tests/harness/test_fail2ban_flood_jail_wiring.py` (new): 7 static config-shape tests (no running container) — filter file exists + references `visitor.request` + `<HOST>`; jail block present with all four placeholders; `enabled` is env-gated not hardcoded; `.env.example` ships the jail disarmed (`FAIL2BAN_FLOOD_ENABLED=false`); compose plumbs every var with a false default; render-script allowlist covers all four. Models `test_fail2ban_scanner_jail_wiring.py`.
+
+Total harness count → 3642 (+7 from this commit's `test_fail2ban_flood_jail_wiring.py`).
+
+MINOR — new opt-in fail2ban jail (config + filter + env wiring), default OFF, no app code change, no behavior change on existing deploys. No schema change.
+
+### Added
+- `docs/integrations/fail2ban/filter.d/simplevtt-flood.conf`: fail2ban filter matching the v2.480.0 `visitor.request` event.
+- `docs/integrations/fail2ban/jail.d/simplevtt.conf`: `[simplevtt-flood]` jail block, env-gated OFF by default.
+- `docker-compose.yml` + `.env.example` + `render-jail.sh`: `FAIL2BAN_FLOOD_ENABLED` (default `false`) + `FAIL2BAN_FLOOD_MAXRETRY` / `_FINDTIME` / `_BANTIME` (300 / 1m / 1h).
+- `tests/harness/test_fail2ban_flood_jail_wiring.py`: 7 config-shape wiring tests.
+
+### Changed
+- `docs/wiki/fail2ban-deployment.md`: documents the scanner + flood jails (at-a-glance table + a dedicated request-flood section).
+
 ## [2.480.0] - 2026-06-20 — "The Visitor's Ledger"
 
 **Schema version:** 71

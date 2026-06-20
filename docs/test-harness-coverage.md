@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3635 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.480.0, 2026-06-20).
+**Total tests:** 3642 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.481.0, 2026-06-20).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5468,6 +5468,22 @@ Unit tests on the `app.visitor_log` module — the opt-in `visitor.request` audi
 | `test_emit_noop_when_disabled` | `emit_visitor_request()` writes nothing when the gate is closed. |
 | `test_emit_canonical_line_when_enabled` | Gate open → one `visitor.request` line carrying the trusted-XFF `ip=` (matching every other audit event for the client), `ua=`, `method=`, `path=`, `status=`, `ms=`. |
 | `test_emit_quotes_path_with_query_chars` | A non-bare-token path (query string / spaces) is double-quoted so the canonical-line parser doesn't split on it. |
+
+---
+
+## Request-flood jail wiring (`simplevtt-flood` — v2.481.0)
+
+Static config-shape validation for the opt-in `simplevtt-flood` fail2ban jail that bans IPs on raw request rate (consumes the v2.480.0 `visitor.request` event). No running container needed. Lives in `tests/harness/test_fail2ban_flood_jail_wiring.py`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_flood_filter_file_exists` | `filter.d/simplevtt-flood.conf` ships. |
+| `test_flood_filter_matches_visitor_request` | The failregex references `visitor.request` + uses the `<HOST>` placeholder so fail2ban can extract the IP. |
+| `test_jail_config_includes_flood_block` | `jail.d/simplevtt.conf` carries an uncommented `[simplevtt-flood]` block with all four `${FAIL2BAN_FLOOD_*}` placeholders. |
+| `test_flood_jail_enabled_is_env_gated` | The jail's `enabled` is `${FAIL2BAN_FLOOD_ENABLED}`, NOT a hardcoded `true` — it ships disarmed. |
+| `test_env_example_gates_flood_off_by_default` | `.env.example` carries every `FAIL2BAN_FLOOD_*` default and `FAIL2BAN_FLOOD_ENABLED=false` so a fresh `.env` leaves the jail off. |
+| `test_compose_passes_flood_env_vars` | The compose fail2ban service plumbs every `FAIL2BAN_FLOOD_*` var, with the enabled gate defaulting to `false`. |
+| `test_render_script_allowlist_includes_flood_placeholders` | `render-jail.sh`'s substitution allowlist covers all four placeholders. |
 
 ---
 

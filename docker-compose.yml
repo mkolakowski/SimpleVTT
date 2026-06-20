@@ -180,6 +180,16 @@ services:
       FAIL2BAN_SCANNER_MAXRETRY: ${FAIL2BAN_SCANNER_MAXRETRY:-20}
       FAIL2BAN_SCANNER_FINDTIME: ${FAIL2BAN_SCANNER_FINDTIME:-5m}
       FAIL2BAN_SCANNER_BANTIME: ${FAIL2BAN_SCANNER_BANTIME:-6h}
+      # v2.481.0 — request-flood jail thresholds. Matches the opt-in
+      # ``visitor.request`` event (app/visitor_log.py, v2.480.0) and
+      # bans IPs that hammer the app regardless of outcome. Gated OFF
+      # by default — the jail only makes sense when per-request
+      # logging is also on, so both opt-ins travel together. Defaults
+      # (when enabled): 300 requests in 1min → 1h ban.
+      FAIL2BAN_FLOOD_ENABLED: ${FAIL2BAN_FLOOD_ENABLED:-false}
+      FAIL2BAN_FLOOD_MAXRETRY: ${FAIL2BAN_FLOOD_MAXRETRY:-300}
+      FAIL2BAN_FLOOD_FINDTIME: ${FAIL2BAN_FLOOD_FINDTIME:-1m}
+      FAIL2BAN_FLOOD_BANTIME: ${FAIL2BAN_FLOOD_BANTIME:-1h}
       # v2.472.0 — Phase 4d. Ban-action selector. Default is the
       # fail2ban built-in iptables/nftables shorthand. Set to
       # `cloudflare-bouncer` (Phase 4d) or `ipset-bouncer` (Phase
