@@ -248,6 +248,22 @@ closure — runs indefinitely until Bucket A is exhausted.
   permanently GM-narrated; the engine surfaces the flag so the
   table can see Tongues is active. 3 harness tests.
 
+- **Goodberry (L1)** — ✅ shipped v2.465.0. New
+  `_SPELL_BUFF_MAP["goodberry"]` substrate (14400 rounds = 24h,
+  non-concentration, `effects.goodberry_charges: 10` counter) +
+  new `/cast_goodberry` endpoint. Charge-counter buff shape —
+  same pattern as Bless Water's v2.447.0 `holy-water-flask`
+  buff, but with a multi-charge counter (10 berries vs. 1
+  flask). Self-cast only per RAW. Gates druid/ranger only —
+  narrowest two-class gate on the arc alongside Identify's
+  bard/wizard. v1 leaves berry consumption GM-narrated; a
+  future commit can add `/eat_goodberry` to decrement the
+  counter + heal via `_apply_hp_change`. Generalizes the
+  charge-counter buff pattern from single-use to multi-charge,
+  opening a fourth shape bucket: **carry-forward consumable
+  counter**. 4 harness tests including a Ranger happy path and
+  a Cleric narrow-gate.
+
 - **Healing Word (L1)** — ✅ shipped v2.464.0. Companion ship
   to Cure Wounds v2.463.0 — same mechanical-mutation shape but
   with a smaller die (`1d4` vs `1d8`), a narrower class gate

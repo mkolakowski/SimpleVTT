@@ -10,6 +10,48 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.465.0] - 2026-06-19 — "The Sprig of Mistletoe"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #22 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Goodberry** (L1 transmutation, Druid/Ranger, RAW PHB p.248). New `_SPELL_BUFF_MAP["goodberry"]` substrate (14400 rounds = 24h, non-concentration, `effects.goodberry_charges: 10` counter) + new `/cast_goodberry` endpoint. Charge-counter buff shape — same pattern as Bless Water's v2.447.0 `holy-water-flask` buff. v1 leaves berry consumption GM-narrated; a future commit can add `/eat_goodberry` to decrement the counter + heal via the same `_apply_hp_change` path Cure Wounds / Healing Word use.
+
+**Description:** RAW: "Up to ten berries appear in your hand and are infused with magic for the duration. A creature can use its action to eat one berry. Eating a berry restores 1 hit point, and the berry provides enough nourishment to sustain a creature for one day. The berries lose their potency if they have not been consumed within 24 hours of the casting of this spell." 1 action, V/S/M (a sprig of mistletoe), Touch (creates berries in caster's hand), Instantaneous (24-hour shelf life).
+
+**Implementation:**
+
+- Body: `{character_id}`. Self-cast — the berries appear in the caster's hand, then the caster can hand them out.
+- Caster gate: knows Goodberry OR is in `{druid, ranger}`. 409 cannot_cast otherwise. Narrowest two-class gate on the cast-and-broadcast arc alongside Identify's bard/wizard (v2.459.0).
+- New `_SPELL_BUFF_MAP["goodberry"]` substrate entry — 14400 rounds (24 hours), non-concentration, `effects.goodberry_charges: 10`.
+- The charge counter IS the mechanic in v1: the buff says "this caster carries 10 magical berries"; the GM narrates each consumption. The 14400-round duration auto-expires the buff after 24h, matching RAW's "lose their potency" rider — no manual cleanup needed.
+- Response and `feature_used` broadcast carry `charges: 10` so chat/sheet UIs can display "🫐 ×10" without re-reading the buff.
+
+**Why "The Sprig of Mistletoe":** RAW lists `M (a sprig of mistletoe)` as the material component. Mistletoe is the Druidic plant par excellence — Pliny the Elder's *Natural History* notes mistletoe gathered with a golden sickle by white-robed Gauls. The sprig matches Goodberry's flavor as a small woody focus that opens a connection to the natural world's healing magic. Resumes the material-component naming theme that interleaves through the arc (Pinch of Dirt → Grasshopper's Leg → Silver Mirror → Powdered Silver → Yew Leaf → Hundred-Gold Pearl → Sprig of Mistletoe — seven material-named ships across 22 Phase 2 commits).
+
+**Charge-counter buff pattern (v2.447.0 → v2.465.0).** Bless Water introduced the pattern with `holy_water_charges: 1` (single-use); Goodberry generalizes it to `goodberry_charges: 10` (multi-use). Future charge-counter spells (Aganazzar's Scorcher pearls, alchemical-token-style cantrips, etc.) can mirror the same `effects.<spell>_charges: N` + multi-day duration shape. The pattern is distinct from the buff-installing bucket (no on-going effect to read) and distinct from the mechanical-non-buff bucket (no state mutation at cast time) — it's a fourth shape: **carry-forward consumable counter**.
+
+**4 new harness tests** at `tests/harness/test_cast_goodberry.py`:
+
+- `test_cast_gb_druid_installs_buff` — Mira (Druid) self-casts; response + buff carry `goodberry_charges: 10`.
+- `test_cast_gb_buff_is_24h_non_concentration` — duration_rounds=14400, concentration=false.
+- `test_cast_gb_ranger_succeeds` — Rowan (Ranger) succeeds; asserts the dual-class gate covers both Druids and Rangers.
+- `test_cast_gb_cleric_rejected` — Tavik (Cleric) → 409 (Cleric is NOT on Goodberry's RAW class list; asserts the narrow Druid/Ranger gate vs. Detect Evil and Good v2.456.0 which IS on Cleric's list).
+
+Canonical caster is Mira Greenleaf (Druid 5, Circle of the Moon); fallback is Rowan Quickbow (Ranger 5, Hunter).
+
+Total harness count 3562 → 3566.
+
+MINOR — new HTTP endpoint + new substrate + 4 new harness tests. No schema change.
+
+### Added
+- `app/routes/tabletop_routes.py::_SPELL_BUFF_MAP["goodberry"]`: new substrate entry. Non-concentration, 14400 rounds (24h), `goodberry_charges: 10` counter effect.
+- `app/routes/tabletop_routes.py::cast_goodberry`: new `POST /api/campaign/{campaign_id}/cast_goodberry` endpoint. Self-cast on a `druid/ranger` caster. Response carries `charges: 10`.
+- `tests/harness/test_cast_goodberry.py`: 4 tests covering self-install + buff shape + Ranger happy path + Cleric narrow-gate.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Goodberry marked ✅ shipped v2.465.0 under Phase 2's Shipped subsection. Phase 2 has now shipped 22 spells/contracts; first charge-counter buff after Bless Water generalized to multi-charge.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3562 → 3566.
+
 ## [2.464.0] - 2026-06-19 — "The Distant Word"
 
 **Schema version:** 71

@@ -2968,6 +2968,40 @@ _SPELL_BUFF_MAP["comprehend-languages"] = {
 # Closest existing precedent: the Speak with Animals (v2.438.0) flag
 # buff, but with a charges field instead of a binary flag, mirroring
 # the v2.158.x potion-charge substrate.
+# v2.465.0 — Phase 2 #22 of docs/plans/cast-and-broadcast-tail.md.
+# Goodberry (Druid / Ranger L1): RAW PHB p.248: "Up to ten berries
+# appear in your hand and are infused with magic for the duration.
+# A creature can use its action to eat one berry. Eating a berry
+# restores 1 hit point, and the berry provides enough nourishment
+# to sustain a creature for one day. The berries lose their potency
+# if they have not been consumed within 24 hours of the casting of
+# this spell." 1 action, V/S/M (sprig of mistletoe), Touch (creates
+# berries in caster's hand), Instantaneous (24-hour shelf life).
+#
+# Charge-counter buff shape — same pattern as Bless Water's
+# v2.447.0 ``holy-water-flask`` entry (which uses
+# ``effects.holy_water_charges: 1``). Goodberry uses
+# ``effects.goodberry_charges: 10`` to track the 10 berries. v1
+# leaves berry consumption GM-narrated (each berry restores 1 HP
+# when eaten); a future commit can add ``/eat_goodberry`` that
+# decrements the counter + heals the eater for 1 HP through the
+# same _apply_hp_change path Cure Wounds / Healing Word use.
+_SPELL_BUFF_MAP["goodberry"] = {
+    "key": "goodberry",
+    "name": "Goodberry",
+    "icon": "🫐",
+    "duration_rounds": 14400,  # 24 hours @ 6s/round (RAW shelf life)
+    "duration_max": 14400,
+    "concentration": False,
+    "effects": {
+        "goodberry_charges": 10,
+    },
+    "desc": (
+        "10 magical berries. Eating one (action) restores 1 HP and "
+        "sustains for a day. Berries lose potency after 24 hours."
+    ),
+}
+
 _SPELL_BUFF_MAP["holy-water-flask"] = {
     "key": "holy-water-flask",
     "name": "Holy Water Flask",
@@ -66897,6 +66931,139 @@ async def cast_healing_word(
         "hp_before": hp_before,
         "hp_after": int(result["hp"].get("current") or 0),
         "revived": revived,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_goodberry")
+async def cast_goodberry(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.465.0 — Phase 2 #22 of
+    docs/plans/cast-and-broadcast-tail.md. Goodberry (L1
+    transmutation, Druid/Ranger, PHB p.248):
+
+      "Up to ten berries appear in your hand and are infused with
+       magic for the duration. A creature can use its action to
+       eat one berry. Eating a berry restores 1 hit point, and
+       the berry provides enough nourishment to sustain a
+       creature for one day. The berries lose their potency if
+       they have not been consumed within 24 hours of the casting
+       of this spell."
+
+    1 action, V/S/M (a sprig of mistletoe), Touch (creates
+    berries in caster's hand), Instantaneous (24-hour shelf life
+    on the berries).
+
+    Implementation: installs the v2.465.0 ``goodberry`` buff on
+    the caster with ``effects.goodberry_charges: 10`` and a
+    14400-round duration (24h @ 6s/round). Same charge-counter
+    pattern as Bless Water's v2.447.0 ``holy-water-flask`` buff.
+    v1 leaves berry consumption GM-narrated — each eaten berry
+    restores 1 HP; a future commit can add ``/eat_goodberry`` to
+    decrement the counter + heal via ``_apply_hp_change``.
+
+    Body: ``{character_id}``. Self-cast — the berries appear in
+    the caster's hand, then the caster can hand them out.
+
+    Response: ``{ok, feature, buff_installed, charges,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_gb = any(
+        (s.get("_slug") == "goodberry")
+        or (str(s.get("name", "")).lower() == "goodberry")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"druid", "ranger"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_gb and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Goodberry, or druid/ranger",
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("goodberry") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 14400)
+    CHARGES = int(
+        (template.get("effects") or {}).get("goodberry_charges") or 10
+    )
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "goodberry",
+        "name": template.get("name") or "Goodberry",
+        "icon": template.get("icon") or "🫐",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": dict(
+            template.get("effects") or {"goodberry_charges": 10},
+        ),
+        "desc": template.get("desc") or (
+            "10 magical berries. Eating one restores 1 HP."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🫐 Goodberry",
+            "feature_desc": (
+                f"{char.name} conjures {CHARGES} magical berries in "
+                "their hand. Eating one (action) restores 1 HP and "
+                "sustains a creature for a day. Berries spoil after "
+                "24 hours."
+            ),
+            "source": "goodberry",
+            "charges": CHARGES,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "goodberry",
+        "buff_installed": bool(buff_installed),
+        "charges": CHARGES,
+        "duration_rounds": DURATION_ROUNDS,
     }
 
 
