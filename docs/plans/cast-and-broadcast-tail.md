@@ -248,6 +248,21 @@ closure — runs indefinitely until Bucket A is exhausted.
   permanently GM-narrated; the engine surfaces the flag so the
   table can see Tongues is active. 3 harness tests.
 
+- **Mass Healing Word (L3)** — ✅ shipped v2.467.0. **First
+  multi-target heal on the cast-and-broadcast arc.** Same
+  mechanical-mutation engine path as Cure Wounds (v2.463.0) and
+  Healing Word (v2.464.0) but wrapped in a per-target loop.
+  Rolls `1d4 + spellcasting_mod` ONCE, applies to up to 6
+  targets, broadcasts one `character_hp_update` per healed
+  target plus a single `feature_used` summarizing the cast.
+  Body: `{character_id, target_character_ids: [...]}`. Class
+  gate: bard/cleric (narrower than Healing Word's bard/cleric/
+  druid — RAW excludes Druid). Atomic guarantee: if any target
+  id is unknown the endpoint returns 404 BEFORE mutating any
+  state. Opens the per-target loop pattern that future multi-
+  target heals (Mass Cure Wounds, Aid v2, Beacon of Hope) can
+  mirror. 5 harness tests including the atomicity guarantee.
+
 - **`/eat_goodberry` consume endpoint** — ✅ shipped v2.466.0.
   Closes the loop on the v2.465.0 Goodberry buff. New consume
   endpoint decrements `goodberry_charges` in the holder's buff

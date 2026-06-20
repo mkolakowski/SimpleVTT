@@ -10,6 +10,54 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.467.0] - 2026-06-19 — "The Chorused Word"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #24 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Mass Healing Word** (L3 evocation, Bard/Cleric, RAW PHB p.258). **First multi-target heal on the cast-and-broadcast arc.** Same mechanical-mutation engine path as Cure Wounds (v2.463.0) and Healing Word (v2.464.0) but wrapped in a per-target loop. Rolls `1d4 + spellcasting_mod` once, applies the same amount to up to 6 targets, broadcasts one `character_hp_update` per healed target plus a single `feature_used` chat card summarizing the cast.
+
+**Description:** RAW: "As you call out words of restoration, up to six creatures of your choice that you can see within range regain hit points equal to 1d4 + your spellcasting ability modifier." 1 bonus action, V, 60 ft, Instantaneous.
+
+**Implementation:**
+
+- Body: `{character_id, target_character_ids: [list of int]}`. Both required. `target_character_ids` must be a non-empty list with ≤ 6 entries — RAW's hard cap.
+- Caster gate: knows Mass Healing Word OR is in `{bard, cleric}`. 409 cannot_cast otherwise. Strictly narrower than Healing Word's bard/cleric/druid — RAW excludes Druid (who get Mass Cure Wounds at L5 instead).
+- Target validation: up-front loop resolves each `target_character_id` to a Character row. If ANY id can't be resolved, the endpoint returns `404 target_not_found` with the offending id echoed back AND does not mutate any state. **Atomic guarantee** — partial heals would be confusing (a Cleric's bonus action half-applies isn't a thing in RAW).
+- Heal roll: rolled ONCE per cast (`dice_mod.roll("1d4")` + `_caster_spellcasting_mod(sheet)`) per common table interpretation of the RAW phrasing. The 2014 PHB text is ambiguous between per-target rolls and shared, but the table consensus + 5e simulators land on shared, which is also simpler to implement.
+- Per-target loop: for each target, clamps `new_current` at `hp.max`, calls `_apply_hp_change(target, new_current)`, computes `revived` from the death-save status delta. All mutations land in-memory before a single `db.commit()` at the end of the loop.
+- Broadcast surface: one `character_hp_update` per target with `delta != 0` (no-op heals don't broadcast), plus a single `feature_used` chat card naming all targets and the per-target heal amount. The `feature_used` card carries `target_character_ids: [...]` so a future chat UI can render avatars for each healed creature.
+- Response: `{ok, feature, heal_rolled, heal_dice_total, heal_breakdown, spellcasting_mod, results: [{target_character_id, target_character_name, delta, hp_before, hp_after, revived}, ...]}`. Each per-target dict is structured so a test can iterate and assert per-creature behavior.
+
+**Why "The Chorused Word":** RAW opens with "As you call out words of restoration" — the spell is verbalized, and the words reach multiple ears at once. "Chorused" captures both the multi-target shape (multiple voices in harmony) and the single-cast unity (one spoken phrase, many recipients). Pairs thematically with v2.464.0 "The Distant Word" (single-target Healing Word) — both ships use vocal restoration as the flavor anchor, single-target → multi-target as the mechanical progression.
+
+**First multi-target ship on the cast-and-broadcast arc.** The prior 23 commits have all been single-target (or self-target). Mass Healing Word introduces the per-target loop pattern, which future multi-target heals (Mass Cure Wounds, Aid v2, Beacon of Hope, etc.) can mirror. The atomic-resolve-then-mutate pattern (validate all targets up front, mutate in a second pass) also generalizes — Mass Cure Wounds will reuse exactly this shape with a d8 die instead of a d4.
+
+**Why the d4 not d8:** Mass Healing Word is RAW the multi-target counterpart to Healing Word (d4 + mod), not Cure Wounds (d8 + mod). The L3 slot upgrade buys the multi-target range, not bigger dice — RAW design intent is that Mass Cure Wounds at L5 is the bigger-die multi-target option.
+
+**5 new harness tests** at `tests/harness/test_cast_mass_healing_word.py`:
+
+- `test_cast_mhw_heals_three_targets` — drop Krieger, Caelan, Pip to 5 HP each; Tavik casts on all three; assert `len(results) == 3`, each `delta == heal_dice_total + spell_mod`, and `/sheet-json` confirms each target's new HP.
+- `test_cast_mhw_empty_targets_returns_400` — `target_character_ids: []` → 400.
+- `test_cast_mhw_too_many_targets_returns_400` — 7 target ids → 400 `too_many_targets` with `limit: 6` and `received: 7` in the error body.
+- `test_cast_mhw_druid_rejected` — Mira (Druid) → 409. Asserts the narrow Bard/Cleric gate vs. Healing Word's broader Bard/Cleric/Druid list.
+- `test_cast_mhw_unknown_target_is_atomic` — mix one valid target id with `999_999`; assert 404 `target_not_found` AND `/sheet-json` shows the valid target's HP unchanged. The atomic-resolve-then-mutate guarantee.
+
+Each test that mutates HP restores via `/rest` `{"type": "long"}` in a try/finally.
+
+Canonical caster is Brother Tavik Stonebrow (Cleric 5); canonical targets are Krieger Stonefist (Barbarian), Sir Caelan Lightbringer (Paladin), and Pip Quickfingers (Rogue) — the demo party's three frontliners.
+
+Total harness count 3571 → 3576.
+
+MINOR — new HTTP endpoint + 5 new harness tests. No schema change. No new substrate.
+
+### Added
+- `app/routes/tabletop_routes.py::cast_mass_healing_word`: new `POST /api/campaign/{campaign_id}/cast_mass_healing_word` endpoint. Body: `{character_id, target_character_ids: [...]}`. Rolls 1d4+mod once, applies to ≤6 targets atomically via `_apply_hp_change`, broadcasts per-target `character_hp_update` + single `feature_used`.
+- `tests/harness/test_cast_mass_healing_word.py`: 5 tests covering the multi-target happy path + 3 error paths (empty / too many / non-caster) + the atomicity guarantee.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Mass Healing Word marked ✅ shipped v2.467.0 under Phase 2's Shipped subsection. Phase 2 has now shipped 24 spells/contracts; first multi-target heal opens the per-target loop pattern.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3571 → 3576.
+
 ## [2.466.0] - 2026-06-19 — "The First Berry"
 
 **Schema version:** 71

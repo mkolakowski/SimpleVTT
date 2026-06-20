@@ -67269,6 +67269,223 @@ async def eat_goodberry(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_mass_healing_word")
+async def cast_mass_healing_word(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.467.0 — Phase 2 #24 of
+    docs/plans/cast-and-broadcast-tail.md. Mass Healing Word
+    (L3 evocation, Bard/Cleric, PHB p.258):
+
+      "As you call out words of restoration, up to six creatures
+       of your choice that you can see within range regain hit
+       points equal to 1d4 + your spellcasting ability modifier."
+
+    1 bonus action, V, 60 ft, Instantaneous.
+
+    **First multi-target heal on the cast-and-broadcast arc.**
+    Same mechanical-mutation engine path as Cure Wounds
+    (v2.463.0) and Healing Word (v2.464.0) but wrapped in a
+    per-target loop. The dice are rolled ONCE for the cast and
+    the same amount is applied to each target — common table
+    interpretation of the RAW phrasing.
+
+    Body: ``{character_id, target_character_ids: [list of int]}``.
+    Both required. RAW caps targets at 6 — anything above 400s
+    with ``too_many_targets``.
+
+    Heal math: ``1d4 + _caster_spellcasting_mod(sheet)`` rolled
+    once, applied to each target. v1 skips upcast scaling (each
+    slot above L3 adds another d4 per RAW); a future commit can
+    layer the slot_level body param.
+
+    Response: ``{ok, feature, heal_rolled, heal_dice_total,
+    spellcasting_mod, results: [{target_character_id,
+    target_character_name, delta, hp_before, hp_after,
+    revived}, ...]}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_ids_raw = body.get("target_character_ids") or []
+    if not isinstance(target_ids_raw, list):
+        raise HTTPException(
+            400, "target_character_ids must be a list of integers",
+        )
+    if len(target_ids_raw) == 0:
+        raise HTTPException(
+            400, "target_character_ids must include at least one id",
+        )
+    if len(target_ids_raw) > 6:
+        return JSONResponse(status_code=400, content={
+            "error": "too_many_targets",
+            "limit": 6,
+            "received": len(target_ids_raw),
+        })
+    try:
+        target_ids = [int(t) for t in target_ids_raw]
+    except (TypeError, ValueError):
+        raise HTTPException(
+            400, "target_character_ids must be a list of integers",
+        )
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_mhw = any(
+        (s.get("_slug") == "mass-healing-word")
+        or (str(s.get("name", "")).lower() == "mass healing word")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"bard", "cleric"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_mhw and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Mass Healing Word, or bard/cleric",
+            "got_class": _cls,
+        })
+
+    # Resolve all target Characters up front; bail on any 404
+    # before mutating any state (atomic-ish — a partial heal would
+    # be confusing).
+    targets: list[Character] = []
+    for tid in target_ids:
+        t = db.query(Character).filter(
+            Character.id == tid,
+            Character.campaign_id == campaign_id,
+        ).first()
+        if not t:
+            return JSONResponse(status_code=404, content={
+                "error": "target_not_found",
+                "target_character_id": tid,
+            })
+        targets.append(t)
+
+    # Roll the heal ONCE; apply the same amount to each target
+    # per common table interpretation of the RAW phrasing.
+    try:
+        roll = dice_mod.roll("1d4")
+        heal_dice_total = int(roll.total)
+        heal_breakdown = roll.breakdown
+    except dice_mod.DiceParseError:
+        heal_dice_total = 1
+        heal_breakdown = "1d4"
+    spell_mod = _caster_spellcasting_mod(sheet)
+    heal_amount = max(0, heal_dice_total + spell_mod)
+
+    results: list[dict] = []
+    for t in targets:
+        t_sheet = dict(t.sheet or {})
+        t_hp = dict(t_sheet.get("hp") or {})
+        hp_before = int(t_hp.get("current") or 0)
+        hp_max = int(t_hp.get("max") or 0)
+        new_current = (
+            min(hp_max, hp_before + heal_amount) if hp_max > 0
+            else (hp_before + heal_amount)
+        )
+        delta = new_current - hp_before
+        ds_before = (
+            t_sheet.get("death_saves") or {}
+        ).get("status", "alive")
+        result = _apply_hp_change(t, new_current)
+        ds_after = result["death_saves"]["status"]
+        revived = ds_before != "alive" and ds_after == "alive"
+        results.append({
+            "target_character_id": t.id,
+            "target_character_name": t.name,
+            "delta": delta,
+            "hp_before": hp_before,
+            "hp_after": int(result["hp"].get("current") or 0),
+            "revived": revived,
+            "_hp": result["hp"],
+        })
+    db.commit()
+
+    # Broadcast one character_hp_update per target with a delta,
+    # mirroring Cure Wounds / Healing Word's per-target shape.
+    for r in results:
+        if r["delta"] != 0:
+            await hub.broadcast(campaign_id, {
+                "type": "character_hp_update",
+                "data": {
+                    "character_id": r["target_character_id"],
+                    "hp": r["_hp"],
+                    "delta": r["delta"],
+                    "source": "mass-healing-word",
+                },
+            })
+        # Drop the internal _hp scratch field from the response.
+        r.pop("_hp", None)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    target_names = ", ".join(r["target_character_name"] for r in results)
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": (
+                f"💞 Mass Healing Word ({heal_amount} HP each)"
+            ),
+            "feature_desc": (
+                f"{char.name} calls out words of restoration to "
+                f"{target_names} — each regains up to {heal_amount} HP "
+                f"(rolled {heal_dice_total} + {spell_mod} spellcasting "
+                "mod)."
+            ),
+            "source": "mass-healing-word",
+            "target_character_ids": [
+                r["target_character_id"] for r in results
+            ],
+            "heal_rolled": heal_amount,
+            "heal_dice_total": heal_dice_total,
+            "heal_breakdown": heal_breakdown,
+            "spellcasting_mod": spell_mod,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "mass-healing-word",
+        "heal_rolled": heal_amount,
+        "heal_dice_total": heal_dice_total,
+        "heal_breakdown": heal_breakdown,
+        "spellcasting_mod": spell_mod,
+        "results": results,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_gust")
 async def cast_gust(
     campaign_id: int,
