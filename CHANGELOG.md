@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.473.1] - 2026-06-19 — "The Restart Loop"
+
+**Schema version:** 71
+
+**Commit summary:** Bug fix for the Phase 4b–e fail2ban service. Three issues surfaced when actually bringing the container up locally with `docker compose --profile fail2ban up -d`:
+
+1. **`envsubst` is missing from the alpine + busybox image.** `crazymax/fail2ban:1.0.2` doesn't ship `gettext`, so the v2.471.0 `render-jail.sh` crash-looped with `envsubst: not found`. Rewrote the renderer to use POSIX sed with `|` as the delimiter and POSIX-style indirect variable reads (`eval "value=\"\${$var:-}\""`).
+2. **Writing to `/etc/fail2ban/jail.d/` collides with the image's symlink chain.** The image's `/entrypoint.sh` symlinks `/data/jail.d → /etc/fail2ban/jail.d`; if `render-jail.sh` populates the destination first, the upstream `ln -s` fails with `File exists` and the container restart-loops. Moved the render destinations from `/etc/fail2ban/{jail,action}.d/` to `/data/{jail,action}.d/` so the image's symlink step picks them up in its normal flow.
+3. **Compose's `entrypoint:` override clears the image's `CMD`.** When `entrypoint: [/bin/sh, /scripts/render-jail.sh]` lands, the original image `CMD` (`["fail2ban-server","-f","-x","-v","start"]`) is discarded. `render-jail.sh`'s final `exec /entrypoint.sh "$@"` was running with empty args, so the upstream entrypoint exec'd nothing → container exited → restart. Re-supplied the CMD via an explicit `command:` block in `docker-compose.yml`.
+
+**Verification:** with the fixes applied, `docker compose --profile fail2ban up -d fail2ban` reaches `Server ready` and `fail2ban-client status simplevtt-auth` reports the jail running with the env-derived thresholds (`maxRetry: 5`, `findtime: 300`, `banTime: 3600`).
+
+**Why "The Restart Loop":** the bug manifest was a container crash-looping every ~2 seconds. The fun name names the symptom; the fix names the cause.
+
+**No new harness tests** — Phase 4f's end-to-end smoke test will cover the integration path that exposed these bugs (it was the local-container manual run that surfaced them). The existing 30 Phase 4a–e wiring tests all still pass.
+
+PATCH — three bug fixes to v2.471.0–v2.473.0 wiring. No new features. No schema change.
+
+### Fixed
+- `docs/integrations/fail2ban/scripts/render-jail.sh`: rewritten to use POSIX sed (alpine + busybox-compatible) instead of `envsubst` (missing from the image). Render destination changed from `/etc/fail2ban/{jail,action}.d/` to `/data/{jail,action}.d/` so the image's symlink chain works normally.
+- `docker-compose.yml`: explicit `command: [fail2ban-server, -f, -x, -v, start]` added to the fail2ban service so the entrypoint override doesn't clear the image's `CMD`.
+
 ## [2.473.0] - 2026-06-19 — "The Privileged Sentry"
 
 **Schema version:** 71

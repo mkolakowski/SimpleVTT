@@ -187,9 +187,21 @@ services:
     # render-jail.sh helper that envsubsts the FAIL2BAN_* placeholders
     # into the jail.d configs before exec'ing the image's standard
     # entrypoint chain.
+    #
+    # v2.473.1 — Compose's `entrypoint:` override clears the image's
+    # default CMD, so we MUST re-supply it as `command:` below or
+    # render-jail.sh's `exec /entrypoint.sh "$@"` runs with empty
+    # args and the upstream entrypoint exec's nothing → restart loop.
+    # The command mirrors the image's Dockerfile CMD.
     entrypoint:
       - /bin/sh
       - /scripts/render-jail.sh
+    command:
+      - fail2ban-server
+      - -f
+      - -x
+      - -v
+      - start
     volumes:
       # Persist the ban database across restarts so a fresh container
       # starts with the existing bans (matches how operators expect
