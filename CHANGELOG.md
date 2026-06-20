@@ -10,6 +10,40 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.484.0] - 2026-06-20 — "The Ban Ledger"
+
+**Schema version:** 71
+
+**Commit summary:** Adds the **fail2ban ban panel** to the Admin Center — currently-banned IPs (per jail, with ban time + expiry), read directly from fail2ban's sqlite database. Also fixes a latent persistence bug: the `fail2ban_data` volume was mounted at the wrong path, so bans never actually survived a container restart.
+
+**Description:** The v2.483.0 Admin Center surfaced the audit log + traffic stats. This commit answers "who's banned right now?" The crazymax/fail2ban image persists ban state to `/data/db/fail2ban.sqlite3`; the admin-center service mounts that volume **read-only** and reads the `bips` table (currently-banned IPs) directly — no `fail2ban-client`, no shared control socket. Expired-but-not-yet-purged rows are filtered out; permanent bans (`bantime < 0`) are flagged.
+
+**Latent bug fixed:** the fail2ban service mounted `fail2ban_data` at `/var/lib/fail2ban`, but the image's `dbfile` is `/data/db/fail2ban.sqlite3` — so the ban database lived on the container's ephemeral writable layer and was lost on every recreate, despite the volume's "persist across restarts" comment. v2.484.0 remounts the volume at `/data/db`, which both fixes persistence and makes the db readable by the admin center. (No data migration needed — the old mount never held the real db.)
+
+**Implementation:**
+
+- `app/admin_center/fail2ban.py` (new): `read_status(db_path, *, now)` opens the sqlite db read-only (`mode=ro`, respects fail2ban's journal), reads `bips` + `bans` + `jails`, filters to active/permanent bans, and returns a `{available, jails, banned[], total_current, total_historical, by_jail}` envelope. `available=False` with a human reason when the db is missing (fail2ban profile not running) — the dashboard renders an empty state.
+- `app/admin_center/main.py`: `GET /api/fail2ban` + the ban panel in the dashboard context; two Jinja filters (`epoch`, `duration`) for ban timestamps.
+- `app/admin_center/templates/dashboard.html`: fail2ban panel — currently-banned / all-time / active-jails cards, per-jail chips, and a banned-IP table (IP, jail, banned-at, expires-in, times-banned).
+- `docker-compose.yml`: fail2ban volume `fail2ban_data:/var/lib/fail2ban` → `/data/db` (the persistence fix); admin-center gains `fail2ban_data:/data/db:ro` + `FAIL2BAN_DB_PATH`.
+- `docs/wiki/admin-center.md`: fail2ban capability flipped from 🟠 follow-up to ✅.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py`: +5 tests. 2 unit (`read_status` on a missing db → unavailable; on a seeded sqlite → active+permanent counted, expired excluded, permanent flagged, remaining-seconds + bancount + historical + jail roll-up correct). 3 live (`/api/fail2ban` shape, its auth gate, dashboard panel present).
+
+Verified end-to-end against the running stack: `fail2ban-client set simplevtt-auth banip <ip>` surfaces in `/api/fail2ban` within seconds with the right expiry, and a real `simplevtt-scanner` ban triggered by the harness's 404 tests showed up alongside it.
+
+Total harness count → 3670 (+5).
+
+MINOR — additive panel on the v2.483.0 Admin Center + a compose persistence fix. No schema change, no app-surface change.
+
+### Added
+- `app/admin_center/fail2ban.py` + `GET /api/fail2ban` + the dashboard ban panel: currently-banned IPs read read-only from fail2ban's sqlite db.
+
+### Fixed
+- `docker-compose.yml`: fail2ban ban database now persists across restarts — the `fail2ban_data` volume mounted at the upstream-default `/var/lib/fail2ban` instead of the crazymax image's actual `dbfile` path `/data/db`, so bans were silently lost on every container recreate. Now mounted at `/data/db`.
+
 ## [2.483.0] - 2026-06-20 — "The Watchtower"
 
 **Schema version:** 71

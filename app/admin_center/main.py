@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -19,7 +20,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from ..version import APP_VERSION
-from . import audit_parse, stats
+from . import audit_parse, fail2ban, stats
 from .basic_auth import header_authorizes, is_default_password
 
 log = logging.getLogger("simplevtt.admin_center")
@@ -32,6 +33,39 @@ AUDIT_LOG_PATH = os.environ.get(
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
+
+
+def _fmt_epoch(t) -> str:
+    """Unix epoch → readable UTC string, for the ban timestamps."""
+    if not t:
+        return ""
+    try:
+        import datetime
+        return datetime.datetime.utcfromtimestamp(int(t)).strftime(
+            "%Y-%m-%d %H:%M UTC"
+        )
+    except (ValueError, OverflowError, OSError):
+        return str(t)
+
+
+def _fmt_duration(s) -> str:
+    """Seconds → compact human duration (or 'permanent' for None)."""
+    if s is None:
+        return "permanent"
+    s = int(s)
+    if s <= 0:
+        return "expired"
+    h, rem = divmod(s, 3600)
+    m, sec = divmod(rem, 60)
+    if h:
+        return f"{h}h {m}m" if m else f"{h}h"
+    if m:
+        return f"{m}m"
+    return f"{sec}s"
+
+
+templates.env.filters["epoch"] = _fmt_epoch
+templates.env.filters["duration"] = _fmt_duration
 
 app = FastAPI(title="SimpleVTT Admin Center", version=APP_VERSION)
 
@@ -93,6 +127,13 @@ def api_stats():
     return JSONResponse(stats.summarize(events))
 
 
+@app.get("/api/fail2ban")
+def api_fail2ban():
+    """Current fail2ban ban state (jails + currently-banned IPs),
+    read directly from the fail2ban sqlite db."""
+    return JSONResponse(fail2ban.read_status(now=time.time()))
+
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, event: str | None = None):
     events = audit_parse.load_events(
@@ -106,6 +147,7 @@ def dashboard(request: Request, event: str | None = None):
     )
     # Distinct event tags present, for the filter dropdown.
     event_tags = sorted(summary["by_event"].keys())
+    bans = fail2ban.read_status(now=time.time())
     return templates.TemplateResponse(
         "dashboard.html",
         {
@@ -118,5 +160,6 @@ def dashboard(request: Request, event: str | None = None):
             "events": events[:500],
             "event_tags": event_tags,
             "active_filter": event or "",
+            "bans": bans,
         },
     )

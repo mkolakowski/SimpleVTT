@@ -12,8 +12,8 @@ reuses the main app's Docker image but runs a separate ASGI app
 **read-only**.
 
 > **Phase status.** v2.483.0 ships the scaffold + audit-log viewer +
-> traffic stats. The fail2ban ban panel and the database
-> data-inventory summary land in follow-up commits.
+> traffic stats; v2.484.0 adds the fail2ban ban panel. The database
+> data-inventory summary lands in a follow-up commit.
 
 ---
 
@@ -23,7 +23,7 @@ reuses the main app's Docker image but runs a separate ASGI app
 |---|---|---|
 | Audit-event viewer (filterable) | `audit_logs` volume → `audit.log` | ✅ v2.483.0 |
 | Traffic statistics (top IPs, paths, signal counters) | parsed audit log | ✅ v2.483.0 |
-| fail2ban status + currently-banned IPs | `fail2ban_data` volume → `fail2ban.sqlite3` | 🟠 follow-up |
+| fail2ban status + currently-banned IPs | `fail2ban_data` volume → `fail2ban.sqlite3` | ✅ v2.484.0 |
 | Database data-inventory (users, campaigns, …) | app database (read-only) | 🟠 follow-up |
 
 ---
@@ -88,6 +88,25 @@ A filterable table of the most recent parsed audit events — time,
 level, event tag, source IP, and the remaining structured fields.
 Filter by event tag via the dropdown.
 
+### fail2ban — banned IPs (v2.484.0)
+
+Reads fail2ban's own sqlite ban database (mounted read-only) and
+shows the IPs that are **currently** banned — per jail, with when
+they were banned and how long is left on the ban — plus the all-time
+ban count and the active jail list. Expired-but-not-yet-purged bans
+are filtered out; permanent bans (`bantime < 0`) are flagged.
+
+When the `--profile fail2ban` stack isn't running, the shared volume
+has no database and the panel shows an empty state rather than an
+error.
+
+> **Persistence note (v2.484.0).** The fail2ban service now mounts
+> its `fail2ban_data` volume at `/data/db` (the crazymax image's
+> actual `dbfile` location). Before v2.484.0 the volume mounted at
+> the upstream-default `/var/lib/fail2ban`, so bans were silently
+> lost on every container recreate. If you ran an earlier version,
+> existing bans will repopulate as fail2ban re-bans offenders.
+
 ### JSON APIs
 
 For scripting / scraping:
@@ -95,8 +114,9 @@ For scripting / scraping:
 - `GET /api/stats` — the traffic-statistics roll-up.
 - `GET /api/events?event=<prefix>&limit=<n>` — recent parsed events
   (filter by tag prefix, e.g. `auth.` or the exact `visitor.request`).
+- `GET /api/fail2ban` — current ban state (jails + banned IPs).
 
-Both require basic-auth.
+All require basic-auth.
 
 ---
 

@@ -116,9 +116,16 @@ services:
       ADMIN_CENTER_USER: ${ADMIN_CENTER_USER:-admin}
       ADMIN_CENTER_PASS: ${ADMIN_CENTER_PASS:-changeme}
       ADMIN_CENTER_PORT: ${ADMIN_CENTER_PORT:-8015}
+      # v2.484.0 — path to fail2ban's sqlite ban db (read-only mount
+      # below). When the --profile fail2ban service isn't running the
+      # shared volume is empty and the dashboard shows an empty state.
+      FAIL2BAN_DB_PATH: ${FAIL2BAN_DB_PATH:-/data/db/fail2ban.sqlite3}
     volumes:
       # Read-only consumer of the app's audit-log volume.
       - audit_logs:/var/log/simplevtt:ro
+      # Read-only consumer of fail2ban's ban database (same named
+      # volume the fail2ban service writes at /data/db).
+      - fail2ban_data:/data/db:ro
     ports:
       - "${ADMIN_CENTER_PORT:-8015}:${ADMIN_CENTER_PORT:-8015}"
     command:
@@ -261,8 +268,12 @@ services:
     volumes:
       # Persist the ban database across restarts so a fresh container
       # starts with the existing bans (matches how operators expect
-      # fail2ban to behave under systemd).
-      - fail2ban_data:/var/lib/fail2ban
+      # fail2ban to behave under systemd). v2.484.0 — the crazymax
+      # image's dbfile is /data/db/fail2ban.sqlite3 (NOT the upstream
+      # default /var/lib/fail2ban), so the volume must mount there to
+      # actually persist + to let the admin-center service read it
+      # read-only.
+      - fail2ban_data:/data/db
       # Read-only tail of the app's audit log volume. Phase 4a owns
       # the writer side; this is the consumer.
       - audit_logs:/var/log/simplevtt:ro

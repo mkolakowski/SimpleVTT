@@ -131,6 +131,45 @@
       </div>
     </div>
 
+    <h2>fail2ban — banned IPs</h2>
+    {% if not bans.available %}
+    <div class="banner empty">
+      🚫 {{ bans.reason }}
+    </div>
+    {% else %}
+    <div class="cards">
+      <div class="card {{ 'bad' if bans.total_current else '' }}">
+        <div class="n">{{ bans.total_current }}</div><div class="l">Currently banned</div>
+      </div>
+      <div class="card"><div class="n">{{ bans.total_historical }}</div><div class="l">Total bans (all time)</div></div>
+      <div class="card"><div class="n">{{ bans.jails|length }}</div><div class="l">Active jails</div></div>
+    </div>
+    {% if bans.jails %}
+    <p class="muted" style="margin:-6px 0 14px">
+      Jails: {% for j in bans.jails %}<span class="tag">{{ j }}{% if bans.by_jail.get(j) %} · {{ bans.by_jail.get(j) }}{% endif %}</span> {% endfor %}
+    </p>
+    {% endif %}
+    <table>
+      <thead><tr><th>IP</th><th>Jail</th><th>Banned at</th><th>Expires in</th><th>Times banned</th></tr></thead>
+      <tbody>
+        {% for b in bans.banned %}
+        <tr>
+          <td><code>{{ b.ip }}</code></td>
+          <td><span class="tag">{{ b.jail }}</span></td>
+          <td class="muted"><code>{{ b.banned_at|epoch }}</code></td>
+          <td>
+            {% if b.permanent %}<span class="tag bad">permanent</span>
+            {% else %}{{ b.remaining_seconds|duration }}{% endif %}
+          </td>
+          <td>{{ b.bancount }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="muted">No IPs currently banned. 🎉</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
     <h2>Recent events</h2>
     <form class="filterbar" method="get" action="/">
       <label for="event" class="muted">Filter by event:</label>
@@ -170,7 +209,8 @@
 
     <p class="muted" style="margin-top:30px;font-size:12.5px">
       Read-only view of <code>{{ audit_log_path }}</code>. JSON APIs:
-      <a href="/api/stats">/api/stats</a> · <a href="/api/events">/api/events</a>.
+      <a href="/api/stats">/api/stats</a> · <a href="/api/events">/api/events</a> ·
+      <a href="/api/fail2ban">/api/fail2ban</a>.
       See <code>/wiki/admin-center</code> on the main app for docs.
     </p>
   </main>
