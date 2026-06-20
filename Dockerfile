@@ -83,6 +83,9 @@ COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 # Listening port — overridable via APP_PORT env var.
 ENV APP_PORT=8013
 EXPOSE 8013
+# v2.483.0 — the admin-center service (docker-compose.yml) reuses this
+# image and listens on 8015 via `uvicorn app.admin_center.main:app`.
+EXPOSE 8015
 
 # v2.474.0 — entrypoint chowns the volume mount points (idempotent)
 # then `exec gosu appuser ...`. CMD is the uvicorn invocation; the

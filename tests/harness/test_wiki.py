@@ -26,6 +26,8 @@ async def test_wiki_home_renders():
     assert "SimpleVTT wiki" in resp.text
     # Available-guides table includes the roll-log guide link.
     assert "/wiki/roll-log-guide" in resp.text
+    # v2.483.0: the Admin Center guide is surfaced in the guides table.
+    assert "/wiki/admin-center" in resp.text
     # v2.49.9: the wiki nav menu is rendered on the landing too.
     assert 'class="wiki-nav"' in resp.text
     # v2.49.9: Plans + References + Repo docs sections all reachable.

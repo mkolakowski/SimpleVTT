@@ -10,6 +10,47 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.483.0] - 2026-06-20 — "The Watchtower"
+
+**Schema version:** 71
+
+**Commit summary:** Ships the **Admin Center** — a standalone, read-only operator dashboard on its own port (default 8015) that surfaces the data SimpleVTT collects. This first commit lands the scaffold + HTTP basic-auth + the audit-log event viewer + derived traffic statistics. (fail2ban ban panel + DB data-inventory follow in later commits.)
+
+**Description:** The audit log, traffic patterns, and security signals SimpleVTT now records (v2.424.0–v2.482.0) lived only on disk / in `docker compose logs`. The Admin Center gives an operator a single browser surface for them. It reuses the main app's Docker image but runs a separate ASGI app (`app.admin_center.main:app`), mounts the shared `audit_logs` volume **read-only**, and never touches game state. It is its own compose service, on by default, protected by a dedicated basic-auth credential independent of the main app's session login.
+
+**Implementation:**
+
+- `app/admin_center/` (new package):
+  - `audit_parse.py` — pure parser: a canonical audit line → `{ts, level, event, fields}`, with a bounded `tail_lines` reader and a filtering `load_events`. Stdlib-only (uses `shlex` to reassemble quoted values), unit-testable on a host without the web stack.
+  - `stats.py` — pure roll-up: total events, by-event breakdown, named security-signal counters (failed logins / 401 / 403 / 404 / visitor / export), top source IPs, top probed paths, unique-IP count.
+  - `basic_auth.py` — constant-time (`secrets.compare_digest`) credential check; `is_default_password()` drives a UI nag banner.
+  - `main.py` — the FastAPI app: a basic-auth middleware (everything but `/healthz`), `GET /` dashboard, `GET /api/stats`, `GET /api/events`, `/healthz`, `/version`.
+  - `templates/dashboard.html` — self-contained dark-theme dashboard (44px touch targets per the HIG rule): signal cards, top-IPs / top-paths tables, a tag-filterable recent-events table.
+- `docker-compose.yml`: new `admin-center` service (reuses `simplevtt-app:latest`, `audit_logs:ro` mount, port 8015, `/healthz` healthcheck). On by default.
+- `Dockerfile`: `EXPOSE 8015`.
+- `.env.example`: `ADMIN_CENTER_PORT` / `ADMIN_CENTER_USER` / `ADMIN_CENTER_PASS` (defaults 8015 / admin / changeme).
+- `docs/wiki/admin-center.md` (new) + surfaced in `wiki.html` "Available guides" + `docs/wiki/README.md`.
+
+**Auth:** HTTP basic-auth, independent of the main app login, so audit-log visibility can be granted without a game account. The default password (`changeme`) makes it usable out of the box but the dashboard shows a loud warning banner until `ADMIN_CENTER_PASS` is changed. `/healthz` is intentionally unauthenticated (compose healthcheck); every other path is gated.
+
+**Read-only posture:** mounts shared volumes read-only and exposes no mutation endpoints — a compromise can read collected data but cannot change game state, ban IPs, or delete records.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py` (new): 16 tests. 9 host-side unit tests (parser: canonical / quoted-path / non-audit rejection / file load + filter / missing-file; stats roll-up; basic-auth valid / rejection matrix / default-password). 7 live tests (httpx → :8015): `/healthz` open, dashboard 401 without/with-wrong creds, 200 + content with creds, `/api/stats` + `/api/events` shapes, `/api/events` auth gate. Live tests skip when the service isn't reachable.
+- `tests/harness/test_wiki.py::test_wiki_home_renders`: asserts the `/wiki/admin-center` guide link is surfaced.
+
+Total harness count → 3665 (+16 from `test_admin_center.py`).
+
+MINOR — new standalone service + read-only dashboard, additive. No schema change, no change to existing app surfaces.
+
+### Added
+- `app/admin_center/` — standalone read-only operator dashboard (audit-log viewer + traffic stats) on port 8015, HTTP basic-auth protected.
+- `docker-compose.yml`: `admin-center` service (on by default); `Dockerfile`: `EXPOSE 8015`.
+- `.env.example`: `ADMIN_CENTER_PORT` / `ADMIN_CENTER_USER` / `ADMIN_CENTER_PASS`.
+- `docs/wiki/admin-center.md` + wiki surfacing.
+- `tests/harness/test_admin_center.py`: 16 tests (9 unit + 7 live).
+
 ## [2.482.0] - 2026-06-20 — "The Right of Access"
 
 **Schema version:** 71

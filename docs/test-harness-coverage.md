@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3649 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.482.0, 2026-06-20).
+**Total tests:** 3665 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.483.0, 2026-06-20).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5500,6 +5500,31 @@ Static config-shape validation for the opt-in `simplevtt-flood` fail2ban jail th
 | `test_cooldown_zero_when_window_elapsed` | Returns 0 once the cooldown window has fully elapsed. |
 | `test_cooldown_positive_within_window` | Returns the correct remaining seconds within the window. |
 | `test_cooldown_disabled_when_window_nonpositive` | `cooldown_seconds <= 0` disables the gate (returns 0). |
+
+---
+
+## Admin Center (standalone operator dashboard — v2.483.0)
+
+The standalone read-only dashboard on port 8015. Unit tests (host-side) for the audit-log parser / stats / basic-auth modules + live tests (httpx → :8015) for the auth gate + dashboard + JSON APIs. Live tests skip when the service isn't reachable. Lives in `tests/harness/test_admin_center.py`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_parse_line_canonical_event` | `audit_parse.parse_line` extracts event tag, level, and kv fields (quoted UA reassembled intact). |
+| `test_parse_line_quoted_path_with_space` | A `path="/a b"` quoted value with whitespace parses to one field. |
+| `test_parse_line_rejects_non_audit_lines` | App-startup logs / junk / empty lines → `None`. |
+| `test_load_events_from_file` | Tails + parses a sample log: 3 events, newest-first ordering, `event_prefix` filter. |
+| `test_load_events_missing_file_is_empty` | A missing log path → `[]` (empty state, not an error). |
+| `test_summarize_counts_and_top_lists` | `stats.summarize` rolls up total, by-event, named signals, top IPs, top paths, unique-IP count. |
+| `test_header_authorizes_valid` | A correct `Authorization: Basic` header passes the gate. |
+| `test_header_authorizes_rejects_bad` | Wrong password / missing / non-basic / non-b64 headers all rejected. |
+| `test_is_default_password` | `is_default_password()` true on `changeme`, false otherwise (UI nag signal). |
+| `test_healthz_open_without_auth` | `/healthz` → 200 without creds (for the compose healthcheck). |
+| `test_dashboard_requires_auth` | `/` without creds → 401 + `WWW-Authenticate: Basic`. |
+| `test_dashboard_rejects_wrong_creds` | `/` with wrong creds → 401. |
+| `test_dashboard_renders_with_creds` | `/` with valid creds → 200 + "Admin Center" / "Traffic signals". |
+| `test_api_stats_shape` | `/api/stats` → 200 + the roll-up keys. |
+| `test_api_events_shape` | `/api/events?limit=10` → 200 + `{count, events: []}`. |
+| `test_api_events_requires_auth` | `/api/events` without creds → 401. |
 
 ---
 

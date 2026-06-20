@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SimpleVTT Admin Center</title>
+  <style>
+    :root {
+      --bg: #14171c; --panel: #1d2128; --panel2: #242a33;
+      --fg: #e6e9ef; --muted: #9aa4b2; --line: #2e3540;
+      --accent: #6ea8fe; --warn: #ffb454; --bad: #ff6b6b; --ok: #5ad19a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--fg);
+      font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    a { color: var(--accent); }
+    header {
+      padding: 18px 24px; border-bottom: 1px solid var(--line);
+      display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+    }
+    header h1 { margin: 0; font-size: 20px; }
+    header .ver { color: var(--muted); font-size: 13px; }
+    main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+    .banner {
+      background: #3a2a12; border: 1px solid var(--warn); color: var(--warn);
+      padding: 12px 16px; border-radius: 8px; margin-bottom: 20px;
+    }
+    .banner.empty { background: #25201a; }
+    .cards { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); margin-bottom: 26px; }
+    .card {
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: 10px; padding: 14px 16px;
+    }
+    .card .n { font-size: 26px; font-weight: 700; }
+    .card .l { color: var(--muted); font-size: 13px; margin-top: 2px; }
+    .card.bad .n { color: var(--bad); }
+    .card.ok .n { color: var(--ok); }
+    h2 { font-size: 16px; margin: 28px 0 12px; }
+    .grid2 { display: grid; gap: 22px; grid-template-columns: 1fr 1fr; }
+    @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+    table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    th, td {
+      text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 600; }
+    tbody tr:hover { background: var(--panel2); }
+    code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; }
+    .tag {
+      display: inline-block; padding: 2px 8px; border-radius: 6px;
+      background: var(--panel2); border: 1px solid var(--line); font-size: 12px;
+    }
+    .tag.warn { color: var(--warn); border-color: var(--warn); }
+    .tag.bad { color: var(--bad); border-color: var(--bad); }
+    .filterbar { display: flex; gap: 10px; align-items: center; margin: 18px 0 8px; flex-wrap: wrap; }
+    /* 44px minimum touch targets per the project HIG rule. */
+    select, .btn {
+      min-height: 44px; background: var(--panel); color: var(--fg);
+      border: 1px solid var(--line); border-radius: 8px; padding: 0 14px;
+      font: inherit; display: inline-flex; align-items: center;
+    }
+    .muted { color: var(--muted); }
+    .nofields { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🛡️ SimpleVTT Admin Center</h1>
+    <span class="ver">v{{ app_version }}</span>
+  </header>
+  <main>
+
+    {% if default_password %}
+    <div class="banner">
+      ⚠️ <strong>Default password in use.</strong> The admin center is
+      protected by the shipped default credentials. Set
+      <code>ADMIN_CENTER_PASS</code> (and optionally
+      <code>ADMIN_CENTER_USER</code>) in your <code>.env</code> and
+      restart before exposing this off-host.
+    </div>
+    {% endif %}
+
+    {% if not audit_log_present %}
+    <div class="banner empty">
+      No audit log found at <code>{{ audit_log_path }}</code> yet. It
+      appears once the main app emits its first audit event (a failed
+      login, a 404, an admin action, …). Stats below will be empty
+      until then.
+    </div>
+    {% endif %}
+
+    <h2>Traffic signals</h2>
+    <div class="cards">
+      <div class="card"><div class="n">{{ summary.total_events }}</div><div class="l">Total audit events</div></div>
+      <div class="card"><div class="n">{{ summary.unique_ips }}</div><div class="l">Unique source IPs</div></div>
+      {% for label, n in summary.signals.items() %}
+      <div class="card {{ 'bad' if n and label in ('Failed logins', '401 unauthorized', '403 forbidden', '404 not found') else '' }}">
+        <div class="n">{{ n }}</div><div class="l">{{ label }}</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="grid2">
+      <div>
+        <h2>Top source IPs</h2>
+        <table>
+          <thead><tr><th>IP</th><th>Events</th></tr></thead>
+          <tbody>
+            {% for ip, n in summary.top_ips %}
+            <tr><td><code>{{ ip }}</code></td><td>{{ n }}</td></tr>
+            {% else %}
+            <tr><td colspan="2" class="muted">No IPs recorded yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h2>Top paths</h2>
+        <table>
+          <thead><tr><th>Path</th><th>Hits</th></tr></thead>
+          <tbody>
+            {% for path, n in summary.top_paths %}
+            <tr><td><code>{{ path }}</code></td><td>{{ n }}</td></tr>
+            {% else %}
+            <tr><td colspan="2" class="muted">No path-bearing events yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <h2>Recent events</h2>
+    <form class="filterbar" method="get" action="/">
+      <label for="event" class="muted">Filter by event:</label>
+      <select id="event" name="event" onchange="this.form.submit()">
+        <option value="">All events</option>
+        {% for tag in event_tags %}
+        <option value="{{ tag }}" {{ 'selected' if tag == active_filter else '' }}>{{ tag }}</option>
+        {% endfor %}
+      </select>
+      <noscript><button class="btn" type="submit">Apply</button></noscript>
+      <span class="muted">showing {{ events|length }} most recent</span>
+    </form>
+    <table>
+      <thead><tr><th>Time</th><th>Level</th><th>Event</th><th>IP</th><th>Details</th></tr></thead>
+      <tbody>
+        {% for e in events %}
+        <tr>
+          <td class="muted"><code>{{ e.ts }}</code></td>
+          <td>
+            <span class="tag {{ 'bad' if e.level in ('ERROR','CRITICAL') else ('warn' if e.level == 'WARNING' else '') }}">{{ e.level }}</span>
+          </td>
+          <td><code>{{ e.event }}</code></td>
+          <td><code>{{ e.fields.ip or '' }}</code></td>
+          <td>
+            {% set rest = [] %}
+            {% for k, v in e.fields.items() if k != 'ip' %}
+              {% set _ = rest.append(k ~ '=' ~ v) %}
+            {% endfor %}
+            {% if rest %}<code>{{ rest|join(' ') }}</code>{% else %}<span class="nofields">—</span>{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="muted">No events match.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <p class="muted" style="margin-top:30px;font-size:12.5px">
+      Read-only view of <code>{{ audit_log_path }}</code>. JSON APIs:
+      <a href="/api/stats">/api/stats</a> · <a href="/api/events">/api/events</a>.
+      See <code>/wiki/admin-center</code> on the main app for docs.
+    </p>
+  </main>
+</body>
+</html>

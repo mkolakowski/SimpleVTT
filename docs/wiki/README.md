@@ -34,6 +34,7 @@ How much of the SRD 5.1 ruleset SimpleVTT mechanically automates, by content cat
 | [Demo mode](demo-mode.md) | Markdown (how-to) | Operators | ✅ shipped (v2.43.21) |
 | [fail2ban deployment](fail2ban-deployment.md) | Markdown (how-to) | Operators | ✅ shipped (v2.476.0) |
 | [Privacy Policy (GDPR-compliant template)](privacy.md) | Markdown (policy) | Operators + Users | ✅ shipped (v2.479.0) |
+| [Admin Center](admin-center.md) | Markdown (how-to) | Operators | ✅ shipped (v2.483.0) |
 | [PC vs NPC combat systems](pc-vs-npc-systems.md) | Markdown (reference) | Contributors | ✅ shipped (v2.49.167) |
 | [Reactions automation](reactions.md) | Markdown (how-to) | GMs + players | ✅ shipped (v2.82.0) |
 | [Targeting system guide](targeting-system-guide.html) | HTML (visual) | GMs + contributors | ✅ shipped (v2.49.168) |

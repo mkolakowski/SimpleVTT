@@ -95,6 +95,42 @@ services:
     ports:
       - "${APP_PORT:-8013}:${APP_PORT:-8013}"
 
+  # ── Admin Center ────────────────────────────────────────────────────────────
+  # v2.483.0 — standalone read-only operator dashboard on its own port
+  # (default 8015). Reuses the app image but launches
+  # app.admin_center.main:app. Mounts the audit_logs volume read-only
+  # to parse the canonical audit log into traffic stats + an event
+  # viewer. Protected by HTTP basic-auth (ADMIN_CENTER_USER /
+  # ADMIN_CENTER_PASS) independent of the main app's session login.
+  # On by default; set ADMIN_CENTER_PASS in .env before exposing
+  # off-host (the dashboard nags while the default password is in use).
+  admin-center:
+    build: .
+    image: simplevtt-app:latest
+    container_name: simplevtt-admin-center
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      AUDIT_LOG_PATH: ${AUDIT_LOG_PATH:-/var/log/simplevtt/audit.log}
+      ADMIN_CENTER_USER: ${ADMIN_CENTER_USER:-admin}
+      ADMIN_CENTER_PASS: ${ADMIN_CENTER_PASS:-changeme}
+      ADMIN_CENTER_PORT: ${ADMIN_CENTER_PORT:-8015}
+    volumes:
+      # Read-only consumer of the app's audit-log volume.
+      - audit_logs:/var/log/simplevtt:ro
+    ports:
+      - "${ADMIN_CENTER_PORT:-8015}:${ADMIN_CENTER_PORT:-8015}"
+    command:
+      - sh
+      - -c
+      - uvicorn app.admin_center.main:app --host 0.0.0.0 --port "${ADMIN_CENTER_PORT:-8015}" --proxy-headers
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request,os; urllib.request.urlopen('http://localhost:'+os.environ.get('ADMIN_CENTER_PORT','8015')+'/healthz').read()\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
   backup:
     image: postgres:16-alpine  # contains pg_dump, multi-arch
     container_name: simplevtt-backup
