@@ -10,6 +10,54 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.462.0] - 2026-06-19 — "The Cured Affliction"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #19 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Lesser Restoration** (L2 abjuration, Bard/Cleric/Druid/Paladin/Ranger, RAW PHB p.255). **Second mechanical non-buff cast in the Phase 2 arc** (after Spare the Dying v2.461.0). New `/cast_lesser_restoration` endpoint takes a `condition_key` body param, validates the target carries that condition as a buff, calls the existing `_remove_buff` helper to strip it, and broadcasts a `feature_used` card.
+
+**Description:** RAW: "You touch a creature and can end either one disease or one condition afflicting it. The condition can be blinded, deafened, paralyzed, or poisoned." 1 action, V/S, Touch, Instantaneous.
+
+**Implementation:**
+
+- Body: `{character_id, target_character_id, condition_key}`. All three required.
+- Caster gate: knows Lesser Restoration OR is in `{bard, cleric, druid, paladin, ranger}`. 409 cannot_cast otherwise. RAW's five-class list — broader than Spare the Dying's cleric-only gate.
+- `condition_key` allowlist: `{blinded, deafened, paralyzed, poisoned, diseased}`. RAW lists "one disease or one condition" with the four conditions enumerated; this commit adds `diseased` as a fifth opt-in to cover the disease case (the engine uses a `diseased` buff key for in-game diseases). Anything outside this set → 400.
+- Mutation: calls the existing `_remove_buff(campaign_id, target_char_id, condition_key)` helper — same one used by every other buff-cleanup path. The helper handles the `buff_update` broadcast + the v2.38.0 paired-concentration-cleanup cascade automatically.
+- "Condition present" check: if the target's combatant doesn't carry the named buff at cast time, the endpoint returns `409 condition_not_present` with the actual list of buff keys echoed back (so the GM can see what IS there and pick another). RAW says the spell ends "either one disease or one condition afflicting it" — there must be something to end. (Compare to wasted slot semantics in tabletop: the cast fails if there's nothing to cure.)
+- Broadcasts: `feature_used` (chat card) + the auto `buff_update` from `_remove_buff` (so the target's buff list updates in the sheet UI).
+- Response: `{ok, feature, target_character_id, target_character_name, condition_key, removed}`.
+
+**Why "The Cured Affliction":** RAW frames the spell's outcome in terms of "affliction" — "one condition afflicting it." The fun name verbs the cure: an affliction is cured, named, and the target moves on. Matches the "directly mutates engine state" pattern that Spare the Dying opened (where the touch IS the cure). The "cured" prefix could become a recurring theme for surgical-state-mutation casts (a future Cure Wounds ship would naturally land as something-cured, since the mechanic is identical at the engine layer: read sheet, mutate field, broadcast canonical event).
+
+**Mechanical non-buff pattern, second exemplar.** The arc's bucket vocabulary is firming up:
+
+- **Buff-installing casts** (15 ships): substrate write + flag-read elsewhere.
+- **Pure-broadcast casts** (2 ships): no state change, just narration.
+- **Mechanical non-buff casts** (2 ships): surgical state mutation + canonical event broadcast. Spare the Dying flipped `death_saves.status`; Lesser Restoration removes a buff via `_remove_buff`. Both wire into existing engine paths without inventing new substrate.
+
+**5 new harness tests** at `tests/harness/test_cast_lesser_restoration.py`:
+
+- `test_cast_lr_removes_paralyzed` — happy path: install paralyzed on Krieger via the `/battle` PUT, cast Lesser Restoration → response `removed: True` + `/buffs` no longer lists `paralyzed`.
+- `test_cast_lr_condition_not_present_returns_409` — Krieger with no paralyzed → 409 `condition_not_present`.
+- `test_cast_lr_invalid_condition_key_returns_400` — `condition_key="charmed"` → 400 (RAW doesn't list charmed as an allowed Lesser Restoration target).
+- `test_cast_lr_missing_target_returns_400` — omit `target_character_id` → 400.
+- `test_cast_lr_non_caster_rejected` — Krieger (Barbarian) as the caster → 409.
+
+Canonical caster is Brother Tavik Stonebrow (Cleric 5); canonical target is Krieger Stonefist (Barbarian).
+
+Total harness count 3547 → 3552.
+
+MINOR — new HTTP endpoint + 5 new harness tests. No schema change. No new substrate.
+
+### Added
+- `app/routes/tabletop_routes.py::cast_lesser_restoration`: new `POST /api/campaign/{campaign_id}/cast_lesser_restoration` endpoint. Body: `{character_id, target_character_id, condition_key}`. Strips a named condition buff from the target via `_remove_buff` and broadcasts `feature_used`.
+- `tests/harness/test_cast_lesser_restoration.py`: 5 tests covering the happy path (paralyzed removed + sheet round-trip) + 4 error paths (condition not present / invalid key / missing target / non-caster).
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Lesser Restoration marked ✅ shipped v2.462.0 under Phase 2's Shipped subsection. Phase 2 has now shipped 19 spells/contracts; second mechanical non-buff cast on the arc.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3547 → 3552.
+
 ## [2.461.0] - 2026-06-19 — "The Sparing Touch"
 
 **Schema version:** 71

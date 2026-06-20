@@ -248,6 +248,22 @@ closure — runs indefinitely until Bucket A is exhausted.
   permanently GM-narrated; the engine surfaces the flag so the
   table can see Tongues is active. 3 harness tests.
 
+- **Lesser Restoration (L2)** — ✅ shipped v2.462.0. **Second
+  mechanical non-buff cast on the arc** (after Spare the Dying
+  v2.461.0). New `/cast_lesser_restoration` endpoint takes a
+  `condition_key` body param, validates the target carries that
+  condition as a buff, calls the existing `_remove_buff` helper
+  to strip it, and broadcasts a `feature_used` card. Body:
+  `{character_id, target_character_id, condition_key}`. Class
+  gate: bard/cleric/druid/paladin/ranger. `condition_key`
+  allowlist: `{blinded, deafened, paralyzed, poisoned,
+  diseased}`. 409 `condition_not_present` if no matching buff
+  on the target (RAW: must have something to cure). The
+  "mechanical non-buff" bucket now has two exemplars — death-
+  save-state mutation (v2.461.0) + buff-strip mutation
+  (v2.462.0) — both wiring into existing engine paths without
+  inventing new substrate. 5 harness tests.
+
 - **Spare the Dying (Cantrip)** — ✅ shipped v2.461.0. **First
   mechanical non-buff cast on the arc** — unlike Identify
   (v2.459.0) and Purify Food and Drink (v2.460.0), Spare the

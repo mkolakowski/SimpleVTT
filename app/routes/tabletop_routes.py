@@ -66362,6 +66362,177 @@ async def cast_spare_the_dying(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_lesser_restoration")
+async def cast_lesser_restoration(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.462.0 — Phase 2 #19 of
+    docs/plans/cast-and-broadcast-tail.md. Lesser Restoration
+    (L2 abjuration, Bard/Cleric/Druid/Paladin/Ranger, PHB p.255):
+
+      "You touch a creature and can end either one disease or one
+       condition afflicting it. The condition can be blinded,
+       deafened, paralyzed, or poisoned."
+
+    1 action, V/S, Touch, Instantaneous.
+
+    **Second mechanical non-buff cast in the Phase 2 arc** (after
+    Spare the Dying v2.461.0). The endpoint calls the existing
+    ``_remove_buff(target, condition_key)`` helper — same one
+    used by the buff-cleanup paths — and broadcasts a
+    ``feature_used`` card naming what was cured.
+
+    Body: ``{character_id, target_character_id, condition_key}``.
+    All three required. ``condition_key`` must be one of
+    ``{blinded, deafened, paralyzed, poisoned, diseased}``
+    (RAW's list of one disease + four conditions).
+
+    Errors:
+      - 400 missing fields / invalid condition_key
+      - 404 caster / target not found
+      - 409 cannot_cast (not on the class list)
+      - 409 condition_not_present (target has no matching buff)
+
+    Response: ``{ok, feature, target_character_id, condition_key,
+    removed}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id_raw = body.get("target_character_id")
+    if not target_char_id_raw:
+        raise HTTPException(400, "target_character_id is required")
+    target_char_id = int(target_char_id_raw)
+    condition_key = (
+        str(body.get("condition_key") or "").strip().lower()
+    )
+    _ALLOWED_CONDITIONS = {
+        "blinded", "deafened", "paralyzed", "poisoned", "diseased",
+    }
+    if condition_key not in _ALLOWED_CONDITIONS:
+        raise HTTPException(
+            400,
+            f"condition_key must be one of {sorted(_ALLOWED_CONDITIONS)}",
+        )
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_lr = any(
+        (s.get("_slug") == "lesser-restoration")
+        or (str(s.get("name", "")).lower() == "lesser restoration")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {
+        "bard", "cleric", "druid", "paladin", "ranger",
+    }
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_lr and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": (
+                "knows Lesser Restoration, or "
+                "bard/cleric/druid/paladin/ranger"
+            ),
+            "got_class": _cls,
+        })
+
+    # Look up the target's active buffs from the hub state. Lesser
+    # Restoration requires the named condition to be PRESENT to
+    # remove — otherwise it's a wasted slot, signaled as 409.
+    state = hub.get_battle(campaign_id)
+    target_buffs: list = []
+    if state:
+        for c in state.get("combatants") or []:
+            if c.get("char_id") == target_char.id:
+                target_buffs = list(c.get("buffs") or [])
+                break
+    has_condition = any(
+        (b or {}).get("key") == condition_key for b in target_buffs
+    )
+    if not has_condition:
+        return JSONResponse(status_code=409, content={
+            "error": "condition_not_present",
+            "expected": (
+                f"target carries a '{condition_key}' buff"
+            ),
+            "target_buff_keys": [
+                str((b or {}).get("key") or "") for b in target_buffs
+            ],
+        })
+
+    # Remove the buff via the existing helper (handles the
+    # buff_update broadcast + paired-concentration cleanup
+    # cascade per v2.38.0).
+    removed = await _remove_buff(
+        campaign_id, target_char.id, condition_key,
+    )
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🩹 Lesser Restoration",
+            "feature_desc": (
+                f"{char.name} touches {target_char.name} — ends "
+                f"their {condition_key} condition."
+            ),
+            "source": "lesser-restoration",
+            "target_character_id": target_char.id,
+            "target_character_name": target_char.name,
+            "condition_key": condition_key,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "lesser-restoration",
+        "target_character_id": target_char.id,
+        "target_character_name": target_char.name,
+        "condition_key": condition_key,
+        "removed": bool(removed),
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_gust")
 async def cast_gust(
     campaign_id: int,
