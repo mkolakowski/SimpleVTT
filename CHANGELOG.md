@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.485.1] - 2026-06-20 — "The Tunnel Map"
+
+**Schema version:** 71
+
+**Commit summary:** Documents running the Admin Center behind a Cloudflare Tunnel — including an external `cloudflared` on another machine / Cloudflare account, not the project's own stack. Doc-only.
+
+**Description:** A user asked whether the Admin Center works behind a separate Cloudflare tunnel they already run elsewhere. It does, with three things to get right; this commit folds that guidance into the wiki so it's discoverable, not buried in chat.
+
+**Implementation:**
+
+- `docs/wiki/admin-center.md`: new "Behind a Cloudflare Tunnel (or other reverse proxy)" section —
+  1. The tunnel needs its **own ingress rule** for port 8015 (the `→ :8013` app rule doesn't cover it); same-host vs different-machine sub-cases, with the "run `cloudflared` on the Docker network and stop publishing 8015" hardening note.
+  2. `TRUSTED_PROXY_HOPS=1` on the **app** service is required or every audit event (and thus the Admin Center's IP stats + fail2ban panel) records the tunnel's internal IP instead of the real client.
+  3. fail2ban *bans* only bite tunnel traffic via `FAIL2BAN_ACTION=cloudflare-bouncer` with a token for the **same zone the tunnel uses** — the panel displays bans either way, but in-container iptables can't touch tunnel traffic.
+  - Plus a "don't expose it unprotected" note (Cloudflare Access / no public hostname).
+
+PATCH — doc-only, no code or schema change. (Harness-test exempt per the doc-only rule.)
+
+### Changed
+- `docs/wiki/admin-center.md`: added the Cloudflare-Tunnel / reverse-proxy operations section.
+
 ## [2.485.0] - 2026-06-20 — "The Census"
 
 **Schema version:** 71

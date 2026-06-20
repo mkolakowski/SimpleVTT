@@ -60,6 +60,84 @@ credentials into the compose file. Every other path requires auth.
 
 ---
 
+## Behind a Cloudflare Tunnel (or other reverse proxy)
+
+The Admin Center works behind a Cloudflare Tunnel — including an
+**external `cloudflared` you already run on another machine or
+Cloudflare account**, not anything this project sets up. It's plain
+HTTP + basic-auth, and Cloudflare passes the `Authorization` header
+through untouched. Three things to get right:
+
+### 1. Give the tunnel its own ingress rule
+
+The rule that routes to the main app (`→ :8013`) does **not** cover
+the Admin Center — add a second hostname pointing at port 8015. In
+your `cloudflared` config:
+
+```yaml
+ingress:
+  - hostname: vtt.example.com
+    service: http://localhost:8013        # main app
+  - hostname: vtt-admin.example.com
+    service: http://localhost:8015        # admin center
+  - service: http_status:404
+```
+
+- **`cloudflared` on the same host** as the Docker stack →
+  `http://localhost:8015` works as shipped (compose publishes 8015 on
+  all host interfaces).
+- **`cloudflared` on a different machine/network** → it can't reach
+  `localhost:8015`; target the Docker host's reachable IP
+  (`http://<docker-host-ip>:8015`) and ensure that port is routable.
+  Cleaner: run `cloudflared` on the same Docker network and target
+  `http://admin-center:8015`, then stop publishing 8015 to the host
+  at all.
+
+### 2. Set `TRUSTED_PROXY_HOPS` for real visitor IPs
+
+Through a tunnel the app sees every request coming **from the
+`cloudflared` connector**, not the real client — the real IP rides in
+`X-Forwarded-For` / `CF-Connecting-IP`. The audit log (and therefore
+the Admin Center's traffic stats, top-IPs, and fail2ban panel) only
+trusts that header when you set, on the **app** service:
+
+```
+TRUSTED_PROXY_HOPS=1
+```
+
+One `cloudflared` hop = `1`. Without it, every event records the
+tunnel's internal IP and the IP stats are meaningless.
+
+### 3. fail2ban *bans* need the edge action (and a matching zone)
+
+The Admin Center **displays** whatever fail2ban records regardless.
+But fail2ban's default action bans via the container's iptables,
+which does nothing to tunnel traffic (packets arrive from
+`cloudflared`, not the client). To actually block a tunnel visitor,
+use the Cloudflare bouncer — and make sure its token is for the
+**same Cloudflare zone your tunnel uses**:
+
+```
+FAIL2BAN_ACTION=cloudflare-bouncer
+CLOUDFLARE_API_TOKEN=...      # SAME zone as the tunnel
+CLOUDFLARE_ZONE_ID=...
+```
+
+If the token is for a different account/zone than the tunnel, the ban
+is created but never applies. See
+[fail2ban deployment](/wiki/fail2ban-deployment) for the bouncer
+setup.
+
+### Don't expose it unprotected
+
+Publishing the Admin Center means publishing your audit log + banned
+IPs + usernames. At minimum change `ADMIN_CENTER_PASS`. Strongly
+better: put **Cloudflare Access (Zero Trust)** in front of the admin
+hostname, or give it no public hostname at all and reach it over the
+LAN, an SSH tunnel, or a `cloudflared access` session.
+
+---
+
 ## What it shows (v2.483.0)
 
 ### Traffic signals
