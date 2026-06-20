@@ -66,6 +66,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-permanent-ability-increase-reconciliation" in resp.text
     # v2.49.167: PC vs NPC combat systems audit doc listed.
     assert "/wiki/pc-vs-npc-systems" in resp.text
+    # v2.476.0: fail2ban deployment operator guide listed.
+    assert "/wiki/fail2ban-deployment" in resp.text
     # v2.49.168: targeting system visual guide listed.
     assert "/wiki/targeting-system-guide" in resp.text
     # v2.49.182: Battle & Characters tab sheets visual guide listed.
@@ -206,6 +208,25 @@ async def test_wiki_pc_vs_npc_systems_doc_renders():
     assert "pc vs npc" in resp.text.lower()
     assert "<h1" in resp.text
     assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_fail2ban_deployment_guide_renders():
+    """v2.476.0: GET /wiki/fail2ban-deployment — markdown source
+    under docs/wiki/ rendered + wrapped + nav-injected. Closes the
+    Phase 4 fail2ban arc per the doc-surfacing rule in
+    CLAUDE.md."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/fail2ban-deployment")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    # H1 contains "fail2ban deployment".
+    assert "fail2ban deployment" in resp.text.lower()
+    assert "<h1" in resp.text
+    assert 'class="wiki-nav"' in resp.text
+    # Spot-check that a key operator step is present (the threshold
+    # tuning section). Anchors against a future edit that
+    # accidentally truncates the guide.
+    assert "FAIL2BAN_LOGIN_MAXRETRY" in resp.text
 
 
 async def test_wiki_targeting_system_guide_renders():

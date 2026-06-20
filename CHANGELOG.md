@@ -10,6 +10,59 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.476.0] - 2026-06-20 — "The Operator's Wiki"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 4g of [`docs/plans/fail2ban-crowdsec-integration.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/fail2ban-crowdsec-integration.md) — closes the Phase 4 arc. New operator deployment guide at `docs/wiki/fail2ban-deployment.md` walks an operator from `docker compose --profile fail2ban up -d` through ban-action selection (Cloudflare vs ipset) + verification + the production checklist + common-pitfall troubleshooting. Wiki surface per the doc-surfacing rule in [`CLAUDE.md`](CLAUDE.md): landing-page row, on-disk index row, per-slug harness test, landing-page assertion.
+
+**Description:** Phase 4a–f built the wiring. Phase 4g closes the loop by making sure an operator who lands on the SimpleVTT wiki can find the deployment story without digging into design plans. The guide is task-oriented — picks up where the high-level plan doc ends and gets into concrete commands an operator runs at a terminal.
+
+**Why a separate wiki guide vs. embedding in the plan doc:** the plan doc is contributor-facing (threat model, architecture, what gets shipped when). The wiki guide is operator-facing (commands to type, configs to set, things to check). Different audiences want different prose. The wiki guide cross-links to the plan doc for readers who want the "why" behind any specific knob.
+
+**Implementation:**
+
+- `docs/wiki/fail2ban-deployment.md` (new, ~250 lines): 6-step deployment walkthrough — overview table mapping each phase to the version it shipped in + what it gives the operator; "pick your ban action" decision matrix; `.env` tuning rationale; per-action setup instructions (Cloudflare + ipset); bring-up + verify section; production checklist; common-pitfalls troubleshooting. Cross-links to the plan doc and to the v2.430.0 Cloudflare integration plan.
+- `app/templates/wiki.html`: new landing-page row under the "Demo mode" row in the "Available guides" table. Status `✅ shipped`, audience `Operators`.
+- `docs/wiki/README.md`: matching index row.
+- `tests/harness/test_wiki.py`:
+  - New `test_wiki_fail2ban_deployment_guide_renders` follows the `test_wiki_pc_vs_npc_systems_doc_renders` template — asserts the slug returns 200, the H1 contains "fail2ban deployment", the wiki nav is injected, and a spot-check of operator-critical content (`FAIL2BAN_LOGIN_MAXRETRY` appears) anchors against future edits that accidentally truncate the guide.
+  - `test_wiki_home_renders` landing-page assertion list gains `/wiki/fail2ban-deployment`.
+
+**Wiki guide structure (the operator's experience):**
+
+1. **At a glance.** Phase table → "what do I get for opting in." 5 rows, 1 per Phase 4 sub-phase, mapped to the version they shipped + a 1-line "what this gives you."
+2. **Step 1 — pick your ban action.** Decision matrix: Cloudflare for sites behind Cloudflare (zero host privilege); ipset for sites NOT behind Cloudflare (requires `network_mode: host` + `cap_add: [NET_ADMIN]`); in-container iptables for testing only.
+3. **Step 2 — copy `.env.example` to `.env` and tune.** Defaults explained + when to bump them (corporate NAT → higher maxretry, magic-link-replay-bantime is intentionally 24 h because replay is never legit).
+4. **Step 3 — turn on a real ban action.** Per-option setup blocks.
+5. **Step 4 — bring up the profile.** One-line `docker compose --profile fail2ban up -d`.
+6. **Step 5 — verify it's working.** Three checks: `fail2ban-client status simplevtt-auth` for the loaded jail, `fail2ban-client get` for the env-derived thresholds, and the v2.475.0 smoke test for the full chain.
+7. **Step 6 — production checklist.** Six items: `TRUSTED_PROXY_HOPS=1` behind a reverse proxy, pick `FAIL2BAN_ACTION`, persist `fail2ban_data` volume, review threat model, monitor via existing logs.
+8. **Common pitfalls.** Three named gotchas with symptoms + fixes (container restart-loop on first boot, "Currently banned: 0" after many failed logins, `TRUSTED_PROXY_HOPS=0` with Cloudflare in front).
+9. **Where to look next.** Cross-links to the plan, CrowdSec sibling, and v2.430.0 Cloudflare integration.
+
+**Why "The Operator's Wiki":** v2.468.0 named the Phase 4 arc "The Operator's Hand" — the operator-facing affordances added at each sub-phase. v2.476.0 lands the **discoverability** half of those affordances. The hand is what the operator does; the wiki is what they read to know they can do it.
+
+**1 new harness test** (33 prior Phase 4a–e + 2 v2.475.0 end-to-end + 1 Phase 4g landing-page test = 36 fail2ban-related tests in the suite):
+
+- `test_wiki_fail2ban_deployment_guide_renders` — slug returns 200, H1 + nav + key operator content present.
+
+The existing `test_wiki_home_renders` gains a 1-line landing-page link assertion to anchor that the guide is reachable from the wiki home.
+
+Total harness count 3614 → 3615.
+
+MINOR — new operator wiki guide + landing-page row + index row + per-slug harness test + landing-page assertion. No app code change. No schema change.
+
+### Added
+- `docs/wiki/fail2ban-deployment.md`: operator deployment guide.
+- `app/templates/wiki.html`: landing-page row for the new guide.
+- `docs/wiki/README.md`: matching index-table row.
+- `tests/harness/test_wiki.py::test_wiki_fail2ban_deployment_guide_renders`: per-slug harness test.
+
+### Changed
+- `tests/harness/test_wiki.py::test_wiki_home_renders`: landing-page assertion list gains `/wiki/fail2ban-deployment`.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3614 → 3615.
+
 ## [2.475.0] - 2026-06-20 — "The Banhammer Lives"
 
 **Schema version:** 71
