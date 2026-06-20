@@ -10,6 +10,74 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.473.0] - 2026-06-19 — "The Privileged Sentry"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 4e of [`docs/plans/fail2ban-crowdsec-integration.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/fail2ban-crowdsec-integration.md). Adds the ipset bouncer action — when fail2ban decides to ban an IP, it lands in a host-side `simplevtt-bans` ipset that an iptables `-j DROP` rule references. Requires the fail2ban container to run with `network_mode: host` + `cap_add: [NET_ADMIN]`, which the new `docs/integrations/fail2ban/docker-compose.fail2ban-ipset.yml` override provides. Opt-in twice over: enable `--profile fail2ban` AND pass the override to compose.
+
+**Description:** Phase 4d (Cloudflare bouncer) gives operators an edge-banning path with zero host privilege. Phase 4e fills the other half — for operators NOT behind Cloudflare, the ipset action drops banned traffic at the host firewall directly. The "privileged twice" opt-in pattern means the default `docker compose --profile fail2ban up` flow stays unprivileged; the privileged config is gated behind both the profile flag AND an explicit `-f` override.
+
+**Implementation:**
+
+- **New file: `docs/integrations/fail2ban/action.d/ipset-bouncer.conf`.**
+  - `actionstart`: `ipset create -exist simplevtt-bans hash:ip timeout 0` + idempotent `iptables -C INPUT -m set --match-set simplevtt-bans src -j DROP || iptables -I INPUT ...` so the DROP rule is installed exactly once.
+  - `actionstop`: `iptables -D ... 2>/dev/null || true` + `ipset destroy ... 2>/dev/null || true` — both swallow errors so a half-state container shutdown doesn't fail loudly.
+  - `actionban`: `ipset add -exist simplevtt-bans <ip> timeout <bantime>` — fail2ban substitutes `<ip>` + `<bantime>` (seconds) at fire time.
+  - `actionunban`: `ipset del -exist simplevtt-bans <ip>`.
+  - No `[Init]` block — the ipset name is hardcoded `simplevtt-bans` (operator-tunable knobs not worth a .env line for v1).
+- **New file: `docs/integrations/fail2ban/docker-compose.fail2ban-ipset.yml`.** Minimal override that:
+  - Adds `network_mode: host` so the container's ipset / iptables commands reach the host's network namespace.
+  - Adds `cap_add: [NET_ADMIN]` — the narrowest capability that lets ipset + iptables work without root-on-host.
+  - Sets `ports: []` as a no-op safety net (since `network_mode: host` already forbids the bridge port mapping).
+- The override file lives under `docs/integrations/fail2ban/` rather than at the repo root so it doesn't pollute the top-level `docker-compose*.yml` namespace. Operators invoke with explicit `-f docs/integrations/fail2ban/docker-compose.fail2ban-ipset.yml`.
+- The Phase 4d `FAIL2BAN_ACTION=ipset-bouncer` setting and the existing render-jail.sh action.d rendering pass cover the action-config side automatically — no compose changes to the main docker-compose.yml.
+
+**The "opt-in twice over" design:**
+
+1. The `fail2ban` service itself is profile-gated (Phase 4b). Default `docker compose up` doesn't run anything.
+2. The privileged override is NOT loaded automatically. Operator must pass `-f docs/integrations/fail2ban/docker-compose.fail2ban-ipset.yml` explicitly.
+
+Both gates have to fall for the privileged stack to come up. A test (`test_base_compose_does_not_elevate_fail2ban`) anchors this property — if a future edit added `cap_add` or `network_mode: host` to the base compose's fail2ban service, the test fails before merge.
+
+**Safety properties of the actionstart / actionstop lifecycle:**
+
+- `ipset create -exist` is idempotent — a re-run after a crash doesn't EBUSY.
+- `iptables -C ... || iptables -I ...` checks for the rule's existence before inserting — a re-run doesn't duplicate the DROP rule.
+- `iptables -D ... 2>/dev/null || true` + `ipset destroy ... 2>/dev/null || true` swallow errors so a half-state shutdown doesn't fail.
+- All three properties have explicit harness tests (`test_ipset_actionstart_is_idempotent`).
+
+**Why "The Privileged Sentry":** the operator who runs this is consciously trading container isolation for real banning reach. The container becomes a sentry stationed AT the host network namespace, watching the same wire the rest of the host sees. The name signals the trade — "Privileged" names the cost; "Sentry" names what you get for it.
+
+**Why network_mode: host instead of `--privileged`:** `--privileged` grants every capability + access to host devices, which is wildly broader than what fail2ban needs. `network_mode: host` + `cap_add: [NET_ADMIN]` is the minimum-viable elevation. Host devices, kernel modules, mount points all stay out of reach.
+
+**Why no env-driven ipset name:** the action's `simplevtt-bans` is hardcoded. An operator running multiple fail2ban instances against the same host would need separate ipsets — but that's a pretty exotic case, and they can fork the action.d file. Not worth a `.env` knob that 99% of operators leave alone.
+
+**8 new harness tests** at `tests/harness/test_fail2ban_ipset_bouncer.py`. YAML + text-file validation pattern.
+
+- `test_ipset_action_file_exists` — sanity check.
+- `test_ipset_action_has_create_and_destroy_lifecycle` — all 4 action keys present + body calls ipset + iptables.
+- `test_ipset_actionstart_is_idempotent` — `-exist` + `-C ... || -I ...` patterns anchored.
+- `test_ipset_actionban_uses_ip_and_bantime_placeholders` — `<ip>` + `<bantime>` present.
+- `test_ipset_override_file_exists` — sanity check on the override.
+- `test_override_sets_network_mode_host_and_net_admin` — privilege config landed.
+- `test_base_compose_does_not_elevate_fail2ban` — **the design anchor**. Base compose has no `network_mode` or `cap_add` on the fail2ban service.
+- `test_override_only_touches_fail2ban_service` — scope-creep anchor. The override redefines only `fail2ban`, not other services.
+
+All 22 prior Phase 4a–d tests continue to pass.
+
+Total harness count 3601 → 3609.
+
+MINOR — new action.d config + new compose override + 8 new harness tests. No schema change. No new app code. Default `--profile fail2ban` behavior unchanged.
+
+### Added
+- `docs/integrations/fail2ban/action.d/ipset-bouncer.conf`: ipset hash:ip + iptables DROP-from-set lifecycle.
+- `docs/integrations/fail2ban/docker-compose.fail2ban-ipset.yml`: privilege-elevating override (network_mode: host + cap_add: NET_ADMIN). NOT loaded by default — operator opts in via `-f`.
+- `tests/harness/test_fail2ban_ipset_bouncer.py`: 8 wiring-contract tests + the base-compose privilege anchor.
+
+### Changed
+- `docs/test-harness-coverage.md`: total-test-count nudges 3601 → 3609.
+
 ## [2.472.0] - 2026-06-19 — "The Edge Bouncer"
 
 **Schema version:** 71

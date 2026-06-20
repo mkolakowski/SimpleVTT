@@ -1,0 +1,45 @@
+# v2.473.0 — fail2ban Phase 4e. Compose override that elevates the
+# fail2ban container to manage the HOST's network namespace +
+# iptables, so action.d/ipset-bouncer.conf can drop banned IPs at
+# the host firewall.
+#
+# **This is opt-in twice over:**
+#   1. The fail2ban service itself is profile-gated (Phase 4b) —
+#      base `docker compose up` leaves it alone.
+#   2. This override is NOT loaded automatically — the operator
+#      invokes it explicitly with -f to enable the privileged bits.
+#
+# Bring up the full ipset-banning stack with:
+#
+#     docker compose \
+#         -f docker-compose.yml \
+#         -f docs/integrations/fail2ban/docker-compose.fail2ban-ipset.yml \
+#         --profile fail2ban up -d
+#
+# And in .env:
+#     FAIL2BAN_ACTION=ipset-bouncer
+#
+# **Safety notes:**
+# - `network_mode: host` removes container network isolation; the
+#   fail2ban process can read + mutate the host's iptables. A
+#   misconfigured filter regex could end up banning legitimate
+#   traffic AT THE HOST. Test changes against the wiremock first.
+# - `cap_add: [NET_ADMIN]` is the kernel capability that lets
+#   `ipset` + `iptables` work without root-on-host. The container
+#   still runs as a non-root user inside; NET_ADMIN is the
+#   narrowest cap that gets the job done.
+# - For shared-tenancy or strict-isolation hosts, do NOT enable
+#   this override. Use the Cloudflare bouncer (Phase 4d) instead
+#   — it has zero host-side privilege requirements.
+
+services:
+  fail2ban:
+    # Share the host's network namespace so iptables / ipset
+    # commands inside the container reach the host's rules.
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    # network_mode: host conflicts with the default bridge ports
+    # mapping. We don't expose any ports anyway, so this is a no-op
+    # safety net.
+    ports: []
