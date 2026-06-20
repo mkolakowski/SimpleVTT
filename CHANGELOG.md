@@ -10,6 +10,42 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.482.0] - 2026-06-20 — "The Right of Access"
+
+**Schema version:** 71
+
+**Commit summary:** Ships `GET /api/users/me/export` — the GDPR Article 15 (right of access) + Article 20 (data portability) self-serve export filed as a P2 follow-up to the v2.479.0 privacy policy. A logged-in user pulls their own full record set as a single JSON archive, replacing the manual operator-run SQL recipe the policy documented (Section 5.1).
+
+**Description:** v2.479.0's privacy policy documented an operator running SQL queries to satisfy an access/portability request. v2.482.0 makes it self-serve: the authenticated user gets a single machine-readable JSON archive (Article 20's "structured, commonly used, machine-readable" requirement). The export deliberately **omits** credential material — an access export must never become a credential-leak vector — and is rate-limited + audited.
+
+**Implementation:**
+
+- `app/routes/user_routes.py`: new `GET /api/users/me/export`. Gathers account fields + the full preferences block, campaigns owned (`gm_user_id == user.id`), campaign memberships (with resolved campaign names in one batched query), characters owned (full `sheet`), and dice rolls authored. Excludes the bcrypt `password_hash` and the Google `google_sub` raw value, surfacing `has_password` / `has_google_sso` booleans instead. Emits a `user.data_export` audit event (a full PII pull belongs in the security log — a hijacked-session bulk-dump leaves a trace). Sets `Content-Disposition: attachment` so a browser hitting the URL saves the archive.
+- `app/user_export.py` (new): FastAPI-free module holding the pure, unit-testable bits — `export_cooldown_remaining()` (the rate-limit math), `export_cooldown_seconds()` (env read), `iso()` (datetime serialization), and the in-process `LAST_EXPORT_MONOTONIC` registry. Same dependency-light pattern as `app/audit_log.py` / `app/visitor_log.py` so the harness can import + test it on a host without the web stack.
+- Rate limit: one export per `USER_DATA_EXPORT_COOLDOWN_SECONDS` (default 24h) per user → 429 + `Retry-After` when tripped. Best-effort in-process (single-container deploy; fail-open on restart, the safe direction for a data-access right). Bypassed under TEST_MODE so the harness exercises the endpoint deterministically; the 429 path is unit-tested via the pure helper.
+- `.env.example`: `USER_DATA_EXPORT_COOLDOWN_SECONDS` knob (commented, default 86400).
+- `docs/wiki/privacy.md`: Section 5.1 rewritten to document the shipped self-serve endpoint (was a "filed in TODO" note); audit catalog Section 2.3 gains `user.data_export` + backfills the v2.480.0 `visitor.request` row.
+
+**Scope note:** the original TODO mentioned "chat messages authored" + "recent audit-log lines about them." Neither shipped: SimpleVTT has no chat-message table (chat rides dice-roll notes, which ARE exported), and bundling raw audit lines into a self-serve export would leak the security-log structure — that access stays the operator-run `grep` path documented in Section 5.1.
+
+**Harness changes:**
+
+- `tests/harness/test_user_data_export.py` (new): 7 tests. Live (httpx): happy-path 200 + archive shape + `Content-Disposition` + the credential-omission assertions; `generated_for_user_id` self-scoping; 401 for an unauthenticated caller. In-process (no container): 4 `export_cooldown_remaining` unit tests covering never-exported / window-elapsed / within-window / disabled-gate.
+
+Total harness count → 3649 (+7 from this commit's `test_user_data_export.py`).
+
+MINOR — new authenticated read endpoint, no schema change, no behavior change to existing surfaces.
+
+### Added
+- `GET /api/users/me/export`: GDPR Article 15/20 self-serve JSON data export (account + preferences + campaigns owned + memberships + characters + dice rolls). Credential material omitted; rate-limited; audited via `user.data_export`.
+- `app/user_export.py`: FastAPI-free cooldown + serialization helpers for the export endpoint.
+- `.env.example`: `USER_DATA_EXPORT_COOLDOWN_SECONDS` (default 86400).
+- `tests/harness/test_user_data_export.py`: 7 tests (3 live + 4 cooldown unit).
+
+### Changed
+- `docs/wiki/privacy.md`: Section 5.1 documents the shipped self-serve export; Section 2.3 audit catalog adds `user.data_export` + `visitor.request`.
+- `TODO.md` / `TODONE.md`: the Article 15/20 export item moves to the shipped archive.
+
 ## [2.481.0] - 2026-06-20 — "The Flood Gate"
 
 **Schema version:** 71

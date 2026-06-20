@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3642 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.481.0, 2026-06-20).
+**Total tests:** 3649 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.482.0, 2026-06-20).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5484,6 +5484,22 @@ Static config-shape validation for the opt-in `simplevtt-flood` fail2ban jail th
 | `test_env_example_gates_flood_off_by_default` | `.env.example` carries every `FAIL2BAN_FLOOD_*` default and `FAIL2BAN_FLOOD_ENABLED=false` so a fresh `.env` leaves the jail off. |
 | `test_compose_passes_flood_env_vars` | The compose fail2ban service plumbs every `FAIL2BAN_FLOOD_*` var, with the enabled gate defaulting to `false`. |
 | `test_render_script_allowlist_includes_flood_placeholders` | `render-jail.sh`'s substitution allowlist covers all four placeholders. |
+
+---
+
+## User data export (GDPR Article 15/20 — v2.482.0)
+
+`GET /api/users/me/export` — a logged-in user's self-serve data export. Live endpoint tests (httpx) + pure cooldown-helper unit tests (`app.user_export`, FastAPI-free). Lives in `tests/harness/test_user_data_export.py`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_export_happy_path` | 200 + `Content-Disposition: attachment`; archive carries the 8 top-level keys; `account` has the email, role, `has_password`/`has_google_sso` booleans, preferences block; `password_hash`/`google_sub` are NOT present; collections are lists. |
+| `test_export_generated_for_self` | `generated_for_user_id` matches `account.id` — the archive is scoped to the caller, never another user. |
+| `test_export_requires_auth` | Unauthenticated GET → 401 (no empty/foreign archive leak). |
+| `test_cooldown_zero_when_never_exported` | `export_cooldown_remaining` returns 0 when the user has never exported. |
+| `test_cooldown_zero_when_window_elapsed` | Returns 0 once the cooldown window has fully elapsed. |
+| `test_cooldown_positive_within_window` | Returns the correct remaining seconds within the window. |
+| `test_cooldown_disabled_when_window_nonpositive` | `cooldown_seconds <= 0` disables the gate (returns 0). |
 
 ---
 

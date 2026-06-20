@@ -1,11 +1,16 @@
 """User-facing settings and character pages."""
 from __future__ import annotations
 
+import logging
+import os
+import time
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from ..audit_log import audit
 from ..auth import require_user
 from ..database import get_db
 from ..models import (
@@ -14,10 +19,18 @@ from ..models import (
     Campaign,
     CampaignMembership,
     Character,
+    DiceRoll,
     User,
     UserAudioCategoryPref,
     VALID_THEMES,
 )
+from ..user_export import (
+    LAST_EXPORT_MONOTONIC,
+    export_cooldown_remaining,
+    export_cooldown_seconds,
+    iso as _iso,
+)
+from ..version import APP_VERSION
 from ..character_presets import build_sheet as build_preset_sheet
 from ..character_presets import list_presets, preset_template
 from ..game_systems import get_system
@@ -537,3 +550,189 @@ def update_reaction_prompt_mode(
     user.reaction_prompt_mode = body.mode
     db.commit()
     return {"ok": True, "reaction_prompt_mode": body.mode}
+
+
+# ---------------------------------------------------------------------------
+# v2.482.0 — GDPR Article 15 (right of access) + Article 20 (data
+# portability) self-serve export. Replaces the manual SQL recipe the
+# privacy policy (docs/wiki/privacy.md Section 5.1) documented for the
+# operator with a logged-in user pulling their own record set as a
+# single machine-readable JSON archive. Per Article 20 the format must
+# be "structured, commonly used, machine-readable" — JSON satisfies
+# that.
+# ---------------------------------------------------------------------------
+
+def _test_mode() -> bool:
+    return os.environ.get("TEST_MODE", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+@router.get("/api/users/me/export")
+def export_my_data(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """GDPR Article 15 / 20 self-serve data export.
+
+    Returns every piece of personal data SimpleVTT holds about the
+    authenticated user as a single JSON archive: account fields +
+    preferences, campaigns they own, campaign memberships, characters
+    they own (full sheet), and dice rolls they authored.
+
+    Deliberately **excludes** the bcrypt ``password_hash`` and the
+    Google ``google_sub`` raw value — an access export must not become
+    a credential-leak vector. Their presence is surfaced as the
+    ``has_password`` / ``has_google_sso`` booleans instead, which is the
+    fact a data subject actually needs (which sign-in methods are on
+    their account).
+
+    Rate-limited to one export per ``USER_DATA_EXPORT_COOLDOWN_SECONDS``
+    (default 24h) per user, bypassed under TEST_MODE so the harness can
+    exercise it repeatedly. The 429 path is unit-tested via
+    ``app.user_export.export_cooldown_remaining``.
+    """
+    if not _test_mode():
+        remaining = export_cooldown_remaining(
+            now=time.monotonic(),
+            last_export_at=LAST_EXPORT_MONOTONIC.get(user.id),
+            cooldown_seconds=export_cooldown_seconds(),
+        )
+        if remaining > 0:
+            # 429 + Retry-After so a client can back off politely.
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "Data export was already requested recently. "
+                    f"Try again in {remaining} seconds."
+                ),
+                headers={"Retry-After": str(remaining)},
+            )
+
+    campaigns_owned = (
+        db.query(Campaign).filter(Campaign.gm_user_id == user.id).all()
+    )
+    memberships = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.user_id == user.id)
+        .all()
+    )
+    # Resolve membership campaign names in one query (no per-row lookups).
+    member_campaign_ids = [m.campaign_id for m in memberships]
+    campaign_names: dict[int, str] = {}
+    if member_campaign_ids:
+        for cid, cname in (
+            db.query(Campaign.id, Campaign.name)
+            .filter(Campaign.id.in_(member_campaign_ids))
+            .all()
+        ):
+            campaign_names[cid] = cname
+    characters = (
+        db.query(Character).filter(Character.owner_user_id == user.id).all()
+    )
+    rolls = (
+        db.query(DiceRoll)
+        .filter(DiceRoll.user_id == user.id)
+        .order_by(DiceRoll.id.asc())
+        .all()
+    )
+
+    archive = {
+        "export_format_version": 1,
+        "app_version": APP_VERSION,
+        "generated_for_user_id": user.id,
+        "note": (
+            "GDPR Article 15/20 self-serve export. Contains the personal "
+            "data SimpleVTT holds about you. Sensitive credential "
+            "material (password hash, Google SSO id) is intentionally "
+            "omitted — see has_password / has_google_sso. For the full "
+            "data inventory see /wiki/privacy."
+        ),
+        "account": {
+            "id": user.id,
+            "email": user.email,
+            "display_name": user.display_name,
+            "role": "admin" if user.is_admin else "user",
+            "is_disabled": bool(user.is_disabled),
+            "has_password": bool(user.password_hash),
+            "has_google_sso": bool(user.google_sub),
+            "created_at": _iso(user.created_at),
+            "preferences": {
+                "theme": user.theme,
+                "font_preference": user.font_preference,
+                "battle_tab_color": user.battle_tab_color,
+                "player_tab_color": user.player_tab_color,
+                "ui_scale": user.ui_scale,
+                "font_scale": user.font_scale,
+                "zoom_speed": user.zoom_speed,
+                "animate_gifs": bool(user.animate_gifs),
+                "roll_log_position": user.roll_log_position,
+                "glass_alpha": user.glass_alpha,
+                "reaction_prompt_mode": user.reaction_prompt_mode,
+                "sepia_texture": bool(user.sepia_texture),
+            },
+        },
+        "campaigns_owned": [
+            {"id": c.id, "name": c.name, "created_at": _iso(c.created_at)}
+            for c in campaigns_owned
+        ],
+        "campaign_memberships": [
+            {
+                "campaign_id": m.campaign_id,
+                "campaign_name": campaign_names.get(m.campaign_id),
+                "is_gm": bool(m.is_gm),
+                "created_at": _iso(m.created_at),
+            }
+            for m in memberships
+        ],
+        "characters": [
+            {
+                "id": ch.id,
+                "name": ch.name,
+                "campaign_id": ch.campaign_id,
+                "template": ch.template,
+                "created_at": _iso(ch.created_at),
+                "sheet": ch.sheet,
+            }
+            for ch in characters
+        ],
+        "dice_rolls": [
+            {
+                "id": r.id,
+                "campaign_id": r.campaign_id,
+                "character_id": r.character_id,
+                "expression": r.expression,
+                "total": r.total,
+                "note": r.note,
+                "visibility": r.visibility.value
+                if hasattr(r.visibility, "value")
+                else r.visibility,
+                "created_at": _iso(r.created_at),
+            }
+            for r in rolls
+        ],
+    }
+
+    if not _test_mode():
+        LAST_EXPORT_MONOTONIC[user.id] = time.monotonic()
+
+    # Audit the access so a hijacked-session bulk-dump leaves a trace
+    # (the export is a full PII pull; it belongs in the security log).
+    audit(
+        "user.data_export",
+        level=logging.INFO,
+        request=request,
+        user_id=user.id,
+        characters=len(characters),
+        rolls=len(rolls),
+    )
+
+    # Content-Disposition nudges a browser hitting the URL directly to
+    # save the archive as a file rather than render it inline.
+    return JSONResponse(
+        archive,
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="simplevtt-export-user-{user.id}.json"'
+            ),
+        },
+    )

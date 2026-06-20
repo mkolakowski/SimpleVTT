@@ -97,6 +97,8 @@ Catalog of events:
 | `api.unauthorized` | 401 on a protected endpoint | path, IP, UA |
 | `api.forbidden` | 403 on a protected endpoint | path, IP, UA |
 | `api.not_found` *(v2.477.0)* | 404 on any path | path, IP, UA |
+| `visitor.request` *(v2.480.0, opt-in)* | Per-request visitor log (OFF by default) | method, path, status, response time, IP, UA |
+| `user.data_export` *(v2.482.0)* | A user pulled their own Article 15/20 export | `user_id`, record counts, IP, UA |
 | `admin.<action>` | Admin destructive action | admin `user_id`, target id, IP, UA |
 | `cloudflare.ban_ok` / `cloudflare.unban_ok` | Cloudflare API ban/unban | banned IP, admin `user_id`, IP, UA |
 
@@ -279,9 +281,20 @@ docker compose exec app \
 The result is delivered to you as a machine-readable export
 (JSON or CSV).
 
-> **Operator follow-on (filed in TODO):** add a `/api/users/me/export`
-> endpoint so a logged-in user can self-serve this request. See
-> the TODO "GDPR Article 15/20 user data export endpoint."
+**Self-serve (v2.482.0+):** a logged-in user can pull their own
+record set directly — `GET /api/users/me/export` returns a single
+JSON archive (account fields + preferences, campaigns owned,
+campaign memberships, characters owned with full sheets, and dice
+rolls authored). Per Article 20 the format is "structured, commonly
+used, machine-readable." Sensitive credential material (the bcrypt
+password hash, the Google SSO id) is intentionally **omitted** —
+the archive surfaces `has_password` / `has_google_sso` booleans
+instead, so an access export can't become a credential-leak vector.
+The endpoint is rate-limited to one export per 24 hours per user
+(tunable via `USER_DATA_EXPORT_COOLDOWN_SECONDS`) and the access is
+recorded in the audit log as a `user.data_export` event (Section
+2.3). The manual SQL recipe above remains available to the operator
+for users who can't sign in.
 
 ### 5.2 — Right to rectification (Article 16)
 
