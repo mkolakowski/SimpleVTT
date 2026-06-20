@@ -10,6 +10,50 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.464.0] - 2026-06-19 — "The Distant Word"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #21 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **Healing Word** (L1 evocation, Bard/Cleric/Druid, RAW PHB p.250). Companion ship to Cure Wounds v2.463.0 — same mechanical-mutation shape (rolls a heal die, calls `_apply_hp_change`, broadcasts `character_hp_update`) but with a smaller die (`1d4` vs `1d8`), a narrower class gate (Bard/Cleric/Druid only — no Paladin or Ranger), and a 60-ft range rather than touch. New `/cast_healing_word` endpoint mirrors the Cure Wounds structure end-to-end.
+
+**Description:** RAW: "A creature of your choice that you can see within range regains hit points equal to 1d4 + your spellcasting ability modifier." 1 bonus action, V, 60 ft, Instantaneous.
+
+**Implementation:**
+
+- Body: `{character_id, target_character_id}`. Both required.
+- Caster gate: knows Healing Word OR is in `{bard, cleric, druid}`. 409 cannot_cast otherwise. Strictly narrower than Cure Wounds' five-class list — RAW excludes Paladin (who get Cure Wounds + Lay on Hands instead) and Ranger.
+- Heal roll: `dice_mod.roll("1d4")` plus `_caster_spellcasting_mod(sheet)`. Capped at `hp.max`.
+- Mutation: identical to Cure Wounds — calls `_apply_hp_change(target_char, new_current)`, commits the DB, broadcasts `character_hp_update` with `source: "healing-word"`.
+- Bonus-action gate: v1 skips the bonus-action chip gate (the cast-and-broadcast arc has been action-economy-agnostic throughout, with Feinting Attack v2.451.0 as the one chip-consuming exception). A future commit can layer in `_mark_battle_economy(..., "bonus")` if the table wants strict action-economy enforcement on heals.
+- v1 skips upcast scaling — each slot above L1 adds another d4 per RAW; a future commit can layer in a `slot_level` body param.
+- Response: same shape as Cure Wounds — `{ok, feature, target_character_id, heal_rolled, heal_dice_total, heal_breakdown, spellcasting_mod, hp_before, hp_after, revived}`.
+
+**Why "The Distant Word":** the spell's 60-ft range is its defining differentiator from Cure Wounds (which is touch-only). A Cleric who can heal from across the battlefield — without crossing it — is a tactical asset that touch-heals can't match. The distant word is whispered, not shouted; the heal arrives before the spoken syllable fades. Lyric, ranged, intimate-at-distance — fits the spell's vibe. Continues the bonus-action / quick-cast naming flavor that ties to RAW's bonus-action timing.
+
+**Why pair Cure Wounds + Healing Word back-to-back:** both spells share the same mechanical-mutation engine path (`_apply_hp_change` + `character_hp_update` broadcast). Shipping them consecutively lets the bucket vocabulary observe a "near-identical shape with narrow gate variations" pattern — proving the third-bucket pattern scales across die size + class list + range without needing per-spell substrate. Future heal spells (Goodberry, Mass Healing Word, Aid v2, etc.) can keep mirroring the same shape.
+
+**5 new harness tests** at `tests/harness/test_cast_healing_word.py`:
+
+- `test_cast_hw_partial_hp_heals` — drop Krieger to 5 HP, cast; assert `1 ≤ heal_dice_total ≤ 4` (the d4 cap), `spellcasting_mod == 3` (Tavik's WIS), `heal_rolled == dice + mod`, sheet round-trip confirms new HP.
+- `test_cast_hw_at_full_hp_zero_delta` — cast at full HP → `heal_rolled == 0` and `hp_before == hp_after`.
+- `test_cast_hw_at_zero_hp_revives` — drop Caelan to 0 HP with damage reason (flips to dying), cast → `revived: True` and sheet reads back `status: alive`. Uses Caelan (Human Paladin) to dodge Krieger's Half-Orc Relentless Endurance (same workaround as `test_cast_cw_at_zero_hp_revives`).
+- `test_cast_hw_paladin_rejected` — Caelan (Paladin, who CAN cast Cure Wounds) → 409. Asserts the narrower Bard/Cleric/Druid gate vs. Cure Wounds' broader Bard/Cleric/Druid/Paladin/Ranger gate.
+- `test_cast_hw_non_caster_rejected` — Krieger (Barbarian) → 409.
+
+Canonical caster is Brother Tavik Stonebrow (Cleric 5).
+
+Total harness count 3557 → 3562.
+
+MINOR — new HTTP endpoint + 5 new harness tests. No schema change. No new substrate.
+
+### Added
+- `app/routes/tabletop_routes.py::cast_healing_word`: new `POST /api/campaign/{campaign_id}/cast_healing_word` endpoint. Body: `{character_id, target_character_id}`. Rolls `1d4 + spellcasting_mod`, calls `_apply_hp_change`, broadcasts `character_hp_update` (source: `"healing-word"`) + `feature_used`.
+- `tests/harness/test_cast_healing_word.py`: 5 tests covering partial-HP heal + full-HP no-op + 0-HP revival + 2 error paths (Paladin narrow-gate + Barbarian).
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: Healing Word marked ✅ shipped v2.464.0 under Phase 2's Shipped subsection. Phase 2 has now shipped 21 spells/contracts; companion ship to Cure Wounds proves the mechanical-non-buff bucket scales across spell variations.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3557 → 3562.
+
 ## [2.463.0] - 2026-06-19 — "The Closed Wound"
 
 **Schema version:** 71

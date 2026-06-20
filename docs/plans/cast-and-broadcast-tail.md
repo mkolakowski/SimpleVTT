@@ -248,6 +248,18 @@ closure — runs indefinitely until Bucket A is exhausted.
   permanently GM-narrated; the engine surfaces the flag so the
   table can see Tongues is active. 3 harness tests.
 
+- **Healing Word (L1)** — ✅ shipped v2.464.0. Companion ship
+  to Cure Wounds v2.463.0 — same mechanical-mutation shape but
+  with a smaller die (`1d4` vs `1d8`), a narrower class gate
+  (Bard/Cleric/Druid only — no Paladin/Ranger per RAW), and 60-ft
+  range rather than touch. New `/cast_healing_word` endpoint
+  mirrors the Cure Wounds structure end-to-end. v1 skips both the
+  bonus-action chip gate and upcast scaling. 5 harness tests
+  including a Paladin → 409 that asserts the narrow gate vs.
+  Cure Wounds' broader Bard/Cleric/Druid/Paladin/Ranger list.
+  Proves the mechanical-non-buff bucket scales across die size +
+  class list + range without needing per-spell substrate.
+
 - **Cure Wounds (L1)** — ✅ shipped v2.463.0. **Third
   mechanical non-buff cast on the arc.** New `/cast_cure_wounds`
   endpoint rolls `1d8 + spellcasting_mod`, mutates the target's
