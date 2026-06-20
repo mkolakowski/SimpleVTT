@@ -1,6 +1,6 @@
 # fail2ban / CrowdSec log integration — Design Plan
 
-> **Status:** ✅ Phase 1 + Phase 2 shipped (v2.426.0 + v2.429.0) — emission module + auth canonical events + API-surface 401/403 events + demo_magic_link.* events + cloudflare.* events + reference fail2ban configs covering all 8 event tags + CrowdSec parser + 5 reference scenarios + operator compose override template. Only the wiki-surface for `docs/integrations/README.md` and the compose-side smoke test (Phase 2B, gated on Docker Hub image reliability) remain filed.
+> **Status:** ✅ Phase 1 + Phase 2 shipped (v2.426.0 + v2.429.0) — emission module + auth canonical events + API-surface 401/403 events + demo_magic_link.* events + cloudflare.* events + reference fail2ban configs covering all 8 event tags + CrowdSec parser + 5 reference scenarios + operator compose override template. **Phase 4 OPEN (v2.468.0+)** — operationalize fail2ban into `docker-compose.yml` so an operator can `docker compose --profile fail2ban up` and have a working ban policy reading env-file thresholds without copying configs into `/etc/fail2ban/`. The wiki-surface for `docs/integrations/README.md` lands as Phase 4g.
 > **Tracked in:** [`TODO.md`](../../TODO.md) → Manually Added → "fail2ban / CrowdSec log integration out of the box".
 > **Sibling plans:**
 > - [`demo-magic-link.md`](demo-magic-link.md) — defines half the consumer side of this contract (the `demo_magic_link.*` log lines).
@@ -180,6 +180,95 @@ Each config block carries a header comment with a short rationale + the threshol
 1. Add a secondary logger `simplevtt.audit.json` that emits the same events as JSON lines.
 2. Document Datadog / Loki / Vector pickup patterns in `docs/integrations/structured-logs.md`.
 3. **Hard precondition: a real operator asks for it.** Filed as Phase 3 so the slot is there but not built on spec.
+
+### Phase 4 — Out-of-the-box fail2ban operationalization (v2.468.0+)
+
+Phase 1 + Phase 2 shipped the **emission** layer (canonical events) + **reference configs** (copy-paste for `/etc/fail2ban/`). Phase 4 closes the gap between "reference config" and "running container": an operator should be able to enable fail2ban with a docker-compose profile flag, tune thresholds via `.env`, and pick a ban-action template that fits their hosting posture — all without hand-editing fail2ban configs or touching the host's `/etc/`.
+
+**Why this lives as a separate phase, not a Phase 1 follow-up:** Phase 1's reference configs were deliberately operator-DIY because the per-deployment choices (logpath, ban action, privileged container) are real decisions an operator must own. Phase 4 doesn't take those decisions away — it makes the *default* path frictionless while keeping every knob explicit in `.env`.
+
+#### Phase 4a — Shared log volume + RotatingFileHandler (v2.469.0)
+
+The current `app/logging.py` setup writes audit lines to stdout only. fail2ban running inside a container needs a file to tail. Phase 4a adds:
+
+- A named volume `simplevtt-logs` in `docker-compose.yml` mounted at `/var/log/simplevtt` in the `app` service.
+- A `logging.handlers.RotatingFileHandler` on the `simplevtt.audit` logger writing to `/var/log/simplevtt/audit.log` (10 MB × 5 backups by default). The existing `StreamHandler` to stdout stays — `docker compose logs app` continues to work; the file is a tee.
+- A new env var `AUDIT_LOG_PATH` (default `/var/log/simplevtt/audit.log`) so an operator can redirect.
+- Smoke test: post a failed `/login`, read `/var/log/simplevtt/audit.log` (via a host-side mount in the test fixture), assert the canonical `auth.login_failed ip=... ua=...` line appears.
+
+#### Phase 4b — fail2ban service in docker-compose, profile-gated (v2.470.0)
+
+- New `fail2ban` service block in `docker-compose.yml`, gated behind compose profile `fail2ban`. Out-of-the-box `docker compose up` does **not** start it; opt in with `docker compose --profile fail2ban up`.
+- Image: `crazymax/fail2ban` pinned to `1.0.x` (well-maintained alpine-based, supports env-templated configs, ARM64 + AMD64).
+- Volumes: `simplevtt-logs:/var/log/simplevtt:ro` + `./docs/integrations/fail2ban/filter.d:/etc/fail2ban/filter.d:ro` + `./docs/integrations/fail2ban/jail.d:/etc/fail2ban/jail.d:ro`. The configs are mounted, not baked, so an operator's local edits land without an image rebuild.
+- `depends_on: [app]` so fail2ban starts after the audit log exists.
+- Smoke test: bring up the profile, `docker compose --profile fail2ban exec fail2ban fail2ban-client status simplevtt-auth` returns a structured response (not an error). The test brings the profile up then tears it down.
+
+#### Phase 4c — Env-driven jail thresholds (v2.471.0)
+
+Lift the hardcoded knobs in `docs/integrations/fail2ban/jail.d/simplevtt.conf` into env-templated placeholders. Add to `.env.example`:
+
+```
+# fail2ban thresholds — see docs/plans/fail2ban-crowdsec-integration.md Phase 4c.
+FAIL2BAN_LOGIN_MAXRETRY=5
+FAIL2BAN_LOGIN_FINDTIME=300       # 5min
+FAIL2BAN_LOGIN_BANTIME=3600       # 1h
+FAIL2BAN_MAGIC_LINK_REPLAY_BANTIME=86400   # 24h — replay is never legit
+FAIL2BAN_API_PROBE_MAXRETRY=20
+FAIL2BAN_DEFAULT_BANTIME=3600
+```
+
+The crazymax/fail2ban image natively supports envsubst on `/etc/fail2ban/jail.d/*.conf` at container startup. The reference jail config becomes templated:
+
+```
+maxretry = ${FAIL2BAN_LOGIN_MAXRETRY}
+findtime = ${FAIL2BAN_LOGIN_FINDTIME}
+bantime  = ${FAIL2BAN_LOGIN_BANTIME}
+```
+
+Smoke test: set `FAIL2BAN_LOGIN_MAXRETRY=2`, restart the profile, fire 3 failed logins from one IP, assert the IP gets banned on attempt 3 (the threshold flipped at startup, not the default 5).
+
+#### Phase 4d — Cloudflare bouncer ban action (v2.472.0)
+
+Adds `docs/integrations/fail2ban/action.d/cloudflare-bouncer.conf` that POSTs the banned IP to the v2.430.0 Cloudflare access-rule list. Reuses the existing `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_BAN_LIST_ID` env vars already in `.env.example` (from the cloudflare-edge-banning plan).
+
+Operator picks via:
+
+```
+FAIL2BAN_ACTION=cloudflare    # default: iptables (image default)
+```
+
+Smoke test against the existing wiremock Cloudflare fixture in `docs/integrations/cloudflare/mock/` — ban an IP via fail2ban, assert the wiremock saw the POST.
+
+#### Phase 4e — ipset bouncer action template (v2.473.0)
+
+Adds `docs/integrations/fail2ban/action.d/ipset-bouncer.conf`. This action requires the fail2ban container to run with `network_mode: host` + `cap_add: [NET_ADMIN]` to manage the host's ipset. **This is genuinely scary** for some hosting environments, so it stays opt-in via a separate compose override `docker-compose.fail2ban-ipset.yml`. The default `--profile fail2ban` from Phase 4b leaves the container unprivileged; the operator opts into ipset by overlaying the second compose file.
+
+`.env.example` gains:
+
+```
+FAIL2BAN_PRIVILEGED=false   # set true ONLY if using the ipset action template
+```
+
+A startup warning fires in the app container when `FAIL2BAN_PRIVILEGED=true` AND `TRUSTED_PROXY_HOPS=0` — reverse-proxy deployments will ban the proxy's IP unless `TRUSTED_PROXY_HOPS` is set.
+
+#### Phase 4f — End-to-end fail2ban smoke test (v2.474.0)
+
+A harness test at `tests/harness/test_fail2ban_integration.py` that:
+
+1. Brings up `--profile fail2ban` if available locally (skip cleanly if the compose profile isn't reachable — keeps CI happy when Docker Hub is slow).
+2. Replays 6 failed `/login` attempts from a synthetic IP (set via `X-Forwarded-For` + `TRUSTED_PROXY_HOPS=1` on the test container so the audit log records the synthetic IP, not the loopback).
+3. Polls `docker compose --profile fail2ban exec fail2ban fail2ban-client banned` for up to 30s.
+4. Asserts the synthetic IP appears in the banned list.
+5. Tears down the profile.
+
+This is the canonical end-to-end test: log line → fail2ban filter → ban decision. If it passes, the operator's out-of-the-box experience works.
+
+#### Phase 4g — Wiki surface for the deployment guide (v2.475.0)
+
+- New `docs/wiki/fail2ban-deployment.md` operator guide covering: enabling the profile, env-file tuning, choosing ipset vs. Cloudflare, debugging banned IPs, common pitfalls (logpath drift, TRUSTED_PROXY_HOPS=0 with a reverse proxy).
+- Update `docs/integrations/README.md` with a "running fail2ban" section pointing at the wiki guide.
+- Per the doc-surfacing rule in [`CLAUDE.md`](../../CLAUDE.md#every-doc-must-be-surfaced-through-the-wiki) — landing-page row in `app/templates/wiki.html` + index row in `docs/wiki/README.md` + harness test `test_wiki_doc_serves_fail2ban_deployment` + landing-page assertion in `test_wiki_home_renders`.
 
 ---
 

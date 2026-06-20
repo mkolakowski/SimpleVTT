@@ -10,6 +10,45 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.468.0] - 2026-06-19 — "The Operator's Hand"
+
+**Schema version:** 71
+
+**Commit summary:** Doc-only plan extension. Adds a new **Phase 4** to [`docs/plans/fail2ban-crowdsec-integration.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/fail2ban-crowdsec-integration.md) covering out-of-the-box fail2ban operationalization. Phase 1 + Phase 2 (already-shipped v2.426.0/v2.429.0) wired the emission layer + reference configs; Phase 4 closes the gap to "operator runs `docker compose --profile fail2ban up` and has a working ban policy without copying configs to `/etc/fail2ban/`." The 7 sub-phases (4a–4g) carve up the operationalization work into reviewable commits.
+
+**Description:** The fail2ban plan doc opened in v2.424.0 with detection scope only (emit canonical events; operator owns enforcement). Phase 4 doesn't change that scope — emission stays separate from enforcement — but it ships ready-to-run defaults so the "just `docker compose up`" path is no longer rejected.
+
+**Why "The Operator's Hand":** the sub-phases all live at the operator's fingertips — flip a profile flag, tune a `.env` var, pick a ban-action template. The plan keeps every decision explicit so an operator who reads the doc can predict every IP the engine will ban. "The Operator's Hand" names the user the plan is for.
+
+**Phase 4 carved into 7 sub-phases:**
+
+| Sub-phase | Version | Scope |
+|---|---|---|
+| 4a | v2.469.0 | Shared `simplevtt-logs` volume + `RotatingFileHandler` tee from `simplevtt.audit` logger to `/var/log/simplevtt/audit.log`. |
+| 4b | v2.470.0 | `fail2ban` service in `docker-compose.yml`, gated by `--profile fail2ban`. Uses `crazymax/fail2ban` 1.0.x. Mounts the shared logs volume + the existing reference configs read-only. |
+| 4c | v2.471.0 | Env-templated jail thresholds — `FAIL2BAN_LOGIN_MAXRETRY`, `FAIL2BAN_LOGIN_FINDTIME`, `FAIL2BAN_LOGIN_BANTIME`, `FAIL2BAN_MAGIC_LINK_REPLAY_BANTIME`, `FAIL2BAN_API_PROBE_MAXRETRY`, `FAIL2BAN_DEFAULT_BANTIME`. |
+| 4d | v2.472.0 | Cloudflare bouncer ban action — reuses the v2.430.0 `CLOUDFLARE_*` env vars to ban via the access-rule list. Default-safe (no host privilege). |
+| 4e | v2.473.0 | ipset bouncer ban action template — `network_mode: host` + `cap_add: [NET_ADMIN]`. Opt-in via a separate compose override (`docker-compose.fail2ban-ipset.yml`) + `FAIL2BAN_PRIVILEGED=true` in `.env`. |
+| 4f | v2.474.0 | End-to-end smoke test: brings up the profile, replays 6 failed `/login` attempts, polls `fail2ban-client banned` for the synthetic IP. |
+| 4g | v2.475.0 | Wiki surface for the new operator deployment guide + landing-page row + per-doc harness test per the `CLAUDE.md` doc-surfacing rule. |
+
+The status header at the top of the plan doc flips from "Phase 1 + Phase 2 shipped" to "Phase 1 + Phase 2 shipped; Phase 4 OPEN (v2.468.0+)."
+
+**Reading order for the user:**
+
+1. The new Phase 4 section in the plan doc — explains the gap and why each sub-phase exists.
+2. `docs/integrations/fail2ban/{filter.d,jail.d}/` — the v1 reference configs Phase 4 operationalizes.
+3. `app/audit_log.py` — the canonical event emission Phase 4 depends on (already shipped).
+
+**No code changes in this commit** — pure plan-doc extension. The 7 follow-up commits land the actual operationalization.
+
+Total harness count unchanged (3576).
+
+PATCH — doc-only change. No code, no schema, no harness shift.
+
+### Changed
+- `docs/plans/fail2ban-crowdsec-integration.md`: status header updated to reflect Phase 4 opening at v2.468.0+. New Phase 4 section added below the existing Phase 3 with 7 sub-phases (4a–4g) covering log volume + compose service + env thresholds + two ban-action templates + smoke test + wiki surface.
+
 ## [2.467.0] - 2026-06-19 — "The Chorused Word"
 
 **Schema version:** 71
