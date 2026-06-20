@@ -128,6 +128,58 @@ services:
   #   CLOUDFLARE_ZONE_ID=dev-fake-zone
   #   CLOUDFLARE_API_BASE_URL=http://cloudflare-mock:8080/client/v4
   #   SIMPLEVTT_CLOUDFLARE_BANNING_ENABLED=true
+  # v2.470.0 — fail2ban Phase 4b. Opt-in fail2ban service.
+  # Brings up the crazymax/fail2ban container alongside the app,
+  # tailing the shared audit_logs volume (Phase 4a). The container
+  # mounts the existing reference filter + jail configs read-only,
+  # so the operator gets ban policy out of the box without copying
+  # files into /etc/fail2ban/.
+  #
+  # NOT loaded by default — invoke with:
+  #     docker compose --profile fail2ban up -d
+  #
+  # The default ban action is the image's iptables target. Phase 4d
+  # adds a Cloudflare bouncer action template; Phase 4e adds an
+  # ipset action template that requires privileged + NET_ADMIN.
+  # Both stay opt-in via FAIL2BAN_ACTION (Phase 4d) and a sibling
+  # compose override (Phase 4e).
+  #
+  # Verify the jail loaded after `up`:
+  #     docker compose --profile fail2ban exec fail2ban \
+  #         fail2ban-client status simplevtt-auth
+  fail2ban:
+    image: crazymax/fail2ban:1.0.2
+    container_name: simplevtt-fail2ban
+    profiles:
+      - fail2ban
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      TZ: ${TZ:-UTC}
+      F2B_LOG_LEVEL: ${F2B_LOG_LEVEL:-INFO}
+      F2B_LOG_TARGET: STDOUT
+      F2B_DB_PURGE_AGE: ${F2B_DB_PURGE_AGE:-1d}
+    volumes:
+      # Persist the ban database across restarts so a fresh container
+      # starts with the existing bans (matches how operators expect
+      # fail2ban to behave under systemd).
+      - fail2ban_data:/var/lib/fail2ban
+      # Read-only tail of the app's audit log volume. Phase 4a owns
+      # the writer side; this is the consumer.
+      - audit_logs:/var/log/simplevtt:ro
+      # Read-only mounts of the v2.424.0 reference filter + jail.
+      # Operator edits to the on-disk files take effect after
+      # `fail2ban-client reload`.
+      - ./docs/integrations/fail2ban/filter.d:/etc/fail2ban/filter.d:ro
+      - ./docs/integrations/fail2ban/jail.d:/etc/fail2ban/jail.d:ro
+    # No port mappings — fail2ban-client is reached via
+    # `docker compose exec`. Banning runs inside the container via
+    # the image's default iptables action (talks to the in-container
+    # iptables, not the host's — adequate for the dev profile;
+    # production deploys layer Phase 4d (Cloudflare) or 4e (ipset
+    # with privileged) on top).
+
   cloudflare-mock:
     image: wiremock/wiremock:3.10.0
     container_name: simplevtt-cloudflare-mock
@@ -150,5 +202,10 @@ volumes:
   homebrew_data:
   # v2.469.0 — fail2ban Phase 4a. Shared between the app container
   # (writes audit.log via RotatingFileHandler) and the fail2ban
-  # container introduced in Phase 4b (read-only tail).
+  # container in Phase 4b (read-only tail).
   audit_logs:
+  # v2.470.0 — fail2ban Phase 4b. Ban-database persistence so the
+  # fail2ban container starts with the existing bans across
+  # restarts. Empty for the default `docker compose up` flow since
+  # the fail2ban service is profile-gated.
+  fail2ban_data:

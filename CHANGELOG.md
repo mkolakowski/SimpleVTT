@@ -10,6 +10,57 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.470.0] - 2026-06-19 — "The Profile-Gated Banhammer"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 4b of [`docs/plans/fail2ban-crowdsec-integration.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/fail2ban-crowdsec-integration.md). Adds an opt-in `fail2ban` service to `docker-compose.yml` using the `crazymax/fail2ban:1.0.2` image, gated behind the new `--profile fail2ban` compose profile. The container mounts the v2.469.0 `audit_logs` volume read-only as its log datasource and the existing v2.424.0 reference filter + jail configs read-only as its policy definitions. New `fail2ban_data` volume persists the ban DB across container restarts.
+
+**Description:** Operators now get a working fail2ban policy by running `docker compose --profile fail2ban up` — no more copying configs into `/etc/fail2ban/` on the host, no manual logpath wiring. The profile gate means the default `docker compose up` flow is unchanged; only operators who explicitly opt in see fail2ban.
+
+**Implementation:**
+
+- New `fail2ban` service block in `docker-compose.yml` immediately above `cloudflare-mock` (the existing profile-gated sibling).
+- Image: `crazymax/fail2ban:1.0.2` — a well-maintained Alpine-based multi-arch image with native env-var templating support (which Phase 4c will lean on).
+- `profiles: [fail2ban]` keeps the service dormant for `docker compose up`. The compose profile name matches the plan-doc convention.
+- Volumes:
+  - `fail2ban_data:/var/lib/fail2ban` — new named volume for ban DB persistence.
+  - `audit_logs:/var/log/simplevtt:ro` — read-only mount of the Phase 4a audit log. Read-only by design: fail2ban must not be able to clobber the writer's file, defense-in-depth against a compromised fail2ban container.
+  - `./docs/integrations/fail2ban/filter.d:/etc/fail2ban/filter.d:ro` — the v2.424.0 reference filter, mounted not baked, so operator edits land without an image rebuild.
+  - `./docs/integrations/fail2ban/jail.d:/etc/fail2ban/jail.d:ro` — same for the jail.
+- `depends_on: [app]` so fail2ban starts after the audit log file exists (Phase 4a's startup creates the path).
+- Environment knobs: `TZ`, `F2B_LOG_LEVEL` (defaults `INFO`), `F2B_LOG_TARGET=STDOUT` (so `docker compose --profile fail2ban logs fail2ban` works), `F2B_DB_PURGE_AGE` (defaults `1d` — drop old ban entries from the DB after a day).
+- No port mappings — `fail2ban-client` is reached via `docker compose --profile fail2ban exec fail2ban`. Doc-comment in the service block tells the operator the verification command.
+
+**Why "The Profile-Gated Banhammer":** the `--profile fail2ban` flag is the new on-switch for the whole banning pipeline. "Profile-gated" names the opt-in mechanism; "banhammer" names what the gate actually enables. The naming convention from v2.468.0 "The Operator's Hand" continues — each Phase 4 ship is named for the operator-side affordance it adds.
+
+**Why the default ban action stays as the image's iptables target:** Phase 4d (Cloudflare bouncer) + Phase 4e (ipset with privileged container) introduce action templates the operator picks from. Phase 4b just gets the container up. The image's default iptables action works in the dev-profile context (banning happens inside the container, doesn't reach the host); production deploys layer 4d or 4e on top.
+
+**Why mount the reference configs read-only and not bake them into the image:** an operator who wants to tweak the filter regex or jail thresholds editing the on-disk files at `docs/integrations/fail2ban/{filter.d,jail.d}` then running `fail2ban-client reload` inside the container. Baking them into the image would require an image rebuild for every tweak.
+
+**7 new harness tests** at `tests/harness/test_fail2ban_compose_service.py`. Pattern matches `test_crowdsec_configs.py`'s YAML-validation approach — no docker subprocess dependency.
+
+- `test_fail2ban_service_exists` — sanity check on the service block.
+- `test_fail2ban_service_is_profile_gated` — `profiles: [fail2ban]` anchored so a future edit can't make the service run by default and break dev compose.
+- `test_fail2ban_image_pinned` — the image must be a `crazymax/fail2ban:<version>` tag, not `:latest` (reproducible compose).
+- `test_fail2ban_mounts_audit_logs_readonly` — the Phase 4a shared volume is mounted read-only.
+- `test_fail2ban_mounts_reference_configs` — both filter.d + jail.d mounts present and read-only.
+- `test_fail2ban_data_volume_declared` — `fail2ban_data` at the compose top-level + referenced in the service.
+- `test_fail2ban_depends_on_app` — startup ordering anchor.
+
+The live container smoke test (bring up the profile + `fail2ban-client status simplevtt-auth`) lands in Phase 4f (v2.474.0).
+
+Total harness count 3579 → 3586.
+
+MINOR — new opt-in compose service + 7 harness tests. No schema change. No new substrate.
+
+### Added
+- `docker-compose.yml`: new `fail2ban` service block under `--profile fail2ban`, mounting the v2.469.0 `audit_logs` volume read-only + the v2.424.0 reference configs read-only. New `fail2ban_data` named volume.
+- `tests/harness/test_fail2ban_compose_service.py`: 7 YAML-contract tests anchoring the service definition.
+
+### Changed
+- `docs/test-harness-coverage.md`: total-test-count nudges 3579 → 3586.
+
 ## [2.469.0] - 2026-06-19 — "The Teed-Off Audit"
 
 **Schema version:** 71
