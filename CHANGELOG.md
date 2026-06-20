@@ -10,6 +10,54 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.466.0] - 2026-06-19 — "The First Berry"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #23 of [`docs/plans/cast-and-broadcast-tail.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/cast-and-broadcast-tail.md) — **`/eat_goodberry`** closes the loop on the v2.465.0 Goodberry charge-counter buff. New consume endpoint decrements `goodberry_charges` by 1 in the holder's buff state, removes the buff entirely when the counter hits 0, and heals the eater for 1 HP through the same `_apply_hp_change` path Cure Wounds / Healing Word use. First **paired-endpoint** ship on the arc: the cast (v2.465.0) installed the substrate; the consume (v2.466.0) drives it.
+
+**Description:** RAW PHB p.248: "A creature can use its action to eat one berry. Eating a berry restores 1 hit point...." The berry-holder doesn't have to be the eater — RAW lets the caster hand a berry to any creature, so the endpoint takes a separate `target_character_id` for the eater (defaulting to the buff holder when omitted).
+
+**Implementation:**
+
+- Body: `{character_id, target_character_id?}`. `character_id` is the buff holder (who carries the goodberry buff with the charge counter). `target_character_id` is the eater (defaults to `character_id` when omitted — caster eats their own berry).
+- Buff-state read: walks `hub.get_battle(campaign_id).combatants` for the holder's combatant, then its buffs for the `goodberry` key. 409 `no_goodberry_buff` if the holder doesn't carry the buff in the active battle. 409 `no_charges_remaining` if the counter is already at 0 (defensive — shouldn't fire because the buff auto-removes at 0).
+- Decrement path: when `charges_after > 0`, mutates `effects.goodberry_charges` in place on the hub-state buff dict, calls `hub.set_battle(campaign_id, state)` to persist, and broadcasts `buff_update` so the sheet UI's buff list updates the new count.
+- Remove path: when `charges_after == 0`, calls the canonical `_remove_buff(campaign_id, buff_holder.id, "goodberry")` helper — which broadcasts `buff_update` with the empty buff list. `buff_removed: True` in the response so the caller can render "🫐 spent" instead of "🫐 ×0."
+- Heal path: identical to Cure Wounds / Healing Word — read eater's `hp.current` + `hp.max`, clamp `new_current` at max, call `_apply_hp_change(eater, new_current)`, commit DB, broadcast `character_hp_update` (source: `"goodberry"`). A heal at 0 HP auto-revives via the same `_apply_hp_change` mechanism — eating a goodberry stabilizes-and-revives a downed PC in one action, matching RAW.
+- The `character_hp_update` broadcast is suppressed when `delta == 0` (full HP eater) so the chat surface isn't spammed by "ate a berry, no HP change" events — but the `feature_used` card always fires with the consumption details.
+- Response: `{ok, action, buff_holder_character_id, eater_character_id, charges_before, charges_after, buff_removed, heal_delta, hp_before, hp_after, revived}`.
+
+**Why "The First Berry":** the ship is the first of (potentially) ten consumption events from a single Goodberry cast. Each berry is small but each represents a real engine state transition — a decrement, a heal, sometimes a revival. "The First Berry" names the unit of consumption rather than the whole bundle, fitting that the endpoint operates on one berry per call. Pairs thematically with v2.465.0 "The Sprig of Mistletoe" (which conjured the bundle).
+
+**First paired-endpoint ship on the cast-and-broadcast arc.** All 22 prior ships have been single-endpoint commits. v2.465.0 installed a substrate that needed a companion consume endpoint to be useful in v1; v2.466.0 lands that companion. The paired-endpoint pattern unlocks future ships that need an install + consume pair: Aganazzar's Scorcher pearls (cast then expend), alchemical-token cantrips (cast then use), Necklace of Fireballs-style multi-charge wear items (already supported on the item path, but the cast variant can mirror this shape).
+
+**Cross-character consumption:** the endpoint deliberately separates `character_id` (buff holder) from `target_character_id` (eater) so the harness can exercise the RAW "caster hands a berry to an ally" path. `test_eat_cross_character_holder_decrements_eater_heals` is the canonical assertion: Mira casts, Krieger eats; Mira's charges go 10 → 9 and Krieger's HP rises by 1.
+
+**5 new harness tests** at `tests/harness/test_eat_goodberry.py`:
+
+- `test_eat_self_decrements_and_heals` — Mira at 5 HP casts Goodberry then eats one → charges 10 → 9, HP 5 → 6, buff still present with the new counter.
+- `test_eat_cross_character_holder_decrements_eater_heals` — Mira casts, Krieger eats with `target_character_id` → Mira's charges decrement, Krieger heals; asserts the cross-character flow.
+- `test_eat_exhausts_counter_removes_buff` — cast then eat 10 times in a loop; the 10th consumption sets `charges_before == 1`, `charges_after == 0`, `buff_removed == True`, and `/buffs` confirms the buff is gone.
+- `test_eat_no_buff_returns_409` — seed a battle without casting → 409 `no_goodberry_buff`.
+- `test_eat_at_full_hp_still_decrements_charge` — eat at full HP → `heal_delta == 0` (capped at max) but charges still decrement 10 → 9 (the berry consumption is real even when the heal is wasted).
+
+Each test that mutates HP restores via `/rest` `{"type": "long"}` in a try/finally to keep the demo state clean.
+
+Canonical buff holder is Mira Greenleaf (Druid 5); cross-character eater is Krieger Stonefist (Barbarian).
+
+Total harness count 3566 → 3571.
+
+MINOR — new HTTP endpoint + 5 new harness tests. No schema change. No new substrate (rides the v2.465.0 entry).
+
+### Added
+- `app/routes/tabletop_routes.py::eat_goodberry`: new `POST /api/campaign/{campaign_id}/eat_goodberry` endpoint. Decrements `goodberry_charges` in hub state, removes the buff when it hits 0, heals the eater for 1 HP via `_apply_hp_change`, broadcasts `buff_update` + `character_hp_update` + `feature_used`.
+- `tests/harness/test_eat_goodberry.py`: 5 tests covering self-eat + cross-character + counter exhaustion + no-buff error + full-HP-still-decrements.
+
+### Changed
+- `docs/plans/cast-and-broadcast-tail.md`: `/eat_goodberry` marked ✅ shipped v2.466.0 under Phase 2's Shipped subsection. Phase 2 has now shipped 23 spells/contracts; first paired-endpoint ship on the arc.
+- `docs/test-harness-coverage.md`: total-test-count nudges 3566 → 3571.
+
 ## [2.465.0] - 2026-06-19 — "The Sprig of Mistletoe"
 
 **Schema version:** 71

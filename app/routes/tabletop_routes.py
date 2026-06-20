@@ -67067,6 +67067,208 @@ async def cast_goodberry(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/eat_goodberry")
+async def eat_goodberry(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.466.0 — Phase 2 #23 of
+    docs/plans/cast-and-broadcast-tail.md. Closes the loop on the
+    v2.465.0 Goodberry charge-counter buff: consumes one berry
+    (decrements ``goodberry_charges``) and heals the eater for
+    1 HP through the canonical ``_apply_hp_change`` helper.
+
+    RAW PHB p.248: "A creature can use its action to eat one
+    berry. Eating a berry restores 1 hit point...." The berry-
+    holder doesn't have to be the eater — the caster carries the
+    berries in their hand but RAW lets them hand one to any
+    creature.
+
+    Body: ``{character_id, target_character_id?}``.
+        - ``character_id`` = the buff holder (who has the
+          goodberry buff with the charge counter).
+        - ``target_character_id`` = the eater (defaults to the
+          buff holder when omitted — caster eats their own
+          berry).
+
+    Errors:
+      - 400 missing character_id
+      - 404 buff-holder / eater character not found
+      - 409 no_goodberry_buff (buff holder doesn't carry the
+        buff in the active battle state)
+      - 409 no_charges_remaining (counter is at 0)
+
+    Response: ``{ok, action, charges_before, charges_after,
+    buff_removed, heal_delta, hp_before, hp_after, revived}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id_raw = body.get("target_character_id")
+    target_char_id = (
+        int(target_char_id_raw) if target_char_id_raw else char_id
+    )
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    buff_holder = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not buff_holder:
+        raise HTTPException(404, "Buff holder character not found")
+    if not (_user_is_gm(user, campaign, db) or buff_holder.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+    eater = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not eater:
+        raise HTTPException(404, "Eater character not found")
+
+    # Locate the goodberry buff in the active battle state.
+    state = hub.get_battle(campaign_id)
+    holder_combatant: dict | None = None
+    goodberry_buff: dict | None = None
+    if state:
+        for c in state.get("combatants") or []:
+            if c.get("char_id") == buff_holder.id:
+                holder_combatant = c
+                for b in (c.get("buffs") or []):
+                    if (b or {}).get("key") == "goodberry":
+                        goodberry_buff = b
+                        break
+                break
+    if goodberry_buff is None:
+        return JSONResponse(status_code=409, content={
+            "error": "no_goodberry_buff",
+            "expected": (
+                f"{buff_holder.name} carries a goodberry buff "
+                "with charges remaining"
+            ),
+        })
+
+    effects = goodberry_buff.get("effects") or {}
+    charges_before = int(effects.get("goodberry_charges") or 0)
+    if charges_before <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "no_charges_remaining",
+            "charges": charges_before,
+        })
+
+    # Decrement charges in hub state; if the count hits 0 remove
+    # the buff entirely via the canonical helper.
+    charges_after = charges_before - 1
+    buff_removed = False
+    if charges_after <= 0:
+        await _remove_buff(campaign_id, buff_holder.id, "goodberry")
+        buff_removed = True
+    else:
+        new_effects = dict(effects)
+        new_effects["goodberry_charges"] = charges_after
+        goodberry_buff["effects"] = new_effects
+        # Persist via set_battle + broadcast buff_update so the
+        # sheet UI reflects the new charge count.
+        hub.set_battle(campaign_id, state)
+        if holder_combatant is not None:
+            await hub.broadcast(campaign_id, {
+                "type": "buff_update",
+                "data": {
+                    "character_id": buff_holder.id,
+                    "combatant_id": holder_combatant.get("id"),
+                    "buffs": holder_combatant.get("buffs") or [],
+                },
+            })
+
+    # Heal the eater for 1 HP through the canonical helper. Same
+    # path Cure Wounds / Healing Word use, so the death-save
+    # revival semantics fire for a dying eater.
+    eater_sheet = dict(eater.sheet or {})
+    eater_hp = dict(eater_sheet.get("hp") or {})
+    hp_before = int(eater_hp.get("current") or 0)
+    hp_max = int(eater_hp.get("max") or 0)
+    new_current = (
+        min(hp_max, hp_before + 1) if hp_max > 0 else (hp_before + 1)
+    )
+    delta = new_current - hp_before
+    ds_before = (
+        eater_sheet.get("death_saves") or {}
+    ).get("status", "alive")
+    result = _apply_hp_change(eater, new_current)
+    db.commit()
+    ds_after = result["death_saves"]["status"]
+    revived = ds_before != "alive" and ds_after == "alive"
+
+    if delta != 0:
+        await hub.broadcast(campaign_id, {
+            "type": "character_hp_update",
+            "data": {
+                "character_id": eater.id,
+                "hp": result["hp"],
+                "delta": delta,
+                "source": "goodberry",
+            },
+        })
+
+    # Chat card for the consume action.
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    if eater.id == buff_holder.id:
+        feature_desc = (
+            f"{buff_holder.name} eats one of their own goodberries "
+            f"(+{delta} HP). {charges_after}/10 berries remain."
+        )
+    else:
+        feature_desc = (
+            f"{eater.name} eats one of {buff_holder.name}'s "
+            f"goodberries (+{delta} HP). {charges_after}/10 "
+            "berries remain."
+        )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": buff_holder.id,
+            "character_name": buff_holder.name,
+            "user_color": buff_holder.color or player_color,
+            "feature_name": "🫐 Eat Goodberry",
+            "feature_desc": feature_desc,
+            "source": "eat-goodberry",
+            "buff_holder_character_id": buff_holder.id,
+            "eater_character_id": eater.id,
+            "eater_character_name": eater.name,
+            "charges_before": charges_before,
+            "charges_after": charges_after,
+            "buff_removed": buff_removed,
+            "heal_delta": delta,
+        },
+    })
+
+    return {
+        "ok": True,
+        "action": "eat-goodberry",
+        "buff_holder_character_id": buff_holder.id,
+        "eater_character_id": eater.id,
+        "charges_before": charges_before,
+        "charges_after": charges_after,
+        "buff_removed": buff_removed,
+        "heal_delta": delta,
+        "hp_before": hp_before,
+        "hp_after": int(result["hp"].get("current") or 0),
+        "revived": revived,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_gust")
 async def cast_gust(
     campaign_id: int,

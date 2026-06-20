@@ -248,6 +248,21 @@ closure — runs indefinitely until Bucket A is exhausted.
   permanently GM-narrated; the engine surfaces the flag so the
   table can see Tongues is active. 3 harness tests.
 
+- **`/eat_goodberry` consume endpoint** — ✅ shipped v2.466.0.
+  Closes the loop on the v2.465.0 Goodberry buff. New consume
+  endpoint decrements `goodberry_charges` in the holder's buff
+  state, removes the buff entirely when the counter hits 0, and
+  heals the eater for 1 HP via the same `_apply_hp_change` path
+  Cure Wounds / Healing Word use. Body:
+  `{character_id, target_character_id?}` — caster holds the
+  berries, eater (defaulting to caster) consumes one. **First
+  paired-endpoint ship on the arc** — v2.465.0 installed the
+  substrate; v2.466.0 drives it. Unlocks future install+consume
+  pairs (Aganazzar's Scorcher pearls, alchemical-token cantrips,
+  etc.). 5 harness tests including cross-character feeding
+  (Mira casts, Krieger eats) and counter exhaustion (eat 10
+  times → buff removed).
+
 - **Goodberry (L1)** — ✅ shipped v2.465.0. New
   `_SPELL_BUFF_MAP["goodberry"]` substrate (14400 rounds = 24h,
   non-concentration, `effects.goodberry_charges: 10` counter) +
