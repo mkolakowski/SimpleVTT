@@ -10,6 +10,47 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.469.0] - 2026-06-19 — "The Teed-Off Audit"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 4a of [`docs/plans/fail2ban-crowdsec-integration.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/plans/fail2ban-crowdsec-integration.md). Adds a `RotatingFileHandler` on the `simplevtt.audit` logger writing to `/var/log/simplevtt/audit.log` (10 MB × 5 backups), backed by a new `audit_logs` named volume in `docker-compose.yml`. Stdout output is unchanged — `docker compose logs app` still surfaces audit lines. `/healthz` gains `audit_log_path` + `audit_log_enabled` so a smoke test (and the operator) can verify the wiring without docker-exec.
+
+**Description:** fail2ban needs a file to tail; SimpleVTT's audit emitter has only written to stdout until now. The new file-side mirror is purely additive — every existing log handler stays attached via Python's default propagation. The named volume in compose decouples log durability from the app container's lifecycle, and the same volume is mounted read-only into the fail2ban service when Phase 4b lands.
+
+**Implementation:**
+
+- `app/main.py`: read `AUDIT_LOG_PATH` env var (default `/var/log/simplevtt/audit.log`), `mkdir -p` the parent directory, attach a `RotatingFileHandler(maxBytes=10*1024*1024, backupCount=5)` to `logging.getLogger("simplevtt.audit")`. Falls back to stdout-only with a warning if the file handler fails to open (permission error, unwritable path). Empty `AUDIT_LOG_PATH` deliberately disables the handler so an operator who doesn't want the file can opt out without rebuilding.
+- `docker-compose.yml`: new `audit_logs` named volume; the `app` service mounts it at `/var/log/simplevtt` (read-write) and passes `AUDIT_LOG_PATH` through to the container.
+- `/healthz` endpoint extended with `audit_log_path` (string) and `audit_log_enabled` (bool). Lightweight surface — no docker SDK or file-system dependency in the test path.
+- `.env.example` gains a commented `AUDIT_LOG_PATH` line with a docstring explaining the docker-compose default + the empty-string opt-out.
+
+**Why "The Teed-Off Audit":** the file handler tees audit lines off stdout into a separate sink. "Teed off" also has the colloquial mood of "annoyed" — fitting since the file exists specifically so a banning engine can do something about the events it sees there.
+
+**Why opt-out via empty string, not a separate flag:** the env-var-empty-string-disables-the-feature pattern is the lightest possible API surface. An operator running SimpleVTT outside docker-compose (e.g. on bare metal under systemd) sets `AUDIT_LOG_PATH=` (empty) to keep the stdout-only behavior they already had, with zero other changes. No flag flip, no compose override.
+
+**Phase 4b dependency:** the fail2ban service in Phase 4b mounts the same `audit_logs` volume read-only at `/var/log/simplevtt`. Phase 4a defining the volume + path contract lets Phase 4b stay focused on the fail2ban service block + reference config mounts.
+
+**3 new harness tests** at `tests/harness/test_audit_log_file_handler.py`:
+
+- `test_healthz_surfaces_audit_log_config` — `/healthz` returns both `audit_log_path` and `audit_log_enabled` fields.
+- `test_healthz_audit_log_path_is_docker_compose_default` — the path resolves to `/var/log/simplevtt/audit.log` in the running container (anchors that env-var changes don't drift from the volume mount path).
+- `test_healthz_audit_log_enabled_in_running_container` — `audit_log_enabled` is True; if it were False the file handler would have failed to attach and the audit lines wouldn't reach fail2ban.
+
+Total harness count 3576 → 3579.
+
+MINOR — new env var + new compose volume + new `/healthz` fields + 3 new harness tests. No schema change.
+
+### Added
+- `app/main.py`: `RotatingFileHandler` on the `simplevtt.audit` logger pointing at `AUDIT_LOG_PATH` (default `/var/log/simplevtt/audit.log`). Defensive fallback to stdout-only on file-handler setup failure.
+- `app/main.py::healthz`: new response fields `audit_log_path` and `audit_log_enabled`.
+- `docker-compose.yml`: new `audit_logs` named volume; mounted at `/var/log/simplevtt` on the `app` service.
+- `.env.example`: commented `AUDIT_LOG_PATH` with docstring covering the docker-compose default + the empty-string opt-out.
+- `tests/harness/test_audit_log_file_handler.py`: 3 tests covering the `/healthz` config-surfacing contract.
+
+### Changed
+- `docs/test-harness-coverage.md`: total-test-count nudges 3576 → 3579.
+
 ## [2.468.0] - 2026-06-19 — "The Operator's Hand"
 
 **Schema version:** 71

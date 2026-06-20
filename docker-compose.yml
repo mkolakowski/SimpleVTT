@@ -61,6 +61,13 @@ services:
       # the real client IP, not the proxy's. See
       # docs/plans/fail2ban-crowdsec-integration.md for the threat model.
       TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-0}
+      # v2.469.0 — fail2ban Phase 4a. File path for the audit-log
+      # RotatingFileHandler tee. The default lands on the shared
+      # `audit_logs` named volume mounted below at /var/log/simplevtt,
+      # so the fail2ban service (Phase 4b) can tail it without docker-
+      # exec'ing into the app container. Set to empty string to
+      # disable the file handler (stdout-only).
+      AUDIT_LOG_PATH: ${AUDIT_LOG_PATH:-/var/log/simplevtt/audit.log}
       # v2.427.0 — Cloudflare edge-banning Phase 1.
       # Three vars configure the OUTBOUND client; the fourth gates the
       # GM-facing button. CRITICAL: leave all four off in production
@@ -81,6 +88,10 @@ services:
     volumes:
       - uploads_data:/app/app/static/uploads
       - homebrew_data:/app/app/data/homebrew
+      # v2.469.0 — fail2ban Phase 4a. Shared volume for the audit-log
+      # tee. The fail2ban service in Phase 4b mounts this same volume
+      # read-only at the same path to tail the file.
+      - audit_logs:/var/log/simplevtt
     ports:
       - "${APP_PORT:-8013}:${APP_PORT:-8013}"
 
@@ -137,3 +148,7 @@ volumes:
   db_data:
   uploads_data:
   homebrew_data:
+  # v2.469.0 — fail2ban Phase 4a. Shared between the app container
+  # (writes audit.log via RotatingFileHandler) and the fail2ban
+  # container introduced in Phase 4b (read-only tail).
+  audit_logs:

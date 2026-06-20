@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -31,6 +32,40 @@ from .version import APP_VERSION, SCHEMA_VERSION
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("simplevtt")
+
+# v2.469.0 — Phase 4a of docs/plans/fail2ban-crowdsec-integration.md.
+# Tee the canonical-event audit log (``simplevtt.audit``) to a file so
+# the fail2ban container introduced in Phase 4b has a real tail target.
+# The stdout handler from ``basicConfig`` stays attached via the
+# default propagation, so ``docker compose logs app`` keeps showing
+# audit lines too — this is purely additive.
+#
+# AUDIT_LOG_PATH=<empty>  → file handler is skipped (stdout-only).
+# AUDIT_LOG_PATH=<path>   → 10 MB × 5 backup rotation.
+#
+# The parent directory is created on startup if missing; the named
+# volume mount in docker-compose.yml owns the directory itself.
+AUDIT_LOG_PATH = os.environ.get("AUDIT_LOG_PATH", "/var/log/simplevtt/audit.log").strip()
+_AUDIT_LOG_ENABLED = False
+if AUDIT_LOG_PATH:
+    try:
+        Path(AUDIT_LOG_PATH).parent.mkdir(parents=True, exist_ok=True)
+        _audit_handler = RotatingFileHandler(
+            AUDIT_LOG_PATH, maxBytes=10 * 1024 * 1024, backupCount=5,
+        )
+        _audit_handler.setFormatter(logging.Formatter(
+            "%(asctime)s %(levelname)s %(name)s: %(message)s",
+        ))
+        logging.getLogger("simplevtt.audit").addHandler(_audit_handler)
+        _AUDIT_LOG_ENABLED = True
+        log.info(f"audit log tee enabled at {AUDIT_LOG_PATH}")
+    except Exception as exc:  # noqa: BLE001
+        # Defensive: a bad path or permission error must not fail
+        # startup; the stdout handler still records audit events.
+        log.warning(
+            f"audit log file handler setup failed ({exc!r}); "
+            "continuing stdout-only",
+        )
 
 settings = get_settings()
 app = FastAPI(title="SimpleVTT", version=APP_VERSION)
@@ -311,7 +346,17 @@ async def on_shutdown() -> None:
 
 @app.get("/healthz")
 def healthz():
-    return {"ok": True, "app_version": APP_VERSION, "schema_version": SCHEMA_VERSION}
+    return {
+        "ok": True,
+        "app_version": APP_VERSION,
+        "schema_version": SCHEMA_VERSION,
+        # v2.469.0 — Phase 4a: surface the audit-log file config so
+        # the fail2ban Phase 4b smoke test can verify wiring without
+        # docker-exec'ing into the container. Empty path / disabled
+        # flag tells the operator the file handler isn't active.
+        "audit_log_path": AUDIT_LOG_PATH,
+        "audit_log_enabled": _AUDIT_LOG_ENABLED,
+    }
 
 
 @app.get("/version")
