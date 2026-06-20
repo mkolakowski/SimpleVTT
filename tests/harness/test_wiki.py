@@ -233,10 +233,14 @@ async def test_wiki_fail2ban_deployment_guide_renders():
 
 async def test_wiki_privacy_doc_renders():
     """v2.478.0: GET /wiki/privacy — markdown source under
-    docs/wiki/ rendered + wrapped + nav-injected. Privacy
-    reference page documenting every piece of data SimpleVTT
-    collects, surfaced through the wiki per the doc-surfacing
-    rule in CLAUDE.md."""
+    docs/wiki/ rendered + wrapped + nav-injected. Privacy policy
+    page surfaced through the wiki per the doc-surfacing rule in
+    CLAUDE.md.
+
+    v2.479.0: page rewritten as a GDPR Article 12–14 compliant
+    privacy notice. Content anchors below enforce that the
+    GDPR-required sections + the prior factual catalog both
+    stay present."""
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
         resp = await client.get("/wiki/privacy")
     assert resp.status_code == 200
@@ -245,9 +249,7 @@ async def test_wiki_privacy_doc_renders():
     assert "privacy" in resp.text.lower()
     assert "<h1" in resp.text
     assert 'class="wiki-nav"' in resp.text
-    # Spot-check key sections that an operator needs to find.
-    # Anchors against future edits that truncate or rename
-    # critical content.
+    # Operator-controlled env-var references stay anchored.
     assert "AUDIT_LOG_PATH" in resp.text, (
         "privacy doc missing AUDIT_LOG_PATH env var reference"
     )
@@ -258,6 +260,26 @@ async def test_wiki_privacy_doc_renders():
     assert "api.not_found" in resp.text, (
         "privacy doc missing api.not_found event in the catalog"
     )
+    # v2.479.0 — GDPR-required sections must all be present.
+    # If a future edit drops one, the test fails before the
+    # operator unwittingly publishes a non-compliant policy.
+    body_lower = resp.text.lower()
+    for anchor in (
+        "controller",            # Section 1 — controller info
+        "legal basis",           # Sections 2.1–2.6 + recipients
+        "article 6",             # Lawful processing reference
+        "article 15",            # Right of access
+        "article 17",            # Right to erasure
+        "article 20",            # Right to data portability
+        "article 22",            # Automated decision-making
+        "supervisory authority", # Right to lodge a complaint
+        "automated decision",    # Section 4 — fail2ban disclosure
+        "data breach",           # Section 8 — Article 33-34
+    ):
+        assert anchor in body_lower, (
+            f"privacy doc missing GDPR-required anchor {anchor!r}; "
+            f"page may have dropped a required section"
+        )
 
 
 async def test_wiki_targeting_system_guide_renders():

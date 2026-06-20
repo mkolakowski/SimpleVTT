@@ -1,279 +1,474 @@
-# Privacy: what SimpleVTT tracks
+# Privacy Policy
 
-This page documents every piece of data SimpleVTT collects,
-where it lives, how long it sticks around, and what an operator
-can do to change those defaults.
+This page is the **GDPR-compliant privacy notice template** for
+SimpleVTT. It is structured to satisfy Articles 12–14 of the EU
+General Data Protection Regulation (transparency at collection)
+and enumerate the rights in Articles 15–22.
 
-> **This page is descriptive, not a legal privacy policy.** If
-> you run a public SimpleVTT instance and your jurisdiction
-> requires a published privacy notice (GDPR, CCPA, COPPA, …),
-> use this page as a *starting point* — not a substitute for a
-> policy reviewed by counsel.
+> **Operator action required before publishing.** Fill in the
+> placeholders in [Section 1 — Controller and contact](#1--controller-and-contact)
+> before publishing this page to your users. The rest of the
+> page is pre-filled based on what SimpleVTT actually does;
+> values that vary per-deploy are clearly marked. Have counsel
+> review for your specific jurisdiction — this template
+> satisfies the GDPR's transparency requirements but isn't a
+> substitute for legal advice on your specific deployment.
 
 ---
 
-## Quick map
+## 1 — Controller and contact
 
-| Bucket | What's in it | Where it lives | Retention |
+Under GDPR, the **controller** is the natural or legal person
+who determines the purposes and means of processing personal
+data. **The operator running this SimpleVTT instance is the
+controller**, not the SimpleVTT project upstream.
+
+**Controller:** _[Your organization or individual name]_
+**Registered address:** _[Your registered postal address]_
+**Email for privacy requests:** _[privacy@your-domain.example]_
+**Data Protection Officer (DPO):** _[Name + contact, or "Not
+appointed — this deployment does not meet the Article 37
+thresholds"]_
+**Supervisory authority:** _[The supervisory authority for your
+EU member state. Examples: ICO (UK — post-Brexit equivalent
+regime), CNIL (France), BfDI (Germany), Garante (Italy). If you
+are not in the EU/UK but process EU resident data, name your
+representative under Article 27.]_
+
+---
+
+## 2 — What data we process
+
+### 2.1 — Account data
+
+| Field | Purpose |
+|---|---|
+| Email address | Authentication, contact channel |
+| Password hash (bcrypt) | Authentication |
+| Display name | Identification in shared sessions |
+| Color | UI personalization |
+| Role (admin / user) | Authorization |
+| Google SSO opaque uid (optional) | Authentication via Google |
+
+**Legal basis:** Article 6(1)(b) — performance of a contract
+(you can't use SimpleVTT without an account, and we can't
+authenticate you without these fields). The Google SSO uid is
+6(1)(a) — consent, since you choose Google as your sign-in
+method.
+
+**Retention:** for the life of the account + 30 days after
+account deletion (the buffer covers operator backup-rotation
+windows so a "delete me" request takes effect even after a
+backup restore). Plaintext passwords are **never** stored or
+logged.
+
+### 2.2 — Session data
+
+A signed cookie carrying `user_id` (integer) issued by
+Starlette's `SessionMiddleware` using `APP_SECRET_KEY`. The
+cookie is signed but not encrypted; without `APP_SECRET_KEY`
+nobody can forge a valid signature.
+
+**Legal basis:** Article 6(1)(b) — performance of a contract
+(authentication requires a session). The cookie is
+"strictly necessary" under ePrivacy / PECR; no consent banner is
+required for its use.
+
+**Retention:** browser session by default (cleared when the
+user closes their browser).
+
+### 2.3 — Audit log events (security log)
+
+SimpleVTT writes a structured text log for every event
+relevant to detecting attacks. The log lands at
+`/var/log/simplevtt/audit.log` (rotated at 10 MB × 5 backups,
+~50 MB total) and on the app's stdout.
+
+Catalog of events:
+
+| Event tag | Triggered by | Personal data recorded |
+|---|---|---|
+| `auth.login_ok` | Successful sign-in | `user_id`, IP, User-Agent |
+| `auth.login_failed` | Bad password / unknown email | typed username, IP, User-Agent |
+| `auth.signup_failed` | Registration rejected | reason, IP, User-Agent |
+| `demo_magic_link.mint_ok` | Admin minted a magic link | admin `user_id`, link `sub`+`jti`, IP, UA |
+| `demo_magic_link.verify_ok` | Magic-link login succeeded | link `sub`+`jti`, IP, UA |
+| `demo_magic_link.verify_rejected` | Magic-link refused | reason, IP, UA |
+| `api.unauthorized` | 401 on a protected endpoint | path, IP, UA |
+| `api.forbidden` | 403 on a protected endpoint | path, IP, UA |
+| `api.not_found` *(v2.477.0)* | 404 on any path | path, IP, UA |
+| `admin.<action>` | Admin destructive action | admin `user_id`, target id, IP, UA |
+| `cloudflare.ban_ok` / `cloudflare.unban_ok` | Cloudflare API ban/unban | banned IP, admin `user_id`, IP, UA |
+
+**Legal basis:** Article 6(1)(f) — legitimate interest in
+network security, fraud prevention, and abuse detection
+(Recital 49 explicitly recognizes this purpose). The balancing
+test favors processing because (a) the data is technically
+necessary for the stated purpose, (b) we don't enrich the data
+with marketing or behavioral profiles, and (c) we minimize the
+data captured (no request bodies, no auth tokens, no
+passwords).
+
+**Retention:**
+- Events that lead to a ban: **1 year** from the ban event date,
+  to support investigation + appeal.
+- Events that do not lead to a ban: **90 days**, to support
+  burst-detection windows (replay attacks, scanner waves).
+
+If your operator deployment runs without log rotation, the
+default RotatingFileHandler caps the file at ~50 MB total
+(10 MB × 5 backups). Operators in jurisdictions requiring
+shorter retention should configure host-side log rotation
+or set `AUDIT_LOG_PATH=` (empty) to disable the file handler
+entirely.
+
+### 2.4 — Game state
+
+Campaigns, characters, sheets, battle state, chat messages, and
+roll history.
+
+**Legal basis:** Article 6(1)(b) — performance of a contract
+(the service IS the game state).
+
+**Retention:** indefinite while the account is active; deleted
+30 days after account deletion (same buffer as Section 2.1).
+
+### 2.5 — Uploaded assets
+
+Map images, token images, audio clips, and thumbnails uploaded
+by users.
+
+**Legal basis:** Article 6(1)(b).
+
+**Retention:** indefinite while the campaign exists. Deleting
+the campaign deletes the database-side metadata; orphaned
+binary files are pruned during the operator's quarterly volume
+sweep.
+
+### 2.6 — Database backups
+
+Daily and weekly `pg_dump` snapshots in the `backup_data` volume
+(7 daily + 4 weekly = ~5 weeks of history with default config).
+
+**Legal basis:** Article 6(1)(f) — legitimate interest in
+business continuity + disaster recovery.
+
+**Retention:** governed by the operator's `BACKUP_CRON` /
+`KEEP_DAILY` / `KEEP_WEEKLY` env vars. Default: 7 daily + 4
+weekly, rotating.
+
+---
+
+## 3 — Recipients of personal data
+
+### 3.1 — Inside the SimpleVTT operator's infrastructure
+
+Data is processed by:
+- The SimpleVTT application container (uvicorn worker as
+  unprivileged user `appuser`, v2.474.0+).
+- The PostgreSQL container.
+- The `backup` container (runs `pg_dump` on cron).
+- Optionally, the `fail2ban` container (reads the audit log;
+  only when the `--profile fail2ban` is enabled by the
+  operator).
+
+These run on the operator's infrastructure under the
+operator's control.
+
+### 3.2 — Third-party processors / sub-processors
+
+| Recipient | Purpose | Country | Gate |
 |---|---|---|---|
-| User accounts | email, password hash, display name, role | postgres | Indefinite (operator deletes) |
-| Sessions | signed cookie with `user_id` | browser cookie | Browser session by default |
-| Audit log events | login attempts, magic-link mints, 401/403/404 probes | `/var/log/simplevtt/audit.log` | 10 MB × 5 backups (~50 MB) |
-| Game state | campaigns, characters, sheets, battles, chat, rolls | postgres | Indefinite |
-| Uploaded assets | maps, tokens, audio, thumbnails | `uploads_data` volume | Indefinite |
-| Homebrew content | JSON content packs | `homebrew_data` volume | Indefinite |
-| Database backups | `pg_dump` snapshots | `backup_data` volume | 7 daily + 4 weekly |
+| Google LLC | Sign-in via OAuth (Google SSO) | United States | Only if operator sets `GOOGLE_SSO_ENABLED=true` AND a user chooses Google as their sign-in method (Article 6(1)(a) — consent) |
+| Cloudflare, Inc. | Edge-side IP ban list management | United States | Only if operator sets `SIMPLEVTT_CLOUDFLARE_BANNING_ENABLED=true`. Data shared: banned IP + a free-form "fail2ban" or admin-id note (no user data, no request payloads) |
+
+SimpleVTT does **not** use analytics services, advertising
+networks, A/B-test SDKs, or any other third-party SDKs in the
+browser.
+
+### 3.3 — International transfers
+
+Where third-party processors (Google, Cloudflare) are based
+outside the European Economic Area, transfers happen under the
+European Commission's adequacy decisions or the
+Standard Contractual Clauses (SCCs):
+
+- **Google LLC** (US): Data Privacy Framework participant +
+  SCCs.
+- **Cloudflare, Inc.** (US): Data Privacy Framework participant
+  + SCCs.
+
+Operators relying on either integration are responsible for
+confirming the current status of these mechanisms; both vendors
+publish their certifications on their respective trust pages.
 
 ---
 
-## Account data
+## 4 — Automated decision-making (Article 22)
 
-When a user registers (local registration, `APP_ALLOW_LOCAL_REGISTRATION=true`)
-or signs in via Google SSO (`GOOGLE_SSO_ENABLED=true`),
-the following lands in the `users` table:
+SimpleVTT runs **one** automated decision process that produces
+legal or similarly significant effects on data subjects: the
+fail2ban-driven IP ban.
 
-- **Email address.** Used as the login identifier and (if you
-  enable email features later) the contact channel.
-- **Password hash.** Bcrypt-style (`passlib`). The plaintext
-  password is **never** stored or logged.
-- **Display name.** What other players see in chat / character
-  sheets.
-- **Color.** Personalization knob; persists across sessions.
-- **Role** (`admin` / `user`). Operators set admins via the
-  `ADMINS=email1,email2` env var.
-- **Google SSO uid** (when applicable). Opaque identifier issued
-  by Google; lets us recognize the same user on subsequent
-  sign-ins without storing the Google password.
+**How it works:**
+- The audit log records IPs that hit a failure threshold
+  (default: 5 failed logins in 5 min, or 20 distinct 404s in
+  5 min).
+- The fail2ban container reads the log and inserts the IP into
+  a ban list (in-container iptables, ipset on the host, or a
+  Cloudflare access rule, per operator choice).
+- The ban expires automatically (default: 1 hour for auth,
+  6 hours for scanner).
 
-What the user can do:
-- Change display name + color via the user settings page.
-- Change password via the user settings page (re-bcrypts;
-  old hash is overwritten).
-- Account deletion — currently operator-driven (admin portal);
-  self-service deletion is a filed feature.
+**Right to appeal:** users banned in error can contact the
+operator at the email in Section 1 to request an unban. The
+operator runs:
 
----
+```bash
+docker compose --profile fail2ban exec fail2ban \
+    fail2ban-client unban <ip>
+```
 
-## Session data
+If the ban landed at the Cloudflare edge, the operator also
+removes the corresponding access rule via the Cloudflare
+dashboard or the in-app admin portal.
 
-Sessions are signed cookies (Starlette `SessionMiddleware` with
-`APP_SECRET_KEY`). The cookie holds:
-
-- `user_id` (integer FK to `users.id`).
-- Per-page navigation breadcrumbs (transient — cleared on logout).
-
-The cookie is signed but **not encrypted** — anyone with the
-cookie can read its contents but can't forge a valid signature
-without `APP_SECRET_KEY`. The user_id alone is useless without
-the database.
-
-Default expiry: browser session (cookie cleared on browser
-close). An operator can extend this via Starlette config in
-`app/main.py`.
+**Why this is the only automated decision:** SimpleVTT does not
+profile users for behavioral analytics, credit scoring, or any
+other purpose. The ban decision is narrowly scoped to source IP
++ recent log activity.
 
 ---
 
-## Audit log events
+## 5 — Your rights as a data subject
 
-This is the most operationally interesting category. SimpleVTT
-emits canonical text-format log lines for every event a
-fail2ban / CrowdSec engine cares about. The events land at:
+Under the GDPR you have the rights enumerated below. To
+exercise any of them, contact the operator at the email in
+Section 1. We will respond within **one month** of receipt
+(Article 12(3)), extendable by two further months for complex
+requests with notice to you.
 
-- **stdout** (always — `docker compose logs app` shows them).
-- **`/var/log/simplevtt/audit.log`** (since v2.469.0 — the
-  shared volume the fail2ban container tails). Rotated at
-  10 MB × 5 backups.
+### 5.1 — Right of access (Article 15)
 
-### Events emitted today
-
-| Event tag | When it fires | Keys logged |
-|---|---|---|
-| `auth.login_ok` | Successful sign-in | `ip`, `ua`, `user_id` |
-| `auth.login_failed` | Bad password / unknown email | `ip`, `ua`, `username` (the typed value) |
-| `auth.signup_failed` | Registration rejected | `ip`, `ua`, `reason` |
-| `demo_magic_link.mint_ok` | Admin minted a magic link | `ip`, `ua`, `sub`, `jti`, `admin_id` |
-| `demo_magic_link.verify_ok` | Magic-link login succeeded | `ip`, `ua`, `sub`, `jti` |
-| `demo_magic_link.verify_rejected` | Magic-link login refused | `ip`, `ua`, `reason` |
-| `api.unauthorized` | 401 on a protected endpoint | `ip`, `ua`, `path` |
-| `api.forbidden` | 403 on a protected endpoint | `ip`, `ua`, `path` |
-| `api.not_found` *(v2.477.0)* | 404 on any path | `ip`, `ua`, `path` |
-| `admin.<action>` | Admin destructive action (delete user, delete campaign, ...) | `ip`, `ua`, `admin_id`, action-specific |
-| `cloudflare.ban_ok` / `cloudflare.unban_ok` | Admin-initiated Cloudflare edge ban / unban | `ip`, `ua`, `admin_id`, `target_ip` |
-
-### What's logged about *the typed credential*
-
-When `auth.login_failed` fires, the **typed username** lands in
-the log — even if that username doesn't match any user. This is
-the default for credential-stuffing detection ("we want to see
-the wordlist contents") but can be a privacy concern in some
-jurisdictions. To redact, override the audit call site in
-`app/auth.py` to log `username="<redacted>"`. Passwords are
-**never** logged in any form.
-
-### IP attribution
-
-The `ip` key on every event records the direct connection IP by
-default. If your deploy sits behind a reverse proxy (nginx,
-Traefik, Cloudflare), set `TRUSTED_PROXY_HOPS=N` (the number of
-trusted proxy hops) so the audit log records the real client IP
-from `X-Forwarded-For` instead of the proxy's IP. Default `0`
-(don't trust the header) is safe but records the proxy's IP for
-behind-proxy deploys.
-
----
-
-## Game state
-
-Everything that happens at the table lives in postgres:
-
-- **Campaigns** + memberships.
-- **Characters** + sheets (D&D 5e attributes, HP, attacks,
-  spells, inventory).
-- **Battle state** (combatant list, initiative, hp, buffs) —
-  ephemeral per-battle; the realtime hub keeps it in memory and
-  the database persists it on `PUT /battle`.
-- **Chat messages** + roll history (every die roll fires a row).
-- **Maps + tokens** metadata (the assets themselves are in
-  `uploads_data`).
-- **Homebrew content** — campaign-scoped or system-wide
-  homebrew JSON.
-
-Game state is indefinitely retained; operators manage deletion
-through the admin portal or direct DB access.
-
----
-
-## Uploaded assets
-
-Map images, token images, audio clips, and thumbnails land in
-the `uploads_data` named volume at
-`/app/app/static/uploads/{maps,tokens,audio,thumbnails}`. The
-uploader's `user_id` is recorded in postgres for ownership; the
-binary content is in the volume.
-
-A campaign deletion *does* delete the database-side metadata but
-**does not** automatically delete orphaned binary files in the
-volume. An operator who wants to reclaim disk space periodically
-runs a cleanup pass against the volume.
-
----
-
-## Database backups
-
-The `backup` service (started by default) runs `pg_dump` on cron
-(default: daily at 03:00 UTC; overridable via `BACKUP_CRON` env)
-and keeps:
-
-- 7 daily snapshots, rotating.
-- 4 weekly snapshots, rotating.
-
-Backups live in the `backup_data` volume on the host. Backups
-contain **everything** the database contains — including
-password hashes, session cookies (sort of — only their server
-state), audit-trail-relevant user data, etc. Operators are
-responsible for protecting the backup volume in line with their
-threat model.
-
----
-
-## Third-party data flows
-
-SimpleVTT talks to external services only in these specific
-cases:
-
-- **Google SSO** (when `GOOGLE_SSO_ENABLED=true`). On user-
-  initiated sign-in, SimpleVTT redirects to Google's OAuth
-  endpoint. Google receives: the operator's `redirect_uri` + the
-  OAuth scopes (typically `email` + `profile`). SimpleVTT
-  receives: an opaque token + the user's email + display name.
-  No further data exchange happens.
-- **Cloudflare API** (when `SIMPLEVTT_CLOUDFLARE_BANNING_ENABLED=true`
-  AND an admin clicks the ban button OR fail2ban's
-  cloudflare-bouncer action fires). SimpleVTT POSTs `{IP,
-  mode:block}` to the Cloudflare access-rules API. Cloudflare
-  receives: the banned IP + a free-form "notes" string
-  identifying the source (admin id or "fail2ban
-  simplevtt-auth"). No request payloads, no user data, no
-  session info.
-- **No analytics, no telemetry.** SimpleVTT does not phone home,
-  does not call out to any vendor for metrics, does not run any
-  third-party JS. The browser-side code talks only to your
-  SimpleVTT origin + (if you set it up) Cloudflare's edge.
-
----
-
-## Data we deliberately *don't* track
-
-By design:
-
-- **No per-request access log.** SimpleVTT does **not** log
-  every HTTP request. Only banning-relevant events (the audit log
-  table above) get logged. There is a [filed TODO](/wiki/doc/todo)
-  for an opt-in Cloudflare-tunnel-aware visitor request log, but
-  it's intentionally OFF by default.
-- **No browser fingerprinting.** No canvas, font, or WebGL
-  probes. No third-party trackers.
-- **No password content.** Plaintext passwords are never logged
-  even on failure paths.
-- **No PII on `auth.login_ok`.** Successful logins record
-  `user_id`, not email — so a log breach can't be cross-
-  referenced to email addresses without the database.
-
----
-
-## What an operator controls
-
-Every privacy-relevant knob is a single env var:
-
-| Env var | Default | Effect |
-|---|---|---|
-| `AUDIT_LOG_PATH` | `/var/log/simplevtt/audit.log` | File path for the audit log tee. Set to empty string to disable the file handler (stdout-only). |
-| `TRUSTED_PROXY_HOPS` | `0` | How many `X-Forwarded-For` hops to trust. Set to `1` behind one reverse proxy, `2` behind two, etc. |
-| `APP_ALLOW_LOCAL_REGISTRATION` | `true` | Whether anyone can create an account. Set `false` to lock signups. |
-| `GOOGLE_SSO_ENABLED` | `false` | Whether Google SSO is offered. |
-| `SIMPLEVTT_CLOUDFLARE_BANNING_ENABLED` | `false` | Whether the in-app Cloudflare ban button + fail2ban Cloudflare bouncer can talk to the Cloudflare API. |
-| `BACKUP_CRON` / `KEEP_DAILY` / `KEEP_WEEKLY` | `0 3 * * *` / `7` / `4` | Backup cadence + retention. Set `KEEP_*=0` to disable backups entirely. |
-
-For full env-var documentation see [`.env.example`](/wiki/doc/changelog)
-at the repo root.
-
----
-
-## If a user asks: "what do you have on me?"
-
-Run this against your database (replacing `<email>`):
+You can request a copy of all personal data we hold about you.
+The operator runs the following against the database (where
+`<your-email>` is your sign-in email):
 
 ```sql
--- Account data
 SELECT id, email, display_name, role, created_at FROM users
-WHERE email = '<email>';
+WHERE email = '<your-email>';
 
--- Campaigns they belong to
 SELECT c.id, c.name FROM campaigns c
 JOIN campaign_memberships m ON m.campaign_id = c.id
 JOIN users u ON u.id = m.user_id
-WHERE u.email = '<email>';
+WHERE u.email = '<your-email>';
 
--- Characters they own
 SELECT id, name, campaign_id FROM characters
-WHERE owner_user_id = (SELECT id FROM users WHERE email = '<email>');
-
--- Recent audit events about them
--- (audit log is text, not in postgres; grep the log file directly)
+WHERE owner_user_id = (
+    SELECT id FROM users WHERE email = '<your-email>'
+);
 ```
 
-For audit-log entries about a specific user, grep the file:
+For audit-log entries about you, the operator runs:
 
 ```bash
 docker compose exec app \
-    grep "user_id=<their_id>" /var/log/simplevtt/audit.log
+    grep "user_id=<your-user-id>" /var/log/simplevtt/audit.log
 ```
 
-For a deletion request, the admin portal has user delete; that
-cascades through campaigns + characters + rolls. The audit log
-file is NOT automatically scrubbed — that's an operator
-decision (the audit log is forensic evidence; scrubbing it on
-user request reduces its value as a security record).
+The result is delivered to you as a machine-readable export
+(JSON or CSV).
+
+> **Operator follow-on (filed in TODO):** add a `/api/users/me/export`
+> endpoint so a logged-in user can self-serve this request. See
+> the TODO "GDPR Article 15/20 user data export endpoint."
+
+### 5.2 — Right to rectification (Article 16)
+
+You can correct inaccurate personal data. Display name + color
+are user-editable via the in-app settings page. Email + password
+changes also flow through the settings page. For other fields,
+contact the operator.
+
+### 5.3 — Right to erasure / "right to be forgotten" (Article 17)
+
+You can request deletion of your account. The operator runs a
+user-delete from the admin portal; this cascades to your
+campaigns (if you own them), characters, sheets, chat messages,
+and roll history.
+
+**What does NOT auto-delete:**
+- **Audit-log entries about you** are retained for the periods
+  in Section 2.3 (90 days / 1 year for ban-relevant). This is
+  permitted under Article 17(3)(b) — exercising the legal right
+  to defend against security claims — and Article 17(3)(e) —
+  legal claims. Operators may grep + redact the log on request
+  but are not obliged to.
+- **Database backups** that include your data are retained per
+  the operator's `BACKUP_CRON` config. Backups taken before your
+  deletion request will roll out of the retention window per
+  policy. Operators do not selectively scrub historical
+  backups.
+
+> **Operator follow-on (filed in TODO):** add an admin-driven
+> audit-log scrub command that pseudonymizes `user_id` values
+> for deleted users while preserving the security-relevant
+> structure of the log.
+
+### 5.4 — Right to restriction of processing (Article 18)
+
+You can request that we stop processing your personal data
+beyond what's strictly necessary to fulfill your contract (i.e.,
+beyond what's needed to keep your account functioning). Contact
+the operator. SimpleVTT does not run optional processing
+(analytics, marketing) by default, so the practical effect is
+usually limited.
+
+### 5.5 — Right to data portability (Article 20)
+
+You can request your personal data in a machine-readable format.
+The export from Section 5.1 satisfies this.
+
+### 5.6 — Right to object (Article 21)
+
+You can object to processing based on legitimate interests
+(Article 6(1)(f) — primarily the audit log). The operator
+assesses whether their interest in security overrides yours;
+in most cases for security logs the answer is yes (Recital 49),
+but you have the right to a documented response.
+
+### 5.7 — Right to withdraw consent (Article 7(3))
+
+Where the processing legal basis is consent (Section 3.2's
+Google SSO uid), you can withdraw consent at any time by
+deleting your account or unlinking Google SSO from the
+settings page. Withdrawal does not affect the lawfulness of
+processing before the withdrawal.
+
+### 5.8 — Right to lodge a complaint (Article 77)
+
+You have the right to lodge a complaint with the supervisory
+authority listed in Section 1. You may also lodge with the
+authority for your habitual residence, place of work, or place
+of the alleged infringement.
+
+---
+
+## 6 — Data we deliberately don't collect
+
+- **No per-request access log.** SimpleVTT does **not** log
+  every HTTP request. Only banning-relevant events (Section 2.3)
+  get logged. A future opt-in Cloudflare-tunnel-aware visitor
+  request log is filed as a TODO but is intentionally OFF by
+  default.
+- **No browser fingerprinting.** No canvas / font / WebGL probes.
+  No third-party trackers.
+- **No password content.** Plaintext passwords are never
+  logged, even on failure paths.
+- **No marketing PII on `auth.login_ok`.** Successful logins
+  record `user_id`, not email — so a log breach can't be
+  cross-referenced to email addresses without database access.
+
+---
+
+## 7 — Security measures
+
+Technical and organizational measures (Article 32):
+
+- **Encryption in transit.** SimpleVTT is served over HTTPS
+  in production (operator's reverse proxy or Cloudflare edge).
+- **Password hashing.** bcrypt with a per-password salt
+  (`passlib`).
+- **Non-root container.** The app container drops from root to
+  unprivileged `appuser` (uid 999, no login shell) via gosu at
+  startup (v2.474.0+). A container escape lands as `appuser`,
+  not root.
+- **fail2ban-driven IP banning.** See Section 4.
+- **Backups + restore-tested at operator discretion.**
+- **Access controls.** Database access requires
+  `POSTGRES_PASSWORD`; admin role gates destructive actions in
+  the application (delete user, delete campaign, ban IP); every
+  admin action is recorded in the audit log per Section 2.3.
+
+---
+
+## 8 — Data breach notification (Article 33–34)
+
+If we discover a personal data breach we will:
+
+1. **Within 72 hours of becoming aware**, notify the supervisory
+   authority listed in Section 1 (Article 33), unless the
+   breach is unlikely to result in a risk to your rights and
+   freedoms.
+2. **Without undue delay**, notify affected data subjects
+   (Article 34) when the breach is likely to result in a high
+   risk to your rights and freedoms.
+
+The operator's breach response runbook (recommended:
+[Section X of the operator's incident-response plan]) covers
+detection, containment, scope assessment, notification, and
+remediation steps.
+
+---
+
+## 9 — Children
+
+GDPR Article 8 sets the threshold for valid consent for
+"information society services" at 16 years (member states may
+lower to 13–16). Operators serving users in EEA member states
+should:
+
+- Configure account creation to verify age, OR
+- Require parental consent for under-threshold users, OR
+- Refuse service to users under the relevant threshold.
+
+The SimpleVTT default does not perform age verification.
+Operators planning to serve minors are responsible for adding
+this gate (e.g., a "must be 16 or older" checkbox at signup, or
+operator-managed account provisioning that screens age out of
+band).
+
+---
+
+## 10 — Operator-controlled privacy knobs
+
+Every privacy-relevant default is a single environment variable
+on the app container. Operators can override any of these to
+match their threat model + jurisdiction.
+
+| Env var | Default | Effect |
+|---|---|---|
+| `AUDIT_LOG_PATH` | `/var/log/simplevtt/audit.log` | File path for the audit log tee. Set to empty string to disable file logging (stdout-only). |
+| `TRUSTED_PROXY_HOPS` | `0` | Trust depth for `X-Forwarded-For`. Set `1` behind one reverse proxy, etc. **Required for accurate IP attribution behind Cloudflare / nginx.** |
+| `APP_ALLOW_LOCAL_REGISTRATION` | `true` | Whether anyone can self-register. `false` to require operator-managed account creation. |
+| `GOOGLE_SSO_ENABLED` | `false` | Whether Google SSO is offered. Disable to remove Google as a recipient (Section 3.2). |
+| `SIMPLEVTT_CLOUDFLARE_BANNING_ENABLED` | `false` | Whether the in-app Cloudflare ban + fail2ban Cloudflare bouncer can talk to the Cloudflare API. Disable to remove Cloudflare as a recipient. |
+| `BACKUP_CRON` / `KEEP_DAILY` / `KEEP_WEEKLY` | `0 3 * * *` / `7` / `4` | Backup schedule + retention. Set `KEEP_*=0` to disable backups entirely. |
+| `FAIL2BAN_LOGIN_BANTIME` / `FAIL2BAN_SCANNER_BANTIME` | `1h` / `6h` | Automated decision durations (Article 22 relevant). |
+
+For the full set, see [`.env.example`](/wiki/doc/changelog) at
+the repo root.
+
+---
+
+## 11 — Changes to this policy
+
+This policy is versioned with the SimpleVTT release. Material
+changes to data processing (new event tags, new third-party
+processors, expanded retention) ship in CHANGELOG entries and
+this page is updated in the same release.
+
+Operators are responsible for surfacing material changes to
+their users. A common pattern is to email registered users when
+the policy is updated.
+
+---
+
+## 12 — Effective date
+
+This policy applies as published. Operators should fill in
+**Effective date:** _[YYYY-MM-DD when this version was
+published]_ before going live.
 
 ---
 

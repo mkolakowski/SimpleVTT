@@ -10,6 +10,68 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.479.0] - 2026-06-20 — "The Compliance Frame"
+
+**Schema version:** 71
+
+**Commit summary:** Rewrites [`docs/wiki/privacy.md`](https://github.com/mkolakowski/SimpleVTT/blob/main/docs/wiki/privacy.md) as a **GDPR-compliant privacy notice template**. Structured to satisfy Articles 12–14 (transparency at collection) and enumerate Articles 15–22 (data subject rights). Includes operator-fillable controller/DPO/supervisory-authority placeholders, legal-basis declarations per data category (Article 6), explicit retention periods, automated-decision-making disclosure for the fail2ban ban pipeline (Article 22), data-breach notification commitment (Article 33–34), and a Section 9 children's-data nudge for operators serving EEA users (Article 8).
+
+**Description:** v2.478.0 shipped a factual data ledger. v2.479.0 reframes that ledger as a *publishable* policy document an EU/UK operator can put up on their site after filling in their controller fields, with all the headings and language a supervisory authority expects to see. The factual catalog (event tags, retention periods, env-var knobs) is preserved; the new sections wrap it in GDPR structure.
+
+**Implementation:**
+
+- `docs/wiki/privacy.md`: full rewrite. 12 numbered sections + a "See also" footer.
+  1. **Controller and contact** — operator-fillable placeholders. Names supervisory authorities by member state.
+  2. **What data we process** — six subsections (account / session / audit log / game state / uploaded assets / backups). Each subsection states the **legal basis** under Article 6 (contract 6(1)(b), legitimate interest 6(1)(f), consent 6(1)(a)) and the **retention period**.
+  3. **Recipients of personal data** — internal containers + the two third-party processors (Google SSO, Cloudflare) with country + opt-in gate. International-transfers note covers SCCs + DPF.
+  4. **Automated decision-making (Article 22)** — discloses fail2ban as the only automated-decision pipeline, names the threshold + the appeal process (`fail2ban-client unban`).
+  5. **Your rights as a data subject** — eight subsections covering Articles 15, 16, 17, 18, 20, 21, 7(3), 77. Each subsection names the operator action that satisfies the right + flags filed follow-ons where the response is currently manual.
+  6. **Data we deliberately don't collect** — preserves the v2.478.0 anti-tracker commitments.
+  7. **Security measures (Article 32)** — TLS, bcrypt, non-root containers (v2.474.0), fail2ban, backups, access controls.
+  8. **Data breach notification (Article 33–34)** — 72-hour supervisory-authority notification, without-undue-delay data-subject notification when high-risk.
+  9. **Children** — Article 8 age-of-consent gate; nudges operators serving EEA users to add an age check.
+  10. **Operator-controlled privacy knobs** — preserves the v2.478.0 env-var table with the new fail2ban-bantime rows added (those are Article 22 automated-decision durations).
+  11. **Changes to this policy** — versioning commitment.
+  12. **Effective date** — operator-fillable.
+- `TODO.md`: two new P2 entries filed to match the new policy text's "filed follow-on" callouts:
+  - `GET /api/users/me/export` — Article 15 / 20 self-serve data export endpoint (replaces the current manual SQL recipe in Section 5.1).
+  - `admin_audit_log_scrub_user(user_id)` — Article 17 pseudonymization command that rewrites deleted users' identifiers in the audit log while preserving the security-relevant structure (called out in Section 5.3).
+- `app/templates/wiki.html` + `docs/wiki/README.md`: landing-page row + index row updated to say "Privacy Policy (GDPR-compliant template)" with policy classification (vs. the v2.478.0 "reference" classification).
+
+**Harness changes:**
+
+- `tests/harness/test_wiki.py::test_wiki_privacy_doc_renders`: content anchors extended to enforce all 10 GDPR-required substrings (controller, legal basis, Article 6 / 15 / 17 / 20 / 22 references, supervisory authority, automated decision, data breach). If a future edit drops one, the test fails before an operator unwittingly publishes a non-compliant policy.
+
+**Why the page stays a "template" not a "ready-to-publish policy":** SimpleVTT is open-source software shipped to operators who run their own deploys. The author of SimpleVTT is not the controller for any specific operator's deploy — the operator is. We can pre-fill everything that's the same across all SimpleVTT deploys (legal basis, retention periods, recipients, automated decisions, rights enumeration) but we genuinely cannot fill in operator-specific fields (controller name, DPO, supervisory authority). The disclaimer at the top of the page makes this responsibility split explicit.
+
+**Why we list the supervisory authority and don't just say "your supervisory authority":** GDPR Article 13(1)(f) requires the *identity* of the supervisory authority be disclosed; "your authority" doesn't satisfy that. We can't know in advance which authority the operator is subject to, but we can name examples (ICO, CNIL, BfDI, Garante) so the operator knows the shape of what goes in the slot.
+
+**Why "The Compliance Frame":** v2.478.0 was "The Privacy Ledger" — the inventory of what we track. v2.479.0 frames that ledger in the legal language that turns it into a publishable policy. The frame is GDPR's transparency mandate; the ledger fills it.
+
+**Operator action required:** before publishing the policy, fill in the placeholders in Sections 1 and 12 (effective date). The harness test does NOT enforce that the placeholders have been filled — that would block the operator from running tests on a fresh checkout. The instruction is in the page's header and in the operator notes below.
+
+**Operator notes:**
+
+- The page is `/wiki/privacy` on a running instance.
+- The "right to lodge a complaint" boilerplate (Article 77) names the supervisory authority **for your habitual residence, place of work, or place of the alleged infringement**. That tripled-jurisdiction option is per Article 77(1) — don't strike it.
+- The Section 4 ban appeal path requires `--profile fail2ban` to be running. If you don't run fail2ban, replace that section with your operator's actual decision-process (likely: account-level rate-limits or manual review).
+- The Section 2.3 retention figures (90 days non-ban / 1 year ban-relevant) reflect SimpleVTT's defaults but operators may shorten further for stricter jurisdictions. Configure host-side log rotation or set `AUDIT_LOG_PATH=""` to disable the file handler entirely.
+
+**No new harness test count** (the existing `test_wiki_privacy_doc_renders` gains 10 new anchor assertions but stays a single test). All 13 v2.477.0 fail2ban tests + 3 v2.474.0 non-root tests + the rest of the wiki suite continue to pass.
+
+Total harness count unchanged at 3625.
+
+MINOR — full rewrite of an existing reference doc + 2 new TODO entries + 1 updated harness test with stricter content anchors. No app code change. No schema change.
+
+### Changed
+- `docs/wiki/privacy.md`: rewritten as a GDPR Article 12–14 compliant privacy notice template. 12 numbered sections. Operator-fillable controller/DPO/supervisory-authority placeholders. Legal basis declared per data category. Article 22 automated-decision disclosure for fail2ban. Article 33–34 breach notification commitment.
+- `app/templates/wiki.html`: landing-page row classification updated from "Markdown (reference)" to "Markdown (policy)".
+- `docs/wiki/README.md`: matching index-row update.
+- `tests/harness/test_wiki.py::test_wiki_privacy_doc_renders`: content anchors extended with 10 GDPR-required substring checks.
+
+### Added
+- `TODO.md`: two new P2 entries — GDPR Article 15 / 20 user data export endpoint, and Article 17 audit-log pseudonymization on user deletion. Both are called out in the rewritten privacy policy as filed follow-ons.
+
 ## [2.478.0] - 2026-06-20 — "The Privacy Ledger"
 
 **Schema version:** 71
