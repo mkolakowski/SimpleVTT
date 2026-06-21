@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.545.0] - 2026-06-21 — "The Quarry Named"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_locate_creature` — Phase 2 #59 of the cast-and-broadcast tail. The L4, 1-hour sibling of Locate Object (#58), reusing the shared `_do_cast_locate` helper.
+
+**Description:** RAW PHB p.256: "Describe or name a creature that is familiar to you. You sense the direction to the creature's location, as long as that creature is within 1,000 feet of you." Self, Concentration up to 1 hour. Same shape as Locate Object — the bearing is GM-narrated, the concentration ride is mechanical (the `locate-creature` buff is concentration-bound, so `_install_buff`'s one-at-a-time cascade drops it when the caster concentrates elsewhere). Optional `creature_name` body field names the quarry; differs from #58 only in slug, the L4 1-hour (600-round) duration, and the `creature` kind.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: `cast_locate_creature` endpoint (thin wrapper over `_do_cast_locate`).
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #59.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_locate_creature.py` (new): +5 — concentration `locate-creature` buff install (`locate_kind == "creature"`, `locate_range_ft: 1000`, 600 rounds); named `creature_name` surfaces as `locate_target`; concentration cascade-drop via Barkskin; non-caster 409; missing character_id 400.
+
+Total harness count → 3958 (+5).
+
+MINOR — new cast endpoint reusing the locate helper. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_locate_creature`: Locate Creature (L4) — a concentration flag-buff sensing the direction to a named creature within 1,000 ft (GM-narrated bearing). Phase 2 #59 of the cast-and-broadcast tail.
+
 ## [2.544.0] - 2026-06-21 — "The Bearing Sought"
 
 **Schema version:** 71

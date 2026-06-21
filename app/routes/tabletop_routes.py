@@ -71433,6 +71433,37 @@ async def cast_locate_object(
     )
 
 
+@router.post("/api/campaign/{campaign_id}/cast_locate_creature")
+async def cast_locate_creature(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.545.0 — Phase 2 #59 of
+    docs/plans/cast-and-broadcast-tail.md. Locate Creature (L4
+    divination, Bard/Cleric/Druid/Ranger/Wizard, PHB p.256): "Describe
+    or name a creature that is familiar to you. You sense the direction
+    to the creature's location, as long as that creature is within 1,000
+    feet of you." 1 action, V/S/M, Self, Concentration up to 1 hour.
+
+    The L4, 1-hour sibling of Locate Object (#58) on the shared
+    `_do_cast_locate` helper. Optional body ``creature_name`` names the
+    quarry (default "a creature"). The bearing is GM-narrated; the
+    concentration ride (drops when the caster concentrates elsewhere) is
+    mechanical. Response: ``{ok, feature, target_character_id,
+    locate_target, locate_range_ft, concentration, buff_installed,
+    duration_rounds}``.
+    """
+    return await _do_cast_locate(
+        campaign_id, request, db, user,
+        slug="locate-creature", display_name="Locate Creature", icon="🧭",
+        duration_rounds=600,  # 1 hour @ 6 s/round
+        target_field="creature_name", target_kind="creature",
+        default_target="a creature",
+    )
+
+
 @router.post("/api/campaign/{campaign_id}/cast_zone_of_truth")
 async def cast_zone_of_truth(
     campaign_id: int,
