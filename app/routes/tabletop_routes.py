@@ -4906,6 +4906,44 @@ async def _remove_buff(
     return True
 
 
+async def _remove_buff_from_token(
+    campaign_id: int, mover_token: "Token", key: str,
+) -> bool:
+    """v2.521.0 — remove a buff by key from the combatant backing a token,
+    whether it's a PC (delegates to ``_remove_buff`` by char_id) or an NPC
+    (matched by ``source_token_id``; drops the buff from the hub combatant
+    and broadcasts ``buff_update``). Returns True when something was
+    removed. Lets NPC-held effects (e.g. an NPC druid's Antilife Shell)
+    end the same way PC ones do.
+    """
+    if mover_token.character_id:
+        return await _remove_buff(
+            campaign_id, int(mover_token.character_id), key,
+        )
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("source_token_id") != int(mover_token.id):
+            continue
+        buffs = c.get("buffs") or []
+        new_list = [b for b in buffs if (b or {}).get("key") != key]
+        if len(new_list) == len(buffs):
+            return False
+        c["buffs"] = new_list
+        hub.set_battle(campaign_id, state)
+        await hub.broadcast(campaign_id, {
+            "type": "buff_update",
+            "data": {
+                "combatant_id": c.get("id"),
+                "buffs": new_list,
+                "removed_key": key,
+            },
+        })
+        return True
+    return False
+
+
 # v2.49.61 — Sleep wake-on-damage hook. RAW (PHB Sleep): "each creature
 # affected by this spell falls unconscious until the spell ends, THE
 # SLEEPER TAKES DAMAGE, or someone uses an action to shake or slap the
@@ -15577,20 +15615,14 @@ def _move_crosses_antilife_shell(
         )
         if not has_shell:
             continue
-        emitter_char_id = c.get("char_id")
-        if not emitter_char_id:
-            continue  # NPC-holder position (source_token_id) filed for v1
-        # The shell moves with its holder — never block the holder's move.
-        if (mover_token.character_id is not None
-                and int(emitter_char_id) == int(mover_token.character_id)):
+        # v2.521.0 — resolve the holder's token via `_combatant_token`
+        # (NPC `source_token_id` OR PC `char_id`) so NPC-held shells hedge
+        # creatures out too.
+        etok = _combatant_token(db, campaign_id, c)
+        if not etok or etok.map_id != map_row.id:
             continue
-        etok = (
-            db.query(Token)
-            .filter(Token.character_id == int(emitter_char_id),
-                    Token.map_id == map_row.id)
-            .first()
-        )
-        if not etok:
+        # The shell moves with its holder — never block the holder's move.
+        if etok.id == mover_token.id:
             continue
         ex, ey = float(etok.x or 0), float(etok.y or 0)
         dest_dist = _distance_ft_between_points(
@@ -15615,21 +15647,35 @@ def _antilife_shell_emitter_forces_creature_through(
     creature that was OUTSIDE the shell before the emitter's move and is
     INSIDE after — i.e. the emitter swept the moving 10-ft barrier over
     it. Returns None when the mover doesn't hold an Antilife Shell, when
-    off-grid, or when no creature was swept. PC-emitter only for v1 (same
-    boundary as ``_move_crosses_antilife_shell``).
+    off-grid, or when no creature was swept.
+
+    v2.521.0 — handles NPC holders too: the mover's combatant is matched
+    by ``char_id`` (PC) OR ``source_token_id`` (NPC), and affected
+    creatures' positions resolve via ``_combatant_token``.
     """
-    emitter_char_id = emitter_token.character_id
-    if not emitter_char_id:
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return None
+    # Find the mover's own combatant (PC by char_id, NPC by source token).
+    emitter_comb = None
+    for c in state.get("combatants") or []:
+        if not isinstance(c, dict):
+            continue
+        if (
+            (emitter_token.character_id is not None
+             and c.get("char_id") == int(emitter_token.character_id))
+            or c.get("source_token_id") == int(emitter_token.id)
+        ):
+            emitter_comb = c
+            break
+    if emitter_comb is None:
         return None
     holds_shell = any(
         isinstance(b, dict) and isinstance(b.get("effects"), dict)
         and b["effects"].get("antilife_shell")
-        for b in (_get_buffs(campaign_id, int(emitter_char_id)) or [])
+        for b in (emitter_comb.get("buffs") or [])
     )
     if not holds_shell:
-        return None
-    state = hub.get_battle(campaign_id)
-    if not state:
         return None
     map_row = emitter_token.map
     if not map_row or not map_row.grid_size_px:
@@ -15642,21 +15688,15 @@ def _antilife_shell_emitter_forces_creature_through(
     for c in state.get("combatants") or []:
         if not isinstance(c, dict):
             continue
-        c_char = c.get("char_id")
-        if c_char and int(c_char) == int(emitter_char_id):
+        if c is emitter_comb:
             continue  # the emitter isn't "forced through" its own shell
         # Affected creatures only — undead/constructs aren't hedged (RAW).
-        if _attacker_creature_type(db, c_char, c) in ("undead", "construct"):
+        if _attacker_creature_type(db, c.get("char_id"), c) in (
+            "undead", "construct",
+        ):
             continue
-        ctok = None
-        if c_char:
-            ctok = (
-                db.query(Token)
-                .filter(Token.character_id == int(c_char),
-                        Token.map_id == map_row.id)
-                .first()
-            )
-        if not ctok:
+        ctok = _combatant_token(db, campaign_id, c)
+        if not ctok or ctok.map_id != map_row.id:
             continue
         cx, cy = float(ctok.x or 0), float(ctok.y or 0)
         old_d = _distance_ft_between_points(
@@ -15933,13 +15973,13 @@ async def move_token(
     # 10-ft barrier over an affected creature (outside → inside), the
     # spell ends. The move itself still stands — RAW the shell ends, it
     # doesn't block the holder's movement.
-    if token.character_id and distance_ft > 0:
+    if distance_ft > 0:
         _swept = _antilife_shell_emitter_forces_creature_through(
             db, campaign_id, token, from_x, from_y, x, y,
         )
         if _swept:
-            await _remove_buff(
-                campaign_id, int(token.character_id), "antilife-shell",
+            await _remove_buff_from_token(
+                campaign_id, token, "antilife-shell",
             )
             await hub.broadcast(campaign_id, {
                 "type": "feature_used",

@@ -205,6 +205,56 @@ async def test_emitter_move_no_sweep_keeps_shell(gm_client, roster):
         await _teardown_shell(gm_client, druid)
 
 
+async def _del_token(gm_client, char_id):
+    await gm_client.delete(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/token",
+    )
+
+
+async def test_npc_held_shell_blocks_mover(gm_client, roster):
+    """v2.521.0 — an NPC-held Antilife Shell hedges movers out too. The
+    emitter is an NPC combatant (no char_id) whose position resolves via
+    `source_token_id`; a PC mover crossing into its 10-ft radius → 409
+    barrier_blocks_move."""
+    import pytest
+    anchor = roster.get("Sir Caelan Lightbringer")
+    mover = roster.get("Krieger Stonefist")
+    if not (anchor and mover):
+        pytest.skip("demo roster missing Caelan/Krieger")
+    # The NPC emitter's position is anchored to `anchor`'s token (a stand-in
+    # for an NPC token at a known coordinate).
+    await _place(gm_client, anchor["id"], 350.0, 350.0)
+    await _place(gm_client, mover["id"], 560.0, 350.0)  # 15 ft, outside
+    toks = await _tokens_by_char(gm_client)
+    anchor_tok_id = toks[anchor["id"]]["id"]
+    mover_tok_id = toks[mover["id"]]["id"]
+    npc_holder = {
+        "id": "npc_als_holder", "char_id": None,
+        "source_token_id": anchor_tok_id, "name": "Shambling Druid",
+        "initiative": 20, "hp_current": 40, "hp_max": 40,
+        "buffs": [{
+            "key": "antilife-shell", "name": "Antilife Shell",
+            "concentration": True,
+            "effects": {"antilife_shell": True},
+        }],
+        "economy": {"action": False, "bonus": False,
+                    "reaction": False, "movement": 0},
+    }
+    await _put_battle(gm_client, [npc_holder, _tok(mover, init=10)])
+    try:
+        r = await _move(gm_client, mover_tok_id, 420.0, 350.0)  # ~5 ft, inside
+        assert r.status_code == 409, r.text
+        assert r.json()["error"] == "barrier_blocks_move", r.json()
+    finally:
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/battle",
+            json={"combatants": [], "turn_index": 0, "round": 1,
+                  "active": False},
+        )
+        await _del_token(gm_client, anchor["id"])
+        await _del_token(gm_client, mover["id"])
+
+
 async def test_undead_mover_passes_freely(gm_client, roster):
     """v2.519.0 — RAW: undead/constructs are NOT hedged out. A mover whose
     combatant carries `creature_type: "undead"` crosses the shell freely

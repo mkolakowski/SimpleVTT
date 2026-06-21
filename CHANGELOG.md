@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.521.0] - 2026-06-21 — "The Warden's Circle"
+
+**Schema version:** 71
+
+**Commit summary:** Antilife Shell v1 follow-up (final) — NPC-held shells now enforce too. The barrier-block + force-through helpers resolve the holder's position via `_combatant_token` (NPC `source_token_id` OR PC `char_id`), so an NPC druid's shell hedges creatures out the same way a PC's does.
+
+**Description:** Closes the last filed limitation on the Phase 3 Antilife Shell barrier. v2.518.0–v2.520.0 were PC-holder only (the helpers queried the holder's token by `character_id`). v2.521.0 swaps that for the existing `_combatant_token` helper, which prefers `source_token_id` (NPC) and falls back to `char_id` (PC). The force-through helper now matches the moving holder's combatant by either id and ends the shell via the new `_remove_buff_from_token` (delegates to `_remove_buff` for PCs; drops the buff from the hub combatant + broadcasts `buff_update` for NPCs). The undead/construct exemption + the "forced through" clause both carry over to NPC holders unchanged.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: `_move_crosses_antilife_shell` + `_antilife_shell_emitter_forces_creature_through` resolve the holder via `_combatant_token` and match the mover's combatant by `char_id` OR `source_token_id`; new `_remove_buff_from_token` (PC + NPC); the `move_token` force-through hook no longer requires `token.character_id`.
+
+**Harness changes:**
+
+- `tests/harness/test_antilife_shell_barrier.py`: +1 test — an NPC emitter combatant (no `char_id`, position via `source_token_id`) carrying the shell hedges a PC mover out → 409 `barrier_blocks_move`.
+
+Total harness count → 3868 (+1).
+
+MINOR — NPC-holder support on the Antilife Shell barrier. No schema change.
+
+### Changed
+- Antilife Shell: NPC-held shells now enforce the movement barrier (+ undead/construct exemption + forced-through end), via `_combatant_token` position resolution. Antilife Shell is now RAW-complete for both PC and NPC holders.
+
 ## [2.520.0] - 2026-06-21 — "The Sweeping Veil"
 
 **Schema version:** 71
