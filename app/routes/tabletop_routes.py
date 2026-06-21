@@ -15531,8 +15531,12 @@ def _move_crosses_antilife_shell(
     ``effects.antilife_shell``) and the holder's token position on the
     active map. PC-holder only for v1 (NPC-holder positions via
     ``source_token_id`` are filed). Off-grid (no `grid_size_px`) → no
-    gate (GM-narrated). The undead/construct exception (those creatures
-    pass freely) is GM-narrated via the ``override_barrier`` bypass.
+    gate (GM-narrated).
+
+    v2.519.0 — RAW undead/construct exception: those creatures are NOT
+    hedged out, so a mover whose creature type (via
+    ``_attacker_creature_type``) is undead or construct passes freely.
+    The ``override_barrier`` bypass remains for other edge cases.
     """
     state = hub.get_battle(campaign_id)
     if not state:
@@ -15545,6 +15549,24 @@ def _move_crosses_antilife_shell(
         map_row.grid_type.value if map_row.grid_type else "square"
     ).lower()
     RADIUS_FT = 10.0
+    # v2.519.0 — resolve the mover's combatant + creature type; undead and
+    # constructs are exempt from the hedge (RAW), so they pass freely.
+    _mover_comb = None
+    for c in state.get("combatants") or []:
+        if not isinstance(c, dict):
+            continue
+        if (
+            (mover_token.character_id is not None
+             and c.get("char_id") == int(mover_token.character_id))
+            or c.get("source_token_id") == int(mover_token.id)
+        ):
+            _mover_comb = c
+            break
+    _mover_type = _attacker_creature_type(
+        db, mover_token.character_id, _mover_comb,
+    )
+    if _mover_type in ("undead", "construct"):
+        return None
     for c in state.get("combatants") or []:
         if not isinstance(c, dict):
             continue

@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.519.0] - 2026-06-21 — "The Unbothered Dead"
+
+**Schema version:** 71
+
+**Commit summary:** Antilife Shell v1 follow-up — the RAW undead/construct exception is now automatic. A mover whose creature type is undead or construct passes the shell freely; no GM `override_barrier` needed.
+
+**Description:** Tightens the v2.518.0 Phase 3 barrier. RAW PHB p.213: the shell hedges out "creatures other than undead and constructs." v2.518.0 left that exception to the GM `override_barrier` bypass; v2.519.0 makes it automatic by resolving the mover's creature type via the existing `_attacker_creature_type` helper (combatant `creature_type` override → PC sheet `creature_type` → NPC `token_template.sheet.type`). When the type is `undead` or `construct`, `_move_crosses_antilife_shell` returns `None` (no block). `override_barrier` remains for other edge cases (the "spell ends if the emitter forces a creature through" clause is still GM-narrated).
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: `_move_crosses_antilife_shell` resolves the mover's combatant + creature type and exempts undead/constructs before the radius check.
+
+**Harness changes:**
+
+- `tests/harness/test_antilife_shell_barrier.py`: +1 test — a mover whose combatant carries `creature_type: "undead"` crosses into the shell (~2 ft) and is allowed (200), no override.
+
+Total harness count → 3865 (+1).
+
+MINOR — automatic undead/construct exemption on the movement barrier. No schema change.
+
+### Changed
+- Antilife Shell movement barrier: undead and construct creatures now pass the shell automatically (RAW exception), resolved via `_attacker_creature_type` — previously required GM `override_barrier`.
+
 ## [2.518.0] - 2026-06-21 — "The Living Hedge"
 
 **Schema version:** 71

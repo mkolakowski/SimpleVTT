@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3864 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.518.0, 2026-06-21).
+**Total tests:** 3865 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.519.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4716,7 +4716,8 @@ v2.518.0 — Antilife Shell movement barrier (Phase 3 of [aura-geometry-enforcem
 |------|-----------------|
 | `test_move_into_shell_blocked` | A mover crossing from 25 ft (outside) to ~2 ft (inside) → 409 `barrier_blocks_move`, `barrier == "antilife-shell"`. |
 | `test_move_staying_outside_allowed` | A move that stays outside the 10-ft radius → 200. |
-| `test_override_barrier_bypasses` | `override_barrier: true` → the mover crosses in (200) — the GM escape hatch for the undead/construct exception. |
+| `test_override_barrier_bypasses` | `override_barrier: true` → the mover crosses in (200) — the GM escape hatch for edge cases. |
+| `test_undead_mover_passes_freely` | v2.519.0: a mover whose combatant carries `creature_type: "undead"` crosses into the shell (200) with no override (RAW undead/construct exception, auto via `_attacker_creature_type`). |
 
 ### `test_holy_aura_membership.py`
 v2.516.0 — Holy Aura aura membership (Phase 1 of [aura-geometry-enforcement.md](../plans/aura-geometry-enforcement.md)). `cast_holy_aura` registers `effects.aura = {radius_ft:30, affects:allies, buff:{key:holy-aura-radiance, ...}}` on the caster's anchor so the v2.99.425 `_tick_auras` engine maintains the benefit for allies within 30 ft each turn (auto-apply on enter, lapse on leave). Distinct `holy-aura-radiance` key avoids clobbering the cast-time `holy-aura` buffs.

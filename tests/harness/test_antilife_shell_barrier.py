@@ -127,7 +127,45 @@ async def test_move_staying_outside_allowed(gm_client, shell_setup):
 
 async def test_override_barrier_bypasses(gm_client, shell_setup):
     """override_barrier: true lets the mover cross into the shell (the
-    GM escape hatch for the undead/construct exception)."""
+    GM escape hatch for edge cases)."""
     mover_tok_id, druid, mover = shell_setup
     r = await _move(gm_client, mover_tok_id, 380.0, 350.0, override_barrier=True)
     assert r.status_code == 200, r.text
+
+
+async def test_undead_mover_passes_freely(gm_client, roster):
+    """v2.519.0 — RAW: undead/constructs are NOT hedged out. A mover whose
+    combatant carries `creature_type: "undead"` crosses the shell freely
+    (no override needed)."""
+    import pytest
+    druid = _find_druid(roster)
+    mover = roster.get("Krieger Stonefist")
+    if not (druid and mover):
+        pytest.skip("demo roster missing Mira/Krieger")
+    # Seed the mover's combatant with an undead creature-type override.
+    mover_tok = _tok(mover, init=10)
+    mover_tok["creature_type"] = "undead"
+    await _put_battle(gm_client, [_tok(druid, init=20), mover_tok])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_antilife_shell",
+        json={"character_id": druid["id"]},
+    )
+    assert r.status_code == 200, r.text
+    await _place(gm_client, druid["id"], 350.0, 350.0)
+    await _place(gm_client, mover["id"], 700.0, 350.0)
+    toks = await _tokens_by_char(gm_client)
+    mover_tok_id = toks[mover["id"]]["id"]
+    try:
+        # Crossing into the shell (~2 ft) is allowed for an undead mover.
+        r = await _move(gm_client, mover_tok_id, 380.0, 350.0)
+        assert r.status_code == 200, r.text
+    finally:
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+            json={"character_id": druid["id"], "key": "antilife-shell"},
+        )
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/battle",
+            json={"combatants": [], "turn_index": 0, "round": 1,
+                  "active": False},
+        )
