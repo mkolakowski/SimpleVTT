@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.531.0] - 2026-06-21 — "The Flushed Edge"
+
+**Schema version:** 71
+
+**Commit summary:** Deploy-time Cloudflare cache purge. On boot, the app can flush the Cloudflare edge cache so a freshly-deployed `APP_VERSION`'s HTML/JS isn't served stale from the edge (the issue behind the public demo showing an old version after a deploy). Opt-in, default-off, best-effort.
+
+**Description:** The public demo is fronted by Cloudflare; after a deploy, Cloudflare can keep serving the cached old-version HTML until the cache expires — so the admin center / app appears stuck on a previous version. This adds a startup-time cache purge. New `purge_cache()` op on the existing `app/integrations/cloudflare.py` client POSTs `{"purge_everything": true}` to `/zones/{zone}/purge_cache` (or `{"files": [...]}` when passed a URL list), reusing the same token/zone/base-URL config as the edge-banning ops (so the dev wiremock override works too). A new `on_startup` hook calls it once per boot when `cloudflare_cache_purge_enabled()` is on — gated by both the configured Cloudflare client **and** a new `SIMPLEVTT_CLOUDFLARE_CACHE_PURGE_ENABLED` flag (default off; fresh deploys never call the API on boot). The purge is best-effort: any failure (unconfigured, API error, network) is logged and never blocks boot.
+
+**Operational note (the real fix for the stale dashboard):** the `admin-center` is a **separate compose container** and was not being rebuilt by a plain `docker compose up -d --build app`, so its dashboard sat on an older `APP_VERSION`. Rebuilding it (`--build admin-center`, done in v2.530.0) is the direct fix; this cache purge handles the *edge*-cache layer for the public Cloudflare-fronted demo.
+
+**Implementation:**
+
+- `app/integrations/cloudflare.py`: new `purge_cache(*, files=None)` + `cloudflare_cache_purge_enabled()` gate.
+- `app/main.py`: `on_startup` calls `purge_cache()` (best-effort, gated) and logs the purged version.
+- `.env.example`: documented `SIMPLEVTT_CLOUDFLARE_CACHE_PURGE_ENABLED=false`.
+- `docs/integrations/cloudflare/mock/mappings/purge-cache.json`: wiremock stub for the dev profile (per the third-party-API rule).
+
+**Harness changes:**
+
+- `tests/harness/test_cloudflare_banning.py`: +6 tests — the gate needs client + flag (default off) + truthy variants; `purge_cache()` POSTs `{"purge_everything": true}` to the right URL with the bearer token; `files=[...]` targets the list; `CloudflareDisabledError` when unconfigured; `CloudflareApiError` on a non-200. (Reuses the existing `fake_cf_client` httpx fixture.)
+
+Total harness count → 3900 (+6).
+
+MINOR — new opt-in Cloudflare cache-purge integration. No schema change.
+
+### Added
+- Deploy-time Cloudflare cache purge: `purge_cache()` on the Cloudflare client + a gated `on_startup` hook (`SIMPLEVTT_CLOUDFLARE_CACHE_PURGE_ENABLED`, default off) that flushes the edge cache on boot so a new `APP_VERSION` isn't served stale from Cloudflare.
+
 ## [2.530.0] - 2026-06-21 — "The Threaded Trail"
 
 **Schema version:** 71

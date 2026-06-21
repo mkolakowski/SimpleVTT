@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3894 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.527.0, 2026-06-21).
+**Total tests:** 3900 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.531.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5753,6 +5753,12 @@ Mix of in-process unit tests on `app/integrations/cloudflare.py` predicates + in
 | `test_list_ip_access_rules_returns_array` | Parses `result` array out of the response; sends `per_page=100`. |
 | `test_list_ip_access_rules_with_ip_filter` | `ip="..."` argument adds the `configuration.value` query param. |
 | `test_notes_truncated_at_1024_chars` | Notes longer than Cloudflare's 1024-char cap are truncated client-side before being sent. |
+| `test_cache_purge_gate_requires_client_and_flag` | v2.531.0: `cloudflare_cache_purge_enabled()` needs BOTH the client configured AND `SIMPLEVTT_CLOUDFLARE_CACHE_PURGE_ENABLED` on — default closed; client missing → off. |
+| `test_cache_purge_gate_truthy_variants` | v2.531.0: the purge flag accepts `1/true/yes/on` (case-insensitive) and rejects everything else. |
+| `test_purge_cache_posts_purge_everything` | v2.531.0: `purge_cache()` POSTs `{"purge_everything": true}` to `.../zones/{zone}/purge_cache` with the `Authorization: Bearer` header. |
+| `test_purge_cache_with_files_targets_them` | v2.531.0: `purge_cache(files=[...])` POSTs `{"files": [...]}` instead of purging everything. |
+| `test_purge_cache_raises_disabled_when_env_unset` | v2.531.0: token/zone unset → `CloudflareDisabledError` before any HTTP attempt. |
+| `test_purge_cache_raises_on_non_200` | v2.531.0: a 403 upstream raises `CloudflareApiError` with `status_code=403`. |
 
 ---
 

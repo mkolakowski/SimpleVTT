@@ -338,3 +338,67 @@ async def test_notes_truncated_at_1024_chars(fake_cf_client):
     await cf.add_ip_access_rule("198.51.100.10", notes=long_notes)
     body = fake_cf_client.captured[0]["body"]
     assert len(body["notes"]) == 1024
+
+
+# ─── v2.531.0 — deploy-time cache purge ───────────────────────────────
+
+
+def test_cache_purge_gate_requires_client_and_flag(monkeypatch):
+    """cloudflare_cache_purge_enabled() needs BOTH the client configured
+    AND the explicit opt-in flag — default closed."""
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "real-token")
+    monkeypatch.setenv("CLOUDFLARE_ZONE_ID", "real-zone")
+
+    monkeypatch.delenv("SIMPLEVTT_CLOUDFLARE_CACHE_PURGE_ENABLED", raising=False)
+    assert cf.cloudflare_cache_purge_enabled() is False, "flag off → no purge"
+
+    monkeypatch.setenv("SIMPLEVTT_CLOUDFLARE_CACHE_PURGE_ENABLED", "true")
+    assert cf.cloudflare_cache_purge_enabled() is True, "both set → purge on"
+
+    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
+    assert cf.cloudflare_cache_purge_enabled() is False, "client missing → off"
+
+
+def test_cache_purge_gate_truthy_variants(monkeypatch):
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "real-token")
+    monkeypatch.setenv("CLOUDFLARE_ZONE_ID", "real-zone")
+    for truthy in ("1", "true", "TRUE", "yes", "on"):
+        monkeypatch.setenv("SIMPLEVTT_CLOUDFLARE_CACHE_PURGE_ENABLED", truthy)
+        assert cf.cloudflare_cache_purge_enabled() is True, truthy
+    for falsy in ("0", "false", "no", "off", "", "garbage"):
+        monkeypatch.setenv("SIMPLEVTT_CLOUDFLARE_CACHE_PURGE_ENABLED", falsy)
+        assert cf.cloudflare_cache_purge_enabled() is False, falsy
+
+
+async def test_purge_cache_posts_purge_everything(fake_cf_client):
+    """purge_cache() with no files POSTs {"purge_everything": true} to
+    /zones/{zone}/purge_cache with the bearer token."""
+    await cf.purge_cache()
+    assert len(fake_cf_client.captured) == 1
+    req = fake_cf_client.captured[0]
+    assert req["method"] == "POST"
+    assert req["url"] == "https://api.test.example/v4/zones/test-zone-abc/purge_cache"
+    assert req["headers"]["Authorization"] == "Bearer test-token-xyz"
+    assert req["body"] == {"purge_everything": True}
+
+
+async def test_purge_cache_with_files_targets_them(fake_cf_client):
+    """purge_cache(files=[...]) POSTs the file list instead of everything."""
+    urls = ["https://demo.example/", "https://demo.example/admin"]
+    await cf.purge_cache(files=urls)
+    body = fake_cf_client.captured[0]["body"]
+    assert body == {"files": urls}
+
+
+async def test_purge_cache_raises_disabled_when_env_unset(monkeypatch):
+    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
+    monkeypatch.delenv("CLOUDFLARE_ZONE_ID", raising=False)
+    with pytest.raises(cf.CloudflareDisabledError):
+        await cf.purge_cache()
+
+
+async def test_purge_cache_raises_on_non_200(fake_cf_client):
+    fake_cf_client.responses["POST"] = _FakeResp(403, {"success": False, "errors": ["forbidden"]})
+    with pytest.raises(cf.CloudflareApiError) as exc:
+        await cf.purge_cache()
+    assert exc.value.status_code == 403

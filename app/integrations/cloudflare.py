@@ -117,6 +117,20 @@ def cloudflare_banning_enabled() -> bool:
     return raw in ("1", "true", "yes", "on")
 
 
+def cloudflare_cache_purge_enabled() -> bool:
+    """v2.531.0 — gate for the deploy-time cache purge (see
+    ``purge_cache``). Both the integration client AND an explicit
+    ``SIMPLEVTT_CLOUDFLARE_CACHE_PURGE_ENABLED`` flag must be on. Default
+    closed — fresh deploys never call the Cloudflare API on boot.
+    """
+    if not integration_enabled():
+        return False
+    raw = os.environ.get(
+        "SIMPLEVTT_CLOUDFLARE_CACHE_PURGE_ENABLED", "",
+    ).strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
 # ─── HTTP operations ──────────────────────────────────────────────────
 
 
@@ -230,3 +244,43 @@ async def list_ip_access_rules(*, ip: Optional[str] = None) -> list[dict]:
         raise CloudflareApiError(resp.status_code, resp.text)
     result = body.get("result") or []
     return result if isinstance(result, list) else []
+
+
+async def purge_cache(*, files: Optional[list[str]] = None) -> None:
+    """v2.531.0 — purge the configured zone's Cloudflare cache. With no
+    ``files`` (the default), purges EVERYTHING — the deploy-time
+    cache-bust so a freshly-shipped ``APP_VERSION``'s HTML/JS isn't
+    served stale from the edge after a restart. Pass ``files`` (a list
+    of absolute URLs) to purge only those.
+
+    POSTs ``{"purge_everything": true}`` (or ``{"files": [...]}``) to
+    ``/zones/{zone}/purge_cache``. Raises ``CloudflareDisabledError``
+    when unconfigured, ``CloudflareApiError`` on a non-success response,
+    or ``CloudflareConnectionError`` on a network failure — the startup
+    caller swallows these so a purge failure never blocks boot.
+    """
+    cfg = _read_config()
+    if cfg is None:
+        raise CloudflareDisabledError(
+            "Cloudflare integration not configured "
+            "(CLOUDFLARE_API_TOKEN + CLOUDFLARE_ZONE_ID required)"
+        )
+    payload: dict = {"files": list(files)} if files else {"purge_everything": True}
+    url = f"{cfg.api_base_url}/zones/{cfg.zone_id}/purge_cache"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {cfg.api_token}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+    except (httpx.ConnectError, httpx.ReadTimeout, httpx.ConnectTimeout) as e:
+        raise CloudflareConnectionError(str(e)) from e
+    if resp.status_code != 200:
+        raise CloudflareApiError(resp.status_code, resp.text)
+    body = resp.json()
+    if not body.get("success"):
+        raise CloudflareApiError(resp.status_code, resp.text)

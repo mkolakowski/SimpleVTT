@@ -1,0 +1,20 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPathPattern": "/client/v4/zones/[^/]+/purge_cache"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "success": true,
+      "errors": [],
+      "messages": [],
+      "result": {
+        "id": "9a7806061c88ada191ed06f989cc3dac"
+      }
+    }
+  }
+}

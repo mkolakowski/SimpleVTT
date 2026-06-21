@@ -374,6 +374,24 @@ async def on_startup() -> None:
         from .demo_scheduler import start_demo_scheduler
         start_demo_scheduler(app)
 
+    # v2.531.0 — deploy-time Cloudflare cache purge. A fresh container
+    # start means a (potentially) new APP_VERSION; if the operator has
+    # opted in (SIMPLEVTT_CLOUDFLARE_CACHE_PURGE_ENABLED + the Cloudflare
+    # client configured), flush the edge cache so the new version's
+    # HTML/JS isn't served stale from Cloudflare (the issue behind a
+    # public demo showing an old version after a deploy). Default-off and
+    # best-effort — any failure is logged and never blocks boot.
+    try:
+        from .integrations import cloudflare as _cf
+        if _cf.cloudflare_cache_purge_enabled():
+            await _cf.purge_cache()
+            log.info(
+                "Cloudflare cache purged on boot for version %s.",
+                APP_VERSION,
+            )
+    except Exception as e:  # noqa: BLE001 — never block boot on a purge
+        log.warning("Cloudflare cache purge on boot skipped/failed: %s", e)
+
 
 @app.get("/api/content-health")
 def content_health():
