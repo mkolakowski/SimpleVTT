@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.532.0] - 2026-06-21 — "The Traced Source"
+
+**Schema version:** 71
+
+**Commit summary:** Admin Center dashboard — **Top source IPs** are now clickable too, filtering the Recent events table by IP (mirroring the v2.530.0 clickable Top paths). Path + IP filters compose (AND).
+
+**Description:** Extends the v2.530.0 clickable-Top-paths feature to the **Top source IPs** list. Each IP is now a button; clicking it sets the events table's **IP** column filter to that address, scrolls to the table, and shows a clearable note. Because path and IP target different columns, the two compose with AND — clicking IP `1.1.1.1` then path `/.env` narrows to events that are both — and the shared note lists every active filter (`Recent events filtered to IP 1.1.1.1 + path /.env`) with a single **Clear**. Pure client-side, instant.
+
+**Implementation:**
+
+- `app/admin_center/templates/dashboard.html`: Top-source-IP cells are now `.ip-link` buttons; the click-wiring was refactored into a shared `setFilter(column, value, display)` + an `active`-filters note (replacing the path-only handler), with separate `.path-link` (Details → `path=…`) and `.ip-link` (IP column) bindings; CSS selector extended to `.ip-link`.
+
+**Operational note:** the Admin Center is a **separate `admin-center` container** — `docker compose up -d --build admin-center` is required for dashboard changes to land. This commit rebuilds it.
+
+**Harness changes:** none — UI-only template + client-side JS; exempt per the harness-discipline rule. Validated with Playwright: clicking IP `1.1.1.1` filters events to its rows; adding a path click composes (AND) to the single matching row; the note lists both filters; Clear restores all rows; zero JS console errors.
+
+MINOR — Admin Center dashboard UI enhancement. No schema change.
+
+### Added
+- Admin Center dashboard: clickable Top source IPs that filter the Recent events table by IP, composing (AND) with the clickable Top paths.
+
 ## [2.531.1] - 2026-06-21 — "The Plumbed Flag"
 
 **Schema version:** 71

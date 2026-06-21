@@ -131,14 +131,14 @@
     table.filterable tr.no-matches td {
       text-align: center; font-style: italic; color: var(--muted); padding: 8px;
     }
-    /* Clickable Top-paths cell. 32px min per the compact-panel exception
-       to the 44px touch-target rule (dense stats table). */
-    button.path-link {
+    /* Clickable Top-paths / Top-IPs cell. 32px min per the compact-panel
+       exception to the 44px touch-target rule (dense stats table). */
+    button.path-link, button.ip-link {
       background: transparent; border: none; padding: 0; margin: 0;
       cursor: pointer; color: var(--accent); font: inherit; text-align: left;
       min-height: 32px; display: inline-flex; align-items: center;
     }
-    button.path-link:hover code { text-decoration: underline; }
+    button.path-link:hover code, button.ip-link:hover code { text-decoration: underline; }
     .events-path-note { margin: 8px 0; color: var(--accent); font-size: 13px; }
     .events-path-note button {
       background: transparent; border: 1px solid var(--line);
@@ -212,13 +212,14 @@
     <div class="grid2">
       <div>
         <h2>Top source IPs</h2>
+        <p class="muted" style="font-size:12px;margin:-6px 0 8px">Click an IP to filter the recent-events table below.</p>
         <table>
           <thead><tr><th>IP</th><th>Events</th></tr></thead>
           <tbody>
             {% for ip, n in summary.top_ips %}
             <tr>
               <td>
-                <code>{{ ip }}</code>
+                <button type="button" class="ip-link" data-ip="{{ ip }}" title="Filter the recent-events table to this IP"><code>{{ ip }}</code></button>
                 {% if dns_on %}{% set h = dns_map.get(ip) %}{% if h %}<div class="muted" style="font-size:12px"><code>{{ h }}</code></div>{% endif %}{% endif %}
               </td>
               <td>{{ n }}</td>
@@ -499,34 +500,61 @@
             var tables = document.querySelectorAll('table.filterable');
             Array.prototype.forEach.call(tables, attachColumnFilters);
 
-            // Clickable Top paths → filter the events table's Details
-            // column to `path=<path>` (path-bearing events render the path
-            // as `path=…` in Details). Shows a clearable note.
+            // Clickable Top paths / Top source IPs → filter the events
+            // table. A path sets the Details-column filter to `path=<path>`
+            // (path-bearing events render the path as `path=…` in Details);
+            // an IP sets the IP-column filter. Both can be active at once
+            // (AND); a shared note lists them with a single Clear.
             var evTable = document.getElementById('events-table');
             var note = document.getElementById('events-path-note');
-            function clearPathFilter() {
-                if (evTable && evTable._setColumnFilter) {
-                    evTable._setColumnFilter('Details', '');
+            var active = {};  // columnLabel -> display string
+            function renderNote() {
+                if (!note) { return; }
+                var labels = Object.keys(active).map(function (k) {
+                    return active[k];
+                });
+                if (labels.length === 0) {
+                    note.style.display = 'none';
+                    note.textContent = '';
+                    return;
                 }
-                if (note) { note.style.display = 'none'; }
+                note.style.display = '';
+                note.textContent = 'Recent events filtered to '
+                    + labels.join(' + ') + ' ';
+                var clr = document.createElement('button');
+                clr.type = 'button';
+                clr.textContent = 'Clear';
+                clr.addEventListener('click', clearAll);
+                note.appendChild(clr);
+            }
+            function clearAll() {
+                if (evTable && evTable._setColumnFilter) {
+                    Object.keys(active).forEach(function (col) {
+                        evTable._setColumnFilter(col, '');
+                    });
+                }
+                active = {};
+                renderNote();
+            }
+            function setFilter(col, filterValue, display) {
+                if (!evTable || !evTable._setColumnFilter) { return; }
+                evTable._setColumnFilter(col, filterValue);
+                active[col] = display;
+                renderNote();
+                evTable.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
             Array.prototype.forEach.call(
                 document.querySelectorAll('.path-link'), function (btn) {
                     btn.addEventListener('click', function () {
                         var p = btn.getAttribute('data-path') || '';
-                        if (!evTable || !evTable._setColumnFilter) { return; }
-                        evTable._setColumnFilter('Details', 'path=' + p);
-                        if (note) {
-                            note.style.display = '';
-                            note.textContent = 'Recent events filtered to path ' + p;
-                            var clr = document.createElement('button');
-                            clr.type = 'button';
-                            clr.textContent = 'Clear';
-                            clr.addEventListener('click', clearPathFilter);
-                            note.appendChild(clr);
-                        }
-                        evTable.scrollIntoView(
-                            { behavior: 'smooth', block: 'start' });
+                        setFilter('Details', 'path=' + p, 'path ' + p);
+                    });
+                });
+            Array.prototype.forEach.call(
+                document.querySelectorAll('.ip-link'), function (btn) {
+                    btn.addEventListener('click', function () {
+                        var ip = btn.getAttribute('data-ip') || '';
+                        setFilter('IP', ip, 'IP ' + ip);
                     });
                 });
         });
