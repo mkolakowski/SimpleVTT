@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.547.0] - 2026-06-21 — "The Distant Self"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_project_image` — Phase 2 #61 of the cast-and-broadcast tail. Project Image (L7 illusion, Bard/Wizard) projects a remote intangible copy of the caster as a concentration flag-buff.
+
+**Description:** RAW PHB p.270: "You create an illusory copy of yourself that lasts for the duration. ... The illusion looks and sounds like you but is intangible. ... you can see through its eyes and hear through its ears as if you were in its space." 500 miles, Concentration up to 24 hours. Unlike Mislead (#60), Project Image grants the caster no invisibility — the copy is a *remote* intangible sensor/decoy that SimpleVTT models as GM-narrated (no decoy token, no remote camera). So this is a concentration flag-buff: it marks the active projection (with an optional `location` label) and rides the concentration cascade — the projection drops the moment the caster concentrates elsewhere. "Attacks pass harmlessly through it" and the DC-Intelligence-check-to-spot-the-illusion clause are GM-managed.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `cast_project_image` endpoint (self-cast; gate: knows the spell OR bard/wizard). 400/403/404/409 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #61.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_project_image.py` (new): +5 — self-cast installs a concentration `project-image` buff (`project_image_active` + a `location` label, 14400 rounds); a named `location` surfaces; concentration cascade-drop via Fly; non-caster 409; missing character_id 400.
+
+Total harness count → 3968 (+5).
+
+MINOR — new cast endpoint (concentration GM-narrated projection flag-buff). No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_project_image`: Project Image (L7) — a concentration flag-buff marking a remote intangible illusory copy of the caster (GM-narrated). Phase 2 #61 of the cast-and-broadcast tail.
+
 ## [2.546.0] - 2026-06-21 — "The Vanishing Act"
 
 **Schema version:** 71

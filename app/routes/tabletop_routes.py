@@ -71600,6 +71600,136 @@ async def cast_mislead(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_project_image")
+async def cast_project_image(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.547.0 — Phase 2 #61 of
+    docs/plans/cast-and-broadcast-tail.md. Project Image (L7 illusion,
+    Bard/Wizard, PHB p.270):
+
+      "You create an illusory copy of yourself that lasts for the
+       duration. The copy can appear at any location within range that
+       you have seen before ... The illusion looks and sounds like you
+       but is intangible. ... you can see through its eyes and hear
+       through its ears as if you were in its space."
+
+    1 action, V/S/M, 500 miles, Concentration up to 24 hours.
+
+    Unlike Mislead (#60), Project Image grants the caster no
+    invisibility — the copy is a *remote* intangible sensor/decoy, which
+    SimpleVTT models as a GM-narrated illusion (no decoy token, no remote
+    camera). So this is a **concentration flag-buff**: it marks the
+    active projection (and an optional `location` label) and rides the
+    concentration cascade — the projection drops the moment the caster
+    concentrates elsewhere. "Attacks pass harmlessly through it" and the
+    DC-Intelligence-check-to-spot-the-illusion clause are GM-managed.
+    Self-cast.
+
+    Body: ``{character_id, location?}``. Response: ``{ok, feature,
+    target_character_id, location, concentration, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows = any(
+        (s.get("_slug") == "project-image")
+        or (str(s.get("name", "")).lower() == "project image")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"bard", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Project Image, or bard/wizard",
+            "got_class": _cls,
+        })
+
+    location = (body.get("location") or "").strip() or "a remembered location"
+    DURATION_ROUNDS = 14400  # 24 hours @ 6 s/round
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "project-image",
+        "name": "Project Image",
+        "icon": "👥",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": True,  # RAW "Concentration, up to 24 hours"
+        "source_char_id": char.id,
+        "effects": {
+            "project_image_active": True,
+            "project_image_location": location,
+        },
+        "desc": (
+            f"An intangible illusory copy of you at {location} "
+            "(concentration, up to 24 hours). You see/hear through it; "
+            "attacks pass harmlessly through it. The image — and the "
+            "Intelligence-check to spot it — are GM-managed."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "👥 Project Image",
+            "feature_desc": (
+                f"{char.name} projects an intangible illusory copy of "
+                f"themself at {location}. The GM narrates the image."
+            ),
+            "source": "project-image",
+            "project_image_location": location,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "project-image",
+        "target_character_id": char.id,
+        "location": location,
+        "concentration": True,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_zone_of_truth")
 async def cast_zone_of_truth(
     campaign_id: int,
