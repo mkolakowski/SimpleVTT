@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.499.0] - 2026-06-21 — "The Unseen Hand"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_greater_invisibility` — Phase 2 #32 of the cast-and-broadcast tail. Greater Invisibility (L4 illusion, Bard/Sorcerer/Wizard) installs a 1-minute concentration buff turning the target invisible — and, unlike L2 Invisibility, it does not end when they attack or cast.
+
+**Description:** Continues the tail after Stoneskin (#31). Greater Invisibility was the lighter of the two survey candidates (Blur needs a new generic attackers-disadvantage read-site). RAW PHB p.251: "You or a creature you touch becomes invisible until the spell ends." The mechanized core rides the existing `effects.invisible` marker the attack-resolution intercepts already read — `_attacker_has_invisible_advantage` gives the invisible attacker advantage, and the target-side intercept gives attackers disadvantage vs an invisible target (the same marker the Potion of Invisibility + Monk Empty Body carry). The "does not end on attacking/casting" distinction from L2 Invisibility is already the engine default (the "ends on attack" consume is GM-narrated for L2/the potion), so this is a true **zero new mechanical code** ride. Concentration / 1 minute; the buff is mirrored to the target sheet so the sheet-based invisible reader sees it.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_SPELL_BUFF_MAP["greater-invisibility"]` template (`invisible: True`, concentration, 10 rounds) + the `cast_greater_invisibility` endpoint. Caster gate: knows the spell OR bard/sorcerer/wizard. Touch self-or-ally target. Mirrors to the target sheet. 400 missing character_id, 404 unknown caster/target, 409 non-caster, 403 not-your-character.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #32.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_greater_invisibility.py` (new): +5 tests — install carries `invisible:true`, concentration + 1-minute + mirrored to sheet `_buffs_active`, ally-target installs on the ally, non-caster 409, missing character_id 400.
+
+Total harness count → 3785 (+5).
+
+MINOR — new cast endpoint; backward-compatible, additive substrate. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_greater_invisibility`: Greater Invisibility (L4) — 1-minute concentration invisibility (persists through attacks/casts), riding the existing `invisible` marker. Phase 2 #32 of the cast-and-broadcast tail.
+
 ## [2.498.0] - 2026-06-21 — "The Diamond Skin"
 
 **Schema version:** 71

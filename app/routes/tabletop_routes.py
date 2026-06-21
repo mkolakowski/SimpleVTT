@@ -2109,6 +2109,35 @@ _SPELL_BUFF_MAP["stoneskin"] = {
     ),
 }
 
+# v2.499.0 — Greater Invisibility (Phase 2 #32 of
+# docs/plans/cast-and-broadcast-tail.md). L4 illusion,
+# Bard/Sorcerer/Wizard, PHB p.251. "You or a creature you touch
+# becomes invisible until the spell ends." Concentration, up to
+# 1 minute. Rides the existing `effects.invisible` marker that the
+# attack-resolution intercepts already read (`_attacker_has_invisible_
+# advantage` → advantage for the invisible attacker; the target-side
+# intercept → disadvantage for attackers vs an invisible target) — the
+# same marker the Potion of Invisibility + Monk Empty Body carry.
+# Unlike L2 Invisibility, Greater Invisibility does NOT end when the
+# target attacks or casts — which is already the engine default (the
+# "ends on attack" consume is GM-narrated for L2/the potion), so this
+# is a true zero-code ride.
+_SPELL_BUFF_MAP["greater-invisibility"] = {
+    "key": "greater-invisibility",
+    "name": "Greater Invisibility",
+    "icon": "👻",
+    "duration_rounds": 10,  # 1 minute @ 6 s/round
+    "duration_max": 10,
+    "concentration": True,  # RAW (PHB p.251)
+    "effects": {
+        "invisible": True,
+    },
+    "desc": (
+        "Invisible for up to 1 minute (concentration); does NOT end "
+        "when you attack or cast a spell."
+    ),
+}
+
 # v2.190.0 — Potion of Invulnerability (RAW DMG p.188, rare): resistance to
 # ALL damage for 1 minute. Reuses the v2.99.121 `resistance_to: ["all"]`
 # wildcard that `_resistance_halve` already honours, so no new intercept is
@@ -66356,6 +66385,145 @@ async def cast_stoneskin(
     return {
         "ok": True,
         "feature": "stoneskin",
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_greater_invisibility")
+async def cast_greater_invisibility(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.499.0 — Phase 2 #32 of
+    docs/plans/cast-and-broadcast-tail.md. Greater Invisibility
+    (L4 illusion, Bard/Sorcerer/Wizard, PHB p.251):
+
+      "You or a creature you touch becomes invisible until the spell
+       ends. Anything the target is wearing or carrying is invisible
+       as long as it is on the target's person."
+
+    1 action, V/S, Touch, **Concentration, up to 1 minute**.
+
+    Implementation: rides the existing ``effects.invisible`` marker the
+    attack-resolution intercepts already read
+    (``_attacker_has_invisible_advantage`` → advantage for the invisible
+    attacker; the target-side intercept → disadvantage for attackers vs
+    an invisible target). Unlike L2 Invisibility, Greater Invisibility
+    does NOT end when the target attacks or casts — which is already the
+    engine default (the "ends on attack" consume is GM-narrated for
+    L2/the potion), so this is a true ZERO new mechanical code ride.
+    Mirrors the buff to the target sheet (the invisible reader is
+    sheet-based, like the resistance readers).
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster targets themself.
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_gi = any(
+        (s.get("_slug") == "greater-invisibility")
+        or (str(s.get("name", "")).lower() == "greater invisibility")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"bard", "sorcerer", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_gi and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Greater Invisibility, or bard/sorcerer/wizard",
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("greater-invisibility") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 10)
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "greater-invisibility",
+        "name": template.get("name") or "Greater Invisibility",
+        "icon": template.get("icon") or "👻",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": True,
+        "source_char_id": char.id,
+        "effects": dict(template.get("effects") or {"invisible": True}),
+        "desc": template.get("desc") or (
+            "Invisible for up to 1 minute (concentration)."
+        ),
+    })
+    # Mirror to the target's sheet so the sheet-based invisible reader
+    # (`_attacker_has_invisible_advantage` reads `_buffs_active`) sees it.
+    _mirror_buffs_to_sheet(
+        db, target_char.id, _get_buffs(campaign_id, target_char.id),
+    )
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    who = "themself" if target_char.id == char.id else target_char.name
+    feature_desc = (
+        f"{char.name} turns {who} invisible — advantage on attacks, "
+        "attackers have disadvantage, for up to 1 minute (concentration). "
+        "Does not end on attacking or casting."
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "👻 Greater Invisibility",
+            "feature_desc": feature_desc,
+            "source": "greater-invisibility",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "greater-invisibility",
         "target_character_id": target_char.id,
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,
