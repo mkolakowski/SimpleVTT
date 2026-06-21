@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.492.0] - 2026-06-21 — "The Unbound Stride"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_freedom_of_movement` — Phase 2 #27 of the cast-and-broadcast tail. Freedom of Movement (L4 abjuration, Bard/Cleric/Druid/Ranger) installs a 1-hour buff granting **immunity to being paralyzed or restrained** via the existing condition-immunity substrate.
+
+**Description:** Continues the cast-and-broadcast tail (Enlarge/Reduce #26 shipped v2.491.0). Freedom of Movement was verified genuinely unwired. RAW PHB p.250: "spells and other magical effects can neither reduce the target's speed nor cause the target to be paralyzed or restrained." The mechanized core rides the existing condition-immunity substrate — the buff carries `effects.condition_immunity_to: ["paralyzed", "restrained"]` (the exact field the v2.289.0 Ring of Free Action uses), enforced at the `_install_buff` / `_install_buff_on_combatant_id` gate via `_target_condition_immune`. So a Hold Person / Hold Monster / Web install on the warded target is suppressed with **zero new mechanical code**. The difficult-terrain / speed-reduction-immunity / escape-grapple / underwater clauses stay GM-narrated (no terrain/speed-debuff substrate). RAW the immunity is scoped to magical sources; like the Ring we model it as full immunity to the two conditions, since nearly all paralyzed/restrained installs in-engine are spell/magic effects.
+
+**Mirror nuance:** unlike the speed/resistance/STR-marker buffs shipped in #25/#26 (read from live hub state), the PC condition-immunity gate reads the target's sheet `_buffs_active`. So this endpoint calls `_mirror_buffs_to_sheet` after the install — otherwise the gate wouldn't see the freshly-installed FoM buff. The gate test exercises this end-to-end.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_SPELL_BUFF_MAP["freedom-of-movement"]` template + the `cast_freedom_of_movement` endpoint. Caster gate: knows the spell OR bard/cleric/druid/ranger. Touch self-or-ally target. Mirrors buffs to the target sheet post-install. 400 missing character_id, 404 unknown caster/target, 409 non-caster, 403 not-your-character.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #27.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_freedom_of_movement.py` (new): +5 tests — self-install carries `condition_immunity_to:[paralyzed,restrained]`, 1-hour non-concentration, **gate test** (FoM on Krieger → Hold Person → paralyzed `installed == False`), non-caster 409, missing character_id 400.
+
+Total harness count → 3749 (+5).
+
+MINOR — new cast endpoint; backward-compatible, additive substrate. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_freedom_of_movement`: Freedom of Movement (L4) — 1-hour paralyzed/restrained immunity buff riding the existing condition-immunity substrate. Phase 2 #27 of the cast-and-broadcast tail.
+
 ## [2.491.0] - 2026-06-21 — "The Growth Spurt"
 
 **Schema version:** 71

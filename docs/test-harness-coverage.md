@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3744 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.491.0, 2026-06-21).
+**Total tests:** 3749 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.492.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4580,6 +4580,17 @@ v2.404.4 — Longstrider multi-target cap + per-slot upcast scaling (RAW PHB p.2
 | `test_longstrider_l1_two_targets_returns_400` | L1 cast with 2 targets → 400 `too_many_targets` with `{limit: 1, received: 2}`. |
 | `test_longstrider_l2_two_targets_succeeds` | L2 cast with 2 targets → 200 (extended cap = 1 + (2-1)*1 = 2). |
 | `test_longstrider_l2_three_targets_returns_400` | L2 cast with 3 targets → 400 with `{limit: 2, received: 3}` — confirms the upcast field is honored. |
+
+### `test_cast_freedom_of_movement.py`
+v2.492.0 — Freedom of Movement (L4 abjuration, Bard/Cleric/Druid/Ranger, PHB p.250). Phase 2 #27 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_SPELL_BUFF_MAP["freedom-of-movement"]` template (`condition_immunity_to: ["paralyzed","restrained"]`, 600 rounds, non-concentration) + the `cast_freedom_of_movement` endpoint. Rides the existing condition-immunity gate (`_target_condition_immune` at `_install_buff`) — the same substrate the v2.289.0 Ring of Free Action uses. The endpoint mirrors the buff to the target's sheet (`_mirror_buffs_to_sheet`) so the PC gate, which reads `_buffs_active` off the sheet, sees it. Brother Tavik (Cleric) casts; Krieger (Barbarian) is the warded target + non-caster reject.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_fom_self_installs_condition_immunity` | Cleric self → 200, `feature == "freedom-of-movement"`, `duration_rounds == 600`; buff carries `effects.condition_immunity_to` ⊇ {paralyzed, restrained}. |
+| `test_cast_fom_is_1_hour_non_concentration` | Installed buff has `concentration == false` + `duration_rounds == 600`. |
+| `test_fom_suppresses_hold_person_paralyze` | **Gate test:** FoM on Krieger → Tavik casts Hold Person (override) → `affected[].installed == False` for Krieger + no `paralyzed` buff. End-to-end proof the immunity gate fires off the mirrored sheet buff. |
+| `test_cast_fom_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected string names "freedom of movement". |
+| `test_cast_fom_missing_character_id_400` | Empty body → 400. |
 
 ### `test_cast_enlarge_reduce.py`
 v2.491.0 — Enlarge/Reduce (L2 transmutation, Sorcerer/Wizard, PHB p.237). Phase 2 #26 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `cast_enlarge_reduce` endpoint with a required `mode` param: `enlarge` installs `effects.advantage_on: ["str_check","str_save"]`, `reduce` installs `disadvantage_on: [...]`. Rides the existing STR-marker read-sites (the same `_pc_has_rage_str_save_advantage` + v2.199.0 disadvantage intercept the Potion of Growth / Diminution use) so STR checks/saves actually roll with adv/dis; size + ±1d4 weapon damage stay GM-narrated. Concentration / 1 minute (10 rounds), unlike the non-concentration potions. Thalindra Moonwhisper (Wizard) is the cast surface.

@@ -1983,6 +1983,39 @@ _SPELL_BUFF_MAP["protection-from-poison"] = {
     ),
 }
 
+# v2.492.0 — Freedom of Movement (Phase 2 #27 of
+# docs/plans/cast-and-broadcast-tail.md). L4 abjuration,
+# Bard/Cleric/Druid/Ranger, PHB p.250. For 1 hour, "spells and other
+# magical effects can neither reduce the target's speed nor cause the
+# target to be paralyzed or restrained." The mechanized core rides the
+# existing condition-immunity substrate (`condition_immunity_to`,
+# enforced at the `_install_buff` / `_install_buff_on_combatant_id`
+# gate via `_target_condition_immune`) — the EXACT substrate the
+# v2.289.0 Ring of Free Action uses for the same paralyzed/restrained
+# immunity. So a Hold Person / Hold Monster / Web install on the warded
+# target is suppressed with zero new mechanical code. The
+# difficult-terrain / speed-reduction-immunity / escape-grapple /
+# underwater clauses stay GM-narrated (no terrain/speed-debuff
+# substrate). RAW the immunity is scoped to magical sources; like the
+# Ring we model it as full immunity to the two conditions, since nearly
+# all paralyzed/restrained installs in-engine are spell/magic effects.
+_SPELL_BUFF_MAP["freedom-of-movement"] = {
+    "key": "freedom-of-movement",
+    "name": "Freedom of Movement",
+    "icon": "🕊️",
+    "duration_rounds": 600,  # 1 hour RAW, non-concentration
+    "duration_max": 600,
+    "concentration": False,
+    "effects": {
+        "condition_immunity_to": ["paralyzed", "restrained"],
+    },
+    "desc": (
+        "Immune to being paralyzed or restrained by magic; movement "
+        "unaffected by difficult terrain; can spend 5 ft to escape "
+        "nonmagical restraints (GM-narrated). 1 hour."
+    ),
+}
+
 # v2.190.0 — Potion of Invulnerability (RAW DMG p.188, rare): resistance to
 # ALL damage for 1 minute. Reuses the v2.99.121 `resistance_to: ["all"]`
 # wildcard that `_resistance_halve` already honours, so no new intercept is
@@ -65453,6 +65486,155 @@ async def cast_enlarge_reduce(
         "ok": True,
         "feature": "enlarge-reduce",
         "mode": mode,
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_freedom_of_movement")
+async def cast_freedom_of_movement(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.492.0 — Phase 2 #27 of
+    docs/plans/cast-and-broadcast-tail.md. Freedom of Movement
+    (L4 abjuration, Bard/Cleric/Druid/Ranger, PHB p.250):
+
+      "For the duration, the target's movement is unaffected by
+       difficult terrain, and spells and other magical effects can
+       neither reduce the target's speed nor cause the target to be
+       paralyzed or restrained. ..."
+
+    1 action, V/S/M, Touch, 1 hour, non-concentration.
+
+    Implementation: rides the existing condition-immunity substrate —
+    the buff carries ``effects.condition_immunity_to: ["paralyzed",
+    "restrained"]`` (the SAME field the v2.289.0 Ring of Free Action
+    uses), enforced at the ``_install_buff`` gate via
+    ``_target_condition_immune``. So a Hold Person / Hold Monster / Web
+    install on the warded target is suppressed with ZERO new mechanical
+    code. The difficult-terrain / speed-reduction-immunity /
+    escape-grapple / underwater clauses stay GM-narrated.
+
+    **Mirror is required:** the PC immunity gate reads the target's
+    sheet ``_buffs_active`` (not the live hub state), so after the
+    install we mirror the buff list to the sheet — otherwise the gate
+    wouldn't see the freshly-installed FoM buff. (Speed/resistance
+    buffs like Longstrider read hub state directly and don't need
+    this; condition-immunity is the read-from-sheet exception.)
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster targets themself.
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_fom = any(
+        (s.get("_slug") == "freedom-of-movement")
+        or (str(s.get("name", "")).lower() == "freedom of movement")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"bard", "cleric", "druid", "ranger"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_fom and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": (
+                "knows Freedom of Movement, or bard/cleric/druid/ranger"
+            ),
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("freedom-of-movement") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 600)
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "freedom-of-movement",
+        "name": template.get("name") or "Freedom of Movement",
+        "icon": template.get("icon") or "🕊️",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": dict(
+            template.get("effects")
+            or {"condition_immunity_to": ["paralyzed", "restrained"]}),
+        "desc": template.get("desc") or (
+            "Immune to paralyzed/restrained by magic for 1 hour."
+        ),
+    })
+    # Mirror to the target's sheet so the PC condition-immunity gate
+    # (which reads `_buffs_active` off the sheet) sees the new buff.
+    _mirror_buffs_to_sheet(
+        db, target_char.id, _get_buffs(campaign_id, target_char.id),
+    )
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    who = "themself" if target_char.id == char.id else target_char.name
+    feature_desc = (
+        f"{char.name} grants Freedom of Movement to {who} — immune to "
+        "being paralyzed or restrained by magic; difficult terrain "
+        "ignored for 1 hour."
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🕊️ Freedom of Movement",
+            "feature_desc": feature_desc,
+            "source": "freedom-of-movement",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "freedom-of-movement",
         "target_character_id": target_char.id,
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,
