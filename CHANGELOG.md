@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.536.0] - 2026-06-21 — "The Kept Vigil"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_gentle_repose` — Phase 2 #54 of the cast-and-broadcast tail. Gentle Repose (L2 necromancy ritual, Cleric/Wizard) preserves a corpse — a flag-buff on a tracked character's remains, or a broadcast-only cast over a GM-narrated corpse.
+
+**Description:** Continues the tail after Calm Emotions (#53). RAW PHB p.245: "You touch a corpse or other remains. For the duration, the target is protected from decay and can't become undead. The spell also effectively extends the time limit on raising the target from the dead …" 1 action (ritual), V/S/M, Touch, 10 days, non-concentration. The target is a **corpse**, which the engine doesn't model as an entity — so this uses the flexible-target shape (like Identify #16): if `target_character_id` names a tracked character (a fallen ally's remains), a `gentle-repose` flag-buff carrying `effects.gentle_repose: True` is installed on them so the table sees the body is preserved; otherwise the cast is broadcast-only over a GM-narrated corpse (`target_name`). The decay-prevention, can't-become-undead, and raise-dead-window extension are all GM-narrated (the engine tracks no decay clock or raise-dead timer).
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `cast_gentle_repose` endpoint. `target_character_id?` → flag-buff (10 days = 144000 rounds); else `target_name?` → broadcast-only. Caster gate: knows the spell OR cleric/wizard. 400/403/404/409 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #54.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_gentle_repose.py` (new): +4 tests — cast on a tracked target installs `gentle_repose: true` (non-conc, 144000 rounds); cast with only `target_name` is broadcast-only (no buff); non-caster 409; missing character_id 400.
+
+Total harness count → 3917 (+4).
+
+MINOR — new cast endpoint, flexible corpse-target flag-buff. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_gentle_repose`: Gentle Repose (L2) — preserves a corpse via a `gentle_repose` flag-buff on a tracked character's remains (or a broadcast-only cast over a GM-narrated corpse); decay/undead/raise-window GM-narrated. Phase 2 #54 of the cast-and-broadcast tail.
+
 ## [2.535.0] - 2026-06-21 — "The Quieted Heart"
 
 **Schema version:** 71

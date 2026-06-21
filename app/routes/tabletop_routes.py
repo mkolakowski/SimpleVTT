@@ -70936,6 +70936,151 @@ async def cast_calm_emotions(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_gentle_repose")
+async def cast_gentle_repose(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.536.0 — Phase 2 #54 of
+    docs/plans/cast-and-broadcast-tail.md. Gentle Repose (L2 necromancy
+    ritual, Cleric/Wizard, PHB p.245):
+
+      "You touch a corpse or other remains. For the duration, the target
+       is protected from decay and can't become undead. The spell also
+       effectively extends the time limit on raising the target from the
+       dead ..."
+
+    1 action (ritual), V/S/M, Touch, 10 days, non-concentration.
+
+    Implementation: the target is a **corpse**, which the engine doesn't
+    model as an entity. Flexible-target shape (like Identify #16): if
+    ``target_character_id`` names a tracked character (a fallen ally's
+    remains), a ``gentle-repose`` flag-buff carrying
+    ``effects.gentle_repose: True`` is installed on them so the table
+    sees the body is preserved; otherwise the cast is broadcast-only over
+    a GM-narrated corpse (``target_name``). The decay-prevention,
+    can't-become-undead, and raise-dead-window extension are all
+    GM-narrated (the engine tracks no decay clock or raise-dead timer).
+
+    Body: ``{character_id, target_character_id?, target_name?}``.
+
+    Response: ``{ok, feature, target_character_id, target_name,
+    buff_installed, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_character_id = body.get("target_character_id")
+    target_character_id = (
+        int(target_character_id) if target_character_id else None
+    )
+    target_name = (body.get("target_name") or "").strip() or None
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_gr = any(
+        (s.get("_slug") == "gentle-repose")
+        or (str(s.get("name", "")).lower() == "gentle repose")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"cleric", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_gr and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Gentle Repose, or cleric/wizard",
+            "got_class": _cls,
+        })
+
+    DURATION_ROUNDS = 144000  # 10 days @ 6 s/round
+    buff_installed = False
+    target_char = None
+    if target_character_id:
+        target_char = db.query(Character).filter(
+            Character.id == target_character_id,
+            Character.campaign_id == campaign_id,
+        ).first()
+        if not target_char:
+            raise HTTPException(404, "Target character not found")
+        buff_installed = bool(await _install_buff(
+            campaign_id, target_char.id, {
+                "key": "gentle-repose",
+                "name": "Gentle Repose",
+                "icon": "🪦",
+                "duration_rounds": DURATION_ROUNDS,
+                "duration_max": DURATION_ROUNDS,
+                "concentration": False,
+                "source_char_id": char.id,
+                "effects": {"gentle_repose": True},
+                "desc": (
+                    "The remains are protected from decay and can't become "
+                    "undead for 10 days; the raise-dead time limit is "
+                    "extended (all GM-narrated). The flag surfaces that the "
+                    "body is preserved."
+                ),
+            }))
+
+    who = (
+        target_char.name if target_char
+        else (target_name or "a set of remains")
+    )
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🪦 Gentle Repose",
+            "feature_desc": (
+                f"{char.name} casts Gentle Repose on {who} — protected from "
+                "decay, can't become undead, and the raise-dead window is "
+                "extended for 10 days (GM-narrated)."
+            ),
+            "source": "gentle-repose",
+            "target_character_id": target_char.id if target_char else None,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "gentle-repose",
+        "target_character_id": target_char.id if target_char else None,
+        "target_name": (target_char.name if target_char else target_name),
+        "buff_installed": buff_installed,
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_globe_of_invulnerability")
 async def cast_globe_of_invulnerability(
     campaign_id: int,
