@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3917 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.536.0, 2026-06-21).
+**Total tests:** 3921 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.537.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4697,6 +4697,16 @@ v2.510.0 — See Invisibility attack-edge negation (Phase 2 #43 of [cast-and-bro
 |------|-----------------|
 | `test_invisible_attacker_has_advantage_vs_normal_target` | **Control:** invisible Krieger attacks Pip (no See Invisibility) → `roll_state_applied` contains both `advantage` and `invisible`. |
 | `test_see_invisibility_negates_invisible_attacker_advantage` | **Negation:** invisible Krieger attacks the See-Invisibility Thalindra → `roll_state_applied` no longer contains `invisible`. |
+
+### `test_cast_continual_flame.py`
+v2.537.0 — Continual Flame (L2 evocation, Cleric/Wizard, PHB p.227). Phase 2 #55 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `cast_continual_flame` endpoint — flexible object target: a `continual_flame` flag-buff on a tracked bearer, or a broadcast-only cast over a GM-named object. Light GM-narrated.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_cf_on_bearer_installs_buff` | Cast on a tracked bearer → 200, `buff_installed == true`, `duration_rounds == 999999`; buff carries `continual_flame == true`, non-concentration. |
+| `test_cast_cf_no_target_is_broadcast_only` | Cast with only `target_name` → `buff_installed == false`, `target_character_id == null`, `target_name` echoed. |
+| `test_cast_cf_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected names "continual flame". |
+| `test_cast_cf_missing_character_id_400` | Missing `character_id` → 400. |
 
 ### `test_cast_gentle_repose.py`
 v2.536.0 — Gentle Repose (L2 necromancy ritual, Cleric/Wizard, PHB p.245). Phase 2 #54 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `cast_gentle_repose` endpoint — flexible corpse target: a `gentle_repose` flag-buff on a tracked character's remains, or a broadcast-only cast over a GM-narrated corpse. Decay/undead/raise-window GM-narrated.

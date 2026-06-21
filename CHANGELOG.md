@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.537.0] - 2026-06-21 — "The Undying Ember"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_continual_flame` — Phase 2 #55 of the cast-and-broadcast tail. Continual Flame (L2 evocation, Cleric/Wizard) lights a permanent heatless flame — a flag-buff on a tracked bearer, or a broadcast-only cast over a GM-named object.
+
+**Description:** Continues the tail after Gentle Repose (#54). RAW PHB p.227: "A flame, equivalent in brightness to a torch, springs forth from an object that you touch. … it creates no heat and doesn't use oxygen. A continual flame can be covered or hidden but not smothered or quenched." 1 action, V/S/M, Touch, Until dispelled, non-concentration. Cast on an **object** (the engine models no objects/lighting), so this uses the same flexible-target shape as Gentle Repose (#54): if `target_character_id` names a tracked character bearing the flamed object, a `continual-flame` flag-buff carrying `effects.continual_flame: True` is installed so the table sees they carry a permanent light source; otherwise the cast is broadcast-only over a GM-narrated object (`target_name`). The torch-bright light + the can't-be-smothered rider are GM-narrated; "Until dispelled" is modelled as a very long nominal duration.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `cast_continual_flame` endpoint. `target_character_id?` → flag-buff (999999 rounds ≈ permanent); else `target_name?` → broadcast-only. Caster gate: knows the spell OR cleric/wizard. 400/403/404/409 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #55.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_continual_flame.py` (new): +4 tests — cast on a tracked bearer installs `continual_flame: true` (non-conc, 999999 rounds); cast with only `target_name` is broadcast-only (no buff); non-caster 409; missing character_id 400.
+
+Total harness count → 3921 (+4).
+
+MINOR — new cast endpoint, flexible object-target flag-buff. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_continual_flame`: Continual Flame (L2) — a permanent heatless flame, via a `continual_flame` flag-buff on a tracked bearer (or a broadcast-only cast over a GM-named object); light GM-narrated. Phase 2 #55 of the cast-and-broadcast tail.
+
 ## [2.536.0] - 2026-06-21 — "The Kept Vigil"
 
 **Schema version:** 71

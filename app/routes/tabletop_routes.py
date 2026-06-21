@@ -71081,6 +71081,151 @@ async def cast_gentle_repose(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_continual_flame")
+async def cast_continual_flame(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.537.0 — Phase 2 #55 of
+    docs/plans/cast-and-broadcast-tail.md. Continual Flame (L2
+    evocation, Cleric/Wizard, PHB p.227):
+
+      "A flame, equivalent in brightness to a torch, springs forth from
+       an object that you touch. The effect looks like a regular flame,
+       but it creates no heat and doesn't use oxygen. A continual flame
+       can be covered or hidden but not smothered or quenched."
+
+    1 action, V/S/M (ruby dust worth 50 gp, consumed), Touch, Until
+    dispelled (permanent), non-concentration.
+
+    Implementation: cast on an **object**, which the engine doesn't model
+    (no lighting / object substrate). Flexible-target shape (like Gentle
+    Repose #54 / Identify #16): if ``target_character_id`` names a tracked
+    character bearing the flamed object (a torch, shield, …), a
+    ``continual-flame`` flag-buff carrying ``effects.continual_flame:
+    True`` is installed so the table sees they carry a permanent light
+    source; otherwise the cast is broadcast-only over a GM-narrated
+    object (``target_name``). The torch-bright light + the
+    can't-be-smothered rider are GM-narrated. "Until dispelled" is
+    modelled as a very long nominal duration.
+
+    Body: ``{character_id, target_character_id?, target_name?}``.
+
+    Response: ``{ok, feature, target_character_id, target_name,
+    buff_installed, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_character_id = body.get("target_character_id")
+    target_character_id = (
+        int(target_character_id) if target_character_id else None
+    )
+    target_name = (body.get("target_name") or "").strip() or None
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_cf = any(
+        (s.get("_slug") == "continual-flame")
+        or (str(s.get("name", "")).lower() == "continual flame")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"cleric", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_cf and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Continual Flame, or cleric/wizard",
+            "got_class": _cls,
+        })
+
+    DURATION_ROUNDS = 999999  # "until dispelled" — nominal permanent
+    buff_installed = False
+    target_char = None
+    if target_character_id:
+        target_char = db.query(Character).filter(
+            Character.id == target_character_id,
+            Character.campaign_id == campaign_id,
+        ).first()
+        if not target_char:
+            raise HTTPException(404, "Target character not found")
+        buff_installed = bool(await _install_buff(
+            campaign_id, target_char.id, {
+                "key": "continual-flame",
+                "name": "Continual Flame",
+                "icon": "🔥",
+                "duration_rounds": DURATION_ROUNDS,
+                "duration_max": DURATION_ROUNDS,
+                "concentration": False,
+                "source_char_id": char.id,
+                "effects": {"continual_flame": True},
+                "desc": (
+                    "Bears a torch-bright, heatless flame (until dispelled). "
+                    "The light + the can't-be-smothered rider are "
+                    "GM-narrated; the flag surfaces the carried light source."
+                ),
+            }))
+
+    who = (
+        target_char.name if target_char
+        else (target_name or "an object")
+    )
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🔥 Continual Flame",
+            "feature_desc": (
+                f"{char.name} casts Continual Flame on {who} — a torch-bright, "
+                "heatless flame that burns until dispelled (GM-narrated light)."
+            ),
+            "source": "continual-flame",
+            "target_character_id": target_char.id if target_char else None,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "continual-flame",
+        "target_character_id": target_char.id if target_char else None,
+        "target_name": (target_char.name if target_char else target_name),
+        "buff_installed": buff_installed,
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_globe_of_invulnerability")
 async def cast_globe_of_invulnerability(
     campaign_id: int,
