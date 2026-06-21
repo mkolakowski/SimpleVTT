@@ -1,6 +1,6 @@
 # Aura & Barrier Geometry Enforcement — Design Plan
 
-**Status:** ⚪ design only · all phases unstarted (filed v2.515.0)
+**Status:** 🟠 Phase 1 shipped v2.516.0 · Phases 2–3 unstarted (filed v2.515.0)
 **Parent / foundation:** [auras.md](auras.md) (the shipped `_tick_auras` per-turn radius engine) + [ruler-and-range.md](ruler-and-range.md) (distance primitives + AoE templates).
 **Motivating ships:** the cast-and-broadcast tail's geometry-bound spells — Holy Aura (#41, v2.508.0), Globe of Invulnerability (#44, v2.511.0 + the `/cast_spell` block v2.513.0), and Antilife Shell (#45, v2.512.0). Each shipped as a **flag-buff with the spatial half GM-narrated**; this plan replaces the GM-narration with real engine enforcement.
 **Related code:** `app/routes/tabletop_routes.py` — `_tick_auras`, `_distance_ft_between_chars`, `_aura_of_protection_bonus`, `_resolve_sphere_aoe_combatant_ids`, `_concentration_aoes`, the `token_move` endpoint, `_target_globe_blocks_spell`.
@@ -75,7 +75,22 @@ membership.
 
 ## 2. Phases
 
-### Phase 1 — Aura membership auto-apply / auto-remove (Holy Aura)
+### Phase 1 — Aura membership auto-apply / auto-remove (Holy Aura) — ✅ shipped v2.516.0
+
+**Shipped simpler than designed below:** the v2.99.449 `buff` aura
+payload (Aura of Alacrity / Warding) already does install-on-enter +
+lapse-on-leave via `_tick_auras` + a short refresh duration. So
+`cast_holy_aura` just registers `effects.aura = {radius_ft: 30, affects:
+"allies", buff: {key: "holy-aura-radiance", effects: {save_advantage,
+attackers_have_disadvantage}, duration_rounds: 2}}` on the caster's
+anchor buff — zero new engine code. The tick grants a distinct
+`holy-aura-radiance` key (the reads are key-agnostic) so it never
+clobbers the cast-time `holy-aura` buffs on chosen targets. The
+"creatures of your choice" subset stays the cast-time selection
+(generalized to in-range allies); the design below (a chosen-set ∩
+in-range registry) is retained as the fuller model if needed later.
+
+
 
 A registry of **active auras** keyed by emitter combatant: `{emitter_char_id,
 radius_ft, buff_template, faction}`. On the per-turn `_tick_auras` pass

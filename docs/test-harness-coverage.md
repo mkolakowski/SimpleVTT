@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3855 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.515.0, 2026-06-21).
+**Total tests:** 3858 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.516.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4705,6 +4705,15 @@ v2.509.0 — See Invisibility (L2 divination, Bard/Sorcerer/Wizard, PHB p.274). 
 | `test_cast_si_bard_also_succeeds` | A Bard succeeds (asserts the bard/sorcerer/wizard gate covers Bard). |
 | `test_cast_si_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected string names "see invisibility". |
 | `test_cast_si_missing_character_id_400` | Empty body → 400. |
+
+### `test_holy_aura_membership.py`
+v2.516.0 — Holy Aura aura membership (Phase 1 of [aura-geometry-enforcement.md](../plans/aura-geometry-enforcement.md)). `cast_holy_aura` registers `effects.aura = {radius_ft:30, affects:allies, buff:{key:holy-aura-radiance, ...}}` on the caster's anchor so the v2.99.425 `_tick_auras` engine maintains the benefit for allies within 30 ft each turn (auto-apply on enter, lapse on leave). Distinct `holy-aura-radiance` key avoids clobbering the cast-time `holy-aura` buffs.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_registers_membership_aura` | Cast → the caster's anchor buff carries `effects.aura{radius_ft:30, affects:allies, buff.key:holy-aura-radiance}` with both markers. |
+| `test_in_range_ally_gains_radiance_on_tick` | A non-chosen ally 5 ft away gains `holy-aura-radiance` (both markers) after the caster's turn ticks. |
+| `test_out_of_range_ally_gains_nothing_on_tick` | An ally 35 ft away (outside 30 ft) gains no `holy-aura-radiance`. |
 
 ### `test_cast_holy_aura.py`
 v2.508.0 — Holy Aura (L8 abjuration, Cleric, PHB p.243). Phase 2 #41 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). The first tail spell to fan the buff out across an arbitrary number of chosen creatures (the 30-ft aura). New `_SPELL_BUFF_MAP["holy-aura"]` (`save_advantage: True` + `attackers_have_disadvantage: True`, concentration) + the `cast_holy_aura` endpoint — both effects ride existing hub-state substrates (`_buff_grants_save_advantage` all-saves + the v2.500.0 Blur read-site `_target_blur_imposes_disadvantage`); zero new mechanical code. Concentration anchors on the caster; companion buffs carry `_dependent_on_caster_concentration`. Dim-light radius + fiend/undead blinding flash GM-narrated. Tavik (Cleric) casts.

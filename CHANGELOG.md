@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.516.0] - 2026-06-21 — "The Moving Halo"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 1 of the aura-geometry-enforcement plan — Holy Aura now registers a **membership aura** so the `_tick_auras` engine maintains its benefit for allies within 30 ft each turn (auto-apply on enter, lapse on leave), instead of only the cast-time placement on chosen targets.
+
+**Description:** Closes the GM-narrated "moving aura membership" half of Holy Aura (#41, v2.508.0). The cast still installs the two markers directly on chosen targets (unchanged — immediate effect + concentration cascade preserved); Phase 1 *additionally* registers `effects.aura = {radius_ft: 30, affects: "allies", buff: {...}}` on the caster's anchor buff. The already-shipped v2.99.425 `_tick_auras` + v2.99.449 `buff`-payload engine (the same one Aura of Alacrity / Aura of Warding ride) then, on the caster's turn, grants the benefit to allies inside 30 ft and lets it lapse (~2 rounds) once they leave — so an ally who moves into the radius mid-combat gains the protection and one who walks out loses it. **Zero new engine code** — the membership substrate already existed; this is pure wiring.
+
+To avoid clobbering the cast-time `holy-aura` buffs on chosen targets (and their `_dependent_on_caster_concentration` cascade marker), the tick grants a **distinct** key `holy-aura-radiance` carrying the same `save_advantage` + `attackers_have_disadvantage` markers — the save-advantage / attacker-disadvantage reads are key-agnostic, so the benefit is identical. RAW's "creatures of your choice" subset stays the cast-time selection (here generalized to in-range allies); enemy / specific-exclusion targeting is GM-narrated.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: `cast_holy_aura` adds the `effects.aura` membership registration to the caster's anchor buff only.
+- `docs/plans/aura-geometry-enforcement.md`: Phase 1 status flip pending (left ⚪ until P2/P3 land; this is the first phase shipped).
+
+**Harness changes:**
+
+- `tests/harness/test_holy_aura_membership.py` (new): +3 tests — cast registers the membership aura (radius 30, affects allies, grant key `holy-aura-radiance`); an in-range ally (5 ft, non-chosen) gains `holy-aura-radiance` after the caster's turn ticks; an out-of-range ally (35 ft) gains nothing. Autouse teardown clears the buffs + tokens so the file is order-independent.
+
+Total harness count → 3858 (+3).
+
+MINOR — new aura-membership behavior on the turn tick (no new endpoint). No schema change.
+
+### Changed
+- Holy Aura: registers a membership aura so the per-turn `_tick_auras` engine grants the save-advantage + attacker-disadvantage benefit to allies within 30 ft (auto-apply on enter, lapse on leave). Phase 1 of the aura-geometry-enforcement plan.
+
 ## [2.515.0] - 2026-06-21 — "The Surveyor's Charter"
 
 **Schema version:** 71

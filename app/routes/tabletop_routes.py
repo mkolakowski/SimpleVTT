@@ -65731,6 +65731,38 @@ async def cast_holy_aura(
         if not target:
             continue
         is_caster_self = (target.id == char.id)
+        _effects = dict(base_effects)
+        if is_caster_self:
+            # v2.516.0 — Phase 1 of docs/plans/aura-geometry-enforcement.md.
+            # The caster's anchor buff also registers a membership aura so
+            # the v2.99.425 `_tick_auras` engine maintains the Holy Aura
+            # benefit for allies within 30 ft each turn — granting it to an
+            # ally who moves into the radius and letting it lapse (the
+            # short `buff` payload refresh) ~2 rounds after they leave. The
+            # tick grants a DISTINCT key (`holy-aura-radiance`) carrying the
+            # same two markers (the save-advantage / attacker-disadvantage
+            # reads are key-agnostic), so it never clobbers the cast-time
+            # `holy-aura` buffs on chosen targets or their
+            # `_dependent_on_caster_concentration` cascade marker. RAW's
+            # "creatures of your choice" subset stays the cast-time
+            # selection (here generalized to in-range allies); enemy /
+            # specific-exclusion targeting is GM-narrated.
+            _effects["aura"] = {
+                "radius_ft": 30,
+                "affects": "allies",
+                "source": "holy-aura",
+                "label": "Holy Aura",
+                "buff": {
+                    "key": "holy-aura-radiance",
+                    "name": "Holy Aura",
+                    "icon": "☀️",
+                    "effects": {
+                        "save_advantage": True,
+                        "attackers_have_disadvantage": True,
+                    },
+                    "duration_rounds": 2,
+                },
+            }
         buff_payload = {
             "key": "holy-aura",
             "name": template.get("name") or "Holy Aura",
@@ -65742,7 +65774,7 @@ async def cast_holy_aura(
             # marker so the whole aura drops in lock-step when it breaks.
             "concentration": is_caster_self,
             "source_char_id": char.id,
-            "effects": dict(base_effects),
+            "effects": _effects,
             "desc": template.get("desc") or (
                 "Advantage on all saving throws; attackers have "
                 "disadvantage. Up to 1 minute (concentration)."
