@@ -56189,8 +56189,11 @@ async def end_buff(
     the rage'd barbarian's player can end their own rage; the GM can
     end anyone's.)
 
-    Returns 404 if no battle / character not in init / buff not on
-    the combatant. Broadcasts ``buff_update`` with the new list.
+    Idempotent teardown: removing a buff that is already absent is a
+    success (HTTP 200, ``already_absent: True``), not a 404 — the
+    desired end state (no such buff on the combatant) already holds.
+    Returns 404 only when the *character* itself isn't found. On a
+    real removal, broadcasts ``buff_update`` with the new list.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -56225,7 +56228,19 @@ async def end_buff(
 
     removed = await _remove_buff(campaign_id, char.id, key)
     if not removed:
-        raise HTTPException(404, f"No '{key}' buff on this character")
+        # v2.494.0 — idempotent teardown. Removing a buff that's
+        # already absent is a no-op success, not a 404: the desired
+        # end state (no '{key}' buff on this combatant) already holds.
+        # The old 404 turned benign client retries — a buff-chip ×
+        # double-clicked, or a stale tab re-firing after the
+        # buff_update WS already cleared the buff — into api.not_found
+        # WARNINGs, which the simplevtt-scanner fail2ban jail counts
+        # toward a ban (10 / 5 min). A tight client retry loop could
+        # rack up thousands of these and ban a (often Cloudflare-edge)
+        # IP for what is really a no-op. Nothing changed, so we skip
+        # the broadcast + the rage/concentration teardown hooks below
+        # and return immediately.
+        return {"ok": True, "removed_key": key, "already_absent": True}
 
     # v2.19.2 Phase C.3: sync sheet mirror.
     _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
@@ -56329,7 +56344,7 @@ async def end_buff(
                 },
             })
 
-    return {"ok": True, "removed_key": key}
+    return {"ok": True, "removed_key": key, "already_absent": False}
 
 
 # ----------- API: GET buffs (read helper, mostly for harness tests) -----------

@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.494.0] - 2026-06-21 — "The Double Tap"
+
+**Schema version:** 71
+
+**Commit summary:** Makes `POST /api/campaign/{id}/end_buff` idempotent — removing a buff that's already absent now returns **200 `{ok, removed_key, already_absent: true}`** instead of **404**. The character-not-found case still 404s.
+
+**Description:** Diagnosed from a live incident: a `python-httpx` client was hammering `POST /api/campaign/1/end_buff` in a ~11 req/s loop (8,161 404s in 12 minutes), all returning 404 because the targeted buff was already gone. Each 404 emits an `api.not_found` WARNING (the v2.477.0 404 handler in `app/main.py`), and the `simplevtt-scanner` fail2ban jail bans any IP exceeding 10 `api.not_found` events per 5 minutes — so the loop got the (Cloudflare-edge) IP banned four times over. The irony: the v2.477.0 design comment explicitly distinguishes *scanner* traffic (many distinct paths) from *"one stale link hammered repeatedly"* (same path), but the jail counts events regardless of path, so a benign retry loop on a single endpoint trips it.
+
+The root fix is at the endpoint: `end_buff` is a teardown, and removing something that's already gone should be an idempotent no-op success, not an error. A buff-chip × double-clicked, or a stale tab re-firing `end_buff` after the `buff_update` WS already cleared the buff, is benign — it shouldn't manufacture an `api.not_found` that feeds the ban jail. The frontend already treats any `!r.ok` as an error toast, so the 200 also removes a spurious "End {key} failed" toast on double-tap.
+
+**Scope note:** only the *buff-absent* case is relaxed. A genuinely unknown `character_id` still returns 404 — that's a bad resource reference, not idempotency, and changing it would skip the owner/GM auth check. The IP-attribution side (fail2ban banning a shared Cloudflare edge IP because `CF-Connecting-IP` is absent on these requests despite `TRUST_CF_CONNECTING_IP=true`) is a separate follow-up, not addressed here.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: `end_buff` returns `{"ok": True, "removed_key": key, "already_absent": True}` (HTTP 200) when `_remove_buff` removes nothing, short-circuiting before the broadcast and the rage/concentration teardown hooks. The real-removal path returns `already_absent: False` for a consistent response shape. Docstring updated.
+
+**Harness changes:**
+
+- `tests/harness/test_end_buff.py`: `test_end_buff_unknown_key_404` → `test_end_buff_unknown_key_idempotent` (now asserts 200 + `already_absent: True`); added `test_end_buff_unknown_character_404` (a bad `character_id` still 404s).
+
+Total harness count → 3755 (+1).
+
+MINOR — endpoint contract relaxed (404 → idempotent 200) plus a new `already_absent` response field; backward-compatible. No schema change.
+
+### Changed
+- `POST /api/campaign/{id}/end_buff`: idempotent teardown — removing an already-absent buff returns 200 `{ok, removed_key, already_absent}` instead of 404, so benign client retries no longer emit `api.not_found` WARNINGs that feed the `simplevtt-scanner` fail2ban jail.
+
 ## [2.493.0] - 2026-06-21 — "The Platinum Rings"
 
 **Schema version:** 71

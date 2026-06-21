@@ -8,7 +8,11 @@ this file covers the endpoint contract.
 Coverage:
   - Happy path: install Rage via /use_rage, then /end_buff drops it
   - 400 missing character_id / key
-  - 404 when no buff with that key on the character
+  - Idempotent 200 when no buff with that key on the character
+    (v2.494.0 — removing an already-absent buff is a no-op success,
+    not a 404, so benign client retries don't feed the fail2ban
+    scanner jail)
+  - 404 when the character itself isn't found
   - 403 when a non-owner / non-GM player tries to end someone else's buff
 """
 from .conftest import CAMPAIGN_ID
@@ -83,8 +87,16 @@ async def test_end_buff_missing_key_400(gm_client, roster):
     assert resp.status_code == 400
 
 
-async def test_end_buff_unknown_key_404(gm_client, roster):
-    """A character with no buffs returns 404 when end_buff is called."""
+async def test_end_buff_unknown_key_idempotent(gm_client, roster):
+    """Removing an absent buff is an idempotent 200 no-op (v2.494.0).
+
+    The desired end state (no such buff on the combatant) already
+    holds, so the endpoint returns 200 with ``already_absent: True``
+    instead of a 404. This stops benign client retries — a buff-chip
+    × double-clicked, a stale tab re-firing — from emitting
+    api.not_found WARNINGs that the simplevtt-scanner fail2ban jail
+    counts toward a ban.
+    """
     krieger = roster["Krieger Stonefist"]
     # Long-rest to clear any persisting buffs (rage etc.).
     await gm_client.post(
@@ -95,6 +107,21 @@ async def test_end_buff_unknown_key_404(gm_client, roster):
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/end_buff",
         json={"character_id": krieger["id"], "key": "made-up-buff"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["removed_key"] == "made-up-buff"
+    assert body["already_absent"] is True
+
+
+async def test_end_buff_unknown_character_404(gm_client):
+    """A genuinely unknown character_id still 404s — only the
+    buff-absent case is idempotent, not a bad character reference."""
+    await _seed_battle_with(gm_client, [])
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+        json={"character_id": 999999, "key": "rage"},
     )
     assert resp.status_code == 404, resp.text
 

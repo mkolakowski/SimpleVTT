@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3754 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.493.0, 2026-06-21).
+**Total tests:** 3755 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.494.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4302,7 +4302,8 @@ Manual buff removal via `/end_buff`.
 | `test_end_buff_removes_rage` | Install Rage via `/use_rage`, then `/end_buff` drops it; `/character/{id}/buffs` no longer lists it. |
 | `test_end_buff_missing_character_id_400` | 400. |
 | `test_end_buff_missing_key_400` | 400. |
-| `test_end_buff_unknown_key_404` | Buff not present → 404. |
+| `test_end_buff_unknown_key_idempotent` | Buff not present → idempotent 200 `{ok, removed_key, already_absent: true}` (v2.494.0; no longer 404, so retries don't feed the fail2ban scanner jail). |
+| `test_end_buff_unknown_character_404` | Unknown `character_id` still → 404 (bad resource reference, not idempotency). |
 | `test_end_buff_non_owner_403` | Alice tries to drop Krieger's buff → 403/404. |
 
 ### `test_concentration_buffs.py`
