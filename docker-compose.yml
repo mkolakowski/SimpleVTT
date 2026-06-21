@@ -162,8 +162,12 @@ services:
       CLOUDFLARE_ZONE_ID: ${CLOUDFLARE_ZONE_ID:-}
       CLOUDFLARE_API_BASE_URL: ${CLOUDFLARE_API_BASE_URL:-https://api.cloudflare.com/client/v4}
     volumes:
-      # Read-only consumer of the app's audit-log volume.
-      - audit_logs:/var/log/simplevtt:ro
+      # Consumer of the app's audit-log volume. Read-WRITE (v2.488.2)
+      # only so the "Clear log" button can truncate the log; the admin
+      # center never appends events (the app owns that), just clears.
+      # The file is appuser-owned and admin-center runs as appuser, so
+      # the truncate works without root.
+      - audit_logs:/var/log/simplevtt
       # Read-only consumer of fail2ban's ban database (same named
       # volume the fail2ban service writes at /data/db).
       - fail2ban_data:/data/db:ro

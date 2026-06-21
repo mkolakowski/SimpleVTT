@@ -37,6 +37,7 @@ from . import (
     fail2ban,
     fail2ban_control,
     inventory,
+    log_control,
     login_guard,
     mfa,
     stats,
@@ -361,6 +362,31 @@ def api_inventory():
     return JSONResponse(inventory.read_inventory())
 
 
+@app.post("/logs/clear")
+def logs_clear(request: Request):
+    """Clear the audit log (truncate + drop rotated backups). Leaves a
+    ``admin_center.log_cleared`` marker recording who did it, so the
+    clear is itself auditable. Form POST → redirects to the dashboard."""
+    import datetime
+    user = request.session.get("admin_user", "")
+    ip = _extract_client_ip(request)
+    # UTC asctime to match what the app's logger writes (the dashboard's
+    # localtime filter parses it as UTC).
+    ts = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S,%f")[:-3]
+    marker = (
+        f'{ts} WARNING simplevtt.audit: admin_center.log_cleared '
+        f'ip={ip} by="{user}"'
+    )
+    result = log_control.clear_audit_log(AUDIT_LOG_PATH, marker_line=marker)
+    if result.get("ok"):
+        log.warning("admin-center audit log CLEARED by=%r ip=%s", user, ip)
+        return RedirectResponse("/?logs_cleared=1", status_code=303)
+    return RedirectResponse(
+        f"/?logs_error={quote(result.get('error', 'failed'), safe='')}",
+        status_code=303,
+    )
+
+
 @app.post("/fail2ban/unban")
 async def fail2ban_unban(request: Request, ip: str = Form("")):
     """Unban ``ip`` everywhere it might be banned.
@@ -398,6 +424,8 @@ def dashboard(
     unbanned: str = "",
     unban_error: str = "",
     cf: int = -1,
+    logs_cleared: int = 0,
+    logs_error: str = "",
 ):
     events = audit_parse.load_events(
         AUDIT_LOG_PATH,
@@ -440,5 +468,7 @@ def dashboard(
             "unbanned": unbanned,
             "unban_error": unban_error,
             "cf_removed": cf,
+            "logs_cleared": logs_cleared,
+            "logs_error": logs_error,
         },
     )

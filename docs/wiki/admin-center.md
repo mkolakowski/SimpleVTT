@@ -6,10 +6,12 @@ It surfaces everything SimpleVTT collects in one place: the canonical
 audit log, derived traffic statistics, fail2ban ban state, and a
 database data-inventory summary.
 
-It is deliberately **read-only** — it never mutates game state. It
-reuses the main app's Docker image but runs a separate ASGI app
-(`app.admin_center.main:app`) and mounts the shared volumes
-**read-only**.
+It **never touches game state** (no access to characters, campaigns,
+or the tabletop). It reuses the main app's Docker image but runs a
+separate ASGI app (`app.admin_center.main:app`). Beyond viewing, it
+offers a few explicit, confirm-gated **operator actions**: unban an IP
+(local fail2ban + Cloudflare edge) and clear the audit log — each
+behind the login.
 
 > **Phase status.** Complete as of v2.485.0: audit-log viewer +
 > traffic stats (v2.483.0), fail2ban ban panel (v2.484.0), and the
@@ -277,13 +279,18 @@ last 5 000 lines; older events live in the rotated `audit.log.1` …
 
 ## Security notes
 
-- **Read-only by design.** The service mounts shared volumes
-  read-only and exposes no mutation endpoints. A compromise of the
-  Admin Center can read collected data but cannot change game state,
-  ban IPs, or delete records.
-- **Separate credential.** Basic-auth is independent of the main app
+- **No game-state access.** A compromise of the Admin Center can read
+  collected data and run its operator actions (unban an IP, clear the
+  audit log), but cannot touch characters, campaigns, or the tabletop.
+  Its actions are deliberately narrow: it unbans (never bans) and
+  clears the audit log (which is self-auditing — the clear leaves a
+  `admin_center.log_cleared by="…"` marker). The DB + fail2ban-db
+  mounts stay read-only; only the audit-log volume is writable, solely
+  for the clear.
+- **Separate credential.** The login is independent of the main app
   login, so you can hand someone audit-log visibility without giving
-  them a game account, and rotate it independently.
+  them a game account, and rotate it independently. Add TOTP MFA for a
+  second factor (see above).
 - **Don't expose it publicly without a password change** and,
   ideally, a reverse proxy enforcing TLS. The dashboard surfaces IP
   addresses and usernames from the audit log.

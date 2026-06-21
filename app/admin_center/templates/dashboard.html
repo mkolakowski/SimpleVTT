@@ -81,6 +81,14 @@
       display: inline-flex; align-items: center;
     }
     .unban-btn:hover { background: var(--bad); color: #1a0e0e; }
+    /* Destructive "Clear log" action — 44px touch target. */
+    .danger-btn {
+      min-height: 44px; padding: 0 16px; cursor: pointer;
+      background: transparent; color: var(--bad); border: 1px solid var(--bad);
+      border-radius: 8px; font: 600 14px/1 inherit;
+      display: inline-flex; align-items: center;
+    }
+    .danger-btn:hover { background: var(--bad); color: #1a0e0e; }
     /* 44px minimum touch targets per the project HIG rule. */
     select, .btn {
       min-height: 44px; background: var(--panel); color: var(--fg);
@@ -263,7 +271,21 @@
     </table>
     {% endif %}
 
-    <h2>Recent events</h2>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:28px">
+      <h2 style="margin:0">Recent events</h2>
+      <span style="flex:1"></span>
+      <form method="post" action="/logs/clear"
+            onsubmit="return confirm('Clear the entire audit log? This deletes the current log + rotated backups and cannot be undone.');">
+        <button class="danger-btn" type="submit">🗑 Clear log</button>
+      </form>
+    </div>
+    {% if logs_cleared %}
+    <div class="banner" style="background:#13301f;border-color:var(--ok);color:var(--ok)">
+      ✅ Audit log cleared. New events will start accumulating again immediately.
+    </div>
+    {% elif logs_error %}
+    <div class="banner">⚠️ Could not clear the audit log: {{ logs_error }}</div>
+    {% endif %}
     <form class="filterbar" method="get" action="/">
       <label for="event" class="muted">Filter by event:</label>
       <select id="event" name="event" onchange="this.form.submit()">

@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.488.2] - 2026-06-21 — "The Clean Slate"
+
+**Schema version:** 71
+
+**Commit summary:** Adds a **"Clear log" button** to the Admin Center — truncates the audit log and removes its rotated backups, leaving an auditable marker recording who cleared it.
+
+**Description:** Operators wanted a way to reset the audit log from the dashboard (e.g. after a noisy scan or to start fresh). The button truncates `audit.log` in place — keeping the inode so the app's open `RotatingFileHandler` keeps writing to the now-empty file — and removes `audit.log.1…N` backups. The cleared log opens with a `admin_center.log_cleared ip=… by="…"` line so the clear itself is recorded (and that tag matches no fail2ban filter, so it's inert for banning).
+
+**Implementation:**
+
+- `app/admin_center/log_control.py` (new): `clear_audit_log(path, marker_line=)` — truncate + drop backups + append the marker; returns `{ok, cleared, backups_removed}`. Pure/stdlib, unit-testable against a temp dir.
+- `app/admin_center/main.py`: `POST /logs/clear` builds the marker (UTC asctime, who/where) and clears; redirects with a `logs_cleared` / `logs_error` flash. Logs the action to stdout too.
+- `app/admin_center/templates/dashboard.html`: a danger-styled "🗑 Clear log" button (confirm dialog, 44px) by the Recent-events header + a result banner.
+- `docker-compose.yml`: the admin-center audit-log mount changes from **read-only to read-write** — *only* so the truncate works. The admin center never appends events (the app owns that); it just clears. The file is `appuser`-owned and the admin center runs as `appuser`, so no root is needed.
+
+**Posture note:** the admin center now has write access to the audit-log volume (previously read-only). It's used solely for the clear; the action is behind the login (+ MFA if enabled), confirm-gated, and self-auditing.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py`: +4 tests — 3 unit (`clear_audit_log` truncate+mark / backup removal / missing-file-ok) + 1 live auth-gate (`POST /logs/clear` without a session → bounced to `/login`, not executed). The happy path is unit-only so the suite never wipes the shared container's log.
+
+Total harness count → 3728 (+4).
+
+PATCH — additive admin action; the volume goes read-write for the truncate. No schema change.
+
+### Added
+- `app/admin_center/log_control.py` + a "Clear log" button: truncate the audit log + drop rotated backups, with a self-auditing marker.
+
+### Changed
+- `docker-compose.yml`: admin-center audit-log mount read-only → read-write (for the clear only).
+
 ## [2.488.1] - 2026-06-21 — "The Edge Pardon"
 
 **Schema version:** 71

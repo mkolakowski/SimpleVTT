@@ -24,6 +24,7 @@ from app.admin_center import (
     event_help,
     fail2ban,
     fail2ban_control,
+    log_control,
     login_guard,
     mfa,
     stats,
@@ -352,6 +353,38 @@ def test_unban_request_filename_is_sanitized(tmp_path):
     fail2ban_control.request_unban("10.0.0.1", spool_dir=str(tmp_path))
     for f in tmp_path.glob("unban-*.req"):
         assert "/" not in f.name and ".." not in f.name
+
+
+# ---- audit log clearing ---------------------------------------------
+
+def test_clear_audit_log_truncates_and_marks(tmp_path):
+    p = tmp_path / "audit.log"
+    p.write_text("old line 1\nold line 2\n")
+    res = log_control.clear_audit_log(str(p), marker_line="MARKER cleared")
+    assert res["ok"] is True
+    assert res["cleared"] is True
+    # Old content gone; only the marker remains.
+    body = p.read_text()
+    assert "old line" not in body
+    assert body.strip() == "MARKER cleared"
+
+
+def test_clear_audit_log_removes_rotated_backups(tmp_path):
+    p = tmp_path / "audit.log"
+    p.write_text("x")
+    (tmp_path / "audit.log.1").write_text("b1")
+    (tmp_path / "audit.log.2").write_text("b2")
+    res = log_control.clear_audit_log(str(p))
+    assert res["ok"] is True
+    assert res["backups_removed"] == 2
+    assert not (tmp_path / "audit.log.1").exists()
+    assert not (tmp_path / "audit.log.2").exists()
+
+
+def test_clear_audit_log_missing_file_is_ok(tmp_path):
+    res = log_control.clear_audit_log(str(tmp_path / "nope.log"))
+    assert res["ok"] is True
+    assert res["cleared"] is False
 
 
 # ---- Cloudflare unban (edge rule removal) ---------------------------
@@ -836,6 +869,18 @@ def test_unban_endpoint_requires_auth():
     r = httpx.post(
         f"{ADMIN_BASE_URL}/fail2ban/unban", data={"ip": "203.0.113.250"},
         timeout=5.0, follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert "/login" in r.headers.get("location", "")
+
+
+@_LIVE
+def test_logs_clear_requires_auth():
+    # No session → bounced to /login WITHOUT clearing the log (the auth
+    # gate runs before the handler). We deliberately don't test the
+    # happy path live — it would wipe the shared container's audit log.
+    r = httpx.post(
+        f"{ADMIN_BASE_URL}/logs/clear", timeout=5.0, follow_redirects=False,
     )
     assert r.status_code == 303
     assert "/login" in r.headers.get("location", "")
