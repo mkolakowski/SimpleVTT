@@ -45,6 +45,11 @@ spawn counts, upcast multipliers, the class gate, and dismissal.
   catalog. A `_summon_companion(template=…)` override built from a
   monster's SRD JSON (HP/AC/speed/size/type/CR) by slug would let a
   caster pick *any* catalog creature within the spell's type + CR tier.
-  Prototyped + reverted v2.538.1 (the family already worked without it);
-  re-open if a table wants arbitrary-creature conjuration.
+  **Conjure Animals shipped it v2.539.0** — `/cast_conjure_animals`
+  takes an optional `beast_slug` to summon any catalog beast within the
+  count's CR tier, via `_monster_summon_template` + a
+  `_summon_companion(template=…)` override + the shared
+  `_conjure_catalog_summon_template` validator. The other count-tier
+  spells (Woodland Beings, Minor Elementals) can reuse the same validator
+  + override in a follow-up.
 - **Random-creature RAW variant** (roll the pool) — GM-narrated today.

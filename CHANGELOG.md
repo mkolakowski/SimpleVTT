@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.539.0] - 2026-06-21 — "The Open Menagerie"
+
+**Schema version:** 71
+
+**Commit summary:** Conjure family follow-up — `/cast_conjure_animals` now accepts an optional `beast_slug` to summon **any catalog beast** within the count's CR tier, not just the default wolf. Backward-compatible (no slug → wolves).
+
+**Description:** Implements the catalog-backed-summon follow-up filed in `conjure-family.md`. New substrate: `_monster_summon_template(slug)` (builds a summon stat block — HP / AC / speed / size / type / CR — from a monster's SRD catalog record, reusing the existing `_cr_to_float` CR parser), a `_summon_companion(template=…)` override (an inline stat block supersedes the hardcoded `_COMPANION_TEMPLATES` registry), and `_conjure_catalog_summon_template(...)` (the shared validator: resolves `body[slug_field]`, checks the creature's type + CR against the count↔CR tier `_CONJURE_COUNT_CR_TIERS`). (A first prototype defined a redundant `_parse_cr` float helper that silently shadowed the pre-existing form-input `_parse_cr` string validator — caught + replaced with the existing `_cr_to_float` before commit; another verify-substrate-first near-miss.) `cast_conjure_animals` wires it in: with `beast_slug` set it summons that beast (validating it's a Beast within the CR tier for the chosen count of 1/2/4/8); with none, the existing wolf default is unchanged. The shared validator + `_summon_companion` override are reusable by the other count-tier conjure spells (Woodland Beings, Minor Elementals) in a follow-up.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: `_parse_cr`, `_monster_summon_template`, `_conjure_catalog_summon_template`, `_CONJURE_COUNT_CR_TIERS`, the `_summon_companion(template=…)` param; `cast_conjure_animals` resolves the optional `beast_slug` + parameterizes the summon loop + broadcast over the creature label.
+- `docs/plans/conjure-family.md`: the catalog-backed-summon follow-up marked started (Conjure Animals).
+
+**Harness changes:**
+
+- `tests/harness/test_cast_conjure_animals.py`: +4 tests — `beast_slug=giant-spider` count 2 (CR 1) spawns 2 spiders with the catalog HP 26 / AC 14 under `companion_key "giant-spider"`; `black-bear` (CR ½) at count 8 → 400; non-beast `goblin` → 400; unknown slug → 400. The 8 pre-existing wolf-default tests still pass (backward-compatible).
+
+Total harness count → 3926 (+4).
+
+MINOR — additive `beast_slug` override on `/cast_conjure_animals`. No schema change.
+
+### Added
+- `/cast_conjure_animals`: optional `beast_slug` to summon any catalog beast within the count's CR tier (the catalog-backed-summon follow-up), reusing a new `_monster_summon_template` + `_summon_companion(template=…)` substrate.
+
 ## [2.538.1] - 2026-06-21 — "The Twice-Told Tale"
 
 **Schema version:** 71

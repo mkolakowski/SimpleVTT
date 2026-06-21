@@ -198,3 +198,67 @@ async def test_conjure_animals_cannot_cast(gm_client, roster):
     )
     assert r.status_code == 409, r.text
     assert r.json()["error"] == "cannot_cast"
+
+
+# ─── v2.539.0 — optional catalog-creature override ────────────────────
+
+
+async def test_conjure_animals_catalog_beast(gm_client, roster):
+    """beast_slug=giant-spider, count=2 (CR1 ≤ the CR-1 tier) → two
+    spiders with the catalog stat block (HP 26 / AC 14), tracked under
+    companion_key 'giant-spider'."""
+    mira = roster["Mira Greenleaf"]
+    await _seed_battle(gm_client, [_pc_cb(mira)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_animals",
+        json={"character_id": mira["id"], "count": 2,
+              "beast_slug": "giant-spider", "x": 700.0, "y": 700.0},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    ids = [c["id"] for c in body["combatants"]]
+    try:
+        assert body["count"] == 2
+        assert len(body["combatants"]) == 2
+        for c in body["combatants"]:
+            assert c["companion_key"] == "giant-spider"
+            assert c["is_summon"] is True
+            assert int(c["hp_max"]) == 26
+            assert int(c["ac"]) == 14
+    finally:
+        await _dismiss_all(gm_client, ids)
+
+
+async def test_conjure_animals_catalog_cr_too_high_400(gm_client, roster):
+    """beast_slug=black-bear (CR ½) with count=8 (the ¼ tier) → 400."""
+    mira = roster["Mira Greenleaf"]
+    await _seed_battle(gm_client, [_pc_cb(mira)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_animals",
+        json={"character_id": mira["id"], "count": 8,
+              "beast_slug": "black-bear"},
+    )
+    assert r.status_code == 400, r.text
+
+
+async def test_conjure_animals_catalog_non_beast_400(gm_client, roster):
+    """beast_slug=goblin (Humanoid) → 400."""
+    mira = roster["Mira Greenleaf"]
+    await _seed_battle(gm_client, [_pc_cb(mira)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_animals",
+        json={"character_id": mira["id"], "count": 1, "beast_slug": "goblin"},
+    )
+    assert r.status_code == 400, r.text
+
+
+async def test_conjure_animals_catalog_unknown_slug_400(gm_client, roster):
+    """An unknown beast_slug → 400."""
+    mira = roster["Mira Greenleaf"]
+    await _seed_battle(gm_client, [_pc_cb(mira)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_animals",
+        json={"character_id": mira["id"], "count": 1,
+              "beast_slug": "no-such-beast-xyz"},
+    )
+    assert r.status_code == 400, r.text

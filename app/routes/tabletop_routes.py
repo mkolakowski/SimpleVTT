@@ -5688,6 +5688,109 @@ _COMPANION_TEMPLATES: dict[str, dict] = {
 }
 
 
+_CREATURE_SIZE_TO_INT = {
+    "tiny": 1, "small": 1, "medium": 1,
+    "large": 2, "huge": 3, "gargantuan": 4,
+}
+
+
+def _monster_summon_template(
+    slug: str, campaign_id: "int | None" = None,
+) -> "dict | None":
+    """v2.539.0 — Conjure family catalog summon. Build a summon stat
+    block from a monster's SRD catalog record (resolved by slug),
+    suitable for ``_summon_companion(template=...)`` plus the creature's
+    ``type`` + parsed ``cr`` for the caller's validation. Returns None
+    when the slug doesn't resolve. ``armor_class`` may be an int or a
+    list/dict in the SRD shape — normalized here.
+    """
+    hit = local_content.resolve(
+        (slug or "").strip().lower(), type="monsters", campaign_id=campaign_id,
+    )
+    if not hit:
+        return None
+    rec, _ = hit
+    ac_raw = rec.get("armor_class")
+    if isinstance(ac_raw, list) and ac_raw:
+        ac_raw = ac_raw[0]
+    if isinstance(ac_raw, dict):
+        ac_raw = ac_raw.get("value")
+    try:
+        ac = int(ac_raw)
+    except (TypeError, ValueError):
+        ac = 10
+    try:
+        hp = int(rec.get("hit_points") or 1)
+    except (TypeError, ValueError):
+        hp = 1
+    speed = rec.get("speed") or {}
+    try:
+        speed_walk = (
+            int(speed.get("walk") or 30) if isinstance(speed, dict) else 30
+        )
+    except (TypeError, ValueError):
+        speed_walk = 30
+    size_str = (rec.get("size") or "Medium").strip().lower()
+    return {
+        "name": rec.get("name") or slug,
+        "hp": max(1, hp),
+        "ac": ac,
+        "speed_walk": speed_walk,
+        "size": _CREATURE_SIZE_TO_INT.get(size_str, 1),
+        "color": "#6b8e23",  # summon green
+        "team": "hero",
+        "type": (rec.get("type") or "").strip().lower(),
+        # v2.539.0 — reuse the existing `_cr_to_float` CR→float helper
+        # (NOT the form-input `_parse_cr` validator, which returns a
+        # normalized string and would shadow a same-named local).
+        "cr": _cr_to_float(rec.get("challenge_rating")),
+    }
+
+
+# v2.539.0 — Conjure Animals/Woodland-Beings count↔max-CR table (PHB
+# p.225/226): a chosen summoning option fixes each creature's max CR.
+# Used by the catalog-backed summon override to gate the chosen slug.
+_CONJURE_COUNT_CR_TIERS = {1: 2.0, 2: 1.0, 4: 0.5, 8: 0.25}
+
+
+def _conjure_catalog_summon_template(
+    body: dict, campaign_id: "int | None",
+    *, slug_field: str, required_type: str, base_count: int,
+) -> "tuple[dict | None, str | None]":
+    """v2.539.0 — shared validator for the conjure spells' optional
+    catalog-creature override. Reads ``body[slug_field]``; when present,
+    resolves + validates the creature against ``required_type`` (e.g.
+    "beast", "fey") and the count↔CR tier for ``base_count``. Returns
+    ``(template, error)`` — ``template`` is None + ``error`` set on a bad
+    slug / wrong type / over-CR / non-tier count; ``(None, None)`` when no
+    slug was supplied (caller falls back to its hardcoded default).
+    """
+    slug = (body.get(slug_field) or "").strip().lower()
+    if not slug:
+        return None, None
+    if base_count not in _CONJURE_COUNT_CR_TIERS:
+        return None, (
+            f"{slug_field} requires count to be one of 1/2/4/8 "
+            "(the RAW summoning options)"
+        )
+    max_cr = _CONJURE_COUNT_CR_TIERS[base_count]
+    template = _monster_summon_template(slug, campaign_id)
+    if template is None:
+        return None, f"Unknown creature: {slug!r}"
+    if required_type not in (template.get("type") or ""):
+        return None, (
+            f"{template.get('name')} is not a {required_type} "
+            f"(type: {template.get('type') or 'unknown'})"
+        )
+    if float(template.get("cr") or 0) > max_cr:
+        return None, (
+            f"{template.get('name')} (CR {template.get('cr')}) exceeds the "
+            f"max CR {max_cr} for {base_count} creature"
+            f"{'s' if base_count != 1 else ''}"
+        )
+    return template, None
+
+
 async def _summon_companion(
     db: Session,
     campaign_id: int,
@@ -5701,6 +5804,7 @@ async def _summon_companion(
     hp: "int | None" = None,
     ac: "int | None" = None,
     concentration_bound: bool = False,
+    template: "dict | None" = None,
 ) -> "dict | None":
     """v2.99.437 — Phase 7.1: stand up a summoned companion as a REAL
     combatant. Creates an NPC ``Token`` on the active map (broadcast
@@ -5719,7 +5823,14 @@ async def _summon_companion(
     token (``token_id`` None — announce-style fallback). Returns
     ``{combatant, token_id, companion_key}`` or None for an unknown key.
     """
-    entry = _COMPANION_TEMPLATES.get((companion_key or "").strip().lower())
+    # v2.539.0 — Conjure family catalog-backed summon: an inline
+    # ``template`` (built from the SRD monster catalog by
+    # `_monster_summon_template`) overrides the hardcoded
+    # `_COMPANION_TEMPLATES` registry, so a conjure spell can summon any
+    # catalog creature within its type + CR tier — not just the curated
+    # default. No template → existing registry lookup by key.
+    entry = template or _COMPANION_TEMPLATES.get(
+        (companion_key or "").strip().lower())
     if not entry:
         return None
     disp_name = (name or entry["name"])[:120]
@@ -63409,6 +63520,21 @@ async def cast_conjure_animals(
             "got_class": _cls,
         })
 
+    # v2.539.0 — optional catalog-creature override. With no `beast_slug`
+    # the default wolf is summoned (backward-compatible); with one, any
+    # catalog beast within the count's CR tier is summoned instead.
+    _cat_template, _cat_err = _conjure_catalog_summon_template(
+        body, campaign_id,
+        slug_field="beast_slug", required_type="beast", base_count=base_count,
+    )
+    if _cat_err:
+        raise HTTPException(400, _cat_err)
+    _summon_key = (
+        (body.get("beast_slug") or "").strip().lower()
+        if _cat_template else "wolf"
+    )
+    _summon_label = _cat_template["name"] if _cat_template else "Wolf"
+
     base_x = float(body.get("x") or 0)
     base_y = float(body.get("y") or 0)
     initiative = int(body.get("initiative") or 0)
@@ -63418,11 +63544,12 @@ async def cast_conjure_animals(
         res = await _summon_companion(
             db, campaign_id,
             owner_char_id=char.id,
-            companion_key="wolf",
-            name=f"Conjured Wolf {i + 1}",
+            companion_key=_summon_key,
+            name=f"Conjured {_summon_label} {i + 1}",
             x=base_x + i * spacing,
             y=base_y,
             initiative=initiative,
+            template=_cat_template,
         )
         if res:
             combatants.append(res["combatant"])
@@ -63444,10 +63571,13 @@ async def cast_conjure_animals(
             "character_id": char.id,
             "character_name": char.name,
             "user_color": char.color or player_color,
-            "feature_name": f"🐾 Conjure Animals — {len(combatants)} wolves",
+            "feature_name": (
+                f"🐾 Conjure Animals — {len(combatants)} × {_summon_label}"
+            ),
             "feature_desc": (
                 f"{char.name} summons {len(combatants)} fey spirits in "
-                f"wolf form as combatants. (Conjure Animals, L{slot_level}"
+                f"{_summon_label.lower()} form as combatants. (Conjure "
+                f"Animals, L{slot_level}"
                 f"{f', ×{multiplier}' if multiplier > 1 else ''}.)"
             ),
             "source": "conjure-animals",
