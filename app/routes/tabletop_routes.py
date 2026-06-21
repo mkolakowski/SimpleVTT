@@ -48073,6 +48073,96 @@ def _target_sees_invisible(
     return False
 
 
+def _attacker_sees_invisible(campaign_id: int, char_id: "int | None") -> bool:
+    """v2.514.0 — See Invisibility target-side (#43 follow-up). PC mirror
+    of ``_target_sees_invisible``: returns True when the attacker's hub
+    combatant carries a buff with ``effects.sees_invisible: True`` (See
+    Invisibility v2.509.0). Read alongside the target-invisible
+    disadvantage so a See-Invisibility attacker doesn't suffer
+    disadvantage for attacking an invisible creature it can plainly see.
+
+    Reads the hub combatant buffs via ``_get_buffs`` (by char_id) rather
+    than the sheet ``_buffs_active`` mirror — ``cast_see_invisibility``
+    installs a hub-only buff (no sheet mirror), so the hub read is the
+    reliable source.
+    """
+    if not char_id:
+        return False
+    for b in _get_buffs(campaign_id, int(char_id)) or []:
+        if not isinstance(b, dict):
+            continue
+        effects = b.get("effects")
+        if isinstance(effects, dict) and effects.get("sees_invisible") is True:
+            return True
+    return False
+
+
+def _npc_attacker_sees_invisible(
+    campaign_id: int, attacker_combatant_id: "str | None",
+) -> bool:
+    """v2.514.0 — NPC mirror of ``_attacker_sees_invisible``. Returns True
+    when the NPC attacker's combatant.buffs carries a buff with
+    ``effects.sees_invisible: True``. Same read path as
+    ``_npc_attacker_has_invisible_advantage`` (the NPC combatant.buffs
+    list, no sheet mirror).
+    """
+    if not attacker_combatant_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("id") != attacker_combatant_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            effects = b.get("effects")
+            if isinstance(effects, dict) and effects.get("sees_invisible") is True:
+                return True
+        return False
+    return False
+
+
+def _target_is_invisible(
+    campaign_id: int, target_combatant_id: "str | None",
+) -> bool:
+    """v2.514.0 — See Invisibility target-side (#43 follow-up). Returns
+    True when the target combatant carries an ``invisible`` key OR a buff
+    with ``effects.invisible: True`` (Greater Invisibility, Potion of
+    Invisibility, Monk Empty Body, …). RAW PHB p.291: "attack rolls
+    against the creature have disadvantage." This is the auto-read
+    target-side intercept the v2.499.0 Greater Invisibility comment
+    described but that had been left to the manual ``attacker_cant_see_target``
+    body field; folding it in here makes any ``effects.invisible`` marker
+    impose disadvantage automatically. Negated when the attacker can see
+    invisible creatures (``_attacker_sees_invisible`` /
+    ``_npc_attacker_sees_invisible``).
+
+    Same matching logic as ``_attacker_has_invisible_advantage`` (key OR
+    effects), read from the target combatant's hub buffs by combatant id
+    (covers PC + NPC targets via the hub mirror).
+    """
+    if not target_combatant_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("id") != target_combatant_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            if (b.get("key") or "").strip().lower() == "invisible":
+                return True
+            effects = b.get("effects")
+            if isinstance(effects, dict) and effects.get("invisible") is True:
+                return True
+        return False
+    return False
+
+
 def _target_globe_blocks_spell(
     campaign_id: int, target_combatant_id: "str | None", spell_level: int,
 ) -> bool:
@@ -104319,12 +104409,24 @@ async def use_attack(
         # Prone) impose disadvantage on its attack roll. Reads the PC
         # `_buffs_active` mirror so we don't need a second hub lookup.
         _attacker_dis_condition = _attacker_has_condition_disadvantage(sheet)
+        # v2.514.0 — See Invisibility target-side (#43 follow-up): an
+        # invisible target imposes disadvantage on the attacker (RAW PHB
+        # p.291), negated when the attacker can see invisible creatures
+        # (`_attacker_sees_invisible`). This is the auto-read target-side
+        # intercept the v2.499.0 Greater Invisibility comment described;
+        # composes with the manual `attacker_cant_see_target` field via
+        # the set-OR (double-marking is harmless).
+        _target_invisible_dis = (
+            _target_is_invisible(campaign_id, target_combatant_id)
+            and not _attacker_sees_invisible(campaign_id, int(char.id))
+        )
         has_dis = (
             target_dodging or target_blurred or target_pfeag_blocks_type
             or _attacker_cant_see or _ap_marked_vs_other
             or _um_marked_vs_other
             or bool(_attacker_dis_condition)
             or bool(target_cloak_dis)
+            or _target_invisible_dis
         )
         dis_label = (
             "dodging" if target_dodging else
@@ -104335,7 +104437,8 @@ async def use_attack(
             "unwavering_mark_vs_other" if _um_marked_vs_other else
             f"attacker_{_attacker_dis_condition}"
             if _attacker_dis_condition else
-            "cloak_of_displacement" if target_cloak_dis else ""
+            "cloak_of_displacement" if target_cloak_dis else
+            "target_invisible" if _target_invisible_dis else ""
         )
         if has_adv and has_dis:
             attack_roll_state_applied = f"canceled_{adv_label}_vs_{dis_label}"
@@ -104453,12 +104556,24 @@ async def use_attack(
         # v2.152.0 — Phase 2a attacker-condition disadvantage (bonusless
         # branch mirror). See bonused branch above for the helper.
         _attacker_dis_condition = _attacker_has_condition_disadvantage(sheet)
+        # v2.514.0 — See Invisibility target-side (#43 follow-up): an
+        # invisible target imposes disadvantage on the attacker (RAW PHB
+        # p.291), negated when the attacker can see invisible creatures
+        # (`_attacker_sees_invisible`). This is the auto-read target-side
+        # intercept the v2.499.0 Greater Invisibility comment described;
+        # composes with the manual `attacker_cant_see_target` field via
+        # the set-OR (double-marking is harmless).
+        _target_invisible_dis = (
+            _target_is_invisible(campaign_id, target_combatant_id)
+            and not _attacker_sees_invisible(campaign_id, int(char.id))
+        )
         has_dis = (
             target_dodging or target_blurred or target_pfeag_blocks_type
             or _attacker_cant_see or _ap_marked_vs_other
             or _um_marked_vs_other
             or bool(_attacker_dis_condition)
             or bool(target_cloak_dis)
+            or _target_invisible_dis
         )
         dis_label = (
             "dodging" if target_dodging else
@@ -104469,7 +104584,8 @@ async def use_attack(
             "unwavering_mark_vs_other" if _um_marked_vs_other else
             f"attacker_{_attacker_dis_condition}"
             if _attacker_dis_condition else
-            "cloak_of_displacement" if target_cloak_dis else ""
+            "cloak_of_displacement" if target_cloak_dis else
+            "target_invisible" if _target_invisible_dis else ""
         )
         if has_adv and has_dis:
             attack_roll_state_applied = f"canceled_{adv_label}_vs_{dis_label}"
@@ -106107,18 +106223,27 @@ async def use_npc_attack(
         "invisible" if _npc_attacker_invisible_adv else
         f"target_{_npc_target_adv_condition}" if _npc_target_adv_condition else ""
     )
+    # v2.514.0 — See Invisibility target-side (#43 follow-up), NPC mirror:
+    # an invisible target imposes disadvantage on the NPC attacker (RAW
+    # PHB p.291), negated when the NPC can see invisible creatures.
+    _npc_target_invisible_dis = (
+        _target_is_invisible(campaign_id, target_combatant_id)
+        and not _npc_attacker_sees_invisible(campaign_id, combatant_id)
+    )
     has_dis = (
         target_dodging
         or target_blurred
         or bool(_npc_attacker_dis_condition)
         or bool(target_cloak_dis)
+        or _npc_target_invisible_dis
     )
     dis_label = (
         "dodging" if target_dodging else
         "blur" if target_blurred else
         f"attacker_{_npc_attacker_dis_condition}"
         if _npc_attacker_dis_condition else
-        "cloak_of_displacement" if target_cloak_dis else ""
+        "cloak_of_displacement" if target_cloak_dis else
+        "target_invisible" if _npc_target_invisible_dis else ""
     )
     if has_adv and has_dis:
         attack_roll_state_applied = f"canceled_{adv_label}_vs_{dis_label}"

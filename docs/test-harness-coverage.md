@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3850 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.513.0, 2026-06-21).
+**Total tests:** 3854 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.514.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4676,6 +4676,16 @@ v2.511.0 — Globe of Invulnerability (L6 abjuration, Sorcerer/Wizard, PHB p.247
 | `test_cast_goi_sorcerer_also_succeeds` | A Sorcerer succeeds (asserts the sorcerer/wizard gate). |
 | `test_cast_goi_non_caster_rejected` | Cleric (not on the RAW list) → 409 `cannot_cast`, expected string names "globe of invulnerability". |
 | `test_cast_goi_missing_character_id_400` | Empty body → 400. |
+
+### `test_attack_invisible_target_disadvantage.py`
+v2.514.0 — See Invisibility target-side (Phase 2 #43 follow-up of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md)). New `_target_is_invisible` hub-read folds an invisible *target* into the PC `/attack` + NPC `/npc_attack` disadvantage source sets (RAW PHB p.291), negated when the attacker carries `effects.sees_invisible` (`_attacker_sees_invisible` / `_npc_attacker_sees_invisible`). Invisible target + sees-invisible attacker seeded directly on combatant.buffs.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_pc_attacks_invisible_target_gets_disadvantage` | Pip attacks an invisible Krieger → `roll_state_applied` contains `disadvantage` + `target_invisible`. |
+| `test_pc_with_see_invisibility_no_disadvantage` | Pip carrying `sees_invisible` attacks the invisible target → `roll_state_applied` no longer contains `target_invisible`. |
+| `test_npc_attacks_invisible_pc_gets_disadvantage` | An NPC attacks an invisible PC → `disadvantage` + `target_invisible`. |
+| `test_npc_with_see_invisibility_no_disadvantage` | An NPC carrying `sees_invisible` attacks the invisible PC → not `target_invisible`. |
 
 ### `test_see_invisibility_negates_attack_edge.py`
 v2.510.0 — See Invisibility attack-edge negation (Phase 2 #43 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md)). New `_target_sees_invisible` hub-read folded into the v2.152.0 invisible-attacker advantage across all three attack branches (PC `/attack` bonused + bonusless, NPC `/npc_attack`). Thalindra casts Greater Invisibility on Krieger + See Invisibility on herself.

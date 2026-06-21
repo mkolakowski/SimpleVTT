@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.514.0] - 2026-06-21 — "The Telltale Shimmer"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #43 follow-up of the cast-and-broadcast tail — wires the symmetric target-side half of the invisibility/See-Invisibility interaction. An invisible *target* now auto-imposes disadvantage on attackers, negated when the attacker can see invisible creatures.
+
+**Description:** Completes the invisibility interaction begun in #43 (v2.510.0, the attacker-side advantage negation). RAW PHB p.291: "attack rolls against [an invisible] creature have disadvantage." Until now that disadvantage was driven only by the manual `attacker_cant_see_target` body field; the auto-read target-side intercept the v2.499.0 Greater Invisibility comment described didn't actually exist. This commit adds it: new `_target_is_invisible(campaign_id, target_combatant_id)` hub-read (matching the `invisible` key OR `effects.invisible: True`, same logic as `_attacker_has_invisible_advantage`) folded into the PC `/attack` (both branches) and NPC `/npc_attack` disadvantage source sets. So any `effects.invisible` marker — Greater Invisibility, Potion of Invisibility, Monk Empty Body — now imposes disadvantage on attackers automatically.
+
+The disadvantage is **negated** when the attacker can see invisible creatures: new `_attacker_sees_invisible(campaign_id, char_id)` (PC, hub-read by char_id — `cast_see_invisibility` installs a hub-only buff, no sheet mirror) and `_npc_attacker_sees_invisible(campaign_id, combatant_id)` (NPC). It composes with the manual `attacker_cant_see_target` field via the set-OR (double-marking is harmless), and with the attacker-side invisible advantage via the existing RAW cancel logic (attacker invisible + target invisible → straight roll).
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_attacker_sees_invisible`, `_npc_attacker_sees_invisible`, and `_target_is_invisible` helpers; `_target_invisible_dis` / `_npc_target_invisible_dis` folded into the three attack-branch `has_dis` source sets + `dis_label` (`target_invisible`).
+
+**Harness changes:**
+
+- `tests/harness/test_attack_invisible_target_disadvantage.py` (new): +4 tests — PC attacks an invisible target → `disadvantage_target_invisible`; PC with `sees_invisible` → negated; NPC attacks an invisible PC → `disadvantage_target_invisible`; NPC with `sees_invisible` → negated.
+
+Total harness count → 3854 (+4).
+
+MINOR — new attack-pipeline interaction (no new endpoint). No schema change.
+
+### Changed
+- `/attack` + `/npc_attack`: an invisible target (any `effects.invisible` marker) now auto-imposes disadvantage on attackers (RAW PHB p.291), negated when the attacker carries `effects.sees_invisible` (See Invisibility). Phase 2 #43 follow-up of the cast-and-broadcast tail.
+
 ## [2.513.0] - 2026-06-21 — "The Unwelcome Spell"
 
 **Schema version:** 71
