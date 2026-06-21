@@ -2050,6 +2050,36 @@ _SPELL_BUFF_MAP["warding-bond"] = {
     ),
 }
 
+# v2.496.0 — Death Ward (Phase 2 #29 of
+# docs/plans/cast-and-broadcast-tail.md). L4 abjuration,
+# Cleric/Paladin, PHB p.230. "The first time the target would drop to
+# 0 hit points as a result of taking damage, the target instead drops
+# to 1 hit point, and the spell ends." 8 hours, non-concentration.
+# This is the first tail spell that needed NEW mechanical code: the
+# HP-floor hook lives in `_apply_hp_change` alongside the v2.99.17
+# Half-Orc Relentless Endurance branch (the identical drop-to-1
+# mechanic, gated by a one-shot trigger). The `effects.death_ward`
+# marker is read by `_pc_has_death_ward`; firing consumes the buff.
+# The instant-death-negation clause ("subjected to an effect that
+# would kill it instantaneously without dealing damage") stays
+# GM-narrated for v1 — the engine has no instant-death-without-damage
+# vector that flows through `_apply_hp_change`.
+_SPELL_BUFF_MAP["death-ward"] = {
+    "key": "death-ward",
+    "name": "Death Ward",
+    "icon": "✝️",
+    "duration_rounds": 4800,  # 8 hours RAW
+    "duration_max": 4800,
+    "concentration": False,
+    "effects": {
+        "death_ward": True,
+    },
+    "desc": (
+        "The first time you would drop to 0 HP from damage, you drop "
+        "to 1 HP instead and the ward ends. 8 hours."
+    ),
+}
+
 # v2.190.0 — Potion of Invulnerability (RAW DMG p.188, rare): resistance to
 # ALL damage for 1 minute. Reuses the v2.99.121 `resistance_to: ["all"]`
 # wildcard that `_resistance_halve` already honours, so no new intercept is
@@ -10159,6 +10189,29 @@ async def _apply_damage_to_combatant(
                     "key": "relentless-endurance",
                     "current": 0,
                     "max": 1,
+                },
+            })
+        # v2.496.0 — Death Ward (L4 spell) broadcast + buff cleanup.
+        # `_apply_hp_change` clamped HP to 1 and consumed the buff from
+        # the sheet mirror; drop the hub-state copy here (the spell
+        # ends) and surface the trigger to the chat card.
+        if result.get("death_ward_fired"):
+            await _remove_buff(campaign_id, char.id, "death-ward")
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": char.id,
+                    "character_name": char.name,
+                    "user_color": char.color,
+                    "feature_name": "✝️ Death Ward — held at 1 HP",
+                    "feature_desc": (
+                        f"{char.name} would have dropped to 0 HP from "
+                        f"{int(result.get('death_ward_damage') or 0)} "
+                        f"damage but Death Ward holds them at 1 HP. The "
+                        f"ward ends."
+                    ),
+                    "source": "death-ward",
+                    "damage": int(result.get("death_ward_damage") or 0),
                 },
             })
         # v2.99.202 — Phase F.1 cont'd: Relentless Rage broadcast.
@@ -65839,6 +65892,143 @@ async def cast_warding_bond(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_death_ward")
+async def cast_death_ward(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.496.0 — Phase 2 #29 of
+    docs/plans/cast-and-broadcast-tail.md. Death Ward
+    (L4 abjuration, Cleric/Paladin, PHB p.230):
+
+      "The first time the target would drop to 0 hit points as a
+       result of taking damage, the target instead drops to 1 hit
+       point, and the spell ends. ..."
+
+    1 action, V/S, Touch, 8 hours, non-concentration.
+
+    First tail spell that needed NEW mechanical code: the drop-to-1
+    floor lives in ``_apply_hp_change`` alongside the Half-Orc
+    Relentless Endurance branch (the identical mechanic). This endpoint
+    just installs the ``effects.death_ward`` marker buff + mirrors it to
+    the target's sheet so the sync HP-change function can read it. When
+    the floor fires, the central damage path drops the hub buff and
+    broadcasts ``feature_used(source=death-ward)``. The
+    instant-death-negation clause stays GM-narrated (no
+    instant-death-without-damage vector flows through the HP path).
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster targets themself.
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_dw = any(
+        (s.get("_slug") == "death-ward")
+        or (str(s.get("name", "")).lower() == "death ward")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"cleric", "paladin"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_dw and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Death Ward, or cleric/paladin",
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("death-ward") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 4800)
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "death-ward",
+        "name": template.get("name") or "Death Ward",
+        "icon": template.get("icon") or "✝️",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": dict(template.get("effects") or {"death_ward": True}),
+        "desc": template.get("desc") or (
+            "First drop to 0 HP from damage becomes 1 HP instead."
+        ),
+    })
+    # Mirror to the target's sheet so the sync HP-change floor
+    # (`_pc_has_death_ward` reads `_buffs_active`) sees the new buff.
+    _mirror_buffs_to_sheet(
+        db, target_char.id, _get_buffs(campaign_id, target_char.id),
+    )
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    who = "themself" if target_char.id == char.id else target_char.name
+    feature_desc = (
+        f"{char.name} wards {who} against death — the first drop to 0 HP "
+        "from damage becomes 1 HP instead (the ward then ends). 8 hours."
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "✝️ Death Ward",
+            "feature_desc": feature_desc,
+            "source": "death-ward",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "death-ward",
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_jump")
 async def cast_jump(
     campaign_id: int,
@@ -94798,6 +94988,39 @@ def get_character_economy(
 _DEATH_SAVE_STATUSES = ("alive", "dying", "stable", "dead")
 
 
+def _pc_has_death_ward(sheet: dict) -> bool:
+    """v2.496.0 — True when the character carries an active Death Ward
+    buff (``effects.death_ward`` truthy) in its sheet ``_buffs_active``
+    mirror. Read by ``_apply_hp_change``'s drop-to-1 floor. Sheet-based
+    (not hub state) so the sync HP-change function can consult it;
+    ``cast_death_ward`` mirrors the buff to the sheet on install.
+    """
+    for b in (sheet or {}).get("_buffs_active") or []:
+        if not isinstance(b, dict):
+            continue
+        eff = b.get("effects")
+        if isinstance(eff, dict) and eff.get("death_ward"):
+            return True
+    return False
+
+
+def _consume_death_ward(sheet: dict) -> None:
+    """v2.496.0 — Drop every Death Ward buff from the sheet's
+    ``_buffs_active`` in place (one-shot: "the spell ends"). The caller
+    persists ``char.sheet``; the hub-state copy is dropped separately by
+    the central damage path when the ``death_ward_fired`` flag surfaces.
+    """
+    buffs = (sheet or {}).get("_buffs_active") or []
+    sheet["_buffs_active"] = [
+        b for b in buffs
+        if not (
+            isinstance(b, dict)
+            and isinstance(b.get("effects"), dict)
+            and b["effects"].get("death_ward")
+        )
+    ]
+
+
 def _apply_hp_change(
     char: Character,
     new_current: int,
@@ -94846,6 +95069,11 @@ def _apply_hp_change(
     became_dead = False
     relentless_endurance_fired = False
     relentless_endurance_damage = 0
+    # v2.496.0 — Death Ward trigger flags (Phase 2 #29 of the
+    # cast-and-broadcast tail). Set when the spell's drop-to-1 floor
+    # fires; the central damage path drops the hub buff + broadcasts.
+    death_ward_fired = False
+    death_ward_damage = 0
     # v2.99.202 — Phase F.1 cont'd: Relentless Rage trigger flags.
     relentless_rage_fired = False
     relentless_rage_passed = False
@@ -94891,6 +95119,22 @@ def _apply_hp_change(
                     relentless_endurance_fired = True
                     relentless_endurance_damage = damage_amount
                     # Stay alive; don't tick death-save state.
+                    new_status = "alive"
+                # v2.496.0 — Death Ward (L4 spell). RAW: "the first
+                # time the target would drop to 0 HP as a result of
+                # taking damage, the target instead drops to 1 hit
+                # point, and the spell ends." Same drop-to-1 shape as
+                # Relentless Endurance, gated by an active death-ward
+                # buff instead of a racial resource. Placed AFTER RE so
+                # a Half-Orc spends the free 1/long-rest trait before
+                # the precious L4 slot. Consumes the buff from the
+                # sheet mirror; the hub-state copy is dropped by the
+                # central damage path on the fired flag.
+                elif _pc_has_death_ward(sheet):
+                    new_current = 1
+                    _consume_death_ward(sheet)
+                    death_ward_fired = True
+                    death_ward_damage = damage_amount
                     new_status = "alive"
                 # v2.99.202 — Phase F.1 cont'd: Relentless Rage
                 # (Barbarian Lv 11+). RAW PHB p.49: when raging
@@ -94983,6 +95227,9 @@ def _apply_hp_change(
         # broadcast the feature_used event when fired.
         "relentless_endurance_fired": relentless_endurance_fired,
         "relentless_endurance_damage": relentless_endurance_damage,
+        # v2.496.0 — Death Ward trigger flags.
+        "death_ward_fired": death_ward_fired,
+        "death_ward_damage": death_ward_damage,
         # v2.99.202 — Relentless Rage trigger flags.
         "relentless_rage_fired": relentless_rage_fired,
         "relentless_rage_passed": relentless_rage_passed,

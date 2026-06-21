@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3764 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.495.4, 2026-06-21).
+**Total tests:** 3769 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.496.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4598,6 +4598,17 @@ v2.404.4 — Longstrider multi-target cap + per-slot upcast scaling (RAW PHB p.2
 | `test_longstrider_l1_two_targets_returns_400` | L1 cast with 2 targets → 400 `too_many_targets` with `{limit: 1, received: 2}`. |
 | `test_longstrider_l2_two_targets_succeeds` | L2 cast with 2 targets → 200 (extended cap = 1 + (2-1)*1 = 2). |
 | `test_longstrider_l2_three_targets_returns_400` | L2 cast with 3 targets → 400 with `{limit: 2, received: 3}` — confirms the upcast field is honored. |
+
+### `test_cast_death_ward.py`
+v2.496.0 — Death Ward (L4 abjuration, Cleric/Paladin, PHB p.230). Phase 2 #29 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). **First tail spell with genuinely new mechanical code:** the drop-to-1-on-first-0 floor lives in `_apply_hp_change` alongside the Half-Orc Relentless Endurance branch (gated by an `effects.death_ward` buff instead of a racial resource). New `_SPELL_BUFF_MAP["death-ward"]` template + `_pc_has_death_ward`/`_consume_death_ward` helpers + the `cast_death_ward` endpoint (mirrors the buff to the sheet so the sync HP floor reads it). Firing consumes the buff and the central damage path drops the hub copy + broadcasts. Tavik (Cleric) casts; Pip attacks the warded Garrik to trigger the floor.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_death_ward_installs_marker_buff` | Cleric wards an ally → 200, `feature == "death-ward"`, `duration_rounds == 4800`; buff carries `effects.death_ward == true`. |
+| `test_cast_death_ward_is_8_hours_non_concentration` | Installed buff has `concentration == false` + `duration_rounds == 4800`. |
+| `test_death_ward_floors_lethal_hit_at_1_hp` | **End-to-end floor:** warded Garrik at 3 HP → Pip's seeded hit ≥3 → `character_hp_update` shows HP=1 (not 0), `feature_used(source=death-ward, "held at 1 HP")` broadcast fires, and the death-ward buff is consumed. |
+| `test_cast_death_ward_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected string names "death ward". |
+| `test_cast_death_ward_missing_character_id_400` | Empty body → 400. |
 
 ### `test_cast_warding_bond.py`
 v2.493.0 — Warding Bond (L2 abjuration, Cleric, PHB p.287). Phase 2 #28 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_SPELL_BUFF_MAP["warding-bond"]` template (`ac_bonus: 1` + `resistance_to: ["all"]`, 600 rounds, non-concentration) + the `cast_warding_bond` endpoint. Rides two existing substrates — `ac_bonus` (read at `_read_target_ac`) + `resistance_to:["all"]` (read by `_resistance_halve`); the +1 saves (item-only read-site), damage-share rider, and 60-ft tether stay GM-narrated. Mirrors the buff to the target's sheet (the resistance reader is sheet-based). Brother Tavik (Cleric) casts; Krieger is the warded ally + non-caster reject.

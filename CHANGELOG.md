@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.496.0] - 2026-06-21 — "The Second Breath"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_death_ward` — Phase 2 #29 of the cast-and-broadcast tail. Death Ward (L4 abjuration, Cleric/Paladin) installs an 8-hour ward so the first time the target would drop to 0 HP from damage, they drop to 1 HP instead and the ward ends.
+
+**Description:** Continues the cast-and-broadcast tail (Warding Bond #28 shipped v2.493.0). Death Ward is the **first tail spell that needed genuinely new mechanical code** — not a zero-code substrate ride. RAW PHB p.230: "The first time the target would drop to 0 hit points as a result of taking damage, the target instead drops to 1 hit point, and the spell ends." This is the exact drop-to-1 mechanic as the v2.99.17 Half-Orc Relentless Endurance, so the HP-floor hook lives right alongside it in `_apply_hp_change`: when damage would set HP to 0, the massive-damage rule didn't fire, and Relentless Endurance didn't fire, an active `effects.death_ward` buff clamps HP to 1, keeps status `alive`, consumes the buff, and returns a `death_ward_fired` flag. Placed after Relentless Endurance so a Half-Orc spends the free 1/long-rest trait before the precious L4 slot.
+
+The instant-death-negation clause ("subjected to an effect that would kill it instantaneously without dealing damage") stays GM-narrated for v1 — the engine has no instant-death-without-damage vector that flows through `_apply_hp_change`.
+
+**Consumption + mirror nuance:** the floor reads the target's sheet `_buffs_active` (sync function, no hub access), so `cast_death_ward` mirrors the buff to the sheet on install (like #27/#28). Firing consumes the buff from the sheet inside `_apply_hp_change` and the central damage path (`_apply_damage_to_combatant`) drops the hub-state copy via `_remove_buff` + broadcasts `feature_used(source=death-ward)`.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_SPELL_BUFF_MAP["death-ward"]` template (`death_ward: True`, 4800 rounds / 8 h, non-concentration); `_pc_has_death_ward` + `_consume_death_ward` helpers; the drop-to-1 branch + `death_ward_fired`/`death_ward_damage` flags in `_apply_hp_change`; the fire handler (hub buff drop + broadcast) in `_apply_damage_to_combatant`; the `cast_death_ward` endpoint (caster gate cleric/paladin, touch self/ally, sheet mirror, 400/404/409/403 error paths).
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #29.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_death_ward.py` (new): +5 tests — install carries `death_ward:true`, 8-hour non-concentration, **end-to-end floor test** (warded Garrik at 3 HP → Pip's hit ≥3 → HP lands at 1 not 0, buff consumed, `feature_used(source=death-ward, "held at 1 HP")` broadcast fires), non-caster 409, missing character_id 400.
+
+Total harness count → 3769 (+5).
+
+MINOR — new cast endpoint + additive HP-path hook; backward-compatible. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_death_ward`: Death Ward (L4) — 8-hour ward that turns the first drop-to-0-from-damage into drop-to-1, riding the Relentless-Endurance HP-floor machinery. Phase 2 #29 of the cast-and-broadcast tail.
+
 ## [2.495.4] - 2026-06-21 — "The Guest List"
 
 **Schema version:** 71
