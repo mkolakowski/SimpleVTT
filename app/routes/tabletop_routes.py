@@ -70802,6 +70802,140 @@ async def cast_zone_of_truth(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_calm_emotions")
+async def cast_calm_emotions(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.535.0 — Phase 2 #53 of
+    docs/plans/cast-and-broadcast-tail.md. Calm Emotions (L2
+    enchantment, Bard/Cleric/Warlock, PHB p.221):
+
+      "Each humanoid in a 20-foot-radius sphere ... must make a Charisma
+       saving throw ... If a creature fails its saving throw, choose one
+       of the following two effects. You can suppress any effect causing
+       a target to be charmed or frightened. ... Alternatively, you can
+       make a target indifferent about creatures of your choice that it
+       is hostile toward."
+
+    1 action, V/S, 60 ft, **Concentration, up to 1 minute**.
+
+    Implementation: the concentration sibling of Zone of Truth (#52) on
+    the same Sanctuary DC-bake pattern. Installs a ``calm-emotions`` buff
+    on the caster carrying ``effects.calm_emotions: True`` + the baked
+    ``save_dc`` (8 + prof + spellcasting mod) + ``save_ability: "CHA"``,
+    surfacing "Calm Emotions active (DC N)" for the table. The 20-ft
+    sphere, the per-humanoid CHA saves, and the GM's per-target choice of
+    the two effects (suppress charm/frighten OR make indifferent) are
+    GM-narrated (no zone-of-effect model). Self-cast — the zone is
+    GM-placed within 60 ft.
+
+    Body: ``{character_id}``. Response: ``{ok, feature, save_dc,
+    save_ability, buff_installed, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if char.template == "dnd5e":
+        normalize_dnd5e_sheet(sheet)
+    spells = list(sheet.get("spells") or [])
+    knows_ce = any(
+        (s.get("_slug") == "calm-emotions")
+        or (str(s.get("name", "")).lower() == "calm emotions")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"bard", "cleric", "warlock"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_ce and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Calm Emotions, or bard/cleric/warlock",
+            "got_class": _cls,
+        })
+
+    save_dc = _compute_spell_save_dc_from_sheet(sheet)
+    DURATION_ROUNDS = 10  # 1 minute @ 6 s/round (concentration)
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "calm-emotions",
+        "name": "Calm Emotions",
+        "icon": "🕊️",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": True,  # RAW (PHB p.221)
+        "source_char_id": char.id,
+        "effects": {
+            "calm_emotions": True,
+            "save_dc": save_dc,
+            "save_ability": "CHA",
+        },
+        "desc": (
+            f"A 20-ft sphere where humanoids that fail a CHA save (DC "
+            f"{save_dc}) have charm/frighten suppressed or are made "
+            "indifferent (GM's choice), up to 1 minute (concentration). "
+            "The sphere + saves + effect choice are GM-narrated."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🕊️ Calm Emotions",
+            "feature_desc": (
+                f"{char.name} casts Calm Emotions — a 20-ft sphere where "
+                f"a humanoid that fails a CHA save (DC {save_dc}) has "
+                "charm/frighten suppressed or is made indifferent (GM's "
+                "choice), up to 1 minute (concentration)."
+            ),
+            "source": "calm-emotions",
+            "save_dc": save_dc,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "calm-emotions",
+        "save_dc": save_dc,
+        "save_ability": "CHA",
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_globe_of_invulnerability")
 async def cast_globe_of_invulnerability(
     campaign_id: int,

@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.535.0] - 2026-06-21 — "The Quieted Heart"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_calm_emotions` — Phase 2 #53 of the cast-and-broadcast tail. Calm Emotions (L2 enchantment, Bard/Cleric/Warlock) installs a 1-minute concentration marker buff baking the CHA save DC.
+
+**Description:** Continues the tail after Zone of Truth (#52) — its concentration sibling on the same Sanctuary DC-bake pattern. RAW PHB p.221: "Each humanoid in a 20-foot-radius sphere … must make a Charisma saving throw … suppress any effect causing a target to be charmed or frightened … [or] make a target indifferent." 1 action, V/S, 60 ft, Concentration up to 1 minute. Installs a `calm-emotions` buff on the caster carrying `effects.calm_emotions: True` + the baked `save_dc` (8 + prof + spellcasting mod) + `save_ability: "CHA"`, surfacing "Calm Emotions active (DC N)" for the table. The 20-ft sphere, the per-humanoid CHA saves, and the GM's per-target choice of the two effects (suppress charm/frighten OR make indifferent) are GM-narrated (no zone-of-effect model). Self-cast — the zone is GM-placed within 60 ft.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `cast_calm_emotions` endpoint. Normalizes the sheet, computes the DC via `_compute_spell_save_dc_from_sheet`, installs the concentration marker, surfaces `save_dc` + `save_ability`. Caster gate: knows the spell OR bard/cleric/warlock (the spell's data class list). 400/403/404/409 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #53.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_calm_emotions.py` (new): +4 tests — Cleric cast installs `calm_emotions` + `save_dc` + CHA (response DC matches, ≥ 8); buff is concentration + 1-min (10 rounds); non-caster 409; missing character_id 400.
+
+Total harness count → 3913 (+4).
+
+MINOR — new cast endpoint baking a CHA save DC. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_calm_emotions`: Calm Emotions (L2) — a 1-minute concentration marker buff baking the CHA save DC; sphere + saves + effect choice GM-narrated. Phase 2 #53 of the cast-and-broadcast tail.
+
 ## [2.534.0] - 2026-06-21 — "The Honest Sphere"
 
 **Schema version:** 71
