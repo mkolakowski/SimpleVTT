@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3815 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.505.0, 2026-06-21).
+**Total tests:** 3819 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.506.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4644,6 +4644,16 @@ v2.491.0 — Enlarge/Reduce (L2 transmutation, Sorcerer/Wizard, PHB p.237). Phas
 | `test_cast_enlarge_reduce_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`. |
 | `test_cast_enlarge_reduce_bad_mode_400` | An invalid `mode` (e.g. "embiggen") → 400. |
 | `test_cast_enlarge_reduce_missing_character_id_400` | Body without character_id → 400. |
+
+### `test_cast_heroes_feast.py`
+v2.506.0 — Heroes' Feast (L6 conjuration, Bard/Cleric, PHB p.250). Phase 2 #39 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_SPELL_BUFF_MAP["heroes-feast"]` + `cast_heroes_feast` endpoint — all three combat halves ride existing substrates: condition immunity (`_target_condition_immune`), `save_advantage: ["WIS"]` (`_buff_grants_save_advantage`), and `aid_hp_bonus` = a per-cast 2d10 roll (`_buff_hp_max_bonus` + `_apply_heal_to_combatant`, the Aid pattern). Mirrored to the sheet. Tavik (Cleric) casts.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_heroes_feast_installs_all_markers` | Cast → 200, `feature == "heroes-feast"`, `duration_rounds == 14400`, `hp_bonus` in [2,20]; buff carries `condition_immunity_to` ⊇ {poisoned, frightened}, `save_advantage` ⊇ {WIS}, `aid_hp_bonus ≥ 2`; mirrored to the sheet `_buffs_active`. |
+| `test_heroes_feast_raises_max_hp_and_heals` | A full-HP target (20/20) ends at `20 + rolled 2d10` — proves both the `aid_hp_bonus` max-raise and the install-time heal. |
+| `test_cast_heroes_feast_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected string names "heroes' feast". |
+| `test_cast_heroes_feast_missing_character_id_400` | Empty body → 400. |
 
 ### `test_cast_resistance.py`
 v2.505.0 — Resistance (cantrip, Cleric/Druid, PHB p.272). Phase 2 #38 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). The save-side mirror of Guidance — new `_pc_has_resistance_cantrip` helper + a `/roll` save append (`+1d4`) that consumes the buff after one save + `_SPELL_BUFF_MAP["resistance-cantrip"]` (distinct from the damage `resistance-<type>` buffs) + the `cast_resistance` endpoint. Tavik (Cleric) casts.

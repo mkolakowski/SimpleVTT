@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.506.0] - 2026-06-21 — "The Laden Table"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_heroes_feast` — Phase 2 #39 of the cast-and-broadcast tail. Heroes' Feast (L6 conjuration, Bard/Cleric) installs a 24-hour buff granting poison + frightened immunity, advantage on WIS saves, and +2d10 max HP (healed the same).
+
+**Description:** Continues the tail after Resistance (#38). RAW PHB p.250: the feaster "becomes immune to poison and being frightened, and makes all Wisdom saving throws with advantage. In addition, its hit point maximum increases by 2d10, and it gains the same number of hit points. These benefits last for 24 hours." All three combat halves ride existing substrates — near-zero new code:
+
+- **Poison + frightened immunity** → `condition_immunity_to: ["poisoned", "frightened"]` (the `_install_buff` gate via `_target_condition_immune`).
+- **WIS-save advantage** → `save_advantage: ["WIS"]` (the v2.99.423 ability-aware `_buff_grants_save_advantage`, read at the spell-save sites).
+- **+2d10 max HP + heal** → a per-cast 2d10 roll stored as `aid_hp_bonus` (the v2.97.42 `_buff_hp_max_bonus` raises the effective max; the endpoint heals current HP by the same via `_apply_heal_to_combatant` — the Aid install pattern).
+
+The buff is mirrored to the target sheet so the sheet-read condition-immunity gate sees it. **GM-narrated:** cure-of-disease/poison (no active-disease tracking) and the multi-creature feast (RAW up to 12 creatures — v1 buffs one creature per cast).
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_SPELL_BUFF_MAP["heroes-feast"]` template (condition immunity + WIS save advantage + placeholder `aid_hp_bonus`) + the `cast_heroes_feast` endpoint (rolls 2d10, overrides `aid_hp_bonus`, installs + mirrors, then heals current HP by the roll). Caster gate: knows the spell OR bard/cleric. Touch self-or-ally. Returns `hp_bonus`. 400/404/409/403 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #39.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_heroes_feast.py` (new): +4 tests — install carries all three markers (poison/frightened immunity, WIS save advantage, rolled `aid_hp_bonus`) + 24-hour non-concentration + sheet mirror; **HP gate** (a full-HP target ends at `max + rolled 2d10`, proving both the max-raise and the heal); non-caster 409; missing character_id 400. Regression-checked the `aid` suite (shared `aid_hp_bonus` substrate, 10 passing).
+
+Total harness count → 3819 (+4).
+
+MINOR — new cast endpoint; backward-compatible (reuses three existing substrates). No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_heroes_feast`: Heroes' Feast (L6) — 24-hour poison/frightened immunity + WIS-save advantage + 2d10 max-HP boost, all riding existing substrates. Phase 2 #39 of the cast-and-broadcast tail.
+
 ## [2.505.0] - 2026-06-21 — "The Steady Hand"
 
 **Schema version:** 71

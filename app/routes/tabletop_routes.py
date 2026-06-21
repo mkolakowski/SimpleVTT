@@ -2209,6 +2209,32 @@ _SPELL_BUFF_MAP["mind-blank"] = {
 # v2.500.0 `attackers_have_disadvantage` (the Blur read-site —
 # `_target_blur_imposes_disadvantage`, zero extra code). The
 # can't-be-surprised clause stays GM-narrated (no surprise model).
+_SPELL_BUFF_MAP["heroes-feast"] = {
+    "key": "heroes-feast",
+    "name": "Heroes' Feast",
+    "icon": "🍖",
+    "duration_rounds": 14400,  # 24 hours @ 6 s/round
+    "duration_max": 14400,
+    "concentration": False,
+    "effects": {
+        # v2.506.0 — Phase 2 #39. All three combat halves ride existing
+        # substrates: condition immunity (the `_install_buff` gate),
+        # WIS-save advantage (`_buff_grants_save_advantage`), and the
+        # +2d10 max HP (`aid_hp_bonus` via `_buff_hp_max_bonus`). The
+        # cast endpoint overrides `aid_hp_bonus` with the per-cast 2d10
+        # roll and heals current HP by the same. Cure-of-disease/poison
+        # + the multi-creature feast stay GM-narrated.
+        "condition_immunity_to": ["poisoned", "frightened"],
+        "save_advantage": ["WIS"],
+        "aid_hp_bonus": 11,  # placeholder; endpoint rolls 2d10 per cast
+    },
+    "desc": (
+        "Immune to poison + being frightened, advantage on WIS saves, "
+        "and +2d10 max HP (healed the same), for 24 hours. Cure of "
+        "disease/poison + the multi-creature feast are GM-narrated."
+    ),
+}
+
 _SPELL_BUFF_MAP["resistance-cantrip"] = {
     "key": "resistance-cantrip",
     "name": "Resistance",
@@ -67703,6 +67729,173 @@ async def cast_resistance(
         "feature": "resistance",
         "target_character_id": target_char.id,
         "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_heroes_feast")
+async def cast_heroes_feast(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.506.0 — Phase 2 #39 of
+    docs/plans/cast-and-broadcast-tail.md. Heroes' Feast
+    (L6 conjuration, Bard/Cleric, PHB p.250):
+
+      "A creature that partakes ... becomes immune to poison and being
+       frightened, and makes all Wisdom saving throws with advantage.
+       In addition, its hit point maximum increases by 2d10, and it
+       gains the same number of hit points. These benefits last for
+       24 hours."
+
+    1 action (10 min ritual RAW), V/S/M (1000 gp gem bowl), 30 ft,
+    Instantaneous (benefits last 24 hours), non-concentration.
+
+    Implementation: all three combat halves ride existing substrates,
+    so this is near-zero new code — `condition_immunity_to:
+    ["poisoned", "frightened"]` (the `_install_buff` gate via
+    `_target_condition_immune`), `save_advantage: ["WIS"]`
+    (`_buff_grants_save_advantage` at the spell-save sites), and
+    `aid_hp_bonus` = a per-cast 2d10 roll (`_buff_hp_max_bonus` raises
+    the max; the endpoint heals current HP by the same via
+    `_apply_heal_to_combatant`, the Aid pattern). The buff is mirrored
+    to the target sheet so the sheet-read condition-immunity gate sees
+    it. Cure-of-disease/poison + the multi-creature feast (RAW up to 12
+    creatures) stay GM-narrated — v1 buffs one creature per cast.
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster targets themself.
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    hp_bonus, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_hf = any(
+        (s.get("_slug") == "heroes-feast")
+        or (str(s.get("name", "")).lower() in ("heroes' feast", "heroes feast"))
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"bard", "cleric"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_hf and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Heroes' Feast, or bard/cleric",
+            "got_class": _cls,
+        })
+
+    # Roll the +2d10 hit-point bonus once for this cast.
+    try:
+        hp_bonus = int(dice_mod.roll("2d10").total)
+    except dice_mod.DiceParseError:
+        hp_bonus = 11
+    hp_bonus = max(2, hp_bonus)
+
+    template = _SPELL_BUFF_MAP.get("heroes-feast") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 14400)
+    _effects = dict(template.get("effects") or {})
+    _effects["aid_hp_bonus"] = hp_bonus  # override placeholder with roll
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "heroes-feast",
+        "name": template.get("name") or "Heroes' Feast",
+        "icon": template.get("icon") or "🍖",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": _effects,
+        "desc": template.get("desc") or (
+            "Immune to poison + frightened, advantage on WIS saves, "
+            f"+{hp_bonus} max HP, for 24 hours."
+        ),
+    })
+    # Mirror to the target's sheet so the condition-immunity gate
+    # (`_target_condition_immune` reads `_buffs_active`) sees the buff.
+    _mirror_buffs_to_sheet(
+        db, target_char.id, _get_buffs(campaign_id, target_char.id),
+    )
+    # Heal current HP by the rolled bonus (the buff's aid_hp_bonus has
+    # already raised the effective max via _buff_hp_max_bonus, so this
+    # pushes current above the base max — the Aid install pattern).
+    state = hub.get_battle(campaign_id)
+    target_combatant = None
+    for c in (state.get("combatants") if state else []) or []:
+        if c.get("char_id") == target_char.id:
+            target_combatant = c
+            break
+    if target_combatant is not None:
+        await _apply_heal_to_combatant(
+            db, campaign_id, target_combatant, hp_bonus,
+        )
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    who = "themself" if target_char.id == char.id else target_char.name
+    feature_desc = (
+        f"{char.name} lays a Heroes' Feast for {who} — immune to poison "
+        f"and being frightened, advantage on WIS saves, and +{hp_bonus} "
+        "max HP (healed the same), for 24 hours."
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🍖 Heroes' Feast",
+            "feature_desc": feature_desc,
+            "source": "heroes-feast",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "heroes-feast",
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "hp_bonus": hp_bonus,
         "duration_rounds": DURATION_ROUNDS,
     }
 
