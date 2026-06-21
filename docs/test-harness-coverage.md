@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3760 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.495.2, 2026-06-21).
+**Total tests:** 3764 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.495.4, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5565,6 +5565,17 @@ Static config-shape validation for the opt-in `simplevtt-flood` fail2ban jail th
 | `test_env_example_gates_flood_off_by_default` | `.env.example` carries every `FAIL2BAN_FLOOD_*` default and `FAIL2BAN_FLOOD_ENABLED=false` so a fresh `.env` leaves the jail off. |
 | `test_compose_passes_flood_env_vars` | The compose fail2ban service plumbs every `FAIL2BAN_FLOOD_*` var, with the enabled gate defaulting to `false`. |
 | `test_render_script_allowlist_includes_flood_placeholders` | `render-jail.sh`'s substitution allowlist covers all four placeholders. |
+
+## Jail allowlist wiring (`FAIL2BAN_IGNOREIP` — v2.495.4)
+
+Static config-shape validation for the env-driven jail allowlist that lets an operator exempt a trusted source (e.g. a smoke-test host that self-bans on its own error-path tests) from all jails. No running container needed. Lives in `tests/harness/test_fail2ban_ignoreip_wiring.py`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_jail_default_block_has_ignoreip_placeholder` | `jail.d/simplevtt.conf` has a `[DEFAULT]` whose `ignoreip` keeps localhost AND appends `${FAIL2BAN_IGNOREIP}`. |
+| `test_render_script_substitutes_ignoreip` | `render-jail.sh`'s `VARS` allowlist includes `FAIL2BAN_IGNOREIP` so the placeholder is substituted (not rendered literally). |
+| `test_compose_passes_ignoreip_env` | The compose fail2ban service plumbs `FAIL2BAN_IGNOREIP` through from the host shell. |
+| `test_env_example_documents_ignoreip` | `.env.example` carries a `FAIL2BAN_IGNOREIP` default (empty). |
 
 ---
 

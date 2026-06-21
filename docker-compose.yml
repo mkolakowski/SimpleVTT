@@ -290,6 +290,15 @@ services:
       FAIL2BAN_FLOOD_MAXRETRY: ${FAIL2BAN_FLOOD_MAXRETRY:-300}
       FAIL2BAN_FLOOD_FINDTIME: ${FAIL2BAN_FLOOD_FINDTIME:-1m}
       FAIL2BAN_FLOOD_BANTIME: ${FAIL2BAN_FLOOD_BANTIME:-1h}
+      # v2.495.4 — allowlist appended to the jails' [DEFAULT] ignoreip
+      # (localhost is always kept). Space-separated IPs/CIDRs that
+      # should NEVER be banned — e.g. a trusted smoke-test / monitoring
+      # host that runs the harness against the public deploy and would
+      # otherwise self-ban on its own error-path 401/403/404 tests.
+      # Empty by default. CAUTION: an allowlisted IP is exempt from ALL
+      # jails — don't list a shared/NAT/Cloudflare-egress address unless
+      # everything behind it can also be trusted.
+      FAIL2BAN_IGNOREIP: ${FAIL2BAN_IGNOREIP:-}
       # v2.472.0 — Phase 4d. Ban-action selector. Default is the
       # fail2ban built-in iptables/nftables shorthand. Set to
       # `cloudflare-bouncer` (Phase 4d) or `ipset-bouncer` (Phase

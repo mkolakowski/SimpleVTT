@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.495.4] - 2026-06-21 — "The Guest List"
+
+**Schema version:** 71
+
+**Commit summary:** Adds an env-driven fail2ban allowlist — `FAIL2BAN_IGNOREIP` appends space-separated IPs/CIDRs to the jails' `[DEFAULT] ignoreip` (localhost always kept), so a trusted source can be exempted from all jails without editing the shipped config.
+
+**Description:** The stopgap for the v2.494.0 incident: a scheduled smoke-test/monitor host runs the harness against the public deploy (`vtt-demo.iptater.net`) and self-bans, because its error-path tests deliberately emit 401/403/404s that trip the `simplevtt-auth` + `simplevtt-scanner` jails. The proper fix is to repoint that host at `localhost`, but until then an operator can allowlist its (stable Cloudflare-range) egress IP so the scheduled runs stop getting banned.
+
+The allowlist lands in the jails' shared `[DEFAULT]` block, so it covers the auth, scanner, and flood jails at once. localhost (`127.0.0.1/8 ::1`) is always kept; `${FAIL2BAN_IGNOREIP}` appends operator entries. It's empty by default — no behavior change for existing deploys. **Caveat (documented in `.env.example` + the config comment):** an allowlisted IP is exempt from *every* jail, so listing a shared/NAT/Cloudflare-egress address means anything behind it is also un-bannable — acceptable for a trusted monitor, not for a general-purpose exemption.
+
+**Implementation:**
+
+- `docs/integrations/fail2ban/jail.d/simplevtt.conf`: new `[DEFAULT]` block with `ignoreip = 127.0.0.1/8 ::1 ${FAIL2BAN_IGNOREIP}`.
+- `docs/integrations/fail2ban/scripts/render-jail.sh`: `FAIL2BAN_IGNOREIP` added to the `VARS` substitution allowlist so the placeholder renders at container start.
+- `docker-compose.yml`: `FAIL2BAN_IGNOREIP: ${FAIL2BAN_IGNOREIP:-}` on the fail2ban service.
+- `.env.example`: documents the knob (empty default) with the all-jails caveat.
+
+**Harness changes:**
+
+- `tests/harness/test_fail2ban_ignoreip_wiring.py` (new): +4 tests — the `[DEFAULT] ignoreip` keeps localhost + appends the placeholder, the render allowlist carries it, compose plumbs it, `.env.example` documents it.
+
+Total harness count → 3764 (+4).
+
+PATCH — additive operator config knob (fail2ban allowlist); empty default preserves current behavior. No app code or schema change.
+
+### Added
+- `FAIL2BAN_IGNOREIP` env var: space-separated IPs/CIDRs appended to the fail2ban jails' `[DEFAULT] ignoreip` allowlist (localhost always kept). Exempts a trusted source — e.g. a monitoring host that self-bans on its own error-path tests — from all jails.
+
 ## [2.495.3] - 2026-06-21 — "The Stale Assertion"
 
 **Schema version:** 71
