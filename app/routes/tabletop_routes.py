@@ -2138,6 +2138,34 @@ _SPELL_BUFF_MAP["greater-invisibility"] = {
     ),
 }
 
+# v2.500.0 — Blur (Phase 2 #33 of
+# docs/plans/cast-and-broadcast-tail.md). L2 illusion, Sorcerer/Wizard,
+# PHB p.219. "Any creature has disadvantage on attack rolls against
+# you." Concentration, up to 1 minute, self-only. This needed a NEW
+# generic read-site: `_target_blur_imposes_disadvantage` reads the
+# target combatant's hub buffs for `effects.attackers_have_disadvantage`
+# and the /attack + /npc_attack flows fold it into the same
+# disadvantage cancel logic as Dodge. The "attacker immune if it
+# doesn't rely on sight / sees through illusions" RAW caveat stays
+# GM-narrated (no vision/truesight model).
+_SPELL_BUFF_MAP["blur"] = {
+    "key": "blur",
+    "name": "Blur",
+    "icon": "🌫️",
+    "duration_rounds": 10,  # 1 minute @ 6 s/round
+    "duration_max": 10,
+    "concentration": True,  # RAW (PHB p.219)
+    "effects": {
+        "attackers_have_disadvantage": True,
+    },
+    "desc": (
+        "Attackers have disadvantage on attack rolls against you for "
+        "up to 1 minute (concentration). Attackers that don't rely on "
+        "sight (blindsight) or see through illusions (truesight) are "
+        "immune — GM-narrated."
+    ),
+}
+
 # v2.190.0 — Potion of Invulnerability (RAW DMG p.188, rare): resistance to
 # ALL damage for 1 minute. Reuses the v2.99.121 `resistance_to: ["all"]`
 # wildcard that `_resistance_halve` already honours, so no new intercept is
@@ -47409,6 +47437,43 @@ def _target_has_dodging(
     return False
 
 
+def _target_blur_imposes_disadvantage(
+    campaign_id: int, target_combatant_id: str | None,
+) -> bool:
+    """v2.500.0 — Phase 2 #33 of the cast-and-broadcast tail (Blur).
+    Returns True if the target combatant has a buff with
+    ``effects.attackers_have_disadvantage: True`` active — RAW Blur
+    (PHB p.219): "any creature has disadvantage on attack rolls against
+    you." Generic so future spells (Foresight, etc.) can opt in by
+    carrying the same marker.
+
+    Same shape + read path as ``_target_has_dodging`` (target
+    combatant's hub buffs, NOT the sheet mirror, since the attack-flow
+    target is named by combatant id). The "attacker immune if it
+    doesn't rely on sight / can see through illusions" RAW caveat is
+    NOT enforced (vision/truesight modelling is filed) — like the
+    Dodge "if the attacker can see you" caveat.
+    """
+    if not target_combatant_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("id") != target_combatant_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            effects = b.get("effects")
+            if not isinstance(effects, dict):
+                continue
+            if effects.get("attackers_have_disadvantage") is True:
+                return True
+        return False
+    return False
+
+
 # v2.99.196 — Dragonborn ancestry → damage type table. RAW PHB
 # p.34, "Draconic Ancestry" table. Each of the 10 chromatic /
 # metallic ancestries maps to a single damage type the PC's Damage
@@ -66525,6 +66590,130 @@ async def cast_greater_invisibility(
         "ok": True,
         "feature": "greater-invisibility",
         "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_blur")
+async def cast_blur(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.500.0 — Phase 2 #33 of
+    docs/plans/cast-and-broadcast-tail.md. Blur
+    (L2 illusion, Sorcerer/Wizard, PHB p.219):
+
+      "Your body becomes blurred... For the duration, any creature has
+       disadvantage on attack rolls against you."
+
+    1 action, V, Self, **Concentration, up to 1 minute**.
+
+    Implementation: installs a self buff carrying
+    ``effects.attackers_have_disadvantage: True``, read at attack-roll
+    construction by the new ``_target_blur_imposes_disadvantage`` helper
+    (folded into the same disadvantage cancel logic as Dodge across the
+    ``/attack`` + ``/npc_attack`` flows). No sheet mirror needed — the
+    read consults the target combatant's hub buffs directly (like
+    Dodge / Reckless Attack). The "attacker immune if it doesn't rely
+    on sight or sees through illusions" RAW caveat stays GM-narrated.
+
+    Blur is RAW self-only ("Your body becomes blurred"), so the buff
+    always installs on the caster.
+
+    Body: ``{character_id}``.
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_blur = any(
+        (s.get("_slug") == "blur")
+        or (str(s.get("name", "")).lower() == "blur")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"sorcerer", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_blur and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Blur, or sorcerer/wizard",
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("blur") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 10)
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "blur",
+        "name": template.get("name") or "Blur",
+        "icon": template.get("icon") or "🌫️",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": True,
+        "source_char_id": char.id,
+        "effects": dict(
+            template.get("effects") or {"attackers_have_disadvantage": True}),
+        "desc": template.get("desc") or (
+            "Attackers have disadvantage on attack rolls against you."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    feature_desc = (
+        f"{char.name}'s form blurs — attackers have disadvantage on "
+        "attack rolls against them for up to 1 minute (concentration)."
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🌫️ Blur",
+            "feature_desc": feature_desc,
+            "source": "blur",
+            "target_character_id": char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "blur",
+        "target_character_id": char.id,
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,
     }
@@ -101638,6 +101827,12 @@ async def use_attack(
     # and disadvantage, you are considered to have neither of them").
     # Handled in the dice-expression patch below.
     target_dodging = _target_has_dodging(campaign_id, target_combatant_id)
+    # v2.500.0 — Phase 2 #33: target's Blur buff (effects.attackers_have_
+    # disadvantage) imposes disadvantage on the d20 attack roll, same as
+    # dodging. Folds into the disadvantage source set below.
+    target_blurred = _target_blur_imposes_disadvantage(
+        campaign_id, target_combatant_id,
+    )
     # v2.49.238 Phase B: target's Reckless Attack buff grants the
     # attacker advantage on the d20. Combines with rage_advantage as
     # an OR (both fire? still one advantage source). Combines with
@@ -101920,7 +102115,7 @@ async def use_attack(
         # `_buffs_active` mirror so we don't need a second hub lookup.
         _attacker_dis_condition = _attacker_has_condition_disadvantage(sheet)
         has_dis = (
-            target_dodging or target_pfeag_blocks_type
+            target_dodging or target_blurred or target_pfeag_blocks_type
             or _attacker_cant_see or _ap_marked_vs_other
             or _um_marked_vs_other
             or bool(_attacker_dis_condition)
@@ -101928,6 +102123,7 @@ async def use_attack(
         )
         dis_label = (
             "dodging" if target_dodging else
+            "blur" if target_blurred else
             "pfeag" if target_pfeag_blocks_type else
             "cant_see" if _attacker_cant_see else
             "ancestral_protectors_vs_other" if _ap_marked_vs_other else
@@ -102048,7 +102244,7 @@ async def use_attack(
         # branch mirror). See bonused branch above for the helper.
         _attacker_dis_condition = _attacker_has_condition_disadvantage(sheet)
         has_dis = (
-            target_dodging or target_pfeag_blocks_type
+            target_dodging or target_blurred or target_pfeag_blocks_type
             or _attacker_cant_see or _ap_marked_vs_other
             or _um_marked_vs_other
             or bool(_attacker_dis_condition)
@@ -102056,6 +102252,7 @@ async def use_attack(
         )
         dis_label = (
             "dodging" if target_dodging else
+            "blur" if target_blurred else
             "pfeag" if target_pfeag_blocks_type else
             "cant_see" if _attacker_cant_see else
             "ancestral_protectors_vs_other" if _ap_marked_vs_other else
@@ -103628,6 +103825,12 @@ async def use_npc_attack(
 
     # Dodging disadvantage on the target — same buff lookup PCs honor.
     target_dodging = _target_has_dodging(campaign_id, target_combatant_id)
+    # v2.500.0 — Phase 2 #33: target's Blur buff (effects.attackers_have_
+    # disadvantage) imposes disadvantage on the d20 attack roll, same as
+    # dodging. Folds into the disadvantage source set below.
+    target_blurred = _target_blur_imposes_disadvantage(
+        campaign_id, target_combatant_id,
+    )
     # v2.49.238 Phase B: target's Reckless Attack buff grants the
     # attacker advantage on the d20. Combines with rage_advantage as
     # an OR (both fire? still one advantage source). Combines with
@@ -103689,11 +103892,13 @@ async def use_npc_attack(
     )
     has_dis = (
         target_dodging
+        or target_blurred
         or bool(_npc_attacker_dis_condition)
         or bool(target_cloak_dis)
     )
     dis_label = (
         "dodging" if target_dodging else
+        "blur" if target_blurred else
         f"attacker_{_npc_attacker_dis_condition}"
         if _npc_attacker_dis_condition else
         "cloak_of_displacement" if target_cloak_dis else ""

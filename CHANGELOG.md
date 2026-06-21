@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.500.0] - 2026-06-21 — "The Wavering Form"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_blur` — Phase 2 #33 of the cast-and-broadcast tail. Blur (L2 illusion, Sorcerer/Wizard) installs a 1-minute concentration self-buff so attackers roll at disadvantage against the caster.
+
+**Description:** Continues the tail after Greater Invisibility (#32). Blur needed a **new generic read-site** (not a zero-code ride): `_target_blur_imposes_disadvantage` reads the target combatant's hub buffs for `effects.attackers_have_disadvantage: True`, and the `/attack` + `/npc_attack` flows fold it into the same disadvantage cancel logic as the Dodge action (across all three `has_dis`/`dis_label` blocks — PC melee, PC ranged, and NPC-attacker). RAW PHB p.219: "any creature has disadvantage on attack rolls against you." The marker is generic so future spells (e.g. Foresight's attacker-disadvantage half) can opt in by carrying the same effect. No sheet mirror needed — the read consults hub state directly, like Dodge / Reckless Attack. The "attacker immune if it doesn't rely on sight (blindsight) or sees through illusions (truesight)" RAW caveat stays GM-narrated (no vision/truesight model).
+
+This is the **500th minor line** of the 2.x series — a normal SemVer minor bump (2.499 → 2.500), not a major.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_target_blur_imposes_disadvantage` helper (mirror of `_target_has_dodging`); `target_blurred` threaded into both PC attack flows + the NPC-attacker flow (`has_dis` disjunction + `dis_label` → `"blur"`); new `_SPELL_BUFF_MAP["blur"]` template (`attackers_have_disadvantage: True`, concentration, 10 rounds); the `cast_blur` endpoint (self-only per RAW). Caster gate: knows the spell OR sorcerer/wizard. 400 missing character_id, 404 unknown caster, 409 non-caster, 403 not-your-character.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #33.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_blur.py` (new): +5 tests — install carries `attackers_have_disadvantage:true`, concentration + 1-minute, **gate test** (attacker vs blurred target → `roll_state_applied == "disadvantage_blur"`), non-caster 409, missing character_id 400.
+
+Total harness count → 3790 (+5).
+
+MINOR — new cast endpoint + new attack-roll read-site; backward-compatible. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_blur`: Blur (L2) — 1-minute concentration self-buff imposing disadvantage on attackers, via a new generic `attackers_have_disadvantage` read-site in the attack flow. Phase 2 #33 of the cast-and-broadcast tail.
+
 ## [2.499.0] - 2026-06-21 — "The Unseen Hand"
 
 **Schema version:** 71

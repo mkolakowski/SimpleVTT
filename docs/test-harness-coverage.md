@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3785 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.499.0, 2026-06-21).
+**Total tests:** 3790 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.500.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4644,6 +4644,17 @@ v2.491.0 — Enlarge/Reduce (L2 transmutation, Sorcerer/Wizard, PHB p.237). Phas
 | `test_cast_enlarge_reduce_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`. |
 | `test_cast_enlarge_reduce_bad_mode_400` | An invalid `mode` (e.g. "embiggen") → 400. |
 | `test_cast_enlarge_reduce_missing_character_id_400` | Body without character_id → 400. |
+
+### `test_cast_blur.py`
+v2.500.0 — Blur (L2 illusion, Sorcerer/Wizard, PHB p.219). Phase 2 #33 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_target_blur_imposes_disadvantage` read-site (target combatant hub buffs for `effects.attackers_have_disadvantage`) folded into the /attack + /npc_attack disadvantage cancel logic, + `_SPELL_BUFF_MAP["blur"]` + the self-only `cast_blur` endpoint. Thalindra (Wizard) casts; Pip attacks her for the gate test.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_blur_installs_attacker_disadvantage` | Cast → 200, `feature == "blur"`, `duration_rounds == 10`, target is the caster; buff's `effects.attackers_have_disadvantage == true`. |
+| `test_cast_blur_is_concentration_1_minute` | Buff is `concentration == true` + 10 rounds. |
+| `test_blur_imposes_disadvantage_on_attacker` | **Gate test:** Pip attacks the blurred target with `override` → the attack response's `roll_state_applied == "disadvantage_blur"`. |
+| `test_cast_blur_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected string names "blur". |
+| `test_cast_blur_missing_character_id_400` | Empty body → 400. |
 
 ### `test_cast_greater_invisibility.py`
 v2.499.0 — Greater Invisibility (L4 illusion, Bard/Sorcerer/Wizard, PHB p.251). Phase 2 #32 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_SPELL_BUFF_MAP["greater-invisibility"]` template + `cast_greater_invisibility` endpoint — rides the existing `effects.invisible` marker the attack-resolution intercepts already read (`_attacker_has_invisible_advantage`); concentration / 1 minute, persists through attacks/casts (unlike L2), mirrored to the target sheet. Thalindra (Wizard) casts.
