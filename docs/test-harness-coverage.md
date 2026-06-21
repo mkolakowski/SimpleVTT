@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3819 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.506.0, 2026-06-21).
+**Total tests:** 3823 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.507.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4644,6 +4644,16 @@ v2.491.0 — Enlarge/Reduce (L2 transmutation, Sorcerer/Wizard, PHB p.237). Phas
 | `test_cast_enlarge_reduce_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`. |
 | `test_cast_enlarge_reduce_bad_mode_400` | An invalid `mode` (e.g. "embiggen") → 400. |
 | `test_cast_enlarge_reduce_missing_character_id_400` | Body without character_id → 400. |
+
+### `test_cast_beacon_of_hope.py`
+v2.507.0 — Beacon of Hope (L3 abjuration, Cleric, PHB p.219). Phase 2 #40 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_pc_has_death_save_advantage` helper + a 2d20-keep-highest roll + `death_save_advantage` response flag at `/death-save` + `_SPELL_BUFF_MAP["beacon-of-hope"]` (`save_advantage: ["WIS"]` + `death_save_advantage`) + the `cast_beacon_of_hope` endpoint. Max-healing GM-narrated. Tavik (Cleric) casts.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_beacon_installs_markers` | Cast → 200, `feature == "beacon-of-hope"`, `duration_rounds == 10`, `concentration == true`; buff carries `save_advantage` ⊇ {WIS} + `death_save_advantage == true`. |
+| `test_beacon_grants_death_save_advantage` | **Death-save gate:** a dying creature with no beacon → `/death-save` reports `death_save_advantage: false`; after Beacon of Hope → `death_save_advantage: true`. |
+| `test_cast_beacon_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected string names "beacon of hope". |
+| `test_cast_beacon_missing_character_id_400` | Empty body → 400. |
 
 ### `test_cast_heroes_feast.py`
 v2.506.0 — Heroes' Feast (L6 conjuration, Bard/Cleric, PHB p.250). Phase 2 #39 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_SPELL_BUFF_MAP["heroes-feast"]` + `cast_heroes_feast` endpoint — all three combat halves ride existing substrates: condition immunity (`_target_condition_immune`), `save_advantage: ["WIS"]` (`_buff_grants_save_advantage`), and `aid_hp_bonus` = a per-cast 2d10 roll (`_buff_hp_max_bonus` + `_apply_heal_to_combatant`, the Aid pattern). Mirrored to the sheet. Tavik (Cleric) casts.

@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.507.0] - 2026-06-21 — "The Kindled Hope"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_beacon_of_hope` — Phase 2 #40 of the cast-and-broadcast tail. Beacon of Hope (L3 abjuration, Cleric) installs a concentration buff granting advantage on WIS saves and death saves.
+
+**Description:** Continues the tail after Heroes' Feast (#39). RAW PHB p.219: "each target has advantage on Wisdom saving throws and death saving throws, and regains the maximum number of hit points possible from any healing." Two of the three halves are mechanized:
+
+- **WIS-save advantage** → `save_advantage: ["WIS"]` (the ability-aware `_buff_grants_save_advantage`, read at the spell-save sites).
+- **Death-save advantage** → new `death_save_advantage` marker + a new read at `/death-save` (`_pc_has_death_save_advantage`): the endpoint rolls a second d20 and keeps the higher, surfaces a `death_save_advantage` flag in the response, and renders the breakdown as `2d20kh1`. Reusable by any future death-save-advantage effect.
+
+The **"regains the maximum from any healing"** clause is GM-narrated for v1 — maximizing received healing would touch every heal source's dice roll (a cross-cutting change). Both wired halves are hub-state reads (no sheet mirror). RAW the spell targets "any number of creatures"; v1 buffs one per cast (multi-target GM-narrated).
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_pc_has_death_save_advantage` helper; `roll_death_save` rolls 2d20-keep-highest + a `2d20kh1` breakdown + a `death_save_advantage` response field when the marker is present; new `_SPELL_BUFF_MAP["beacon-of-hope"]` template (`save_advantage: ["WIS"]` + `death_save_advantage: True`, concentration, 10 rounds); the `cast_beacon_of_hope` endpoint. Caster gate: knows the spell OR cleric. Touch self-or-ally. 400/404/409/403 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #40.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_beacon_of_hope.py` (new): +4 tests — install carries `save_advantage[WIS]` + `death_save_advantage` + concentration; **death-save gate** (a dying beacon'd creature's `/death-save` reports `death_save_advantage: true`; a control with no beacon reports false); non-caster 409; missing character_id 400. Regression-checked `test_death_save` (7 passing — the death-save machine is unchanged when no beacon is present).
+
+Total harness count → 3823 (+4).
+
+MINOR — new cast endpoint + a new death-save-advantage read at `/death-save`. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_beacon_of_hope`: Beacon of Hope (L3) — advantage on WIS + death saving throws, via `save_advantage` + a new `/death-save` advantage read. Phase 2 #40 of the cast-and-broadcast tail.
+
 ## [2.506.0] - 2026-06-21 — "The Laden Table"
 
 **Schema version:** 71

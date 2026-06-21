@@ -2209,6 +2209,29 @@ _SPELL_BUFF_MAP["mind-blank"] = {
 # v2.500.0 `attackers_have_disadvantage` (the Blur read-site —
 # `_target_blur_imposes_disadvantage`, zero extra code). The
 # can't-be-surprised clause stays GM-narrated (no surprise model).
+_SPELL_BUFF_MAP["beacon-of-hope"] = {
+    "key": "beacon-of-hope",
+    "name": "Beacon of Hope",
+    "icon": "🕯️",
+    "duration_rounds": 10,  # 1 minute @ 6 s/round (concentration)
+    "duration_max": 10,
+    "concentration": True,  # RAW (PHB p.219)
+    "effects": {
+        # v2.507.0 — Phase 2 #40. WIS-save advantage rides
+        # `_buff_grants_save_advantage`; death-save advantage rides the
+        # new `_pc_has_death_save_advantage` read at /death-save. The
+        # "regains the maximum from any healing" clause is GM-narrated
+        # (it would touch every heal source's dice roll).
+        "save_advantage": ["WIS"],
+        "death_save_advantage": True,
+    },
+    "desc": (
+        "Advantage on WIS saving throws and death saving throws for up "
+        "to 1 minute (concentration). 'Regains maximum HP from any "
+        "healing' is GM-narrated."
+    ),
+}
+
 _SPELL_BUFF_MAP["heroes-feast"] = {
     "key": "heroes-feast",
     "name": "Heroes' Feast",
@@ -47077,6 +47100,33 @@ def _pc_has_guidance(campaign_id: int, char_id: "int | None") -> bool:
     return False
 
 
+def _pc_has_death_save_advantage(campaign_id: int, char_id: "int | None") -> bool:
+    """v2.507.0 — Beacon of Hope (L3, Phase 2 #40). Returns True when
+    the PC's combatant carries a buff with ``effects.death_save_advantage``
+    truthy. RAW PHB p.219: "advantage on ... death saving throws." Read
+    at the ``/death-save`` endpoint, which rolls a second d20 and keeps
+    the higher. Hub-state read (the dying creature is a combatant in the
+    active battle). Generic so any future death-save-advantage effect
+    opts in via the same marker.
+    """
+    if not char_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != char_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            effects = b.get("effects")
+            if isinstance(effects, dict) and effects.get("death_save_advantage"):
+                return True
+        return False
+    return False
+
+
 def _pc_has_resistance_cantrip(campaign_id: int, char_id: "int | None") -> bool:
     """v2.505.0 — Resistance (cantrip, Phase 2 #38). Returns True when
     the PC's combatant carries a buff with ``effects.resistance_die``
@@ -67896,6 +67946,143 @@ async def cast_heroes_feast(
         "target_character_id": target_char.id,
         "buff_installed": bool(buff_installed),
         "hp_bonus": hp_bonus,
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_beacon_of_hope")
+async def cast_beacon_of_hope(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.507.0 — Phase 2 #40 of
+    docs/plans/cast-and-broadcast-tail.md. Beacon of Hope
+    (L3 abjuration, Cleric, PHB p.219):
+
+      "For the duration, each target has advantage on Wisdom saving
+       throws and death saving throws, and regains the maximum number
+       of hit points possible from any healing."
+
+    1 action, V/S, 30 ft, **Concentration, up to 1 minute**.
+
+    Implementation: two of the three halves ride substrates —
+    ``save_advantage: ["WIS"]`` (`_buff_grants_save_advantage` at the
+    spell-save sites) and ``death_save_advantage: True`` (the new
+    `_pc_has_death_save_advantage` read at `/death-save`, which rolls a
+    second d20 and keeps the higher). The "regains the maximum from any
+    healing" clause is GM-narrated for v1 — maximizing received healing
+    would touch every heal source's dice roll. Both wired halves are
+    hub-state reads, so no sheet mirror is needed. RAW the spell targets
+    "any number of creatures"; v1 buffs one creature per cast
+    (multi-target GM-narrated).
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster targets themself.
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_boh = any(
+        (s.get("_slug") == "beacon-of-hope")
+        or (str(s.get("name", "")).lower() == "beacon of hope")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"cleric"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_boh and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Beacon of Hope, or cleric",
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("beacon-of-hope") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 10)
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "beacon-of-hope",
+        "name": template.get("name") or "Beacon of Hope",
+        "icon": template.get("icon") or "🕯️",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": True,
+        "source_char_id": char.id,
+        "effects": dict(template.get("effects") or {
+            "save_advantage": ["WIS"],
+            "death_save_advantage": True,
+        }),
+        "desc": template.get("desc") or (
+            "Advantage on WIS + death saving throws for up to 1 minute."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    who = "themself" if target_char.id == char.id else target_char.name
+    feature_desc = (
+        f"{char.name} kindles a Beacon of Hope on {who} — advantage on "
+        "WIS saves and death saves (and maximum healing — GM-narrated) "
+        "for up to 1 minute (concentration)."
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🕯️ Beacon of Hope",
+            "feature_desc": feature_desc,
+            "source": "beacon-of-hope",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "beacon-of-hope",
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,
     }
 
@@ -111276,6 +111463,15 @@ async def roll_death_save(
     # v2.49.12: route the death-save d20 through the shared seedable
     # dice RNG so encounter-sim tests can make the result deterministic.
     raw = dice_mod.get_rng().randint(1, 20)
+    # v2.507.0 — Beacon of Hope: advantage on death saving throws. Roll
+    # a second d20 and keep the higher when the dying creature carries a
+    # beacon-of-hope buff (effects.death_save_advantage). Composes with
+    # the nat-1/nat-20 rules below, which read the kept ``raw``.
+    _ds_advantage = _pc_has_death_save_advantage(campaign_id, char_id)
+    _ds_raw2 = None
+    if _ds_advantage:
+        _ds_raw2 = dice_mod.get_rng().randint(1, 20)
+        raw = max(raw, _ds_raw2)
 
     outcome = ""
     regained = False
@@ -111332,11 +111528,17 @@ async def roll_death_save(
         "crit_fail": "💀 Death Save: CRITICAL FAILURE (2 failures)",
         "regain_consciousness": "💀 Death Save: NATURAL 20 — regain consciousness!",
     }.get(outcome, "💀 Death Save")
+    if _ds_advantage and _ds_raw2 is not None:
+        _ds_expr = "2d20kh1"
+        _ds_bd = f"2d20kh1[{raw if raw != _ds_raw2 else _ds_raw2},{_ds_raw2}]={raw}  =>  {raw}"
+    else:
+        _ds_expr = "1d20"
+        _ds_bd = f"1d20[{raw}]={raw}  =>  {raw}"
     rec = DiceRoll(
         campaign_id=campaign_id,
         user_id=user.id,
-        expression="1d20",
-        breakdown=f"1d20[{raw}]={raw}  =>  {raw}",
+        expression=_ds_expr,
+        breakdown=_ds_bd,
         total=raw,
         visibility=Visibility.PUBLIC,
         note=note_label[:200],
@@ -111400,6 +111602,10 @@ async def roll_death_save(
         "successes": int(new_ds.get("successes") or 0),
         "failures": int(new_ds.get("failures") or 0),
         "hp": new_hp,
+        # v2.507.0 — Beacon of Hope: surface whether advantage was applied
+        # so clients (and the harness) can confirm the death-save buff
+        # fired without depending on the random roll outcome.
+        "death_save_advantage": bool(_ds_advantage),
     }
 
 
