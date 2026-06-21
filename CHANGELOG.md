@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.515.0] - 2026-06-21 — "The Surveyor's Charter"
+
+**Schema version:** 71
+
+**Commit summary:** Files the **Aura & Barrier Geometry Enforcement** design plan — the architectural follow-up behind the cast-and-broadcast tail's geometry-bound spells (Holy Aura #41, Globe of Invulnerability #44, Antilife Shell #45), each of which shipped as a flag-buff with its spatial half GM-narrated.
+
+**Description:** Design doc only — no runtime behavior change. The plan grounds three phases in already-shipped substrate (the `_tick_auras` per-turn radius engine from `auras.md`, `_distance_ft_between_chars`, the sphere/cone/line AoE resolvers, the `_concentration_aoes` marker registry, and the `token_move` gate) rather than inventing geometry from scratch:
+
+- **Phase 1 — aura membership auto-apply/remove** (Holy Aura): a per-turn membership tick installs/removes a derived buff on creatures by radius, extending `_tick_auras`.
+- **Phase 2 — inside/outside enforcement** (Globe): swap the v2.513.0 globe gate's "assume outside" default for a real `_distance_ft_between_chars` check against the 10-ft barrier.
+- **Phase 3 — movement-barrier substrate** (Antilife Shell): a `token_move` gate (409 `barrier_blocks_move`) that hedges living creatures out of a moving shell — the one genuinely new piece.
+
+Surfaced through `/wiki` per the doc-surfacing rule (allowlist + landing-page table + on-disk index + per-slug harness test).
+
+**Implementation:**
+
+- `docs/plans/aura-geometry-enforcement.md` (new): the design plan.
+- `app/routes/wiki_routes.py`: `_DOC_ALLOWLIST` entry `plan-aura-geometry-enforcement`.
+- `app/templates/wiki.html` + `docs/wiki/README.md`: "Design plans" table rows (⚪ design only).
+
+**Harness changes:**
+
+- `tests/harness/test_wiki.py`: new `test_wiki_doc_serves_aura_geometry_enforcement_plan` (slug serves 200 + H1 substring + nav) + the slug added to `test_wiki_home_renders`'s landing-page assertion list.
+
+Total harness count → 3855 (+1).
+
+MINOR — new wiki-served design-plan slug (additive; no runtime feature). No schema change.
+
+### Added
+- `docs/plans/aura-geometry-enforcement.md` + its `/wiki/doc/plan-aura-geometry-enforcement` surface: the design plan for mechanically enforcing the cast-and-broadcast tail's aura/barrier geometry (Holy Aura, Globe of Invulnerability, Antilife Shell).
+
 ## [2.514.0] - 2026-06-21 — "The Telltale Shimmer"
 
 **Schema version:** 71

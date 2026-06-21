@@ -91,6 +91,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-feature-saves" in resp.text
     assert "/wiki/doc/plan-temp-hp-and-bonuses" in resp.text
     assert "/wiki/doc/plan-auras" in resp.text
+    # v2.515.0: aura & barrier geometry enforcement plan listed.
+    assert "/wiki/doc/plan-aura-geometry-enforcement" in resp.text
     assert "/wiki/doc/plan-movement-and-summons" in resp.text
     # v2.99.447: automation-coverage audit doc listed in the references table.
     assert "/wiki/doc/automation-coverage" in resp.text
@@ -394,6 +396,19 @@ async def test_wiki_doc_serves_full_feature_automation_plan():
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "automation" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_aura_geometry_enforcement_plan():
+    """v2.515.0: GET /wiki/doc/plan-aura-geometry-enforcement — 200 +
+    body contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/aura-geometry-enforcement.md``.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-aura-geometry-enforcement")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "geometry enforcement" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 
