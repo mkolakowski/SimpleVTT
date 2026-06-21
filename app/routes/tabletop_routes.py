@@ -67373,6 +67373,11 @@ async def cast_death_ward(
 # broadcast tail). The five RAW damage types the caster may pick.
 _PROTECTION_FROM_ENERGY_TYPES = {"acid", "cold", "fire", "lightning", "thunder"}
 
+# v2.522.0 — Fire Shield (L4) variants. RAW PHB p.241: the "warm shield"
+# gives resistance to COLD; the "chill shield" gives resistance to FIRE.
+# Maps the caller's chosen shield to the damage type it resists.
+_FIRE_SHIELD_VARIANTS = {"warm": "cold", "chill": "fire"}
+
 
 @router.post("/api/campaign/{campaign_id}/cast_protection_from_energy")
 async def cast_protection_from_energy(
@@ -67518,6 +67523,146 @@ async def cast_protection_from_energy(
         "feature": "protection-from-energy",
         "damage_type": damage_type,
         "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_fire_shield")
+async def cast_fire_shield(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.522.0 — Phase 2 #46 of
+    docs/plans/cast-and-broadcast-tail.md. Fire Shield (L4 evocation,
+    Warlock/Wizard, PHB p.241):
+
+      "The flames are around you ... The warm shield grants you
+       resistance to cold damage, and the chill shield grants you
+       resistance to fire damage. In addition, whenever a creature
+       within 5 feet of you hits you with a melee attack, the shield
+       erupts ... the attacker takes 2d8 [fire/cold] damage."
+
+    1 action, V/S/M, Self, 10 minutes, non-concentration.
+
+    Implementation: the self-only sibling of Protection from Energy
+    (#30) — rides the same ``resistance_to`` read-site
+    (`_resistance_halve`), with the resisted type chosen by the
+    ``shield`` body param (``warm`` → cold resistance, ``chill`` → fire
+    resistance, per RAW). Mirrors the buff to the caster's sheet (the
+    resistance reader is sheet-based, per the v2.496.1 fix). ZERO new
+    mechanical code for the resistance half. The **2d8 reactive damage**
+    to a melee attacker is GM-narrated for v1 — it needs an
+    attack-resolution reaction hook (the same boundary Hellish Rebuke's
+    auto-damage sat behind before v2.446.0); the bright-light radius is
+    GM-narrated (no lighting model).
+
+    Body: ``{character_id, shield}``. ``shield`` is required and must be
+    ``warm`` or ``chill``. Self-targeted per RAW (Range: Self).
+
+    Response: ``{ok, feature, shield, resists, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    shield = str(body.get("shield") or "").strip().lower()
+    if shield not in _FIRE_SHIELD_VARIANTS:
+        raise HTTPException(400, "shield must be one of warm/chill")
+    resists = _FIRE_SHIELD_VARIANTS[shield]
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_fs = any(
+        (s.get("_slug") == "fire-shield")
+        or (str(s.get("name", "")).lower() == "fire shield")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"warlock", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_fs and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Fire Shield, or warlock/wizard",
+            "got_class": _cls,
+        })
+
+    DURATION_ROUNDS = 100  # 10 minutes RAW
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "fire-shield",
+        "name": f"Fire Shield ({shield.title()})",
+        "icon": _RESISTANCE_DAMAGE_ICONS.get(resists, "🔥"),
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,  # RAW (PHB p.241)
+        "source_char_id": char.id,
+        "effects": {"resistance_to": [resists]},
+        "desc": (
+            f"{shield.title()} shield — resistance to {resists} damage for "
+            "10 minutes. The 2d8 reactive damage to melee attackers + the "
+            "bright-light radius are GM-narrated."
+        ),
+    })
+    # Mirror to the caster's sheet so the sheet-based resistance reader
+    # (`_resistance_halve` reads `_buffs_active`) sees the new buff.
+    _mirror_buffs_to_sheet(
+        db, char.id, _get_buffs(campaign_id, char.id),
+    )
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": (
+                f"{_RESISTANCE_DAMAGE_ICONS.get(resists, '🔥')} "
+                f"Fire Shield ({shield.title()})"
+            ),
+            "feature_desc": (
+                f"{char.name} wreathes themself in a {shield} shield — "
+                f"resistance to {resists} damage for 10 minutes. A melee "
+                "attacker takes 2d8 (GM-narrated)."
+            ),
+            "source": "fire-shield",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "fire-shield",
+        "shield": shield,
+        "resists": resists,
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,
     }

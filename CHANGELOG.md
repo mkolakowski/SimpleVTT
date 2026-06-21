@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.522.0] - 2026-06-21 — "The Warm Shield"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_fire_shield` — Phase 2 #46 of the cast-and-broadcast tail. Fire Shield (L4 evocation, Warlock/Wizard) installs a 10-minute self-buff granting resistance to cold (warm shield) or fire (chill shield).
+
+**Description:** Resumes the tail after the aura-geometry-enforcement arc. RAW PHB p.241: "The warm shield grants you resistance to cold damage, and the chill shield grants you resistance to fire damage." 1 action, V/S/M, Self, 10 minutes, non-concentration. The self-only sibling of Protection from Energy (#30) — rides the same `resistance_to` read-site (`_resistance_halve`), with the resisted type chosen by the `shield` body param (`warm` → cold, `chill` → fire). Mirrors the buff to the caster's sheet (the resistance reader is sheet-based, per the v2.496.1 fix). **Zero new mechanical code** for the resistance half.
+
+**GM-narrated:** the 2d8 reactive damage to a melee attacker within 5 ft (needs an attack-resolution reaction hook — the same boundary Hellish Rebuke's auto-damage sat behind before v2.446.0) and the bright-light radius (no lighting model).
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_FIRE_SHIELD_VARIANTS` map (`warm`→cold, `chill`→fire) + the `cast_fire_shield` endpoint. Self-targeted (Range: Self). Caster gate: knows the spell OR warlock/wizard. Returns `shield` + `resists`. 400 (missing/bad shield, missing character_id) / 403 / 404 / 409 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #46.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_fire_shield.py` (new): +6 tests — `warm` → `resistance_to == [cold]` (+ response `resists==cold`); `chill` → `[fire]`; non-concentration + 10-min + sheet-mirrored; invalid shield 400; non-caster 409; missing character_id 400.
+
+Total harness count → 3874 (+6).
+
+MINOR — new cast endpoint riding the `resistance_to` substrate. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_fire_shield`: Fire Shield (L4) — resistance to cold (warm) or fire (chill) for 10 minutes, via the `resistance_to` substrate; the 2d8 reactive melee damage + bright light are GM-narrated. Phase 2 #46 of the cast-and-broadcast tail.
+
 ## [2.521.0] - 2026-06-21 — "The Warden's Circle"
 
 **Schema version:** 71
