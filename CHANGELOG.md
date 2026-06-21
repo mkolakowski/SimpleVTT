@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.502.0] - 2026-06-21 — "The Open Eye"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_foresight` — Phase 2 #35 of the cast-and-broadcast tail. Foresight (L9 divination, Bard/Druid/Warlock/Wizard) installs an 8-hour buff granting advantage on all attack rolls, ability checks, and saving throws, plus disadvantage on attackers — the most mechanically complete tail spell yet.
+
+**Description:** Continues the tail after Mind Blank (#34). Foresight needed a real substrate addition (a generic blanket-advantage marker) plus a reuse of the v2.500.0 Blur read-site. RAW PHB p.248: "advantage on attack rolls, ability checks, and saving throws ... other creatures have disadvantage on attack rolls against the target ... can't be surprised." The buff carries two hub-state markers (no sheet mirror needed): `effects.foresight: True`, read at the three advantage choke-points via the new `_pc_has_foresight_advantage` helper, and `effects.attackers_have_disadvantage: True`, which reuses Blur's `_target_blur_imposes_disadvantage` read-site for zero extra code.
+
+The three advantage choke-points were extended at their helper level so every call site inherits: `_attacker_has_str_attack_advantage` fires on Foresight for any attack type (not just physical/STR); `_pc_has_rage_str_save_advantage` fires for any saving throw (not just STR); and the `/roll` ability-check advantage block fires for any check (not just STR), via a new `_is_any_check_roll` predicate. The can't-be-surprised clause stays GM-narrated (no surprise model).
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_pc_has_foresight_advantage` helper; foresight checks folded into `_attacker_has_str_attack_advantage` (any damage type), `_pc_has_rage_str_save_advantage` (any ability, before the STR gate), and the `/roll` check block (any check); new `_SPELL_BUFF_MAP["foresight"]` template (`foresight` + `attackers_have_disadvantage`, 4800 rounds / 8 h, non-concentration); the `cast_foresight` endpoint. Caster gate: knows the spell OR bard/druid/warlock/wizard. Touch self-or-ally. 400/404/409/403 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #35.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_foresight.py` (new): +6 tests — install carries both markers + 8-hour non-concentration; **check-advantage gate** (DEX check → 2d20kh1, proving it's not STR-gated like Rage); **save-advantage gate** (Fireball DEX save vs the warded target → `roll_request base_expression == "2d20kh1"`); **attack-advantage gate** (warded creature's attack → `roll_state_applied` has "advantage"); non-caster 409; missing character_id 400. All four gates are deterministic on roll-state (no dice seeding). Regression-checked against `test_rage_str_check` / `test_rage_str_save` / `test_use_reckless_attack` / `test_cast_blur` (17 passing).
+
+Total harness count → 3801 (+6).
+
+MINOR — new cast endpoint + generic blanket-advantage substrate (additive, backward-compatible). No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_foresight`: Foresight (L9) — 8-hour advantage on all attacks/checks/saves + attacker disadvantage, via a new generic `foresight` advantage marker (wired into the three advantage choke-points) + the reused `attackers_have_disadvantage` read-site. Phase 2 #35 of the cast-and-broadcast tail.
+
 ## [2.501.0] - 2026-06-21 — "The Sealed Mind"
 
 **Schema version:** 71

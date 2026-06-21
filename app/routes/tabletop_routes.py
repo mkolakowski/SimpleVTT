@@ -2198,6 +2198,35 @@ _SPELL_BUFF_MAP["mind-blank"] = {
     ),
 }
 
+# v2.502.0 — Foresight (Phase 2 #35 of
+# docs/plans/cast-and-broadcast-tail.md). L9 divination,
+# Bard/Druid/Warlock/Wizard, PHB p.248. "Advantage on attack rolls,
+# ability checks, and saving throws ... other creatures have
+# disadvantage on attack rolls against the target ... can't be
+# surprised." 8 hours, non-concentration. Carries TWO markers, both
+# read from hub state (no sheet mirror): `foresight` (read at the three
+# advantage choke-points via `_pc_has_foresight_advantage`) + the
+# v2.500.0 `attackers_have_disadvantage` (the Blur read-site —
+# `_target_blur_imposes_disadvantage`, zero extra code). The
+# can't-be-surprised clause stays GM-narrated (no surprise model).
+_SPELL_BUFF_MAP["foresight"] = {
+    "key": "foresight",
+    "name": "Foresight",
+    "icon": "🔮",
+    "duration_rounds": 4800,  # 8 hours @ 6 s/round
+    "duration_max": 4800,
+    "concentration": False,
+    "effects": {
+        "foresight": True,
+        "attackers_have_disadvantage": True,
+    },
+    "desc": (
+        "Advantage on attack rolls, ability checks, and saving throws; "
+        "attackers have disadvantage against you; can't be surprised "
+        "(GM-narrated). 8 hours."
+    ),
+}
+
 # v2.190.0 — Potion of Invulnerability (RAW DMG p.188, rare): resistance to
 # ALL damage for 1 minute. Reuses the v2.99.121 `resistance_to: ["all"]`
 # wildcard that `_resistance_halve` already honours, so no new intercept is
@@ -19490,10 +19519,22 @@ async def roll_dice(
         stat_key_lc == "str_check"
         or (stat_ability_raw == "STR" and stat_key_lc != "str_save")
     )
+    # v2.502.0 — Foresight grants advantage on ALL ability checks (any
+    # ability + skill), not just STR. A check roll is any /roll that
+    # isn't a save (saves end in "_save" and are handled by the
+    # save-advantage path) and carries an ability or a *_check stat_key.
+    _is_any_check_roll = (
+        stat_key_lc.endswith("_check")
+        or (bool(stat_ability_raw) and not stat_key_lc.endswith("_save"))
+    )
     if (
-        _is_str_check_roll
-        and _char is not None
-        and _pc_has_rage_str_check_advantage(campaign_id, _char.id)
+        _char is not None
+        and (
+            (_is_str_check_roll
+             and _pc_has_rage_str_check_advantage(campaign_id, _char.id))
+            or (_is_any_check_roll
+                and _pc_has_foresight_advantage(campaign_id, _char.id))
+        )
     ):
         if "1d20" in expr and "2d20kh1" not in expr and "2d20kl1" not in expr:
             expr = expr.replace("1d20", "2d20kh1", 1)
@@ -32226,16 +32267,21 @@ def _attacker_has_str_attack_advantage(
     additional plumbing.
     """
     damage_type_l = (damage_type or "").strip().lower()
-    if damage_type_l not in _PHYSICAL_DAMAGE_TYPES:
-        return False
     for b in _get_buffs(campaign_id, attacker_char_id):
         if not isinstance(b, dict):
             continue
         effects = b.get("effects")
         if not isinstance(effects, dict):
             continue
+        # v2.502.0 — Foresight grants advantage on ALL attack rolls
+        # (any damage type, incl. ranged/finesse/spell attacks), so it
+        # fires before the physical-damage gate below.
+        if effects.get("foresight"):
+            return True
+        # str_attack advantage (Rage / Reckless) only applies to
+        # physical (STR-based) attacks.
         adv_list = effects.get("advantage_on") or []
-        if "str_attack" in adv_list:
+        if "str_attack" in adv_list and damage_type_l in _PHYSICAL_DAMAGE_TYPES:
             return True
     return False
 
@@ -46702,9 +46748,13 @@ def _pc_has_rage_str_save_advantage(
     save). Caller swaps `1d20 → 2d20kh1` when this returns True;
     composes safely with other advantage sources via kh1-of-kh1.
     """
-    if (save_ability or "").strip().upper() != "STR":
-        return False
     if not saving_char_id:
+        return False
+    # v2.502.0 — Foresight grants advantage on ALL saving throws (any
+    # ability), so it fires before the STR-only gate below.
+    if _pc_has_foresight_advantage(campaign_id, saving_char_id):
+        return True
+    if (save_ability or "").strip().upper() != "STR":
         return False
     state = hub.get_battle(campaign_id)
     if not state:
@@ -46793,6 +46843,40 @@ def _pc_has_rage_str_check_advantage(
                 continue
             adv = effects.get("advantage_on") or []
             if isinstance(adv, list) and "str_check" in adv:
+                return True
+        return False
+    return False
+
+
+def _pc_has_foresight_advantage(
+    campaign_id: int, char_id: "int | None",
+) -> bool:
+    """v2.502.0 — Foresight (L9 divination, Phase 2 #35 of the
+    cast-and-broadcast tail). Returns True when the PC's combatant
+    carries an active buff with ``effects.foresight`` truthy.
+
+    RAW PHB p.248: the target "has advantage on attack rolls, ability
+    checks, and saving throws." A single blanket marker, read at all
+    three advantage choke-points — the attack-roll advantage helper
+    (``_attacker_has_str_attack_advantage``), the save-advantage helper
+    (``_pc_has_rage_str_save_advantage``), and the ``/roll``
+    ability-check advantage block — so one buff grants advantage on
+    every roll kind. Hub-state read (combatant buffs), like the
+    rage/str helpers.
+    """
+    if not char_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != char_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            effects = b.get("effects")
+            if isinstance(effects, dict) and effects.get("foresight"):
                 return True
         return False
     return False
@@ -66887,6 +66971,148 @@ async def cast_mind_blank(
     return {
         "ok": True,
         "feature": "mind-blank",
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_foresight")
+async def cast_foresight(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.502.0 — Phase 2 #35 of
+    docs/plans/cast-and-broadcast-tail.md. Foresight
+    (L9 divination, Bard/Druid/Warlock/Wizard, PHB p.248):
+
+      "For the duration, the target can't be surprised and has
+       advantage on attack rolls, ability checks, and saving throws.
+       Additionally, other creatures have disadvantage on attack rolls
+       against the target ..."
+
+    1 action, V/S/M, Touch, 8 hours, non-concentration.
+
+    Implementation: the buff carries two markers, both read from hub
+    state (no sheet mirror). ``effects.foresight: True`` is read at the
+    three advantage choke-points via ``_pc_has_foresight_advantage`` —
+    the attack-roll helper (advantage on every attack type), the
+    save-advantage helper (advantage on every save), and the ``/roll``
+    ability-check block (advantage on every check). ``effects.
+    attackers_have_disadvantage: True`` reuses the v2.500.0 Blur
+    read-site (``_target_blur_imposes_disadvantage``) so attackers roll
+    at disadvantage vs the target — zero extra code. The
+    can't-be-surprised clause is GM-narrated (no surprise model).
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster targets themself.
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_fs = any(
+        (s.get("_slug") == "foresight")
+        or (str(s.get("name", "")).lower() == "foresight")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"bard", "druid", "warlock", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_fs and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": (
+                "knows Foresight, or bard/druid/warlock/wizard"
+            ),
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("foresight") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 4800)
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "foresight",
+        "name": template.get("name") or "Foresight",
+        "icon": template.get("icon") or "🔮",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": dict(template.get("effects") or {
+            "foresight": True,
+            "attackers_have_disadvantage": True,
+        }),
+        "desc": template.get("desc") or (
+            "Advantage on attacks, checks, and saves; attackers have "
+            "disadvantage against you. 8 hours."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    who = "themself" if target_char.id == char.id else target_char.name
+    feature_desc = (
+        f"{char.name} grants {who} Foresight — advantage on all attack "
+        "rolls, ability checks, and saving throws; attackers have "
+        "disadvantage against them; can't be surprised (GM-narrated). "
+        "8 hours."
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🔮 Foresight",
+            "feature_desc": feature_desc,
+            "source": "foresight",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "foresight",
         "target_character_id": target_char.id,
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3795 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.501.0, 2026-06-21).
+**Total tests:** 3801 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.502.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4644,6 +4644,18 @@ v2.491.0 — Enlarge/Reduce (L2 transmutation, Sorcerer/Wizard, PHB p.237). Phas
 | `test_cast_enlarge_reduce_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`. |
 | `test_cast_enlarge_reduce_bad_mode_400` | An invalid `mode` (e.g. "embiggen") → 400. |
 | `test_cast_enlarge_reduce_missing_character_id_400` | Body without character_id → 400. |
+
+### `test_cast_foresight.py`
+v2.502.0 — Foresight (L9 divination, Bard/Druid/Warlock/Wizard, PHB p.248). Phase 2 #35 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_pc_has_foresight_advantage` helper wired into the three advantage choke-points (`_attacker_has_str_attack_advantage`, `_pc_has_rage_str_save_advantage`, the `/roll` check block) so one `effects.foresight` marker grants advantage on every attack/check/save; the buff also carries `attackers_have_disadvantage` (reusing Blur's read-site). All gates deterministic on roll-state. Thalindra casts on Krieger.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_foresight_installs_both_markers` | Cast → 200, `feature == "foresight"`, `duration_rounds == 4800`, `concentration == false`; buff carries `effects.foresight == true` AND `effects.attackers_have_disadvantage == true`. |
+| `test_foresight_grants_advantage_on_non_str_check` | `/roll` `dex_check` on the warded creature → expression swapped to `2d20kh1` (proves all-checks, not STR-gated like Rage). |
+| `test_foresight_grants_advantage_on_non_str_save` | Thalindra's Fireball (DEX save) vs the warded creature → `roll_request base_expression == "2d20kh1"` (proves all-saves). |
+| `test_foresight_grants_advantage_on_attack` | The warded creature's `/attack` → `roll_state_applied` contains "advantage" (no "disadvantage"). |
+| `test_cast_foresight_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected string names "foresight". |
+| `test_cast_foresight_missing_character_id_400` | Empty body → 400. |
 
 ### `test_cast_mind_blank.py`
 v2.501.0 — Mind Blank (L8 abjuration, Bard/Wizard, PHB p.259). Phase 2 #34 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_SPELL_BUFF_MAP["mind-blank"]` template + `cast_mind_blank` endpoint — the charmed-condition immunity rides the existing `condition_immunity_to` gate (proven generically by `test_condition_immunity.py`); psychic-damage immunity + divination/scry/wish clauses are GM-narrated. Mirrored to the target sheet. Thalindra (Wizard) casts.
