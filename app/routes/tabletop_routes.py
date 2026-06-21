@@ -65374,6 +65374,14 @@ async def cast_protection_from_poison(
             "Resistance to poison damage for 1 hour."
         ),
     })
+    # v2.496.1 — mirror to the target's sheet so the sheet-based
+    # resistance reader (`_resistance_halve` reads `_buffs_active`) sees
+    # the buff. Without this the poison resistance installed above never
+    # actually halves damage (the v2.490.0 ship missed the mirror that
+    # #28 Warding Bond / #27 Freedom of Movement include).
+    _mirror_buffs_to_sheet(
+        db, target_char.id, _get_buffs(campaign_id, target_char.id),
+    )
 
     membership = (
         db.query(CampaignMembership)

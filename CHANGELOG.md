@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.496.1] - 2026-06-21 — "The Latent Ward"
+
+**Schema version:** 71
+
+**Commit summary:** Fixes a latent gap in v2.490.0 Protection from Poison (#25): the poison-resistance buff installed but never actually halved damage, because the cast endpoint didn't mirror the buff to the target's sheet `_buffs_active` — and `_resistance_halve` reads resistance off the DB sheet, not hub state.
+
+**Description:** Surfaced while surveying the next cast-and-broadcast tail batch. The resistance read-site (`_resistance_halve`) consults `char.sheet["_buffs_active"]` (the damage path loads the Character fresh from the DB), but `_install_buff` writes only hub state — so a resistance buff applies only if the cast endpoint also calls `_mirror_buffs_to_sheet`. Freedom of Movement (#27) and Warding Bond (#28) include that mirror; Protection from Poison (#25) shipped without it, so its `resistance_to: ["poison"]` was inert (installed + displayed, but no damage halving). This adds the one-line mirror to match #27/#28.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: `cast_protection_from_poison` now calls `_mirror_buffs_to_sheet` after `_install_buff` (same pattern as Freedom of Movement / Warding Bond).
+
+**Harness changes:**
+
+- `tests/harness/test_cast_protection_from_poison.py`: +1 test (`test_cast_pfp_mirrors_buff_to_sheet`) — casts PfP, reads `/sheet-json`, asserts the buff is present in the sheet's `_buffs_active` (the precondition the resistance reader needs).
+
+Total harness count → 3770 (+1).
+
+PATCH — bug fix to an existing endpoint. No schema change.
+
+### Fixed
+- Protection from Poison (v2.490.0) now mirrors its buff to the target sheet so the poison-damage resistance actually applies (was installed but inert).
+
 ## [2.496.0] - 2026-06-21 — "The Second Breath"
 
 **Schema version:** 71

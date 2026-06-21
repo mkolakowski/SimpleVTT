@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3769 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.496.0, 2026-06-21).
+**Total tests:** 3770 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.496.1, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4653,6 +4653,7 @@ v2.490.0 — Protection from Poison (L2 abjuration, Cleric/Druid/Paladin/Ranger,
 | `test_cast_pfp_self_installs_poison_resistance` | Cleric self-targets → 200, `feature == "protection-from-poison"`, `buff_installed`, `duration_rounds == 600`; the installed buff carries `effects.resistance_to` containing `"poison"` (the real damage-pipeline read-site). |
 | `test_cast_pfp_buff_is_1_hour_non_concentration` | Installed buff has `concentration == false` + `duration_rounds == 600` (1 hour RAW). |
 | `test_cast_pfp_on_ally_installs_on_ally` | Targeting an ally installs the buff on the ally, not the caster (touch range). |
+| `test_cast_pfp_mirrors_buff_to_sheet` | v2.496.1 — after casting, `/sheet-json` shows the buff in the sheet's `_buffs_active` (the precondition `_resistance_halve` needs to actually halve poison damage; the v2.490.0 ship missed this mirror). |
 | `test_cast_pfp_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected string names "protection from poison". |
 | `test_cast_pfp_missing_character_id_400` | Empty body → 400. |
 

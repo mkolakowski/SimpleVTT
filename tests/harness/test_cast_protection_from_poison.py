@@ -158,6 +158,31 @@ async def test_cast_pfp_on_ally_installs_on_ally(gm_client, roster):
     ), f"caster shouldn't carry the buff when targeting an ally: {caster_buffs}"
 
 
+async def test_cast_pfp_mirrors_buff_to_sheet(gm_client, roster):
+    """v2.496.1 — the resistance buff is mirrored to the target's sheet
+    `_buffs_active`, so the sheet-based `_resistance_halve` reader (which
+    the damage path consults off the DB sheet) actually sees it. Without
+    the mirror the poison resistance installs but never halves damage."""
+    caster = _find_pfp_caster(roster)
+    if caster is None:
+        import pytest
+        pytest.skip("no Cleric/Druid/Paladin/Ranger in the demo roster")
+    await _set_battle(gm_client, caster)
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_protection_from_poison",
+        json={"character_id": caster["id"]},
+    )
+    assert r.status_code == 200, r.text
+    sj = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{caster['id']}/sheet-json",
+    )
+    assert sj.status_code == 200, sj.text
+    active = (sj.json().get("sheet") or {}).get("_buffs_active") or []
+    assert any(
+        b.get("key") == "protection-from-poison" for b in active
+    ), f"buff not mirrored to sheet _buffs_active: {active}"
+
+
 async def test_cast_pfp_non_caster_rejected(gm_client, roster):
     """Krieger (Barbarian) → 409 cannot_cast."""
     krieger = roster["Krieger Stonefist"]
