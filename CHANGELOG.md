@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.488.3] - 2026-06-21 — "The Shorter Leash"
+
+**Schema version:** 71
+
+**Commit summary:** Lowers the `simplevtt-scanner` jail's default from **20 → 10** invalid URLs (404s) per 5 minutes, so persistent bad-URL probing (e.g. someone hammering `/weiners`) gets banned roughly twice as fast.
+
+**Description:** The scanner jail already bans IPs that hit too many 404s — that capability shipped in v2.477.0 and works end-to-end (now that v2.488.0 records the real visitor IP behind a Cloudflare Tunnel, and with `FAIL2BAN_ACTION=cloudflare-bouncer` the ban lands at the edge). The only tuning was the threshold: 20/5min was tuned to ignore casual broken-link noise, but operators wanted obvious abuse caught sooner. 10/5min still clears normal users (who rarely hit even 3 404s in 5 min) while banning a persistent prober after 10 hits. `FINDTIME` (5m) and `BANTIME` (6h) unchanged; operators can still set any value via `FAIL2BAN_SCANNER_MAXRETRY`.
+
+**Implementation:**
+
+- `docker-compose.yml` + `.env.example`: `FAIL2BAN_SCANNER_MAXRETRY` default `20 → 10`.
+- Comments updated to match in `docs/integrations/fail2ban/{filter.d/simplevtt-scanner.conf,jail.d/simplevtt.conf}` and `app/main.py`'s 404-handler note.
+
+No new tests — the scanner-jail wiring test asserts the env-var plumbing (key presence), not the numeric value, so it still passes. Config-default change only.
+
+PATCH — tuning the scanner-jail default. No code-behavior or schema change.
+
+### Changed
+- `FAIL2BAN_SCANNER_MAXRETRY` default lowered from 20 to 10 (ban after 10 invalid URLs in 5 minutes).
+
 ## [2.488.2] - 2026-06-21 — "The Clean Slate"
 
 **Schema version:** 71

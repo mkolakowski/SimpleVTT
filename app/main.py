@@ -217,8 +217,9 @@ async def _auth_redirect_handler(request: Request, exc: StarletteHTTPException):
         # hit 1–3 stale URLs in a browsing session; a vulnerability
         # scanner pumps out hundreds per minute against /.env,
         # /wp-admin, /admin.php, etc. The default threshold
-        # (FAIL2BAN_SCANNER_MAXRETRY=20 / 5min) catches the latter
-        # without false-positiving the former.
+        # (FAIL2BAN_SCANNER_MAXRETRY=10 / 5min, lowered from 20 in
+        # v2.488.3) catches the latter without false-positiving the
+        # former.
         #
         # We emit the path on every event so an operator inspecting
         # the audit log can distinguish scanner activity (many

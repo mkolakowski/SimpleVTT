@@ -269,7 +269,7 @@ services:
       # → 6h ban. The threshold is high enough to swallow normal
       # browser noise from stale bookmarks; tight enough to catch
       # any real scanner pump.
-      FAIL2BAN_SCANNER_MAXRETRY: ${FAIL2BAN_SCANNER_MAXRETRY:-20}
+      FAIL2BAN_SCANNER_MAXRETRY: ${FAIL2BAN_SCANNER_MAXRETRY:-10}
       FAIL2BAN_SCANNER_FINDTIME: ${FAIL2BAN_SCANNER_FINDTIME:-5m}
       FAIL2BAN_SCANNER_BANTIME: ${FAIL2BAN_SCANNER_BANTIME:-6h}
       # v2.481.0 — request-flood jail thresholds. Matches the opt-in
