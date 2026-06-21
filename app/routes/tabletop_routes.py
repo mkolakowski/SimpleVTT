@@ -15605,6 +15605,71 @@ def _move_crosses_antilife_shell(
     return None
 
 
+def _antilife_shell_emitter_forces_creature_through(
+    db: Session, campaign_id: int, emitter_token: "Token",
+    from_x: float, from_y: float, dest_x: float, dest_y: float,
+) -> "str | None":
+    """v2.520.0 — Phase 3 follow-up. RAW PHB p.213: "If you move so that
+    an affected creature is forced to pass through the barrier, the spell
+    ends." Returns the name of an affected (living, non-undead/construct)
+    creature that was OUTSIDE the shell before the emitter's move and is
+    INSIDE after — i.e. the emitter swept the moving 10-ft barrier over
+    it. Returns None when the mover doesn't hold an Antilife Shell, when
+    off-grid, or when no creature was swept. PC-emitter only for v1 (same
+    boundary as ``_move_crosses_antilife_shell``).
+    """
+    emitter_char_id = emitter_token.character_id
+    if not emitter_char_id:
+        return None
+    holds_shell = any(
+        isinstance(b, dict) and isinstance(b.get("effects"), dict)
+        and b["effects"].get("antilife_shell")
+        for b in (_get_buffs(campaign_id, int(emitter_char_id)) or [])
+    )
+    if not holds_shell:
+        return None
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return None
+    map_row = emitter_token.map
+    if not map_row or not map_row.grid_size_px:
+        return None  # off-grid → GM-narrated
+    grid_px = int(map_row.grid_size_px)
+    grid_type = (
+        map_row.grid_type.value if map_row.grid_type else "square"
+    ).lower()
+    RADIUS_FT = 10.0
+    for c in state.get("combatants") or []:
+        if not isinstance(c, dict):
+            continue
+        c_char = c.get("char_id")
+        if c_char and int(c_char) == int(emitter_char_id):
+            continue  # the emitter isn't "forced through" its own shell
+        # Affected creatures only — undead/constructs aren't hedged (RAW).
+        if _attacker_creature_type(db, c_char, c) in ("undead", "construct"):
+            continue
+        ctok = None
+        if c_char:
+            ctok = (
+                db.query(Token)
+                .filter(Token.character_id == int(c_char),
+                        Token.map_id == map_row.id)
+                .first()
+            )
+        if not ctok:
+            continue
+        cx, cy = float(ctok.x or 0), float(ctok.y or 0)
+        old_d = _distance_ft_between_points(
+            grid_px, grid_type, from_x, from_y, cx, cy,
+        )
+        new_d = _distance_ft_between_points(
+            grid_px, grid_type, dest_x, dest_y, cx, cy,
+        )
+        if old_d > RADIUS_FT and new_d <= RADIUS_FT:
+            return c.get("name") or "a creature"
+    return None
+
+
 @router.post("/api/campaign/{campaign_id}/token/{token_id}/move")
 async def move_token(
     campaign_id: int,
@@ -15862,6 +15927,34 @@ async def move_token(
             "token_template_id": token.token_template_id,
         }},
     )
+
+    # v2.520.0 — Antilife Shell "forced through" clause (RAW PHB p.213).
+    # If the mover holds an Antilife Shell and this move swept the moving
+    # 10-ft barrier over an affected creature (outside → inside), the
+    # spell ends. The move itself still stands — RAW the shell ends, it
+    # doesn't block the holder's movement.
+    if token.character_id and distance_ft > 0:
+        _swept = _antilife_shell_emitter_forces_creature_through(
+            db, campaign_id, token, from_x, from_y, x, y,
+        )
+        if _swept:
+            await _remove_buff(
+                campaign_id, int(token.character_id), "antilife-shell",
+            )
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": token.character_id,
+                    "character_name": token.label or "the caster",
+                    "feature_name": "🛡️ Antilife Shell ends",
+                    "feature_desc": (
+                        f"The Antilife Shell ends — {token.label or 'the caster'} "
+                        f"moved so that {_swept} was forced through the "
+                        "barrier (RAW PHB p.213)."
+                    ),
+                    "source": "antilife-shell",
+                },
+            })
 
     # v2.158.51 — Relentless Avenger: consume the single-use buff after
     # the move and announce the OA-free movement. Removing the buff

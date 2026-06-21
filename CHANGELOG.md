@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.520.0] - 2026-06-21 — "The Sweeping Veil"
+
+**Schema version:** 71
+
+**Commit summary:** Antilife Shell v1 follow-up — the RAW "forced through" clause. When the shell holder moves so its moving 10-ft barrier sweeps over an affected creature (outside → inside), the spell ends.
+
+**Description:** Closes the last filed rider on the Phase 3 Antilife Shell barrier. RAW PHB p.213: "If you move so that an affected creature is forced to pass through the barrier, the spell ends." Where the v2.518.0 gate blocks *other* creatures from moving into the shell, this handles the *holder* moving the shell onto someone. New `_antilife_shell_emitter_forces_creature_through` runs after a move commits: if the mover holds an Antilife Shell and the move carried the barrier over an affected (living, non-undead/construct) creature that was outside before and inside after, the `antilife-shell` buff is removed (the spell ends) and a `feature_used` card explains why. The move itself still stands — RAW the shell ends, it doesn't block the holder's movement.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_antilife_shell_emitter_forces_creature_through` helper (reuses `_attacker_creature_type` for the undead/construct exemption) + a post-move hook in `move_token` that ends the shell + broadcasts the card.
+
+**Harness changes:**
+
+- `tests/harness/test_antilife_shell_barrier.py`: +2 tests — the holder sweeps the shell over a living creature (outside → inside) → the move stands (200) and the `antilife-shell` buff is gone; control (holder moves but no creature crosses) → the shell persists.
+
+Total harness count → 3867 (+2).
+
+MINOR — new "forced through" shell-end hook on `/token/{id}/move`. No schema change.
+
+### Changed
+- Antilife Shell: when the holder moves so the barrier sweeps over an affected creature (outside → inside), the spell ends (RAW "forced through" clause). Closes the last filed rider on the aura-geometry-enforcement Phase 3 barrier.
+
 ## [2.519.0] - 2026-06-21 — "The Unbothered Dead"
 
 **Schema version:** 71

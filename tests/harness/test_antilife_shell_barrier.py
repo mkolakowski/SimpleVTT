@@ -133,6 +133,78 @@ async def test_override_barrier_bypasses(gm_client, shell_setup):
     assert r.status_code == 200, r.text
 
 
+async def _has_shell(gm_client, char_id):
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/buffs",
+    )
+    assert r.status_code == 200, r.text
+    return any(b.get("key") == "antilife-shell" for b in (r.json().get("buffs") or []))
+
+
+async def _setup_emitter_move(gm_client, roster):
+    """Battle [Mira(shell), Krieger@15ft outside]; both placed. Returns
+    (mira_token_id, druid, mover). Caller moves Mira."""
+    import pytest
+    druid = _find_druid(roster)
+    mover = roster.get("Krieger Stonefist")
+    if not (druid and mover):
+        pytest.skip("demo roster missing Mira/Krieger")
+    await _put_battle(gm_client, [_tok(druid, init=20), _tok(mover, init=10)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_antilife_shell",
+        json={"character_id": druid["id"]},
+    )
+    assert r.status_code == 200, r.text
+    await _place(gm_client, druid["id"], 350.0, 350.0)
+    await _place(gm_client, mover["id"], 560.0, 350.0)  # 15 ft, outside
+    toks = await _tokens_by_char(gm_client)
+    return toks[druid["id"]]["id"], druid, mover
+
+
+async def _teardown_shell(gm_client, druid):
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+        json={"character_id": druid["id"], "key": "antilife-shell"},
+    )
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [], "turn_index": 0, "round": 1, "active": False},
+    )
+
+
+async def test_emitter_sweeps_creature_ends_shell(gm_client, roster):
+    """v2.520.0 — the holder moves so a living creature (outside → inside)
+    is forced through the barrier → the shell ends (RAW PHB p.213)."""
+    mira_tok_id, druid, mover = await _setup_emitter_move(gm_client, roster)
+    try:
+        assert await _has_shell(gm_client, druid["id"])  # precondition
+        # Move Mira to (490,350): 5 ft from Krieger(560) — sweeps the
+        # shell over him (was 15 ft away).
+        r = await _move(gm_client, mira_tok_id, 490.0, 350.0)
+        assert r.status_code == 200, r.text  # the move stands
+        assert not await _has_shell(gm_client, druid["id"]), (
+            "the Antilife Shell should end when the holder sweeps it over "
+            "an affected creature"
+        )
+    finally:
+        await _teardown_shell(gm_client, druid)
+
+
+async def test_emitter_move_no_sweep_keeps_shell(gm_client, roster):
+    """Control: the holder moves but no creature crosses the barrier →
+    the shell persists."""
+    mira_tok_id, druid, mover = await _setup_emitter_move(gm_client, roster)
+    try:
+        # Move Mira a hair (10 px ≈ <1 ft); Krieger stays 15 ft+ away.
+        r = await _move(gm_client, mira_tok_id, 360.0, 350.0)
+        assert r.status_code == 200, r.text
+        assert await _has_shell(gm_client, druid["id"]), (
+            "the shell should persist when no creature is swept through"
+        )
+    finally:
+        await _teardown_shell(gm_client, druid)
+
+
 async def test_undead_mover_passes_freely(gm_client, roster):
     """v2.519.0 — RAW: undead/constructs are NOT hedged out. A mover whose
     combatant carries `creature_type: "undead"` crosses the shell freely
