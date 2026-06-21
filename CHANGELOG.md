@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.508.0] - 2026-06-21 — "The Radiant Ward"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_holy_aura` — Phase 2 #41 of the cast-and-broadcast tail. Holy Aura (L8 abjuration, Cleric) fans a concentration buff out across any number of chosen creatures, granting advantage on **all** saving throws and imposing disadvantage on attacks against them.
+
+**Description:** Continues the tail after Beacon of Hope (#40), and is the **first tail spell to fan the buff out across an arbitrary number of chosen creatures** (the 30-ft aura). RAW PHB p.243: "Creatures of your choice in [a 30-ft] radius … have advantage on all saving throws, and other creatures have disadvantage on attack rolls against them … when a fiend or an undead hits an affected creature with a melee attack, the aura flashes … The attacker must succeed on a Constitution saving throw or be blinded." Both wired effects ride existing hub-state substrates — **zero new mechanical code**:
+
+- **Advantage on all saving throws** → `save_advantage: True` (the v2.99.423 `_buff_grants_save_advantage`, where `True` covers every ability — the all-saves shape, read at the spell-save sites).
+- **Disadvantage on attacks against affected creatures** → `attackers_have_disadvantage: True` (the v2.500.0 Blur read-site `_target_blur_imposes_disadvantage`, folded into the `/attack` + `/npc_attack` disadvantage logic).
+
+Concentration anchors on the **caster's own** buff; each chosen companion's buff carries `concentration: False` + `_dependent_on_caster_concentration: True` + `source_char_id` so the v2.38.0 `_drop_paired_concentration_buffs` cascade dismisses the whole aura RAW-correctly when the caster's concentration breaks. Both reads are hub-state (no sheet mirror). **GM-narrated:** the 5-ft dim-light radius each affected creature sheds (no lighting model) and the fiend/undead-melee blinding flash (no attacker-creature-type save trigger).
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_SPELL_BUFF_MAP["holy-aura"]` template (`save_advantage: True` + `attackers_have_disadvantage: True`, concentration, 10 rounds) + the `cast_holy_aura` endpoint. Multi-target fan-out over `target_character_ids` (the caster is always auto-included — anchors concentration + the common case); no RAW target cap. Caster gate: knows the spell OR cleric. 400/403/404/409 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #41.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_holy_aura.py` (new): +6 tests — install carries `save_advantage: True` + `attackers_have_disadvantage: True` + concentration; **multi-target fan-out** (a companion gets the buff with `concentration: False` + `_dependent_on_caster_concentration`); **save-advantage gate** (a Fireball DEX save vs a warded creature → `roll_request` `base_expression == "2d20kh1"`); **attacker-disadvantage gate** (an attack against a warded creature → disadvantage roll-state); non-caster 409; missing character_id 400.
+
+Total harness count → 3829 (+6).
+
+MINOR — new cast endpoint, multi-target buff fan-out. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_holy_aura`: Holy Aura (L8) — advantage on all saving throws + disadvantage on attacks against affected creatures, fanned across any number of chosen creatures, via `save_advantage: True` + the Blur attacker-disadvantage read-site. Phase 2 #41 of the cast-and-broadcast tail.
+
 ## [2.507.0] - 2026-06-21 — "The Kindled Hope"
 
 **Schema version:** 71

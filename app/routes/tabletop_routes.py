@@ -2336,6 +2336,43 @@ _SPELL_BUFF_MAP["foresight"] = {
     ),
 }
 
+# v2.508.0 — Holy Aura (Phase 2 #41 of
+# docs/plans/cast-and-broadcast-tail.md). L8 abjuration, Cleric,
+# PHB p.243. "Creatures of your choice in [a 30-ft] radius ... have
+# advantage on all saving throws, and other creatures have
+# disadvantage on attack rolls against them ... when a fiend or an
+# undead hits an affected creature with a melee attack, the aura
+# flashes ... the attacker must succeed on a Constitution saving
+# throw or be blinded." Concentration, up to 1 minute. Carries TWO
+# markers, both hub-state reads (no sheet mirror): `save_advantage:
+# True` — advantage on EVERY save via `_buff_grants_save_advantage`
+# (the same all-saves shape Foresight's `foresight` marker grants,
+# but this is the save-only half) — and the v2.500.0
+# `attackers_have_disadvantage` (the Blur read-site,
+# `_target_blur_imposes_disadvantage`, zero extra code). The first
+# tail spell that fans the buff out across an arbitrary number of
+# chosen creatures (the aura). The 5-ft dim-light radius (no lighting
+# model) and the fiend/undead-melee CON-save-or-blinded flash (no
+# attacker-creature-type save trigger) stay GM-narrated.
+_SPELL_BUFF_MAP["holy-aura"] = {
+    "key": "holy-aura",
+    "name": "Holy Aura",
+    "icon": "☀️",
+    "duration_rounds": 10,  # 1 minute @ 6 s/round (concentration)
+    "duration_max": 10,
+    "concentration": True,  # RAW (PHB p.243): "Concentration, up to 1 minute."
+    "effects": {
+        "save_advantage": True,
+        "attackers_have_disadvantage": True,
+    },
+    "desc": (
+        "Advantage on ALL saving throws; attackers have disadvantage on "
+        "attack rolls against you. Up to 1 minute (concentration). The "
+        "5-ft dim-light aura and the fiend/undead-melee blinding flash "
+        "(CON save) are GM-narrated."
+    ),
+}
+
 # v2.190.0 — Potion of Invulnerability (RAW DMG p.188, rare): resistance to
 # ALL damage for 1 minute. Reuses the v2.99.121 `resistance_to: ["all"]`
 # wildcard that `_resistance_halve` already honours, so no new intercept is
@@ -65261,6 +65298,190 @@ async def cast_feather_fall(
     return {
         "ok": True,
         "feature": "feather-fall",
+        "targets": buffs_installed,
+        "buffs_installed": len(buffs_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_holy_aura")
+async def cast_holy_aura(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.508.0 — Phase 2 #41 of
+    docs/plans/cast-and-broadcast-tail.md. Holy Aura (L8 abjuration,
+    Cleric, PHB p.243):
+
+      "Divine light washes out from you ... Creatures of your choice in
+       [a 30-foot] radius when you cast this spell ... have advantage on
+       all saving throws, and other creatures have disadvantage on
+       attack rolls against them until the spell ends. In addition, when
+       a fiend or an undead hits an affected creature with a melee
+       attack, the aura flashes ... The attacker must succeed on a
+       Constitution saving throw or be blinded until the spell ends."
+
+    Action, V/S/M, Self (30-ft radius), **Concentration, up to 1
+    minute**.
+
+    Implementation: the **first tail spell to fan the buff out across an
+    arbitrary number of chosen creatures** (the aura). Two of the
+    effects ride existing substrates with zero new mechanical code —
+    ``save_advantage: True`` grants advantage on EVERY save
+    (`_buff_grants_save_advantage`, the all-saves shape) and
+    ``attackers_have_disadvantage: True`` makes attackers roll at
+    disadvantage (the v2.500.0 Blur read-site
+    `_target_blur_imposes_disadvantage`). Both are hub-state reads, so
+    no sheet mirror is needed.
+
+    Concentration lives on the **caster's** buff only (the anchor); each
+    chosen companion's buff carries ``concentration: False`` plus
+    ``_dependent_on_caster_concentration: True`` + ``source_char_id`` so
+    the v2.38.0 `_drop_paired_concentration_buffs` cascade dismisses the
+    whole aura RAW-correctly when the caster's concentration breaks.
+
+    GM-narrated: the 5-ft dim-light radius each affected creature sheds
+    (no lighting model) and the fiend/undead-melee blinding flash (no
+    attacker-creature-type save trigger).
+
+    Body: ``{character_id, target_character_ids?}``. The caster is
+    always added to the target list automatically (RAW "creatures of
+    your choice" — a cleric near-always wards themself, and the
+    self-buff anchors concentration). RAW imposes no target cap (the
+    aura affects any number of creatures in the radius), so neither does
+    this endpoint; the 30-ft radius stays GM-tracked.
+
+    Response: ``{ok, feature, targets, buffs_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    raw_targets = body.get("target_character_ids") or []
+    if not isinstance(raw_targets, list):
+        raise HTTPException(400, "target_character_ids must be a list")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_ha = any(
+        (s.get("_slug") == "holy-aura")
+        or (str(s.get("name", "")).lower() == "holy aura")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"cleric"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_ha and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Holy Aura, or cleric",
+            "got_class": _cls,
+        })
+
+    target_ids: list[int] = []
+    seen: set[int] = set()
+    for raw in raw_targets:
+        try:
+            tid = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if tid <= 0 or tid in seen:
+            continue
+        seen.add(tid)
+        target_ids.append(tid)
+    if char.id not in seen:
+        target_ids.insert(0, char.id)
+
+    template = _SPELL_BUFF_MAP.get("holy-aura") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 10)
+    base_effects = dict(template.get("effects") or {
+        "save_advantage": True,
+        "attackers_have_disadvantage": True,
+    })
+    buffs_installed: list[int] = []
+    for tid in target_ids:
+        target = db.query(Character).filter(
+            Character.id == tid,
+            Character.campaign_id == campaign_id,
+        ).first()
+        if not target:
+            continue
+        is_caster_self = (target.id == char.id)
+        buff_payload = {
+            "key": "holy-aura",
+            "name": template.get("name") or "Holy Aura",
+            "icon": template.get("icon") or "☀️",
+            "duration_rounds": DURATION_ROUNDS,
+            "duration_max": DURATION_ROUNDS,
+            # Concentration anchors on the caster's own buff; companion
+            # buffs ride the caster's concentration via the dependent
+            # marker so the whole aura drops in lock-step when it breaks.
+            "concentration": is_caster_self,
+            "source_char_id": char.id,
+            "effects": dict(base_effects),
+            "desc": template.get("desc") or (
+                "Advantage on all saving throws; attackers have "
+                "disadvantage. Up to 1 minute (concentration)."
+            ),
+        }
+        if not is_caster_self:
+            buff_payload["_dependent_on_caster_concentration"] = True
+        installed = await _install_buff(campaign_id, target.id, buff_payload)
+        if installed:
+            buffs_installed.append(target.id)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    feature_desc = (
+        f"{char.name} casts Holy Aura — advantage on all saving throws "
+        f"and disadvantage on attacks against {len(buffs_installed)} "
+        f"creature{'s' if len(buffs_installed) != 1 else ''} for up to 1 "
+        "minute (concentration). Dim-light aura + fiend/undead blinding "
+        "flash are GM-narrated."
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "☀️ Holy Aura",
+            "feature_desc": feature_desc,
+            "source": "holy-aura",
+            "target_character_ids": buffs_installed,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "holy-aura",
         "targets": buffs_installed,
         "buffs_installed": len(buffs_installed),
         "duration_rounds": DURATION_ROUNDS,
