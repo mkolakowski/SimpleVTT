@@ -211,6 +211,10 @@
     {% if unbanned %}
     <div class="banner" style="background:#13301f;border-color:var(--ok);color:var(--ok)">
       ✅ Unban queued for <code>{{ unbanned }}</code> — it clears from every jail within a few seconds.
+      {% if cf_removed >= 0 %}
+        {% if cf_removed > 0 %}Removed {{ cf_removed }} Cloudflare edge rule{{ 's' if cf_removed != 1 else '' }}.
+        {% else %}No Cloudflare edge rule was set for it.{% endif %}
+      {% endif %}
     </div>
     {% elif unban_error %}
     <div class="banner">⚠️ Unban failed: {{ unban_error }}</div>

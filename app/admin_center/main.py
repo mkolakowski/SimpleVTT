@@ -31,6 +31,7 @@ from ..audit_log import _extract_client_ip
 from ..version import APP_VERSION
 from . import (
     audit_parse,
+    cloudflare_unban,
     dns_lookup,
     event_help,
     fail2ban,
@@ -361,21 +362,32 @@ def api_inventory():
 
 
 @app.post("/fail2ban/unban")
-def fail2ban_unban(request: Request, ip: str = Form("")):
-    """Queue an unban for ``ip``. The admin center can't reach
-    fail2ban's root-only control socket as the non-root appuser, so it
-    writes a request to a shared spool that the fail2ban container's
-    watcher drains via ``fail2ban-client unban``. Form POST → redirects
-    back to the dashboard (the button lives in the bans table)."""
+async def fail2ban_unban(request: Request, ip: str = Form("")):
+    """Unban ``ip`` everywhere it might be banned.
+
+    1. Local fail2ban jails — via the shared control spool the fail2ban
+       container's watcher drains (the admin center can't reach
+       fail2ban's root-only socket as the non-root appuser).
+    2. The Cloudflare edge — removes any IP Access Rule for the IP, if
+       the Cloudflare client is configured (bans pushed by the
+       cloudflare-bouncer action or the in-app "Ban IP at edge" button).
+
+    Form POST → redirects back to the dashboard (the button lives in the
+    bans table)."""
     result = fail2ban_control.request_unban(ip)
-    if result.get("ok"):
-        log.info("admin-center queued unban ip=%s by=%r", result["ip"],
-                 request.session.get("admin_user", ""))
-        return RedirectResponse(f"/?unbanned={quote(result['ip'], safe='')}", status_code=303)
-    return RedirectResponse(
-        f"/?unban_error={quote(result.get('error', 'failed'), safe='')}",
-        status_code=303,
-    )
+    if not result.get("ok"):
+        return RedirectResponse(
+            f"/?unban_error={quote(result.get('error', 'failed'), safe='')}",
+            status_code=303,
+        )
+    log.info("admin-center queued unban ip=%s by=%r", result["ip"],
+             request.session.get("admin_user", ""))
+    # Also lift any Cloudflare edge ban. None → client not configured.
+    cf_removed = await cloudflare_unban.unban_ip(result["ip"])
+    loc = f"/?unbanned={quote(result['ip'], safe='')}"
+    if cf_removed is not None:
+        loc += f"&cf={cf_removed}"
+    return RedirectResponse(loc, status_code=303)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -385,6 +397,7 @@ def dashboard(
     dns: int = 0,
     unbanned: str = "",
     unban_error: str = "",
+    cf: int = -1,
 ):
     events = audit_parse.load_events(
         AUDIT_LOG_PATH,
@@ -426,5 +439,6 @@ def dashboard(
             "dns_map": dns_map,
             "unbanned": unbanned,
             "unban_error": unban_error,
+            "cf_removed": cf,
         },
     )

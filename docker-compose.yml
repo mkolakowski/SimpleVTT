@@ -156,6 +156,11 @@ services:
       # v2.485.7 — shared spool the "Unban" button writes unban
       # requests into; the fail2ban watcher drains it.
       FAIL2BAN_CONTROL_DIR: ${FAIL2BAN_CONTROL_DIR:-/data/control}
+      # v2.488.1 — Cloudflare client config so the "Unban" button can
+      # also remove the edge IP Access Rule. Same vars the app uses.
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+      CLOUDFLARE_ZONE_ID: ${CLOUDFLARE_ZONE_ID:-}
+      CLOUDFLARE_API_BASE_URL: ${CLOUDFLARE_API_BASE_URL:-https://api.cloudflare.com/client/v4}
     volumes:
       # Read-only consumer of the app's audit-log volume.
       - audit_logs:/var/log/simplevtt:ro

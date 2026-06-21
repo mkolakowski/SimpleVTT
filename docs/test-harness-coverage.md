@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3721 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.488.0, 2026-06-21).
+**Total tests:** 3724 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.488.1, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5556,6 +5556,9 @@ The standalone read-only dashboard on port 8015. Unit tests (host-side) for the 
 | `test_unban_request_accepts_ipv6` | IPv6 addresses are accepted + spooled. |
 | `test_unban_request_rejects_invalid_ip` | Garbage / injection / empty IPs rejected; nothing written. |
 | `test_unban_request_filename_is_sanitized` | The spool filename stays within the dir (no `/` or `..`). |
+| `test_cloudflare_unban_skips_when_not_configured` | `cloudflare_unban.unban_ip` → None when the CF client isn't configured. |
+| `test_cloudflare_unban_removes_only_matching_ban_rules` | Removes only block/challenge rules for the exact IP; skips whitelist + other IPs; returns the count. |
+| `test_cloudflare_unban_graceful_on_api_error` | A Cloudflare API error → None (the local unban still happened, no raise). |
 | `test_unban_endpoint_accepts_valid_ip` | `POST /fail2ban/unban` (authed) with a valid IP → 303 to `/?unbanned=…`. |
 | `test_unban_endpoint_rejects_invalid_ip` | Invalid IP → 303 to `/?unban_error=…`. |
 | `test_unban_endpoint_requires_auth` | Unauthenticated POST → 303 to `/login` (not executed). |

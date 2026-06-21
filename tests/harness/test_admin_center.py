@@ -354,6 +354,55 @@ def test_unban_request_filename_is_sanitized(tmp_path):
         assert "/" not in f.name and ".." not in f.name
 
 
+# ---- Cloudflare unban (edge rule removal) ---------------------------
+
+async def test_cloudflare_unban_skips_when_not_configured(monkeypatch):
+    from app.admin_center import cloudflare_unban
+    from app.integrations import cloudflare
+    monkeypatch.setattr(cloudflare, "integration_enabled", lambda: False)
+    assert await cloudflare_unban.unban_ip("1.2.3.4") is None
+
+
+async def test_cloudflare_unban_removes_only_matching_ban_rules(monkeypatch):
+    from app.admin_center import cloudflare_unban
+    from app.integrations import cloudflare
+
+    rules = [
+        {"id": "r1", "mode": "block", "configuration": {"target": "ip", "value": "1.2.3.4"}},
+        {"id": "r2", "mode": "whitelist", "configuration": {"value": "1.2.3.4"}},   # skip (allow)
+        {"id": "r3", "mode": "block", "configuration": {"value": "9.9.9.9"}},        # skip (other IP)
+        {"id": "r4", "mode": "managed_challenge", "configuration": {"value": "1.2.3.4"}},  # remove
+    ]
+    removed = []
+
+    async def fake_list(*, ip=None):
+        return rules
+
+    async def fake_remove(rule_id):
+        removed.append(rule_id)
+
+    monkeypatch.setattr(cloudflare, "integration_enabled", lambda: True)
+    monkeypatch.setattr(cloudflare, "list_ip_access_rules", fake_list)
+    monkeypatch.setattr(cloudflare, "remove_ip_access_rule", fake_remove)
+
+    n = await cloudflare_unban.unban_ip("1.2.3.4")
+    assert n == 2
+    assert removed == ["r1", "r4"]
+
+
+async def test_cloudflare_unban_graceful_on_api_error(monkeypatch):
+    from app.admin_center import cloudflare_unban
+    from app.integrations import cloudflare
+
+    async def boom(*, ip=None):
+        raise cloudflare.CloudflareApiError(500, "boom")
+
+    monkeypatch.setattr(cloudflare, "integration_enabled", lambda: True)
+    monkeypatch.setattr(cloudflare, "list_ip_access_rules", boom)
+    # A Cloudflare hiccup must not raise — returns None, local unban still happened.
+    assert await cloudflare_unban.unban_ip("1.2.3.4") is None
+
+
 # ---- MFA: TOTP + recovery code --------------------------------------
 
 # RFC 6238 test secret (ASCII "12345678901234567890") in base32. At

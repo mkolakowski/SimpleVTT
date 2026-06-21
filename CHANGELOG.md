@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.488.1] - 2026-06-21 — "The Edge Pardon"
+
+**Schema version:** 71
+
+**Commit summary:** The Admin Center "Unban" button now **also removes the Cloudflare edge ban** for that IP, not just the local fail2ban jails — so an IP banned via the `cloudflare-bouncer` action (or the in-app "Ban IP at edge" button) is fully cleared in one click.
+
+**Description:** The unban button only lifted local fail2ban bans (via the control spool). If an operator runs the Cloudflare edge-banning path, the IP stayed blocked at Cloudflare. Now the unban deletes the matching Cloudflare IP Access Rule(s) too, wrapping the existing `app/integrations/cloudflare.py` client. Gracefully no-ops when the Cloudflare client isn't configured.
+
+**Implementation:**
+
+- `app/admin_center/cloudflare_unban.py` (new): `unban_ip(ip)` — lists the zone's IP Access Rules for the IP and deletes the block/challenge ones; returns the count removed, or None when the client isn't configured. Never raises (a Cloudflare hiccup can't break the local unban). Dependency-light (wraps the existing async client; no FastAPI) so it's unit-testable in-process.
+- `app/admin_center/main.py`: `POST /fail2ban/unban` is now async — after queuing the local unban it `await`s `cloudflare_unban.unban_ip` and passes the removed-count to the dashboard.
+- `app/admin_center/templates/dashboard.html`: the unban banner reports the Cloudflare result ("Removed N edge rule(s)" / "No edge rule was set").
+- `docker-compose.yml`: `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ZONE_ID` / `CLOUDFLARE_API_BASE_URL` on the admin-center service (same vars the app uses).
+
+**Gating:** uses `integration_enabled()` (the client is configured), not the GM-facing ban-button gate — unbanning is always safe to offer when the client can reach Cloudflare.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py`: +3 in-process tests — skips when unconfigured; removes only block/challenge rules for the exact IP (not whitelist / other IPs); graceful None on an API error.
+
+Total harness count → 3724 (+3).
+
+PATCH — extends the existing unban action; no-op when Cloudflare isn't configured. No schema change.
+
+### Added
+- `app/admin_center/cloudflare_unban.py` + the Unban button now removes the Cloudflare edge IP Access Rule for the IP. `CLOUDFLARE_*` env on the admin-center service.
+
 ## [2.488.0] - 2026-06-21 — "The True Caller"
 
 **Schema version:** 71
