@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3728 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.488.2, 2026-06-21).
+**Total tests:** 3731 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.489.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5361,6 +5361,18 @@ The canonical-line emission is unit-tested by `test_audit_log.py`; verifying it 
 | `test_admin_reset_password_audits` | `POST /admin/users/{id}/reset_password` returns 303 — triggers `admin.user_password_reset`. The new password is NOT logged (defense against an admin compromise leaking passwords into audit history). |
 | `test_admin_delete_user_audits` | `POST /admin/users/{id}/delete` returns 303 + the user is gone from `/admin`. Triggers `admin.user_delete` (target captured before delete so the audit row keeps a human-readable target). |
 | `test_admin_non_admin_cannot_trigger_destructive_actions` | Logged-in non-admin (`demo-alice`) hits `POST /admin/users` → 403. The audit-log emission is never reached because `require_admin` fires first. |
+
+---
+
+## GDPR Article 17 audit-log scrub (v2.489.0)
+
+Verifies `POST /admin/users/{user_id}/scrub-audit-log` — the admin-portal pseudonymization that rewrites a deleted user's `email` / `user_id` / `actor_id` in the audit log (`app/audit_scrub.py`) to a stable opaque `<deleted-…>` token, preserving every line + the ip/ua/event-tag. Lives in `tests/harness/test_admin_user_audit_scrub.py`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_scrub_pseudonymizes_user_and_is_idempotent` | Create → delete a throwaway user (both emit audit lines carrying the email/id), then `POST …/scrub-audit-log` with the captured email → 200 + JSON `{ok, user_id, pseudonym=<deleted-…>, lines_rewritten>=1}`. A second scrub returns `lines_rewritten==0` with the same stable pseudonym (idempotent + deterministic token). |
+| `test_scrub_missing_email_400` | Blank/omitted `email` form field → 400 (the email can't be looked up after the user row is deleted, so it's required). |
+| `test_scrub_requires_admin_403` | Non-admin (`demo-alice`) → 403; `require_admin` fires before the scrub runs. |
 
 ---
 

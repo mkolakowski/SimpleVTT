@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.489.0] - 2026-06-21 — "The Forgotten Name"
+
+**Schema version:** 71
+
+**Commit summary:** Adds an admin-portal **GDPR Article 17 audit-log scrub** — `POST /admin/users/{user_id}/scrub-audit-log` pseudonymizes a deleted user's `email` / `user_id` / `actor_id` across the audit log to a stable opaque `<deleted-…>` token, preserving every line + the ip/ua/event-tag that fail2ban + CrowdSec consume.
+
+**Description:** When an admin deletes a user the DB rows cascade away, but the canonical audit log (`AUDIT_LOG_PATH`) keeps lines *about* that user for the Section 2.3 retention window — permitted under Article 17(3)(b)/(e). A privacy-conscious operator may still want to honor a "right to be forgotten" request by **pseudonymizing** the deleted user's identifiers while keeping the security-relevant structure intact ("a banned IP was logged" stays; `actor_id=42` / `target=user@example.com` become one stable token). This was the top filed item in `TODO.md` (Manually Added P2) and was named as a follow-on in the privacy policy Section 5.3.
+
+The scrub never deletes a line — it rewrites identifiers in place, line-for-line, so the trail's integrity (and its value to log-based banning) survives. Only user-identifying keys (`actor_id` / `user_id` / `uid` / `target_user_id` / `caster_user_id`) carrying the target id, plus the email value, are rewritten; `ip=` / `ua=` / the event tag are untouched. The token is a one-way salted HMAC of the user id (not reversible to the id) and *stable* (same user → same token) so cross-line correlation ("this principal did X then Y") survives the scrub without the real identity. The user row is normally gone by the time this runs, so the email is passed as a form field (captured at delete time) rather than looked up.
+
+**Implementation:**
+
+- `app/audit_scrub.py` (new): `scrub_user_from_audit_log(user_id=, email=)` + `pseudonym(user_id)` + `default_audit_paths()`. Walks the active audit log + its 5 rotated backups, rewrites under the live `RotatingFileHandler`'s lock (close stream → rewrite atomically via temp+rename → next emit reopens the new file), so post-scrub lines land in the rewritten file rather than the old unlinked inode. Runs as the non-root `appuser` (plain file I/O on the `audit_logs` volume the app already owns). Idempotent.
+- `app/routes/admin_routes.py`: `POST /admin/users/{user_id}/scrub-audit-log` (admin-only) — validates the `email` form field (400 if blank), runs the scrub, and records `admin.user_audit_scrub` against the **pseudonym** (never the real email, so nothing re-enters the freshly-scrubbed log). Returns a JSON summary `{ok, user_id, pseudonym, files_scanned, lines_rewritten}`.
+- `docs/wiki/privacy.md` §5.3: filed follow-on flipped to shipped, with the endpoint + behavior documented.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_user_audit_scrub.py` (new): +3 tests — happy path (create → delete → scrub returns 200, `<deleted-…>` pseudonym, `lines_rewritten>=1`, second scrub is a 0-line no-op with the same token), error path (missing email → 400), and auth gate (non-admin → 403).
+
+Total harness count → 3731 (+3).
+
+MINOR — new admin endpoint + module; backward-compatible. No schema change.
+
+### Added
+- `POST /admin/users/{user_id}/scrub-audit-log` + `app/audit_scrub.py`: GDPR Article 17 pseudonymization of a deleted user's identifiers in the audit log, preserving line/ip/ua/event-tag structure for fail2ban + CrowdSec.
+
 ## [2.488.3] - 2026-06-21 — "The Shorter Leash"
 
 **Schema version:** 71

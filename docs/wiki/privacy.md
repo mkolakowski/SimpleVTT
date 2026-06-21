@@ -315,18 +315,23 @@ and roll history.
   in Section 2.3 (90 days / 1 year for ban-relevant). This is
   permitted under Article 17(3)(b) — exercising the legal right
   to defend against security claims — and Article 17(3)(e) —
-  legal claims. Operators may grep + redact the log on request
-  but are not obliged to.
+  legal claims. On request the operator can **pseudonymize** these
+  entries: an admin-portal scrub rewrites your `user_id` /
+  `actor_id` / email in the audit log to a stable opaque
+  `<deleted-…>` token, preserving the security-relevant structure
+  (no line is deleted; the IP / user-agent / event tag that ban
+  engines read stay intact) without retaining your identity.
 - **Database backups** that include your data are retained per
   the operator's `BACKUP_CRON` config. Backups taken before your
   deletion request will roll out of the retention window per
   policy. Operators do not selectively scrub historical
   backups.
 
-> **Operator follow-on (filed in TODO):** add an admin-driven
-> audit-log scrub command that pseudonymizes `user_id` values
-> for deleted users while preserving the security-relevant
-> structure of the log.
+> **Operator note:** the audit-log scrub described above ships as
+> `POST /admin/users/{user_id}/scrub-audit-log` (v2.489.0). It runs
+> as the non-root `appuser`, walks the active audit log + its rotated
+> backups, and records itself against the pseudonym so no real
+> identifier re-enters the freshly-scrubbed log. It is idempotent.
 
 ### 5.4 — Right to restriction of processing (Article 18)
 

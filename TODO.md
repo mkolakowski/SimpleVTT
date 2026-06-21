@@ -758,8 +758,6 @@ Setting-specific subclasses (Tasha's: Beast Barbarian Phase 1 shipped v2.158.20 
 
 ## Manually Added
 
-- 🟡 **P2** — **GDPR Article 17 audit-log pseudonymization on user deletion.** When an admin deletes a user via the admin portal, the `users` row + cascaded game data are removed. The audit log retains entries about the user for 90 days / 1 year (per the privacy policy Section 2.3 retention table) — which is GDPR-permitted under Article 17(3)(b) + 17(3)(e) (legal claims). But a privacy-conscious operator may want to **pseudonymize** the deleted user's identifiers in the log while preserving the security-relevant structure ("a banned IP was logged" stays; "user_id=42 logged in" becomes "user_id=<deleted-1234>"). Filed: add an admin-driven scrub command `admin_audit_log_scrub_user(user_id)` that walks the audit log file, rewrites lines mentioning the user's `user_id` / email to a stable opaque hash, and re-emits the modified file. Should NOT delete lines (security audit-trail integrity); should preserve the IP / UA / event-tag for fail2ban purposes. Pairs with the v2.426.0 audit log + v2.474.0 non-root hardening (the scrub must run as `appuser` and respect the file handler). The privacy policy Section 5.3 names this as a filed follow-on.
-
 - 🟢 **P3** — Feature: More pills in the roll log for spells
     - Move spell type, range, action type and details to pills
         - details should be an expanding pill
