@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.533.0] - 2026-06-21 — "The Borrowed Night-Eyes"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_darkvision` — Phase 2 #51 of the cast-and-broadcast tail. Darkvision (L2 transmutation, Druid/Ranger/Sorcerer/Wizard) installs an 8-hour single-target flag-buff granting darkvision out to 60 ft.
+
+**Description:** Continues the tail after Fly (#50). RAW PHB p.230: "You touch a willing creature to grant it the ability to see in the dark. For the duration, that creature has darkvision out to a range of 60 feet." 1 action, V/S/M, Touch, 8 hours, non-concentration. Single-target touch flag-buff carrying `effects.darkvision_ft: 60` — the same descriptive darkvision sense marker the racial darkvision / Goggles of Night substrate uses, so the spell joins that family consistently. The marker surfaces *who* has darkvision (and the range) for the table/UI; the engine has no positional darkness model, so seeing-in-the-dark is GM-narrated engine-wide (the boundary every darkvision source sits behind). Same self-or-touch shape as Nondetection (#48) / Tongues (#4).
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `cast_darkvision` endpoint. Self-or-touch (`target_character_id?`). Caster gate: knows the spell OR druid/ranger/sorcerer/wizard. Returns `darkvision_ft`. 400/403/404/409 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #51.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_darkvision.py` (new): +4 tests — self-cast installs `darkvision_ft: 60` (8h, non-conc); touch-an-ally routes the buff to the ally; non-caster 409; missing character_id 400.
+
+Total harness count → 3904 (+4).
+
+MINOR — new cast endpoint riding the `darkvision_ft` sense substrate. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_darkvision`: Darkvision (L2) — an 8-hour `darkvision_ft: 60` flag-buff (self-or-touch); seeing-in-the-dark GM-narrated. Phase 2 #51 of the cast-and-broadcast tail.
+
 ## [2.532.0] - 2026-06-21 — "The Traced Source"
 
 **Schema version:** 71

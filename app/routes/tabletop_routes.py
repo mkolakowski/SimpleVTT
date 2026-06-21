@@ -70535,6 +70535,139 @@ async def cast_nondetection(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_darkvision")
+async def cast_darkvision(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.533.0 — Phase 2 #51 of
+    docs/plans/cast-and-broadcast-tail.md. Darkvision (L2
+    transmutation, Druid/Ranger/Sorcerer/Wizard, PHB p.230):
+
+      "You touch a willing creature to grant it the ability to see in
+       the dark. For the duration, that creature has darkvision out to
+       a range of 60 feet."
+
+    1 action, V/S/M, Touch, 8 hours, non-concentration.
+
+    Implementation: single-target touch flag-buff carrying
+    ``effects.darkvision_ft: 60`` — the same descriptive darkvision
+    marker the racial darkvision / Goggles of Night / Belt of Giant
+    Strength sense substrate uses. The marker surfaces who has darkvision
+    (and the range) for the table/UI; the engine has no positional
+    darkness model, so seeing-in-the-dark is GM-narrated engine-wide
+    (the same boundary every darkvision source sits behind). Same
+    self-or-touch shape as Nondetection (#48) / Tongues (#4).
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster targets themself.
+
+    Response: ``{ok, feature, target_character_id, darkvision_ft,
+    buff_installed, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_dv = any(
+        (s.get("_slug") == "darkvision")
+        or (str(s.get("name", "")).lower() == "darkvision")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"druid", "ranger", "sorcerer", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_dv and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Darkvision, or druid/ranger/sorcerer/wizard",
+            "got_class": _cls,
+        })
+
+    DARKVISION_FT = 60
+    DURATION_ROUNDS = 4800  # 8 hours @ 6 s/round
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "darkvision",
+        "name": "Darkvision",
+        "icon": "🌑",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {"darkvision_ft": DARKVISION_FT},
+        "desc": (
+            "Darkvision out to 60 ft for 8 hours. Seeing in the dark is "
+            "GM-narrated (the engine has no positional darkness model); "
+            "the marker surfaces who has darkvision."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    who = "themself" if target_char.id == char.id else target_char.name
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🌑 Darkvision",
+            "feature_desc": (
+                f"{char.name} grants {who} darkvision out to 60 ft for 8 "
+                "hours (seeing in the dark is GM-narrated)."
+            ),
+            "source": "darkvision",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "darkvision",
+        "target_character_id": target_char.id,
+        "darkvision_ft": DARKVISION_FT,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_globe_of_invulnerability")
 async def cast_globe_of_invulnerability(
     campaign_id: int,
