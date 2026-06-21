@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3790 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.500.0, 2026-06-21).
+**Total tests:** 3795 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.501.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4644,6 +4644,17 @@ v2.491.0 — Enlarge/Reduce (L2 transmutation, Sorcerer/Wizard, PHB p.237). Phas
 | `test_cast_enlarge_reduce_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`. |
 | `test_cast_enlarge_reduce_bad_mode_400` | An invalid `mode` (e.g. "embiggen") → 400. |
 | `test_cast_enlarge_reduce_missing_character_id_400` | Body without character_id → 400. |
+
+### `test_cast_mind_blank.py`
+v2.501.0 — Mind Blank (L8 abjuration, Bard/Wizard, PHB p.259). Phase 2 #34 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_SPELL_BUFF_MAP["mind-blank"]` template + `cast_mind_blank` endpoint — the charmed-condition immunity rides the existing `condition_immunity_to` gate (proven generically by `test_condition_immunity.py`); psychic-damage immunity + divination/scry/wish clauses are GM-narrated. Mirrored to the target sheet. Thalindra (Wizard) casts.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_mind_blank_installs_charmed_immunity` | Cast → 200, `feature == "mind-blank"`, `duration_rounds == 14400`; buff's `effects.condition_immunity_to` ⊇ {charmed}. |
+| `test_cast_mind_blank_is_24h_non_concentration_mirrored` | Buff is `concentration == false` + 14400 rounds, and present in the sheet's `_buffs_active` via `/sheet-json` (the gate precondition). |
+| `test_cast_mind_blank_on_ally_installs_on_ally` | Targeting an ally installs the buff on the ally, not the caster. |
+| `test_cast_mind_blank_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected string names "mind blank". |
+| `test_cast_mind_blank_missing_character_id_400` | Empty body → 400. |
 
 ### `test_cast_blur.py`
 v2.500.0 — Blur (L2 illusion, Sorcerer/Wizard, PHB p.219). Phase 2 #33 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_target_blur_imposes_disadvantage` read-site (target combatant hub buffs for `effects.attackers_have_disadvantage`) folded into the /attack + /npc_attack disadvantage cancel logic, + `_SPELL_BUFF_MAP["blur"]` + the self-only `cast_blur` endpoint. Thalindra (Wizard) casts; Pip attacks her for the gate test.

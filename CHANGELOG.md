@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.501.0] - 2026-06-21 — "The Sealed Mind"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_mind_blank` — Phase 2 #34 of the cast-and-broadcast tail. Mind Blank (L8 abjuration, Bard/Wizard) installs a 24-hour buff granting immunity to the charmed condition.
+
+**Description:** Continues the tail after Blur (#33). RAW PHB p.259: the target is "immune to psychic damage, any effect that would sense its emotions or read its thoughts, divination spells, and the charmed condition." The mechanized core is the **charmed-condition immunity**, riding the existing `condition_immunity_to` substrate — the `_install_buff` gate via `_target_condition_immune` (the same generic gate proven end-to-end in `test_condition_immunity.py`, and the path Heroism's frightened immunity + Freedom of Movement's paralyzed/restrained immunity use). So every charm install (Charm Person / Dominate Person / Dominate Monster / etc.) on the warded target is suppressed. The buff is mirrored to the target sheet so the gate (which reads `_buffs_active`) sees it.
+
+**Honest scope:** the **psychic-damage immunity** is GM-narrated — the engine's damage path models resistance (halving) but not full damage immunity, so claiming it via a buff would be inaccurate (the Warding-Bond-style honesty rule). The anti-divination / sense-emotions / read-thoughts / anti-scry / wish-foiling clauses are GM-narrated too (no such substrate). The buff's desc + the broadcast flag this.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_SPELL_BUFF_MAP["mind-blank"]` template (`condition_immunity_to: ["charmed"]`, 14400 rounds / 24 h, non-concentration) + the `cast_mind_blank` endpoint. Caster gate: knows the spell OR bard/wizard. Touch self-or-ally target. Mirrors to the target sheet. 400 missing character_id, 404 unknown caster/target, 409 non-caster, 403 not-your-character.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #34.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_mind_blank.py` (new): +5 tests — install carries `condition_immunity_to:["charmed"]`, 24-hour non-concentration + mirrored to sheet `_buffs_active` (the gate precondition; the gate itself is proven by `test_condition_immunity.py`), ally-target installs on the ally, non-caster 409, missing character_id 400.
+
+Total harness count → 3795 (+5).
+
+MINOR — new cast endpoint; backward-compatible, additive substrate. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_mind_blank`: Mind Blank (L8) — 24-hour charmed-condition immunity, riding the `condition_immunity_to` substrate. Phase 2 #34 of the cast-and-broadcast tail.
+
 ## [2.500.0] - 2026-06-21 — "The Wavering Form"
 
 **Schema version:** 71

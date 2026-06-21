@@ -2166,6 +2166,38 @@ _SPELL_BUFF_MAP["blur"] = {
     ),
 }
 
+# v2.501.0 — Mind Blank (Phase 2 #34 of
+# docs/plans/cast-and-broadcast-tail.md). L8 abjuration, Bard/Wizard,
+# PHB p.259. "Immune to psychic damage, any effect that would sense its
+# emotions or read its thoughts, divination spells, and the charmed
+# condition. ... even foils wish ..." 24 hours, non-concentration.
+# Mechanized core: the **charmed-condition immunity** rides the existing
+# `condition_immunity_to` substrate (the `_install_buff` gate via
+# `_target_condition_immune` — the same path Heroism's frightened
+# immunity + the Ring of Free Action's paralyzed/restrained immunity
+# use), blocking every charm install (Charm Person, Dominate, etc.).
+# The **psychic-damage immunity** is GM-narrated: the engine's damage
+# path only models resistance (halving), not full damage immunity, so
+# claiming it via a buff would be inaccurate. The anti-divination /
+# sense-emotions / read-thoughts / anti-scry / wish-foiling clauses are
+# likewise GM-narrated (no divination/scry substrate).
+_SPELL_BUFF_MAP["mind-blank"] = {
+    "key": "mind-blank",
+    "name": "Mind Blank",
+    "icon": "🧠",
+    "duration_rounds": 14400,  # 24 hours @ 6 s/round
+    "duration_max": 14400,
+    "concentration": False,
+    "effects": {
+        "condition_immunity_to": ["charmed"],
+    },
+    "desc": (
+        "Immune to the charmed condition for 24 hours. Immunity to "
+        "psychic damage, mind-reading/sensing, divination, scrying, "
+        "and wish-foiling are GM-narrated."
+    ),
+}
+
 # v2.190.0 — Potion of Invulnerability (RAW DMG p.188, rare): resistance to
 # ALL damage for 1 minute. Reuses the v2.99.121 `resistance_to: ["all"]`
 # wildcard that `_resistance_halve` already honours, so no new intercept is
@@ -66714,6 +66746,148 @@ async def cast_blur(
         "ok": True,
         "feature": "blur",
         "target_character_id": char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_mind_blank")
+async def cast_mind_blank(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.501.0 — Phase 2 #34 of
+    docs/plans/cast-and-broadcast-tail.md. Mind Blank
+    (L8 abjuration, Bard/Wizard, PHB p.259):
+
+      "Until the spell ends, one willing creature you touch is immune
+       to psychic damage, any effect that would sense its emotions or
+       read its thoughts, divination spells, and the charmed
+       condition. ..."
+
+    1 action, V/S, Touch, 24 hours, non-concentration.
+
+    Implementation: the mechanized core is the **charmed-condition
+    immunity** — the buff carries ``effects.condition_immunity_to:
+    ["charmed"]``, enforced at the ``_install_buff`` gate via
+    ``_target_condition_immune`` (the same path Heroism's frightened
+    immunity + Freedom of Movement's paralyzed/restrained immunity use),
+    so every charm install (Charm Person / Dominate / etc.) on the
+    warded target is suppressed. Mirrors the buff to the target sheet
+    (the gate reads ``_buffs_active``). The **psychic-damage immunity**
+    is GM-narrated (the damage path models resistance/halving, not full
+    immunity); the anti-divination / mind-reading / scry / wish-foiling
+    clauses are GM-narrated too (no such substrate).
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster targets themself.
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_mb = any(
+        (s.get("_slug") == "mind-blank")
+        or (str(s.get("name", "")).lower() == "mind blank")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"bard", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_mb and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Mind Blank, or bard/wizard",
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("mind-blank") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 14400)
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "mind-blank",
+        "name": template.get("name") or "Mind Blank",
+        "icon": template.get("icon") or "🧠",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": dict(
+            template.get("effects") or {"condition_immunity_to": ["charmed"]}),
+        "desc": template.get("desc") or (
+            "Immune to the charmed condition for 24 hours."
+        ),
+    })
+    # Mirror to the target's sheet so the condition-immunity gate
+    # (`_target_condition_immune` reads `_buffs_active`) sees the buff.
+    _mirror_buffs_to_sheet(
+        db, target_char.id, _get_buffs(campaign_id, target_char.id),
+    )
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    who = "themself" if target_char.id == char.id else target_char.name
+    feature_desc = (
+        f"{char.name} shields {who}'s mind — immune to the charmed "
+        "condition for 24 hours (psychic-damage immunity + anti-scry / "
+        "divination clauses GM-narrated)."
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🧠 Mind Blank",
+            "feature_desc": feature_desc,
+            "source": "mind-blank",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "mind-blank",
+        "target_character_id": target_char.id,
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,
     }
