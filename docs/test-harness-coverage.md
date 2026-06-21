@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3737 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.490.0, 2026-06-21).
+**Total tests:** 3744 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.491.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4580,6 +4580,19 @@ v2.404.4 — Longstrider multi-target cap + per-slot upcast scaling (RAW PHB p.2
 | `test_longstrider_l1_two_targets_returns_400` | L1 cast with 2 targets → 400 `too_many_targets` with `{limit: 1, received: 2}`. |
 | `test_longstrider_l2_two_targets_succeeds` | L2 cast with 2 targets → 200 (extended cap = 1 + (2-1)*1 = 2). |
 | `test_longstrider_l2_three_targets_returns_400` | L2 cast with 3 targets → 400 with `{limit: 2, received: 3}` — confirms the upcast field is honored. |
+
+### `test_cast_enlarge_reduce.py`
+v2.491.0 — Enlarge/Reduce (L2 transmutation, Sorcerer/Wizard, PHB p.237). Phase 2 #26 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `cast_enlarge_reduce` endpoint with a required `mode` param: `enlarge` installs `effects.advantage_on: ["str_check","str_save"]`, `reduce` installs `disadvantage_on: [...]`. Rides the existing STR-marker read-sites (the same `_pc_has_rage_str_save_advantage` + v2.199.0 disadvantage intercept the Potion of Growth / Diminution use) so STR checks/saves actually roll with adv/dis; size + ±1d4 weapon damage stay GM-narrated. Concentration / 1 minute (10 rounds), unlike the non-concentration potions. Thalindra Moonwhisper (Wizard) is the cast surface.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_enlarge_self_installs_str_advantage` | Enlarge self → 200, `mode == "enlarge"`, `duration_rounds == 10`; buff key `enlarge` carries `effects.advantage_on` ⊇ {str_check, str_save}. |
+| `test_cast_reduce_self_installs_str_disadvantage` | Reduce self → buff key `reduce` carries `effects.disadvantage_on` ⊇ {str_check, str_save}. |
+| `test_cast_enlarge_is_concentration_1_minute` | Installed buff has `concentration == true` + `duration_rounds == 10` (the spell, not potion, semantics). |
+| `test_cast_enlarge_on_ally_installs_on_ally` | Targeting an ally installs the buff on the ally, not the caster. |
+| `test_cast_enlarge_reduce_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`. |
+| `test_cast_enlarge_reduce_bad_mode_400` | An invalid `mode` (e.g. "embiggen") → 400. |
+| `test_cast_enlarge_reduce_missing_character_id_400` | Body without character_id → 400. |
 
 ### `test_cast_protection_from_poison.py`
 v2.490.0 — Protection from Poison (L2 abjuration, Cleric/Druid/Paladin/Ranger, PHB p.270). Phase 2 #25 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_SPELL_BUFF_MAP["protection-from-poison"]` template (`resistance_to: ["poison"]`, 600 rounds, non-concentration) + the `cast_protection_from_poison` endpoint. Rides the existing `_resistance_halve` read-site (same substrate as the v2.186.0 Potion of Resistance), so poison damage is genuinely halved with zero new mechanical code; the advantage-on-poison-saves + neutralize clauses stay GM-narrated. Brother Tavik Stonebrow (Cleric, GM-owned) is the cast surface; Krieger (Barbarian) is the non-caster reject.

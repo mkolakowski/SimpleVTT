@@ -65284,6 +65284,181 @@ async def cast_protection_from_poison(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_enlarge_reduce")
+async def cast_enlarge_reduce(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.491.0 — Phase 2 #26 of
+    docs/plans/cast-and-broadcast-tail.md. Enlarge/Reduce
+    (L2 transmutation, Sorcerer/Wizard, PHB p.237):
+
+      "You cause a creature or an object you can see within range to
+       grow larger or smaller for the duration. ... **Enlarge:** ...
+       advantage on Strength checks and Strength saving throws. ...
+       weapon ... deals an extra 1d4 damage. **Reduce:** ...
+       disadvantage on Strength checks and Strength saving throws.
+       ... weapon ... deals 1d4 less damage ..."
+
+    1 action, V/S/M, 30 ft, **Concentration, up to 1 minute**.
+
+    Implementation: rides the existing STR-advantage / STR-disadvantage
+    marker substrate — the SAME read-sites the v2.192.0 Potion of
+    Growth + v2.199.0 Potion of Diminution use. ``mode="enlarge"``
+    installs ``effects.advantage_on: ["str_check", "str_save"]`` (read
+    by ``_pc_has_rage_str_save_advantage`` + the /roll str_check
+    intercept); ``mode="reduce"`` installs
+    ``effects.disadvantage_on: ["str_check", "str_save"]`` (read by the
+    v2.199.0 disadvantage intercept). ZERO new mechanical code — the
+    STR-check/save adv/dis is the mechanized core; the size change +
+    the +/-1d4 weapon-damage rider stay GM-narrated (no size or
+    weapon-damage-delta substrate). Unlike the potions, the **spell** is
+    concentration / 1 minute, so the buff installs with
+    ``concentration: True`` + ``duration_rounds: 10`` and rides
+    ``_install_buff``'s concentration-replacement.
+
+    Body: ``{character_id, mode, target_character_id?}``. ``mode`` is
+    required and must be ``"enlarge"`` or ``"reduce"``. If
+    ``target_character_id`` is omitted the caster targets themself.
+
+    Response: ``{ok, feature, mode, target_character_id,
+    buff_installed, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    mode = str(body.get("mode") or "").strip().lower()
+    if mode not in ("enlarge", "reduce"):
+        raise HTTPException(400, "mode must be 'enlarge' or 'reduce'")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_er = any(
+        (s.get("_slug") == "enlarge-reduce")
+        or (str(s.get("name", "")).lower() in ("enlarge/reduce", "enlarge reduce"))
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"sorcerer", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_er and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Enlarge/Reduce, or sorcerer/wizard",
+            "got_class": _cls,
+        })
+
+    # Concentration / 1 minute RAW for the *spell* (the potions are
+    # non-concentration 1d4 hours; we override duration + concentration
+    # while reusing the STR adv/dis effect markers).
+    DURATION_ROUNDS = 10
+    if mode == "enlarge":
+        buff = {
+            "key": "enlarge",
+            "name": "Enlarge (Enlarged)",
+            "icon": "🔼",
+            "duration_rounds": DURATION_ROUNDS,
+            "duration_max": DURATION_ROUNDS,
+            "concentration": True,
+            "source_char_id": char.id,
+            "effects": {"advantage_on": ["str_check", "str_save"]},
+            "desc": (
+                "Size increased (one size larger); advantage on STR "
+                "checks and STR saving throws; weapon attacks deal +1d4 "
+                "(GM-narrated). Concentration, up to 1 minute."
+            ),
+        }
+    else:
+        buff = {
+            "key": "reduce",
+            "name": "Reduce (Reduced)",
+            "icon": "🔽",
+            "duration_rounds": DURATION_ROUNDS,
+            "duration_max": DURATION_ROUNDS,
+            "concentration": True,
+            "source_char_id": char.id,
+            "effects": {"disadvantage_on": ["str_check", "str_save"]},
+            "desc": (
+                "Size reduced (one size smaller); disadvantage on STR "
+                "checks and STR saving throws; weapon attacks deal -1d4 "
+                "(GM-narrated). Concentration, up to 1 minute."
+            ),
+        }
+    buff_installed = await _install_buff(campaign_id, target_char.id, buff)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    verb = "grows larger" if mode == "enlarge" else "shrinks"
+    str_clause = (
+        "advantage on STR checks/saves" if mode == "enlarge"
+        else "disadvantage on STR checks/saves"
+    )
+    who = "themself" if target_char.id == char.id else target_char.name
+    feature_desc = (
+        f"{char.name} casts Enlarge/Reduce on {who} — "
+        f"{who if target_char.id != char.id else 'they'} {verb}; "
+        f"{str_clause} for 1 minute (concentration)."
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": (
+                "🔼 Enlarge" if mode == "enlarge" else "🔽 Reduce"
+            ),
+            "feature_desc": feature_desc,
+            "source": "enlarge-reduce",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "enlarge-reduce",
+        "mode": mode,
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_jump")
 async def cast_jump(
     campaign_id: int,

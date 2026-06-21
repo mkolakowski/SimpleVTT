@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.491.0] - 2026-06-21 — "The Growth Spurt"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_enlarge_reduce` — Phase 2 #26 of the cast-and-broadcast tail. Enlarge/Reduce (L2 transmutation, Sorcerer/Wizard) installs a concentration buff granting **advantage** (enlarge) or **disadvantage** (reduce) **on STR checks + STR saves** via the existing STR-marker substrate.
+
+**Description:** Continues the cast-and-broadcast tail (Protection from Poison #25 shipped v2.490.0). Enlarge/Reduce was verified genuinely unwired. RAW PHB p.237: Enlarge grants advantage on Strength checks and Strength saving throws (+1d4 weapon damage); Reduce grants the disadvantage mirror (−1d4). The mechanized core rides the existing STR-advantage / STR-disadvantage marker substrate — the exact read-sites the v2.192.0 Potion of Growth + v2.199.0 Potion of Diminution use (`_pc_has_rage_str_save_advantage` reads `effects.advantage_on` generically across all buffs; the v2.199.0 intercept reads `disadvantage_on`). So STR checks/saves actually roll with adv/dis through the real roll pipeline with **zero new mechanical code**. The size change + the ±1d4 weapon-damage rider stay GM-narrated (no size or weapon-damage-delta substrate). Unlike the potions (non-concentration, 1d4 hours), the **spell** is Concentration / 1 minute, so the buff installs with `concentration: True` + `duration_rounds: 10` and rides `_install_buff`'s concentration-replacement.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: `cast_enlarge_reduce` endpoint with a required `mode` (`"enlarge"` / `"reduce"`) body param. `enlarge` → `effects.advantage_on: ["str_check", "str_save"]`; `reduce` → `effects.disadvantage_on: [...]`. Caster gate: knows the spell OR sorcerer/wizard. Touch/30-ft self-or-ally target. 400 missing character_id / bad mode, 404 unknown caster/target, 409 non-caster, 403 not-your-character.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_enlarge_reduce.py` (new): +7 tests — enlarge installs `advantage_on` str_check/str_save, reduce installs `disadvantage_on`, concentration=true + 10-round duration, ally-target installs on the ally, non-caster 409, bad mode 400, missing character_id 400.
+
+Total harness count → 3744 (+7).
+
+MINOR — new cast endpoint; backward-compatible. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_enlarge_reduce`: Enlarge/Reduce (L2) — concentration buff granting STR-check/save advantage (enlarge) or disadvantage (reduce) via the existing STR-marker substrate. Phase 2 #26 of the cast-and-broadcast tail.
+
 ## [2.490.0] - 2026-06-21 — "The Antivenom"
 
 **Schema version:** 71
