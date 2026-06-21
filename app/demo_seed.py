@@ -33,6 +33,7 @@ at view time — the demo just ensures the GM has a token to drop.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 from datetime import datetime, timedelta
 
@@ -64,6 +65,28 @@ DEMO_BOB_EMAIL = "demo-bob@example.com"
 DEMO_EMAILS = (DEMO_GM_EMAIL, DEMO_ALICE_EMAIL, DEMO_BOB_EMAIL)
 DEMO_PASSWORD = "demopass"
 DEMO_CAMPAIGN_NAME = "Demo: The Sundered Vault"
+
+_TRUTHY = ("1", "true", "yes", "on")
+
+
+def _demo_gm_site_admin() -> bool:
+    """Whether the demo GM is granted **site-admin** — the ``/admin``
+    portal (user management, audit-log viewer, GDPR scrub, ban
+    controls). This is distinct from the per-campaign **GM role**,
+    which keys off campaign membership (``_user_is_gm`` /
+    ``campaign.gm_user_id``) and is unaffected by this flag — the demo
+    GM still runs the demo campaign either way.
+
+    Default ON so local dev + CI keep the admin showcase and the
+    six admin-portal harness suites (``test_admin_audit`` etc.) pass
+    unchanged. **Set ``DEMO_GM_SITE_ADMIN=false`` on any
+    internet-facing demo deploy.** The demo credentials are public —
+    the login page advertises ``demopass`` — so a site-admin demo GM
+    is an open admin backdoor: anyone could reach ``/admin`` and
+    scrub the audit log or delete users. Read at call time so a
+    reseed (boot or scheduler tick) picks up a runtime flip.
+    """
+    return os.getenv("DEMO_GM_SITE_ADMIN", "true").strip().lower() in _TRUTHY
 
 
 # ── Wipe ────────────────────────────────────────────────────────────
@@ -188,8 +211,11 @@ def wipe(db: Session) -> dict[str, int]:
 # ── Seed helpers ────────────────────────────────────────────────────
 def seed_users(db: Session) -> dict[str, User]:
     """Create the three demo users. All share the same password so the
-    login page can advertise it. ``is_admin`` is True for the GM so the
-    GM tools panel is reachable; the two players are non-admin."""
+    login page can advertise it. The GM is site-admin only when
+    ``DEMO_GM_SITE_ADMIN`` is on (default; see ``_demo_gm_site_admin``)
+    — disable it on public deploys so the well-known demo credentials
+    don't grant the ``/admin`` portal. The two players are never
+    admin. Per-campaign GM powers are unaffected by the flag."""
     pw = hash_password(DEMO_PASSWORD)
     # v2.51.1: default the demo GM's roll-log drawer to the left side
     # so the GM controls + initiative + characters tabs sit on the
@@ -201,7 +227,7 @@ def seed_users(db: Session) -> dict[str, User]:
         email=DEMO_GM_EMAIL,
         display_name="Demo GM",
         password_hash=pw,
-        is_admin=True,
+        is_admin=_demo_gm_site_admin(),
         roll_log_position="left",
     )
     alice = User(

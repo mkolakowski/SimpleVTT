@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.495.0] - 2026-06-21 — "The Closed Backdoor"
+
+**Schema version:** 71
+
+**Commit summary:** Gates the demo GM's **site-admin** grant behind a new `DEMO_GM_SITE_ADMIN` flag (default on). Public/internet-facing demo deploys set it `false` so the well-known demo credentials no longer unlock the `/admin` portal.
+
+**Description:** Surfaced while diagnosing the v2.494.0 fail2ban incident: the public demo instance seeds `demo-gm@example.com` with `is_admin=True` (`demo_seed.py`), and the login page advertises its password (`demopass`). On an internet-facing demo that means **anyone can log in as a site-admin** and reach `/admin` — user management, the audit-log viewer, the GDPR audit-log scrub, and the Cloudflare/fail2ban ban controls. That is an open admin backdoor, independent of any fail2ban tuning.
+
+Site-admin (`is_admin`, gating `require_admin` → the `/admin` portal) is distinct from the **per-campaign GM role** (`_user_is_gm` / campaign membership), which the demo GM keeps regardless of this flag — so disabling it costs nothing for the demo's actual GM experience; it only removes the `/admin` portal link and access.
+
+`DEMO_GM_SITE_ADMIN` defaults **on** so local dev keeps the admin showcase and the six admin-portal harness suites (`test_admin_audit`, `test_admin_user_audit_scrub`, `test_audit_log`, `test_cloudflare_banning`, `test_api_audit_emission`, `test_demo_magic_link`) pass unchanged. Operators running a public demo set `DEMO_GM_SITE_ADMIN=false` in `.env`; the next reseed (boot or scheduler tick) strips admin from `demo-gm`. The two demo players are never admin, flag or not.
+
+**Implementation:**
+
+- `app/demo_seed.py`: new `_demo_gm_site_admin()` reads `DEMO_GM_SITE_ADMIN` (default `true`) at call time; `seed_users` sets the GM's `is_admin` from it. Players unchanged.
+- `docker-compose.yml`: `DEMO_GM_SITE_ADMIN: ${DEMO_GM_SITE_ADMIN:-true}` on the `app` service so local/CI default on and `.env` can override.
+- `.env.example`: documents the flag with the public-deploy warning.
+
+**Harness changes:**
+
+- `tests/harness/test_demo_gm_admin_gate.py` (new): +3 tests — demo-gm reaches `GET /admin` (200, default flag on), demo-alice and demo-bob are forbidden (403). Locks the role contract: players are never admin; the GM's admin access is a real, flag-governed surface.
+
+Total harness count → 3758 (+3).
+
+MINOR — new backward-compatible config flag; default preserves current behavior. No schema change.
+
+### Added
+- `DEMO_GM_SITE_ADMIN` env flag (default `true`): governs whether the demo GM is granted the `/admin` site-admin portal. Set `false` on public/internet-facing demo deploys to close the admin backdoor created by the advertised demo credentials.
+
 ## [2.494.0] - 2026-06-21 — "The Double Tap"
 
 **Schema version:** 71
