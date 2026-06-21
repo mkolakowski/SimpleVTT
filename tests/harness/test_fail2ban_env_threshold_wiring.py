@@ -74,14 +74,24 @@ def test_jail_config_uses_envsubst_placeholders():
             f"jail config missing required placeholder "
             f"${{{placeholder}}}"
         )
-    # No hardcoded ``maxretry = 5`` style override.
+    # No hardcoded ``maxretry = 5`` style override — every maxretry
+    # line must use one of the per-jail FAIL2BAN_*_MAXRETRY
+    # placeholders. v2.495.3: the auth jail (v2.471.0) was joined by the
+    # scanner jail (v2.477.0) and flood jail (v2.481.0), each carrying
+    # its own maxretry knob, so this no longer asserts the LOGIN one
+    # specifically — just that *some* env placeholder is used.
+    _maxretry_placeholders = (
+        "${FAIL2BAN_LOGIN_MAXRETRY}",
+        "${FAIL2BAN_SCANNER_MAXRETRY}",
+        "${FAIL2BAN_FLOOD_MAXRETRY}",
+    )
     for line in jail.splitlines():
         if line.strip().startswith("#"):
             continue
         if line.strip().startswith("maxretry"):
-            assert "${FAIL2BAN_LOGIN_MAXRETRY}" in line, (
-                f"jail line {line!r} hardcodes maxretry; must use "
-                "the FAIL2BAN_LOGIN_MAXRETRY placeholder"
+            assert any(p in line for p in _maxretry_placeholders), (
+                f"jail line {line!r} hardcodes maxretry; must use a "
+                "FAIL2BAN_*_MAXRETRY placeholder"
             )
 
 

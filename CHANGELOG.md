@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.495.3] - 2026-06-21 — "The Stale Assertion"
+
+**Schema version:** 71
+
+**Commit summary:** Fixes a pre-existing red test: `test_jail_config_uses_envsubst_placeholders` asserted *every* `maxretry` line in the fail2ban jail config used `${FAIL2BAN_LOGIN_MAXRETRY}`, but the scanner + flood jails (added after the test) carry their own `${FAIL2BAN_SCANNER_MAXRETRY}` / `${FAIL2BAN_FLOOD_MAXRETRY}` placeholders.
+
+**Description:** Found while wiring the v2.495.4 allowlist. `test_fail2ban_env_threshold_wiring.py::test_jail_config_uses_envsubst_placeholders` dates to v2.471.0, when `simplevtt-auth` was the only jail and its `maxretry` used `${FAIL2BAN_LOGIN_MAXRETRY}`. v2.477.0 (`simplevtt-scanner`) and v2.481.0 (`simplevtt-flood`) each added a jail with its own per-jail maxretry placeholder, so the assertion `"${FAIL2BAN_LOGIN_MAXRETRY}" in line` started failing on the scanner line — the test has been red on `main` since v2.477.0. The intent of the check is "no hardcoded numeric `maxretry`," so the fix accepts any of the three `FAIL2BAN_*_MAXRETRY` placeholders.
+
+**Implementation:**
+
+- `tests/harness/test_fail2ban_env_threshold_wiring.py`: the maxretry-not-hardcoded loop now asserts the line uses one of `${FAIL2BAN_LOGIN_MAXRETRY}` / `${FAIL2BAN_SCANNER_MAXRETRY}` / `${FAIL2BAN_FLOOD_MAXRETRY}`, instead of the LOGIN one specifically.
+
+No test count change (assertion fix, no add/remove). Total harness count stays 3760.
+
+### Fixed
+- `test_jail_config_uses_envsubst_placeholders` no longer false-fails on the scanner/flood jails' own `maxretry` placeholders — a pre-existing regression red since v2.477.0.
+
 ## [2.495.2] - 2026-06-21 — "The Vanishing Actor"
 
 **Schema version:** 71
