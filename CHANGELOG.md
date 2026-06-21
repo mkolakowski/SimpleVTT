@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.546.0] - 2026-06-21 — "The Vanishing Act"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_mislead` — Phase 2 #60 of the cast-and-broadcast tail. Mislead (L5 illusion, Bard/Wizard) turns the caster invisible (a real, mechanical attack-disadvantage ride) and leaves a GM-narrated illusory double.
+
+**Description:** RAW PHB p.260: "You become invisible at the same time that an illusory double of you appears where you are standing." Self, Concentration up to 1 hour. The **invisibility half is mechanical** — the `mislead` buff carries `effects.invisible: True`, which the v2.514.0 target-side read (`_target_is_invisible`) honors: attacks against the misleading caster have disadvantage (negated only if the attacker can see invisible creatures). It's concentration-bound, so `_install_buff`'s one-at-a-time cascade drops it when the caster concentrates elsewhere. The illusory double — move it, see/hear through it — is GM-narrated (no decoy token), and the RAW "invisibility ends if you attack or cast a spell" clause is GM-managed for v1 (filed). Not mirroring the invisible effect to the sheet is RAW-aligned: Mislead's invisibility ends the instant the caster attacks, so it never grants attacker-side invisible advantage.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `cast_mislead` endpoint (self-cast; gate: knows the spell OR bard/wizard). 400/403/404/409 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #60.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_mislead.py` (new): +5 — self-cast installs a concentration `mislead` buff (`invisible` + `mislead_double`, 600 rounds); **mechanical ride** (an attacker swinging at the misleading caster gets `target_invisible` disadvantage, with a control before the cast); concentration cascade-drop via Fly; non-caster 409; missing character_id 400.
+
+Total harness count → 3963 (+5).
+
+MINOR — new cast endpoint riding the `invisible` substrate. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_mislead`: Mislead (L5) — the caster turns invisible (attacks against them have disadvantage) with a GM-narrated illusory double; concentration-bound. Phase 2 #60 of the cast-and-broadcast tail.
+
 ## [2.545.0] - 2026-06-21 — "The Quarry Named"
 
 **Schema version:** 71

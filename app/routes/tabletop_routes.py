@@ -71464,6 +71464,142 @@ async def cast_locate_creature(
     )
 
 
+@router.post("/api/campaign/{campaign_id}/cast_mislead")
+async def cast_mislead(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.546.0 — Phase 2 #60 of
+    docs/plans/cast-and-broadcast-tail.md. Mislead (L5 illusion,
+    Bard/Wizard, PHB p.260):
+
+      "You become invisible at the same time that an illusory double of
+       you appears where you are standing. The double lasts for the
+       duration, but the invisibility ends if you attack or cast a
+       spell."
+
+    1 action, S, Self, Concentration up to 1 hour.
+
+    Implementation: the **invisibility half is mechanical** — the
+    `mislead` buff carries ``effects.invisible: True``, which the
+    v2.514.0 target-side read (`_target_is_invisible`) honors:
+    attacks against the misleading caster have disadvantage (negated
+    only if the attacker can see invisible creatures). Concentration-
+    bound, so it drops via `_install_buff`'s one-at-a-time cascade when
+    the caster concentrates elsewhere. The illusory double (move it,
+    see/hear through it) is GM-narrated — SimpleVTT models no decoy
+    token. The RAW "invisibility ends if you attack or cast a spell"
+    clause is GM-managed for v1 (filed). Self-only.
+
+    Body: ``{character_id}``. Response: ``{ok, feature,
+    target_character_id, invisible, concentration, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows = any(
+        (s.get("_slug") == "mislead")
+        or (str(s.get("name", "")).lower() == "mislead")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"bard", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Mislead, or bard/wizard",
+            "got_class": _cls,
+        })
+
+    DURATION_ROUNDS = 600  # 1 hour @ 6 s/round
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "mislead",
+        "name": "Mislead",
+        "icon": "🎭",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": True,  # RAW "Concentration, up to 1 hour"
+        "source_char_id": char.id,
+        "effects": {
+            # The invisibility is mechanical (target-side attack
+            # disadvantage); the illusory double is GM-narrated.
+            "invisible": True,
+            "mislead_double": True,
+        },
+        "desc": (
+            "Invisible (attacks against you have disadvantage) with an "
+            "illusory double standing where you were (concentration, up "
+            "to 1 hour). The double — and the RAW 'invisibility ends if "
+            "you attack or cast' clause — are GM-managed."
+        ),
+    })
+    # The invisible attack-edge read is hub-state, so no sheet mirror is
+    # needed — and not mirroring is RAW-aligned: Mislead's invisibility
+    # ends the instant the caster attacks, so it never grants the
+    # attacker-side invisible advantage.
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🎭 Mislead",
+            "feature_desc": (
+                f"{char.name} turns invisible (attacks against them have "
+                "disadvantage) and leaves an illusory double behind. The "
+                "GM narrates the double."
+            ),
+            "source": "mislead",
+            "target_character_id": char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "mislead",
+        "target_character_id": char.id,
+        "invisible": True,
+        "concentration": True,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_zone_of_truth")
 async def cast_zone_of_truth(
     campaign_id: int,

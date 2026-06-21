@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3958 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.545.0, 2026-06-21).
+**Total tests:** 3963 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.546.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4753,6 +4753,17 @@ v2.544.0 — Locate Object (L2 divination, Bard/Cleric/Druid/Ranger/Wizard, PHB 
 | `test_locate_object_drops_on_new_concentration` | **Concentration ride:** casting Barkskin (another concentration spell) drops the `locate-object` buff (one concentration at a time). |
 | `test_cast_locate_object_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected names "locate object". |
 | `test_cast_locate_object_missing_character_id_400` | Missing `character_id` → 400. |
+
+### `test_cast_mislead.py`
+v2.546.0 — Mislead (L5 illusion, Bard/Wizard, PHB p.260). Phase 2 #60 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `cast_mislead` endpoint — the caster turns invisible (a real attack-disadvantage ride via `effects.invisible`) + a GM-narrated double; concentration-bound. Casters: Thalindra Moonwhisper (Wizard); attacker Pip Quickfingers.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_mislead_installs_invisible_concentration_buff` | Self-cast → `feature == "mislead"`, `invisible == true`, `concentration == true`, `duration_rounds == 600`; buff carries `effects.invisible` + `effects.mislead_double` + `concentration == true`. |
+| `test_mislead_imposes_attack_disadvantage` | **Mechanical ride:** an attacker swinging at the misleading caster gets `target_invisible` in `roll_state_applied` (a control swing before the cast does not). |
+| `test_mislead_drops_on_new_concentration` | **Concentration ride:** casting Fly drops the `mislead` buff. |
+| `test_cast_mislead_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected names "mislead". |
+| `test_cast_mislead_missing_character_id_400` | Missing `character_id` → 400. |
 
 ### `test_cast_locate_creature.py`
 v2.545.0 — Locate Creature (L4 divination, Bard/Cleric/Druid/Ranger/Wizard, PHB p.256). Phase 2 #59 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). The L4, 1-hour sibling of Locate Object on the shared `_do_cast_locate` helper. Caster: Mira Greenleaf (Druid).
