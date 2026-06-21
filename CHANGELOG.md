@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.523.0] - 2026-06-21 — "The Steady Stride"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_water_walk` — Phase 2 #47 of the cast-and-broadcast tail. Water Walk (L3 transmutation ritual, Cleric/Druid/Ranger/Sorcerer) fans a 1-hour `water_walk` flag-buff out to up to 10 chosen creatures.
+
+**Description:** Continues the tail after Fire Shield (#46). RAW PHB p.287: "This spell grants the ability to move across any liquid surface … as if it were harmless solid ground … Up to ten willing creatures you can see within range gain this ability for the duration." 1 action (or ritual), V/S/M, 30 ft, 1 hour, non-concentration. Multi-target flag-buff shape — the same fan-out as Feather Fall (#3) / Pass without Trace (#4): installs `effects.water_walk: True` on up to 10 chosen creatures, with the caster auto-included. The flag IS the mechanic — the engine doesn't model liquid terrain, so the surface-walking (and the "lava still deals heat damage" rider) is GM-narrated; the flag surfaces who can walk on liquids.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_WATER_WALK_MAX_TARGETS = 10` + the `cast_water_walk` endpoint. Caster gate: knows the spell OR cleric/druid/ranger/sorcerer. 400 if more than 10 unique targets (incl. caster). 400/403/404/409 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #47.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_water_walk.py` (new): +5 tests — self-cast installs `water_walk: true` (1-hour, non-conc); multi-target fan-out (caster + companion → 2 buffs); over-cap (>10 incl. caster) → 400; non-caster 409; missing character_id 400.
+
+Total harness count → 3879 (+5).
+
+MINOR — new multi-target cast endpoint, flag-buff substrate. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_water_walk`: Water Walk (L3) — a 1-hour `water_walk` flag-buff fanned across up to 10 chosen creatures; surface-walking GM-narrated. Phase 2 #47 of the cast-and-broadcast tail.
+
 ## [2.522.0] - 2026-06-21 — "The Warm Shield"
 
 **Schema version:** 71

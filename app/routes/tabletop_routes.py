@@ -65871,6 +65871,166 @@ async def cast_feather_fall(
     }
 
 
+_WATER_WALK_MAX_TARGETS = 10
+
+
+@router.post("/api/campaign/{campaign_id}/cast_water_walk")
+async def cast_water_walk(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.523.0 — Phase 2 #47 of
+    docs/plans/cast-and-broadcast-tail.md. Water Walk (L3 transmutation
+    ritual, Cleric/Druid/Ranger/Sorcerer, PHB p.287):
+
+      "This spell grants the ability to move across any liquid surface —
+       such as water, acid, mud, snow, quicksand, or lava — as if it
+       were harmless solid ground ... Up to ten willing creatures you
+       can see within range gain this ability for the duration."
+
+    1 action (or ritual), V/S/M, 30 ft, 1 hour, non-concentration.
+
+    Implementation: the multi-target flag-buff shape (same fan-out as
+    Feather Fall v2.444.0 / Pass without Trace v2.440.0). Installs the
+    ``water-walk`` buff carrying ``effects.water_walk: True`` on up to 10
+    chosen creatures; the caster is always added automatically. The flag
+    IS the mechanic — the engine doesn't model liquid terrain, so the
+    surface-walking (and the "lava still deals heat damage" rider) is
+    GM-narrated; the flag surfaces who can walk on liquids.
+
+    Body: ``{character_id, target_character_ids?}``. 400 if more than 10
+    unique targets (including the caster) are supplied.
+
+    Response: ``{ok, feature, targets, buffs_installed, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    raw_targets = body.get("target_character_ids") or []
+    if not isinstance(raw_targets, list):
+        raise HTTPException(400, "target_character_ids must be a list")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_ww = any(
+        (s.get("_slug") == "water-walk")
+        or (str(s.get("name", "")).lower() == "water walk")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"cleric", "druid", "ranger", "sorcerer"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_ww and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": (
+                "knows Water Walk, or cleric/druid/ranger/sorcerer"
+            ),
+            "got_class": _cls,
+        })
+
+    target_ids: list[int] = []
+    seen: set[int] = set()
+    for raw in raw_targets:
+        try:
+            tid = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if tid <= 0 or tid in seen:
+            continue
+        seen.add(tid)
+        target_ids.append(tid)
+    if char.id not in seen:
+        target_ids.insert(0, char.id)
+    if len(target_ids) > _WATER_WALK_MAX_TARGETS:
+        raise HTTPException(400, (
+            f"Water Walk affects up to {_WATER_WALK_MAX_TARGETS} "
+            f"creatures (RAW); got {len(target_ids)} including the caster."
+        ))
+
+    DURATION_ROUNDS = 600  # 1 hour
+    buffs_installed: list[int] = []
+    for tid in target_ids:
+        target = db.query(Character).filter(
+            Character.id == tid,
+            Character.campaign_id == campaign_id,
+        ).first()
+        if not target:
+            continue
+        installed = await _install_buff(campaign_id, target.id, {
+            "key": "water-walk",
+            "name": "Water Walk",
+            "icon": "🌊",
+            "duration_rounds": DURATION_ROUNDS,
+            "duration_max": DURATION_ROUNDS,
+            "concentration": False,
+            "source_char_id": char.id,
+            "effects": {"water_walk": True},
+            "desc": (
+                "Move across any liquid surface as if it were solid "
+                "ground for 1 hour. Surface-walking + the lava heat-damage "
+                "rider are GM-narrated."
+            ),
+        })
+        if installed:
+            buffs_installed.append(target.id)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    feature_desc = (
+        f"{char.name} casts Water Walk — move across any liquid surface "
+        f"as if it were solid ground for {len(buffs_installed)} creature"
+        f"{'s' if len(buffs_installed) != 1 else ''} for 1 hour."
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🌊 Water Walk",
+            "feature_desc": feature_desc,
+            "source": "water-walk",
+            "target_character_ids": buffs_installed,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "water-walk",
+        "targets": buffs_installed,
+        "buffs_installed": len(buffs_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_holy_aura")
 async def cast_holy_aura(
     campaign_id: int,
