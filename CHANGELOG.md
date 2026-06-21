@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.538.1] - 2026-06-21 — "The Twice-Told Tale"
+
+**Schema version:** 71
+
+**Commit summary:** Correction — the Conjure family was **already shipped**; rewrites the v2.538.0 "design plan" into a ✅-shipped status/reference doc and flips the wiki status.
+
+**Description:** v2.538.0 filed `docs/plans/conjure-family.md` as a fresh design plan, under the mistaken premise that the six SRD `conjure-*` spells were unwired. They were already shipped — `cast_conjure_animals` (v2.99.443, movement-and-summons Phase 7.2; upcast v2.414.0), `cast_conjure_woodland_beings` (v2.415.0), `cast_conjure_minor_elementals` (v2.416.0), `cast_conjure_elemental` (v2.418.0), `cast_conjure_fey` (v2.419.0), `cast_conjure_celestial` (v2.420.0), with 38 passing harness tests across 7 files. A prototyped duplicate `cast_conjure_animals` + a catalog-backed-summon substrate (`_parse_cr`, `_monster_summon_template`, a `_summon_companion(template=…)` override) were **reverted** before commit — the family already worked. The catalog-backed-summon idea is filed as an optional follow-up in the doc (arbitrary-creature conjuration from the full monster catalog).
+
+**Lesson banked:** the cast-and-broadcast-tail plan's "Conjure family … filed separately" line read as pending when the work was done — `verify-substrate-before-proposing` applies to whole arcs; grep `async def cast_<spell>` before writing a new cast endpoint.
+
+**Implementation:**
+
+- `docs/plans/conjure-family.md`: rewritten as a status/reference doc (shipped table + substrate notes + the filed catalog-backed follow-up).
+- `app/templates/wiki.html` + `docs/wiki/README.md`: Conjure-family row flipped to ✅ shipped.
+- `docs/plans/cast-and-broadcast-tail.md`: lead corrected — the Conjure family is NOT pending.
+
+**Harness changes:** none — doc + wiki-status only (no code change; the WIP endpoint/substrate were reverted). The v2.538.0 `test_wiki_doc_serves_conjure_family_plan` still passes (the doc's H1 still contains "Conjure family").
+
+PATCH — doc/status correction. No schema change.
+
+### Fixed
+- `docs/plans/conjure-family.md` mis-stated the Conjure family as unwired; corrected to ✅ shipped (all 6 spells, v2.99.443–v2.420.0) + wiki status flipped.
+
 ## [2.538.0] - 2026-06-21 — "The Summoner's Charter"
 
 **Schema version:** 71

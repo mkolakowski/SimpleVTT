@@ -61,7 +61,7 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 | [Temp HP + roll bonuses (automation Phase 4)](../plans/temp-hp-and-bonuses.md) | Markdown (design) | Contributors | ✅ shipped |
 | [Auras (automation Phase 5)](../plans/auras.md) | Markdown (design) | Contributors | ✅ shipped |
 | [Aura & barrier geometry enforcement](../plans/aura-geometry-enforcement.md) | Markdown (design) | Contributors | ✅ all phases shipped (v2.516.0–v2.518.0) |
-| [Conjure family (summon catalog)](../plans/conjure-family.md) | Markdown (design) | Contributors | ⚪ design only · Phase 1 unstarted |
+| [Conjure family (summon catalog)](../plans/conjure-family.md) | Markdown (status) | Contributors | ✅ all 6 spells shipped (v2.99.443–v2.420.0) |
 | [Forced movement, speed & summons (automation Phase 6)](../plans/movement-and-summons.md) | Markdown (design) | Contributors | ✅ shipped (v2.99.431–.446) |
 | [Death saving throws](../plans/death-saves.md) | Markdown (design) | Contributors | 🟠 Phases 1 + 3a + 3b shipped (v2.150.0–v2.151.0); 3c + 4 deferred |
 | [Demo mode](../plans/demo-mode.md) | Markdown (design) | Contributors | ✅ shipped (v2.3.0) |
