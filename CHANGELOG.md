@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.531.1] - 2026-06-21 — "The Plumbed Flag"
+
+**Schema version:** 71
+
+**Commit summary:** Wire the v2.531.0 `SIMPLEVTT_CLOUDFLARE_CACHE_PURGE_ENABLED` flag through `docker-compose.yml` so the app container actually receives it.
+
+**Description:** The app service passes env via an explicit `environment:` block (interpolated from `.env`), **not** `env_file:` — so a var present only in `.env` never reaches the container. v2.531.0 added the flag to `.env.example` + the code but not to the compose `environment:` block, so the startup purge could never fire under docker-compose. This adds `SIMPLEVTT_CLOUDFLARE_CACHE_PURGE_ENABLED: ${SIMPLEVTT_CLOUDFLARE_CACHE_PURGE_ENABLED:-false}` next to the other Cloudflare vars (default false). A no-behavior-change wiring fix.
+
+**Implementation:**
+
+- `docker-compose.yml`: declare `SIMPLEVTT_CLOUDFLARE_CACHE_PURGE_ENABLED` in the `app` service `environment:` block.
+
+**Harness changes:** none — compose-config only.
+
+PATCH — docker-compose env wiring. No schema change.
+
+### Fixed
+- `SIMPLEVTT_CLOUDFLARE_CACHE_PURGE_ENABLED` is now passed to the app container via `docker-compose.yml` (it was only in `.env.example` + code, so the v2.531.0 boot purge couldn't fire under compose).
+
 ## [2.531.0] - 2026-06-21 — "The Flushed Edge"
 
 **Schema version:** 71

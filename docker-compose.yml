@@ -92,6 +92,9 @@ services:
       CLOUDFLARE_ZONE_ID: ${CLOUDFLARE_ZONE_ID:-}
       CLOUDFLARE_API_BASE_URL: ${CLOUDFLARE_API_BASE_URL:-https://api.cloudflare.com/client/v4}
       SIMPLEVTT_CLOUDFLARE_BANNING_ENABLED: ${SIMPLEVTT_CLOUDFLARE_BANNING_ENABLED:-false}
+      # v2.531.1 — deploy-time edge-cache purge (purge Cloudflare's cache
+      # on boot so a new APP_VERSION isn't served stale). Default false.
+      SIMPLEVTT_CLOUDFLARE_CACHE_PURGE_ENABLED: ${SIMPLEVTT_CLOUDFLARE_CACHE_PURGE_ENABLED:-false}
       # v2.49.12: test-suite knobs (encounter-sim plan, Phase 1).
       # TEST_MODE conditionally mounts /api/test/* endpoints — leave
       # OFF in production. DICE_SEED, when an integer, makes every
