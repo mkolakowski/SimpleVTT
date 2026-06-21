@@ -2441,6 +2441,40 @@ _SPELL_BUFF_MAP["globe-of-invulnerability"] = {
     ),
 }
 
+# v2.512.0 — Antilife Shell (Phase 2 #45 of
+# docs/plans/cast-and-broadcast-tail.md). L5 abjuration, Druid,
+# PHB p.213. "A shimmering barrier extends out from you in a 10-foot
+# radius and moves with you ... hedging out creatures other than undead
+# and constructs. ... The barrier prevents an affected creature from
+# passing or reaching through. An affected creature can cast spells or
+# make attacks with ranged or reach weapons through the barrier."
+# Concentration, up to 1 hour. Flag-buff shape: the `antilife_shell`
+# flag IS the mechanic. The barrier GEOMETRY — the moving 10-ft radius,
+# hedging out living creatures, the can't-pass-or-reach-through
+# enforcement, and the "spell ends if a creature is forced through"
+# clause — is a brand-new movement-barrier substrate with no existing
+# ride, filed against Maps 2.0 alongside the Globe (#44) and Holy Aura
+# (#41) geometry. v1 surfaces the flag so the table can enforce the
+# hedge; the undead/construct exception + the barrier itself are
+# GM-narrated.
+_SPELL_BUFF_MAP["antilife-shell"] = {
+    "key": "antilife-shell",
+    "name": "Antilife Shell",
+    "icon": "🛡️",
+    "duration_rounds": 600,  # 1 hour @ 6 s/round (concentration)
+    "duration_max": 600,
+    "concentration": True,  # RAW (PHB p.213): "Concentration, up to 1 hour."
+    "effects": {
+        "antilife_shell": True,
+    },
+    "desc": (
+        "A moving 10-ft barrier hedges out living creatures (undead and "
+        "constructs pass freely) for up to 1 hour (concentration). The "
+        "barrier geometry + the hedge enforcement are GM-narrated; the "
+        "flag surfaces that the shell is active."
+    ),
+}
+
 # v2.190.0 — Potion of Invulnerability (RAW DMG p.188, rare): resistance to
 # ALL damage for 1 minute. Reuses the v2.99.121 `resistance_to: ["all"]`
 # wildcard that `_resistance_halve` already honours, so no new intercept is
@@ -69403,6 +69437,137 @@ async def cast_globe_of_invulnerability(
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,
         "spell_immunity_max_level": max_level,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_antilife_shell")
+async def cast_antilife_shell(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.512.0 — Phase 2 #45 of
+    docs/plans/cast-and-broadcast-tail.md. Antilife Shell (L5
+    abjuration, Druid, PHB p.213):
+
+      "A shimmering barrier extends out from you in a 10-foot radius and
+       moves with you, remaining centered on you and hedging out
+       creatures other than undead and constructs. ... The barrier
+       prevents an affected creature from passing or reaching through.
+       An affected creature can cast spells or make attacks with ranged
+       or reach weapons through the barrier. If you move so that an
+       affected creature is forced to pass through the barrier, the
+       spell ends."
+
+    1 action, V/S, Self (10-ft radius), **Concentration, up to 1 hour**.
+
+    Implementation: installs the v2.512.0 ``antilife-shell`` buff
+    carrying ``effects.antilife_shell: True``. Flag-buff shape — the
+    flag IS the mechanic. The barrier GEOMETRY (the moving 10-ft radius,
+    hedging out living creatures, the can't-pass-or-reach-through
+    enforcement, and the "spell ends if a creature is forced through"
+    clause) is a brand-new movement-barrier substrate with no existing
+    ride, filed against Maps 2.0 alongside the Globe (#44) and Holy Aura
+    (#41) geometry. v1 surfaces the flag so the table can enforce the
+    hedge; the undead/construct exception + the barrier itself are
+    GM-narrated.
+
+    Body: ``{character_id}``. Self-targeted per RAW (Range: Self — the
+    shell is centered on and moves with the caster).
+
+    Response: ``{ok, feature, buff_installed, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_als = any(
+        (s.get("_slug") == "antilife-shell")
+        or (str(s.get("name", "")).lower() == "antilife shell")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"druid"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_als and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Antilife Shell, or druid",
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("antilife-shell") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 600)
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "antilife-shell",
+        "name": template.get("name") or "Antilife Shell",
+        "icon": template.get("icon") or "🛡️",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": True,
+        "source_char_id": char.id,
+        "effects": dict(
+            template.get("effects")
+            or {"antilife_shell": True},
+        ),
+        "desc": template.get("desc") or (
+            "A moving 10-ft barrier hedges out living creatures (undead "
+            "and constructs pass freely) for up to 1 hour (concentration)."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🛡️ Antilife Shell",
+            "feature_desc": (
+                f"{char.name} raises an Antilife Shell — a moving 10-ft "
+                "barrier hedges out living creatures (undead and "
+                "constructs pass freely) for up to 1 hour (concentration). "
+                "Barrier geometry + the hedge are GM-narrated."
+            ),
+            "source": "antilife-shell",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "antilife-shell",
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
     }
 
 

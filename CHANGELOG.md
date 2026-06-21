@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.512.0] - 2026-06-21 — "The Hedging Shell"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_antilife_shell` — Phase 2 #45 of the cast-and-broadcast tail. Antilife Shell (L5 abjuration, Druid) installs a 1-hour concentration flag-buff marking the moving anti-life barrier.
+
+**Description:** Continues the tail after Globe of Invulnerability (#44). RAW PHB p.213: "A shimmering barrier extends out from you in a 10-foot radius and moves with you … hedging out creatures other than undead and constructs. … The barrier prevents an affected creature from passing or reaching through." 1 action, V/S, Self (10-ft radius), Concentration up to 1 hour. Flag-buff shape: the buff carries `effects.antilife_shell: True`.
+
+**Scope note:** the barrier GEOMETRY — the moving 10-ft radius, hedging out living creatures, the can't-pass-or-reach-through enforcement, and the "spell ends if a creature is forced through" clause — is a brand-new **movement-barrier substrate with no existing ride**, filed against Maps 2.0 alongside the Globe (#44) and Holy Aura (#41) geometry. v1 surfaces the flag so the table can enforce the hedge; the undead/construct exception + the barrier itself are GM-narrated.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_SPELL_BUFF_MAP["antilife-shell"]` template (`antilife_shell: True`, concentration, 600 rounds = 1 hour) + the `cast_antilife_shell` endpoint. Self-targeted per RAW (Range: Self — the shell moves with the caster). Caster gate: knows the spell OR druid (the narrowest single-class gate on the arc alongside Sanctuary's cleric-only). 400/403/404/409 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #45.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_antilife_shell.py` (new): +5 tests — Druid self-cast installs the buff with `antilife_shell: true`; buff is `duration_rounds=600` + `concentration=true`; Barbarian 409; Wizard 409 (asserts the Druid-only gate excludes a different caster class); missing character_id 400.
+
+Total harness count → 3846 (+5).
+
+MINOR — new cast endpoint, flag-buff substrate. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_antilife_shell`: Antilife Shell (L5) — a 1-hour concentration flag-buff marking the moving anti-life barrier; barrier geometry + the hedge enforcement GM-narrated (new movement-barrier substrate filed against Maps 2.0). Phase 2 #45 of the cast-and-broadcast tail.
+
 ## [2.511.0] - 2026-06-21 — "The Shimmering Barrier"
 
 **Schema version:** 71
