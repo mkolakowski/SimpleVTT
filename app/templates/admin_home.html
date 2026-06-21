@@ -318,6 +318,12 @@
         color: var(--muted, #888);
         padding: 8px;
     }
+    table.filterable thead th.sortable { cursor: pointer; user-select: none; }
+    table.filterable thead th.sortable:hover { text-decoration: underline; }
+    table.filterable thead th .sort-ind {
+        font-size: 0.8em;
+        opacity: 0.7;
+    }
 </style>
 <script>
     (function () {
@@ -360,6 +366,62 @@
             nmCell.textContent = 'No rows match the current filters.';
             noMatch.appendChild(nmCell);
             tbody.appendChild(noMatch);
+
+            // v2.528.0 — click-to-sort. Clicking a (filterable) column
+            // header sorts the rows by that column; clicking again
+            // reverses. Numeric-aware (e.g. ID, "#3" actor ids). The
+            // current filter still hides non-matching rows after a sort.
+            var sortState = { idx: -1, dir: 1 };
+            ths.forEach(function (th, idx) {
+                if (th.hasAttribute('data-nofilter')) { return; }
+                th.classList.add('sortable');
+                th.setAttribute('title', 'Click to sort');
+                var ind = document.createElement('span');
+                ind.className = 'sort-ind';
+                th.appendChild(ind);
+                th.addEventListener('click', function () {
+                    if (sortState.idx === idx) {
+                        sortState.dir = -sortState.dir;
+                    } else {
+                        sortState.idx = idx;
+                        sortState.dir = 1;
+                    }
+                    ths.forEach(function (t) {
+                        var si = t.querySelector('.sort-ind');
+                        if (si) { si.textContent = ''; }
+                    });
+                    ind.textContent = sortState.dir === 1 ? ' ▲' : ' ▼';
+                    sortRows(idx, sortState.dir);
+                });
+            });
+
+            function cellText(row, idx) {
+                var c = row.cells[idx];
+                return c ? c.textContent.trim() : '';
+            }
+            function asNum(s) {
+                var t = s.replace(/[#,\s]/g, '');
+                if (t === '' || isNaN(t)) { return null; }
+                return parseFloat(t);
+            }
+            function sortRows(idx, dir) {
+                var rows = Array.prototype.filter.call(
+                    tbody.rows, function (r) { return r !== noMatch; });
+                rows.sort(function (a, b) {
+                    var sa = cellText(a, idx), sb = cellText(b, idx);
+                    var na = asNum(sa), nb = asNum(sb);
+                    var cmp;
+                    if (na !== null && nb !== null) {
+                        cmp = na - nb;
+                    } else {
+                        cmp = sa.toLowerCase().localeCompare(sb.toLowerCase());
+                    }
+                    return cmp * dir;
+                });
+                rows.forEach(function (r) { tbody.appendChild(r); });
+                tbody.appendChild(noMatch); // keep the placeholder last
+                apply();
+            }
 
             function apply() {
                 var terms = inputs.map(function (inp) {

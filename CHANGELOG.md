@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.528.0] - 2026-06-21 — "The Sorted Ledger"
+
+**Schema version:** 71
+
+**Commit summary:** Admin console — click-to-sort column headers on the data tables, composing with the v2.526.0 per-column filter.
+
+**Description:** Builds on the v2.526.0 filterable tables. Clicking a (filterable) column header on any `<table class="filterable">` — the Users table + the Cloudflare edge-ban audit log — sorts the rows by that column; clicking the same header again reverses the direction (a ▲/▼ indicator shows the active column + direction). Sorting is **numeric-aware**: columns whose cells parse as numbers (ID, the `#N` actor ids) sort numerically, everything else case-insensitively. The current per-column filter is re-applied after each sort, so filtered-out rows stay hidden and the "No rows match" placeholder stays last. `<th data-nofilter>` columns (Actions, the unban column) aren't sortable. Pure client-side — no endpoint, instant.
+
+**Implementation:**
+
+- `app/templates/admin_home.html`: extended the shared `attachColumnFilters` helper with a `sortRows` pass + per-header click handlers + a `.sort-ind` ▲/▼ indicator; added `.sortable` header styling (pointer cursor, hover underline).
+
+**Harness changes:** none — UI-only template + client-side JS (no HTTP endpoint or WS broadcast); exempt per the harness-discipline rule. Jinja-compile verified.
+
+MINOR — admin-console UI enhancement. No schema change.
+
+### Added
+- Admin console: click-to-sort column headers (numeric-aware, reversible) on the Users + edge-ban audit-log tables, composing with the existing per-column filter.
+
 ## [2.527.0] - 2026-06-21 — "The Borrowed Wings"
 
 **Schema version:** 71
