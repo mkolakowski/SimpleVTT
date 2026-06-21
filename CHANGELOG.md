@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.538.0] - 2026-06-21 — "The Summoner's Charter"
+
+**Schema version:** 71
+
+**Commit summary:** Files the **Conjure family** design plan — the summon-catalog arc behind the six SRD `conjure-*` spells the cast-and-broadcast tail deferred as "separate work."
+
+**Description:** Design doc only — no runtime behavior change. The plan grounds the arc in already-shipped substrate (`_summon_companion`, the `_drop_paired_concentration_buffs` concentration-teardown cascade, `cast_find_steed` as the single-summon precedent, and the 322-record monster catalog via `local_content.resolve(slug, type="monsters")`) rather than inventing summoning from scratch. The one substrate gap is a **catalog-backed summon** — building a companion stat block (HP / AC / speed / size / type / CR) from a monster's SRD JSON at cast time instead of the hardcoded `_COMPANION_TEMPLATES` (which Find Steed's five steeds use). Three phases: P1 Conjure Animals (the demonstrator — a CR-tier + count-table validated beast pool), P2 the rest of the family (Woodland Beings / Minor Elementals / Elemental / Fey / Celestial via a shared pool helper), P3 polish (upcast scaling, random-creature variant, per-summon name suffixes). Surfaced through `/wiki` per the doc-surfacing rule.
+
+**Implementation:**
+
+- `docs/plans/conjure-family.md` (new): the design plan.
+- `app/routes/wiki_routes.py`: `_DOC_ALLOWLIST` entry `plan-conjure-family`.
+- `app/templates/wiki.html` + `docs/wiki/README.md`: "Design plans" table rows (⚪ design only).
+
+**Harness changes:**
+
+- `tests/harness/test_wiki.py`: new `test_wiki_doc_serves_conjure_family_plan` (slug serves 200 + H1 substring + nav) + the slug added to `test_wiki_home_renders`.
+
+Total harness count → 3922 (+1).
+
+MINOR — new wiki-served design-plan slug (additive; no runtime feature). No schema change.
+
+### Added
+- `docs/plans/conjure-family.md` + its `/wiki/doc/plan-conjure-family` surface: the design plan for the SRD Conjure family (summon-catalog), grounded in the `_summon_companion` substrate.
+
 ## [2.537.0] - 2026-06-21 — "The Undying Ember"
 
 **Schema version:** 71
