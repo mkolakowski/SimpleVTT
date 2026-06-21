@@ -25,6 +25,7 @@ from app.admin_center import (
     fail2ban,
     fail2ban_control,
     login_guard,
+    mfa,
     stats,
 )
 
@@ -328,6 +329,81 @@ def test_unban_request_filename_is_sanitized(tmp_path):
     fail2ban_control.request_unban("10.0.0.1", spool_dir=str(tmp_path))
     for f in tmp_path.glob("unban-*.req"):
         assert "/" not in f.name and ".." not in f.name
+
+
+# ---- MFA: TOTP + recovery code --------------------------------------
+
+# RFC 6238 test secret (ASCII "12345678901234567890") in base32. At
+# T=59s (step 30 → counter 1) the 6-digit TOTP is 287082 — the same
+# value Google Authenticator / Aegis / 1Password produce, so this
+# pins our implementation to the real-world algorithm.
+_RFC_SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+
+
+def test_totp_matches_rfc6238_vector():
+    assert mfa.verify_totp("287082", now=59, secret=_RFC_SECRET, valid_window=0) is True
+
+
+def test_totp_rejects_wrong_code():
+    assert mfa.verify_totp("000000", now=59, secret=_RFC_SECRET, valid_window=0) is False
+
+
+def test_totp_window_tolerance():
+    # A code valid at counter 1 (now=59) is accepted one step later
+    # (now=89, counter 2) with valid_window=1...
+    assert mfa.verify_totp("287082", now=89, secret=_RFC_SECRET, valid_window=1) is True
+    # ...but not 3 steps away (counter 4).
+    assert mfa.verify_totp("287082", now=149, secret=_RFC_SECRET, valid_window=1) is False
+
+
+def test_totp_rejects_blank_and_nondigit():
+    assert mfa.verify_totp("", now=59, secret=_RFC_SECRET) is False
+    assert mfa.verify_totp("abcdef", now=59, secret=_RFC_SECRET) is False
+    # No secret → always False.
+    assert mfa.verify_totp("287082", now=59, secret="") is False
+
+
+def test_recovery_blank_config_accepts_nothing():
+    """The headline safety property: a blank recovery code rejects every
+    submission, including a blank one — no empty==empty bypass."""
+    mfa.reset_recovery_state()
+    assert mfa.recovery_code_accepts("", configured="") is False
+    assert mfa.recovery_code_accepts("anything", configured="") is False
+    assert mfa.recovery_code_accepts("", configured="   ") is False
+
+
+def test_recovery_set_matches_then_one_shot():
+    mfa.reset_recovery_state()
+    assert mfa.recovery_code_accepts("right-code", configured="right-code") is True
+    assert mfa.recovery_code_accepts("wrong", configured="right-code") is False
+    # One-shot: after consuming, even the correct code is refused.
+    mfa.mark_recovery_used()
+    assert mfa.recovery_code_accepts("right-code", configured="right-code") is False
+    mfa.reset_recovery_state()
+    assert mfa.recovery_code_accepts("right-code", configured="right-code") is True
+
+
+def test_mfa_config_gates(monkeypatch):
+    monkeypatch.delenv("ADMIN_CENTER_MFA_ENABLED", raising=False)
+    assert mfa.mfa_enabled() is False
+    monkeypatch.setenv("ADMIN_CENTER_MFA_ENABLED", "true")
+    assert mfa.mfa_enabled() is True
+    # Enabled but no secret → misconfigured (must fail closed).
+    monkeypatch.delenv("ADMIN_CENTER_TOTP_SECRET", raising=False)
+    assert mfa.totp_configured() is False
+    assert mfa.mfa_misconfigured() is True
+    monkeypatch.setenv("ADMIN_CENTER_TOTP_SECRET", _RFC_SECRET)
+    assert mfa.totp_configured() is True
+    assert mfa.mfa_misconfigured() is False
+
+
+def test_provisioning_uri(monkeypatch):
+    monkeypatch.setenv("ADMIN_CENTER_TOTP_SECRET", _RFC_SECRET)
+    uri = mfa.provisioning_uri(account="admin")
+    assert uri.startswith("otpauth://totp/")
+    assert _RFC_SECRET in uri
+    monkeypatch.delenv("ADMIN_CENTER_TOTP_SECRET", raising=False)
+    assert mfa.provisioning_uri() == ""
 
 
 # ---- event help -----------------------------------------------------

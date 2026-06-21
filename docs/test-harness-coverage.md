@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3700 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.485.8, 2026-06-20).
+**Total tests:** 3708 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.486.0, 2026-06-20).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5548,6 +5548,14 @@ The standalone read-only dashboard on port 8015. Unit tests (host-side) for the 
 | `test_unban_endpoint_accepts_valid_ip` | `POST /fail2ban/unban` (authed) with a valid IP → 303 to `/?unbanned=…`. |
 | `test_unban_endpoint_rejects_invalid_ip` | Invalid IP → 303 to `/?unban_error=…`. |
 | `test_unban_endpoint_requires_auth` | Unauthenticated POST → 303 to `/login` (not executed). |
+| `test_totp_matches_rfc6238_vector` | `mfa.verify_totp` reproduces the RFC 6238 6-digit code (287082) — pins it to what real authenticators generate. |
+| `test_totp_rejects_wrong_code` | A wrong code is rejected. |
+| `test_totp_window_tolerance` | ±1 step skew accepted; 3 steps away rejected. |
+| `test_totp_rejects_blank_and_nondigit` | Blank / non-digit code / missing secret → False. |
+| `test_recovery_blank_config_accepts_nothing` | Blank recovery config rejects everything (incl. a blank submission) — the headline safety property. |
+| `test_recovery_set_matches_then_one_shot` | A set code matches (constant-time); one-shot consume then re-arm via reset. |
+| `test_mfa_config_gates` | `mfa_enabled` / `totp_configured` / `mfa_misconfigured` (enabled + no secret → fail-closed). |
+| `test_provisioning_uri` | `otpauth://` URI carries the secret; blank when no secret set. |
 | `test_api_stats_shape` | `/api/stats` → 200 + the roll-up keys. |
 | `test_api_events_shape` | `/api/events?limit=10` → 200 + `{count, events: []}`. |
 | `test_api_events_requires_auth` | `/api/events` without creds → 401. |

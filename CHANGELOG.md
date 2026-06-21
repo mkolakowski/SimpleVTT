@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.486.0] - 2026-06-20 — "The Second Factor (Forged)"
+
+**Schema version:** 71
+
+**Commit summary:** First implementation step of the Admin Center MFA plan: the pure, dependency-free `mfa` module — RFC 6238 TOTP verification + the env recovery-code logic (blank ⇒ accepts nothing) + config gates. No wiring yet (the login flow change lands next), so this is a zero-behavior-change foundation.
+
+**Description:** Implements `docs/plans/admin-center-mfa.md` §6–§7's core. TOTP is done in stdlib (`hmac`/`hashlib`/`struct`/`base64`) — **no new dependency** — and validated against the RFC 6238 test vector so it matches Google Authenticator / Aegis / 1Password. The recovery-code rule the operator asked for is enforced here: a blank `ADMIN_CENTER_RECOVERY_CODE` rejects every submission (checked before any compare), with constant-time matching and one-shot consume.
+
+**Implementation:**
+
+- `app/admin_center/mfa.py` (new): `mfa_enabled()`, `totp_configured()`, `mfa_misconfigured()` (enabled + no/blank/invalid secret → fail-closed signal), `verify_totp(code, *, now, secret, valid_window)` (±1 step skew, constant-time, rejects blank/non-digit/no-secret), `recovery_code_accepts()` / `mark_recovery_used()` / `reset_recovery_state()` (blank-rejects-everything + one-shot), and `provisioning_uri()` (`otpauth://` for an authenticator). All read env at call time; clock + secret + configured-code are injectable for testing.
+
+**Not yet wired:** with `ADMIN_CENTER_MFA_ENABLED` default-off (and nothing calling this module in the login path yet), the login is unchanged. The flow branch (`/login/mfa`), templates, env vars, and wiki section land in the next commit.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py`: +8 unit tests — RFC 6238 vector match, wrong-code/blank/non-digit rejection, ±window tolerance, **blank-recovery-rejects-everything**, set-code match + one-shot, config/fail-closed gates, provisioning URI.
+
+Total harness count → 3708 (+8).
+
+MINOR — new (unwired) capability module for the admin center. No behavior change, no schema change.
+
+### Added
+- `app/admin_center/mfa.py` — dependency-free RFC 6238 TOTP + env recovery-code logic (blank accepts nothing) + config gates. Foundation for the opt-in admin-center MFA; not yet wired into the login flow.
+
 ## [2.485.8] - 2026-06-20 — "The Second Factor (Drawn)"
 
 **Schema version:** 71
