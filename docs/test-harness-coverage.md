@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3732 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.489.1, 2026-06-21).
+**Total tests:** 3737 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.490.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4580,6 +4580,17 @@ v2.404.4 — Longstrider multi-target cap + per-slot upcast scaling (RAW PHB p.2
 | `test_longstrider_l1_two_targets_returns_400` | L1 cast with 2 targets → 400 `too_many_targets` with `{limit: 1, received: 2}`. |
 | `test_longstrider_l2_two_targets_succeeds` | L2 cast with 2 targets → 200 (extended cap = 1 + (2-1)*1 = 2). |
 | `test_longstrider_l2_three_targets_returns_400` | L2 cast with 3 targets → 400 with `{limit: 2, received: 3}` — confirms the upcast field is honored. |
+
+### `test_cast_protection_from_poison.py`
+v2.490.0 — Protection from Poison (L2 abjuration, Cleric/Druid/Paladin/Ranger, PHB p.270). Phase 2 #25 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_SPELL_BUFF_MAP["protection-from-poison"]` template (`resistance_to: ["poison"]`, 600 rounds, non-concentration) + the `cast_protection_from_poison` endpoint. Rides the existing `_resistance_halve` read-site (same substrate as the v2.186.0 Potion of Resistance), so poison damage is genuinely halved with zero new mechanical code; the advantage-on-poison-saves + neutralize clauses stay GM-narrated. Brother Tavik Stonebrow (Cleric, GM-owned) is the cast surface; Krieger (Barbarian) is the non-caster reject.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_pfp_self_installs_poison_resistance` | Cleric self-targets → 200, `feature == "protection-from-poison"`, `buff_installed`, `duration_rounds == 600`; the installed buff carries `effects.resistance_to` containing `"poison"` (the real damage-pipeline read-site). |
+| `test_cast_pfp_buff_is_1_hour_non_concentration` | Installed buff has `concentration == false` + `duration_rounds == 600` (1 hour RAW). |
+| `test_cast_pfp_on_ally_installs_on_ally` | Targeting an ally installs the buff on the ally, not the caster (touch range). |
+| `test_cast_pfp_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected string names "protection from poison". |
+| `test_cast_pfp_missing_character_id_400` | Empty body → 400. |
 
 ### `test_cast_charm_person_target_cap_upcast.py`
 v2.404.5 — Charm Person multi-target cap + per-slot upcast scaling (RAW PHB p.221). First **condition-shape** spell to use the v2.381.0 generalized `_SPELL_TARGET_CAPS` substrate (Mass Healing Word + Mass Cure Wounds were the heal-shape consumers before this). New entry: `max_targets: 1, base_level: 1, extra_targets_per_slot_above_base: 1`. Pure data drop — the v2.381.0 cap reader at `/cast_spell` (line ~19877) already enforces the limit before slot consumption. The save-or-suck Charmed install on a failed WIS save flows through `_SPELL_CONDITION_MAP["charm-person"]` unchanged. Thalindra Moonwhisper (Wizard Lv 7, Charm Person appended at spell index 21) is the cast surface; her L1 + L2 slots cover both base cap and +1 upcast extension.

@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.490.0] - 2026-06-21 — "The Antivenom"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_protection_from_poison` — Phase 2 #25 of the cast-and-broadcast utility-spell tail. Protection from Poison (L2 abjuration, Cleric/Druid/Paladin/Ranger) installs a 1-hour buff granting **resistance to poison damage** via the existing `resistance_to` substrate.
+
+**Description:** Resuming the cast-and-broadcast tail arc (Phase 2 reached #24 / Mass Healing Word at v2.467.0 before the security/admin-center detour). Protection from Poison was verified genuinely unwired — cast-and-broadcast only, no handler, no substrate entry. RAW PHB p.270: "the target has advantage on saving throws against being poisoned, and it has resistance to poison damage." The mechanized core rides the existing `resistance_to: ["poison"]` read-site (`_resistance_halve` / `_resistance_halve_npc`) — the exact substrate the v2.186.0 Potion of Resistance (Poison) uses — so poison damage is genuinely halved through the real damage pipeline with **zero new mechanical code**. The advantage-on-poison-saves + neutralize-one-poison clauses stay GM-narrated (poison saves aren't a distinguished roll category the engine can gate), noted in the broadcast/desc. Same single-target-buff shape as Longstrider (v2.452.0): one endpoint exposes a pre-wired substrate.
+
+**Note on stale plan doc:** `docs/plans/cast-and-broadcast-tail.md`'s status line claimed "Phase 2 opens against Bucket A (Shield of Faith, Feather Fall, Mage Armor, Tongues…)" — but all of those, plus 20+ more, already shipped through #24. The status line is corrected in this commit to reflect that Phase 2 reached #24/v2.467.0 and #25 is Protection from Poison.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_SPELL_BUFF_MAP["protection-from-poison"]` template (`resistance_to: ["poison"]`, 600 rounds, non-concentration) + the `cast_protection_from_poison` endpoint. Caster gate: knows the spell OR cleric/druid/paladin/ranger. Touch-range self-or-ally target (omit `target_character_id` to self-target). 400 missing character_id, 404 unknown caster/target, 409 non-caster, 403 not-your-character.
+- `docs/plans/cast-and-broadcast-tail.md`: status line refreshed to #25.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_protection_from_poison.py` (new): +5 tests — self-install carries `resistance_to:["poison"]`, 1-hour non-concentration, ally-target installs on the ally not the caster, non-caster 409, missing character_id 400.
+
+Total harness count → 3737 (+5).
+
+MINOR — new cast endpoint; backward-compatible, additive substrate. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_protection_from_poison`: Protection from Poison (L2) — 1-hour poison-damage resistance buff riding the existing `resistance_to` substrate. Phase 2 #25 of the cast-and-broadcast tail.
+
 ## [2.489.1] - 2026-06-21 — "The Erase Button"
 
 **Schema version:** 71

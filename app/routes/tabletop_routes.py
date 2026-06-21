@@ -1956,6 +1956,33 @@ for _rdt, _rdi in _RESISTANCE_DAMAGE_ICONS.items():
         "desc": f"Resistance to {_rdt} damage for 1 hour.",
     }
 
+# v2.490.0 — Protection from Poison (Phase 2 #25 of
+# docs/plans/cast-and-broadcast-tail.md). L2 abjuration,
+# Cleric/Druid/Paladin/Ranger, PHB p.270. For 1 hour the target has
+# resistance to poison damage + advantage on saves against being
+# poisoned, and one poison currently affecting it is neutralized. The
+# mechanized core rides the existing `resistance_to: ["poison"]`
+# read-site (`_resistance_halve` / `_resistance_halve_npc`) — the exact
+# same substrate the v2.186.0 Potion of Resistance (Poison) uses, so no
+# new damage-pipeline code is needed. The advantage-on-poison-saves +
+# neutralize-one-poison clauses stay GM-narrated (poison saves aren't a
+# distinguished roll category the engine can gate).
+_SPELL_BUFF_MAP["protection-from-poison"] = {
+    "key": "protection-from-poison",
+    "name": "Protection from Poison",
+    "icon": "☠️",
+    "duration_rounds": 600,  # 1 hour RAW, non-concentration
+    "duration_max": 600,
+    "concentration": False,
+    "effects": {
+        "resistance_to": ["poison"],
+    },
+    "desc": (
+        "Resistance to poison damage + advantage on saves vs being "
+        "poisoned for 1 hour (one current poison neutralized)."
+    ),
+}
+
 # v2.190.0 — Potion of Invulnerability (RAW DMG p.188, rare): resistance to
 # ALL damage for 1 minute. Reuses the v2.99.121 `resistance_to: ["all"]`
 # wildcard that `_resistance_halve` already honours, so no new intercept is
@@ -65107,6 +65134,150 @@ async def cast_longstrider(
     return {
         "ok": True,
         "feature": "longstrider",
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_protection_from_poison")
+async def cast_protection_from_poison(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.490.0 — Phase 2 #25 of
+    docs/plans/cast-and-broadcast-tail.md. Protection from Poison
+    (L2 abjuration, Cleric/Druid/Paladin/Ranger, PHB p.270):
+
+      "For the duration, the target has advantage on saving throws
+       against being poisoned, and it has resistance to poison
+       damage. ... you ... neutralize one poison ..."
+
+    1 action, V/S, Touch, 1 hour, non-concentration.
+
+    Implementation: rides the existing
+    ``_SPELL_BUFF_MAP["protection-from-poison"]`` substrate
+    (``resistance_to: ["poison"]``, 600 rounds, non-concentration) +
+    the pre-existing ``_resistance_halve`` reader the damage pipeline
+    already calls (the same read-site the v2.186.0 Potion of
+    Resistance uses). ZERO new mechanical code — the mechanized core
+    is the poison-damage resistance; the advantage-on-poison-saves +
+    neutralize-one-poison clauses stay GM-narrated (no distinguished
+    poison-save roll category to gate).
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster targets themself
+    (RAW "you touch a creature"). The "touch" range stays GM-tracked.
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_pfp = any(
+        (s.get("_slug") == "protection-from-poison")
+        or (str(s.get("name", "")).lower() == "protection from poison")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"cleric", "druid", "paladin", "ranger"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_pfp and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": (
+                "knows Protection from Poison, or "
+                "cleric/druid/paladin/ranger"
+            ),
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("protection-from-poison") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 600)
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "protection-from-poison",
+        "name": template.get("name") or "Protection from Poison",
+        "icon": template.get("icon") or "☠️",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": dict(
+            template.get("effects") or {"resistance_to": ["poison"]}),
+        "desc": template.get("desc") or (
+            "Resistance to poison damage for 1 hour."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    if target_char.id == char.id:
+        feature_desc = (
+            f"{char.name} is warded against poison — resistance to "
+            "poison damage + advantage on saves vs being poisoned for "
+            "1 hour."
+        )
+    else:
+        feature_desc = (
+            f"{char.name} wards {target_char.name} against poison — "
+            "resistance to poison damage + advantage on saves vs being "
+            "poisoned for 1 hour."
+        )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "☠️ Protection from Poison",
+            "feature_desc": feature_desc,
+            "source": "protection-from-poison",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "protection-from-poison",
         "target_character_id": target_char.id,
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,
