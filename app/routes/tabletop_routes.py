@@ -2373,6 +2373,39 @@ _SPELL_BUFF_MAP["holy-aura"] = {
     ),
 }
 
+# v2.509.0 — See Invisibility (Phase 2 #42 of
+# docs/plans/cast-and-broadcast-tail.md). L2 divination,
+# Bard/Sorcerer/Wizard, PHB p.274. "For the duration, you see invisible
+# creatures and objects as if they were visible, and you can see into
+# the Ethereal Plane." 1 action, V/S/M, Self, 1 hour, non-
+# concentration. Flag-buff shape (same as Detect Magic v2.457.0 / Detect
+# Evil and Good v2.456.0 / Tongues v2.445.0): the `sees_invisible` flag
+# IS the mechanic. The engine models invisibility as the v2.499.0
+# `effects.invisible` marker (advantage for the invisible attacker /
+# disadvantage for attackers against an invisible target); negating that
+# edge when the See-Invisibility caster is on the other side of the
+# roll is a two-sided attack-pipeline change filed for a follow-up. v1
+# surfaces the flag so the table can see who can pierce invisibility,
+# and the GM narrates the detection (and the Ethereal-Plane sight, which
+# has no engine model).
+_SPELL_BUFF_MAP["see-invisibility"] = {
+    "key": "see-invisibility",
+    "name": "See Invisibility",
+    "icon": "👁️",
+    "duration_rounds": 600,  # 1 hour @ 6 s/round
+    "duration_max": 600,
+    "concentration": False,  # RAW (PHB p.274)
+    "effects": {
+        "sees_invisible": True,
+    },
+    "desc": (
+        "You see invisible creatures and objects as if visible, and can "
+        "see into the Ethereal Plane, for 1 hour. Detection + Ethereal "
+        "sight are GM-narrated; the flag surfaces who can pierce "
+        "invisibility."
+    ),
+}
+
 # v2.190.0 — Potion of Invulnerability (RAW DMG p.188, rare): resistance to
 # ALL damage for 1 minute. Reuses the v2.99.121 `resistance_to: ["all"]`
 # wildcard that `_resistance_halve` already honours, so no new intercept is
@@ -69033,6 +69066,132 @@ async def cast_detect_magic(
     return {
         "ok": True,
         "feature": "detect-magic",
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_see_invisibility")
+async def cast_see_invisibility(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.509.0 — Phase 2 #42 of
+    docs/plans/cast-and-broadcast-tail.md. See Invisibility (L2
+    divination, Bard/Sorcerer/Wizard, PHB p.274):
+
+      "For the duration, you see invisible creatures and objects as if
+       they were visible, and you can see into the Ethereal Plane.
+       Ethereal creatures and objects appear ghostly and translucent."
+
+    1 action, V/S/M (talc + silver dust), Self, 1 hour, non-
+    concentration.
+
+    Implementation: installs the v2.509.0 ``see-invisibility`` buff
+    carrying ``effects.sees_invisible: True``. Flag-buff shape (same as
+    Detect Magic v2.457.0 / Detect Evil and Good v2.456.0 / Tongues
+    v2.445.0) — the flag IS the mechanic. The engine models invisibility
+    as the v2.499.0 ``effects.invisible`` marker (advantage for the
+    invisible attacker / disadvantage for attackers against an invisible
+    target); negating that edge when the See-Invisibility caster sits on
+    the other side of the roll is a two-sided attack-pipeline change
+    filed for a follow-up. v1 surfaces the flag so the table can see who
+    can pierce invisibility, and the GM narrates the detection plus the
+    Ethereal-Plane sight (no engine model for the Ethereal Plane).
+
+    Body: ``{character_id}``. Self-targeted per RAW (Range: Self).
+
+    Response: ``{ok, feature, buff_installed, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_si = any(
+        (s.get("_slug") == "see-invisibility")
+        or (str(s.get("name", "")).lower() == "see invisibility")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"bard", "sorcerer", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_si and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows See Invisibility, or bard/sorcerer/wizard",
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("see-invisibility") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 600)
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "see-invisibility",
+        "name": template.get("name") or "See Invisibility",
+        "icon": template.get("icon") or "👁️",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": dict(
+            template.get("effects")
+            or {"sees_invisible": True},
+        ),
+        "desc": template.get("desc") or (
+            "You see invisible creatures and objects as if visible, and "
+            "can see into the Ethereal Plane, for 1 hour."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "👁️ See Invisibility",
+            "feature_desc": (
+                f"{char.name} sees invisible creatures and objects as if "
+                "visible, and can see into the Ethereal Plane, for 1 hour. "
+                "Detection + Ethereal sight are GM-narrated."
+            ),
+            "source": "see-invisibility",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "see-invisibility",
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,
     }

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3829 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.508.0, 2026-06-21).
+**Total tests:** 3834 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.509.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4644,6 +4644,17 @@ v2.491.0 — Enlarge/Reduce (L2 transmutation, Sorcerer/Wizard, PHB p.237). Phas
 | `test_cast_enlarge_reduce_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`. |
 | `test_cast_enlarge_reduce_bad_mode_400` | An invalid `mode` (e.g. "embiggen") → 400. |
 | `test_cast_enlarge_reduce_missing_character_id_400` | Body without character_id → 400. |
+
+### `test_cast_see_invisibility.py`
+v2.509.0 — See Invisibility (L2 divination, Bard/Sorcerer/Wizard, PHB p.274). Phase 2 #42 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_SPELL_BUFF_MAP["see-invisibility"]` (`sees_invisible: True`, 600 rounds, non-concentration) + the `cast_see_invisibility` endpoint. Flag-buff shape (same as Detect Magic / Tongues): the flag IS the mechanic; detection + Ethereal-Plane sight GM-narrated. Negating the v2.499.0 `effects.invisible` attack-edge is filed as a two-sided pipeline follow-up. Self-targeted.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_si_wizard_installs_buff` | Wizard self-cast → 200, `feature == "see-invisibility"`, `duration_rounds == 600`; buff carries `sees_invisible == true`. |
+| `test_cast_si_buff_is_1_hour_non_concentration` | Buff carries `duration_rounds == 600` (1 hour) + `concentration == false`. |
+| `test_cast_si_bard_also_succeeds` | A Bard succeeds (asserts the bard/sorcerer/wizard gate covers Bard). |
+| `test_cast_si_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected string names "see invisibility". |
+| `test_cast_si_missing_character_id_400` | Empty body → 400. |
 
 ### `test_cast_holy_aura.py`
 v2.508.0 — Holy Aura (L8 abjuration, Cleric, PHB p.243). Phase 2 #41 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). The first tail spell to fan the buff out across an arbitrary number of chosen creatures (the 30-ft aura). New `_SPELL_BUFF_MAP["holy-aura"]` (`save_advantage: True` + `attackers_have_disadvantage: True`, concentration) + the `cast_holy_aura` endpoint — both effects ride existing hub-state substrates (`_buff_grants_save_advantage` all-saves + the v2.500.0 Blur read-site `_target_blur_imposes_disadvantage`); zero new mechanical code. Concentration anchors on the caster; companion buffs carry `_dependent_on_caster_concentration`. Dim-light radius + fiend/undead blinding flash GM-narrated. Tavik (Cleric) casts.

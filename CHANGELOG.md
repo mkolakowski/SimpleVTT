@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.509.0] - 2026-06-21 — "The Unveiled Eye"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_see_invisibility` — Phase 2 #42 of the cast-and-broadcast tail. See Invisibility (L2 divination, Bard/Sorcerer/Wizard) installs a 1-hour flag-buff so the table can see who can pierce invisibility.
+
+**Description:** Continues the tail after Holy Aura (#41). RAW PHB p.274: "For the duration, you see invisible creatures and objects as if they were visible, and you can see into the Ethereal Plane." 1 action, V/S/M, Self, 1 hour, non-concentration. Flag-buff shape (same as Detect Magic #14 / Detect Evil and Good #13 / Tongues #4): the `effects.sees_invisible: True` flag IS the mechanic. The engine models invisibility as the v2.499.0 `effects.invisible` marker (advantage for the invisible attacker / disadvantage for attackers against an invisible target); negating that edge when the See-Invisibility caster sits on the other side of the roll is a two-sided attack-pipeline change filed for a follow-up. v1 surfaces the flag so the table can see who can pierce invisibility; the GM narrates the detection plus the Ethereal-Plane sight (no engine model for the Ethereal Plane).
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_SPELL_BUFF_MAP["see-invisibility"]` template (`sees_invisible: True`, 600 rounds = 1 hour, non-concentration) + the `cast_see_invisibility` endpoint. Self-targeted per RAW (Range: Self). Caster gate: knows the spell OR bard/sorcerer/wizard. 400/403/404/409 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #42.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_see_invisibility.py` (new): +5 tests — Wizard self-cast installs the buff with `sees_invisible: true`; buff is `duration_rounds=600` + `concentration=false`; Bard also succeeds (covers the 3-class gate); non-caster (Barbarian) 409; missing character_id 400.
+
+Total harness count → 3834 (+5).
+
+MINOR — new cast endpoint, flag-buff substrate. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_see_invisibility`: See Invisibility (L2) — a 1-hour `sees_invisible` flag-buff so the table can see who can pierce invisibility; detection + Ethereal sight GM-narrated. Phase 2 #42 of the cast-and-broadcast tail.
+
 ## [2.508.0] - 2026-06-21 — "The Radiant Ward"
 
 **Schema version:** 71
