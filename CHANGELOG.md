@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.544.0] - 2026-06-21 — "The Bearing Sought"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_locate_object` — Phase 2 #58 of the cast-and-broadcast tail. Locate Object (L2 divination, Bard/Cleric/Druid/Ranger/Wizard) installs a concentration flag-buff marking the sought object; the direction-sensing is GM-narrated, the concentration ride is mechanical.
+
+**Description:** RAW PHB p.256: "Describe or name an object that is familiar to you. You sense the direction to the object's location, as long as that object is within 1,000 feet of you." Self, Concentration up to 10 minutes. SimpleVTT models no spatial search, so the bearing is GM-narrated — but the **concentration ride is real**: the `locate-object` buff is concentration-bound to the caster (`concentration: True` + `source_char_id`), so `_install_buff`'s one-concentration-at-a-time cascade drops it the moment the caster concentrates on something else (you can't locate two things at once). An optional `object_name` body field names the quarry (surfaced as `locate_target`). Built on a shared `_do_cast_locate` helper so Locate Creature (#59) reuses it.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_do_cast_locate` helper + `_LOCATE_CASTER_CLASSES`; `cast_locate_object` endpoint (self-cast; gate: knows the spell OR cleric/druid/ranger/bard/wizard). 400/403/404/409 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #58.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_locate_object.py` (new): +5 — self-cast installs a concentration `locate-object` buff (`locate_target` default + `locate_range_ft: 1000`, 100 rounds); a named `object_name` surfaces as `locate_target`; **concentration ride** (casting Barkskin drops the Locate Object buff); non-caster 409; missing character_id 400.
+
+Total harness count → 3953 (+5).
+
+MINOR — new cast endpoint + a reusable locate helper. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_locate_object`: Locate Object (L2) — a concentration flag-buff sensing the direction to a named object within 1,000 ft (GM-narrated bearing). Phase 2 #58 of the cast-and-broadcast tail.
+
 ## [2.543.0] - 2026-06-21 — "The Shattered Reflection"
 
 **Schema version:** 71

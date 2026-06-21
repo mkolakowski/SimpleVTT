@@ -71285,6 +71285,154 @@ async def cast_mirror_image(
     }
 
 
+_LOCATE_CASTER_CLASSES = {"cleric", "druid", "ranger", "bard", "wizard"}
+
+
+async def _do_cast_locate(
+    campaign_id: int, request: Request, db: Session, user: User,
+    *, slug: str, display_name: str, icon: str, duration_rounds: int,
+    target_field: str, target_kind: str, default_target: str,
+) -> "dict | JSONResponse":
+    """v2.544.0 — shared body for the Locate Object (#58) / Locate
+    Creature (#59) divination flag-buffs. Both "sense the direction to
+    the [object/creature]'s location ... within 1,000 feet"; the
+    direction-sensing itself is GM-narrated (SimpleVTT models no spatial
+    search). The mechanical half is the **concentration ride**: the buff
+    is concentration-bound to the caster, so it drops via the
+    `_drop_paired_concentration_buffs` cascade the moment the caster
+    concentrates on something else (you can't locate two things at once).
+    Self-range. Body: ``{character_id, <target_field>?}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows = any(
+        (s.get("_slug") == slug)
+        or (str(s.get("name", "")).lower() == display_name.lower())
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    is_caster = _cls in _LOCATE_CASTER_CLASSES or any(
+        c in _LOCATE_CASTER_CLASSES for c in _classes)
+    if not knows and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": (
+                f"knows {display_name}, or "
+                "cleric/druid/ranger/bard/wizard"
+            ),
+            "got_class": _cls,
+        })
+
+    locate_target = (body.get(target_field) or "").strip() or default_target
+    LOCATE_RANGE_FT = 1000
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": slug,
+        "name": display_name,
+        "icon": icon,
+        "duration_rounds": duration_rounds,
+        "duration_max": duration_rounds,
+        "concentration": True,  # RAW "Concentration, up to ..."
+        "source_char_id": char.id,
+        "effects": {
+            "locate_active": True,
+            "locate_kind": target_kind,
+            "locate_target": locate_target,
+            "locate_range_ft": LOCATE_RANGE_FT,
+        },
+        "desc": (
+            f"Sensing the direction to {locate_target} within "
+            f"{LOCATE_RANGE_FT} ft (concentration). Direction is "
+            "GM-narrated."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": f"{icon} {display_name}",
+            "feature_desc": (
+                f"{char.name} senses the direction to {locate_target} "
+                f"within {LOCATE_RANGE_FT} ft (concentration). The GM "
+                "narrates the bearing."
+            ),
+            "source": slug,
+            "locate_target": locate_target,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": slug,
+        "target_character_id": char.id,
+        "locate_target": locate_target,
+        "locate_range_ft": LOCATE_RANGE_FT,
+        "concentration": True,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": duration_rounds,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_locate_object")
+async def cast_locate_object(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.544.0 — Phase 2 #58 of
+    docs/plans/cast-and-broadcast-tail.md. Locate Object (L2 divination,
+    Bard/Cleric/Druid/Ranger/Wizard, PHB p.256): "Describe or name an
+    object that is familiar to you. You sense the direction to the
+    object's location, as long as that object is within 1,000 feet of
+    you." 1 action, V/S/M, Self, Concentration up to 10 minutes.
+
+    Optional body ``object_name`` names the quarry (default "an object").
+    See `_do_cast_locate` for the concentration ride. Response: ``{ok,
+    feature, target_character_id, locate_target, locate_range_ft,
+    concentration, buff_installed, duration_rounds}``.
+    """
+    return await _do_cast_locate(
+        campaign_id, request, db, user,
+        slug="locate-object", display_name="Locate Object", icon="🧭",
+        duration_rounds=100,  # 10 min @ 6 s/round
+        target_field="object_name", target_kind="object",
+        default_target="an object",
+    )
+
+
 @router.post("/api/campaign/{campaign_id}/cast_zone_of_truth")
 async def cast_zone_of_truth(
     campaign_id: int,
