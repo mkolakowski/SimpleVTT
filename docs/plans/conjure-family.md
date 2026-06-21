@@ -49,7 +49,8 @@ spawn counts, upcast multipliers, the class gate, and dismissal.
   takes an optional `beast_slug` to summon any catalog beast within the
   count's CR tier, via `_monster_summon_template` + a
   `_summon_companion(template=…)` override + the shared
-  `_conjure_catalog_summon_template` validator. The other count-tier
-  spells (Woodland Beings, Minor Elementals) can reuse the same validator
-  + override in a follow-up.
+  `_conjure_catalog_summon_template` validator. **Woodland Beings + Minor Elementals shipped it v2.540.0** (fey /
+  elemental pools via `creature_slug`). The single-summon conjures
+  (Elemental / Fey / Celestial — one creature of CR ≤ spell level) are a
+  different validation shape, still a filed follow-up.
 - **Random-creature RAW variant** (roll the pool) — GM-narrated today.

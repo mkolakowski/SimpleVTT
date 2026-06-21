@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.540.0] - 2026-06-21 — "The Wider Grove"
+
+**Schema version:** 71
+
+**Commit summary:** Extends the v2.539.0 catalog-backed summon override to the other two count-tier conjure spells — Conjure Woodland Beings (any **fey**) and Conjure Minor Elementals (any **elemental**) — reusing the shared `_conjure_catalog_summon_template` validator.
+
+**Description:** `/cast_conjure_woodland_beings` and `/cast_conjure_minor_elementals` now accept an optional `creature_slug` to summon any catalog creature of the spell's type (fey / elemental respectively) within the count's CR tier, with the creature's real catalog stat block — exactly the Conjure Animals (#v2.539.0) pattern, parameterized by `required_type`. With no slug, the existing default (`fey-spirit` / `elemental-spirit`) is unchanged (backward-compatible). Zero new substrate — both reuse `_conjure_catalog_summon_template` + the `_summon_companion(template=…)` override + `_monster_summon_template` shipped v2.539.0.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: `cast_conjure_woodland_beings` (slug_field `creature_slug`, required_type `fey`) + `cast_conjure_minor_elementals` (required_type `elemental`) resolve the optional override + parameterize their summon loops + broadcasts over the creature label.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_conjure_woodland_beings.py`: +3 — `dryad` ×2 (Fey CR 1) spawns 2 dryads (HP 22 / AC 11); `dryad` ×4 (CR > ½) → 400; non-fey `wolf` → 400.
+- `tests/harness/test_cast_conjure_minor_elementals.py`: +3 — `dust-mephit` ×4 (Elemental CR ½) spawns 4 mephits (HP 17 / AC 12); `dust-mephit` ×8 (CR > ¼) → 400; non-elemental `wolf` → 400.
+
+Total harness count → 3932 (+6).
+
+MINOR — additive `creature_slug` override on two conjure endpoints. No schema change.
+
+### Added
+- `/cast_conjure_woodland_beings` + `/cast_conjure_minor_elementals`: optional `creature_slug` to summon any catalog fey / elemental within the count's CR tier (extends the v2.539.0 catalog-backed summon).
+
 ## [2.539.0] - 2026-06-21 — "The Open Menagerie"
 
 **Schema version:** 71

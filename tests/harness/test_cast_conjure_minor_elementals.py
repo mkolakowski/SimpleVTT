@@ -223,3 +223,52 @@ async def test_cme_cannot_cast_non_caster(gm_client, roster):
     body = r.json()
     assert body.get("error") == "cannot_cast"
     assert "wizard" in body.get("expected", "").lower()
+
+
+# ─── v2.540.0 — optional catalog-creature (elemental) override ────────
+
+
+async def test_minor_elementals_catalog_elemental(gm_client, roster):
+    """creature_slug=dust-mephit, count=4 (CR ½ ≤ the CR-½ tier) → four
+    mephits with the catalog stat block (HP 17 / AC 12)."""
+    mira = roster["Mira Greenleaf"]
+    await _seed_battle(gm_client, [_pc_cb(mira)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_minor_elementals",
+        json={"character_id": mira["id"], "count": 4,
+              "creature_slug": "dust-mephit", "x": 700.0, "y": 700.0},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    ids = [c["id"] for c in body["combatants"]]
+    try:
+        assert len(body["combatants"]) == 4
+        for c in body["combatants"]:
+            assert c["companion_key"] == "dust-mephit"
+            assert int(c["hp_max"]) == 17
+            assert int(c["ac"]) == 12
+    finally:
+        await _dismiss_all(gm_client, ids)
+
+
+async def test_minor_elementals_catalog_cr_too_high_400(gm_client, roster):
+    """dust-mephit (CR ½) at count=8 (the CR-¼ tier) → 400."""
+    mira = roster["Mira Greenleaf"]
+    await _seed_battle(gm_client, [_pc_cb(mira)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_minor_elementals",
+        json={"character_id": mira["id"], "count": 8,
+              "creature_slug": "dust-mephit"},
+    )
+    assert r.status_code == 400, r.text
+
+
+async def test_minor_elementals_catalog_non_elemental_400(gm_client, roster):
+    """A non-elemental slug (wolf — Beast) → 400."""
+    mira = roster["Mira Greenleaf"]
+    await _seed_battle(gm_client, [_pc_cb(mira)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_minor_elementals",
+        json={"character_id": mira["id"], "count": 2, "creature_slug": "wolf"},
+    )
+    assert r.status_code == 400, r.text

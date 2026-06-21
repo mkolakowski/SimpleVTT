@@ -63680,6 +63680,20 @@ async def cast_conjure_woodland_beings(
             "got_class": _cls,
         })
 
+    # v2.540.0 — optional catalog-creature override (any fey within the
+    # count's CR tier, not just the default fey-spirit).
+    _cat_template, _cat_err = _conjure_catalog_summon_template(
+        body, campaign_id,
+        slug_field="creature_slug", required_type="fey", base_count=base_count,
+    )
+    if _cat_err:
+        raise HTTPException(400, _cat_err)
+    _summon_key = (
+        (body.get("creature_slug") or "").strip().lower()
+        if _cat_template else "fey-spirit"
+    )
+    _summon_label = _cat_template["name"] if _cat_template else "Fey Spirit"
+
     base_x = float(body.get("x") or 0)
     base_y = float(body.get("y") or 0)
     initiative = int(body.get("initiative") or 0)
@@ -63689,11 +63703,12 @@ async def cast_conjure_woodland_beings(
         res = await _summon_companion(
             db, campaign_id,
             owner_char_id=char.id,
-            companion_key="fey-spirit",
-            name=f"Conjured Fey Spirit {i + 1}",
+            companion_key=_summon_key,
+            name=f"Conjured {_summon_label} {i + 1}",
             x=base_x + i * spacing,
             y=base_y,
             initiative=initiative,
+            template=_cat_template,
         )
         if res:
             combatants.append(res["combatant"])
@@ -63715,7 +63730,10 @@ async def cast_conjure_woodland_beings(
             "character_id": char.id,
             "character_name": char.name,
             "user_color": char.color or player_color,
-            "feature_name": f"🍃 Conjure Woodland Beings — {len(combatants)} fey",
+            "feature_name": (
+                f"🍃 Conjure Woodland Beings — {len(combatants)} × "
+                f"{_summon_label}"
+            ),
             "feature_desc": (
                 f"{char.name} summons {len(combatants)} fey creatures in "
                 f"beast form as combatants. (Conjure Woodland Beings, "
@@ -63820,6 +63838,21 @@ async def cast_conjure_minor_elementals(
             "got_class": _cls,
         })
 
+    # v2.540.0 — optional catalog-creature override (any elemental within
+    # the count's CR tier, not just the default elemental-spirit).
+    _cat_template, _cat_err = _conjure_catalog_summon_template(
+        body, campaign_id,
+        slug_field="creature_slug", required_type="elemental",
+        base_count=base_count,
+    )
+    if _cat_err:
+        raise HTTPException(400, _cat_err)
+    _summon_key = (
+        (body.get("creature_slug") or "").strip().lower()
+        if _cat_template else "elemental-spirit"
+    )
+    _summon_label = _cat_template["name"] if _cat_template else "Elemental"
+
     base_x = float(body.get("x") or 0)
     base_y = float(body.get("y") or 0)
     initiative = int(body.get("initiative") or 0)
@@ -63829,11 +63862,12 @@ async def cast_conjure_minor_elementals(
         res = await _summon_companion(
             db, campaign_id,
             owner_char_id=char.id,
-            companion_key="elemental-spirit",
-            name=f"Conjured Elemental {i + 1}",
+            companion_key=_summon_key,
+            name=f"Conjured {_summon_label} {i + 1}",
             x=base_x + i * spacing,
             y=base_y,
             initiative=initiative,
+            template=_cat_template,
         )
         if res:
             combatants.append(res["combatant"])
@@ -63855,7 +63889,10 @@ async def cast_conjure_minor_elementals(
             "character_id": char.id,
             "character_name": char.name,
             "user_color": char.color or player_color,
-            "feature_name": f"🌪️ Conjure Minor Elementals — {len(combatants)} elementals",
+            "feature_name": (
+                f"🌪️ Conjure Minor Elementals — {len(combatants)} × "
+                f"{_summon_label}"
+            ),
             "feature_desc": (
                 f"{char.name} summons {len(combatants)} elementals as "
                 f"combatants. (Conjure Minor Elementals, L{slot_level}"

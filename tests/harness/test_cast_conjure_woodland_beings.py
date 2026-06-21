@@ -201,3 +201,51 @@ async def test_cwb_cannot_cast_non_druid(gm_client, roster):
     body = r.json()
     assert body.get("error") == "cannot_cast"
     assert "druid" in body.get("expected", "").lower()
+
+
+# ─── v2.540.0 — optional catalog-creature (fey) override ──────────────
+
+
+async def test_woodland_catalog_fey(gm_client, roster):
+    """creature_slug=dryad, count=2 (CR1 ≤ the CR-1 tier) → two dryads
+    with the catalog stat block (HP 22 / AC 11)."""
+    mira = roster["Mira Greenleaf"]
+    await _seed_battle(gm_client, [_pc_cb(mira)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_woodland_beings",
+        json={"character_id": mira["id"], "count": 2,
+              "creature_slug": "dryad", "x": 700.0, "y": 700.0},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    ids = [c["id"] for c in body["combatants"]]
+    try:
+        assert len(body["combatants"]) == 2
+        for c in body["combatants"]:
+            assert c["companion_key"] == "dryad"
+            assert int(c["hp_max"]) == 22
+            assert int(c["ac"]) == 11
+    finally:
+        await _dismiss_all(gm_client, ids)
+
+
+async def test_woodland_catalog_cr_too_high_400(gm_client, roster):
+    """dryad (CR1) at count=4 (the CR-½ tier) → 400."""
+    mira = roster["Mira Greenleaf"]
+    await _seed_battle(gm_client, [_pc_cb(mira)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_woodland_beings",
+        json={"character_id": mira["id"], "count": 4, "creature_slug": "dryad"},
+    )
+    assert r.status_code == 400, r.text
+
+
+async def test_woodland_catalog_non_fey_400(gm_client, roster):
+    """A non-fey slug (wolf — Beast) → 400."""
+    mira = roster["Mira Greenleaf"]
+    await _seed_battle(gm_client, [_pc_cb(mira)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_woodland_beings",
+        json={"character_id": mira["id"], "count": 2, "creature_slug": "wolf"},
+    )
+    assert r.status_code == 400, r.text
