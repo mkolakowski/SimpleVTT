@@ -110,6 +110,20 @@ async def test_scrub_missing_email_400():
         await admin.aclose()
 
 
+async def test_admin_page_renders_scrub_button():
+    """The admin portal user table exposes the scrub control + its
+    handler, so an operator can trigger the scrub without crafting the
+    request by hand."""
+    admin = await _admin_client()
+    try:
+        page = await admin.get("/admin")
+        assert page.status_code == 200
+        assert "scrub-audit-log" in page.text
+        assert "scrubUserLog" in page.text
+    finally:
+        await admin.aclose()
+
+
 async def test_scrub_requires_admin_403():
     """Error path: a non-admin can't reach the scrub at all."""
     alice = await login_client("demo-alice@example.com", "demopass")

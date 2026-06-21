@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.489.1] - 2026-06-21 — "The Erase Button"
+
+**Schema version:** 71
+
+**Commit summary:** Surfaces the v2.489.0 audit-log scrub as a **"Scrub log" button** on every user row in the `/admin` portal, so an operator can pseudonymize a user's identifiers without crafting the request by hand.
+
+**Description:** v2.489.0 shipped the `POST /admin/users/{user_id}/scrub-audit-log` endpoint but left it API-only. This wires it into the admin portal's user table: each row gets a "Scrub log" button next to Delete. Clicking it confirms, POSTs the row's id + email to the endpoint (form-encoded), and reports the rewritten-line count inline (`Scrubbed ✓ (N lines)`). The handler lives in an always-rendered `<script>` (not the Cloudflare-gated block below it) so the buttons always have a handler. No new endpoint, no schema change — pure UI wiring of an existing capability, mirroring the v2.488.2 "Clear log" button precedent.
+
+**Implementation:**
+
+- `app/templates/admin_home.html`: per-row `Scrub log` button (`data-uid` / `data-email`, 44px-inheriting `<button>`) + a `scrubUserLog(btn)` fetch handler that posts form-encoded and surfaces the line count / errors.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_user_audit_scrub.py`: +1 test (`test_admin_page_renders_scrub_button`) — `GET /admin` contains the `scrub-audit-log` action + the `scrubUserLog` handler.
+
+Total harness count → 3732 (+1).
+
+PATCH — UI wiring of an existing endpoint. No new endpoint or schema change.
+
+### Added
+- "Scrub log" button per user row in the `/admin` portal — one-click GDPR Art. 17 pseudonymization via the v2.489.0 endpoint.
+
 ## [2.489.0] - 2026-06-21 — "The Forgotten Name"
 
 **Schema version:** 71

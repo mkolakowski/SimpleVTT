@@ -31,6 +31,10 @@
                         <button>Delete</button>
                     </form>
                     {% endif %}
+                    <button type="button" class="scrub-log-btn"
+                            data-uid="{{ u.id }}" data-email="{{ u.email }}"
+                            onclick="scrubUserLog(this)"
+                            title="GDPR Art. 17: pseudonymize this user's identifiers in the audit log (rewrites, never deletes, matching lines to an opaque token)">Scrub log</button>
                 </td>
             </tr>
             {% endfor %}
@@ -46,6 +50,46 @@
         </form>
     </details>
     <p class="muted">Admin emails come from <code>config.yaml</code>: {{ settings.admins }}</p>
+    <script>
+        // GDPR Art. 17 audit-log scrub — pseudonymize a user's email /
+        // user_id / actor_id across the audit log to a stable opaque
+        // token. Defined here (not in the Cloudflare-gated <script>
+        // below) so the per-row buttons always have a handler. Posts
+        // form-encoded to the JSON endpoint and reports the line count.
+        async function scrubUserLog(btn) {
+            const uid = btn.getAttribute('data-uid');
+            const email = btn.getAttribute('data-email');
+            if (!confirm("Pseudonymize " + email + "'s identifiers in the audit log?\n\n" +
+                    "Rewrites (never deletes) matching lines to an opaque <deleted-…> token. " +
+                    "Idempotent — safe to re-run.")) {
+                return;
+            }
+            const orig = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Scrubbing…';
+            try {
+                const resp = await fetch('/admin/users/' + uid + '/scrub-audit-log', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: 'email=' + encodeURIComponent(email),
+                });
+                if (!resp.ok) {
+                    const txt = await resp.text();
+                    btn.disabled = false;
+                    btn.textContent = orig;
+                    alert('Scrub failed: ' + resp.status + ' — ' + (txt || 'unknown'));
+                    return;
+                }
+                const j = await resp.json();
+                btn.textContent = 'Scrubbed ✓ (' + j.lines_rewritten + ' line' +
+                    (j.lines_rewritten === 1 ? '' : 's') + ')';
+            } catch (e) {
+                btn.disabled = false;
+                btn.textContent = orig;
+                alert('Network error: ' + (e.message || e));
+            }
+        }
+    </script>
 </section>
 
 <section>
