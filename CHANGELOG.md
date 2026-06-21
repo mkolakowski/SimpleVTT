@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.495.2] - 2026-06-21 — "The Vanishing Actor"
+
+**Schema version:** 71
+
+**Commit summary:** Fixes `POST /admin/demo/reset` 500ing when the demo GM triggers it — the handler touched its own `user` row after `reset_and_reseed` had wiped and re-created it. Captures the actor email up front and re-resolves the recreated row before logging/auditing.
+
+**Description:** Found while auditing the demo-reseed path after v2.495.1. The on-demand "Reset demo data" admin button (`admin_demo_reset`) runs `reset_and_reseed`, which wipes **and re-creates** the demo users — including the demo GM, who is the demo's only admin and thus the usual caller. After that runs, the request's `user` ORM object points at a deleted row, so the subsequent `log.info(..., user.email, ...)` and `record_admin_action(actor=user, ...)` either raise `ObjectDeletedError` (the post-commit attribute refresh hits a gone row) or write a dangling `actor_user_id` that trips the same `admin_audit_log` FK — both 500 the response, even though the reseed itself already committed. So the data reset but the operator saw an error.
+
+The fix snapshots `actor_email = user.email` **before** the reseed, then re-resolves the actor by email afterward: a demo actor resolves to the freshly-recreated row (new id), a non-demo actor to the same untouched row. The audit row is skipped (with a warning) if the actor no longer exists. Pairs with v2.495.1 (which fixed the `wipe()` FK that made the *first* half of this path fail) — together the demo-reset button now works end-to-end for the demo GM.
+
+**Implementation:**
+
+- `app/routes/admin_routes.py`: `admin_demo_reset` captures `actor_email` before `reset_and_reseed`, logs with it, and re-resolves `actor = db.query(User).filter(User.email == actor_email).first()` before `record_admin_action` — guarded for the actor-gone case.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_demo_reset.py` (new): +2 tests — demo-gm (a demo actor) triggers reset → 200 + counts (campaign stays id 1), reproducing the recreated-actor bug; demo-alice (player) → 403. The reseed keeps campaign 1 via `_reset_sequences`, so the rest of the suite is unaffected. Requires `DEMO_GM_SITE_ADMIN` on (the CI default).
+
+Total harness count → 3760 (+2).
+
+### Fixed
+- `POST /admin/demo/reset` no longer 500s when the demo GM triggers it — the handler re-resolves the actor (which `reset_and_reseed` re-creates with a new id) by email before logging/auditing, instead of dereferencing the wiped `user` row.
+
 ## [2.495.1] - 2026-06-21 — "The Thawed Reset"
 
 **Schema version:** 71

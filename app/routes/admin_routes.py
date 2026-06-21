@@ -780,15 +780,35 @@ def admin_demo_reset(
     if not s.demo_mode:
         raise HTTPException(503, "DEMO_MODE is not enabled on this deploy")
     from ..demo_seed import reset_and_reseed
+    # v2.495.2: capture the actor's email BEFORE the reseed. When the
+    # admin triggering this is the demo GM (the usual case — the demo
+    # GM is the demo's only admin), reset_and_reseed wipes and
+    # re-creates that user with a NEW id, so the ``user`` ORM object is
+    # left pointing at a deleted row. Touching ``user.email`` /
+    # ``user.id`` afterward raises ObjectDeletedError, and auditing with
+    # the stale id writes a dangling ``actor_user_id`` (FK violation) —
+    # both 500 the response even though the reseed itself committed.
+    actor_email = user.email
     counts = reset_and_reseed(db)
-    log.info("admin %s triggered demo reset: %s", user.email, counts)
+    log.info("admin %s triggered demo reset: %s", actor_email, counts)
     # v2.431.0 — audit the demo-reset action with the per-section
-    # delete counts as notes.
-    record_admin_action(
-        db, actor=user, request=request,
-        action="admin.demo_reset", target="demo_dataset",
-        notes=str(counts)[:500],
-    )
+    # delete counts as notes. Re-resolve the actor by email: a demo
+    # actor was just re-created with a fresh id; a non-demo actor
+    # resolves to the same (untouched) row. Skip the audit row if the
+    # actor no longer exists (a demo actor on a deploy where
+    # DEMO_GM_SITE_ADMIN is off can't reach here, but guard anyway).
+    actor = db.query(User).filter(User.email == actor_email).first()
+    if actor is not None:
+        record_admin_action(
+            db, actor=actor, request=request,
+            action="admin.demo_reset", target="demo_dataset",
+            notes=str(counts)[:500],
+        )
+    else:
+        log.warning(
+            "admin demo reset: actor %s gone post-reseed; skipping audit row",
+            actor_email,
+        )
     return {"ok": True, "counts": counts}
 
 
