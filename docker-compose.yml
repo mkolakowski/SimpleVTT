@@ -128,6 +128,13 @@ services:
       # failed sign-ins within the window (seconds).
       ADMIN_CENTER_LOGIN_MAX_ATTEMPTS: ${ADMIN_CENTER_LOGIN_MAX_ATTEMPTS:-5}
       ADMIN_CENTER_LOGIN_WINDOW_SECONDS: ${ADMIN_CENTER_LOGIN_WINDOW_SECONDS:-900}
+      # v2.486.1 — opt-in TOTP MFA on the admin-center login. Default
+      # off. When ENABLED, a TOTP_SECRET is required or the login fails
+      # closed. RECOVERY_CODE is blank by default → no recovery code is
+      # accepted unless one is set. See docs/plans/admin-center-mfa.md.
+      ADMIN_CENTER_MFA_ENABLED: ${ADMIN_CENTER_MFA_ENABLED:-false}
+      ADMIN_CENTER_TOTP_SECRET: ${ADMIN_CENTER_TOTP_SECRET:-}
+      ADMIN_CENTER_RECOVERY_CODE: ${ADMIN_CENTER_RECOVERY_CODE:-}
       # v2.484.0 — path to fail2ban's sqlite ban db (read-only mount
       # below). When the --profile fail2ban service isn't running the
       # shared volume is empty and the dashboard shows an empty state.

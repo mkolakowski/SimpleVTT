@@ -1,6 +1,10 @@
 # Admin Center — TOTP MFA + env recovery code (design plan)
 
-**Status:** ⚪ proposed (design only — not yet implemented).
+**Status:** 🟠 partial — core implemented v2.486.0 (`mfa.py`) + v2.487.0
+(login-flow wiring, env vars, templates, wiki). Deferred: the in-app
+QR provisioning page (§6 — the operator currently enters the base32
+secret into their authenticator manually). WebAuthn / multi-operator
+remain non-goals.
 **Scope:** the standalone Admin Center service (`app/admin_center/`,
 port 8015). Does **not** touch the main app's login.
 

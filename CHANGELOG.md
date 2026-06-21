@@ -10,6 +10,41 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.487.0] - 2026-06-20 — "The Second Factor (Armed)"
+
+**Schema version:** 71
+
+**Commit summary:** Wires the v2.486.0 `mfa` module into the Admin Center login — opt-in TOTP two-step sign-in (`/login/mfa`), an env recovery code, and fail-closed behavior. Off by default; existing deploys are unchanged.
+
+**Description:** Completes the core of `docs/plans/admin-center-mfa.md`. With `ADMIN_CENTER_MFA_ENABLED=true`, the login becomes password → 6-digit TOTP. The second-factor step reuses the brute-force throttle, the recovery code is accepted in place of a TOTP code (with the blank-rejects-everything + one-shot rules), and a missing secret refuses all logins rather than downgrading.
+
+**Implementation:**
+
+- `app/admin_center/main.py`:
+  - `POST /login`: on a correct password, if MFA is on → set `mfa_pending` (NOT `admin_authed`) + redirect to `/login/mfa`; if misconfigured → fail closed; if off → unchanged.
+  - `GET/POST /login/mfa`: self-guards on `mfa_pending`; verifies TOTP or the recovery code (one-shot + logged), promotes to `admin_authed` on success, feeds `login_guard` on a bad code. `/login/mfa` added to the public-path set (it's mid-login, pre-auth).
+  - `GET /login`: shows a fail-closed banner when MFA is on with no secret.
+- `app/admin_center/templates/mfa.html` (new): 6-digit code-entry form (44px targets, recovery-code hint, cancel→logout).
+- `app/admin_center/templates/login.html`: fail-closed banner.
+- `docker-compose.yml` + `.env.example`: `ADMIN_CENTER_MFA_ENABLED` / `ADMIN_CENTER_TOTP_SECRET` / `ADMIN_CENTER_RECOVERY_CODE`, all default off/blank, with the generate-a-secret + manual-authenticator-entry recipe.
+- `docs/wiki/admin-center.md`: "Two-factor authentication" section (enable steps, fail-closed, recovery-code rules, NTP note). Plan + wiki index status → 🟠 partial (QR provisioning page deferred).
+
+**Verified end-to-end** against a temporarily-MFA-on container: password → `/login/mfa`; dashboard blocked while only `mfa_pending`; correct TOTP (computed live) → granted; recovery code → granted; wrong code → re-prompt; MFA-on-with-blank-secret → all logins refused with the banner.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py`: +2 live tests — `/login/mfa` without a pending session bounces to `/login`; MFA-off (default) login still grants directly. The MFA-enabled flow is unit-covered (v2.486.0 `mfa.*` tests) + manually verified; it isn't in the default suite because the shared container runs MFA-off.
+
+Total harness count → 3710 (+2).
+
+MINOR — opt-in TOTP MFA feature on the admin-center login, default-off (no change to existing deploys). No schema change.
+
+### Added
+- Admin Center opt-in TOTP MFA: `/login/mfa` two-step login + env recovery code + fail-closed, behind `ADMIN_CENTER_MFA_ENABLED` (default off). `mfa.html` template; `ADMIN_CENTER_TOTP_SECRET` / `ADMIN_CENTER_RECOVERY_CODE` env vars.
+
+### Changed
+- `docs/wiki/admin-center.md`: new "Two-factor authentication" section; the MFA plan + wiki index move to 🟠 partial.
+
 ## [2.486.0] - 2026-06-20 — "The Second Factor (Forged)"
 
 **Schema version:** 71

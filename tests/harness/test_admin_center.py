@@ -673,6 +673,28 @@ def test_unban_endpoint_rejects_invalid_ip():
 
 
 @_LIVE
+def test_mfa_step_requires_pending_session():
+    """GET /login/mfa without a mid-login (mfa_pending) session bounces
+    to /login — you can't jump straight to the second-factor step."""
+    r = httpx.get(f"{ADMIN_BASE_URL}/login/mfa", timeout=5.0, follow_redirects=False)
+    assert r.status_code == 303
+    assert "/login" in r.headers.get("location", "")
+
+
+@_LIVE
+def test_mfa_disabled_login_still_grants_directly():
+    """With MFA off (the default), a valid password lands straight on
+    the dashboard — no /login/mfa detour."""
+    c = _logged_in_client()
+    try:
+        r = c.get("/", follow_redirects=False)
+        assert r.status_code == 200
+        assert "Admin Center" in r.text
+    finally:
+        c.close()
+
+
+@_LIVE
 def test_unban_endpoint_requires_auth():
     # No session → the POST is bounced to the login page, not executed.
     r = httpx.post(

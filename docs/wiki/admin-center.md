@@ -62,6 +62,46 @@ A **"Log out"** control sits in the dashboard header (clears the
 session). `/healthz` is intentionally **unauthenticated** so the
 docker-compose healthcheck can probe liveness without credentials.
 
+### Two-factor authentication (TOTP, v2.487.0)
+
+You can require a **TOTP second factor** (the 6-digit codes from Google
+Authenticator / Aegis / 1Password) after the password. Opt-in and
+**off by default**.
+
+To enable:
+
+1. Generate a base32 secret:
+   ```bash
+   python -c "import secrets,base64; print(base64.b32encode(secrets.token_bytes(20)).decode().rstrip('='))"
+   ```
+2. Put it in `ADMIN_CENTER_TOTP_SECRET`, and add the **same string** to
+   your authenticator app via its "enter a setup key" / manual-entry
+   option (account name is up to you; algorithm SHA1, 6 digits, 30s).
+3. Set `ADMIN_CENTER_MFA_ENABLED=true` and restart the admin-center
+   service.
+
+Now the login is two-step: password → 6-digit code. The codes tolerate
+±30s of clock skew, so keep the host clock synced (NTP).
+
+| Env var | Default | Effect |
+|---|---|---|
+| `ADMIN_CENTER_MFA_ENABLED` | `false` | Master switch for the TOTP step. |
+| `ADMIN_CENTER_TOTP_SECRET` | _(blank)_ | Base32 shared secret. **Required when MFA is on** — see fail-closed below. |
+| `ADMIN_CENTER_RECOVERY_CODE` | _(blank)_ | Break-glass code accepted in place of a TOTP code. **Blank ⇒ no code is ever accepted.** |
+
+> **Fail-closed.** If `ADMIN_CENTER_MFA_ENABLED=true` but the secret is
+> blank or malformed, the login **refuses everyone** (with a banner)
+> rather than silently allowing password-only. Fix the secret to
+> recover.
+
+**Recovery code (lost authenticator).** Set
+`ADMIN_CENTER_RECOVERY_CODE` to a long random value and store it
+offline. It's entered in the same code box as a TOTP code. Two safety
+properties: while it's **blank, nothing is accepted** (no empty-code
+bypass), and it's **one-shot per container run** — after it's used,
+rotate the value and restart. It never substitutes for the password,
+only for the TOTP step.
+
 > **Scripting the JSON APIs.** The `/api/*` endpoints also accept an
 > HTTP basic-auth `Authorization` header (same `ADMIN_CENTER_USER` /
 > `ADMIN_CENTER_PASS`), so a script can skip the login form:

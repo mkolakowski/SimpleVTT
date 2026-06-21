@@ -31,6 +31,7 @@ from . import (
     fail2ban_control,
     inventory,
     login_guard,
+    mfa,
     stats,
 )
 from .basic_auth import check_credentials, header_authorizes, is_default_password
@@ -116,7 +117,15 @@ def _is_authed(request: Request) -> bool:
 # Paths reachable without auth: the login page + the healthcheck (so
 # docker compose can probe liveness without creds).
 def _is_public(path: str) -> bool:
-    return path == "/healthz" or path == "/login" or path.startswith("/static")
+    # /login/mfa is part of the login flow (reachable mid-login, before
+    # the session is fully authed); it self-guards on the mfa_pending
+    # session flag.
+    return (
+        path == "/healthz"
+        or path == "/login"
+        or path == "/login/mfa"
+        or path.startswith("/static")
+    )
 
 
 @app.middleware("http")
@@ -162,6 +171,8 @@ def login_form(request: Request, next: str = "/", error: str = "", locked: int =
             "error": error,
             "locked": max(0, int(locked or 0)),
             "default_password": is_default_password(),
+            # Fail-closed signal: MFA on but no usable TOTP secret.
+            "mfa_misconfigured": mfa.mfa_misconfigured(),
         },
     )
 
@@ -182,8 +193,22 @@ def login_submit(
         log.warning("admin-center login locked out ip=%s retry_after=%ss", ip, remaining)
         return RedirectResponse(f"/login?next={nxt}&locked={remaining}", status_code=303)
 
+    # Fail closed: MFA enabled but no usable TOTP secret → refuse every
+    # login rather than silently dropping to password-only.
+    if mfa.mfa_misconfigured():
+        log.error("admin-center login refused: MFA enabled but ADMIN_CENTER_TOTP_SECRET unset/invalid")
+        return RedirectResponse(f"/login?next={nxt}&error=1", status_code=303)
+
     if check_credentials(username, password):
         login_guard.reset(ip)
+        if mfa.mfa_enabled():
+            # Password OK → require the second factor. mfa_pending alone
+            # grants nothing (the auth middleware checks admin_authed).
+            request.session["mfa_pending"] = True
+            request.session["mfa_user"] = username
+            request.session["mfa_next"] = _safe_next(next)
+            request.session.pop("admin_authed", None)
+            return RedirectResponse("/login/mfa", status_code=303)
         request.session["admin_authed"] = True
         request.session["admin_user"] = username
         return RedirectResponse(_safe_next(next), status_code=303)
@@ -197,6 +222,68 @@ def login_submit(
         return RedirectResponse(f"/login?next={nxt}&locked={remaining}", status_code=303)
     # 303→GET keeps the form refresh-safe.
     return RedirectResponse(f"/login?next={nxt}&error=1", status_code=303)
+
+
+@app.get("/login/mfa", response_class=HTMLResponse)
+def mfa_form(request: Request, error: str = "", locked: int = 0):
+    if request.session.get("admin_authed"):
+        return RedirectResponse("/", status_code=303)
+    # Only reachable mid-login (password already accepted this session).
+    if not request.session.get("mfa_pending"):
+        return RedirectResponse("/login", status_code=303)
+    return templates.TemplateResponse(
+        "mfa.html",
+        {
+            "request": request,
+            "app_version": APP_VERSION,
+            "error": error,
+            "locked": max(0, int(locked or 0)),
+            "recovery_available": bool(mfa._recovery_code()),
+        },
+    )
+
+
+@app.post("/login/mfa")
+def mfa_submit(request: Request, code: str = Form("")):
+    if not request.session.get("mfa_pending"):
+        return RedirectResponse("/login", status_code=303)
+    ip = _extract_client_ip(request)
+
+    # Reuse the brute-force throttle for the second-factor step too.
+    remaining = login_guard.lockout_remaining(ip, now=time.time())
+    if remaining > 0:
+        return RedirectResponse(f"/login/mfa?locked={remaining}", status_code=303)
+
+    # Fail closed if the secret vanished between steps.
+    if mfa.mfa_misconfigured():
+        request.session.clear()
+        return RedirectResponse("/login?error=1", status_code=303)
+
+    code = (code or "").strip()
+    via_recovery = mfa.recovery_code_accepts(code)
+    if mfa.verify_totp(code, now=time.time()) or via_recovery:
+        if via_recovery:
+            mfa.mark_recovery_used()
+            log.warning(
+                "admin-center MFA RECOVERY CODE used ip=%s user=%r — rotate "
+                "ADMIN_CENTER_RECOVERY_CODE now", ip,
+                request.session.get("mfa_user", ""),
+            )
+        login_guard.reset(ip)
+        nxt = request.session.get("mfa_next", "/")
+        request.session["admin_authed"] = True
+        request.session["admin_user"] = request.session.get("mfa_user", "")
+        for k in ("mfa_pending", "mfa_user", "mfa_next"):
+            request.session.pop(k, None)
+        return RedirectResponse(_safe_next(nxt), status_code=303)
+
+    # Bad code → throttle + re-prompt.
+    login_guard.record_failure(ip, now=time.time())
+    log.warning("admin-center MFA code failed ip=%s", ip)
+    remaining = login_guard.lockout_remaining(ip, now=time.time())
+    if remaining > 0:
+        return RedirectResponse(f"/login/mfa?locked={remaining}", status_code=303)
+    return RedirectResponse("/login/mfa?error=1", status_code=303)
 
 
 @app.get("/logout")

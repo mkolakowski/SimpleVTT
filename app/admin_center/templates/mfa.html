@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sign in · SimpleVTT Admin Center</title>
+  <title>Two-factor · SimpleVTT Admin Center</title>
   <style>
     :root {
       --bg: #14171c; --panel: #1d2128; --panel2: #242a33;
@@ -25,11 +25,10 @@
     h1 { font-size: 19px; margin: 0 0 4px; }
     .sub { color: var(--muted); font-size: 13px; margin: 0 0 22px; }
     label { display: block; font-size: 13px; color: var(--muted); margin: 14px 0 6px; }
-    /* 44px minimum touch targets per the project HIG rule. */
     input {
-      width: 100%; min-height: 44px; background: var(--panel2); color: var(--fg);
+      width: 100%; min-height: 46px; background: var(--panel2); color: var(--fg);
       border: 1px solid var(--line); border-radius: 9px; padding: 0 14px;
-      font: inherit;
+      font: 600 20px/1 ui-monospace, Menlo, monospace; letter-spacing: 4px; text-align: center;
     }
     input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
     button {
@@ -42,47 +41,31 @@
       background: #3a1d1d; border: 1px solid var(--bad); color: #ffb1b1;
       padding: 10px 12px; border-radius: 8px; font-size: 13.5px; margin-bottom: 16px;
     }
-    .hint {
-      background: #2a2114; border: 1px solid var(--warn); color: var(--warn);
-      padding: 9px 12px; border-radius: 8px; font-size: 12.5px; margin-bottom: 16px;
-    }
-    code { font-family: ui-monospace, Menlo, monospace; }
     .foot { color: var(--muted); font-size: 12px; text-align: center; margin: 20px 0 0; }
+    .foot a { color: var(--accent); }
+    .hint { color: var(--muted); font-size: 12px; margin-top: 14px; text-align: center; }
   </style>
 </head>
 <body>
-  <form class="card" method="post" action="/login">
-    <h1>🛡️ Admin Center</h1>
-    <p class="sub">Sign in to view logs, traffic, and bans.</p>
+  <form class="card" method="post" action="/login/mfa">
+    <h1>🔐 Two-factor authentication</h1>
+    <p class="sub">Enter the 6-digit code from your authenticator app.</p>
 
-    {% if mfa_misconfigured %}
-    <div class="error">
-      🔒 MFA is enabled but no TOTP secret is configured. Logins are
-      refused until <code>ADMIN_CENTER_TOTP_SECRET</code> is set.
-    </div>
-    {% elif locked %}
-    <div class="error">
-      🔒 Too many failed attempts. Try again in about
-      {{ (locked // 60) + 1 }} minute{{ 's' if locked >= 60 else '' }}.
-    </div>
+    {% if locked %}
+    <div class="error">🔒 Too many attempts. Try again in about {{ (locked // 60) + 1 }} minute{{ 's' if locked >= 60 else '' }}.</div>
     {% elif error %}
-    <div class="error">Incorrect username or password.</div>
-    {% endif %}
-    {% if default_password %}
-    <div class="hint">
-      ⚠️ Default credentials are active. Set <code>ADMIN_CENTER_PASS</code>
-      (and <code>ADMIN_CENTER_USER</code>) before exposing this off-host.
-    </div>
+    <div class="error">That code didn't match. Try again.</div>
     {% endif %}
 
-    <input type="hidden" name="next" value="{{ next }}">
-    <label for="username">Username</label>
-    <input id="username" name="username" autocomplete="username" autofocus required>
-    <label for="password">Password</label>
-    <input id="password" name="password" type="password" autocomplete="current-password" required>
-    <button type="submit">Sign in</button>
+    <label for="code">Authentication code</label>
+    <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code"
+           pattern="[0-9A-Za-z\-]*" autofocus required>
+    <button type="submit">Verify</button>
 
-    <p class="foot">SimpleVTT Admin Center · v{{ app_version }}</p>
+    {% if recovery_available %}
+    <p class="hint">Lost your authenticator? Enter your recovery code above instead.</p>
+    {% endif %}
+    <p class="foot"><a href="/logout">Cancel</a> · SimpleVTT Admin Center · v{{ app_version }}</p>
   </form>
 </body>
 </html>
