@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.524.0] - 2026-06-21 — "The Hidden Quarry"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_nondetection` — Phase 2 #48 of the cast-and-broadcast tail. Nondetection (L3 abjuration, Bard/Cleric/Ranger/Wizard) installs an 8-hour single-target flag-buff hiding the target from divination magic.
+
+**Description:** Continues the tail after Water Walk (#47). RAW PHB p.264: "For the duration, you hide a target that you touch from divination magic. ... The target can't be targeted by any divination magic or perceived through magical scrying sensors." 1 action, V/S/M, Touch, 8 hours, non-concentration. Single-target touch flag-buff (same shape as Tongues #4 / See Invisibility #42): installs `effects.nondetection: True` on the caster or a touched willing creature. The engine doesn't model divination / scrying, so the detection block is GM-narrated; the flag surfaces who is hidden. The place/object target variant is GM-narrated (the engine buffs creatures, not locations).
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `cast_nondetection` endpoint. Self-or-touch (`target_character_id?`). Caster gate: knows the spell OR bard/cleric/ranger/wizard. 400/403/404/409 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #48.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_nondetection.py` (new): +4 tests — self-cast installs `nondetection: true` (8h, non-conc); touch-an-ally routes the buff to the ally not the caster; non-caster 409; missing character_id 400.
+
+Total harness count → 3883 (+4).
+
+MINOR — new cast endpoint, flag-buff substrate. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_nondetection`: Nondetection (L3) — an 8-hour `nondetection` flag-buff hiding a creature from divination/scrying; detection GM-narrated. Phase 2 #48 of the cast-and-broadcast tail.
+
 ## [2.523.0] - 2026-06-21 — "The Steady Stride"
 
 **Schema version:** 71

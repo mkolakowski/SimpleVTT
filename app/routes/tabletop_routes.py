@@ -70068,6 +70068,138 @@ async def cast_see_invisibility(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_nondetection")
+async def cast_nondetection(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.524.0 — Phase 2 #48 of
+    docs/plans/cast-and-broadcast-tail.md. Nondetection (L3 abjuration,
+    Bard/Cleric/Ranger/Wizard, PHB p.264):
+
+      "For the duration, you hide a target that you touch from divination
+       magic. ... The target can't be targeted by any divination magic
+       or perceived through magical scrying sensors."
+
+    1 action, V/S/M (a pinch of diamond dust), Touch, 8 hours, non-
+    concentration.
+
+    Implementation: single-target touch flag-buff (same shape as Tongues
+    v2.445.0 / See Invisibility v2.509.0). Installs the ``nondetection``
+    buff carrying ``effects.nondetection: True``. The engine doesn't
+    model divination / scrying, so the "can't be targeted / scried"
+    effect is GM-narrated — the flag surfaces who is hidden from
+    divination. The place/object target variant is GM-narrated (the
+    engine buffs creatures, not locations).
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster targets themself (the
+    caster is a willing creature within touch).
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_nd = any(
+        (s.get("_slug") == "nondetection")
+        or (str(s.get("name", "")).lower() == "nondetection")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"bard", "cleric", "ranger", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_nd and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Nondetection, or bard/cleric/ranger/wizard",
+            "got_class": _cls,
+        })
+
+    DURATION_ROUNDS = 4800  # 8 hours @ 6 s/round
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "nondetection",
+        "name": "Nondetection",
+        "icon": "🕵️",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {"nondetection": True},
+        "desc": (
+            "Hidden from divination magic + scrying sensors for 8 hours. "
+            "The detection block is GM-narrated; the flag surfaces who is "
+            "hidden."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    who = "themself" if target_char.id == char.id else target_char.name
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🕵️ Nondetection",
+            "feature_desc": (
+                f"{char.name} hides {who} from divination magic and "
+                "scrying sensors for 8 hours (GM-narrated)."
+            ),
+            "source": "nondetection",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "nondetection",
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_globe_of_invulnerability")
 async def cast_globe_of_invulnerability(
     campaign_id: int,
