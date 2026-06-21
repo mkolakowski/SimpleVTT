@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.487.1] - 2026-06-20 — "The Matching Crest"
+
+**Schema version:** 71
+
+**Commit summary:** The Admin Center now uses the same favicon as the main site. Served via a small public `/favicon.svg` route (the admin center has no `/static` mount) and referenced from all three admin pages.
+
+**Implementation:**
+
+- `app/admin_center/main.py`: `GET /favicon.svg` (+ `/favicon.ico` alias) returns the image-baked `app/static/favicon.svg`; both paths added to the public set so the icon loads on the login page pre-auth.
+- `app/admin_center/templates/{dashboard,login,mfa}.html`: `<link rel="icon" href="/favicon.svg" type="image/svg+xml">`.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py`: +2 live tests — `/favicon.svg` serves (no auth) + matches the main site's bytes; the login page references it.
+
+Total harness count → 3712 (+2).
+
+PATCH — cosmetic (favicon) on the Admin Center. No schema change.
+
+### Added
+- Admin Center favicon (`/favicon.svg`) matching the main site.
+
 ## [2.487.0] - 2026-06-20 — "The Second Factor (Armed)"
 
 **Schema version:** 71

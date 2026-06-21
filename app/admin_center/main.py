@@ -17,7 +17,13 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -57,6 +63,11 @@ AUDIT_LOG_PATH = os.environ.get(
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
+
+# Reuse the main site's favicon (baked into the same image at
+# app/static/favicon.svg). The admin center has no /static mount, so
+# it's served via the dedicated /favicon.svg route below.
+_FAVICON_PATH = Path(__file__).resolve().parent.parent / "static" / "favicon.svg"
 
 
 def _fmt_epoch(t) -> str:
@@ -122,6 +133,8 @@ def _is_public(path: str) -> bool:
     # session flag.
     return (
         path == "/healthz"
+        or path == "/favicon.svg"
+        or path == "/favicon.ico"
         or path == "/login"
         or path == "/login/mfa"
         or path.startswith("/static")
@@ -290,6 +303,15 @@ def mfa_submit(request: Request, code: str = Form("")):
 def logout(request: Request):
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
+
+
+@app.get("/favicon.svg")
+@app.get("/favicon.ico")
+def favicon():
+    """Serve the same favicon as the main site (image-baked SVG)."""
+    if _FAVICON_PATH.is_file():
+        return FileResponse(str(_FAVICON_PATH), media_type="image/svg+xml")
+    return Response(status_code=404)
 
 
 @app.get("/healthz")

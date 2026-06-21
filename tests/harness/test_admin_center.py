@@ -481,6 +481,26 @@ _LIVE = pytest.mark.skipif(
 
 
 @_LIVE
+def test_favicon_served_without_auth():
+    """The admin center serves the same favicon as the main site, and
+    it's reachable without logging in (so the login page shows it)."""
+    r = httpx.get(f"{ADMIN_BASE_URL}/favicon.svg", timeout=5.0, follow_redirects=False)
+    assert r.status_code == 200
+    assert "svg" in r.headers.get("content-type", "").lower()
+    # Same bytes as the main app's /static/favicon.svg.
+    main = httpx.get("http://localhost:8013/static/favicon.svg", timeout=5.0)
+    if main.status_code == 200:
+        assert r.content == main.content
+
+
+@_LIVE
+def test_login_page_references_favicon():
+    r = httpx.get(f"{ADMIN_BASE_URL}/login", timeout=5.0)
+    assert r.status_code == 200
+    assert '/favicon.svg' in r.text
+
+
+@_LIVE
 def test_healthz_open_without_auth():
     r = httpx.get(f"{ADMIN_BASE_URL}/healthz", timeout=5.0)
     assert r.status_code == 200
