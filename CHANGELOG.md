@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.493.0] - 2026-06-21 — "The Platinum Rings"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_warding_bond` — Phase 2 #28 of the cast-and-broadcast tail. Warding Bond (L2 abjuration, Cleric) installs a 1-hour buff granting **+1 AC** and **resistance to all damage** via two existing substrates.
+
+**Description:** Continues the cast-and-broadcast tail (Freedom of Movement #27 shipped v2.492.0). Warding Bond was verified genuinely unwired. RAW PHB p.287: the warded target gains +1 AC, +1 to saving throws, and resistance to all damage while within 60 ft of the caster, who takes the same damage the target takes. The mechanized core rides **two** existing substrates: `ac_bonus: 1` (read at `_read_target_ac` — the same field Mage Armor / Haste / Shield of Faith use) and `resistance_to: ["all"]` (read by `_resistance_halve` — the Potion-of-Invulnerability wildcard). So both effects apply through the real AC + damage pipelines with **zero new mechanical code**.
+
+**Honest scope — what stays GM-narrated:** the **+1 saving-throw** bonus is GM-narrated for v1 because the flat `save_bonus` read-site is equipped-item-only (Cloak/Ring of Protection), not buff-aware — a buff-borne save bonus simply wouldn't apply, so it would be misleading to claim it. The **damage-share** rider (caster takes the same damage), the 60-ft tether, and "ends if caster drops to 0 HP" likewise stay GM-narrated (no damage-redirect substrate). The endpoint's broadcast + the buff desc both flag the damage-share so GMs know the resistance is "free" until they apply the shared damage manually.
+
+**Mirror nuance (same as #27):** `_resistance_halve` reads the target's sheet `_buffs_active`, so the endpoint calls `_mirror_buffs_to_sheet` after install — otherwise the resistance reader wouldn't see the freshly-installed buff.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_SPELL_BUFF_MAP["warding-bond"]` template (`ac_bonus: 1` + `resistance_to: ["all"]`, 600 rounds, non-concentration) + the `cast_warding_bond` endpoint. Caster gate: knows the spell OR cleric. Touch self-or-ally target. Mirrors buffs to the target sheet post-install. 400 missing character_id, 404 unknown caster/target, 409 non-caster, 403 not-your-character.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #28.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_warding_bond.py` (new): +5 tests — install carries `ac_bonus:1` + `resistance_to:[all]`, 1-hour non-concentration, ally-target installs on the ally, non-caster 409, missing character_id 400.
+
+Total harness count → 3754 (+5).
+
+MINOR — new cast endpoint; backward-compatible, additive substrate. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_warding_bond`: Warding Bond (L2) — 1-hour +1 AC + resistance-to-all-damage buff riding the existing `ac_bonus` + `resistance_to` substrates. Phase 2 #28 of the cast-and-broadcast tail.
+
 ## [2.492.0] - 2026-06-21 — "The Unbound Stride"
 
 **Schema version:** 71

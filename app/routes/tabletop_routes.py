@@ -2016,6 +2016,40 @@ _SPELL_BUFF_MAP["freedom-of-movement"] = {
     ),
 }
 
+# v2.493.0 — Warding Bond (Phase 2 #28 of
+# docs/plans/cast-and-broadcast-tail.md). L2 abjuration, Cleric,
+# PHB p.287. While the warded target is within 60 ft it gains +1 AC,
+# +1 to saving throws, and resistance to all damage; each time it
+# takes damage the caster takes the same amount. 1 hour,
+# non-concentration. Mechanized core rides TWO existing substrates:
+# `ac_bonus` (read at `_read_target_ac` — same field Mage Armor /
+# Haste / Shield of Faith use) and `resistance_to: ["all"]` (read by
+# `_resistance_halve` — the Potion-of-Invulnerability wildcard). The
+# **+1 saving-throw** bonus is GM-narrated for v1: the flat `save_bonus`
+# read-site is equipped-item-only (Cloak/Ring of Protection), not
+# buff-aware, so a buff-borne save bonus wouldn't apply. The
+# **damage-share** rider (caster takes the same damage), the 60-ft
+# tether, and "ends if caster drops to 0 HP" likewise stay GM-narrated
+# (no damage-redirect substrate) — GMs should apply the shared damage
+# manually, since the resistance is otherwise "free" until they do.
+_SPELL_BUFF_MAP["warding-bond"] = {
+    "key": "warding-bond",
+    "name": "Warding Bond",
+    "icon": "💍",
+    "duration_rounds": 600,  # 1 hour RAW, non-concentration
+    "duration_max": 600,
+    "concentration": False,
+    "effects": {
+        "ac_bonus": 1,
+        "resistance_to": ["all"],
+    },
+    "desc": (
+        "+1 AC and resistance to all damage while within 60 ft of the "
+        "caster. +1 to saving throws, the damage-share link, and the "
+        "60-ft tether are GM-narrated. 1 hour."
+    ),
+}
+
 # v2.190.0 — Potion of Invulnerability (RAW DMG p.188, rare): resistance to
 # ALL damage for 1 minute. Reuses the v2.99.121 `resistance_to: ["all"]`
 # wildcard that `_resistance_halve` already honours, so no new intercept is
@@ -65635,6 +65669,155 @@ async def cast_freedom_of_movement(
     return {
         "ok": True,
         "feature": "freedom-of-movement",
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_warding_bond")
+async def cast_warding_bond(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.493.0 — Phase 2 #28 of
+    docs/plans/cast-and-broadcast-tail.md. Warding Bond
+    (L2 abjuration, Cleric, PHB p.287):
+
+      "While the target is within 60 feet of you, it gains a +1 bonus
+       to AC and saving throws, and it has resistance to all damage.
+       Also, each time it takes damage, you take the same amount of
+       damage. ..."
+
+    1 action, V/S/M (a pair of platinum rings), Touch, 1 hour,
+    non-concentration.
+
+    Implementation: rides TWO existing substrates — ``ac_bonus`` (read
+    at ``_read_target_ac``, same field Mage Armor / Haste / Shield of
+    Faith use) + ``resistance_to: ["all"]`` (read by
+    ``_resistance_halve``, the Potion-of-Invulnerability wildcard). The
+    **+1 saving-throw** bonus is GM-narrated — the flat save-bonus
+    read-site is equipped-item-only, not buff-aware. The
+    **damage-share** rider (caster takes the same damage), the 60-ft
+    tether, and "ends if caster drops to 0 HP" stay GM-narrated (no
+    damage-redirect substrate); GMs should apply the shared damage
+    manually since the resistance is otherwise "free" until they do.
+
+    Like Freedom of Movement (#27), the resistance read is sheet-based
+    (``_resistance_halve`` reads ``_buffs_active``), so we mirror the
+    buff to the target's sheet after install.
+
+    Body: ``{character_id, target_character_id?}``. RAW the bond is
+    between the caster and *another* willing creature; if
+    ``target_character_id`` is omitted we default to self for endpoint
+    uniformity (the GM picks the real target).
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_wb = any(
+        (s.get("_slug") == "warding-bond")
+        or (str(s.get("name", "")).lower() == "warding bond")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"cleric"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_wb and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Warding Bond, or cleric",
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("warding-bond") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 600)
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "warding-bond",
+        "name": template.get("name") or "Warding Bond",
+        "icon": template.get("icon") or "💍",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": dict(
+            template.get("effects")
+            or {"ac_bonus": 1, "resistance_to": ["all"]}),
+        "desc": template.get("desc") or (
+            "+1 AC and resistance to all damage for 1 hour."
+        ),
+    })
+    # Mirror to the target's sheet so the sheet-based resistance reader
+    # (`_resistance_halve` reads `_buffs_active`) sees the new buff.
+    _mirror_buffs_to_sheet(
+        db, target_char.id, _get_buffs(campaign_id, target_char.id),
+    )
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    who = "themself" if target_char.id == char.id else target_char.name
+    feature_desc = (
+        f"{char.name} forms a Warding Bond with {who} — +1 AC and "
+        "resistance to all damage while within 60 ft (the caster takes "
+        "shared damage — GM-narrated). 1 hour."
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "💍 Warding Bond",
+            "feature_desc": feature_desc,
+            "source": "warding-bond",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "warding-bond",
         "target_character_id": target_char.id,
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,
