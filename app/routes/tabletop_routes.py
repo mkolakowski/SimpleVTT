@@ -2406,6 +2406,41 @@ _SPELL_BUFF_MAP["see-invisibility"] = {
     ),
 }
 
+# v2.511.0 — Globe of Invulnerability (Phase 2 #44 of
+# docs/plans/cast-and-broadcast-tail.md). L6 abjuration,
+# Sorcerer/Wizard, PHB p.247. "An immobile, faintly shimmering barrier
+# springs into existence in a 10-foot radius around you ... Any spell of
+# 5th level or lower cast from outside the barrier can't affect
+# creatures or objects within it, even if the spell is cast using a
+# higher level spell slot." Concentration, up to 1 minute. Flag-buff
+# shape: the buff carries `globe_of_invulnerability: True` plus an
+# explicit `spell_immunity_max_level: 5` so the table can read the
+# threshold directly. The barrier GEOMETRY (which creatures are inside
+# the 10-ft radius; whether the offending caster is inside or outside)
+# is the spatial AoE-shape work filed against Maps 2.0 — the same
+# boundary Holy Aura's aura (#41) and Pass without Trace's radius (#4)
+# sit behind. A mechanical block in `/cast_spell` (a level-≤5 spell from
+# outside has no effect on a globe'd target) is a filed follow-up; v1
+# surfaces the flag + threshold and GM-narrates the block.
+_SPELL_BUFF_MAP["globe-of-invulnerability"] = {
+    "key": "globe-of-invulnerability",
+    "name": "Globe of Invulnerability",
+    "icon": "🔮",
+    "duration_rounds": 10,  # 1 minute @ 6 s/round (concentration)
+    "duration_max": 10,
+    "concentration": True,  # RAW (PHB p.247): "Concentration, up to 1 minute."
+    "effects": {
+        "globe_of_invulnerability": True,
+        "spell_immunity_max_level": 5,
+    },
+    "desc": (
+        "A 10-ft barrier: spells of 5th level or lower cast from outside "
+        "can't affect creatures within it. Up to 1 minute "
+        "(concentration). The barrier geometry + the spell-block are "
+        "GM-narrated; the flag surfaces the 5th-level threshold."
+    ),
+}
+
 # v2.190.0 — Potion of Invulnerability (RAW DMG p.188, rare): resistance to
 # ALL damage for 1 minute. Reuses the v2.99.121 `resistance_to: ["all"]`
 # wildcard that `_resistance_halve` already honours, so no new intercept is
@@ -69231,6 +69266,143 @@ async def cast_see_invisibility(
         "feature": "see-invisibility",
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_globe_of_invulnerability")
+async def cast_globe_of_invulnerability(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.511.0 — Phase 2 #44 of
+    docs/plans/cast-and-broadcast-tail.md. Globe of Invulnerability
+    (L6 abjuration, Sorcerer/Wizard, PHB p.247):
+
+      "An immobile, faintly shimmering barrier springs into existence in
+       a 10-foot radius around you and remains for the duration. Any
+       spell of 5th level or lower cast from outside the barrier can't
+       affect creatures or objects within it, even if the spell is cast
+       using a higher level spell slot. ... Similarly, the area within
+       the barrier is excluded from the areas affected by such spells."
+
+    1 action, V/S/M (a glass or crystal bead that shatters), Self (10-ft
+    radius), **Concentration, up to 1 minute**.
+
+    Implementation: installs the v2.511.0 ``globe-of-invulnerability``
+    buff carrying ``effects.globe_of_invulnerability: True`` plus an
+    explicit ``effects.spell_immunity_max_level: 5`` so the table can
+    read the threshold directly. Flag-buff shape — the barrier GEOMETRY
+    (which creatures sit inside the 10-ft radius; whether the offending
+    caster is inside or outside) is the spatial AoE-shape work filed
+    against Maps 2.0 (the same boundary Holy Aura's aura #41 and Pass
+    without Trace's radius #4 sit behind). A mechanical block in
+    ``/cast_spell`` (a level-≤5 spell from outside has no effect on a
+    globe'd target) is a filed follow-up; v1 surfaces the flag +
+    threshold and GM-narrates the block.
+
+    Body: ``{character_id}``. Self-targeted per RAW (Range: Self — the
+    globe is centered on the caster).
+
+    Response: ``{ok, feature, buff_installed, duration_rounds,
+    spell_immunity_max_level}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_goi = any(
+        (s.get("_slug") == "globe-of-invulnerability")
+        or (str(s.get("name", "")).lower() == "globe of invulnerability")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"sorcerer", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_goi and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Globe of Invulnerability, or sorcerer/wizard",
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("globe-of-invulnerability") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 10)
+    effects = dict(
+        template.get("effects")
+        or {"globe_of_invulnerability": True, "spell_immunity_max_level": 5},
+    )
+    max_level = int(effects.get("spell_immunity_max_level") or 5)
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "globe-of-invulnerability",
+        "name": template.get("name") or "Globe of Invulnerability",
+        "icon": template.get("icon") or "🔮",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": True,
+        "source_char_id": char.id,
+        "effects": effects,
+        "desc": template.get("desc") or (
+            "A 10-ft barrier: spells of 5th level or lower cast from "
+            "outside can't affect creatures within it. Up to 1 minute "
+            "(concentration)."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🔮 Globe of Invulnerability",
+            "feature_desc": (
+                f"{char.name} raises a 10-ft Globe of Invulnerability — "
+                f"spells of {max_level}th level or lower cast from outside "
+                "the barrier can't affect creatures within it, for up to 1 "
+                "minute (concentration). Barrier geometry + the block are "
+                "GM-narrated."
+            ),
+            "source": "globe-of-invulnerability",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "globe-of-invulnerability",
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+        "spell_immunity_max_level": max_level,
     }
 
 

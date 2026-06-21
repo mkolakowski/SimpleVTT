@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3836 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.510.0, 2026-06-21).
+**Total tests:** 3841 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.511.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4644,6 +4644,17 @@ v2.491.0 — Enlarge/Reduce (L2 transmutation, Sorcerer/Wizard, PHB p.237). Phas
 | `test_cast_enlarge_reduce_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`. |
 | `test_cast_enlarge_reduce_bad_mode_400` | An invalid `mode` (e.g. "embiggen") → 400. |
 | `test_cast_enlarge_reduce_missing_character_id_400` | Body without character_id → 400. |
+
+### `test_cast_globe_of_invulnerability.py`
+v2.511.0 — Globe of Invulnerability (L6 abjuration, Sorcerer/Wizard, PHB p.247). Phase 2 #44 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_SPELL_BUFF_MAP["globe-of-invulnerability"]` (`globe_of_invulnerability: True` + `spell_immunity_max_level: 5`, concentration) + the `cast_globe_of_invulnerability` endpoint. Flag-buff shape: surfaces the 5th-level immunity threshold; barrier geometry + the `/cast_spell` block are filed follow-ups (spatial AoE-shape work). Self-targeted.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_goi_wizard_installs_buff` | Wizard self-cast → 200, `feature == "globe-of-invulnerability"`, `spell_immunity_max_level == 5`; buff carries `globe_of_invulnerability == true` + `spell_immunity_max_level == 5`. |
+| `test_cast_goi_buff_is_1_min_concentration` | Buff carries `duration_rounds == 10` (1 min) + `concentration == true`. |
+| `test_cast_goi_sorcerer_also_succeeds` | A Sorcerer succeeds (asserts the sorcerer/wizard gate). |
+| `test_cast_goi_non_caster_rejected` | Cleric (not on the RAW list) → 409 `cannot_cast`, expected string names "globe of invulnerability". |
+| `test_cast_goi_missing_character_id_400` | Empty body → 400. |
 
 ### `test_see_invisibility_negates_attack_edge.py`
 v2.510.0 — See Invisibility attack-edge negation (Phase 2 #43 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md)). New `_target_sees_invisible` hub-read folded into the v2.152.0 invisible-attacker advantage across all three attack branches (PC `/attack` bonused + bonusless, NPC `/npc_attack`). Thalindra casts Greater Invisibility on Krieger + See Invisibility on herself.

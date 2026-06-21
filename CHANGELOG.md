@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.511.0] - 2026-06-21 — "The Shimmering Barrier"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_globe_of_invulnerability` — Phase 2 #44 of the cast-and-broadcast tail. Globe of Invulnerability (L6 abjuration, Sorcerer/Wizard) installs a 1-minute concentration flag-buff carrying the spell-immunity threshold.
+
+**Description:** Continues the tail after the See Invisibility attack-edge (#43). RAW PHB p.247: "An immobile, faintly shimmering barrier springs into existence in a 10-foot radius around you … Any spell of 5th level or lower cast from outside the barrier can't affect creatures or objects within it, even if the spell is cast using a higher level spell slot." 1 action, V/S/M, Self (10-ft radius), Concentration up to 1 minute. Flag-buff shape: the buff carries `effects.globe_of_invulnerability: True` plus an explicit `effects.spell_immunity_max_level: 5` so the table can read the threshold directly (and the response echoes it).
+
+**Scope note:** the barrier GEOMETRY — which creatures sit inside the 10-ft radius, and whether the offending caster is inside or outside — is the spatial AoE-shape work filed against Maps 2.0, the same boundary Holy Aura's aura (#41) and Pass without Trace's radius (#4) sit behind. A mechanical block in `/cast_spell` (a level-≤5 spell from outside has no effect on a globe'd target) is a filed follow-up; v1 surfaces the flag + threshold and GM-narrates the block.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_SPELL_BUFF_MAP["globe-of-invulnerability"]` template (`globe_of_invulnerability: True` + `spell_immunity_max_level: 5`, concentration, 10 rounds) + the `cast_globe_of_invulnerability` endpoint. Self-targeted per RAW (Range: Self). Caster gate: knows the spell OR sorcerer/wizard. Returns `spell_immunity_max_level`. 400/403/404/409 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #44.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_globe_of_invulnerability.py` (new): +5 tests — Wizard self-cast installs the buff with `globe_of_invulnerability: true` + `spell_immunity_max_level: 5` (response echoes the threshold); buff is `duration_rounds=10` + `concentration=true`; Sorcerer also succeeds (covers the gate); Cleric (not on the RAW list) 409; missing character_id 400.
+
+Total harness count → 3841 (+5).
+
+MINOR — new cast endpoint, flag-buff substrate. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_globe_of_invulnerability`: Globe of Invulnerability (L6) — a 1-minute concentration flag-buff carrying `globe_of_invulnerability` + a `spell_immunity_max_level: 5` threshold; barrier geometry + spell-block GM-narrated. Phase 2 #44 of the cast-and-broadcast tail.
+
 ## [2.510.0] - 2026-06-21 — "The Pierced Veil"
 
 **Schema version:** 71
