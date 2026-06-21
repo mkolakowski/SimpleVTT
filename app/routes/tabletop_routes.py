@@ -66037,6 +66037,160 @@ async def cast_death_ward(
     }
 
 
+# v2.497.0 — Protection from Energy (Phase 2 #30 of the cast-and-
+# broadcast tail). The five RAW damage types the caster may pick.
+_PROTECTION_FROM_ENERGY_TYPES = {"acid", "cold", "fire", "lightning", "thunder"}
+
+
+@router.post("/api/campaign/{campaign_id}/cast_protection_from_energy")
+async def cast_protection_from_energy(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.497.0 — Phase 2 #30 of
+    docs/plans/cast-and-broadcast-tail.md. Protection from Energy
+    (L3 abjuration, Cleric/Druid/Ranger/Sorcerer/Wizard, PHB p.270):
+
+      "For the duration, the willing creature you touch has resistance
+       to one damage type of your choice: acid, cold, fire, lightning,
+       or thunder."
+
+    1 action, V/S, Touch, **Concentration, up to 1 hour**.
+
+    Implementation: the sibling of Protection from Poison (#25) — rides
+    the same ``resistance_to`` read-site (`_resistance_halve`), but the
+    type is caller-chosen via the ``damage_type`` body param (one of the
+    five RAW energy types) and the spell is concentration. Mirrors the
+    buff to the target sheet (the resistance reader is sheet-based, per
+    the v2.496.1 fix). ZERO new mechanical code.
+
+    Body: ``{character_id, damage_type, target_character_id?}``.
+    ``damage_type`` is required and must be one of acid/cold/fire/
+    lightning/thunder. If ``target_character_id`` is omitted the caster
+    targets themself.
+
+    Response: ``{ok, feature, damage_type, target_character_id,
+    buff_installed, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    damage_type = str(body.get("damage_type") or "").strip().lower()
+    if damage_type not in _PROTECTION_FROM_ENERGY_TYPES:
+        raise HTTPException(
+            400,
+            "damage_type must be one of acid/cold/fire/lightning/thunder",
+        )
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_pfe = any(
+        (s.get("_slug") == "protection-from-energy")
+        or (str(s.get("name", "")).lower() == "protection from energy")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"cleric", "druid", "ranger", "sorcerer", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_pfe and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": (
+                "knows Protection from Energy, or "
+                "cleric/druid/ranger/sorcerer/wizard"
+            ),
+            "got_class": _cls,
+        })
+
+    DURATION_ROUNDS = 600  # 1 hour RAW
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "protection-from-energy",
+        "name": f"Protection from Energy ({damage_type.title()})",
+        "icon": _RESISTANCE_DAMAGE_ICONS.get(damage_type, "🛡️"),
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": True,  # RAW (PHB p.270)
+        "source_char_id": char.id,
+        "effects": {"resistance_to": [damage_type]},
+        "desc": (
+            f"Resistance to {damage_type} damage for up to 1 hour "
+            "(concentration)."
+        ),
+    })
+    # Mirror to the target's sheet so the sheet-based resistance reader
+    # (`_resistance_halve` reads `_buffs_active`) sees the new buff.
+    _mirror_buffs_to_sheet(
+        db, target_char.id, _get_buffs(campaign_id, target_char.id),
+    )
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    who = "themself" if target_char.id == char.id else target_char.name
+    feature_desc = (
+        f"{char.name} wards {who} against {damage_type} — resistance to "
+        f"{damage_type} damage for up to 1 hour (concentration)."
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": (
+                f"{_RESISTANCE_DAMAGE_ICONS.get(damage_type, '🛡️')} "
+                f"Protection from Energy ({damage_type.title()})"
+            ),
+            "feature_desc": feature_desc,
+            "source": "protection-from-energy",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "protection-from-energy",
+        "damage_type": damage_type,
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_jump")
 async def cast_jump(
     campaign_id: int,

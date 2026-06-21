@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3770 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.496.1, 2026-06-21).
+**Total tests:** 3775 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.497.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4644,6 +4644,17 @@ v2.491.0 — Enlarge/Reduce (L2 transmutation, Sorcerer/Wizard, PHB p.237). Phas
 | `test_cast_enlarge_reduce_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`. |
 | `test_cast_enlarge_reduce_bad_mode_400` | An invalid `mode` (e.g. "embiggen") → 400. |
 | `test_cast_enlarge_reduce_missing_character_id_400` | Body without character_id → 400. |
+
+### `test_cast_protection_from_energy.py`
+v2.497.0 — Protection from Energy (L3 abjuration, Cleric/Druid/Ranger/Sorcerer/Wizard, PHB p.270). Phase 2 #30 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). Sibling of Protection from Poison — `cast_protection_from_energy` rides the same `resistance_to` read-site, with the type chosen via a `damage_type` body param (acid/cold/fire/lightning/thunder), concentration / 1 hour, mirrored to the target sheet. Thalindra (Wizard) casts.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_pfe_installs_chosen_resistance` | `damage_type=fire` → 200, `feature == "protection-from-energy"`, `damage_type == "fire"`, `duration_rounds == 600`; buff carries `effects.resistance_to == ["fire"]`. |
+| `test_cast_pfe_is_concentration_and_mirrored` | Buff is `concentration == true` + 600 rounds, and present in the sheet's `_buffs_active` via `/sheet-json` (the resistance-reader precondition). |
+| `test_cast_pfe_bad_damage_type_400` | An invalid `damage_type` (e.g. necrotic) → 400. |
+| `test_cast_pfe_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`. |
+| `test_cast_pfe_missing_character_id_400` | Body without character_id → 400. |
 
 ### `test_cast_protection_from_poison.py`
 v2.490.0 — Protection from Poison (L2 abjuration, Cleric/Druid/Paladin/Ranger, PHB p.270). Phase 2 #25 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_SPELL_BUFF_MAP["protection-from-poison"]` template (`resistance_to: ["poison"]`, 600 rounds, non-concentration) + the `cast_protection_from_poison` endpoint. Rides the existing `_resistance_halve` read-site (same substrate as the v2.186.0 Potion of Resistance), so poison damage is genuinely halved with zero new mechanical code; the advantage-on-poison-saves + neutralize clauses stay GM-narrated. Brother Tavik Stonebrow (Cleric, GM-owned) is the cast surface; Krieger (Barbarian) is the non-caster reject.

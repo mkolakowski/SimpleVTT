@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.497.0] - 2026-06-21 — "The Elemental Shield"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_protection_from_energy` — Phase 2 #30 of the cast-and-broadcast tail. Protection from Energy (L3 abjuration, Cleric/Druid/Ranger/Sorcerer/Wizard) installs a 1-hour concentration buff granting resistance to one caller-chosen energy type (acid/cold/fire/lightning/thunder).
+
+**Description:** Continues the tail after the v2.496.1 Protection-from-Poison mirror fix. Protection from Energy is the direct sibling of Protection from Poison (#25): it rides the same `resistance_to` read-site (`_resistance_halve`), but the type is chosen via a `damage_type` body param (one of the five RAW energy types) and the spell is concentration / 1 hour. Like #27/#28 — and now #25 after the v2.496.1 fix — the endpoint mirrors the buff to the target sheet so the sheet-based resistance reader actually halves the damage. **Zero new mechanical code.**
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: `cast_protection_from_energy` endpoint + `_PROTECTION_FROM_ENERGY_TYPES` set. Builds the resistance buff inline (`resistance_to: [damage_type]`, concentration, 600 rounds), reusing `_RESISTANCE_DAMAGE_ICONS` for the per-type icon, then mirrors to the sheet. Caster gate: knows the spell OR cleric/druid/ranger/sorcerer/wizard. 400 missing character_id / invalid damage_type, 404 unknown caster/target, 409 non-caster, 403 not-your-character.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #30.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_protection_from_energy.py` (new): +5 tests — install carries `resistance_to:[fire]`, concentration + 1-hour + mirrored to sheet `_buffs_active`, invalid damage_type 400, non-caster 409, missing character_id 400.
+
+Total harness count → 3775 (+5).
+
+MINOR — new cast endpoint; backward-compatible. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_protection_from_energy`: Protection from Energy (L3) — 1-hour concentration resistance to a chosen energy type, riding the `resistance_to` substrate. Phase 2 #30 of the cast-and-broadcast tail.
+
 ## [2.496.1] - 2026-06-21 — "The Latent Ward"
 
 **Schema version:** 71
