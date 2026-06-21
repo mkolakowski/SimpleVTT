@@ -1,35 +1,25 @@
-"""Phase 4 complex-spell deep-dive — Mirror Image (L2 Illusion).
+"""Mirror Image (L2 Illusion) — Phase 4 deep-dive + the v2.543.0
+mechanical cast endpoint (#57 of cast-and-broadcast-tail.md).
 
-Mirror Image is the spell-validation suite's reference case for a
-spell whose RAW mechanic is *deliberately* GM-narration-only. Unlike
-Hold Person (paralyzed buff + repeated WIS save) or Polymorph (full
-stat-block swap + concentration anchor), Mirror Image has:
+Originally Mirror Image was the suite's reference case for a
+GM-narration-only spell (no endpoint, no buff, generic /cast_spell).
+**v2.543.0 changes that:** a dedicated ``/cast_mirror_image`` endpoint
+installs a ``mirror-image`` buff carrying ``mirror_image_duplicates``
+(3) + ``mirror_image_ac`` (10 + DEX mod), and the ``/attack`` +
+``/npc_attack`` hit path rolls the RAW deflection (3 dupes → 6+, 2 → 8+,
+1 → 11+; a deflected hit that meets the duplicate AC pops one).
 
-  - NO dedicated cast endpoint (no /cast_mirror_image),
-  - NO ``_SPELL_BUFF_MAP`` entry, and
-  - a single catalog "cast" action with no save / attack / damage.
-
-So it rides the generic ``/cast_spell`` path: it spends a slot and
-broadcasts ``spell_cast``, but installs no engine buff. The RAW
-3-duplicate misdirection (roll 1d20: 6+ with three dupes, 8+ with two,
-11+ with one; duplicate AC = 10 + Dex mod; a hit pops one) is narrated
-at the table, not modeled.
-
-Two RAW facts make Mirror Image worth pinning:
-
-  1. It is **non-concentration** (PHB) — a sorcerer can hold Mirror
-     Image *and* a concentration spell at once. We assert the cast
-     installs no ``concentration-mirror-image`` anchor and the
-     response doesn't flag concentration, the inverse of the
-     Polymorph deep-dive's ``concentration-polymorph`` assertion.
-  2. It installs **no duplicate/AC buff** today. The narration-only
-     contract is pinned so a future commit that adds real duplicate
-     modeling is a conscious change to this test, not a silent drift.
+This file pins BOTH surfaces:
+  - the catalog shape (unchanged);
+  - the generic ``/cast_spell`` path, which still spends a slot +
+    broadcasts but is **narration-only** (installs no buff) — the
+    mechanical buff is the dedicated endpoint's job;
+  - the new ``/cast_mirror_image`` endpoint: installs 3 duplicates,
+    non-concentration, and the deflection mechanic spares the caster
+    while destroying duplicates.
 
 Caster: Zara Emberfire (Tiefling Sorcerer 5) owns Mirror Image
-natively at spell_index 9 (Fire Bolt/Mage Hand/Minor Illusion/
-Prestidigitation/Shocking Grasp/Thaumaturgy/Shield/Magic Missile/
-Burning Hands/**Mirror Image**/...). She has L2 slots.
+natively at spell_index 9 and has L2 slots.
 """
 import pytest_asyncio
 
@@ -50,6 +40,35 @@ async def _get_buff_keys(gm_client, char_id):
     return keys
 
 
+async def _get_buffs(gm_client, char_id):
+    resp = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/buffs",
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json().get("buffs") or []
+
+
+def _tok(char, tid=None, buffs=None, init=10, hp=40):
+    return {
+        "id": tid or f"tok_mi_{char['id']}",
+        "char_id": char["id"],
+        "name": char["name"],
+        "initiative": init,
+        "hp_current": hp, "hp_max": hp,
+        "buffs": buffs or [],
+        "economy": {"action": False, "bonus": False,
+                    "reaction": False, "movement": 0},
+    }
+
+
+async def _set_battle(gm_client, combatants):
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": combatants, "turn_index": 0,
+              "round": 1, "active": True},
+    )
+
+
 @pytest_asyncio.fixture
 async def zara_rested(gm_client, roster):
     """Long-rest Zara so L2 slots are full before each cast."""
@@ -59,6 +78,21 @@ async def zara_rested(gm_client, roster):
         json={"type": "long"},
     )
     return zara
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _cleanup(gm_client, roster):
+    yield
+    zara = roster.get("Zara Emberfire")
+    if zara:
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+            json={"character_id": zara["id"], "key": "mirror-image"},
+        )
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [], "turn_index": 0, "round": 1, "active": False},
+    )
 
 
 def test_mirror_image_present_in_catalog():
@@ -82,9 +116,9 @@ def test_mirror_image_present_in_catalog():
 
 
 async def test_cast_consumes_l2_slot_and_broadcasts(gm_client, gm_ws, zara_rested):
-    """Zara casts Mirror Image at its base L2: a slot ticks down and
-    the spell_cast broadcast carries the name / level / action timing
-    the chat card reads."""
+    """Zara casts Mirror Image at its base L2 via the generic path: a
+    slot ticks down and the spell_cast broadcast carries the name /
+    level / action timing the chat card reads."""
     zara = zara_rested
     gm_ws.mark()
     resp = await gm_client.post(
@@ -108,7 +142,6 @@ async def test_cast_consumes_l2_slot_and_broadcasts(gm_client, gm_ws, zara_reste
     assert d["spell_name"] == "Mirror Image"
     assert d["spell_level"] == 2
     assert d["spell_casting_time"] == "1 action"
-    # No engine-rolled damage/save action surfaces on the broadcast.
     dmgs = [a.get("damage") for a in (d.get("actions") or []) if a.get("damage")]
     assert not dmgs, f"Mirror Image carries no damage; got {dmgs}"
 
@@ -116,9 +149,7 @@ async def test_cast_consumes_l2_slot_and_broadcasts(gm_client, gm_ws, zara_reste
 async def test_cast_is_non_concentration(gm_client, zara_rested):
     """RAW: Mirror Image is NOT concentration. The cast must not flag
     concentration on the response and must not install a
-    ``concentration-mirror-image`` anchor on the caster — the inverse
-    of the Polymorph deep-dive, and what lets a sorcerer hold it
-    alongside a real concentration spell."""
+    ``concentration-mirror-image`` anchor on the caster."""
     zara = zara_rested
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
@@ -140,12 +171,12 @@ async def test_cast_is_non_concentration(gm_client, zara_rested):
                    for k in keys), keys
 
 
-async def test_cast_installs_no_duplicate_or_ac_buff(gm_client, zara_rested):
-    """Contract pin: the 3-duplicate misdirection mechanic is
-    GM-narration-only — no ``mirror-image`` buff, no duplicate-count
-    or AC-by-count effect is installed on the caster today. A future
-    commit that models duplicates as a real buff updates this test on
-    purpose rather than drifting silently."""
+async def test_generic_cast_spell_path_installs_no_buff(gm_client, zara_rested):
+    """Contract pin: the *generic* /cast_spell path stays
+    narration-only — it spends the slot + broadcasts but installs no
+    ``mirror-image`` buff. The mechanical duplicates live behind the
+    dedicated ``/cast_mirror_image`` endpoint (asserted below), so a
+    spell-grid cast and the dedicated cast stay distinguishable."""
     zara = zara_rested
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
@@ -160,5 +191,102 @@ async def test_cast_installs_no_duplicate_or_ac_buff(gm_client, zara_rested):
     assert resp.status_code == 200, resp.text
     keys = await _get_buff_keys(gm_client, zara["id"])
     assert not any("mirror" in (k or "") for k in keys), (
-        f"Mirror Image installs no engine buff today; got {keys}"
+        f"the generic /cast_spell path installs no engine buff; got {keys}"
     )
+
+
+async def test_cast_mirror_image_installs_three_duplicates(gm_client, roster):
+    """The dedicated endpoint installs a buff with 3 duplicates + AC =
+    10 + DEX mod, non-concentration, 10 rounds."""
+    zara = roster["Zara Emberfire"]
+    await _set_battle(gm_client, [_tok(zara)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_mirror_image",
+        json={"character_id": zara["id"]},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True
+    assert body["feature"] == "mirror-image"
+    assert body["duplicates"] == 3
+    assert body["duplicate_ac"] >= 10
+    assert body["duration_rounds"] == 10
+
+    buffs = await _get_buffs(gm_client, zara["id"])
+    mi = next((b for b in buffs if b.get("key") == "mirror-image"), None)
+    assert mi is not None, f"buff missing: {buffs}"
+    eff = mi.get("effects") or {}
+    assert int(eff.get("mirror_image_duplicates") or 0) == 3
+    assert int(eff.get("mirror_image_ac") or 0) == body["duplicate_ac"]
+    assert mi.get("concentration") is False
+
+
+async def test_mirror_image_deflects_attacks_and_destroys_duplicates(
+    gm_client, roster,
+):
+    """Attacks against the Mirror-Image caster deflect onto a duplicate:
+    a deflected swing met the caster's AC yet leaves ``hit`` False +
+    ``damage_applied`` 0, and duplicates are destroyed (count
+    decrements toward 0)."""
+    zara = roster["Zara Emberfire"]
+    pip = roster["Pip Quickfingers"]
+    zara_tok = "tok_mi_caster"
+    await _set_battle(gm_client, [
+        # Generous HP so non-deflected hits don't drop her mid-loop.
+        _tok(zara, zara_tok, init=5, hp=500),
+        _tok(pip, "tok_mi_pip", init=20),
+    ])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_mirror_image",
+        json={"character_id": zara["id"]},
+    )
+    assert r.status_code == 200, r.text
+
+    deflected_once = False
+    saw_decrement = False
+    # 3 duplicates deflect ~75% of hits; 40 swings makes a flake
+    # vanishingly unlikely.
+    for _ in range(40):
+        a = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={"character_id": pip["id"], "attack_index": 0,
+                  "target_combatant_id": zara_tok, "override": True},
+        )
+        assert a.status_code == 200, a.text
+        j = a.json()
+        mi = j.get("mirror_image")
+        if not mi:
+            continue
+        if mi.get("deflected"):
+            deflected_once = True
+            # The caster is spared despite the swing meeting her AC.
+            assert j["hit"] is False, j
+            assert j["damage_applied"] == 0, j
+            if int(mi.get("remaining", 3)) < 3:
+                saw_decrement = True
+            if int(mi.get("remaining", 3)) <= 0:
+                break  # all duplicates spent — buff is gone
+    assert deflected_once, "expected ≥1 Mirror Image deflection over 40 swings"
+    assert saw_decrement, "expected ≥1 duplicate to be destroyed"
+
+
+async def test_cast_mirror_image_non_caster_rejected(gm_client, roster):
+    """Krieger (Barbarian) → 409 cannot_cast."""
+    krieger = roster["Krieger Stonefist"]
+    await _set_battle(gm_client, [_tok(krieger)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_mirror_image",
+        json={"character_id": krieger["id"]},
+    )
+    assert r.status_code == 409, r.text
+    assert r.json()["error"] == "cannot_cast"
+    assert "mirror image" in r.json()["expected"].lower()
+
+
+async def test_cast_mirror_image_missing_character_id_400(gm_client):
+    """Missing character_id → 400."""
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_mirror_image",
+        json={},
+    )
+    assert r.status_code == 400, r.text

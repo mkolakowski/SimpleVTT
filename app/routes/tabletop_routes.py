@@ -48568,6 +48568,80 @@ def _target_is_invisible(
     return False
 
 
+# v2.543.0 — Mirror Image (PHB p.260) deflection thresholds: with N
+# duplicates, a d20 of this value or higher redirects the attack to a
+# duplicate. 3 → 6+, 2 → 8+, 1 → 11+.
+_MIRROR_IMAGE_THRESHOLD = {3: 6, 2: 8, 1: 11}
+
+
+async def _resolve_mirror_image_deflection(
+    campaign_id: int, target_combatant_id: "str | None",
+    attack_total: "int | None", *, bypass: bool = False,
+) -> "dict | None":
+    """v2.543.0 — Mirror Image (#57). When the target carries a
+    ``mirror-image`` buff with duplicates remaining, roll a d20 to see if
+    the attack is redirected to an illusory duplicate (RAW PHB p.260: 3
+    duplicates → 6+, 2 → 8+, 1 → 11+). On a deflection the caster takes no
+    damage; if the attack total meets the duplicate's AC
+    (``effects.mirror_image_ac`` = 10 + DEX mod) the duplicate is
+    destroyed — the counter is decremented (buff removed at 0) and a
+    ``battle_update`` broadcast. ``bypass=True`` (the truesight /
+    blindsight / can't-see RAW exemption) skips the whole thing.
+
+    Returns ``{deflected, destroyed, remaining, roll, threshold}`` or
+    None when the target has no active Mirror Image (or it's bypassed).
+    The d20 routes through the seedable dice RNG so tests can pin it.
+    """
+    if bypass or not target_combatant_id:
+        return None
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return None
+    for c in state.get("combatants") or []:
+        if c.get("id") != target_combatant_id:
+            continue
+        mi = next(
+            (b for b in (c.get("buffs") or [])
+             if isinstance(b, dict) and b.get("key") == "mirror-image"),
+            None,
+        )
+        if not mi:
+            return None
+        eff = mi.get("effects") or {}
+        try:
+            dups = int(eff.get("mirror_image_duplicates") or 0)
+        except (TypeError, ValueError):
+            dups = 0
+        if dups <= 0:
+            return None
+        try:
+            dup_ac = int(eff.get("mirror_image_ac") or 10)
+        except (TypeError, ValueError):
+            dup_ac = 10
+        threshold = _MIRROR_IMAGE_THRESHOLD.get(dups, 11)
+        roll = dice_mod.get_rng().randint(1, 20)
+        if roll < threshold:
+            return {"deflected": False, "destroyed": False,
+                    "remaining": dups, "roll": roll, "threshold": threshold}
+        destroyed = attack_total is not None and int(attack_total) >= dup_ac
+        if destroyed:
+            dups -= 1
+            if dups <= 0:
+                c["buffs"] = [
+                    b for b in (c.get("buffs") or [])
+                    if not (isinstance(b, dict) and b.get("key") == "mirror-image")
+                ]
+            else:
+                eff["mirror_image_duplicates"] = dups
+            hub.set_battle(campaign_id, state)
+            await hub.broadcast(campaign_id, {
+                "type": "battle_update", "data": state, "force_gm_sync": True,
+            })
+        return {"deflected": True, "destroyed": destroyed,
+                "remaining": dups, "roll": roll, "threshold": threshold}
+    return None
+
+
 def _target_globe_blocks_spell(
     campaign_id: int, target_combatant_id: "str | None", spell_level: int,
 ) -> bool:
@@ -71067,6 +71141,145 @@ async def cast_true_seeing(
         "feature": "true-seeing",
         "target_character_id": target_char.id,
         "truesight_ft": TRUESIGHT_FT,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_mirror_image")
+async def cast_mirror_image(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.543.0 — Phase 2 #57 of
+    docs/plans/cast-and-broadcast-tail.md. Mirror Image (L2 illusion,
+    Sorcerer/Warlock/Wizard, PHB p.260):
+
+      "Three illusory duplicates of yourself appear in your space... Each
+       time a creature targets you with an attack during the spell's
+       duration, roll a d20 to determine whether the attack instead
+       targets one of your duplicates. ... A duplicate's AC equals 10 +
+       your Dexterity modifier. If an attack hits a duplicate, the
+       duplicate is destroyed."
+
+    1 action, V/S, Self, 1 minute, non-concentration.
+
+    **The first new attack-pipeline deflection mechanic since the
+    invisible-edge reads.** The `mirror-image` buff carries
+    ``effects.mirror_image_duplicates: 3`` + ``effects.mirror_image_ac``
+    (10 + the caster's DEX mod). The deflection itself lives in the
+    `/attack` + `/npc_attack` hit path via
+    `_resolve_mirror_image_deflection`: when a hitting attack lands on a
+    Mirror-Image creature it rolls a d20 (3 dupes → 6+, 2 → 8+, 1 → 11+);
+    on a deflect the caster takes no damage and a duplicate is destroyed
+    if the attack total meets the duplicate AC. Self-only.
+
+    Body: ``{character_id}``. Response: ``{ok, feature,
+    target_character_id, duplicates, duplicate_ac, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_mi = any(
+        (s.get("_slug") == "mirror-image")
+        or (str(s.get("name", "")).lower() == "mirror image")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"sorcerer", "warlock", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_mi and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Mirror Image, or sorcerer/warlock/wizard",
+            "got_class": _cls,
+        })
+
+    _dex = int((sheet.get("abilities") or {}).get("DEX") or 10)
+    _dex_mod = (_dex - 10) // 2
+    duplicate_ac = 10 + _dex_mod
+    DUPLICATES = 3
+    DURATION_ROUNDS = 10  # 1 minute @ 6 s/round
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "mirror-image",
+        "name": "Mirror Image",
+        "icon": "🪞",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "mirror_image_duplicates": DUPLICATES,
+            "mirror_image_ac": duplicate_ac,
+        },
+        "desc": (
+            f"{DUPLICATES} illusory duplicates (AC {duplicate_ac}). Each "
+            "hitting attack rolls a d20 to deflect onto a duplicate "
+            "(3 → 6+, 2 → 8+, 1 → 11+); a deflected hit that meets the "
+            "duplicate AC destroys it. Truesight / blindsight ignore the "
+            "duplicates."
+        ),
+    })
+    # The deflection read is hub-state (the /attack + /npc_attack hit
+    # path), so no sheet mirror is needed.
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🪞 Mirror Image",
+            "feature_desc": (
+                f"{char.name} conjures {DUPLICATES} illusory duplicates "
+                f"(AC {duplicate_ac}). Attacks may strike a duplicate "
+                "instead — rolled automatically on each hit."
+            ),
+            "source": "mirror-image",
+            "duplicates": DUPLICATES,
+            "duplicate_ac": duplicate_ac,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "mirror-image",
+        "target_character_id": char.id,
+        "duplicates": DUPLICATES,
+        "duplicate_ac": duplicate_ac,
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,
     }
@@ -107020,6 +107233,7 @@ async def use_attack(
             "spell_name": bonus_damage_label or "Divine Smite",
         })
     hit = None
+    _mi_deflect = None  # v2.543.0 — Mirror Image deflection result
     target_ac = None
     # v2.99.408 — Phase 3.3: results of any weapon_hit_save riders fired
     # on a confirmed hit (Battle Master maneuvers armed for the next hit).
@@ -107040,6 +107254,21 @@ async def use_attack(
             is_ranged_attack=_attack_is_ranged_weapon(attack),
         )
         hit = is_crit or (attack_total >= target_ac)
+        # v2.543.0 — Mirror Image (#57). If the attack would hit the
+        # caster and they have duplicates up, roll the deflection; on a
+        # deflect the attack strikes an illusory duplicate instead (the
+        # caster takes no damage → hit = False, so the on-hit riders +
+        # auto-damage below both skip). `bypass_mirror_image` is the
+        # truesight / blindsight / can't-see RAW exemption. The
+        # "deflect a missing attack onto a lower-AC duplicate" RAW edge is
+        # filed (v1 only rolls on a would-hit).
+        if hit:
+            _mi_deflect = await _resolve_mirror_image_deflection(
+                campaign_id, target_combatant_id, attack_total,
+                bypass=bool(body.get("bypass_mirror_image")),
+            )
+            if _mi_deflect and _mi_deflect.get("deflected"):
+                hit = False
         # v2.60.0 — on-hit-only uplift bookkeeping. Strip Colossus
         # Slayer + Divine Strike from auto_uplifts on a miss (those
         # are "on hit" features per RAW; rolling their bonus dice on
@@ -107728,6 +107957,7 @@ async def use_attack(
         "desc": desc,
         "is_save": is_save,
         "roll_state_applied": attack_roll_state_applied or None,
+        "mirror_image": _mi_deflect,  # v2.543.0 — deflection outcome (or None)
         "over_budget": was_used,
         "over_budget_slot": "action" if was_used else "",
         # v2.49.85 — per-target outcomes for multi-target attacks.
@@ -108008,6 +108238,7 @@ async def use_attack(
         "save_ability": save_ability if is_save else "",
         "save_dc": save_dc if is_save else 0,
         "roll_state_applied": attack_roll_state_applied or None,
+        "mirror_image": _mi_deflect,  # v2.543.0 — deflection outcome (or None)
         "over_budget": was_used,
         # v2.49.85 — echo the per-target outcomes so the rolling player's
         # local toast can render the multi-target summary without WS lag.
@@ -108475,6 +108706,7 @@ async def use_npc_attack(
     # Hit determination + auto-apply (same gating as use_attack).
     attack_id = uuid.uuid4().hex[:12]
     hit = None
+    _mi_deflect = None  # v2.543.0 — Mirror Image deflection result
     target_ac = None
     damage_applied = 0
     target_hp_before = None
@@ -108569,6 +108801,7 @@ async def use_npc_attack(
         "desc": "",
         "is_save": False,
         "roll_state_applied": attack_roll_state_applied or None,
+        "mirror_image": _mi_deflect,  # v2.543.0 — deflection outcome (or None)
         "over_budget": False,
         "over_budget_slot": "",
         "auto_attack_targets": [],
@@ -108672,6 +108905,7 @@ async def use_npc_attack(
         # tests can read which condition (or combination) drove the
         # roll. Matches the PC /attack response convention.
         "roll_state_applied": attack_roll_state_applied or None,
+        "mirror_image": _mi_deflect,  # v2.543.0 — deflection outcome (or None)
         "sentinel_triggers": _sentinel_triggers_for_response,
     }
 

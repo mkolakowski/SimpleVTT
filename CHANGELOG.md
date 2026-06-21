@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.543.0] - 2026-06-21 — "The Shattered Reflection"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_mirror_image` + an attack-pipeline **deflection** mechanic — Phase 2 #57 of the cast-and-broadcast tail. Mirror Image (L2 illusion, Sorcerer/Warlock/Wizard) goes from narration-only to a real, server-resolved mechanic: attacks against the caster roll a d20 to strike an illusory duplicate instead.
+
+**Description:** The first new attack-pipeline deflection mechanic since the invisible-edge reads. RAW PHB p.260: three illusory duplicates; "Each time a creature targets you with an attack... roll a d20 to determine whether the attack instead targets one of your duplicates" (3 dupes → 6+, 2 → 8+, 1 → 11+). A duplicate's AC = 10 + the caster's DEX mod; a hit destroys it. 1 action, V/S, Self, 1 minute, non-concentration.
+
+The cast installs a `mirror-image` buff carrying `effects.mirror_image_duplicates: 3` + `effects.mirror_image_ac` (10 + DEX mod). The deflection runs in the `/attack` + `/npc_attack` hit path via the new `_resolve_mirror_image_deflection`: when a swing would hit a Mirror-Image creature it rolls the d20; on a deflect the caster takes no damage (`hit` is forced False, so the on-hit riders + auto-damage both skip) and a duplicate is destroyed if the attack total meets the duplicate AC — the counter decrements (buff removed at 0) with a `battle_update` broadcast. `bypass_mirror_image: true` is the truesight / blindsight / can't-see RAW exemption. The d20 routes through the seedable dice RNG. The generic `/cast_spell` path stays narration-only (the mechanical buff is the dedicated endpoint's job). v1 only rolls deflection on a would-hit swing; the "deflect a missing attack onto a lower-AC duplicate" RAW edge is filed.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_resolve_mirror_image_deflection` helper + `_MIRROR_IMAGE_THRESHOLD`; deflection hook in `/attack` + `/npc_attack` right after the hit determination; new `cast_mirror_image` endpoint; `mirror_image` surfaced in both attack responses + chat-card broadcasts.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #57.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_mirror_image.py` (rewritten from the old narration-only deep-dive — which explicitly flagged "a future commit that adds real duplicate modeling is a conscious change to this test"): keeps the catalog + generic-`/cast_spell` slot/broadcast/non-concentration/no-buff pins; adds endpoint-installs-3-duplicates, the **mechanical deflection** (a deflected swing met the caster's AC yet leaves `hit` False + `damage_applied` 0, and duplicates decrement toward 0 over a 40-swing loop), non-caster 409, missing-id 400. 9 tests (+4).
+
+Total harness count → 3948 (+4).
+
+MINOR — new cast endpoint + an additive attack-pipeline deflection read. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_mirror_image`: Mirror Image (L2) — 3 illusory duplicates that deflect attacks (resolved server-side in `/attack` + `/npc_attack`). Phase 2 #57 of the cast-and-broadcast tail.
+
+### Changed
+- `/attack` + `/npc_attack`: a hitting swing against a Mirror-Image creature now rolls the RAW deflection and may strike a duplicate instead — surfaced as a `mirror_image` block in the response + chat card.
+
 ## [2.542.0] - 2026-06-21 — "The Unveiled World"
 
 **Schema version:** 71
