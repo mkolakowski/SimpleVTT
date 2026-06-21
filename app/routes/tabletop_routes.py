@@ -66031,6 +66031,164 @@ async def cast_water_walk(
     }
 
 
+_WATER_BREATHING_MAX_TARGETS = 10
+
+
+@router.post("/api/campaign/{campaign_id}/cast_water_breathing")
+async def cast_water_breathing(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.525.0 — Phase 2 #49 of
+    docs/plans/cast-and-broadcast-tail.md. Water Breathing (L3
+    transmutation ritual, Druid/Ranger/Sorcerer/Wizard, PHB p.287):
+
+      "This spell grants up to ten willing creatures you can see within
+       range the ability to breathe underwater until the spell ends."
+
+    1 action (or ritual), V/S/M, 30 ft, **24 hours**, non-concentration.
+
+    Implementation: the multi-target flag-buff sibling of Water Walk
+    (#47) — installs the ``water-breathing`` buff carrying
+    ``effects.water_breathing: True`` on up to 10 chosen creatures (the
+    caster is always added). 24-hour duration, distinct from the 1-hour
+    Potion of Water Breathing buff that shares the slug. The flag IS the
+    mechanic — the engine tracks no drowning/air rule, so breathing
+    underwater is GM-narrated; the flag surfaces who can breathe water.
+
+    Body: ``{character_id, target_character_ids?}``. 400 if more than 10
+    unique targets (including the caster) are supplied.
+
+    Response: ``{ok, feature, targets, buffs_installed, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    raw_targets = body.get("target_character_ids") or []
+    if not isinstance(raw_targets, list):
+        raise HTTPException(400, "target_character_ids must be a list")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_wb = any(
+        (s.get("_slug") == "water-breathing")
+        or (str(s.get("name", "")).lower() == "water breathing")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"druid", "ranger", "sorcerer", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_wb and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": (
+                "knows Water Breathing, or druid/ranger/sorcerer/wizard"
+            ),
+            "got_class": _cls,
+        })
+
+    target_ids: list[int] = []
+    seen: set[int] = set()
+    for raw in raw_targets:
+        try:
+            tid = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if tid <= 0 or tid in seen:
+            continue
+        seen.add(tid)
+        target_ids.append(tid)
+    if char.id not in seen:
+        target_ids.insert(0, char.id)
+    if len(target_ids) > _WATER_BREATHING_MAX_TARGETS:
+        raise HTTPException(400, (
+            f"Water Breathing affects up to {_WATER_BREATHING_MAX_TARGETS} "
+            f"creatures (RAW); got {len(target_ids)} including the caster."
+        ))
+
+    DURATION_ROUNDS = 14400  # 24 hours @ 6 s/round
+    buffs_installed: list[int] = []
+    for tid in target_ids:
+        target = db.query(Character).filter(
+            Character.id == tid,
+            Character.campaign_id == campaign_id,
+        ).first()
+        if not target:
+            continue
+        installed = await _install_buff(campaign_id, target.id, {
+            "key": "water-breathing",
+            "name": "Water Breathing",
+            "icon": "🫧",
+            "duration_rounds": DURATION_ROUNDS,
+            "duration_max": DURATION_ROUNDS,
+            "concentration": False,
+            "source_char_id": char.id,
+            "effects": {"water_breathing": True},
+            "desc": (
+                "Breathe underwater for 24 hours. The engine tracks no "
+                "drowning rule, so this is GM-narrated; the flag surfaces "
+                "who can breathe water."
+            ),
+        })
+        if installed:
+            buffs_installed.append(target.id)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    feature_desc = (
+        f"{char.name} casts Water Breathing — breathe underwater for "
+        f"{len(buffs_installed)} creature"
+        f"{'s' if len(buffs_installed) != 1 else ''} for 24 hours."
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🫧 Water Breathing",
+            "feature_desc": feature_desc,
+            "source": "water-breathing",
+            "target_character_ids": buffs_installed,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "water-breathing",
+        "targets": buffs_installed,
+        "buffs_installed": len(buffs_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_holy_aura")
 async def cast_holy_aura(
     campaign_id: int,

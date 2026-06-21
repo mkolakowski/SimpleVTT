@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3883 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.524.0, 2026-06-21).
+**Total tests:** 3888 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.525.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4707,6 +4707,17 @@ v2.524.0 — Nondetection (L3 abjuration, Bard/Cleric/Ranger/Wizard, PHB p.264).
 | `test_cast_nd_on_ally_installs_on_ally` | Touch an ally → the buff lands on the ally, not the caster. |
 | `test_cast_nd_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected names "nondetection". |
 | `test_cast_nd_missing_character_id_400` | Missing `character_id` → 400. |
+
+### `test_cast_water_breathing.py`
+v2.525.0 — Water Breathing (L3 transmutation ritual, Druid/Ranger/Sorcerer/Wizard, PHB p.287). Phase 2 #49 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_WATER_BREATHING_MAX_TARGETS = 10` + the `cast_water_breathing` endpoint — a multi-target flag-buff (`water_breathing: True`, 24h) fanned across up to 10 creatures (caster auto-included), built inline (distinct from the 1-hour Potion of Water Breathing buff sharing the slug). Underwater breathing GM-narrated.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_wb_self_installs_buff` | Self-cast → 200, `feature == "water-breathing"`, `buffs_installed == 1`; buff carries `water_breathing == true`, non-concentration, 14400 rounds (24h). |
+| `test_cast_wb_fans_out_to_companion` | Caster + a companion → `buffs_installed == 2`; the companion carries the `water-breathing` buff. |
+| `test_cast_wb_over_cap_400` | More than 10 unique targets (incl. the auto-added caster) → 400. |
+| `test_cast_wb_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected names "water breathing". |
+| `test_cast_wb_missing_character_id_400` | Missing `character_id` → 400. |
 
 ### `test_cast_water_walk.py`
 v2.523.0 — Water Walk (L3 transmutation ritual, Cleric/Druid/Ranger/Sorcerer, PHB p.287). Phase 2 #47 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_WATER_WALK_MAX_TARGETS = 10` + the `cast_water_walk` endpoint — a multi-target flag-buff (`water_walk: True`) fanned across up to 10 creatures (caster auto-included), same shape as Feather Fall. Surface-walking GM-narrated.

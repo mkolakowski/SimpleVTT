@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.525.0] - 2026-06-21 — "The Drowned Lung"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_water_breathing` — Phase 2 #49 of the cast-and-broadcast tail. Water Breathing (L3 transmutation ritual, Druid/Ranger/Sorcerer/Wizard) fans a 24-hour `water_breathing` flag-buff out to up to 10 chosen creatures.
+
+**Description:** Continues the tail after Nondetection (#48). RAW PHB p.287: "This spell grants up to ten willing creatures you can see within range the ability to breathe underwater until the spell ends." 1 action (or ritual), V/S/M, 30 ft, 24 hours, non-concentration. The multi-target flag-buff sibling of Water Walk (#47): installs `effects.water_breathing: True` on up to 10 chosen creatures (caster auto-included), with a 24-hour duration **distinct from the 1-hour Potion of Water Breathing buff that shares the slug** (the spell's buff is built inline, not via the potion's `_SPELL_BUFF_MAP` entry). The flag IS the mechanic — the engine tracks no drowning/air rule, so underwater breathing is GM-narrated; the flag surfaces who can breathe water.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_WATER_BREATHING_MAX_TARGETS = 10` + the `cast_water_breathing` endpoint. Caster gate: knows the spell OR druid/ranger/sorcerer/wizard. 400 if more than 10 unique targets (incl. caster). 400/403/404/409 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #49.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_water_breathing.py` (new): +5 tests — self-cast installs `water_breathing: true` (24h = 14400 rounds, non-conc); multi-target fan-out (caster + companion → 2 buffs); over-cap (>10 incl. caster) → 400; non-caster 409; missing character_id 400.
+
+Total harness count → 3888 (+5).
+
+MINOR — new multi-target cast endpoint, flag-buff substrate. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_water_breathing`: Water Breathing (L3) — a 24-hour `water_breathing` flag-buff fanned across up to 10 chosen creatures; underwater breathing GM-narrated. Phase 2 #49 of the cast-and-broadcast tail.
+
 ## [2.524.0] - 2026-06-21 — "The Hidden Quarry"
 
 **Schema version:** 71
