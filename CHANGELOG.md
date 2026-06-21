@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.517.0] - 2026-06-21 — "The Threshold Test"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 of the aura-geometry-enforcement plan — the Globe of Invulnerability `/cast_spell` block now checks whether the offending caster is actually *outside* the 10-ft barrier, instead of always assuming so.
+
+**Description:** Refines the v2.513.0 globe gate. RAW PHB p.247 only blocks spells "cast from outside the barrier"; the v2.513.0 ship fired regardless of the caster's position (GM `override` was the only escape hatch for an inside caster). Phase 2 adds the real geometry: the globe holder *is* the target (it carries the buff), so the caster is "outside" when its token is more than the globe radius (10 ft) from the holder, computed via `_distance_ft_between_chars`. Inside (≤ 10 ft) → the gate does **not** fire (a creature inside the barrier casts freely). Off-grid (`None` distance — no map / no tokens) keeps the v2.513.0 "assume outside" behavior so narrative scenes are unchanged. GM `override` still bypasses. The 409 now also surfaces `caster_distance_ft` for the cast card.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: the `globe_blocks_spell` gate in `/cast_spell` computes `_distance_ft_between_chars(caster, globe_holder)` and only blocks when it's `None` (off-grid) or `> 10`.
+- `docs/plans/aura-geometry-enforcement.md`: Phase 2 status flip.
+
+**Harness changes:**
+
+- `tests/harness/test_globe_blocks_spell.py`: +3 tests — caster 25 ft away (outside) → 409; caster 5 ft away (inside) → not globe-blocked; explicit off-grid (tokens deleted → `caster_distance_ft` null → still blocked). The two pre-existing *blocking* tests now place the caster outside (demo PCs are seeded with tokens, so an unpositioned cast is no longer reliably off-grid); the no-globe + override control tests are position-independent and unchanged.
+
+Total harness count → 3861 (+3).
+
+MINOR — refined `/cast_spell` globe gate (distance-aware). No schema change.
+
+### Changed
+- `/cast_spell`: the Globe of Invulnerability block now only fires when the caster is outside the 10-ft barrier (token distance > 10 ft, or off-grid). A caster inside the barrier casts freely. Phase 2 of the aura-geometry-enforcement plan.
+
 ## [2.516.0] - 2026-06-21 — "The Moving Halo"
 
 **Schema version:** 71

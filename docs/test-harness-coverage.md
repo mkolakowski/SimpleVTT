@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3858 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.516.0, 2026-06-21).
+**Total tests:** 3861 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.517.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4665,6 +4665,9 @@ v2.513.0 — Globe of Invulnerability `/cast_spell` block (Phase 2 #44 follow-up
 | `test_no_globe_does_not_block` | **Control:** no globe up → the same cast is not globe-blocked. |
 | `test_globe_blocks_even_when_upcast` | Magic Missile at `slot_level: 5` → still 409, response `spell_level == 1` (proves base-vs-slot comparison). |
 | `test_globe_override_bypasses_block` | GM `override: true` → the globe gate does not fire. |
+| `test_globe_blocks_caster_outside_barrier` | v2.517.0 (Phase 2): caster placed 25 ft from the globe holder (outside the 10-ft barrier) → 409 `globe_blocks_spell`. |
+| `test_globe_does_not_block_caster_inside_barrier` | v2.517.0 (Phase 2): caster placed 5 ft from the holder (inside the barrier) → the globe gate does NOT fire (a creature inside casts freely). |
+| `test_globe_off_grid_assumes_outside_and_blocks` | v2.517.0 (Phase 2): tokens deleted (off-grid) → `caster_distance_ft` null → assumes outside and blocks (the v2.513.0 fallback). |
 
 ### `test_cast_globe_of_invulnerability.py`
 v2.511.0 — Globe of Invulnerability (L6 abjuration, Sorcerer/Wizard, PHB p.247). Phase 2 #44 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_SPELL_BUFF_MAP["globe-of-invulnerability"]` (`globe_of_invulnerability: True` + `spell_immunity_max_level: 5`, concentration) + the `cast_globe_of_invulnerability` endpoint. Flag-buff shape: surfaces the 5th-level immunity threshold; barrier geometry + the `/cast_spell` block are filed follow-ups (spatial AoE-shape work). Self-targeted.

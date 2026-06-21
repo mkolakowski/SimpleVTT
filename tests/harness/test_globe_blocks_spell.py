@@ -98,22 +98,18 @@ async def test_globe_blocks_low_level_spell(gm_client, roster):
     zara, thal, thal_tok, mm_idx = await _setup(gm_client, roster)
     try:
         await _raise_globe(gm_client, thal)
-        r = await gm_client.post(
-            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
-            json={
-                "character_id": zara["id"],
-                "spell_index": mm_idx,
-                "class_slug": "sorcerer",
-                "target_combatant_id": thal_tok,
-                "target_character_id": thal["id"],
-                "target_name": thal["name"],
-                "override_range": True,
-            },
-        )
+        # Place the caster outside the 10-ft barrier (25 ft) so the gate
+        # fires deterministically — demo PCs are seeded with tokens, so
+        # we can't rely on an off-grid `None` distance here.
+        await _place(gm_client, thal["id"], 350.0, 350.0)
+        await _place(gm_client, zara["id"], 700.0, 350.0)
+        r = await _cast_mm(gm_client, zara, thal, thal_tok, mm_idx)
         assert r.status_code == 409, r.text
         assert r.json()["error"] == "globe_blocks_spell", r.json()
     finally:
         await _drop_globe(gm_client, thal)
+        await _del_token(gm_client, thal["id"])
+        await _del_token(gm_client, zara["id"])
 
 
 async def test_no_globe_does_not_block(gm_client, roster):
@@ -143,6 +139,9 @@ async def test_globe_blocks_even_when_upcast(gm_client, roster):
     zara, thal, thal_tok, mm_idx = await _setup(gm_client, roster)
     try:
         await _raise_globe(gm_client, thal)
+        # Caster outside the barrier so the gate fires (see note above).
+        await _place(gm_client, thal["id"], 350.0, 350.0)
+        await _place(gm_client, zara["id"], 700.0, 350.0)
         r = await gm_client.post(
             f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
             json={
@@ -161,6 +160,8 @@ async def test_globe_blocks_even_when_upcast(gm_client, roster):
         assert r.json()["spell_level"] == 1, r.json()
     finally:
         await _drop_globe(gm_client, thal)
+        await _del_token(gm_client, thal["id"])
+        await _del_token(gm_client, zara["id"])
 
 
 async def test_globe_override_bypasses_block(gm_client, roster):
@@ -184,5 +185,91 @@ async def test_globe_override_bypasses_block(gm_client, roster):
         # The globe gate must not fire when override is set.
         if r.status_code == 409:
             assert r.json().get("error") != "globe_blocks_spell", r.json()
+    finally:
+        await _drop_globe(gm_client, thal)
+
+
+# --- v2.517.0 — Phase 2: inside/outside-the-barrier enforcement ---------
+# The off-grid tests above prove the "assume outside" fallback (no tokens
+# placed → blocked). These two place tokens so the distance check decides.
+# Grid: 70 px / cell, 5 ft / cell; the globe radius is 10 ft (2 cells).
+
+
+async def _place(gm_client, char_id, x, y):
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/place-token",
+        json={"x": float(x), "y": float(y)},
+    )
+    assert r.status_code == 200, r.text
+
+
+async def _del_token(gm_client, char_id):
+    await gm_client.delete(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/token",
+    )
+
+
+async def _cast_mm(gm_client, zara, thal, thal_tok, mm_idx):
+    return await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": zara["id"],
+            "spell_index": mm_idx,
+            "class_slug": "sorcerer",
+            "target_combatant_id": thal_tok,
+            "target_character_id": thal["id"],
+            "target_name": thal["name"],
+            "override_range": True,
+        },
+    )
+
+
+async def test_globe_blocks_caster_outside_barrier(gm_client, roster):
+    """Caster 25 ft from the globe holder (outside the 10-ft barrier) →
+    409 globe_blocks_spell."""
+    zara, thal, thal_tok, mm_idx = await _setup(gm_client, roster)
+    try:
+        await _raise_globe(gm_client, thal)
+        await _place(gm_client, thal["id"], 350.0, 350.0)
+        await _place(gm_client, zara["id"], 700.0, 350.0)  # 5 cells = 25 ft
+        r = await _cast_mm(gm_client, zara, thal, thal_tok, mm_idx)
+        assert r.status_code == 409, r.text
+        assert r.json()["error"] == "globe_blocks_spell", r.json()
+    finally:
+        await _drop_globe(gm_client, thal)
+        await _del_token(gm_client, thal["id"])
+        await _del_token(gm_client, zara["id"])
+
+
+async def test_globe_does_not_block_caster_inside_barrier(gm_client, roster):
+    """Caster 5 ft from the globe holder (inside the 10-ft barrier) → the
+    globe gate does NOT fire (a creature inside casts freely)."""
+    zara, thal, thal_tok, mm_idx = await _setup(gm_client, roster)
+    try:
+        await _raise_globe(gm_client, thal)
+        await _place(gm_client, thal["id"], 350.0, 350.0)
+        await _place(gm_client, zara["id"], 420.0, 350.0)  # 1 cell = 5 ft
+        r = await _cast_mm(gm_client, zara, thal, thal_tok, mm_idx)
+        if r.status_code == 409:
+            assert r.json().get("error") != "globe_blocks_spell", r.json()
+    finally:
+        await _drop_globe(gm_client, thal)
+        await _del_token(gm_client, thal["id"])
+        await _del_token(gm_client, zara["id"])
+
+
+async def test_globe_off_grid_assumes_outside_and_blocks(gm_client, roster):
+    """Off-grid (no tokens on the map) → `None` distance → the gate
+    assumes the caster is outside and blocks (the v2.513.0 fallback)."""
+    zara, thal, thal_tok, mm_idx = await _setup(gm_client, roster)
+    try:
+        await _raise_globe(gm_client, thal)
+        # Force off-grid by removing any seeded tokens for both.
+        await _del_token(gm_client, thal["id"])
+        await _del_token(gm_client, zara["id"])
+        r = await _cast_mm(gm_client, zara, thal, thal_tok, mm_idx)
+        assert r.status_code == 409, r.text
+        assert r.json()["error"] == "globe_blocks_spell", r.json()
+        assert r.json().get("caster_distance_ft") is None, r.json()
     finally:
         await _drop_globe(gm_client, thal)

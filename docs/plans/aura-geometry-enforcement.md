@@ -1,6 +1,6 @@
 # Aura & Barrier Geometry Enforcement — Design Plan
 
-**Status:** 🟠 Phase 1 shipped v2.516.0 · Phases 2–3 unstarted (filed v2.515.0)
+**Status:** 🟠 Phases 1–2 shipped (v2.516.0, v2.517.0) · Phase 3 unstarted (filed v2.515.0)
 **Parent / foundation:** [auras.md](auras.md) (the shipped `_tick_auras` per-turn radius engine) + [ruler-and-range.md](ruler-and-range.md) (distance primitives + AoE templates).
 **Motivating ships:** the cast-and-broadcast tail's geometry-bound spells — Holy Aura (#41, v2.508.0), Globe of Invulnerability (#44, v2.511.0 + the `/cast_spell` block v2.513.0), and Antilife Shell (#45, v2.512.0). Each shipped as a **flag-buff with the spatial half GM-narrated**; this plan replaces the GM-narration with real engine enforcement.
 **Related code:** `app/routes/tabletop_routes.py` — `_tick_auras`, `_distance_ft_between_chars`, `_aura_of_protection_bonus`, `_resolve_sphere_aoe_combatant_ids`, `_concentration_aoes`, the `token_move` endpoint, `_target_globe_blocks_spell`.
@@ -111,7 +111,7 @@ effect (Aura of Vitality, Paladin auras already partly modeled, etc.).
 move them out (or the emitter away) → buff removed on the next tick;
 concentration break → all derived buffs dropped via the existing cascade.
 
-### Phase 2 — Inside/outside enforcement (Globe of Invulnerability)
+### Phase 2 — Inside/outside enforcement (Globe of Invulnerability) — ✅ shipped v2.517.0
 
 Replace the v2.513.0 globe gate's "assume the caster is outside" default
 with a real check: the offending caster is "outside the barrier" when

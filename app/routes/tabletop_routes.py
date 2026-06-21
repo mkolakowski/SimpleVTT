@@ -21968,6 +21968,15 @@ async def cast_spell(
         # at the center, inside the barrier). GM `override` bypasses for
         # the rare caster who is genuinely inside the barrier. Fires
         # before slot consumption — same contract as the range gate.
+        #
+        # v2.517.0 — Phase 2 of docs/plans/aura-geometry-enforcement.md:
+        # RAW only blocks spells cast *from outside* the barrier. The
+        # globe holder IS the target (it carries the buff), so the caster
+        # is "outside" when its token is more than the globe radius
+        # (10 ft) from the holder. Inside (≤ radius) → don't block (a
+        # creature inside the barrier casts freely). Off-grid (`None`
+        # distance) keeps the v2.513.0 "assume outside" behavior so
+        # narrative scenes are unchanged.
         if not bool(body.get("override")) and target_combatant_id_in:
             _tc_globe = _lookup_combatant(campaign_id, target_combatant_id_in)
             _tc_globe_charid = (_tc_globe or {}).get("char_id")
@@ -21981,13 +21990,24 @@ async def cast_spell(
                     campaign_id, target_combatant_id_in, spell_level,
                 )
             ):
-                return JSONResponse(status_code=409, content={
-                    "error": "globe_blocks_spell",
-                    "char_name": char.name,
-                    "source": "cast_spell",
-                    "spell_level": spell_level,
-                    "target_combatant_id": target_combatant_id_in,
-                })
+                _globe_radius_ft = 10.0  # RAW PHB p.247 (fixed)
+                _globe_dist = (
+                    _distance_ft_between_chars(
+                        db, campaign_id, int(char.id), int(_tc_globe_charid),
+                    )
+                    if _tc_globe_charid else None
+                )
+                # Block only when the caster is OUTSIDE the barrier (or
+                # off-grid → assume outside). Inside → cast freely.
+                if _globe_dist is None or _globe_dist > _globe_radius_ft:
+                    return JSONResponse(status_code=409, content={
+                        "error": "globe_blocks_spell",
+                        "char_name": char.name,
+                        "source": "cast_spell",
+                        "spell_level": spell_level,
+                        "target_combatant_id": target_combatant_id_in,
+                        "caster_distance_ft": _globe_dist,
+                    })
 
     # v2.99.160 — Twinned Spell metamagic. The pending buff is
     # installed by /use_metamagic_twinned_spell; consume it once
