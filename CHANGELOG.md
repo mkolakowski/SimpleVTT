@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.518.0] - 2026-06-21 — "The Living Hedge"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 3 (final) of the aura-geometry-enforcement plan — the Antilife Shell now mechanically hedges creatures out via a `/token/{id}/move` 409 `barrier_blocks_move` gate. **Closes the plan** (all three phases shipped).
+
+**Description:** The one genuinely new substrate of the arc. RAW PHB p.213: the shell "prevents an affected creature from passing or reaching through." New `_move_crosses_antilife_shell` reads the shell emitters from the hub battle state (combatants carrying `effects.antilife_shell`) + the holder's token position, and the `/token/{id}/move` endpoint rejects (409 `barrier_blocks_move`) a move that would carry the mover from outside to inside the holder's moving 10-ft radius. The shell is centered on its holder and moves with it, so the holder's own move is never blocked. Fires before the position mutation, same contract as the over-speed + OA gates.
+
+**Scope:** PC-holder only for v1 (NPC-holder positions via `source_token_id` are filed). Off-grid (no `grid_size_px`) → no gate (GM-narrated). The RAW undead/construct exception (those creatures pass freely) + the "spell ends if the emitter forces an affected creature through" clause are GM-narrated via the new `override_barrier: true` bypass.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_move_crosses_antilife_shell` helper + the `barrier_blocks_move` 409 gate in `move_token` (before the OA gate). `override_barrier` bypasses.
+- `docs/plans/aura-geometry-enforcement.md`: Phase 3 shipped → **plan closed** (all phases done).
+
+**Harness changes:**
+
+- `tests/harness/test_antilife_shell_barrier.py` (new): +3 tests — Mira (Druid) raises the shell at the grid center; a mover crossing from 25 ft (outside) to ~2 ft (inside) → 409 `barrier_blocks_move`; a move staying outside → 200; `override_barrier: true` → crosses in (200).
+
+Total harness count → 3864 (+3).
+
+MINOR — new movement-barrier gate on `/token/{id}/move`. No schema change.
+
+### Changed
+- `/token/{id}/move`: a move that would carry a creature into an Antilife Shell's 10-ft radius (from outside) is rejected with 409 `barrier_blocks_move` (holder moves freely; `override_barrier` bypasses for the undead/construct exception). Phase 3 of the aura-geometry-enforcement plan — **plan now closed**.
+
 ## [2.517.0] - 2026-06-21 — "The Threshold Test"
 
 **Schema version:** 71

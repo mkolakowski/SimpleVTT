@@ -1,6 +1,6 @@
 # Aura & Barrier Geometry Enforcement — Design Plan
 
-**Status:** 🟠 Phases 1–2 shipped (v2.516.0, v2.517.0) · Phase 3 unstarted (filed v2.515.0)
+**Status:** ✅ CLOSED — all phases shipped (P1 v2.516.0, P2 v2.517.0, P3 v2.518.0)
 **Parent / foundation:** [auras.md](auras.md) (the shipped `_tick_auras` per-turn radius engine) + [ruler-and-range.md](ruler-and-range.md) (distance primitives + AoE templates).
 **Motivating ships:** the cast-and-broadcast tail's geometry-bound spells — Holy Aura (#41, v2.508.0), Globe of Invulnerability (#44, v2.511.0 + the `/cast_spell` block v2.513.0), and Antilife Shell (#45, v2.512.0). Each shipped as a **flag-buff with the spatial half GM-narrated**; this plan replaces the GM-narration with real engine enforcement.
 **Related code:** `app/routes/tabletop_routes.py` — `_tick_auras`, `_distance_ft_between_chars`, `_aura_of_protection_bonus`, `_resolve_sphere_aoe_combatant_ids`, `_concentration_aoes`, the `token_move` endpoint, `_target_globe_blocks_spell`.
@@ -125,7 +125,7 @@ narrative scenes are unchanged; GM `override` still bypasses.
 409 (as today); the same enemy moved to within 10 ft → not blocked;
 off-grid → blocked (unchanged).
 
-### Phase 3 — Movement-barrier substrate (Antilife Shell)
+### Phase 3 — Movement-barrier substrate (Antilife Shell) — ✅ shipped v2.518.0
 
 The genuinely new piece. A registry of **barriers** keyed by emitter:
 `{emitter_char_id, radius_ft, predicate}`. In `token_move`, after the

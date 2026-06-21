@@ -15516,6 +15516,73 @@ async def respond_movement_request(
     return {"ok": True, "approved": approved}
 
 
+def _move_crosses_antilife_shell(
+    db: Session, campaign_id: int, mover_token: "Token",
+    from_x: float, from_y: float, dest_x: float, dest_y: float,
+) -> "str | None":
+    """v2.518.0 — Phase 3 of docs/plans/aura-geometry-enforcement.md.
+    Returns the emitter's name when this move would carry the mover from
+    OUTSIDE to INSIDE an Antilife Shell's moving 10-ft radius — RAW PHB
+    p.213: "The barrier prevents an affected creature from passing or
+    reaching through." The shell is centered on its holder and moves with
+    it, so the holder's own move is never blocked.
+
+    Reads emitters from the hub battle state (combatants carrying
+    ``effects.antilife_shell``) and the holder's token position on the
+    active map. PC-holder only for v1 (NPC-holder positions via
+    ``source_token_id`` are filed). Off-grid (no `grid_size_px`) → no
+    gate (GM-narrated). The undead/construct exception (those creatures
+    pass freely) is GM-narrated via the ``override_barrier`` bypass.
+    """
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return None
+    map_row = mover_token.map
+    if not map_row or not map_row.grid_size_px:
+        return None  # off-grid → GM-narrated
+    grid_px = int(map_row.grid_size_px)
+    grid_type = (
+        map_row.grid_type.value if map_row.grid_type else "square"
+    ).lower()
+    RADIUS_FT = 10.0
+    for c in state.get("combatants") or []:
+        if not isinstance(c, dict):
+            continue
+        has_shell = any(
+            isinstance(b, dict) and isinstance(b.get("effects"), dict)
+            and b["effects"].get("antilife_shell")
+            for b in (c.get("buffs") or [])
+        )
+        if not has_shell:
+            continue
+        emitter_char_id = c.get("char_id")
+        if not emitter_char_id:
+            continue  # NPC-holder position (source_token_id) filed for v1
+        # The shell moves with its holder — never block the holder's move.
+        if (mover_token.character_id is not None
+                and int(emitter_char_id) == int(mover_token.character_id)):
+            continue
+        etok = (
+            db.query(Token)
+            .filter(Token.character_id == int(emitter_char_id),
+                    Token.map_id == map_row.id)
+            .first()
+        )
+        if not etok:
+            continue
+        ex, ey = float(etok.x or 0), float(etok.y or 0)
+        dest_dist = _distance_ft_between_points(
+            grid_px, grid_type, ex, ey, dest_x, dest_y,
+        )
+        from_dist = _distance_ft_between_points(
+            grid_px, grid_type, ex, ey, from_x, from_y,
+        )
+        # Crossing from outside the barrier to inside → hedged out.
+        if dest_dist <= RADIUS_FT and from_dist > RADIUS_FT:
+            return c.get("name") or "Antilife Shell"
+    return None
+
+
 @router.post("/api/campaign/{campaign_id}/token/{token_id}/move")
 async def move_token(
     campaign_id: int,
@@ -15688,6 +15755,26 @@ async def move_token(
                             "speed_reduction_ft":
                                 _effective_speed_reduction_ft(_active_cap),
                         })
+
+    # v2.518.0 — Phase 3 of docs/plans/aura-geometry-enforcement.md:
+    # Antilife Shell movement barrier. A move that would carry an
+    # affected creature from outside to inside a shell's 10-ft radius is
+    # rejected with 409 `barrier_blocks_move` (RAW PHB p.213 — the
+    # barrier hedges living creatures out). Fires before the mutation,
+    # same contract as the over-speed + OA gates. `override_barrier:
+    # true` bypasses — the GM escape hatch for the RAW undead/construct
+    # exception (those creatures pass freely) and other edge cases.
+    if distance_ft > 0 and not bool(body.get("override_barrier")):
+        _shell_emitter = _move_crosses_antilife_shell(
+            db, campaign_id, token, from_x, from_y, x, y,
+        )
+        if _shell_emitter:
+            return JSONResponse(status_code=409, content={
+                "error": "barrier_blocks_move",
+                "barrier": "antilife-shell",
+                "emitter_name": _shell_emitter,
+                "token_id": int(token.id),
+            })
 
     # v2.99.55 — plan-movement-oa-flow Phase 4 defense-in-depth gate.
     # Compute OA triggers BEFORE committing the move. If any fire
