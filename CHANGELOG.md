@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.495.1] - 2026-06-21 — "The Thawed Reset"
+
+**Schema version:** 71
+
+**Commit summary:** Fixes the demo reseed silently freezing: `wipe()` now deletes demo users' `admin_audit_log` rows before deleting the users, clearing the `admin_audit_log_actor_user_id_fkey` ForeignKeyViolation that aborted every reset.
+
+**Description:** Found while fixing the v2.494.0 fail2ban incident. The public demo's boot + scheduler reseed (`reset_and_reseed` → `wipe`) had been **failing on every run** since the GM first performed a logged admin action — boot log:
+
+```
+ERROR simplevtt: demo seed (boot) failed: (psycopg2.errors.ForeignKeyViolation)
+update or delete on table "users" violates foreign key constraint
+"admin_audit_log_actor_user_id_fkey" on table "admin_audit_log"
+```
+
+`admin_audit_log.actor_user_id` is a non-nullable FK to `users` with **no `ondelete` clause**, so once `demo-gm` had logged any admin action (a Cloudflare ban/unban, a user purge, an audit-log scrub, an on-demand reset), those rows RESTRICT-blocked the user delete and the whole reseed rolled back. The demo dataset froze in place (30 such rows had accumulated on the live instance), defeating the every-60-minutes reset that keeps the public demo clean. `wipe()` already special-cases several FK constraints (`campaigns_gm_user_id_fkey`, `fk_campaign_active_map`) the same way; this adds the missing one. The rows are demo-generated audit noise, so they're deleted — no archival concern.
+
+**Implementation:**
+
+- `app/demo_seed.py`: `wipe()` deletes `AdminAuditLog` rows whose `actor_user_id` is a demo user (counted in the returned per-section dict as `admin_audit_log`) before the `db.delete(u)` loop, with a `db.flush()` so the delete lands before the user delete. `AdminAuditLog` added to the model imports.
+
+**Verification:** the boot reseed (`DEMO_RESET_ON_BOOT=true`) runs `reset_and_reseed` on container start — post-rebuild the boot log reports `demo seed (boot): {…}` success instead of the FK error, and the demo accounts are recreated (with `demo-gm` non-admin per v2.495.0's `DEMO_GM_SITE_ADMIN`, and the campaign back at `id=1` via the existing `_reset_sequences`). No harness test: this fixes the internal `wipe()` helper, not an HTTP endpoint or WS shape.
+
+### Fixed
+- Demo reseed (`wipe`) no longer aborts with a `ForeignKeyViolation` when the demo GM has logged admin actions — `admin_audit_log` rows referencing demo users are cleared first, so the every-60-min public-demo reset runs again.
+
 ## [2.495.0] - 2026-06-21 — "The Closed Backdoor"
 
 **Schema version:** 71

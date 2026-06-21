@@ -43,6 +43,7 @@ from sqlalchemy.orm import Session
 from .auth import hash_password
 from .local_content import HOMEBREW_ROOT, write_homebrew
 from .models import (
+    AdminAuditLog,
     Campaign,
     CampaignMembership,
     Character,
@@ -189,6 +190,18 @@ def wipe(db: Session) -> dict[str, int]:
         db.query(Campaign).filter(
             Campaign.gm_user_id.in_(demo_user_ids)
         ).delete(synchronize_session=False)
+        # v2.495.1: admin_audit_log.actor_user_id is a non-nullable FK
+        # to users with no ondelete clause, so once the demo GM has
+        # performed any logged admin action (a cloudflare ban/unban, a
+        # user purge, an audit-log scrub) those rows RESTRICT the user
+        # delete and the whole reseed aborts with a ForeignKeyViolation
+        # — which silently froze demo resets on the public instance.
+        # The rows are demo-generated audit noise; delete them first.
+        counts["admin_audit_log"] = (
+            db.query(AdminAuditLog)
+            .filter(AdminAuditLog.actor_user_id.in_(demo_user_ids))
+            .delete(synchronize_session=False)
+        )
         db.flush()
         for u in demo_users:
             db.delete(u)
