@@ -2080,6 +2080,35 @@ _SPELL_BUFF_MAP["death-ward"] = {
     ),
 }
 
+# v2.498.0 — Stoneskin (Phase 2 #31 of
+# docs/plans/cast-and-broadcast-tail.md). L4 abjuration,
+# Druid/Ranger/Sorcerer/Wizard, PHB p.278. "The target has resistance
+# to nonmagical bludgeoning, piercing, and slashing damage."
+# Concentration, up to 1 hour. Rides the `nonmagical-<type>` resistance
+# substrate (`_resistance_halve` via `_resistance_matches_damage`, the
+# same matcher the Gaseous Form potion uses) — halves nonmagical weapon
+# hits while letting magical-source damage through at full. Zero new
+# mechanical code.
+_SPELL_BUFF_MAP["stoneskin"] = {
+    "key": "stoneskin",
+    "name": "Stoneskin",
+    "icon": "🪨",
+    "duration_rounds": 600,  # up to 1 hour @ 6 s/round
+    "duration_max": 600,
+    "concentration": True,  # RAW (PHB p.278)
+    "effects": {
+        "resistance_to": [
+            "nonmagical-bludgeoning",
+            "nonmagical-piercing",
+            "nonmagical-slashing",
+        ],
+    },
+    "desc": (
+        "Resistance to nonmagical bludgeoning, piercing, and slashing "
+        "damage for up to 1 hour (concentration)."
+    ),
+}
+
 # v2.190.0 — Potion of Invulnerability (RAW DMG p.188, rare): resistance to
 # ALL damage for 1 minute. Reuses the v2.99.121 `resistance_to: ["all"]`
 # wildcard that `_resistance_halve` already honours, so no new intercept is
@@ -66185,6 +66214,148 @@ async def cast_protection_from_energy(
         "ok": True,
         "feature": "protection-from-energy",
         "damage_type": damage_type,
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_stoneskin")
+async def cast_stoneskin(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.498.0 — Phase 2 #31 of
+    docs/plans/cast-and-broadcast-tail.md. Stoneskin
+    (L4 abjuration, Druid/Ranger/Sorcerer/Wizard, PHB p.278):
+
+      "Until the spell ends, the target has resistance to nonmagical
+       bludgeoning, piercing, and slashing damage."
+
+    1 action, V/S/M (diamond dust worth 100 gp), Touch,
+    **Concentration, up to 1 hour**.
+
+    Implementation: rides the existing ``nonmagical-<type>`` resistance
+    substrate (``_resistance_halve`` via ``_resistance_matches_damage``
+    — the same matcher the Gaseous Form potion uses), so nonmagical
+    weapon hits are halved while magical-source damage passes through at
+    full. Mirrors the buff to the target sheet (the resistance reader is
+    sheet-based, per v2.496.1). ZERO new mechanical code.
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster targets themself.
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_ss = any(
+        (s.get("_slug") == "stoneskin")
+        or (str(s.get("name", "")).lower() == "stoneskin")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"druid", "ranger", "sorcerer", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_ss and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": (
+                "knows Stoneskin, or druid/ranger/sorcerer/wizard"
+            ),
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("stoneskin") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 600)
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "stoneskin",
+        "name": template.get("name") or "Stoneskin",
+        "icon": template.get("icon") or "🪨",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": True,
+        "source_char_id": char.id,
+        "effects": dict(template.get("effects") or {"resistance_to": [
+            "nonmagical-bludgeoning",
+            "nonmagical-piercing",
+            "nonmagical-slashing",
+        ]}),
+        "desc": template.get("desc") or (
+            "Resistance to nonmagical bludgeoning/piercing/slashing "
+            "for up to 1 hour (concentration)."
+        ),
+    })
+    # Mirror to the target's sheet so the sheet-based resistance reader
+    # (`_resistance_halve` reads `_buffs_active`) sees the new buff.
+    _mirror_buffs_to_sheet(
+        db, target_char.id, _get_buffs(campaign_id, target_char.id),
+    )
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    who = "themself" if target_char.id == char.id else target_char.name
+    feature_desc = (
+        f"{char.name} hardens {who}'s skin to stone — resistance to "
+        "nonmagical bludgeoning, piercing, and slashing damage for up "
+        "to 1 hour (concentration)."
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🪨 Stoneskin",
+            "feature_desc": feature_desc,
+            "source": "stoneskin",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "stoneskin",
         "target_character_id": target_char.id,
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,

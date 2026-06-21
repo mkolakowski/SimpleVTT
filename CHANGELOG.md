@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.498.0] - 2026-06-21 — "The Diamond Skin"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_stoneskin` — Phase 2 #31 of the cast-and-broadcast tail. Stoneskin (L4 abjuration, Druid/Ranger/Sorcerer/Wizard) installs a 1-hour concentration buff granting resistance to nonmagical bludgeoning, piercing, and slashing damage.
+
+**Description:** Continues the tail after Protection from Energy (#30). Stoneskin was the verified-unwired zero-code candidate from the v2.497.0 survey. RAW PHB p.278: "the target has resistance to nonmagical bludgeoning, piercing, and slashing damage." The mechanized core rides the existing `nonmagical-<type>` resistance substrate — `_resistance_halve` (via `_resistance_matches_damage`, the same matcher the Gaseous Form potion uses) halves nonmagical weapon hits while letting magical-source damage through at full. Concentration / 1 hour. Like the other resistance spells, the endpoint mirrors the buff to the target sheet so the sheet-based reader actually applies it. **Zero new mechanical code.**
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_SPELL_BUFF_MAP["stoneskin"]` template (`resistance_to: [nonmagical-bludgeoning, nonmagical-piercing, nonmagical-slashing]`, concentration, 600 rounds) + the `cast_stoneskin` endpoint. Caster gate: knows the spell OR druid/ranger/sorcerer/wizard. Touch self-or-ally target. Mirrors to the target sheet. 400 missing character_id, 404 unknown caster/target, 409 non-caster, 403 not-your-character.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #31.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_stoneskin.py` (new): +5 tests — install carries the three `nonmagical-*` resistances, concentration + 1-hour + mirrored to sheet `_buffs_active`, ally-target installs on the ally, non-caster 409, missing character_id 400.
+
+Total harness count → 3780 (+5).
+
+MINOR — new cast endpoint; backward-compatible, additive substrate. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_stoneskin`: Stoneskin (L4) — 1-hour concentration resistance to nonmagical bludgeoning/piercing/slashing, riding the `nonmagical-<type>` resistance substrate. Phase 2 #31 of the cast-and-broadcast tail.
+
 ## [2.497.0] - 2026-06-21 — "The Elemental Shield"
 
 **Schema version:** 71
