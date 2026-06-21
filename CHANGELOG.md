@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.505.0] - 2026-06-21 — "The Steady Hand"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_resistance` — Phase 2 #38 of the cast-and-broadcast tail. Resistance (cantrip, Cleric/Druid) installs a concentration buff that adds +1d4 to the target's next saving throw, then ends — the save-side mirror of Guidance (#37).
+
+**Description:** Continues the tail after Guidance (#37). RAW PHB p.272: "the target can roll a d4 and add the number rolled to one saving throw of its choice ... The spell then ends." Mirrors Guidance's check-bonus-die on the save side: when the rolling PC carries an `effects.resistance_die` buff and the roll is a save (`stat_key` ends in `_save`), the server appends `+1d4` to the expression and **consumes the buff** (one save per cast, RAW). Keyed `resistance-cantrip` to stay distinct from the damage `resistance-<type>` buffs (those carry `resistance_to` and halve damage; this carries `resistance_die` and adds to a save roll). Hub-state read, so it applies to **manual** save rolls; spell-PROMPTED saves (the `roll_request` → `/respond` path) don't yet honor it — filed as a follow-up (the same scope boundary noted for Guidance, which only needed the `/roll` path since checks are never prompted).
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_pc_has_resistance_cantrip` helper; the `/roll` save append+consume block (after the item save-bonus append) + its broadcast; new `_SPELL_BUFF_MAP["resistance-cantrip"]` template (`resistance_die: True`, concentration, 10 rounds); the `cast_resistance` endpoint. Caster gate: knows the spell OR cleric/druid. Touch self-or-ally. 400/404/409/403 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #38.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_resistance.py` (new): +5 tests — install carries `resistance_die: True` + concentration; **gate + consume** (a DEX save after Resistance appends `+1d4` + fires the broadcast, then the buff is gone and a second save has no `+1d4`); **save-only** (an ability check does NOT get the `+1d4`); non-caster 409; missing character_id 400. Regression-checked `test_cast_guidance` (the check-side sibling) + `test_rage_str_save`.
+
+Total harness count → 3815 (+5).
+
+MINOR — new cast endpoint + reusable `/roll` save-bonus-die read. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_resistance`: Resistance (cantrip) — +1d4 to the next saving throw (consumed after one save), via a new save-bonus-die read at `/roll`. Phase 2 #38 of the cast-and-broadcast tail.
+
 ## [2.504.0] - 2026-06-21 — "The Guiding Spark"
 
 **Schema version:** 71

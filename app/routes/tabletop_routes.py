@@ -2209,6 +2209,27 @@ _SPELL_BUFF_MAP["mind-blank"] = {
 # v2.500.0 `attackers_have_disadvantage` (the Blur read-site —
 # `_target_blur_imposes_disadvantage`, zero extra code). The
 # can't-be-surprised clause stays GM-narrated (no surprise model).
+_SPELL_BUFF_MAP["resistance-cantrip"] = {
+    "key": "resistance-cantrip",
+    "name": "Resistance",
+    "icon": "🛡️",
+    "duration_rounds": 10,  # 1 minute @ 6 s/round (concentration)
+    "duration_max": 10,
+    "concentration": True,  # RAW (PHB p.272)
+    "effects": {
+        # v2.505.0 — Phase 2 #38. Read by `_pc_has_resistance_cantrip`
+        # at the /roll save path, which appends +1d4 and consumes the
+        # buff (one save per cast, RAW). Distinct from the damage
+        # `resistance-<type>` buffs' `resistance_to` marker.
+        "resistance_die": True,
+    },
+    "desc": (
+        "Add 1d4 to your next saving throw; the spell then ends. "
+        "Concentration, up to 1 minute. (In-combat manual saves; "
+        "spell-prompted saves GM-narrated for now.)"
+    ),
+}
+
 _SPELL_BUFF_MAP["guidance"] = {
     "key": "guidance",
     "name": "Guidance",
@@ -19701,6 +19722,24 @@ async def roll_dice(
     if _item_save_bonus > 0:
         expr = f"{expr}+{_item_save_bonus}"
 
+    # v2.505.0 — Resistance (cantrip): "add 1d4 to one saving throw ...
+    # the spell then ends." The save-side mirror of Guidance (#37):
+    # append +1d4 for a manual save roll when the PC carries a
+    # resistance-cantrip buff, then consume it. Hub-state read. NOTE:
+    # this fires for /roll manual saves; spell-PROMPTED saves (the
+    # roll_request → /respond path) don't yet honor it — filed as a
+    # follow-up, same scope boundary as Guidance (which only needed the
+    # /roll path since checks are never prompted).
+    _resistance_cantrip_fired = False
+    if (
+        _char is not None
+        and stat_key_lc.endswith("_save")
+        and _pc_has_resistance_cantrip(campaign_id, _char.id)
+    ):
+        expr = f"{expr}+1d4"
+        _resistance_cantrip_fired = True
+        await _remove_buff(campaign_id, _char.id, "resistance-cantrip")
+
     # v2.209.0 — Magic-items: passive ability-check bonuses from
     # equipped+attuned items get appended for ability checks and
     # ability-based skill checks (but NOT saves — those are handled by
@@ -20277,6 +20316,22 @@ async def roll_dice(
                     f"Guidance then ends."
                 ),
                 "source": "guidance",
+            },
+        })
+    # v2.505.0 — Resistance (cantrip) fired: surface the +1d4 save bonus.
+    if _resistance_cantrip_fired and _char is not None:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": _char.id,
+                "character_name": _char.name,
+                "user_color": _char.color,
+                "feature_name": "🛡️ Resistance — +1d4 to the save",
+                "feature_desc": (
+                    f"{_char.name} adds 1d4 to the saving throw; "
+                    f"Resistance then ends."
+                ),
+                "source": "resistance-cantrip",
             },
         })
     # v2.199.0 / v2.347.0 — ability check/save disadvantage broadcast.
@@ -46996,6 +47051,34 @@ def _pc_has_guidance(campaign_id: int, char_id: "int | None") -> bool:
     return False
 
 
+def _pc_has_resistance_cantrip(campaign_id: int, char_id: "int | None") -> bool:
+    """v2.505.0 — Resistance (cantrip, Phase 2 #38). Returns True when
+    the PC's combatant carries a buff with ``effects.resistance_die``
+    truthy. RAW PHB p.272: "add 1d4 to one saving throw ... the spell
+    then ends." Read at the ``/roll`` save path, which appends +1d4 and
+    consumes the buff. Hub-state read. Distinct from the damage
+    ``resistance-<type>`` buffs (those carry ``effects.resistance_to``
+    and halve damage; this carries ``resistance_die`` and adds to a save
+    roll).
+    """
+    if not char_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != char_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            effects = b.get("effects")
+            if isinstance(effects, dict) and effects.get("resistance_die"):
+                return True
+        return False
+    return False
+
+
 async def _broadcast_rage_str_check_advantage(
     campaign_id: int, char: "Character | None",
 ) -> None:
@@ -67486,6 +67569,138 @@ async def cast_guidance(
     return {
         "ok": True,
         "feature": "guidance",
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_resistance")
+async def cast_resistance(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.505.0 — Phase 2 #38 of
+    docs/plans/cast-and-broadcast-tail.md. Resistance
+    (cantrip, Cleric/Druid, PHB p.272):
+
+      "You touch one willing creature. Once before the spell ends, the
+       target can roll a d4 and add the number rolled to one saving
+       throw of its choice. ... The spell then ends."
+
+    1 action, V/S/M, Touch, **Concentration, up to 1 minute**.
+
+    Implementation: the save-side mirror of Guidance (#37). Installs a
+    buff carrying ``effects.resistance_die: True`` (keyed
+    ``resistance-cantrip`` to stay distinct from the damage
+    ``resistance-<type>`` buffs), read at the ``/roll`` save path
+    (``_pc_has_resistance_cantrip``) — which appends ``+1d4`` to the
+    save and consumes the buff (one save per cast, RAW). Hub-state read,
+    so it applies to **manual** save rolls; spell-PROMPTED saves (the
+    roll_request → /respond path) don't yet honor it (filed follow-up).
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster targets themself.
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_r = any(
+        (s.get("_slug") == "resistance")
+        or (str(s.get("name", "")).lower() == "resistance")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"cleric", "druid"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_r and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Resistance, or cleric/druid",
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("resistance-cantrip") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 10)
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "resistance-cantrip",
+        "name": template.get("name") or "Resistance",
+        "icon": template.get("icon") or "🛡️",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": True,
+        "source_char_id": char.id,
+        "effects": dict(template.get("effects") or {"resistance_die": True}),
+        "desc": template.get("desc") or (
+            "Add 1d4 to your next saving throw; the spell then ends."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    who = "themself" if target_char.id == char.id else target_char.name
+    feature_desc = (
+        f"{char.name} steadies {who} with Resistance — +1d4 to their "
+        "next saving throw (then the spell ends). Concentration, up to "
+        "1 minute."
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🛡️ Resistance",
+            "feature_desc": feature_desc,
+            "source": "resistance-cantrip",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "resistance",
         "target_character_id": target_char.id,
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,

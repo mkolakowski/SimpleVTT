@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3810 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.504.0, 2026-06-21).
+**Total tests:** 3815 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.505.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4644,6 +4644,17 @@ v2.491.0 — Enlarge/Reduce (L2 transmutation, Sorcerer/Wizard, PHB p.237). Phas
 | `test_cast_enlarge_reduce_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`. |
 | `test_cast_enlarge_reduce_bad_mode_400` | An invalid `mode` (e.g. "embiggen") → 400. |
 | `test_cast_enlarge_reduce_missing_character_id_400` | Body without character_id → 400. |
+
+### `test_cast_resistance.py`
+v2.505.0 — Resistance (cantrip, Cleric/Druid, PHB p.272). Phase 2 #38 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). The save-side mirror of Guidance — new `_pc_has_resistance_cantrip` helper + a `/roll` save append (`+1d4`) that consumes the buff after one save + `_SPELL_BUFF_MAP["resistance-cantrip"]` (distinct from the damage `resistance-<type>` buffs) + the `cast_resistance` endpoint. Tavik (Cleric) casts.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_resistance_installs_marker` | Cast → 200, `feature == "resistance"`, `duration_rounds == 10`, `concentration == true`; buff's `effects.resistance_die == true`. |
+| `test_resistance_adds_d4_to_save_then_consumes` | **Gate + consume:** a DEX save after Resistance appends `+1d4` + fires `feature_used(source=resistance-cantrip)`; the buff is then gone and a second save has no `+1d4`. |
+| `test_resistance_does_not_add_to_a_check` | Save-only: an ability check does NOT get the `+1d4`. |
+| `test_cast_resistance_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected string names "resistance". |
+| `test_cast_resistance_missing_character_id_400` | Empty body → 400. |
 
 ### `test_cast_guidance.py`
 v2.504.0 — Guidance (cantrip, Cleric/Druid, PHB p.248). Phase 2 #37 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_pc_has_guidance` helper + a `/roll` ability-check append (`+1d4`) that consumes the buff after one check + `_SPELL_BUFF_MAP["guidance"]` + the `cast_guidance` endpoint. Hub-state read. Tavik (Cleric) casts.
