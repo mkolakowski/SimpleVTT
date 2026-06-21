@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.527.0] - 2026-06-21 — "The Borrowed Wings"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_fly` — Phase 2 #50 of the cast-and-broadcast tail. Fly (L3 transmutation, Sorcerer/Warlock/Wizard) installs a 60-ft-flying-speed concentration buff, with upcast adding one target per slot above 3rd.
+
+**Description:** Continues the tail after Water Breathing (#49). RAW PHB p.243: "You touch a willing creature. The target gains a flying speed of 60 feet for the duration. … you can target one additional creature for each slot level above 3rd." Touch, Concentration up to 10 minutes, V/S/M. Exposes the pre-wired `_SPELL_BUFF_MAP["fly"]` substrate (the same `effects.fly_speed_ft` flight marker the Potion of Flying / Dragon Wings / Levitate effects ride) via a cast endpoint — the Longstrider (#9) / Mage Armor (#2) "the substrate was already wired, just add the endpoint" pattern. Installs the `fly` buff (`fly_speed_ft: 60`, concentration, 100 rounds) on each chosen creature; the upcast target count is `1 + max(0, slot_level - 3)`. The "target falls when the spell ends if still aloft" clause is GM-narrated (no elevation model).
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `cast_fly` endpoint reading the existing `_SPELL_BUFF_MAP["fly"]` template. Body: `{character_id, target_character_id? | target_character_ids?, slot_level?}` (default target = self). 400 `too_many_targets` past the slot cap. Caster gate: knows the spell OR sorcerer/warlock/wizard. Returns `slot_level` + `target_cap`.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #50.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_fly.py` (new): +6 tests — self-cast installs `fly_speed_ft=60` (concentration, 100r, `target_cap==1`); touch-an-ally routes to the ally; upcast `slot_level=5` lets 3 targets through (`target_cap==3`); 2 targets at base slot 3 → 400 `too_many_targets` (`limit==1`); non-caster 409; missing character_id 400.
+
+Total harness count → 3894 (+6).
+
+MINOR — new cast endpoint exposing the `fly_speed_ft` flight substrate. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_fly`: Fly (L3) — a 60-ft flying-speed concentration buff (Sorcerer/Warlock/Wizard), upcast adds one target per slot above 3rd, riding the existing `fly_speed_ft` substrate. Phase 2 #50 of the cast-and-broadcast tail.
+
 ## [2.526.0] - 2026-06-21 — "The Sifted Ledger"
 
 **Schema version:** 71

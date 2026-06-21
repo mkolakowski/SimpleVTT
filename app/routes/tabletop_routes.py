@@ -66189,6 +66189,183 @@ async def cast_water_breathing(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_fly")
+async def cast_fly(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.527.0 — Phase 2 #50 of
+    docs/plans/cast-and-broadcast-tail.md. Fly (L3 transmutation,
+    Sorcerer/Warlock/Wizard, PHB p.243):
+
+      "You touch a willing creature. The target gains a flying speed of
+       60 feet for the duration. ... At Higher Levels: When you cast this
+       spell using a spell slot of 4th level or higher, you can target
+       one additional creature for each slot level above 3rd."
+
+    1 action, V/S/M, Touch, **Concentration, up to 10 minutes**.
+
+    Implementation: exposes the pre-wired ``_SPELL_BUFF_MAP["fly"]``
+    substrate (the same ``effects.fly_speed_ft`` flight marker the
+    Potion of Flying / Dragon Wings / Levitate effects ride) via a cast
+    endpoint — the Longstrider/Mage Armor pattern. Installs the ``fly``
+    buff (``fly_speed_ft: 60``, concentration, 100 rounds) on each
+    chosen creature. Upcast adds one target per slot above 3rd
+    (``slot_level``). The "target falls when the spell ends if still
+    aloft" clause is GM-narrated (no elevation model).
+
+    Body: ``{character_id, target_character_id? | target_character_ids?,
+    slot_level?}``. With no target the caster targets themself. 400
+    ``too_many_targets`` if the target count exceeds ``1 + max(0,
+    slot_level - 3)``.
+
+    Response: ``{ok, feature, targets, buffs_installed, slot_level,
+    target_cap, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    raw_targets = body.get("target_character_ids")
+    if not isinstance(raw_targets, list):
+        raw_targets = []
+    single = body.get("target_character_id")
+    if single and not raw_targets:
+        raw_targets = [single]
+    try:
+        slot_level = int(body.get("slot_level") or 3)
+    except (TypeError, ValueError):
+        slot_level = 3
+    if slot_level < 3:
+        slot_level = 3
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_fly = any(
+        (s.get("_slug") == "fly")
+        or (str(s.get("name", "")).lower() == "fly")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"sorcerer", "warlock", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_fly and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Fly, or sorcerer/warlock/wizard",
+            "got_class": _cls,
+        })
+
+    target_ids: list[int] = []
+    seen: set[int] = set()
+    for raw in raw_targets:
+        try:
+            tid = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if tid <= 0 or tid in seen:
+            continue
+        seen.add(tid)
+        target_ids.append(tid)
+    if not target_ids:
+        target_ids = [char.id]
+    target_cap = 1 + max(0, slot_level - 3)
+    if len(target_ids) > target_cap:
+        return JSONResponse(status_code=400, content={
+            "error": "too_many_targets",
+            "spell": "fly",
+            "limit": target_cap,
+            "slot_level": slot_level,
+            "received": len(target_ids),
+        })
+
+    template = _SPELL_BUFF_MAP.get("fly") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 100)
+    effects = dict(template.get("effects") or {"fly_speed_ft": 60})
+    buffs_installed: list[int] = []
+    for tid in target_ids:
+        target = db.query(Character).filter(
+            Character.id == tid,
+            Character.campaign_id == campaign_id,
+        ).first()
+        if not target:
+            continue
+        installed = await _install_buff(campaign_id, target.id, {
+            "key": "fly",
+            "name": template.get("name") or "Fly",
+            "icon": template.get("icon") or "🕊️",
+            "duration_rounds": DURATION_ROUNDS,
+            "duration_max": DURATION_ROUNDS,
+            "concentration": True,  # RAW (PHB p.243)
+            "source_char_id": char.id,
+            "effects": dict(effects),
+            "desc": template.get("desc") or (
+                "Flying speed 60 ft for up to 10 minutes (concentration). "
+                "The target falls when the spell ends if still aloft "
+                "(GM-narrated)."
+            ),
+        })
+        if installed:
+            buffs_installed.append(target.id)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    feature_desc = (
+        f"{char.name} casts Fly — a 60-ft flying speed for "
+        f"{len(buffs_installed)} creature"
+        f"{'s' if len(buffs_installed) != 1 else ''} for up to 10 minutes "
+        "(concentration)."
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🕊️ Fly",
+            "feature_desc": feature_desc,
+            "source": "fly",
+            "target_character_ids": buffs_installed,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "fly",
+        "targets": buffs_installed,
+        "buffs_installed": len(buffs_installed),
+        "slot_level": slot_level,
+        "target_cap": target_cap,
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_holy_aura")
 async def cast_holy_aura(
     campaign_id: int,
