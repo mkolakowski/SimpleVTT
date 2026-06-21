@@ -27,31 +27,54 @@ from app.admin_center import (
     login_guard,
     mfa,
     stats,
+    timefmt,
 )
 
 ADMIN_BASE_URL = os.getenv("ADMIN_CENTER_BASE_URL", "http://localhost:8015")
 
 
-def _admin_creds() -> tuple[str, str]:
-    """The creds the *running* admin-center container uses. Read from
-    the repo-root .env (the same file docker-compose reads) so a local
-    operator who customized ADMIN_CENTER_USER/PASS still has passing
-    tests; fall back to the compose defaults (what CI's credential-less
-    stack uses). An explicit shell env var wins over both."""
-    user, pw = "admin", "changeme"
+def _env_file_value(key: str, default: str = "") -> str:
+    """Read a value from the repo-root .env (the same file docker-compose
+    reads) so tests match a locally-customized running stack; fall back
+    to ``default`` (the compose default / what CI's stack uses). An
+    explicit shell env var wins over both."""
+    val = default
     env_path = Path(__file__).resolve().parents[2] / ".env"
     if env_path.is_file():
         for line in env_path.read_text().splitlines():
             s = line.strip()
-            if s.startswith("ADMIN_CENTER_USER=") and "=" in s:
-                user = s.split("=", 1)[1].strip() or user
-            elif s.startswith("ADMIN_CENTER_PASS=") and "=" in s:
-                pw = s.split("=", 1)[1].strip() or pw
-    return os.getenv("ADMIN_CENTER_USER", user), os.getenv("ADMIN_CENTER_PASS", pw)
+            if s.startswith(f"{key}=") and not s.startswith("#"):
+                val = s.split("=", 1)[1].strip() or val
+    return os.getenv(key, val)
+
+
+def _admin_creds() -> tuple[str, str]:
+    return (
+        _env_file_value("ADMIN_CENTER_USER", "admin"),
+        _env_file_value("ADMIN_CENTER_PASS", "changeme"),
+    )
 
 
 _ADMIN_USER, _ADMIN_PASS = _admin_creds()
 _AUTH = httpx.BasicAuth(_ADMIN_USER, _ADMIN_PASS)
+# If the running stack has MFA enabled (operator set it in .env), the
+# login tests must complete the TOTP step. Empty = MFA off.
+_MFA_SECRET = _env_file_value("ADMIN_CENTER_TOTP_SECRET", "")
+_MFA_ON = (
+    _env_file_value("ADMIN_CENTER_MFA_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+    and bool(_MFA_SECRET)
+)
+
+
+def _complete_mfa_if_pending(client: httpx.Client, resp: httpx.Response) -> None:
+    """If a password login redirected to the MFA step, finish it using
+    the TOTP secret from .env so the helper works on an MFA-on stack."""
+    if "/login/mfa" in resp.headers.get("location", "") and _MFA_SECRET:
+        import time as _t
+
+        from app.admin_center import mfa as _mfa
+        code = _mfa._hotp(_MFA_SECRET, int(_t.time() // 30))
+        client.post("/login/mfa", data={"code": code})
 
 _SAMPLE = """\
 2026-06-20 01:00:00,001 WARNING simplevtt.audit: auth.login_failed ip=203.0.113.7 ua="Mozilla/5.0 (x)" username=alice@example.com
@@ -406,6 +429,44 @@ def test_provisioning_uri(monkeypatch):
     assert mfa.provisioning_uri() == ""
 
 
+# ---- display timezone -----------------------------------------------
+
+def test_timefmt_log_ts_converts_utc_to_offset():
+    import calendar
+    from datetime import timedelta, timezone
+    est = timezone(timedelta(hours=-5))  # fixed offset, no tzdata needed
+    # App logs UTC; 18:30 UTC → 13:30 at UTC-5.
+    out = timefmt.fmt_log_ts("2026-01-15 18:30:00,123", tz=est)
+    assert out.startswith("2026-01-15 13:30:00")
+
+
+def test_timefmt_log_ts_passthrough_on_unparseable():
+    assert timefmt.fmt_log_ts("not a timestamp") == "not a timestamp"
+    assert timefmt.fmt_log_ts("") == ""
+
+
+def test_timefmt_epoch_in_offset():
+    import calendar
+    from datetime import timedelta, timezone
+    est = timezone(timedelta(hours=-5))
+    ts = calendar.timegm((2026, 1, 15, 18, 0, 0, 0, 0, 0))  # 18:00 UTC
+    assert timefmt.fmt_epoch(ts, tz=est).startswith("2026-01-15 13:00")
+    assert timefmt.fmt_epoch(0) == "" or timefmt.fmt_epoch(None) == ""
+
+
+def test_timefmt_display_tz_name_default_and_override(monkeypatch):
+    monkeypatch.delenv("ADMIN_CENTER_TZ", raising=False)
+    assert timefmt.display_tz_name() == "America/New_York"
+    monkeypatch.setenv("ADMIN_CENTER_TZ", "UTC")
+    assert timefmt.display_tz_name() == "UTC"
+
+
+def test_timefmt_display_tz_falls_back_on_bad_name(monkeypatch):
+    from datetime import timezone
+    monkeypatch.setenv("ADMIN_CENTER_TZ", "Not/AZone")
+    assert timefmt.display_tz() == timezone.utc
+
+
 # ---- event help -----------------------------------------------------
 
 def test_event_help_exact_match():
@@ -538,6 +599,9 @@ def test_login_flow_sets_session_and_grants_access():
         )
         assert r.status_code == 303
         assert "admin_center_session" in r.headers.get("set-cookie", "")
+        # On an MFA-on stack the password step lands on /login/mfa;
+        # complete the second factor before checking the dashboard.
+        _complete_mfa_if_pending(c, r)
         # The cookie is now in the client jar — the dashboard loads.
         dash = c.get("/", follow_redirects=False)
         assert dash.status_code == 200
@@ -556,10 +620,11 @@ def test_login_rejects_wrong_password():
 
 @_LIVE
 def test_logout_clears_session():
-    with httpx.Client(base_url=ADMIN_BASE_URL, timeout=5.0, follow_redirects=False) as c:
-        c.post("/login", data={
+    with httpx.Client(base_url=ADMIN_BASE_URL, timeout=10.0, follow_redirects=False) as c:
+        r = c.post("/login", data={
             "username": _ADMIN_USER, "password": _ADMIN_PASS, "next": "/",
         })
+        _complete_mfa_if_pending(c, r)  # finish TOTP if MFA is on
         assert c.get("/", follow_redirects=False).status_code == 200
         c.get("/logout")
         # After logout the dashboard bounces back to the login page.
@@ -666,7 +731,8 @@ def test_dashboard_dns_toggle_renders_column():
 
 def _logged_in_client() -> httpx.Client:
     c = httpx.Client(base_url=ADMIN_BASE_URL, timeout=15.0, follow_redirects=False)
-    c.post("/login", data={"username": _ADMIN_USER, "password": _ADMIN_PASS, "next": "/"})
+    r = c.post("/login", data={"username": _ADMIN_USER, "password": _ADMIN_PASS, "next": "/"})
+    _complete_mfa_if_pending(c, r)  # finishes the TOTP step if MFA is on
     return c
 
 
@@ -702,16 +768,17 @@ def test_mfa_step_requires_pending_session():
 
 
 @_LIVE
+@pytest.mark.skipif(_MFA_ON, reason="stack has MFA enabled — password alone won't grant")
 def test_mfa_disabled_login_still_grants_directly():
     """With MFA off (the default), a valid password lands straight on
-    the dashboard — no /login/mfa detour."""
-    c = _logged_in_client()
-    try:
-        r = c.get("/", follow_redirects=False)
-        assert r.status_code == 200
-        assert "Admin Center" in r.text
-    finally:
-        c.close()
+    the dashboard — no /login/mfa detour. Skipped on an MFA-on stack."""
+    with httpx.Client(base_url=ADMIN_BASE_URL, timeout=10.0, follow_redirects=False) as c:
+        r = c.post("/login", data={"username": _ADMIN_USER, "password": _ADMIN_PASS, "next": "/"})
+        # Password alone authenticated (no MFA redirect).
+        assert "/login/mfa" not in r.headers.get("location", "")
+        dash = c.get("/", follow_redirects=False)
+        assert dash.status_code == 200
+        assert "Admin Center" in dash.text
 
 
 @_LIVE

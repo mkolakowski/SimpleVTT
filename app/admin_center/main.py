@@ -39,6 +39,7 @@ from . import (
     login_guard,
     mfa,
     stats,
+    timefmt,
 )
 from .basic_auth import check_credentials, header_authorizes, is_default_password
 
@@ -70,19 +71,6 @@ templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 _FAVICON_PATH = Path(__file__).resolve().parent.parent / "static" / "favicon.svg"
 
 
-def _fmt_epoch(t) -> str:
-    """Unix epoch → readable UTC string, for the ban timestamps."""
-    if not t:
-        return ""
-    try:
-        import datetime
-        return datetime.datetime.utcfromtimestamp(int(t)).strftime(
-            "%Y-%m-%d %H:%M UTC"
-        )
-    except (ValueError, OverflowError, OSError):
-        return str(t)
-
-
 def _fmt_duration(s) -> str:
     """Seconds → compact human duration (or 'permanent' for None)."""
     if s is None:
@@ -99,9 +87,11 @@ def _fmt_duration(s) -> str:
     return f"{sec}s"
 
 
-templates.env.filters["epoch"] = _fmt_epoch
+templates.env.filters["epoch"] = timefmt.fmt_epoch
 templates.env.filters["duration"] = _fmt_duration
 templates.env.filters["explain"] = event_help.explain
+# Audit-log line timestamps (app writes UTC) → the display zone.
+templates.env.filters["localtime"] = timefmt.fmt_log_ts
 
 app = FastAPI(title="SimpleVTT Admin Center", version=APP_VERSION)
 

@@ -280,7 +280,7 @@
       <tbody>
         {% for e in events %}
         <tr>
-          <td class="muted"><code>{{ e.ts }}</code></td>
+          <td class="muted"><code>{{ e.ts | localtime }}</code></td>
           <td>
             <span class="tag {{ 'bad' if e.level in ('ERROR','CRITICAL') else ('warn' if e.level == 'WARNING' else '') }}">{{ e.level }}</span>
           </td>

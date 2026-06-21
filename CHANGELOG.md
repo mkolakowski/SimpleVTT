@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.487.2] - 2026-06-20 — "The Local Clock"
+
+**Schema version:** 71
+
+**Commit summary:** The Admin Center now renders all times in a configurable timezone, **defaulting to US Eastern** (`America/New_York`, DST-aware). Display-only — it doesn't change what the app writes to the audit log.
+
+**Description:** Audit-log line timestamps + fail2ban ban times were shown in UTC. They now convert to `ADMIN_CENTER_TZ` (default `America/New_York` → EST in winter / EDT in summer). The app keeps logging UTC (so fail2ban's time parsing is untouched); the conversion happens only in the dashboard.
+
+**Implementation:**
+
+- `app/admin_center/timefmt.py` (new): `fmt_epoch` (ban epochs) + `fmt_log_ts` (audit-log asctime, parsed as UTC → display zone) + `display_tz()` (resolves `ADMIN_CENTER_TZ`, falls back to UTC on a bad name). Stdlib `zoneinfo`; tz injectable for tests.
+- `app/admin_center/main.py`: the `epoch` filter now uses `timefmt.fmt_epoch`; new `localtime` filter (`timefmt.fmt_log_ts`) applied to `e.ts` in the events table. Removed the old hardcoded-UTC `_fmt_epoch`.
+- `docker-compose.yml` + `.env.example`: `ADMIN_CENTER_TZ` (default `America/New_York`) — set in the **example + main compose config only**; the running `.env` is untouched.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py`: +5 unit tests — UTC→offset conversion (fixed offset, no tzdata needed), unparseable passthrough, epoch formatting, the `ADMIN_CENTER_TZ` default/override, and the bad-name→UTC fallback.
+- Made the live login tests **MFA-aware**: the helper now reads `ADMIN_CENTER_TOTP_SECRET` from `.env` and completes the TOTP step when the running stack has MFA enabled (so the suite passes on an operator's MFA-on box as well as CI's MFA-off default). The MFA-off-specific test skips when MFA is on.
+
+Total harness count → 3717 (+5).
+
+PATCH — display-only timezone for the Admin Center, default US Eastern. No app-logging or schema change.
+
+### Added
+- `app/admin_center/timefmt.py` + `ADMIN_CENTER_TZ` (default `America/New_York`): the dashboard renders audit-log + ban times in the configured zone.
+
+### Changed
+- Admin Center event + ban timestamps now display in US Eastern by default instead of UTC.
+
 ## [2.487.1] - 2026-06-20 — "The Matching Crest"
 
 **Schema version:** 71
