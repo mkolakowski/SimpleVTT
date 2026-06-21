@@ -2209,6 +2209,26 @@ _SPELL_BUFF_MAP["mind-blank"] = {
 # v2.500.0 `attackers_have_disadvantage` (the Blur read-site —
 # `_target_blur_imposes_disadvantage`, zero extra code). The
 # can't-be-surprised clause stays GM-narrated (no surprise model).
+_SPELL_BUFF_MAP["guidance"] = {
+    "key": "guidance",
+    "name": "Guidance",
+    "icon": "✨",
+    "duration_rounds": 10,  # 1 minute @ 6 s/round (concentration)
+    "duration_max": 10,
+    "concentration": True,  # RAW (PHB p.248)
+    "effects": {
+        # v2.504.0 — Phase 2 #37. Read by `_pc_has_guidance` at the
+        # /roll ability-check path, which appends +1d4 and consumes the
+        # buff (one check per cast, RAW).
+        "guidance": True,
+    },
+    "desc": (
+        "Add 1d4 to your next ability check; the spell then ends. "
+        "Concentration, up to 1 minute. (In-combat checks; out-of-"
+        "combat exploration checks GM-narrated.)"
+    ),
+}
+
 _SPELL_BUFF_MAP["barkskin"] = {
     "key": "barkskin",
     "name": "Barkskin",
@@ -19573,6 +19593,22 @@ async def roll_dice(
             expr = expr.replace("1d20", "2d20kh1", 1)
             _rage_str_check_fired = True
 
+    # v2.504.0 — Guidance (cantrip): "add 1d4 to one ability check ...
+    # the spell then ends." Append the die for any ability/skill check
+    # when the PC carries a guidance buff, then consume it (one check
+    # per cast, RAW). Composes with the advantage swap above — the +1d4
+    # rides on top of a 2d20kh1 when both fire. Fires only for check
+    # rolls (not saves/attacks); saves are handled by the save path.
+    _guidance_fired = False
+    if (
+        _char is not None
+        and _is_any_check_roll
+        and _pc_has_guidance(campaign_id, _char.id)
+    ):
+        expr = f"{expr}+1d4"
+        _guidance_fired = True
+        await _remove_buff(campaign_id, _char.id, "guidance")
+
     # v2.199.0 / generalized v2.347.0 — ability check/save disadvantage.
     # The inverse of the rage/Growth advantage above, now for ANY ability
     # marker (STR/CON/… checks AND saves) so items like Staff of Withering
@@ -20227,6 +20263,22 @@ async def roll_dice(
     # roll result. The d20 swap happened pre-roll above.
     if _rage_str_check_fired and _char is not None:
         await _broadcast_rage_str_check_advantage(campaign_id, _char)
+    # v2.504.0 — Guidance fired: surface the +1d4 + the spell ending.
+    if _guidance_fired and _char is not None:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": _char.id,
+                "character_name": _char.name,
+                "user_color": _char.color,
+                "feature_name": "✨ Guidance — +1d4 to the check",
+                "feature_desc": (
+                    f"{_char.name} adds 1d4 to the ability check; "
+                    f"Guidance then ends."
+                ),
+                "source": "guidance",
+            },
+        })
     # v2.199.0 / v2.347.0 — ability check/save disadvantage broadcast.
     if _str_check_dis_fired and _char is not None:
         await _broadcast_ability_disadvantage(
@@ -46915,6 +46967,35 @@ def _pc_has_foresight_advantage(
     return False
 
 
+def _pc_has_guidance(campaign_id: int, char_id: "int | None") -> bool:
+    """v2.504.0 — Guidance (cantrip, Phase 2 #37 of the cast-and-
+    broadcast tail). Returns True when the PC's combatant carries an
+    active buff with ``effects.guidance`` truthy. RAW PHB p.248: "add
+    1d4 to one ability check of its choice ... the spell then ends."
+    Read at the ``/roll`` ability-check path, which appends +1d4 and
+    consumes the buff. Hub-state read (combatant buffs), like the
+    rage/foresight check helpers — so Guidance applies to in-combat
+    checks; out-of-combat exploration checks stay GM-narrated (the buff
+    install rides battle state).
+    """
+    if not char_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != char_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            effects = b.get("effects")
+            if isinstance(effects, dict) and effects.get("guidance"):
+                return True
+        return False
+    return False
+
+
 async def _broadcast_rage_str_check_advantage(
     campaign_id: int, char: "Character | None",
 ) -> None:
@@ -67274,6 +67355,137 @@ async def cast_barkskin(
     return {
         "ok": True,
         "feature": "barkskin",
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_guidance")
+async def cast_guidance(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.504.0 — Phase 2 #37 of
+    docs/plans/cast-and-broadcast-tail.md. Guidance
+    (cantrip, Cleric/Druid, PHB p.248):
+
+      "You touch one willing creature. Once before the spell ends, the
+       target can roll a d4 and add the number rolled to one ability
+       check of its choice. ... The spell then ends."
+
+    1 action, V/S, Touch, **Concentration, up to 1 minute**.
+
+    Implementation: installs a buff carrying ``effects.guidance: True``,
+    read at the ``/roll`` ability-check path (``_pc_has_guidance``) —
+    which appends ``+1d4`` to the check expression and consumes the buff
+    (one check per cast, RAW). Hub-state read (the /roll helper reads the
+    combatant's live buffs), so it applies to **in-combat** ability/skill
+    checks; out-of-combat exploration checks stay GM-narrated (the buff
+    install rides battle state).
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster targets themself.
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_g = any(
+        (s.get("_slug") == "guidance")
+        or (str(s.get("name", "")).lower() == "guidance")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"cleric", "druid"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_g and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Guidance, or cleric/druid",
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("guidance") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 10)
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "guidance",
+        "name": template.get("name") or "Guidance",
+        "icon": template.get("icon") or "✨",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": True,
+        "source_char_id": char.id,
+        "effects": dict(template.get("effects") or {"guidance": True}),
+        "desc": template.get("desc") or (
+            "Add 1d4 to your next ability check; the spell then ends."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    who = "themself" if target_char.id == char.id else target_char.name
+    feature_desc = (
+        f"{char.name} blesses {who} with Guidance — +1d4 to their next "
+        "ability check (then the spell ends). Concentration, up to "
+        "1 minute."
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "✨ Guidance",
+            "feature_desc": feature_desc,
+            "source": "guidance",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "guidance",
         "target_character_id": target_char.id,
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,

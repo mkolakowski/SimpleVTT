@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.504.0] - 2026-06-21 — "The Guiding Spark"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_guidance` — Phase 2 #37 of the cast-and-broadcast tail. Guidance (cantrip, Cleric/Druid) installs a concentration buff that adds +1d4 to the target's next ability check, then ends.
+
+**Description:** Continues the tail after Barkskin (#36). RAW PHB p.248: "the target can roll a d4 and add the number rolled to one ability check of its choice ... The spell then ends." Adds a reusable check-bonus-die read at the `/roll` ability-check path: when the rolling PC carries a `effects.guidance` buff and the roll is an ability/skill check (the v2.502.0 `_is_any_check_roll` predicate), the server appends `+1d4` to the expression and **consumes the buff** (one check per cast, RAW — closer to RAW than the True-Strike-style "every roll while active" simplification). Hub-state read, so it applies to in-combat checks; out-of-combat exploration checks stay GM-narrated (the buff install rides battle state). A `feature_used(source=guidance)` card surfaces the +1d4 and the spell ending.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_pc_has_guidance` helper; the `/roll` Guidance append+consume block (after the check-advantage block, before the disadvantage block) + its broadcast; new `_SPELL_BUFF_MAP["guidance"]` template (`guidance: True`, concentration, 10 rounds); the `cast_guidance` endpoint. Caster gate: knows the spell OR cleric/druid. Touch self-or-ally. 400/404/409/403 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #37.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_guidance.py` (new): +4 tests — install carries `guidance: True` + concentration; **gate + consume** (a DEX check after Guidance appends `+1d4` to the broadcast expression + fires the broadcast, then the buff is gone and a second check has no `+1d4`); non-caster 409; missing character_id 400. Regression-checked `test_rage_str_check` (the sibling check-roll path).
+
+Total harness count → 3810 (+4).
+
+MINOR — new cast endpoint + reusable check-bonus-die read at `/roll`. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_guidance`: Guidance (cantrip) — +1d4 to the next ability check (consumed after one check), via a new check-bonus-die read at `/roll`. Phase 2 #37 of the cast-and-broadcast tail.
+
 ## [2.503.0] - 2026-06-21 — "The Bark Mantle"
 
 **Schema version:** 71
