@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.503.0] - 2026-06-21 — "The Bark Mantle"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_barkskin` — Phase 2 #36 of the cast-and-broadcast tail. Barkskin (L2 transmutation, Druid/Ranger) installs a 1-hour concentration buff that floors the target's AC at 16.
+
+**Description:** Continues the tail after the v2.502.x audit refresh. RAW PHB p.217: "the target's AC can't be less than 16, regardless of what kind of armor it is wearing." This adds a small reusable substrate: `_read_target_ac` now walks active buffs for `effects.ac_floor` (max across buffs) and applies it as a post-bonus floor — `max(total_ac, floor)` — so a target already ≥16 is unaffected and a lower-AC target is raised to 16. Hub-state read (the AC walker reads the combatant's live buffs), so no sheet mirror is needed.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: `_read_target_ac` tracks `buff_ac_floor` alongside `buff_ac_bonus` and returns `max(total_ac, buff_ac_floor)`; new `_SPELL_BUFF_MAP["barkskin"]` template (`ac_floor: 16`, concentration, 600 rounds); the `cast_barkskin` endpoint. Caster gate: knows the spell OR druid/ranger. Touch self-or-ally. 400/404/409/403 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #36.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_barkskin.py` (new): +5 tests — install carries `ac_floor: 16` + concentration + 1-hour; **floor gate** (Lyra, natural AC 14 → `/attack` `target_ac` becomes 16 after Barkskin); **no-lower control** (Caelan, natural AC 18 → unchanged, proving the floor is a `max()` not a `set()`); non-caster 409; missing character_id 400. The gate reads the deterministic `target_ac` from the `/attack` response. (`ac` is not a sheet-fields PATCH key, so the tests use demo PCs' natural ACs rather than forcing a value.)
+
+Total harness count → 3806 (+5).
+
+MINOR — new cast endpoint + generic `ac_floor` substrate (additive, backward-compatible). No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_barkskin`: Barkskin (L2) — 1-hour concentration AC-floor-of-16 buff, via a new reusable `ac_floor` read in `_read_target_ac`. Phase 2 #36 of the cast-and-broadcast tail.
+
 ## [2.502.1] - 2026-06-21 — "The Recount"
 
 **Schema version:** 71

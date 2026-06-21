@@ -2209,6 +2209,25 @@ _SPELL_BUFF_MAP["mind-blank"] = {
 # v2.500.0 `attackers_have_disadvantage` (the Blur read-site —
 # `_target_blur_imposes_disadvantage`, zero extra code). The
 # can't-be-surprised clause stays GM-narrated (no surprise model).
+_SPELL_BUFF_MAP["barkskin"] = {
+    "key": "barkskin",
+    "name": "Barkskin",
+    "icon": "🌳",
+    "duration_rounds": 600,  # up to 1 hour @ 6 s/round
+    "duration_max": 600,
+    "concentration": True,  # RAW (PHB p.217)
+    "effects": {
+        # v2.503.0 — Phase 2 #36. RAW: "the target's AC can't be less
+        # than 16, regardless of what kind of armor it is wearing."
+        # Read by `_read_target_ac` as a post-bonus floor.
+        "ac_floor": 16,
+    },
+    "desc": (
+        "The target's AC can't be less than 16 (regardless of armor) "
+        "for up to 1 hour (concentration)."
+    ),
+}
+
 _SPELL_BUFF_MAP["foresight"] = {
     "key": "foresight",
     "name": "Foresight",
@@ -9259,6 +9278,12 @@ def _read_target_ac(
     else:
         buffs = combatant.get("buffs") or []
     buff_ac_bonus = 0
+    # v2.503.0 — Barkskin (Phase 2 #36): a buff carrying
+    # ``effects.ac_floor`` raises the FINAL AC to at least that value
+    # ("AC can't be less than 16, regardless of armor"). Tracked as the
+    # max floor across active buffs and applied after all additive
+    # bonuses below.
+    buff_ac_floor = 0
     for b in buffs:
         if not isinstance(b, dict):
             continue
@@ -9267,6 +9292,10 @@ def _read_target_ac(
             continue
         try:
             buff_ac_bonus += int(effects.get("ac_bonus") or 0)
+        except (TypeError, ValueError):
+            pass
+        try:
+            buff_ac_floor = max(buff_ac_floor, int(effects.get("ac_floor") or 0))
         except (TypeError, ValueError):
             pass
     # v2.99.95 — Fighting Style: Defense (+1 AC when wearing armor).
@@ -9288,13 +9317,17 @@ def _read_target_ac(
             item_ranged_ac_bonus = int(
                 _item_eff.get("conditional_ac_bonus_vs_ranged") or 0
             )
-    return (
+    total_ac = (
         base_ac
         + buff_ac_bonus
         + _pc_defense_ac_bonus(char_sheet)
         + item_ac_bonus
         + item_ranged_ac_bonus
     )
+    # v2.503.0 — Barkskin AC floor: the final AC can't be less than the
+    # buff's floor (16). Applied after all additive bonuses so a target
+    # already above the floor is unaffected.
+    return max(total_ac, buff_ac_floor)
 
 
 def _pick_damage_tier(scaling: list | None, level: int) -> dict | None:
@@ -67113,6 +67146,134 @@ async def cast_foresight(
     return {
         "ok": True,
         "feature": "foresight",
+        "target_character_id": target_char.id,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_barkskin")
+async def cast_barkskin(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.503.0 — Phase 2 #36 of
+    docs/plans/cast-and-broadcast-tail.md. Barkskin
+    (L2 transmutation, Druid/Ranger, PHB p.217):
+
+      "Until the spell ends, the target's skin has a rough, bark-like
+       appearance, and the target's AC can't be less than 16,
+       regardless of what kind of armor it is wearing."
+
+    1 action, V/S/M, Touch, **Concentration, up to 1 hour**.
+
+    Implementation: installs a buff carrying ``effects.ac_floor: 16``,
+    read by ``_read_target_ac`` as a post-bonus floor (``max(total,
+    16)``) — so a target whose AC is already ≥16 is unaffected, and a
+    lower-AC target is raised to 16. Hub-state read (the AC walker reads
+    the combatant's live buffs), so NO sheet mirror is needed.
+
+    Body: ``{character_id, target_character_id?}``. If
+    ``target_character_id`` is omitted the caster targets themself.
+
+    Response: ``{ok, feature, target_character_id, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_bs = any(
+        (s.get("_slug") == "barkskin")
+        or (str(s.get("name", "")).lower() == "barkskin")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"druid", "ranger"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_bs and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Barkskin, or druid/ranger",
+            "got_class": _cls,
+        })
+
+    template = _SPELL_BUFF_MAP.get("barkskin") or {}
+    DURATION_ROUNDS = int(template.get("duration_rounds") or 600)
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "barkskin",
+        "name": template.get("name") or "Barkskin",
+        "icon": template.get("icon") or "🌳",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": True,
+        "source_char_id": char.id,
+        "effects": dict(template.get("effects") or {"ac_floor": 16}),
+        "desc": template.get("desc") or (
+            "AC can't be less than 16 for up to 1 hour (concentration)."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    who = "themself" if target_char.id == char.id else target_char.name
+    feature_desc = (
+        f"{char.name} toughens {who}'s skin to bark — AC can't drop "
+        "below 16 for up to 1 hour (concentration)."
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🌳 Barkskin",
+            "feature_desc": feature_desc,
+            "source": "barkskin",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "barkskin",
         "target_character_id": target_char.id,
         "buff_installed": bool(buff_installed),
         "duration_rounds": DURATION_ROUNDS,

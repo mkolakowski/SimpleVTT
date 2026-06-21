@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3801 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.502.0, 2026-06-21).
+**Total tests:** 3806 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.503.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4644,6 +4644,17 @@ v2.491.0 — Enlarge/Reduce (L2 transmutation, Sorcerer/Wizard, PHB p.237). Phas
 | `test_cast_enlarge_reduce_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`. |
 | `test_cast_enlarge_reduce_bad_mode_400` | An invalid `mode` (e.g. "embiggen") → 400. |
 | `test_cast_enlarge_reduce_missing_character_id_400` | Body without character_id → 400. |
+
+### `test_cast_barkskin.py`
+v2.503.0 — Barkskin (L2 transmutation, Druid/Ranger, PHB p.217). Phase 2 #36 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `effects.ac_floor` read in `_read_target_ac` (final AC = `max(total, 16)`) + `_SPELL_BUFF_MAP["barkskin"]` + the `cast_barkskin` endpoint. Hub-state read (no mirror). Mira (Druid) casts; the gate reads the deterministic `target_ac` from `/attack`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_barkskin_installs_ac_floor` | Cast → 200, `feature == "barkskin"`, `duration_rounds == 600`, `concentration == true`; buff's `effects.ac_floor == 16`. |
+| `test_barkskin_floors_low_ac_to_16` | Lyra (natural AC 14) → after Barkskin, `/attack` `target_ac == 16` (the floor lifts a sub-16 AC). |
+| `test_barkskin_does_not_lower_high_ac` | Caelan (natural AC 18) → unchanged after Barkskin (proves the floor is a `max()`, not a `set()`). |
+| `test_cast_barkskin_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected string names "barkskin". |
+| `test_cast_barkskin_missing_character_id_400` | Empty body → 400. |
 
 ### `test_cast_foresight.py`
 v2.502.0 — Foresight (L9 divination, Bard/Druid/Warlock/Wizard, PHB p.248). Phase 2 #35 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_pc_has_foresight_advantage` helper wired into the three advantage choke-points (`_attacker_has_str_attack_advantage`, `_pc_has_rage_str_save_advantage`, the `/roll` check block) so one `effects.foresight` marker grants advantage on every attack/check/save; the buff also carries `attackers_have_disadvantage` (reusing Blur's read-site). All gates deterministic on roll-state. Thalindra casts on Krieger.
