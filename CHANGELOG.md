@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.513.0] - 2026-06-21 — "The Unwelcome Spell"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #44 follow-up of the cast-and-broadcast tail — wires the Globe of Invulnerability spell-block into `/cast_spell`. A spell of the globe's threshold level or lower cast at a globe-protected target is rejected with a 409 `globe_blocks_spell` gate.
+
+**Description:** Closes the mechanical follow-up filed with Globe of Invulnerability (#44 / v2.511.0). RAW PHB p.247: "Any spell of 5th level or lower cast from outside the barrier can't affect creatures or objects within it, **even if the spell is cast using a higher level spell slot**." New `_target_globe_blocks_spell(campaign_id, target_combatant_id, spell_level)` hub-read (same shape as the v2.500.0 Blur read-site / the v2.509.0 `_target_sees_invisible`) compares the spell's **base** level against the buff's `spell_immunity_max_level` (5) — so a 1st–5th-level spell upcast with a higher slot is still blocked. Folded into `/cast_spell` as a pre-slot-consumption 409 `globe_blocks_spell` gate, mirroring the existing range gate's single-target-only scope + slot-preserving contract.
+
+**Scope:** single-target only (an AoE that merely clips a globed creature isn't blocked wholesale — the per-target exclusion stays GM-narrated, the same boundary the barrier geometry sits behind). Self-casts are skipped (the globe holder is at the center, inside the barrier). The rare caster genuinely inside the barrier uses the GM `override` escape hatch. The gate fires before slot consumption, so a blocked cast doesn't burn a slot — RAW models the slot as consumed-with-no-effect, but in a full-information VTT, warning the caster (slot preserved, override available) is the better UX and matches the existing incapacitated / charmed / range gates.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_target_globe_blocks_spell` helper; a `globe_blocks_spell` 409 gate in `/cast_spell` after the range/Distant-Spell block, inside the single-target (`not target_combatant_ids_in`) scope.
+
+**Harness changes:**
+
+- `tests/harness/test_globe_blocks_spell.py` (new): +4 tests — a level-≤5 spell (Magic Missile) at a globed target → 409 `globe_blocks_spell`; control (no globe → not blocked); **upcast still blocked** (Magic Missile at `slot_level: 5` → still 409, `spell_level == 1` proves base-vs-slot); GM `override` bypasses.
+
+Total harness count → 3850 (+4).
+
+MINOR — new `/cast_spell` rejection path (no new endpoint). No schema change.
+
+### Changed
+- `/cast_spell`: a spell of the globe's threshold level or lower (base level ≤ `spell_immunity_max_level`, default 5) cast at a target carrying Globe of Invulnerability is rejected with 409 `globe_blocks_spell` (single-target; self-casts skipped; GM `override` bypasses). Phase 2 #44 follow-up of the cast-and-broadcast tail.
+
 ## [2.512.0] - 2026-06-21 — "The Hedging Shell"
 
 **Schema version:** 71

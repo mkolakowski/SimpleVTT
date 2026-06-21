@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3846 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.512.0, 2026-06-21).
+**Total tests:** 3850 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.513.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4655,6 +4655,16 @@ v2.512.0 — Antilife Shell (L5 abjuration, Druid, PHB p.213). Phase 2 #45 of [c
 | `test_cast_als_barbarian_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected string names "antilife shell". |
 | `test_cast_als_wizard_rejected` | Thalindra (Wizard) → 409 — asserts the Druid-only gate excludes a different caster class. |
 | `test_cast_als_missing_character_id_400` | Empty body → 400. |
+
+### `test_globe_blocks_spell.py`
+v2.513.0 — Globe of Invulnerability `/cast_spell` block (Phase 2 #44 follow-up of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md)). New `_target_globe_blocks_spell` hub-read compares the spell's BASE level against the buff's `spell_immunity_max_level` (5) and rejects a single-target ≤-threshold spell at a globe'd target with 409 `globe_blocks_spell`. Thalindra (Wizard) raises the globe; Zara (Sorcerer) casts Magic Missile at her.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_globe_blocks_low_level_spell` | Magic Missile (base L1) at a globed target → 409 `globe_blocks_spell`. |
+| `test_no_globe_does_not_block` | **Control:** no globe up → the same cast is not globe-blocked. |
+| `test_globe_blocks_even_when_upcast` | Magic Missile at `slot_level: 5` → still 409, response `spell_level == 1` (proves base-vs-slot comparison). |
+| `test_globe_override_bypasses_block` | GM `override: true` → the globe gate does not fire. |
 
 ### `test_cast_globe_of_invulnerability.py`
 v2.511.0 — Globe of Invulnerability (L6 abjuration, Sorcerer/Wizard, PHB p.247). Phase 2 #44 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_SPELL_BUFF_MAP["globe-of-invulnerability"]` (`globe_of_invulnerability: True` + `spell_immunity_max_level: 5`, concentration) + the `cast_globe_of_invulnerability` endpoint. Flag-buff shape: surfaces the 5th-level immunity threshold; barrier geometry + the `/cast_spell` block are filed follow-ups (spatial AoE-shape work). Self-targeted.

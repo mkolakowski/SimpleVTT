@@ -21955,6 +21955,40 @@ async def cast_spell(
                 "metamagic-distant-pending",
             )
 
+        # v2.513.0 — Globe of Invulnerability (#44 follow-up). RAW PHB
+        # p.247: a spell of the globe's threshold level or lower (5th by
+        # default) cast from OUTSIDE the barrier "can't affect creatures
+        # or objects within it, even if the spell is cast using a higher
+        # level spell slot" — so the comparison is the spell's BASE level
+        # (`spell_level`), NOT the upcast `slot_level`. Single-target
+        # only (same `if not target_combatant_ids_in` scope as the range
+        # gate above — an AoE that merely clips a globed creature isn't
+        # blocked wholesale; the per-target exclusion stays GM-narrated).
+        # Skipped when the caster targets themself (the globe holder is
+        # at the center, inside the barrier). GM `override` bypasses for
+        # the rare caster who is genuinely inside the barrier. Fires
+        # before slot consumption — same contract as the range gate.
+        if not bool(body.get("override")) and target_combatant_id_in:
+            _tc_globe = _lookup_combatant(campaign_id, target_combatant_id_in)
+            _tc_globe_charid = (_tc_globe or {}).get("char_id")
+            _globe_is_self = (
+                bool(_tc_globe_charid)
+                and int(_tc_globe_charid) == int(char.id)
+            )
+            if (
+                _tc_globe and not _globe_is_self
+                and _target_globe_blocks_spell(
+                    campaign_id, target_combatant_id_in, spell_level,
+                )
+            ):
+                return JSONResponse(status_code=409, content={
+                    "error": "globe_blocks_spell",
+                    "char_name": char.name,
+                    "source": "cast_spell",
+                    "spell_level": spell_level,
+                    "target_combatant_id": target_combatant_id_in,
+                })
+
     # v2.99.160 — Twinned Spell metamagic. The pending buff is
     # installed by /use_metamagic_twinned_spell; consume it once
     # /cast_spell starts (one-shot per RAW). v1 doesn't auto-route
@@ -48034,6 +48068,48 @@ def _target_sees_invisible(
             if not isinstance(effects, dict):
                 continue
             if effects.get("sees_invisible") is True:
+                return True
+        return False
+    return False
+
+
+def _target_globe_blocks_spell(
+    campaign_id: int, target_combatant_id: "str | None", spell_level: int,
+) -> bool:
+    """v2.513.0 — Globe of Invulnerability (#44 follow-up). Returns True
+    when the target combatant carries a ``globe-of-invulnerability`` buff
+    (``effects.globe_of_invulnerability``) whose
+    ``effects.spell_immunity_max_level`` (default 5) is >= the spell's
+    BASE level. RAW PHB p.247: "Any spell of 5th level or lower cast from
+    outside the barrier can't affect creatures or objects within it,
+    even if the spell is cast using a higher level spell slot" — so the
+    comparison is the spell's base level, NOT the upcast slot level.
+
+    Same shape + read path as ``_target_blur_imposes_disadvantage`` /
+    ``_target_sees_invisible`` (target combatant's hub buffs, NOT the
+    sheet mirror, since the cast-flow target is named by combatant id).
+    """
+    if not target_combatant_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("id") != target_combatant_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            effects = b.get("effects")
+            if not isinstance(effects, dict):
+                continue
+            if not effects.get("globe_of_invulnerability"):
+                continue
+            try:
+                max_level = int(effects.get("spell_immunity_max_level") or 5)
+            except (TypeError, ValueError):
+                max_level = 5
+            if int(spell_level) <= max_level:
                 return True
         return False
     return False
