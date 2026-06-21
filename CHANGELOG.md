@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.510.0] - 2026-06-21 — "The Pierced Veil"
+
+**Schema version:** 71
+
+**Commit summary:** Phase 2 #43 of the cast-and-broadcast tail — the See Invisibility (#42) follow-up. Wires the `sees_invisible` flag into the attack pipeline: an invisible attacker loses its advantage when the target can see invisible creatures.
+
+**Description:** Closes the mechanical follow-up filed with See Invisibility (#42 / v2.509.0). RAW PHB p.291: an invisible attacker has advantage *because the target can't see it* — when the target CAN see invisible creatures (the `effects.sees_invisible` flag from See Invisibility), that advantage no longer applies. New `_target_sees_invisible(campaign_id, target_combatant_id)` hub-read (same shape as the v2.500.0 Blur read-site `_target_blur_imposes_disadvantage`) is folded into the existing v2.152.0 invisible-attacker advantage in **all three** attack branches: the PC `/attack` bonused + bonusless paths and the NPC `/npc_attack` path. So an invisible foe — PC or NPC — that swings at a See-Invisibility caster rolls straight, not at advantage.
+
+**Scope note:** the *target-side* invisibility disadvantage (attackers vs an invisible target) is driven by the manual `attacker_cant_see_target` body field, which also covers darkness/obscurement — See Invisibility doesn't grant darkvision, so negating that field wholesale would be wrong, and it's left untouched. This commit wires the auto-read advantage side, which is unambiguous.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_target_sees_invisible` helper; the PC `/attack` bonused + bonusless branches compute `_attacker_invisible_adv = _attacker_has_invisible_advantage(sheet) and not _target_sees_invisible(...)`; the NPC `/npc_attack` branch clears `_npc_attacker_invisible_adv` when the target sees invisible.
+
+**Harness changes:**
+
+- `tests/harness/test_see_invisibility_negates_attack_edge.py` (new): +2 tests — Thalindra casts Greater Invisibility on Krieger + See Invisibility on herself; **control** (invisible Krieger vs Pip, no See Invisibility → `advantage_invisible`) and **negation** (invisible Krieger vs the See-Invisibility Thalindra → the `invisible` advantage is gone).
+
+Total harness count → 3836 (+2).
+
+MINOR — new attack-pipeline interaction (no new endpoint). No schema change.
+
+### Changed
+- `/attack` + `/npc_attack`: an invisible attacker no longer gains advantage against a target that carries `effects.sees_invisible` (See Invisibility). Phase 2 #43 of the cast-and-broadcast tail.
+
 ## [2.509.0] - 2026-06-21 — "The Unveiled Eye"
 
 **Schema version:** 71

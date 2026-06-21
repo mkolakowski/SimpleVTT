@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3834 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.509.0, 2026-06-21).
+**Total tests:** 3836 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.510.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4644,6 +4644,14 @@ v2.491.0 — Enlarge/Reduce (L2 transmutation, Sorcerer/Wizard, PHB p.237). Phas
 | `test_cast_enlarge_reduce_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`. |
 | `test_cast_enlarge_reduce_bad_mode_400` | An invalid `mode` (e.g. "embiggen") → 400. |
 | `test_cast_enlarge_reduce_missing_character_id_400` | Body without character_id → 400. |
+
+### `test_see_invisibility_negates_attack_edge.py`
+v2.510.0 — See Invisibility attack-edge negation (Phase 2 #43 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md)). New `_target_sees_invisible` hub-read folded into the v2.152.0 invisible-attacker advantage across all three attack branches (PC `/attack` bonused + bonusless, NPC `/npc_attack`). Thalindra casts Greater Invisibility on Krieger + See Invisibility on herself.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_invisible_attacker_has_advantage_vs_normal_target` | **Control:** invisible Krieger attacks Pip (no See Invisibility) → `roll_state_applied` contains both `advantage` and `invisible`. |
+| `test_see_invisibility_negates_invisible_attacker_advantage` | **Negation:** invisible Krieger attacks the See-Invisibility Thalindra → `roll_state_applied` no longer contains `invisible`. |
 
 ### `test_cast_see_invisibility.py`
 v2.509.0 — See Invisibility (L2 divination, Bard/Sorcerer/Wizard, PHB p.274). Phase 2 #42 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `_SPELL_BUFF_MAP["see-invisibility"]` (`sees_invisible: True`, 600 rounds, non-concentration) + the `cast_see_invisibility` endpoint. Flag-buff shape (same as Detect Magic / Tongues): the flag IS the mechanic; detection + Ethereal-Plane sight GM-narrated. Negating the v2.499.0 `effects.invisible` attack-edge is filed as a two-sided pipeline follow-up. Self-targeted.

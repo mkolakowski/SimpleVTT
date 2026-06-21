@@ -47933,6 +47933,43 @@ def _target_blur_imposes_disadvantage(
     return False
 
 
+def _target_sees_invisible(
+    campaign_id: int, target_combatant_id: "str | None",
+) -> bool:
+    """v2.510.0 — See Invisibility (Phase 2 #43 of the cast-and-broadcast
+    tail). Returns True when the target combatant carries a buff with
+    ``effects.sees_invisible: True`` (See Invisibility v2.509.0, or any
+    future see-invisible effect). RAW PHB p.291: an invisible attacker
+    has advantage *because the target can't see it* — when the target
+    CAN see invisible creatures, that advantage no longer applies. Read
+    in the attack pipeline to cancel the v2.152.0
+    ``_attacker_has_invisible_advantage`` edge.
+
+    Same shape + read path as ``_target_blur_imposes_disadvantage``
+    (target combatant's hub buffs, NOT the sheet mirror, since the
+    attack-flow target is named by combatant id). Covers PC and NPC
+    targets alike via the hub combatant mirror.
+    """
+    if not target_combatant_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("id") != target_combatant_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            effects = b.get("effects")
+            if not isinstance(effects, dict):
+                continue
+            if effects.get("sees_invisible") is True:
+                return True
+        return False
+    return False
+
+
 # v2.99.196 — Dragonborn ancestry → damage type table. RAW PHB
 # p.34, "Draconic Ancestry" table. Each of the 10 chromatic /
 # metallic ancestries maps to a single damage type the PC's Damage
@@ -103794,7 +103831,14 @@ async def use_attack(
         # entries onto the same adv/dis source set as Rage / Dodge /
         # Reckless. RAW order matters only for the label; the cancel
         # logic is set-OR.
-        _attacker_invisible_adv = _attacker_has_invisible_advantage(sheet)
+        # v2.510.0 — See Invisibility (#43): the invisible-attacker
+        # advantage only applies while the target can't see the attacker.
+        # If the target carries `effects.sees_invisible` (See
+        # Invisibility v2.509.0), the edge is negated RAW (PHB p.291).
+        _attacker_invisible_adv = (
+            _attacker_has_invisible_advantage(sheet)
+            and not _target_sees_invisible(campaign_id, target_combatant_id)
+        )
         _target_adv_condition = _target_has_condition_advantage(
             campaign_id, target_combatant_id,
         )
@@ -103926,7 +103970,12 @@ async def use_attack(
         # v2.152.0 — Phase 2a advantage/disadvantage automation
         # (bonusless branch mirror). Same source-set fold as the
         # bonused branch above; see comment there for the contract.
-        _attacker_invisible_adv = _attacker_has_invisible_advantage(sheet)
+        # v2.510.0 — See Invisibility (#43): negate the invisible-attacker
+        # advantage when the target can see invisible creatures.
+        _attacker_invisible_adv = (
+            _attacker_has_invisible_advantage(sheet)
+            and not _target_sees_invisible(campaign_id, target_combatant_id)
+        )
         _target_adv_condition = _target_has_condition_advantage(
             campaign_id, target_combatant_id,
         )
@@ -105598,6 +105647,13 @@ async def use_npc_attack(
     _npc_attacker_invisible_adv = _npc_attacker_has_invisible_advantage(
         campaign_id, combatant_id,
     )
+    # v2.510.0 — See Invisibility (#43): an invisible NPC attacker loses
+    # its advantage when the PC target can see invisible creatures
+    # (`effects.sees_invisible`, See Invisibility v2.509.0). RAW PHB p.291.
+    if _npc_attacker_invisible_adv and _target_sees_invisible(
+        campaign_id, target_combatant_id,
+    ):
+        _npc_attacker_invisible_adv = False
     _npc_target_adv_condition = _target_has_condition_advantage(
         campaign_id, target_combatant_id,
     )
