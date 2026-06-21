@@ -5,7 +5,7 @@
 
 <section>
     <h2>Users</h2>
-    <table class="data filterable">
+    <table class="data filterable" data-export-name="users">
         <thead><tr><th>ID</th><th>Email</th><th>Display</th><th>Role</th><th>Status</th><th data-nofilter>Actions</th></tr></thead>
         <tbody>
             {% for u in users %}
@@ -129,7 +129,7 @@
     <div id="ban-ip-result" style="margin-top:8px"></div>
     <h3 style="margin-top:1em">Recent edge-ban actions</h3>
     {% if recent_edge_bans %}
-    <table class="data filterable">
+    <table class="data filterable" data-export-name="edge-ban-actions">
         <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Notes</th><th data-nofilter></th></tr></thead>
         <tbody>
             {% for r in recent_edge_bans %}
@@ -324,6 +324,10 @@
         font-size: 0.8em;
         opacity: 0.7;
     }
+    button.csv-export-btn {
+        margin: 0 0 6px;
+        font-size: 0.85em;
+    }
 </style>
 <script>
     (function () {
@@ -421,6 +425,61 @@
                 rows.forEach(function (r) { tbody.appendChild(r); });
                 tbody.appendChild(noMatch); // keep the placeholder last
                 apply();
+            }
+
+            // v2.529.0 — CSV export of the CURRENT (filtered + sorted)
+            // view. Exports the visible data rows in their current DOM
+            // order, excluding data-nofilter columns (Actions, etc.) and
+            // the "no matches" placeholder. Pure client-side via a Blob.
+            var exportBtn = document.createElement('button');
+            exportBtn.type = 'button';
+            exportBtn.className = 'csv-export-btn';
+            exportBtn.textContent = '⬇ CSV';
+            exportBtn.title =
+                'Download the current (filtered + sorted) view as CSV';
+            exportBtn.addEventListener('click', exportCsv);
+            table.parentNode.insertBefore(exportBtn, table);
+
+            function csvCell(s) {
+                s = (s == null) ? '' : String(s);
+                return /[",\n\r]/.test(s)
+                    ? '"' + s.replace(/"/g, '""') + '"' : s;
+            }
+            function headerText(th) {
+                var ind = th.querySelector('.sort-ind');
+                var t = th.textContent || '';
+                if (ind && ind.textContent) {
+                    t = t.replace(ind.textContent, '');
+                }
+                return t.trim();
+            }
+            function exportCsv() {
+                var cols = [];
+                ths.forEach(function (th, i) {
+                    if (!th.hasAttribute('data-nofilter')) { cols.push(i); }
+                });
+                var lines = [cols.map(function (i) {
+                    return csvCell(headerText(ths[i]));
+                }).join(',')];
+                Array.prototype.forEach.call(tbody.rows, function (row) {
+                    if (row === noMatch) { return; }
+                    if (row.style.display === 'none') { return; }
+                    lines.push(cols.map(function (i) {
+                        return csvCell(cellText(row, i));
+                    }).join(','));
+                });
+                var blob = new Blob([lines.join('\r\n')],
+                    { type: 'text/csv;charset=utf-8' });
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download =
+                    (table.getAttribute('data-export-name') || 'admin-table')
+                    + '.csv';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
             }
 
             function apply() {

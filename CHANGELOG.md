@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.529.0] - 2026-06-21 — "The Exported Ledger"
+
+**Schema version:** 71
+
+**Commit summary:** Admin console — a "⬇ CSV" export button on each data table that downloads the current filtered + sorted view.
+
+**Description:** Completes the admin-table trio (filter v2.526.0, sort v2.528.0, export v2.529.0). Each `<table class="filterable">` (Users + the Cloudflare edge-ban audit log) gets a "⬇ CSV" button above it. Clicking it builds a CSV of the **currently visible** rows — i.e. whatever the per-column filters + the active sort leave on screen — in their current DOM order, and triggers a client-side download (Blob URL). The `data-nofilter` columns (Actions, the unban column) and the "No rows match" placeholder are excluded; header labels drop the ▲/▼ sort indicator. Cells containing commas, quotes, or newlines are RFC-4180-escaped (wrapped in quotes, internal quotes doubled). The filename comes from each table's `data-export-name` (`users.csv` / `edge-ban-actions.csv`). Pure client-side — no endpoint.
+
+**Implementation:**
+
+- `app/templates/admin_home.html`: `data-export-name` on both tables; the `attachColumnFilters` helper now inserts a `.csv-export-btn` before each table + an `exportCsv` builder (with `csvCell` escaping + `headerText` indicator-stripping).
+
+**Harness changes:** none — UI-only template + client-side JS; exempt per the harness-discipline rule. Validated with Playwright: exporting after a numeric ID sort + a `'ra'` Name filter yields `users.csv` with header `ID,Name` (Actions excluded), only the filtered rows in sorted order, and a comma-containing cell correctly quoted (`"Zara, the Bold"`); zero JS console errors.
+
+MINOR — admin-console UI enhancement. No schema change.
+
+### Added
+- Admin console: per-table "⬇ CSV" export of the current filtered + sorted view (Users + edge-ban audit-log tables), with RFC-4180 escaping.
+
 ## [2.528.0] - 2026-06-21 — "The Sorted Ledger"
 
 **Schema version:** 71
