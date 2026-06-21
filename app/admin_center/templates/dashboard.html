@@ -116,6 +116,35 @@
       box-shadow: 0 12px 34px rgba(0,0,0,.55); z-index: 30; white-space: normal;
     }
     .evt:hover .tip, .evt:focus .tip, .evt:focus-within .tip { display: block; }
+    /* v2.530.0 — per-column filter/sort on the Recent events table +
+       clickable Top paths. */
+    table.filterable tr.col-filter-row th { padding: 4px 6px; background: var(--panel2); }
+    table.filterable tr.col-filter-row input {
+      width: 100%; box-sizing: border-box; min-height: 32px;
+      background: var(--bg); color: var(--fg); border: 1px solid var(--line);
+      border-radius: 6px; padding: 2px 8px; font: inherit; font-size: 12.5px;
+    }
+    table.filterable tr.col-filter-row th.nofilter { background: transparent; }
+    table.filterable thead th.sortable { cursor: pointer; user-select: none; }
+    table.filterable thead th.sortable:hover { color: var(--fg); }
+    table.filterable thead th .sort-ind { font-size: 0.8em; opacity: 0.75; }
+    table.filterable tr.no-matches td {
+      text-align: center; font-style: italic; color: var(--muted); padding: 8px;
+    }
+    /* Clickable Top-paths cell. 32px min per the compact-panel exception
+       to the 44px touch-target rule (dense stats table). */
+    button.path-link {
+      background: transparent; border: none; padding: 0; margin: 0;
+      cursor: pointer; color: var(--accent); font: inherit; text-align: left;
+      min-height: 32px; display: inline-flex; align-items: center;
+    }
+    button.path-link:hover code { text-decoration: underline; }
+    .events-path-note { margin: 8px 0; color: var(--accent); font-size: 13px; }
+    .events-path-note button {
+      background: transparent; border: 1px solid var(--line);
+      color: var(--muted); border-radius: 6px; min-height: 32px;
+      padding: 0 10px; margin-left: 8px; cursor: pointer; font: inherit;
+    }
   </style>
 </head>
 <body>
@@ -202,11 +231,12 @@
       </div>
       <div>
         <h2>Top paths</h2>
+        <p class="muted" style="font-size:12px;margin:-6px 0 8px">Click a path to filter the recent-events table below.</p>
         <table>
           <thead><tr><th>Path</th><th>Hits</th></tr></thead>
           <tbody>
             {% for path, n in summary.top_paths %}
-            <tr><td><code>{{ path }}</code></td><td>{{ n }}</td></tr>
+            <tr><td><button type="button" class="path-link" data-path="{{ path }}" title="Filter the recent-events table to this path"><code>{{ path }}</code></button></td><td>{{ n }}</td></tr>
             {% else %}
             <tr><td colspan="2" class="muted">No path-bearing events yet.</td></tr>
             {% endfor %}
@@ -301,7 +331,8 @@
       <noscript><button class="btn" type="submit">Apply</button></noscript>
       <span class="muted">showing {{ events|length }} most recent</span>
     </form>
-    <table>
+    <div id="events-path-note" class="events-path-note" style="display:none"></div>
+    <table class="filterable" id="events-table">
       <thead><tr><th>Time</th><th>Level</th><th>Event</th><th>IP</th>{% if dns_on %}<th>Host (DNS)</th>{% endif %}<th>Details</th></tr></thead>
       <tbody>
         {% for e in events %}
@@ -341,5 +372,165 @@
       See <code>/wiki/admin-center</code> on the main app for docs.
     </p>
   </main>
+  <script>
+    // v2.530.0 — Recent-events table: per-column filter + click-to-sort,
+    // plus clickable Top-paths that filter the events table by path. Pure
+    // client-side, instant. Mirrors the main app's admin-portal tooling.
+    (function () {
+        function attachColumnFilters(table) {
+            var headRow = table.tHead && table.tHead.rows[0];
+            if (!headRow || table.tBodies.length === 0) { return; }
+            var ths = Array.prototype.slice.call(headRow.cells);
+            var tbody = table.tBodies[0];
+
+            var filterRow = document.createElement('tr');
+            filterRow.className = 'col-filter-row';
+            var inputs = [];
+            ths.forEach(function (th) {
+                var cell = document.createElement('th');
+                if (th.hasAttribute('data-nofilter')) {
+                    cell.className = 'nofilter';
+                    filterRow.appendChild(cell);
+                    inputs.push(null);
+                    return;
+                }
+                var input = document.createElement('input');
+                input.type = 'search';
+                input.placeholder = 'Filter…';
+                input.setAttribute('aria-label',
+                    'Filter by ' + (th.textContent || '').trim());
+                input.addEventListener('input', apply);
+                cell.appendChild(input);
+                filterRow.appendChild(cell);
+                inputs.push(input);
+            });
+            table.tHead.appendChild(filterRow);
+
+            var noMatch = document.createElement('tr');
+            noMatch.className = 'no-matches';
+            noMatch.style.display = 'none';
+            var nmCell = document.createElement('td');
+            nmCell.colSpan = ths.length;
+            nmCell.textContent = 'No rows match the current filters.';
+            noMatch.appendChild(nmCell);
+            tbody.appendChild(noMatch);
+
+            var sortState = { idx: -1, dir: 1 };
+            ths.forEach(function (th, idx) {
+                if (th.hasAttribute('data-nofilter')) { return; }
+                th.classList.add('sortable');
+                th.setAttribute('title', 'Click to sort');
+                var ind = document.createElement('span');
+                ind.className = 'sort-ind';
+                th.appendChild(ind);
+                th.addEventListener('click', function () {
+                    if (sortState.idx === idx) { sortState.dir = -sortState.dir; }
+                    else { sortState.idx = idx; sortState.dir = 1; }
+                    ths.forEach(function (t) {
+                        var si = t.querySelector('.sort-ind');
+                        if (si) { si.textContent = ''; }
+                    });
+                    ind.textContent = sortState.dir === 1 ? ' ▲' : ' ▼';
+                    sortRows(idx, sortState.dir);
+                });
+            });
+
+            function cellText(row, idx) {
+                var c = row.cells[idx];
+                return c ? c.textContent.trim() : '';
+            }
+            function asNum(s) {
+                var t = s.replace(/[#,\s]/g, '');
+                if (t === '' || isNaN(t)) { return null; }
+                return parseFloat(t);
+            }
+            function sortRows(idx, dir) {
+                var rows = Array.prototype.filter.call(tbody.rows,
+                    function (r) { return r !== noMatch; });
+                rows.sort(function (a, b) {
+                    var sa = cellText(a, idx), sb = cellText(b, idx);
+                    var na = asNum(sa), nb = asNum(sb);
+                    var cmp = (na !== null && nb !== null)
+                        ? na - nb
+                        : sa.toLowerCase().localeCompare(sb.toLowerCase());
+                    return cmp * dir;
+                });
+                rows.forEach(function (r) { tbody.appendChild(r); });
+                tbody.appendChild(noMatch);
+                apply();
+            }
+
+            function apply() {
+                var terms = inputs.map(function (inp) {
+                    return inp ? inp.value.trim().toLowerCase() : '';
+                });
+                var anyVisible = false;
+                Array.prototype.forEach.call(tbody.rows, function (row) {
+                    if (row === noMatch) { return; }
+                    var show = true;
+                    for (var i = 0; i < terms.length; i++) {
+                        if (!terms[i]) { continue; }
+                        var cell = row.cells[i];
+                        var text = (cell ? cell.textContent : '').toLowerCase();
+                        if (text.indexOf(terms[i]) === -1) { show = false; break; }
+                    }
+                    row.style.display = show ? '' : 'none';
+                    if (show) { anyVisible = true; }
+                });
+                noMatch.style.display = anyVisible ? 'none' : '';
+            }
+
+            // Public hook: set a named column's filter by its header text.
+            table._setColumnFilter = function (headerLabel, value) {
+                for (var i = 0; i < ths.length; i++) {
+                    var label = (ths[i].textContent || '')
+                        .replace(/[▲▼]/g, '').trim().toLowerCase();
+                    if (label === headerLabel.toLowerCase() && inputs[i]) {
+                        inputs[i].value = value;
+                        apply();
+                        return true;
+                    }
+                }
+                return false;
+            };
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            var tables = document.querySelectorAll('table.filterable');
+            Array.prototype.forEach.call(tables, attachColumnFilters);
+
+            // Clickable Top paths → filter the events table's Details
+            // column to `path=<path>` (path-bearing events render the path
+            // as `path=…` in Details). Shows a clearable note.
+            var evTable = document.getElementById('events-table');
+            var note = document.getElementById('events-path-note');
+            function clearPathFilter() {
+                if (evTable && evTable._setColumnFilter) {
+                    evTable._setColumnFilter('Details', '');
+                }
+                if (note) { note.style.display = 'none'; }
+            }
+            Array.prototype.forEach.call(
+                document.querySelectorAll('.path-link'), function (btn) {
+                    btn.addEventListener('click', function () {
+                        var p = btn.getAttribute('data-path') || '';
+                        if (!evTable || !evTable._setColumnFilter) { return; }
+                        evTable._setColumnFilter('Details', 'path=' + p);
+                        if (note) {
+                            note.style.display = '';
+                            note.textContent = 'Recent events filtered to path ' + p;
+                            var clr = document.createElement('button');
+                            clr.type = 'button';
+                            clr.textContent = 'Clear';
+                            clr.addEventListener('click', clearPathFilter);
+                            note.appendChild(clr);
+                        }
+                        evTable.scrollIntoView(
+                            { behavior: 'smooth', block: 'start' });
+                    });
+                });
+        });
+    })();
+  </script>
 </body>
 </html>

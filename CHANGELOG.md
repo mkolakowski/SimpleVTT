@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.530.0] - 2026-06-21 — "The Threaded Trail"
+
+**Schema version:** 71
+
+**Commit summary:** Admin Center dashboard — per-column filter + click-to-sort on the **Recent events** table, and **clickable Top paths** that filter the events table to the chosen path. (This is the separate `admin-center` service's dashboard, not the main app's admin portal.)
+
+**Description:** The Admin Center dashboard (`app/admin_center/templates/dashboard.html`, served by the `admin-center` compose service) gets the same client-side table tooling the main admin portal got in v2.526.0/.528.0: the **Recent events** table now has a per-column filter row (Time / Level / Event / IP / [Host] / Details) and numeric-aware click-to-sort headers (▲/▼). New: each **Top paths** entry is a clickable button — clicking it sets the events table's **Details** column filter to `path=<path>` (path-bearing events render their path as `path=…` in Details), scrolls to the events table, and shows a clearable "filtered to path …" note. Pure client-side, instant; composes with the existing server-side "Filter by event" dropdown.
+
+**Implementation:**
+
+- `app/admin_center/templates/dashboard.html`: marked the Recent events table `filterable` (id `events-table`); made Top-paths cells `.path-link` buttons; added a `<style>` block (dark-theme filter inputs, sortable headers, path-link) + a `<script>` (`attachColumnFilters` with filter + sort + a public `table._setColumnFilter(headerLabel, value)` hook, wired to the path-link clicks).
+
+**Operational note:** the `admin-center` service is a **separate container** — `docker compose up -d --build admin-center` is required for dashboard/version changes to land (a plain `--build app` doesn't touch it). This commit rebuilds it; the prior staleness (dashboard stuck at an older `APP_VERSION`) was a not-rebuilt container.
+
+**Harness changes:** none — UI-only template + client-side JS (no HTTP endpoint or WS broadcast); exempt per the harness-discipline rule. Validated with Playwright: 5 filter inputs on the events table; clicking Top-path `/.env` filters events to `path=/.env` with a clearable note; Clear restores all rows; Level sort orders rows; zero JS console errors.
+
+MINOR — Admin Center dashboard UI enhancement. No schema change.
+
+### Added
+- Admin Center dashboard: per-column filter + click-to-sort on the Recent events table; clickable Top paths that filter the events table to the chosen path.
+
 ## [2.529.0] - 2026-06-21 — "The Exported Ledger"
 
 **Schema version:** 71
