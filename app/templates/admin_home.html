@@ -5,8 +5,8 @@
 
 <section>
     <h2>Users</h2>
-    <table class="data">
-        <thead><tr><th>ID</th><th>Email</th><th>Display</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+    <table class="data filterable">
+        <thead><tr><th>ID</th><th>Email</th><th>Display</th><th>Role</th><th>Status</th><th data-nofilter>Actions</th></tr></thead>
         <tbody>
             {% for u in users %}
             <tr>
@@ -129,8 +129,8 @@
     <div id="ban-ip-result" style="margin-top:8px"></div>
     <h3 style="margin-top:1em">Recent edge-ban actions</h3>
     {% if recent_edge_bans %}
-    <table class="data">
-        <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Notes</th><th></th></tr></thead>
+    <table class="data filterable">
+        <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Notes</th><th data-nofilter></th></tr></thead>
         <tbody>
             {% for r in recent_edge_bans %}
             <tr>
@@ -291,4 +291,101 @@
     </script>
 </section>
 {% endif %}
+
+{# v2.526.0 — reusable per-column search/filter for admin data tables.
+   Any <table class="filterable"> gets a filter row injected under its
+   header; typing in a column box hides rows whose cell in that column
+   doesn't contain the (case-insensitive) substring. Filters combine with
+   AND across columns. Columns marked <th data-nofilter> (Actions, etc.)
+   get no box. Pure client-side — no endpoint, instant filtering. #}
+<style>
+    table.filterable tr.col-filter-row th {
+        padding: 2px 4px;
+        background: var(--panel, #f4f4f4);
+    }
+    table.filterable tr.col-filter-row input {
+        width: 100%;
+        box-sizing: border-box;
+        min-height: 32px; /* compact admin-table control; below the 44px
+                             base per the dense-panel exception. */
+        font-size: 0.85em;
+        padding: 2px 6px;
+    }
+    table.filterable tr.col-filter-row th.nofilter { background: transparent; }
+    table.filterable tr.no-matches td {
+        text-align: center;
+        font-style: italic;
+        color: var(--muted, #888);
+        padding: 8px;
+    }
+</style>
+<script>
+    (function () {
+        function attachColumnFilters(table) {
+            var headRow = table.tHead && table.tHead.rows[0];
+            if (!headRow || table.tBodies.length === 0) { return; }
+            var ths = Array.prototype.slice.call(headRow.cells);
+            var tbody = table.tBodies[0];
+
+            var filterRow = document.createElement('tr');
+            filterRow.className = 'col-filter-row';
+            var inputs = [];
+            ths.forEach(function (th, idx) {
+                var cell = document.createElement('th');
+                if (th.hasAttribute('data-nofilter')) {
+                    cell.className = 'nofilter';
+                    filterRow.appendChild(cell);
+                    inputs.push(null);
+                    return;
+                }
+                var input = document.createElement('input');
+                input.type = 'search';
+                input.placeholder = 'Filter…';
+                input.setAttribute(
+                    'aria-label',
+                    'Filter by ' + (th.textContent || '').trim());
+                input.addEventListener('input', apply);
+                cell.appendChild(input);
+                filterRow.appendChild(cell);
+                inputs.push(input);
+            });
+            table.tHead.appendChild(filterRow);
+
+            // A single "no matching rows" placeholder row, hidden until needed.
+            var noMatch = document.createElement('tr');
+            noMatch.className = 'no-matches';
+            noMatch.style.display = 'none';
+            var nmCell = document.createElement('td');
+            nmCell.colSpan = ths.length;
+            nmCell.textContent = 'No rows match the current filters.';
+            noMatch.appendChild(nmCell);
+            tbody.appendChild(noMatch);
+
+            function apply() {
+                var terms = inputs.map(function (inp) {
+                    return inp ? inp.value.trim().toLowerCase() : '';
+                });
+                var anyVisible = false;
+                Array.prototype.forEach.call(tbody.rows, function (row) {
+                    if (row === noMatch) { return; }
+                    var show = true;
+                    for (var i = 0; i < terms.length; i++) {
+                        if (!terms[i]) { continue; }
+                        var cell = row.cells[i];
+                        var text = (cell ? cell.textContent : '').toLowerCase();
+                        if (text.indexOf(terms[i]) === -1) { show = false; break; }
+                    }
+                    row.style.display = show ? '' : 'none';
+                    if (show) { anyVisible = true; }
+                });
+                noMatch.style.display = anyVisible ? 'none' : '';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            var tables = document.querySelectorAll('table.filterable');
+            Array.prototype.forEach.call(tables, attachColumnFilters);
+        });
+    })();
+</script>
 {% endblock %}

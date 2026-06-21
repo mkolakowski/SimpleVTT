@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.526.0] - 2026-06-21 — "The Sifted Ledger"
+
+**Schema version:** 71
+
+**Commit summary:** Admin console — per-column search/filter on the data tables. Any `<table class="filterable">` (the Users table + the Cloudflare edge-ban audit log) gets a filter row injected under its header; typing in a column box instantly hides rows whose cell in that column doesn't contain the (case-insensitive) substring.
+
+**Description:** Makes the admin console's log/data tables searchable per column without a reload. A reusable client-side helper walks every `table.filterable`, injects a second header row with a `<input type="search">` per column, and filters the `<tbody>` rows on `input`: a row stays visible only when every non-empty column filter matches its cell text (AND across columns). Columns marked `<th data-nofilter>` (the Users "Actions" column, the edge-ban unban column) get no box. A "No rows match the current filters." placeholder shows when everything is filtered out. Pure client-side — no endpoint, no broadcast, instant.
+
+Applied to the two admin data tables in `admin_home.html`: the **Users** table (ID / Email / Display / Role / Status) and the **Recent edge-ban actions** audit log (When / Actor / Action / Target / Notes).
+
+**Implementation:**
+
+- `app/templates/admin_home.html`: marked both `.data` tables `filterable` (+ `data-nofilter` on the action columns); added a shared `<style>` + `<script>` (`attachColumnFilters`) before the block end. The filter inputs use a 32px min-height (the dense-panel exception to the 44px base, commented).
+
+**Harness changes:** none — UI-only template + client-side JS (no HTTP endpoint or WS broadcast added); exempt per the harness-discipline rule. (The admin console is gated behind admin auth + `DEMO_GM_SITE_ADMIN`, with no UI-test harness for it.)
+
+MINOR — new admin-console UI feature. No schema change.
+
+### Added
+- Admin console: per-column search/filter on the Users + edge-ban audit-log tables (client-side, instant; columns combine with AND).
+
 ## [2.525.0] - 2026-06-21 — "The Drowned Lung"
 
 **Schema version:** 71
