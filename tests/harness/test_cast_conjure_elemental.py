@@ -169,3 +169,40 @@ async def test_conjure_elemental_cannot_cast_non_caster(gm_client, roster):
     body = r.json()
     assert body.get("error") == "cannot_cast"
     assert "druid" in body.get("expected", "").lower()
+
+
+# ─── v2.541.0 — optional catalog-creature (elemental) override ────────
+
+
+async def test_elemental_catalog_creature(gm_client, roster):
+    """creature_slug=fire-elemental (CR 5 ≤ the L5 cap) → one elemental
+    with the catalog stat block (HP 102 / AC 13)."""
+    mira = roster["Mira Greenleaf"]
+    await _seed_battle(gm_client, [_pc_cb(mira)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_elemental",
+        json={"character_id": mira["id"],
+              "creature_slug": "fire-elemental", "x": 700.0, "y": 700.0},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    ids = [c["id"] for c in body["combatants"]]
+    try:
+        assert len(body["combatants"]) == 1
+        c = body["combatants"][0]
+        assert c["companion_key"] == "fire-elemental"
+        assert int(c["hp_max"]) == 102
+        assert int(c["ac"]) == 13
+    finally:
+        await _dismiss_all(gm_client, ids)
+
+
+async def test_elemental_catalog_non_elemental_400(gm_client, roster):
+    """A non-elemental slug (wolf — Beast) → 400."""
+    mira = roster["Mira Greenleaf"]
+    await _seed_battle(gm_client, [_pc_cb(mira)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_elemental",
+        json={"character_id": mira["id"], "creature_slug": "wolf"},
+    )
+    assert r.status_code == 400, r.text

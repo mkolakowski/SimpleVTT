@@ -166,3 +166,40 @@ async def test_conjure_fey_cannot_cast_non_caster(gm_client, roster):
     body = r.json()
     assert body.get("error") == "cannot_cast"
     assert "druid" in body.get("expected", "").lower()
+
+
+# ─── v2.541.0 — optional catalog-creature (fey) override ──────────────
+
+
+async def test_fey_catalog_creature(gm_client, roster):
+    """creature_slug=dryad (Fey CR 1 ≤ the L6 cap) → one dryad with the
+    catalog stat block (HP 22 / AC 11)."""
+    mira = roster["Mira Greenleaf"]
+    await _seed_battle(gm_client, [_pc_cb(mira)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_fey",
+        json={"character_id": mira["id"], "creature_slug": "dryad",
+              "x": 700.0, "y": 700.0},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    ids = [c["id"] for c in body["combatants"]]
+    try:
+        assert len(body["combatants"]) == 1
+        c = body["combatants"][0]
+        assert c["companion_key"] == "dryad"
+        assert int(c["hp_max"]) == 22
+        assert int(c["ac"]) == 11
+    finally:
+        await _dismiss_all(gm_client, ids)
+
+
+async def test_fey_catalog_non_fey_400(gm_client, roster):
+    """A non-fey slug (wolf — Beast) → 400."""
+    mira = roster["Mira Greenleaf"]
+    await _seed_battle(gm_client, [_pc_cb(mira)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_fey",
+        json={"character_id": mira["id"], "creature_slug": "wolf"},
+    )
+    assert r.status_code == 400, r.text

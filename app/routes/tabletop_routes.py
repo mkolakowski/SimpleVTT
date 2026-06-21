@@ -5791,6 +5791,38 @@ def _conjure_catalog_summon_template(
     return template, None
 
 
+def _conjure_catalog_single_template(
+    body: dict, campaign_id: "int | None",
+    *, slug_field: str, required_type: str, max_cr: float,
+) -> "tuple[dict | None, str | None]":
+    """v2.541.0 — the single-summon sibling of
+    `_conjure_catalog_summon_template`, for the CR-cap conjure spells
+    (Conjure Elemental / Fey / Celestial — one creature of CR ≤ a
+    slot-scaled cap). Reads ``body[slug_field]``; when present, resolves
+    + validates the creature against ``required_type`` and a direct
+    ``max_cr`` cap (not the count↔CR tier). Returns ``(template, error)``;
+    ``(None, None)`` when no slug was supplied (caller falls back to its
+    hardcoded default).
+    """
+    slug = (body.get(slug_field) or "").strip().lower()
+    if not slug:
+        return None, None
+    template = _monster_summon_template(slug, campaign_id)
+    if template is None:
+        return None, f"Unknown creature: {slug!r}"
+    if required_type not in (template.get("type") or ""):
+        return None, (
+            f"{template.get('name')} is not a {required_type} "
+            f"(type: {template.get('type') or 'unknown'})"
+        )
+    if float(template.get("cr") or 0) > float(max_cr):
+        return None, (
+            f"{template.get('name')} (CR {template.get('cr')}) exceeds the "
+            f"max CR {max_cr} for this casting"
+        )
+    return template, None
+
+
 async def _summon_companion(
     db: Session,
     campaign_id: int,
@@ -64120,6 +64152,24 @@ async def cast_conjure_elemental(
             "got_class": _cls,
         })
 
+    # v2.541.0 — optional catalog-creature override (any elemental of
+    # CR ≤ the slot-scaled cap, not just the default elemental-spirit).
+    _cat_template, _cat_err = _conjure_catalog_single_template(
+        body, campaign_id,
+        slug_field="creature_slug", required_type="elemental",
+        max_cr=challenge_rating,
+    )
+    if _cat_err:
+        raise HTTPException(400, _cat_err)
+    _summon_key = (
+        (body.get("creature_slug") or "").strip().lower()
+        if _cat_template else "elemental-spirit"
+    )
+    _summon_label = (
+        _cat_template["name"] if _cat_template
+        else f"Elemental (CR {challenge_rating})"
+    )
+
     base_x = float(body.get("x") or 0)
     base_y = float(body.get("y") or 0)
     initiative = int(body.get("initiative") or 0)
@@ -64128,11 +64178,12 @@ async def cast_conjure_elemental(
     res = await _summon_companion(
         db, campaign_id,
         owner_char_id=char.id,
-        companion_key="elemental-spirit",
-        name=f"Conjured Elemental (CR {challenge_rating})",
+        companion_key=_summon_key,
+        name=f"Conjured {_summon_label}",
         x=base_x,
         y=base_y,
         initiative=initiative,
+        template=_cat_template,
     )
     if res:
         combatants.append(res["combatant"])
@@ -64247,6 +64298,24 @@ async def cast_conjure_fey(
             "got_class": _cls,
         })
 
+    # v2.541.0 — optional catalog-creature override (any fey of CR ≤ the
+    # slot-scaled cap, not just the default fey-spirit).
+    _cat_template, _cat_err = _conjure_catalog_single_template(
+        body, campaign_id,
+        slug_field="creature_slug", required_type="fey",
+        max_cr=challenge_rating,
+    )
+    if _cat_err:
+        raise HTTPException(400, _cat_err)
+    _summon_key = (
+        (body.get("creature_slug") or "").strip().lower()
+        if _cat_template else "fey-spirit"
+    )
+    _summon_label = (
+        _cat_template["name"] if _cat_template
+        else f"Fey (CR {challenge_rating})"
+    )
+
     base_x = float(body.get("x") or 0)
     base_y = float(body.get("y") or 0)
     initiative = int(body.get("initiative") or 0)
@@ -64255,11 +64324,12 @@ async def cast_conjure_fey(
     res = await _summon_companion(
         db, campaign_id,
         owner_char_id=char.id,
-        companion_key="fey-spirit",
-        name=f"Conjured Fey (CR {challenge_rating})",
+        companion_key=_summon_key,
+        name=f"Conjured {_summon_label}",
         x=base_x,
         y=base_y,
         initiative=initiative,
+        template=_cat_template,
     )
     if res:
         combatants.append(res["combatant"])
@@ -64378,6 +64448,24 @@ async def cast_conjure_celestial(
             "got_class": _cls,
         })
 
+    # v2.541.0 — optional catalog-creature override (any celestial of
+    # CR ≤ the slot-scaled cap, not just the default celestial-spirit).
+    _cat_template, _cat_err = _conjure_catalog_single_template(
+        body, campaign_id,
+        slug_field="creature_slug", required_type="celestial",
+        max_cr=challenge_rating,
+    )
+    if _cat_err:
+        raise HTTPException(400, _cat_err)
+    _summon_key = (
+        (body.get("creature_slug") or "").strip().lower()
+        if _cat_template else "celestial-spirit"
+    )
+    _summon_label = (
+        _cat_template["name"] if _cat_template
+        else f"Celestial (CR {challenge_rating})"
+    )
+
     base_x = float(body.get("x") or 0)
     base_y = float(body.get("y") or 0)
     initiative = int(body.get("initiative") or 0)
@@ -64386,11 +64474,12 @@ async def cast_conjure_celestial(
     res = await _summon_companion(
         db, campaign_id,
         owner_char_id=char.id,
-        companion_key="celestial-spirit",
-        name=f"Conjured Celestial (CR {challenge_rating})",
+        companion_key=_summon_key,
+        name=f"Conjured {_summon_label}",
         x=base_x,
         y=base_y,
         initiative=initiative,
+        template=_cat_template,
     )
     if res:
         combatants.append(res["combatant"])

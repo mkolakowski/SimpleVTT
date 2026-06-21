@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.541.0] - 2026-06-21 — "The Summoned Court"
+
+**Schema version:** 71
+
+**Commit summary:** Completes the catalog-backed summon override across the **single-summon** conjure spells — Conjure Elemental / Fey / Celestial now accept an optional `creature_slug` to summon any catalog creature of the spell's type within the slot-scaled CR cap. All six conjure spells now support arbitrary-creature conjuration.
+
+**Description:** The CR-cap sibling of the v2.539.0/.540.0 count-tier override. New `_conjure_catalog_single_template(...)` validator: resolves `body[slug_field]`, checks the creature's type + CR against a direct `max_cr` (the spell's `_spell_summon_cr_for_slot` cap), not the count↔CR tier. Wired into all three single-summon endpoints: with a `creature_slug` they summon that catalog creature (validated type + CR ≤ the slot cap), with the creature's real catalog stat block; with none, the existing default (`elemental-spirit` / `fey-spirit` / `celestial-spirit`) is unchanged (backward-compatible).
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_conjure_catalog_single_template`; `cast_conjure_elemental` (required_type `elemental`, cap = the L5+ CR), `cast_conjure_fey` (`fey`, L6+ CR), `cast_conjure_celestial` (`celestial`, L7+ CR) resolve the optional override + parameterize their single summon + name over the creature label.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_conjure_elemental.py`: +2 — `fire-elemental` (CR 5 ≤ L5 cap) spawns 1 elemental (HP 102 / AC 13); non-elemental `wolf` → 400.
+- `tests/harness/test_cast_conjure_fey.py`: +2 — `dryad` (Fey CR 1) spawns 1 dryad (HP 22 / AC 11); non-fey `wolf` → 400.
+- `tests/harness/test_cast_conjure_celestial.py`: +3 — `couatl` (Celestial CR 4 ≤ L7 cap) spawns 1 couatl (HP 97 / AC 19); `deva` (CR 10) → 400 (CR-too-high); non-celestial `wolf` → 400.
+
+Total harness count → 3939 (+7).
+
+MINOR — additive `creature_slug` override on the three single-summon conjure endpoints. No schema change.
+
+### Added
+- `/cast_conjure_elemental` + `/cast_conjure_fey` + `/cast_conjure_celestial`: optional `creature_slug` to summon any catalog elemental / fey / celestial within the slot-scaled CR cap — completing the catalog-backed summon across all six conjure spells.
+
 ## [2.540.0] - 2026-06-21 — "The Wider Grove"
 
 **Schema version:** 71

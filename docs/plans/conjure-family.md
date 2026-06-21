@@ -50,7 +50,8 @@ spawn counts, upcast multipliers, the class gate, and dismissal.
   count's CR tier, via `_monster_summon_template` + a
   `_summon_companion(template=…)` override + the shared
   `_conjure_catalog_summon_template` validator. **Woodland Beings + Minor Elementals shipped it v2.540.0** (fey /
-  elemental pools via `creature_slug`). The single-summon conjures
-  (Elemental / Fey / Celestial — one creature of CR ≤ spell level) are a
-  different validation shape, still a filed follow-up.
+  elemental pools via `creature_slug`). **The single-summon conjures (Elemental / Fey / Celestial) shipped it
+  v2.541.0** via `_conjure_catalog_single_template` (a CR-cap validator).
+  **All six conjure spells now support arbitrary-creature conjuration
+  from the catalog.** Follow-up complete.
 - **Random-creature RAW variant** (roll the pool) — GM-narrated today.

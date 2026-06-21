@@ -143,3 +143,53 @@ async def test_conjure_celestial_cannot_cast_non_caster(gm_client, roster):
     body = r.json()
     assert body.get("error") == "cannot_cast"
     assert "cleric" in body.get("expected", "").lower()
+
+
+# ─── v2.541.0 — optional catalog-creature (celestial) override ────────
+
+
+async def test_celestial_catalog_creature(gm_client, roster):
+    """creature_slug=couatl (Celestial CR 4 ≤ the L7 cap) → one couatl
+    with the catalog stat block (HP 97 / AC 19)."""
+    tavik = roster["Brother Tavik Stonebrow"]
+    await _seed_battle(gm_client, [_pc_cb(tavik)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_celestial",
+        json={"character_id": tavik["id"], "slot_level": 7,
+              "creature_slug": "couatl", "x": 700.0, "y": 700.0},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    ids = [c["id"] for c in body["combatants"]]
+    try:
+        assert len(body["combatants"]) == 1
+        c = body["combatants"][0]
+        assert c["companion_key"] == "couatl"
+        assert int(c["hp_max"]) == 97
+        assert int(c["ac"]) == 19
+    finally:
+        await _dismiss_all(gm_client, ids)
+
+
+async def test_celestial_catalog_cr_too_high_400(gm_client, roster):
+    """deva (Celestial CR 10) at L7 (cap 4) → 400."""
+    tavik = roster["Brother Tavik Stonebrow"]
+    await _seed_battle(gm_client, [_pc_cb(tavik)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_celestial",
+        json={"character_id": tavik["id"], "slot_level": 7,
+              "creature_slug": "deva"},
+    )
+    assert r.status_code == 400, r.text
+
+
+async def test_celestial_catalog_non_celestial_400(gm_client, roster):
+    """A non-celestial slug (wolf — Beast) → 400."""
+    tavik = roster["Brother Tavik Stonebrow"]
+    await _seed_battle(gm_client, [_pc_cb(tavik)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_celestial",
+        json={"character_id": tavik["id"], "slot_level": 7,
+              "creature_slug": "wolf"},
+    )
+    assert r.status_code == 400, r.text
