@@ -17,11 +17,58 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 
 **Quick map of where to look:**
 
-- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (v2.434.0 refresh)](#srd-5e-audit-v24340-refresh) for the current per-category coverage (overall **~97%** — **Magic items joins Monsters + Class features + Races as a strictly-✅ 100% surface** via the v2.403.0–v2.404.0 Phase 9.2 + 9.3 arc). Prior passes: [v2.399.0](#srd-5e-audit-v23990-refresh), [v2.390.0](#srd-5e-audit-v23900-refresh), [v2.382.0](#srd-5e-audit-v23820-refresh), [v2.379.0](#srd-5e-audit-v23790-refresh), [v2.376.0](#srd-5e-audit-v23760-refresh), [v2.344.1](#srd-5e-audit-v23441-refresh), [v2.315.0](#srd-5e-audit-v23150-refresh), [2026-06-14](#srd-5e-audit-2026-06-14-refresh), [2026-06-13](#srd-5e-audit-2026-06-13-refresh), [2026-06-11](#srd-5e-audit-2026-06-11-refresh), [2026-06-10](#srd-5e-audit-2026-06-10). The v2.315.0 refresh **corrects two denominators** that all prior passes got wrong: magic items now sit at **239/239 wired (100%)** post-v2.404.0 — the old "292" figure counted total equipment (239 magic + 37 mundane weapons + 18 mundane armor); class features are **222 per-row entries (strictly-✅ 100%)**, not the stale "133".
+- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (v2.502.0 refresh)](#srd-5e-audit-v25020-refresh) for the current per-category coverage (overall **~98%** — the v2.437.0–v2.502.0 **cast-and-broadcast utility-spell tail arc** closed ~35 utility spells, lifting **Spells from ~85% → ~90%**). Prior passes: [v2.434.0](#srd-5e-audit-v24340-refresh), [v2.399.0](#srd-5e-audit-v23990-refresh), [v2.390.0](#srd-5e-audit-v23900-refresh), [v2.382.0](#srd-5e-audit-v23820-refresh), [v2.379.0](#srd-5e-audit-v23790-refresh), [v2.376.0](#srd-5e-audit-v23760-refresh), [v2.344.1](#srd-5e-audit-v23441-refresh), [v2.315.0](#srd-5e-audit-v23150-refresh), [2026-06-14](#srd-5e-audit-2026-06-14-refresh), [2026-06-13](#srd-5e-audit-2026-06-13-refresh), [2026-06-11](#srd-5e-audit-2026-06-11-refresh), [2026-06-10](#srd-5e-audit-2026-06-10). The v2.315.0 refresh **corrects two denominators** that all prior passes got wrong: magic items now sit at **239/239 wired (100%)** post-v2.404.0 — the old "292" figure counted total equipment (239 magic + 37 mundane weapons + 18 mundane armor); class features are **222 per-row entries (strictly-✅ 100%)**, not the stale "133".
 - **Active class-feature automation backlog** → see [Full Class-Feature Automation — remaining backlog](#full-class-feature-automation--remaining-backlog) (just Phase 8 + a few per-feature Phase-2 finishers remain after v2.149.1).
 - **Design plans with deferred phases** → see [Design Plans Backlog](#design-plans-backlog) (every `docs/plans/*.md` indexed with a priority tag).
 - **One-off bugs + UI polish that don't have a design plan** → see [Manually Added](#manually-added).
 - **Big feature buckets that aren't tracked by a plan** → see the topic sections below (Character Sheet, GM Tools, Combat, Maps, Media, Player Features, UI/Mobile, Rules Reference, Legal & Compliance, Security, Test Infrastructure, Integrations, Visual, Class Features (next cycle)). The priority legend doesn't apply to these — they're topic-grouped, not P-tagged. Topic sections may contain entries that *do* have a design plan (e.g. Combat's Advantage & Disadvantage; Security's three v2.423.3–v2.423.5 plans) — the topic split is about audience navigation, not plan-vs.-no-plan status.
+
+---
+
+## SRD 5e Audit (v2.502.0 refresh)
+
+**Audit scope.** Recomputed against the codebase as of v2.502.0, capturing the **v2.437.0 → v2.502.0 cast-and-broadcast utility-spell tail arc** ([`docs/plans/cast-and-broadcast-tail.md`](plans/cast-and-broadcast-tail.md)) — the single biggest Spells mover since the v2.434.0 audit, which predates the *entire* arc. The arc took utility spells that previously only "cast + broadcast" (spent the slot + showed a roll-log card) and gave them **mechanized server-side effects**, all riding existing substrates where possible (the "verify-substrate, prefer zero-code" recipe):
+
+- **Phase 1 — 5 demonstrators (v2.437.0 → v2.441.0):** True Strike, Speak with Animals, Spider Climb, Pass without Trace, Find Steed.
+- **Phase 2 — #1 → #35 (v2.442.0 → v2.502.0):** ~30 more utility spells. The latest cluster (this session): Protection from Poison (#25), Enlarge/Reduce (#26), Freedom of Movement (#27), Warding Bond (#28), **Death Ward (#29 — first to add new HP-path code)**, Protection from Energy (#30), Stoneskin (#31), Greater Invisibility (#32), **Blur (#33 — new generic `attackers_have_disadvantage` read-site)**, Mind Blank (#34), **Foresight (#35 — new generic blanket-`foresight` advantage substrate)**.
+- **v2.496.1 fix:** Protection from Poison's resistance buff wasn't mirrored to the target sheet (so `_resistance_halve` never read it) — patched; the resistance/condition/invisible buffs all need a `_mirror_buffs_to_sheet` call because those readers consult the DB sheet, not hub state.
+
+**Substrate take-aways for the next contributor:** the tail is now deep enough that the remaining candidates need genuinely new substrates, not buff-layer rides. Three reusable read-sites were added this arc — the Death-Ward HP-floor (alongside Relentless Endurance), the generic `attackers_have_disadvantage` (Blur + Foresight), and the generic `foresight` blanket-advantage (wired into all three advantage choke-points). The mirror-vs-hub-state distinction is the main footgun: condition-immunity / resistance / invisible buffs are **sheet-read** (need the mirror); AC / attack adv/dis / blanket-advantage buffs are **hub-read** (no mirror).
+
+### Per-category coverage (the headline numbers)
+
+| Category | SRD count | Automated | Notes |
+|---|---|---|---|
+| Races | 9 | **✅ ~100%** | Unchanged. |
+| Monsters | 322 | **✅ ~100%** | Unchanged. |
+| Conditions | 15 | **~92%** | Unchanged. |
+| Class features | **222 rows** | **✅ 100%** | Unchanged. |
+| Spells | 319 | **~90%** | **+5 pts vs. v2.434.0 (~85% → ~90%).** The v2.437.0–v2.502.0 tail arc mechanized ~35 utility spells that were cast-and-broadcast-only at the v2.434.0 audit — buffs (Longstrider, Mage Armor, Enlarge/Reduce, Stoneskin, Greater Invisibility, Blur, Foresight), condition-immunities (Freedom of Movement, Mind Blank), resistances (Protection from Poison/Energy, Warding Bond), and HP-floors (Death Ward). Remaining ~10% is the spells that need substrates SimpleVTT doesn't model: invisibility-detection (See Invisibility), AoE-shape effects (Antilife Shell, Globe of Invulnerability), illusion-duplicates (Mirror Image, Mislead, Project Image), summon-catalog depth (the Conjure family — filed separately), and the permanently-GM-narrated divination/scry/surprise clauses. |
+| Magic items | **239 / 239 wired** | **✅ 100%** | Unchanged. |
+
+**Overall ~98%** automated across the SRD ruleset (up from ~97% at v2.434.0 — the Spells bump from ~85% → ~90% is the mover). Four of six categories stay strictly-✅ 100% (Races, Monsters, Class features, Magic items); Conditions ~92% (permanently-GM-narrated clauses); Spells ~90% with the remaining gap now dominated by substrate-blocked spells rather than the cast-and-broadcast tail (which is largely closed).
+
+### Remaining gaps (priority order — toward full SRD automation)
+
+1. 🟡 **P2 — Substrate-blocked utility spells.** The cast-and-broadcast tail is largely closed; what's left needs new engine substrates: invisibility-detection (See Invisibility / True Seeing), AoE-shape persistent effects (Antilife Shell, Globe of Invulnerability, Forbiddance), illusion-duplicate state (Mirror Image, Mislead, Project Image), and summon-catalog depth (the Conjure family — has its own filed follow-up). Each is a substrate ship, not a content drop. Pick by leverage if a contributor wants to drive it.
+2. 🟠 **Filed follow-up — PC save-or-suck install for condition-shape spells.** Unchanged from v2.434.0 — the per-target condition install on a failed PC save still needs the v2.32.0 PC-save roll-response hook.
+3. 🟠 **Filed follow-ups — Bucket D announce-only magic items; race-features Phases 1b/1c + 4b/5b + 7.** Unchanged.
+4. ✅ **DONE — Cast-and-broadcast utility-spell tail (v2.437.0–v2.502.0).** Phase 1 (5) + Phase 2 (#1–#35). See [`docs/plans/cast-and-broadcast-tail.md`](plans/cast-and-broadcast-tail.md).
+5. ✅ **DONE — Spell utility-upcast Phase 1 (duration) + Phase 4 (rider/bonus).** Closed v2.405.0–v2.434.0.
+6. ✅ **DONE — Spell target-scaling cap+upcast arc (v2.404.1–v2.404.10); Magic-items closure (v2.403.0–v2.404.0); Security spine (v2.424.0–v2.431.0).** Unchanged.
+
+### Out-of-scope (unchanged)
+
+Tasha's, Xanathar's-beyond-SRD, Strixhaven, post-SRD feats, backgrounds beyond Acolyte, 2024 rules + Mythic Actions stay future-3.x scope. Charmed clause 2 (social-check advantage), Grappled clause 3 (out-of-reach), Deafened (hearing-narrative): permanently GM-narrated per the v2.384.0 audit doc.
+
+### What's left to ship in SimpleVTT 2.x?
+
+The SRD ruleset sits at ~98% automated end-to-end. With the cast-and-broadcast tail largely closed, the remaining ~2% is dominated by the substrate-blocked spells (gap #1) + the filed PC-save-or-suck hook (gap #2). The natural next-arc inflection points:
+
+- **3.0 scope expansion** — post-SRD content (Tasha's, Xanathar's, 2024-PHB rules, Mythic Actions) + the Bucket D announce-only mechanization arc.
+- **v2.5x substrate arcs** — invisibility-detection, AoE-shape persistent effects, illusion-duplicates, summon-catalog depth (each unlocks a cluster of the remaining ~10% Spells gap).
+- **Polish + UX** — Manually Added P3 items + Combat / GM Tools sections.
+- **Maps 2.0 / Stealth-cover substrates** — would unlock race-features Phases 4b + 5b + the positional advantage-disadvantage Phase 3.
 
 ---
 

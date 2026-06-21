@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.502.1] - 2026-06-21 — "The Recount"
+
+**Schema version:** 71
+
+**Commit summary:** Refreshes the SRD 5e coverage audit in `TODO.md` to reflect the v2.437.0 → v2.502.0 cast-and-broadcast utility-spell tail arc, which the prior (v2.434.0) audit predated entirely.
+
+**Description:** The top-of-`TODO.md` audit was stamped v2.434.0 — before the cast-and-broadcast tail shipped a single spell. The arc (Phase 1's 5 demonstrators + Phase 2 #1–#35) mechanized ~35 utility spells that were cast-and-broadcast-only at the v2.434.0 audit, so **Spells moves ~85% → ~90%** and the overall SRD roll-up nudges **~97% → ~98%**. Doc-only: adds a `## SRD 5e Audit (v2.502.0 refresh)` section at the top of the audit stack (with the per-category table, remaining-gaps list now led by the substrate-blocked spells, and the substrate take-aways for the next contributor), and updates the "quick map" pointer to cite it. No code change.
+
+**Implementation:**
+
+- `TODO.md`: new v2.502.0 audit section + updated top-of-file audit pointer (~97%/v2.434.0 → ~98%/v2.502.0).
+
+No harness changes — doc-only. The `/version` bump still requires a container rebuild so `/version` and `/healthz` report 2.502.1.
+
+PATCH — documentation refresh. No code or schema change.
+
+### Changed
+- `TODO.md` SRD audit refreshed to v2.502.0 (Spells ~85% → ~90%, overall ~97% → ~98%) reflecting the cast-and-broadcast tail arc.
+
 ## [2.502.0] - 2026-06-21 — "The Open Eye"
 
 **Schema version:** 71
