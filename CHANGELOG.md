@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.488.0] - 2026-06-21 — "The True Caller"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `TRUST_CF_CONNECTING_IP` — when on, the app reads the real visitor IP from Cloudflare's `CF-Connecting-IP` header. Fixes audit-log / fail2ban / admin-center recording the Cloudflare/tunnel address instead of the visitor's IP behind a **Cloudflare Tunnel**.
+
+**Description:** Diagnosed from an operator report that real IPs weren't coming through their (external) Cloudflare Tunnel. A controlled probe confirmed the app honored `X-Forwarded-For` (with `TRUSTED_PROXY_HOPS`) but **ignored `CF-Connecting-IP` entirely** — so a request carrying only `CF-Connecting-IP` (what cloudflared typically sends) fell back to the immediate peer, a Cloudflare address (e.g. `172.67.x`). `TRUSTED_PROXY_HOPS` didn't help because the tunnel wasn't populating a usable XFF chain.
+
+**Implementation:**
+
+- `app/audit_log.py`: `_extract_client_ip` now checks `CF-Connecting-IP` **first** when `TRUST_CF_CONNECTING_IP` is enabled (it's a single IP, no chain to parse — the reliable source behind a tunnel), then the existing `X-Forwarded-For` (`TRUSTED_PROXY_HOPS`) path, then the peer. New `_trust_cf_connecting_ip()` reads the flag at call time. This flows everywhere IPs are recorded (every audit event → fail2ban filters → admin-center stats; the admin-center login throttle).
+- `docker-compose.yml`: `TRUST_CF_CONNECTING_IP` on the app **and** admin-center services (default `false`); the latter also gains `TRUSTED_PROXY_HOPS` so its login throttle keys on the real client.
+- `.env.example`: documented with the security caveat.
+
+**Security model:** default **off**. Trusting `CF-Connecting-IP` is safe only when the origin is reachable **only** via Cloudflare (a tunnel — the origin isn't publicly exposed — or an origin firewalled to Cloudflare IPs); otherwise an attacker hitting the origin directly could spoof the header. The flag is the operator's explicit assertion of that topology, mirroring how `TRUSTED_PROXY_HOPS` gates `X-Forwarded-For`.
+
+**Operator action (behind a Cloudflare Tunnel):** set `TRUST_CF_CONNECTING_IP=true` in `.env` and restart. The audit log, fail2ban bans, and admin-center stats then record real visitor IPs.
+
+**Harness changes:**
+
+- `tests/harness/test_audit_log.py`: +4 unit tests — ignored by default; trusted-when-enabled (Cloudflare-peer case); precedence over XFF; falls back to XFF when the header is absent.
+
+Total harness count → 3721 (+4).
+
+MINOR — new opt-in IP-attribution source, default off (no change to existing deploys). No schema change.
+
+### Added
+- `TRUST_CF_CONNECTING_IP` env flag: trust Cloudflare's `CF-Connecting-IP` for the real visitor IP behind a Cloudflare Tunnel. Default off.
+
 ## [2.487.2] - 2026-06-20 — "The Local Clock"
 
 **Schema version:** 71

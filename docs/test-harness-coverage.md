@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3717 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.487.2, 2026-06-20).
+**Total tests:** 3721 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.488.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -5451,6 +5451,10 @@ Unit tests on the `app.audit_log` typed emission module. Pure in-process (no htt
 | `test_bool_and_int_render_as_bare_tokens` | `bool` → `true`/`false`; `int` → unquoted decimal — so CrowdSec's typed parsers can read them without unquoting. |
 | `test_invalid_trusted_proxy_hops_falls_back_to_zero` | `TRUSTED_PROXY_HOPS="not-a-number"` falls back to 0 (XFF ignored), not a crash. |
 | `test_negative_trusted_proxy_hops_falls_back_to_zero` | `TRUSTED_PROXY_HOPS="-3"` clamps to 0 — defensive against a typo in `.env`. |
+| `test_cf_connecting_ip_ignored_by_default` | `CF-Connecting-IP` ignored unless `TRUST_CF_CONNECTING_IP` is on (direct client IP wins). |
+| `test_cf_connecting_ip_trusted_when_enabled` | With the flag on + a Cloudflare peer, the real visitor from `CF-Connecting-IP` wins. |
+| `test_cf_connecting_ip_takes_precedence_over_xff` | `CF-Connecting-IP` wins over the `X-Forwarded-For` chain when both are trusted. |
+| `test_cf_trusted_but_absent_falls_back_to_xff` | Flag on but header absent → falls through to the XFF path. |
 
 ---
 

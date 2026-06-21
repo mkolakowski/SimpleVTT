@@ -26,13 +26,21 @@ _AUDIT_LINE_RE = re.compile(
 )
 
 
-def _fake_request(*, ip: str = "1.2.3.4", ua: str = "Mozilla/5.0 (pytest)", xff: str | None = None):
+def _fake_request(
+    *,
+    ip: str = "1.2.3.4",
+    ua: str = "Mozilla/5.0 (pytest)",
+    xff: str | None = None,
+    cf: str | None = None,
+):
     """Build a minimal stand-in for fastapi.Request that ``audit_log``'s
     helpers can read. Only the ``client.host`` + ``headers`` lookups
     are exercised."""
     headers = {"user-agent": ua}
     if xff is not None:
         headers["x-forwarded-for"] = xff
+    if cf is not None:
+        headers["cf-connecting-ip"] = cf
     return SimpleNamespace(
         client=SimpleNamespace(host=ip),
         headers=headers,
@@ -119,6 +127,52 @@ def test_x_forwarded_for_hops_exceeds_chain(caplog, monkeypatch):
     # mis-configured TRUSTED_PROXY_HOPS reading off the front of the
     # array.
     assert "ip=198.51.100.10" in lines[0]
+
+
+def test_cf_connecting_ip_ignored_by_default(caplog, monkeypatch):
+    monkeypatch.delenv("TRUST_CF_CONNECTING_IP", raising=False)
+    monkeypatch.delenv("TRUSTED_PROXY_HOPS", raising=False)
+    req = _fake_request(ip="10.0.0.5", cf="203.0.113.7")
+    lines = _capture(caplog, lambda: audit_log.audit(
+        "auth.login_failed", request=req, username="x"
+    ))
+    # Default off → CF header ignored, direct client IP wins.
+    assert "ip=10.0.0.5" in lines[0]
+    assert "203.0.113.7" not in lines[0]
+
+
+def test_cf_connecting_ip_trusted_when_enabled(caplog, monkeypatch):
+    monkeypatch.setenv("TRUST_CF_CONNECTING_IP", "true")
+    # The Cloudflare-Tunnel case: only CF-Connecting-IP present, the
+    # peer is a Cloudflare address. The real visitor must win.
+    req = _fake_request(ip="172.67.137.205", cf="198.51.100.7")
+    lines = _capture(caplog, lambda: audit_log.audit(
+        "auth.login_failed", request=req, username="x"
+    ))
+    assert "ip=198.51.100.7" in lines[0]
+    assert "172.67.137.205" not in lines[0]
+
+
+def test_cf_connecting_ip_takes_precedence_over_xff(caplog, monkeypatch):
+    monkeypatch.setenv("TRUST_CF_CONNECTING_IP", "true")
+    monkeypatch.setenv("TRUSTED_PROXY_HOPS", "1")
+    req = _fake_request(ip="10.0.0.5", cf="198.51.100.7", xff="203.0.113.9, 10.0.0.99")
+    lines = _capture(caplog, lambda: audit_log.audit(
+        "auth.login_failed", request=req, username="x"
+    ))
+    # CF-Connecting-IP wins over the XFF chain.
+    assert "ip=198.51.100.7" in lines[0]
+
+
+def test_cf_trusted_but_absent_falls_back_to_xff(caplog, monkeypatch):
+    monkeypatch.setenv("TRUST_CF_CONNECTING_IP", "true")
+    monkeypatch.setenv("TRUSTED_PROXY_HOPS", "1")
+    # CF trusted but the header isn't present → fall through to XFF.
+    req = _fake_request(ip="10.0.0.5", xff="203.0.113.9, 10.0.0.99")
+    lines = _capture(caplog, lambda: audit_log.audit(
+        "auth.login_failed", request=req, username="x"
+    ))
+    assert "ip=203.0.113.9" in lines[0]
 
 
 def test_unknown_ip_when_no_request(caplog, monkeypatch):

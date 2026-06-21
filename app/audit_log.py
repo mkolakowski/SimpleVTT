@@ -16,10 +16,14 @@ is passed), and arbitrary additional key=value pairs follow.
 Values with whitespace or special chars are double-quoted; bare
 identifiers (ints, simple strings) pass through unquoted.
 
-Trust model for ``X-Forwarded-For``: never trusted by default.
+Trust model for proxy headers: nothing is trusted by default.
 ``TRUSTED_PROXY_HOPS=N`` opts the deploy into trusting the last N
-hops of the header chain — set this only when a known reverse
-proxy is in front of the app.
+hops of the ``X-Forwarded-For`` chain — set this only when a known
+reverse proxy is in front of the app. ``TRUST_CF_CONNECTING_IP=true``
+opts into trusting Cloudflare's ``CF-Connecting-IP`` header (the
+reliable real-visitor source behind a Cloudflare Tunnel) — set this
+only when the origin is reachable *only* via Cloudflare, or an
+attacker hitting the origin directly could spoof their IP.
 
 This module is intentionally synchronous + standard-logging-only.
 No async, no third-party deps, no JSON side-channel (Phase 3 of
@@ -54,16 +58,44 @@ def _trusted_proxy_hops() -> int:
     return max(0, n)
 
 
+def _trust_cf_connecting_ip() -> bool:
+    """Whether to trust Cloudflare's ``CF-Connecting-IP`` header.
+
+    Read at call time (not cached) so a runtime flip in tests/env is
+    honored. Default off — trusting the header blindly would let an
+    attacker who reaches the origin *directly* (bypassing Cloudflare)
+    spoof their IP. Safe to enable only when the origin is reachable
+    **only** through Cloudflare — e.g. a Cloudflare Tunnel (the origin
+    isn't publicly exposed) or an origin firewalled to Cloudflare IPs.
+    """
+    return os.environ.get("TRUST_CF_CONNECTING_IP", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+
+
 def _extract_client_ip(request: "Optional[Request]") -> str:
     """Pick the source IP from a Request. Falls back to ``unknown``
     when ``request`` is None (e.g. WS handlers without the dependency
-    injected, or test calls). Honors X-Forwarded-For only when
-    ``TRUSTED_PROXY_HOPS`` is positive; takes the value at index
-    ``-hops`` from the end so the closest trusted proxy in a chain
-    is the source we read.
+    injected, or test calls).
+
+    Precedence:
+      1. ``CF-Connecting-IP`` — when ``TRUST_CF_CONNECTING_IP`` is on.
+         Cloudflare (incl. Tunnel) sets this to the real visitor IP;
+         it's a single address, no chain to parse. This is the
+         reliable source behind a Cloudflare Tunnel, where
+         ``X-Forwarded-For`` is often absent and the immediate peer is
+         a Cloudflare/cloudflared address.
+      2. ``X-Forwarded-For`` — when ``TRUSTED_PROXY_HOPS`` is positive;
+         takes the value at index ``-hops`` from the end so the
+         closest trusted proxy in a chain is the source we read.
+      3. The immediate peer (``request.client.host``).
     """
     if request is None:
         return "unknown"
+    if _trust_cf_connecting_ip():
+        cf = (request.headers.get("cf-connecting-ip") or "").strip()
+        if cf:
+            return cf
     hops = _trusted_proxy_hops()
     if hops > 0:
         xff = request.headers.get("x-forwarded-for") or ""
