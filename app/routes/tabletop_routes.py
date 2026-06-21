@@ -70668,6 +70668,140 @@ async def cast_darkvision(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_zone_of_truth")
+async def cast_zone_of_truth(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.534.0 — Phase 2 #52 of
+    docs/plans/cast-and-broadcast-tail.md. Zone of Truth (L2
+    enchantment, Bard/Cleric/Paladin, PHB p.289):
+
+      "You create a magical zone that guards against deception in a
+       15-foot-radius sphere ... a creature that enters the spell's
+       area for the first time on a turn or starts its turn there must
+       make a Charisma saving throw. On a failed save, a creature can't
+       speak a deliberate lie while in the radius."
+
+    1 action, V/S, 60 ft, 10 minutes, non-concentration.
+
+    Implementation: a save-DC marker cast in the same mould as Sanctuary
+    (#... — the DC-bake pattern). Installs a ``zone-of-truth`` buff on the
+    caster carrying ``effects.zone_of_truth: True`` + the baked
+    ``save_dc`` (8 + prof + spellcasting mod, via
+    `_compute_spell_save_dc_from_sheet`) + ``save_ability: "CHA"``, so any
+    chat/sheet card can render "Zone of Truth active (DC N)" without
+    recomputing. The 15-ft sphere geometry, the per-creature CHA saves on
+    enter/start-of-turn, and the can't-lie / avoid-answering enforcement
+    are GM-narrated (no zone-of-effect model). Self-cast — the zone is
+    GM-placed within 60 ft.
+
+    Body: ``{character_id}``. Response: ``{ok, feature, save_dc,
+    save_ability, buff_installed, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if char.template == "dnd5e":
+        normalize_dnd5e_sheet(sheet)
+    spells = list(sheet.get("spells") or [])
+    knows_zot = any(
+        (s.get("_slug") == "zone-of-truth")
+        or (str(s.get("name", "")).lower() == "zone of truth")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"bard", "cleric", "paladin"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_zot and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Zone of Truth, or bard/cleric/paladin",
+            "got_class": _cls,
+        })
+
+    save_dc = _compute_spell_save_dc_from_sheet(sheet)
+    DURATION_ROUNDS = 100  # 10 minutes RAW
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "zone-of-truth",
+        "name": "Zone of Truth",
+        "icon": "⚖️",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,  # RAW (PHB p.289)
+        "source_char_id": char.id,
+        "effects": {
+            "zone_of_truth": True,
+            "save_dc": save_dc,
+            "save_ability": "CHA",
+        },
+        "desc": (
+            f"A 15-ft sphere where creatures that fail a CHA save (DC "
+            f"{save_dc}) can't speak deliberate lies, for 10 minutes. The "
+            "sphere geometry + per-creature saves + lie-prevention are "
+            "GM-narrated."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "⚖️ Zone of Truth",
+            "feature_desc": (
+                f"{char.name} raises a Zone of Truth — a 15-ft sphere "
+                f"where a creature that fails a CHA save (DC {save_dc}) "
+                "can't speak a deliberate lie, for 10 minutes (GM-narrated "
+                "zone + saves)."
+            ),
+            "source": "zone-of-truth",
+            "save_dc": save_dc,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "zone-of-truth",
+        "save_dc": save_dc,
+        "save_ability": "CHA",
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_globe_of_invulnerability")
 async def cast_globe_of_invulnerability(
     campaign_id: int,

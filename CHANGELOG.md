@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.534.0] - 2026-06-21 — "The Honest Sphere"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_zone_of_truth` — Phase 2 #52 of the cast-and-broadcast tail. Zone of Truth (L2 enchantment, Bard/Cleric/Paladin) installs a 10-minute marker buff baking the CHA save DC.
+
+**Description:** Continues the tail after Darkvision (#51). RAW PHB p.289: "You create a magical zone that guards against deception in a 15-foot-radius sphere … a creature that enters the spell's area … must make a Charisma saving throw. On a failed save, a creature can't speak a deliberate lie while in the radius." 1 action, V/S, 60 ft, 10 minutes, non-concentration. A save-DC marker cast in the Sanctuary DC-bake mould: installs a `zone-of-truth` buff on the caster carrying `effects.zone_of_truth: True` + the baked `save_dc` (8 + prof + spellcasting mod, via `_compute_spell_save_dc_from_sheet`) + `save_ability: "CHA"`, so any chat/sheet card can render "Zone of Truth active (DC N)" without recomputing. The 15-ft sphere geometry, the per-creature CHA saves on enter/start-of-turn, and the can't-lie / avoid-answering enforcement are GM-narrated (no zone-of-effect model). Self-cast — the zone is GM-placed within 60 ft.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `cast_zone_of_truth` endpoint. Normalizes the caster sheet, computes the DC via `_compute_spell_save_dc_from_sheet`, installs the marker buff, and surfaces `save_dc` + `save_ability` in the response + broadcast. Caster gate: knows the spell OR bard/cleric/paladin. 400/403/404/409 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #52.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_zone_of_truth.py` (new): +5 tests — Cleric cast installs `zone_of_truth` + `save_dc` + CHA; the baked DC ≥ 8 + prof + spellcasting mod from the sheet (round-trip); buff is non-concentration + 10-min; non-caster 409; missing character_id 400.
+
+Total harness count → 3909 (+5).
+
+MINOR — new cast endpoint baking a CHA save DC. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_zone_of_truth`: Zone of Truth (L2) — a 10-minute marker buff baking the CHA save DC (8 + prof + spellcasting mod); sphere + saves + lie-prevention GM-narrated. Phase 2 #52 of the cast-and-broadcast tail.
+
 ## [2.533.0] - 2026-06-21 — "The Borrowed Night-Eyes"
 
 **Schema version:** 71
