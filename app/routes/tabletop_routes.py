@@ -70924,6 +70924,154 @@ async def cast_darkvision(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_true_seeing")
+async def cast_true_seeing(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.542.0 — Phase 2 #56 of
+    docs/plans/cast-and-broadcast-tail.md. True Seeing (L6 divination,
+    Bard/Cleric/Sorcerer/Warlock/Wizard, PHB p.284):
+
+      "This spell gives the willing creature you touch the ability to see
+       things as they actually are. For the duration, the creature has
+       truesight, notices secret doors hidden by magic, and can see into
+       the Ethereal Plane, all out to a range of 120 feet."
+
+    1 action, V/S/M, Touch, 1 hour, non-concentration.
+
+    Implementation: a **two-substrate ride** — truesight subsumes both
+    See Invisibility (#42) and Darkvision (#51), so the buff carries
+    ``effects.sees_invisible: True`` (which the v2.510.0/.514.0
+    invisible-attacker / invisible-target attack-edge reads honor — a
+    True-Seeing creature negates an invisible attacker's advantage AND
+    the disadvantage of attacking an invisible target, for free) plus
+    ``effects.darkvision_ft: 120`` (the descriptive darkvision sense
+    marker, here at truesight's 120-ft range). The ``truesight`` flag IS
+    the marker for the GM-narrated halves — detecting illusions /
+    shapechangers' true form / secret doors / the Ethereal Plane (no
+    illusion / scry / ethereal model). Same self-or-touch shape as
+    Darkvision (#51).
+
+    Body: ``{character_id, target_character_id?}``. Response: ``{ok,
+    feature, target_character_id, truesight_ft, buff_installed,
+    duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_char_id = int(body.get("target_character_id") or char_id)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target_char = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target_char:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_ts = any(
+        (s.get("_slug") == "true-seeing")
+        or (str(s.get("name", "")).lower() == "true seeing")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"bard", "cleric", "sorcerer", "warlock", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_ts and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": (
+                "knows True Seeing, or bard/cleric/sorcerer/warlock/wizard"
+            ),
+            "got_class": _cls,
+        })
+
+    TRUESIGHT_FT = 120
+    DURATION_ROUNDS = 600  # 1 hour @ 6 s/round
+    buff_installed = await _install_buff(campaign_id, target_char.id, {
+        "key": "true-seeing",
+        "name": "True Seeing",
+        "icon": "👁️‍🗨️",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            # Truesight subsumes See Invisibility + Darkvision; both ride
+            # existing substrates with zero new mechanical code.
+            "sees_invisible": True,
+            "darkvision_ft": TRUESIGHT_FT,
+            "truesight": True,
+        },
+        "desc": (
+            "Truesight out to 120 ft for 1 hour: sees invisible creatures "
+            "(mechanical — negates invisibility's attack edge) + darkvision. "
+            "Detecting illusions / shapechangers / secret doors / the "
+            "Ethereal Plane is GM-narrated."
+        ),
+    })
+    # The sees_invisible / darkvision attack-edge reads are hub-state, so
+    # no sheet mirror is needed (unlike resistance / condition buffs).
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    who = "themself" if target_char.id == char.id else target_char.name
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "👁️‍🗨️ True Seeing",
+            "feature_desc": (
+                f"{char.name} grants {who} truesight out to 120 ft for 1 "
+                "hour — sees invisible creatures + darkvision; illusions / "
+                "shapechangers / Ethereal Plane are GM-narrated."
+            ),
+            "source": "true-seeing",
+            "target_character_id": target_char.id,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "true-seeing",
+        "target_character_id": target_char.id,
+        "truesight_ft": TRUESIGHT_FT,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_zone_of_truth")
 async def cast_zone_of_truth(
     campaign_id: int,

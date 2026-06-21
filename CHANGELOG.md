@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.542.0] - 2026-06-21 — "The Unveiled World"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_true_seeing` — Phase 2 #56 of the cast-and-broadcast tail. True Seeing (L6 divination, Bard/Cleric/Sorcerer/Warlock/Wizard) grants truesight out to 120 ft by riding **two** existing substrates at once.
+
+**Description:** Resumes the tail with a high-leverage two-substrate ride. RAW PHB p.284: "the creature has truesight, notices secret doors hidden by magic, and can see into the Ethereal Plane, all out to a range of 120 feet." Touch, 1 hour, non-concentration. Truesight subsumes both See Invisibility (#42) and Darkvision (#51), so the `true-seeing` buff carries `effects.sees_invisible: True` (which the v2.510.0/.514.0 invisible-attacker / invisible-target attack-edge reads honor — a True-Seeing creature negates an invisible attacker's advantage AND the disadvantage of attacking an invisible target, **with zero new mechanical code**) plus `effects.darkvision_ft: 120` (the descriptive darkvision sense marker at truesight's range). The `truesight` flag IS the marker for the GM-narrated halves: detecting illusions, shapechangers' true form, secret doors, and the Ethereal Plane (no illusion / scry / ethereal model). Both attack-edge reads are hub-state, so no sheet mirror is needed. Same self-or-touch shape as Darkvision (#51).
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `cast_true_seeing` endpoint. Self-or-touch. Caster gate: knows the spell OR bard/cleric/sorcerer/warlock/wizard. Returns `truesight_ft`. 400/403/404/409 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #56.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_true_seeing.py` (new): +5 tests — self-cast installs `sees_invisible` + `darkvision_ft: 120` + `truesight` (1h, non-conc); touch-an-ally routing; **mechanical ride** (a True-Seeing attacker vs an invisible target → the invisible-target disadvantage is negated, with a control that keeps it without True Seeing); non-caster 409; missing character_id 400.
+
+Total harness count → 3944 (+5).
+
+MINOR — new cast endpoint riding the `sees_invisible` + `darkvision_ft` substrates. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_true_seeing`: True Seeing (L6) — truesight 120 ft, riding the See Invisibility (`sees_invisible`) attack-edge substrate + the Darkvision (`darkvision_ft`) sense marker; illusions / shapechangers / Ethereal Plane GM-narrated. Phase 2 #56 of the cast-and-broadcast tail.
+
 ## [2.541.0] - 2026-06-21 — "The Summoned Court"
 
 **Schema version:** 71
