@@ -10,6 +10,38 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.567.0] - 2026-06-22 — "The Trespasser's Toll"
+
+**Schema version:** 75
+
+**Commit summary:** Phase 1 of `docs/plans/aoe-enter-trigger.md` — Spirit Guardians (and radius-shaped persistent damaging AoEs) now auto-resolve their save + damage BOTH when a creature moves into the area AND when it starts its turn there, not just at placement.
+
+**Description:** RAW, a persistent damaging area spell hits a creature *"when it enters the area for the first time on a turn or starts its turn there."* Spirit Guardians (`self_sphere`, 3d8, WIS) already created a `_concentration_aoes` marker at cast (via `/place_aoe`, anchored to the caster) — but neither the enter half nor the start-of-turn half was automated (only the placement sweep was). This ships **both halves** for **radius shapes** (`sphere` / `self_sphere`):
+
+- **Enter-mid-move** — after a `/token/{id}/move`, `_trigger_persistent_aoe_on_move` scans the campaign's markers; if the move carried the creature from outside a damaging radius AoE to inside it (a true crossing), it fires the AoE's save + damage.
+- **Start-of-turn** — on turn advance, `_tick_persistent_aoe_start_of_turn` fires the save + damage if the newly-active combatant begins its turn inside such a marker. (`_tick_auras` only handles aura *buffs*, not these markers — so this is genuinely new.)
+
+A PC target gets a `roll_request` + a `_save_request_context` stash so `/roll_request/{id}/respond` applies save-for-half (the existing T.5d/e path); an NPC auto-rolls + takes save-for-half inline. A per-turn dedupe (`_aoe_enter_triggered`, reset on turn advance) is **shared** by both halves so RAW's "enters **or** starts there" yields exactly one save per turn — a creature that starts its turn in the zone and then leaves and re-enters the same turn is not double-dipped. The caster is never hit by their own emanation; self-anchored emanations (Spirit Guardians) test against the caster's CURRENT token position so the area moves with them. `override_barrier: true` (the GM move-escape) skips the enter half.
+
+Phase 1 uses a plain save (the target's own modifier); ally/cast-time save-advantage layers (Aura of Protection, Danger Sense, …) are a documented follow-up. Cube/cone/line shapes (the server has no point-in-shape geometry — placement is client-side) are Phase 2; forced-movement entry (push/pull dragging a creature in) is Phase 3.
+
+**Implementation (`app/routes/tabletop_routes.py`):**
+
+- `_trigger_persistent_aoe_on_move` (enter) + `_tick_persistent_aoe_start_of_turn` (start-of-turn) + `_resolve_aoe_enter_save` (PC-prompt / NPC-auto save-for-half) + `_caster_token_xy` / `_radius_marker_center` helpers, next to `_clear_caster_concentration_aoes`; plus the shared `_aoe_enter_triggered` per-turn dedupe set.
+- Enter hook in `move_token` after the move applies + the Antilife forced-through block (gated `distance_ft > 0 and not override_barrier`, best-effort).
+- Start-of-turn pass + dedupe reset wired into `update_battle`'s turn-advance block, next to the `_tick_auras` call.
+
+**Harness changes:**
+
+- `tests/harness/test_aoe_enter_trigger.py` (new): +7 — NPC entering takes damage; no re-trigger same turn (out-and-back-in damages once); a move staying outside fires nothing; `override_barrier` skips; caster immune to own emanation; an NPC that *starts its turn* inside takes damage; a PC entering gets a Spirit Guardians WIS-save `roll_request`. Fixture casts Spirit Guardians off Brother Tavik (Life Cleric) + places the emanation, with teardown that ends concentration to clear the in-process marker.
+
+Total harness count → 4065 in `tests/harness/` + 99 in `tests/harness_ui/`.
+
+MINOR — new mechanic (additive; no schema or API-shape change).
+
+### Added
+- Spirit Guardians (and radius-shaped persistent damaging AoEs) now auto-resolve their save + damage when a creature **moves into** them **or starts its turn** inside them — not just at placement (`docs/plans/aoe-enter-trigger.md` Phase 1).
+
 ## [2.566.2] - 2026-06-22 — "The Stepped-On Glyph"
 
 **Schema version:** 75

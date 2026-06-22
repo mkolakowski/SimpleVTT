@@ -10340,6 +10340,290 @@ async def _clear_caster_concentration_aoes(
     return True
 
 
+# v2.567.0 — Phase 1 of docs/plans/aoe-enter-trigger.md. Per-turn dedupe
+# for the "enters the area for the FIRST TIME on a turn" clause: a set of
+# (combatant_id, marker_id) that have already triggered this turn. Cleared
+# on every turn advance (next to the `_tick_auras` start-of-turn pass).
+_aoe_enter_triggered: dict[int, set] = {}
+
+
+def _caster_token_xy(
+    db: Session, campaign_id: int, caster_char_id: int,
+) -> "tuple[float, float] | tuple[None, None]":
+    """Current (x, y) px of a caster's token in the active battle, for
+    self-anchored AoE centers (Spirit Guardians moves with the caster).
+    Returns (None, None) when the caster has no token on the map."""
+    if not caster_char_id:
+        return (None, None)
+    state = hub.get_battle(campaign_id)
+    for c in ((state or {}).get("combatants") or []):
+        if c.get("char_id") == int(caster_char_id):
+            tok = _combatant_token(db, campaign_id, c)
+            if tok is not None:
+                return (float(tok.x), float(tok.y))
+    return (None, None)
+
+
+async def _resolve_aoe_enter_save(
+    db: Session, campaign_id: int, marker: dict, mover: dict,
+    *, campaign: "Campaign | None" = None, prompt_user: "User | None" = None,
+) -> None:
+    """Fire one persistent-AoE damage save against the combatant that just
+    entered it. PC → a roll_request + a `_save_request_context` stash so
+    `/roll_request/{id}/respond` applies save-for-half (the existing T.5d/e
+    AoE path); NPC → auto-roll the save + apply save-for-half inline.
+    Phase 1 uses a plain save (the target's own modifier); ally/cast-time
+    save-advantage layers (Aura of Protection, Danger Sense, …) are a
+    documented follow-up."""
+    save_ability = (marker.get("save_ability") or "").strip() or "DEX"
+    dc = int(marker.get("dc") or 0)
+    damage_expr = marker.get("damage_expr") or ""
+    damage_type = marker.get("damage_type") or ""
+    spell_name = marker.get("spell_name") or "Area effect"
+    spell_slug = marker.get("spell_slug") or ""
+    combatant_id = mover.get("id")
+    mover_name = mover.get("name") or "the creature"
+
+    # PC target → prompt their save; the respond endpoint applies half.
+    char_id = mover.get("char_id")
+    pc = None
+    if char_id:
+        pc = db.query(Character).filter(
+            Character.id == int(char_id),
+            Character.campaign_id == campaign_id,
+        ).first()
+    if pc and pc.owner_user_id:
+        if campaign is None:
+            campaign = db.query(Campaign).filter(
+                Campaign.id == campaign_id).first()
+        note = f"{spell_name} — {save_ability} save (entered the area)"
+        req = RollRequest(
+            campaign_id=campaign_id,
+            created_by_user_id=(prompt_user.id if prompt_user else pc.owner_user_id),
+            label=note,
+            base_expression="1d20",
+            stat_key=f"{save_ability.lower()}_save",
+            dc=dc,
+            visibility=Visibility.PUBLIC,
+        )
+        db.add(req)
+        db.commit()
+        db.refresh(req)
+        await hub.broadcast(campaign_id, {
+            "type": "roll_request",
+            "data": {
+                "id": req.id, "label": req.label, "stat_key": req.stat_key,
+                "base_expression": req.base_expression, "dc": req.dc,
+                "visibility": req.visibility.value,
+                "created_by_name": (prompt_user.display_name if prompt_user else spell_name),
+                "created_by_user_id": req.created_by_user_id,
+                "target_user_ids": _resolve_pc_prompt_target_user_ids(
+                    db, campaign, pc.owner_user_id) if campaign else [pc.owner_user_id],
+                "target_user_names": [pc.name],
+            },
+        })
+        _purge_save_request_context()
+        _save_request_context[req.id] = {
+            "ts": _time.time(),
+            "campaign_id": campaign_id,
+            "spell_slug": spell_slug,
+            "spell_name": spell_name,
+            "target_character_id": int(pc.id),
+            "target_name": pc.name,
+            "dc": dc,
+            "save_ability": save_ability,
+            "caster_char_id": int(marker.get("caster_char_id") or 0),
+            "caster_char_name": marker.get("caster_char_name") or "",
+            "is_aoe": True,
+            "cast_id": marker.get("cast_id"),
+            "combatant_id": combatant_id,
+            "damage_expr": damage_expr,
+            "damage_type": damage_type,
+            "auto_apply_damage": bool(marker.get("auto_apply_damage")),
+        }
+        return
+
+    # NPC target → auto-roll the save + apply save-for-half inline.
+    save_mod = 0
+    tmpl_id = mover.get("token_template_id")
+    if tmpl_id:
+        tmpl = db.query(TokenTemplate).filter(
+            TokenTemplate.id == int(tmpl_id)).first()
+        if tmpl:
+            save_mod, _ = _resolve_stat_modifier(
+                _monster_template_to_sheet(tmpl, campaign_id),
+                "dnd5e", f"{save_ability.lower()}_save")
+    try:
+        rolled = int(dice_mod.roll(f"1d20{save_mod:+d}").total)
+    except dice_mod.DiceParseError:
+        rolled = 0
+    passed = rolled >= dc
+    try:
+        dmg = int(dice_mod.roll(damage_expr).total) if damage_expr else 0
+    except dice_mod.DiceParseError:
+        dmg = 0
+    if passed:
+        dmg //= 2  # save-for-half (RAW: success halves)
+    if dmg > 0:
+        await _apply_damage_to_combatant(
+            db, campaign_id, mover, dmg, damage_type,
+            is_spell=True,
+            attacker_char_id=int(marker.get("caster_char_id") or 0) or None,
+        )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_name": marker.get("caster_char_name") or spell_name,
+            "feature_name": f"💥 {spell_name}",
+            "feature_desc": (
+                f"{mover_name} entered the area — {save_ability} save "
+                f"{rolled} vs DC {dc} ({'save' if passed else 'fail'}); "
+                f"{dmg} {damage_type} damage."
+            ),
+            "source": spell_slug or "aoe-enter",
+        },
+    })
+
+
+async def _trigger_persistent_aoe_on_move(
+    db: Session, campaign_id: int, token, from_x: float, from_y: float,
+    to_x: float, to_y: float,
+    *, campaign: "Campaign | None" = None, prompt_user: "User | None" = None,
+) -> None:
+    """Phase 1 of docs/plans/aoe-enter-trigger.md. After a token move,
+    fire the save+damage of any RADIUS-shaped persistent damaging AoE the
+    moved creature just ENTERED (origin outside → dest inside), once per
+    (creature, AoE) per turn. Radius shapes only (sphere / self_sphere);
+    cube/cone/line are Phase 2. Best-effort — never raises into the move."""
+    markers = _concentration_aoes.get(campaign_id) or []
+    if not markers:
+        return
+    m = db.query(Map).filter(Map.id == token.map_id).first()
+    if not m or not m.grid_size_px:
+        return
+    grid_px = int(m.grid_size_px)
+    grid_type = getattr(m.grid_type, "value", m.grid_type) or "square"
+
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return
+    mover = None
+    for c in (state.get("combatants") or []):
+        if c.get("source_token_id") == int(token.id):
+            mover = c
+            break
+        if token.character_id and c.get("char_id") == int(token.character_id):
+            mover = c
+            break
+    if not mover:
+        return
+    mover_id = mover.get("id")
+    triggered = _aoe_enter_triggered.setdefault(campaign_id, set())
+
+    for marker in markers:
+        # Only damaging AoEs with a save (non-damaging AoEs are handled
+        # at cast / GM-narrated).
+        if not (marker.get("damage_expr") and marker.get("dc")):
+            continue
+        if (marker.get("shape") or "").strip() not in ("sphere", "self_sphere"):
+            continue  # Phase 1: radius shapes only
+        # Caster isn't hit by their own AoE (e.g. Spirit Guardians).
+        caster_id = int(marker.get("caster_char_id") or 0)
+        if token.character_id and caster_id == int(token.character_id):
+            continue
+        key = (mover_id, marker.get("id"))
+        if key in triggered:
+            continue
+        # Center: the caster's CURRENT token for self-anchored emanations,
+        # else the fixed placement.
+        cx, cy = _radius_marker_center(db, campaign_id, marker)
+        if cx is None:
+            continue
+        radius_ft = float(marker.get("size_ft") or 0)
+        if radius_ft <= 0:
+            continue
+        d_to = _distance_ft_between_points(grid_px, grid_type, cx, cy, float(to_x), float(to_y))
+        d_from = _distance_ft_between_points(grid_px, grid_type, cx, cy, float(from_x), float(from_y))
+        # Entered = destination inside, origin outside (a true crossing).
+        if not (d_to <= radius_ft and d_from > radius_ft):
+            continue
+        triggered.add(key)
+        try:
+            await _resolve_aoe_enter_save(
+                db, campaign_id, marker, mover,
+                campaign=campaign, prompt_user=prompt_user)
+        except Exception:
+            logging.exception("AoE enter-trigger resolve failed")
+
+
+def _radius_marker_center(
+    db: Session, campaign_id: int, marker: dict,
+) -> "tuple[float, float] | tuple[None, None]":
+    """(cx, cy) px of a radius marker's center — the caster's CURRENT token
+    for self-anchored emanations (Spirit Guardians moves with the caster),
+    else the fixed placement. (None, None) if a self-anchored caster has no
+    token on the map."""
+    if (marker.get("shape") or "").strip() == "self_sphere":
+        return _caster_token_xy(db, campaign_id, int(marker.get("caster_char_id") or 0))
+    return (float(marker.get("center_x") or 0), float(marker.get("center_y") or 0))
+
+
+async def _tick_persistent_aoe_start_of_turn(
+    db: Session, campaign_id: int, active_combatant: "dict | None",
+    *, campaign: "Campaign | None" = None, prompt_user: "User | None" = None,
+) -> None:
+    """Start-of-turn half of `docs/plans/aoe-enter-trigger.md`: when a
+    creature STARTS its turn inside a radius-shaped persistent damaging AoE
+    (Spirit Guardians et al.), fire its save + damage. Shares the
+    `_aoe_enter_triggered` dedupe with the enter-trigger — RAW is ONE save
+    per turn for *"enters the area for the first time on a turn OR starts
+    its turn there."* The caller runs this right after the per-turn dedupe
+    reset, so the new active combatant's start-of-turn hit marks the set and
+    a later move-out-and-back-in the same turn doesn't double-dip."""
+    if not active_combatant:
+        return
+    markers = _concentration_aoes.get(campaign_id) or []
+    if not markers:
+        return
+    tok = _combatant_token(db, campaign_id, active_combatant)
+    if tok is None or tok.map_id is None:
+        return
+    m = db.query(Map).filter(Map.id == tok.map_id).first()
+    if not m or not m.grid_size_px:
+        return
+    grid_px = int(m.grid_size_px)
+    grid_type = getattr(m.grid_type, "value", m.grid_type) or "square"
+    mover_id = active_combatant.get("id")
+    char_id = active_combatant.get("char_id")
+    triggered = _aoe_enter_triggered.setdefault(campaign_id, set())
+    for marker in markers:
+        if not (marker.get("damage_expr") and marker.get("dc")):
+            continue
+        if (marker.get("shape") or "").strip() not in ("sphere", "self_sphere"):
+            continue
+        if char_id and int(marker.get("caster_char_id") or 0) == int(char_id):
+            continue  # caster isn't hit by their own emanation
+        key = (mover_id, marker.get("id"))
+        if key in triggered:
+            continue
+        cx, cy = _radius_marker_center(db, campaign_id, marker)
+        if cx is None:
+            continue
+        radius_ft = float(marker.get("size_ft") or 0)
+        if radius_ft <= 0:
+            continue
+        if _distance_ft_between_points(
+                grid_px, grid_type, cx, cy, float(tok.x), float(tok.y)) > radius_ft:
+            continue
+        triggered.add(key)
+        try:
+            await _resolve_aoe_enter_save(
+                db, campaign_id, marker, active_combatant,
+                campaign=campaign, prompt_user=prompt_user)
+        except Exception:
+            logging.exception("AoE start-of-turn resolve failed")
+
+
 # Shape names from app/data/local/dnd5e/spells/*.json that trigger
 # the AoE placement picker on the client. Mirrors the client-side
 # ``_AOE_SHAPES`` Set in sheet_dnd5e.html.
@@ -16138,6 +16422,20 @@ async def move_token(
                     "source": "antilife-shell",
                 },
             })
+
+    # v2.567.0 — persistent-AoE enter-trigger (Phase 1). If this move
+    # carried the creature INTO a radius-shaped damaging concentration
+    # AoE (Spirit Guardians, Spike Growth, Sleet Storm, …), fire its
+    # save+damage. Best-effort; never breaks the move. `override_barrier`
+    # (the GM move-escape) also skips it.
+    if distance_ft > 0 and not bool(body.get("override_barrier")):
+        try:
+            await _trigger_persistent_aoe_on_move(
+                db, campaign_id, token, from_x, from_y, x, y,
+                campaign=campaign, prompt_user=user,
+            )
+        except Exception:
+            logging.exception("AoE enter-trigger hook failed")
 
     # v2.158.51 — Relentless Avenger: consume the single-use buff after
     # the move and announce the OA-free movement. Removing the buff
@@ -113018,6 +113316,18 @@ async def update_battle(
         await _tick_auras(
             db, campaign_id, state, _active,
             campaign=campaign, prompt_user=user,
+        )
+
+        # v2.567.0 — reset the persistent-AoE enter-trigger dedupe each
+        # turn so "enters the area for the FIRST TIME on a turn" re-arms
+        # (a creature that left + re-enters next turn triggers again), then
+        # fire the START-OF-TURN half: if the new active combatant begins
+        # its turn inside a radius-shaped damaging AoE, it takes the save +
+        # damage (marking the shared dedupe so a move-out-and-back this turn
+        # doesn't double-dip).
+        _aoe_enter_triggered.pop(campaign_id, None)
+        await _tick_persistent_aoe_start_of_turn(
+            db, campaign_id, _active, campaign=campaign, prompt_user=user,
         )
 
         # v2.97.62 — auto-fire repeated end-of-turn saves for the
