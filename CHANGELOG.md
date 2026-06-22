@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.553.2] - 2026-06-21 — "The Sealed Diary"
+
+**Schema version:** 71
+
+**Commit summary:** Adds the **Notes & Handouts** design plan (`docs/plans/notes-and-handouts.md`) + surfaces it through the wiki. Design-only — no app behavior change.
+
+**Description:** A new design plan for a session notes-and-handouts system with three audiences: GM prep notes (GM/co-GM only), GM-authored handouts (revealable to all or specific players via the existing `recipient_filter` WS substrate), and per-player notes marked public or private. Private player notes are **end-to-end encrypted in the core** (per the design decision): the body and title are encrypted in the browser with a Web Crypto PBKDF2 + AES-GCM key derived from a passphrase that never reaches the server, so the server stores only ciphertext and there is no server-side decryption path — cryptographically GM-proof and operator-proof (lost passphrase = unrecoverable, by design). The plan is grounded against the verified substrate: `Campaign.gm_user_id` / `CampaignMembership.is_gm` for roles, the `_apply_inline_migrations` `Model.__table__.create(checkfirst=True)` table pattern, and the existing `hub.broadcast(..., recipient_filter=...)` per-user WS delivery (already used to keep `gm_only` rolls off non-GM sockets) for "deliver a private note to one user, not the GM." Three new tables proposed (`campaign_notes`, `handouts`, `note_encryption_keys`); five implementation phases with the GM-cannot-read-a-private-note tests as the security centerpiece.
+
+**Implementation:**
+
+- `docs/plans/notes-and-handouts.md` (new): the design plan.
+- Wiki surfacing (per the doc-discovery rule): `_DOC_ALLOWLIST` entry `plan-notes-and-handouts` in `app/routes/wiki_routes.py`; a "Design plans" row in `app/templates/wiki.html`; a row in `docs/wiki/README.md`. (`docs/plans/` is COPY'd whole in the Dockerfile, so no per-file COPY is needed.)
+
+**Harness changes:**
+
+- `tests/harness/test_wiki.py`: +1 — `test_wiki_doc_serves_notes_and_handouts_plan` (slug returns 200 + the H1 substring + the wiki nav). Added the slug to `test_wiki_home_renders`'s landing-page assertion list.
+
+Total harness count → 3995 (+1).
+
+PATCH — design-doc + wiki surfacing. No code or schema change.
+
+### Added
+- `docs/plans/notes-and-handouts.md` — design plan for GM prep notes, revealable handouts, and E2E-encrypted private player notes; surfaced at `/wiki/doc/plan-notes-and-handouts`.
+
 ## [2.553.1] - 2026-06-21 — "The Surveyor's Ledger"
 
 **Schema version:** 71

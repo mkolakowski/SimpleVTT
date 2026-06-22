@@ -112,6 +112,7 @@ _DOC_ALLOWLIST: dict[str, Path] = {
     "plan-race-features": Path("docs") / "plans" / "race-features.md",
     "plan-encounters": Path("docs") / "encounters-plan.md",
     "plan-multi-system-refactor": Path("docs") / "multi-system-refactor.md",
+    "plan-notes-and-handouts": Path("docs") / "plans" / "notes-and-handouts.md",
 }
 
 
