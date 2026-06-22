@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.565.4] - 2026-06-22 — "The Hook That Was Already Set"
+
+**Schema version:** 75
+
+**Commit summary:** SRD audit correction — the "PC save-or-suck install hook" the audit listed as a filed gap has been **built and mature since v2.37.0**. Doc-only.
+
+**Description:** Planning the PC-save roll-response hook turned up that it isn't unbuilt — it's one of the more mature subsystems in the codebase. `/cast_spell` (and NPC-cast saves) prompt a PC-targeted save via a `RollRequest`, and `/roll_request/{id}/respond` (the v2.37.0 Phase T.3d resolver, in `_save_request_context`) auto-installs the matching condition on a failed save, applies save-for-half for damage spells (v2.47.0 T.5d/T.5e AoE orchestration), and layers immunity gates (Aura of Devotion / Mindless Rage / PFE&G / Heroism) + legendary-resistance deferral. It's harness-tested (`test_npc_archmage_hold_person`, `test_npc_cast_npc_target_install`, `test_cast_confusion_npc`, `test_menacing_attack`, …) and covers PC- and NPC-cast sources. The "needs the v2.32.0 PC-save roll-response hook" line had been carried forward verbatim across audit refreshes since v2.404.10/v2.434.0 without re-checking — a verify-substrate drift (the third such find this session, after the conjure family and Mirror Image). Corrected the **current** (v2.553.0) audit section to mark PC save-or-suck as mechanically automated (not GM-narrated / not a gap); the frozen historical sections are left as-is (the hook was genuinely unbuilt at their dates). No code change — this records reality.
+
+**Implementation:**
+
+- `TODO.md`: a verify-substrate correction note in the SRD 5e Audit (v2.553.0 refresh) section; the Spells row + Status #2 reclassified from "GM-narrated / filed" to "mechanically automated since v2.37.0 (Phase T.3d)".
+
+This is a doc-only commit (no endpoint or schema change), so it ships no new harness test (the hook itself is already covered by the tests cited above). `TODO.md` is already surfaced through `/wiki`.
+
+### Changed
+- `TODO.md`: corrected the stale "PC save-or-suck install hook" gap — it's been mechanically automated since v2.37.0 (Phase T.3d), with save-for-half, immunity gates, and NPC-source coverage, all harness-tested.
+
 ## [2.565.3] - 2026-06-22 — "The Authority at the Table"
 
 **Schema version:** 75
