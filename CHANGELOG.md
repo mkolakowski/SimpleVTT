@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.565.5] - 2026-06-22 — "The Finer Print"
+
+**Schema version:** 75
+
+**Commit summary:** SRD audit verify-pass — several "GM-narrated" zone-geometry items are actually already mechanical; corrected the audit. Doc-only.
+
+**Description:** Continuing the verify-substrate sweep over the audit's GM-narrated remainder, three more pieces turn out to be mechanically enforced (so "zone geometry = GM-narrated" was too coarse): **Globe of Invulnerability's spell-block** is wired into `/cast_spell` (`_target_globe_blocks_spell`, geometry-aware via `_distance_ft_between_chars` + a 10-ft radius / spell-level gate); **Antilife Shell's movement-barrier** is wired into the token-move path (`_move_crosses_antilife_shell` / `_antilife_shell_emitter_forces_creature_through`); and **emanation start-of-turn damage** runs through the `_tick_auras` engine (Spirit Guardians / Holy Aura / aura family). What's genuinely still GM-narrated (confirmed no substrate): the enter-the-area-mid-move damage re-trigger (the filed `_concentration_aoes` follow-up), Forbiddance's 5d10 ward damage + 40k-sq-ft geometry, the remote scrying views (Clairvoyance / Arcane Eye / Project Image), and the object triggers (Magic Mouth / Illusory Script). Recorded the per-item findings in the audit (a verify-pass note + a refined Status #1); all of it remains counted done under the 2026-06-22 rubric. No code change.
+
+**Implementation:**
+
+- `TODO.md`: a "Verify pass 2026-06-22" note in the SRD 5e Audit (v2.553.0 refresh) section + refined Status #1 splitting the mechanical (Globe block / Antilife barrier / `_tick_auras`) from the genuinely-GM-narrated (enter-trigger / Forbiddance ward / scrying views / object triggers).
+
+This is a doc-only commit (no endpoint or schema change), so it ships no new harness test. `TODO.md` is already surfaced through `/wiki`.
+
+### Changed
+- `TODO.md`: verify-pass correction — Globe spell-block, Antilife movement-barrier, and emanation start-of-turn damage are mechanically enforced (not GM-narrated); the remaining GM-narrated slice is narrowed to enter-mid-move re-trigger + Forbiddance ward + scrying views + object triggers.
+
 ## [2.565.4] - 2026-06-22 — "The Hook That Was Already Set"
 
 **Schema version:** 75
