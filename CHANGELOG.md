@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.572.3] - 2026-06-22 — "The Honest Ledger"
+
+**Schema version:** 75
+
+**Commit summary:** Audit quick-win — sync drifted wiki/plan status cells: 7 plans that shipped (or shipped further) but whose wiki rows still said "proposed/unstarted/partial", plus a malformed version range and two self-stale plan headlines. Doc-only.
+
+**Description:** From the code/docs audit. The plan files were updated as work shipped, but the `wiki.html` "Design plans" table + the `docs/wiki/README.md` mirror drifted (the two wiki tables agreed with each other but disagreed with the source-of-truth plan files). Synced both, verified against git:
+
+- **Security spine** (demo magic-link ✅ Phases 1+1B v2.425.0/v2.430.0; fail2ban/CrowdSec ✅ Phases 1+2 v2.426.0/v2.429.0, Phase 4 open; Cloudflare edge-banning ✅ Phase 1 v2.427.0) — were all "⚪ proposed · Phase 1 unstarted" in both wiki tables AND the "Security spine (proposed)" highlight section; updated all three places.
+- **cast-and-broadcast-tail** — wiki said "proposed · Phase 1 unstarted"; actually Phase 1 closed (v2.441.0) + Phase 2 in progress through #67 (Forbiddance, v2.553.0). The plan's *own* status headline was also stale ("#25 v2.490.0") while its body already documented #67 — fixed the headline.
+- **spell-validation-suite** — wiki said "Phase 1 smoke + 2A damage"; actually all 5 phases shipped (v2.183.23, per its own "Last updated" line). Fixed the wiki + the plan's stale status headline.
+- **str-override** ✅ Phases 0–4 complete (v2.211.0–v2.217.0) and **encounter-sim-test-suite** 🟠 Phases 1–3 shipped — both wiki rows understated (said "Phase 1 shipped" / "Phase 1 PoC pending").
+- **conjure-family** — fixed a malformed descending version range (`v2.99.443–v2.420.0` → `v2.414.0–v2.420.0`) in both wiki tables.
+
+No orphaned/unsurfaced docs were found; the allowlist is complete.
+
+**Files:** `app/templates/wiki.html` (highlight section + 8 table cells), `docs/wiki/README.md` (8 rows), `docs/plans/cast-and-broadcast-tail.md` + `docs/plans/spell-validation-suite.md` (stale status headlines).
+
+PATCH — documentation status sync. No app, schema, API, or test change.
+
+### Changed
+- Synced 7 drifted plan status cells across `wiki.html` + `docs/wiki/README.md` to match the plan files + git reality (shipped work was still marked proposed/unstarted/partial), fixed a malformed conjure-family version range, and corrected two self-stale plan status headlines (cast-and-broadcast-tail, spell-validation-suite).
+
 ## [2.572.2] - 2026-06-22 — "The Corrected Margins"
 
 **Schema version:** 75
