@@ -376,6 +376,52 @@ async def test_moonbeam_placed_sphere_enter(gm_client, roster):
         await _clear_battle(gm_client)
 
 
+async def test_forced_move_into_aoe_triggers(gm_client, roster):
+    """Phase 3: forced movement (push/pull) that carries a creature into a
+    radius damaging AoE triggers it too — RAW, forced movement counts as
+    entering. An NPC pushed into Spirit Guardians takes save-for-half
+    damage via `/force_move` (not the voluntary `/token/{id}/move` path)."""
+    tavik = roster.get("Brother Tavik Stonebrow")
+    standin = roster.get("Krieger Stonefist")
+    if not (tavik and standin):
+        pytest.skip("demo roster missing Tavik/Krieger")
+    tmpl = await _bandit_tmpl(gm_client)
+    await _place(gm_client, tavik["id"], 350.0, 350.0)
+    await _place(gm_client, standin["id"], 100.0, 350.0)  # ~18 ft LEFT, outside
+    victim_tok_id = (await _tokens_by_char(gm_client))[standin["id"]]["id"]
+    victim_cid = "npc_sg_pushed"
+    await _put_battle(gm_client, [
+        {"id": f"tok_sgf_{tavik['id']}", "char_id": tavik["id"],
+         "name": tavik["name"], "initiative": 20,
+         "hp_current": 40, "hp_max": 40, "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+        {"id": victim_cid, "char_id": None,
+         "token_template_id": tmpl["id"], "source_token_id": victim_tok_id,
+         "name": "Bandit Shoved", "initiative": 10,
+         "hp_current": 50, "hp_max": 50, "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+    ])
+    await _cast_and_place_sg(gm_client, tavik, 350.0, 350.0)
+    try:
+        before = _combatant(await _get_battle(gm_client), victim_cid)["hp_current"]
+        # Push +x 10 ft (no source) → (100,350) → (240,350) = ~8 ft from
+        # Tavik, inside the 15-ft emanation.
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/force_move",
+            json={"target_combatant_id": victim_cid, "distance_ft": 10},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["moved"] is True, r.json()
+        after = _combatant(await _get_battle(gm_client), victim_cid)["hp_current"]
+        assert after < before, (
+            f"being pushed into Spirit Guardians should deal damage; "
+            f"hp {before} → {after}"
+        )
+    finally:
+        await _end_conc(gm_client, tavik["id"])
+        await _clear_battle(gm_client)
+
+
 async def test_pc_entering_prompts_save(gm_client, gm_ws, roster):
     """A PC moving into Spirit Guardians gets a roll_request for their
     WIS save (the respond endpoint applies save-for-half)."""

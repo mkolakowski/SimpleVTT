@@ -5599,6 +5599,20 @@ async def _force_move(
             "forced": True,
         },
     })
+    # v2.568.0 — Phase 3 of docs/plans/aoe-enter-trigger.md: forced
+    # movement (Thorn Whip / Thunderwave / Pushing Attack / a pull) into a
+    # radius damaging AoE triggers it too — RAW, forced movement counts as
+    # "entering the area for the first time on a turn." Reuses the
+    # voluntary-move enter-trigger; campaign / prompt_user default to None
+    # (resolved inside `_resolve_aoe_enter_save`). Best-effort — never
+    # raises into the forced move.
+    try:
+        await _trigger_persistent_aoe_on_move(
+            db, campaign_id, token, from_x, from_y, to_x, to_y,
+        )
+    except Exception:
+        logging.exception("AoE enter-trigger (forced move) failed")
+
     result.update(moved=True, token_id=token.id, from_x=from_x,
                   from_y=from_y, to_x=to_x, to_y=to_y, distance_ft=actual_ft)
     return result

@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.568.0] - 2026-06-22 — "The Shoving Spirits"
+
+**Schema version:** 75
+
+**Commit summary:** Phase 3 of `docs/plans/aoe-enter-trigger.md` — forced movement (push / pull / Thorn Whip / Thunderwave) into a radius damaging AoE now triggers it, not just voluntary moves.
+
+**Description:** RAW, forced movement counts as *"entering the area"* for a persistent damaging AoE. The voluntary-move enter-trigger (v2.567.0) hooked `move_token` (`/token/{id}/move`), but forced movement goes through a **separate** server primitive — `_force_move` mutates the target's `Token.x/y` directly (the path Pushing Attack / Thorn Whip / Thunderwave / a pull call after their save). This wires the same enter-trigger into `_force_move`: after the forced reposition applies, `_trigger_persistent_aoe_on_move` fires the AoE's save + damage if the push/pull carried the creature from outside a radius damaging AoE to inside it. Reuses everything from Phase 1 — the shared per-turn dedupe (a creature shoved in after already taking the AoE this turn isn't double-dipped), caster immunity, the `save_ability` guard, and PC `roll_request` / NPC auto-roll save-for-half. `campaign` / `prompt_user` default to None in the `_force_move` call site and are resolved inside `_resolve_aoe_enter_save`.
+
+This completes the plan's trigger surface for radius AoEs: a creature now takes a persistent damaging AoE's save + damage whether it **walks in**, **is pushed/pulled in**, or **starts its turn there**. (Cube/cone/line — the original Phase 2 — stays N/A; no SRD spell uses those shapes for a damaging AoE.)
+
+**Implementation (`app/routes/tabletop_routes.py`):**
+
+- `_force_move`: after the position mutation + `token_move` broadcast, call `_trigger_persistent_aoe_on_move(db, campaign_id, token, from_x, from_y, to_x, to_y)` (best-effort).
+
+**Harness changes:**
+
+- `tests/harness/test_aoe_enter_trigger.py`: +1 — `test_forced_move_into_aoe_triggers` (an NPC pushed via `/force_move` into Spirit Guardians takes save-for-half damage — the forced path, not the voluntary `/token/{id}/move`).
+
+Total harness count → 4067 in `tests/harness/` + 99 in `tests/harness_ui/`.
+
+MINOR — new backward-compatible behavior (forced movement now triggers persistent AoEs). No schema or API-shape change.
+
+### Added
+- Forced movement (push / pull / Thorn Whip / Thunderwave) into a radius damaging AoE (Spirit Guardians, Moonbeam, …) now triggers its save + damage, completing the enter / forced-entry / start-of-turn trigger surface (`docs/plans/aoe-enter-trigger.md` Phase 3).
+
 ## [2.567.1] - 2026-06-22 — "The Honest Yardstick"
 
 **Schema version:** 75

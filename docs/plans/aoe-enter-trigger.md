@@ -1,6 +1,6 @@
 # Persistent-AoE enter-trigger
 
-**Status:** 🟠 partial · **Phase 1 shipped v2.567.0** (radius shapes: sphere / self_sphere — Spirit Guardians et al.). Ships **both** RAW halves — enter-mid-move (`_trigger_persistent_aoe_on_move` in `move_token`) **and** start-of-turn (`_tick_persistent_aoe_start_of_turn` in `update_battle`'s turn-advance) — sharing one per-turn dedupe, with caster filter + save-for-half. Phases 2 (cube/cone/line) and 3 (forced-movement entry) unstarted.
+**Status:** ✅ complete for radius shapes (Phases 1 + 3 shipped v2.567.0–v2.568.0; Phase 2 N/A). A creature takes a persistent damaging radius AoE's save + damage whether it **walks in** (`_trigger_persistent_aoe_on_move` in `move_token`), **is pushed/pulled in** (same, in `_force_move`), or **starts its turn there** (`_tick_persistent_aoe_start_of_turn` in `update_battle`'s turn-advance) — sharing one per-turn dedupe, with caster + save-ability filters + save-for-half. Phase 2 (cube/cone/line) is N/A — no SRD spell uses those shapes for a damaging AoE.
 
 > **Substrate note (v2.567.0).** An early read of this plan claimed "start-of-turn is already automated via `_tick_auras`." That was wrong: `_tick_auras` only ticks aura *buffs* (Holy Aura etc.), not `_concentration_aoes` markers. Spirit Guardians *does* create a `self_sphere` marker at cast (via `/place_aoe`), but neither the start-of-turn nor the enter damage was resolved off it — only the placement sweep. Phase 1 wired **both**. Phase 1 simplification: a plain save (the target's own modifier); ally/cast-time save-advantage layers (Aura of Protection, Danger Sense, …) are a documented follow-up — they live duplicated at the single-target + cast-time AoE save sites and want a shared extractor rather than a third copy.
 
@@ -118,10 +118,13 @@ triggers once; next turn it can trigger again. Markers get a stable
    self_sphere; every other damaging AoE is a sphere or a wall). Building
    `_point_in_cube` / `_point_in_cone` / `_point_in_line` geometry would be
    dead code. Reopen only if homebrew/expansion content adds such a spell.
-3. **Phase 3 (optional) — forced-movement entry.** Wire the same check
-   into `_force_move` so a push/pull/Thorn-Whip that drags a creature
-   into a zone also triggers it (RAW: forced movement counts as entering).
-   Real for Spirit Guardians + the placed spheres today.
+3. **Phase 3 — forced-movement entry.** ✅ **Shipped v2.568.0.** The same
+   enter-trigger is wired into `_force_move`, so a push / pull / Thorn Whip /
+   Thunderwave that drags a creature into a radius damaging AoE triggers it
+   (RAW: forced movement counts as entering). Reuses the shared per-turn
+   dedupe + caster/save-ability guards. With this, the radius-AoE trigger
+   surface is complete: a creature takes the save + damage whether it walks
+   in, is forced in, or starts its turn there.
 
 **Filed follow-up (content data):** the SRD `concentration: False` flag on
 Moonbeam / Spike Growth / Sleet Storm / Insect Plague / Cloudkill / Call
