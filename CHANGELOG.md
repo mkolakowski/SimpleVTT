@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.560.0] - 2026-06-21 — "The Locked Page"
+
+**Schema version:** 74
+
+**Commit summary:** Notes & Handouts **Phase 5c + 5d** — the Notes drawer gains a visibility selector (player public notes) and the full end-to-end-encrypted private-note flow (set passphrase → unlock → encrypt-on-save → decrypt-on-load). The marquee feature is now usable end-to-end in the browser.
+
+**Description:** `app/static/notes.js` grows from the GM-only prep panel into the full composer: a visibility `<select>` (GM: Prep / Public / Private; player: Public / Private). **Private notes wire in `notes_crypto.js`** (now loaded on the tabletop): saving a private note prompts for a passphrase the first time (set-up flow, with an explicit "no recovery" warning), derives the key, encrypts the title + body in the browser, and POSTs only ciphertext; the server stores no plaintext. A private note loads as "🔒 Locked private note" with an **Unlock** button until the user enters their passphrase (verified against the `key_check`); then it decrypts in place. Decryption happens client-side into an in-memory cache; the key never persists or leaves the page. Live `note_updated` events decrypt + re-render the author's own private notes (scoped server-side so they only reach the author). Public/Prep notes stay plaintext + render as before. Folder + pin are plaintext metadata on every note.
+
+**Implementation:**
+
+- `app/static/notes.js`: visibility selector; `ensureUnlocked` (set-up vs unlock); `encryptField`/`decryptField` on save/load; locked-card + Unlock UI; private-note `note_updated` decrypt path.
+- `app/templates/tabletop.html`: load `notes_crypto.js` before `notes.js`.
+- `docs/plans/notes-and-handouts.md` + wiki rows: Phase 5 status (5a/5c/5d shipped; 5b handouts panel remains).
+
+**Harness changes:**
+
+- `tests/harness_ui/test_notes_drawer.py`: +1 Playwright — a player writes a private note (sets a passphrase), sees it decrypted; after a reload it's locked; unlocking with the passphrase decrypts it again. Zero console errors.
+
+Total harness count → 4043 in `tests/harness/` + 94 in `tests/harness_ui/`.
+
+MINOR — new tabletop UI (player composer + private-note crypto flow) over the existing notes API. No schema change.
+
+### Added
+- Notes drawer: a visibility selector (public notes for players) + the end-to-end-encrypted private-note set-passphrase / unlock / encrypt / decrypt flow using `notes_crypto.js`. Phase 5c + 5d of the Notes & Handouts plan.
+
 ## [2.559.0] - 2026-06-21 — "The Open Notebook"
 
 **Schema version:** 74

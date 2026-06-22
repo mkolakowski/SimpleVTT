@@ -65,3 +65,52 @@ def test_gm_prep_note_create_edit_delete(gm_page: Page):
     expect(gm_page.locator("#notes-body .note-card")).to_have_count(0, timeout=3000)
 
     assert not errors, f"JS console errors in the Notes drawer: {errors}"
+
+
+def test_alice_private_note_encrypt_unlock(alice_page: Page):
+    """Phase 5d: a player writes a PRIVATE note (sets a passphrase), sees
+    it decrypted; after a reload it's locked; unlocking with the
+    passphrase decrypts it again — all in a real browser."""
+    errors = []
+    alice_page.on("pageerror", lambda exc: errors.append(str(exc)))
+    # Every prompt (set passphrase, confirm, unlock) accepts this value;
+    # alerts/confirms ignore it.
+    alice_page.on("dialog", lambda d: d.accept("test-pass-123"))
+
+    resp = alice_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}")
+    assert resp is not None and resp.ok
+    # Clean slate: reset alice's encryption (wipes her private notes), then
+    # reload so notes.js re-inits with no configured passphrase.
+    alice_page.evaluate("() => fetch('/api/notes/encryption', {method: 'DELETE'})")
+    alice_page.wait_for_timeout(300)
+    alice_page.reload()
+
+    tab = alice_page.locator('.drawer-tab-btn[data-target="notes-drawer"]')
+    expect(tab).to_be_visible(timeout=5000)
+    tab.click()
+    body = alice_page.locator("#notes-body")
+
+    # Create a PRIVATE note → triggers the set-passphrase prompts.
+    body.locator("button.note-new").click()
+    body.locator(".note-vis-input").select_option("private")
+    body.locator(".note-title-input").fill("Alice secret XYZZY")
+    body.locator(".note-body-input").fill("hidden body PLUGH")
+    body.locator("button.note-save").click()
+    # Unlocked in this session → the card shows the decrypted title.
+    expect(alice_page.locator("#notes-body .note-card")).to_contain_text(
+        "Alice secret XYZZY", timeout=5000)
+
+    # Reload → fresh page has no key → the private note is locked.
+    alice_page.reload()
+    alice_page.locator('.drawer-tab-btn[data-target="notes-drawer"]').click()
+    expect(alice_page.locator("#notes-body")).to_contain_text(
+        "Locked private note", timeout=5000)
+
+    # Unlock with the passphrase → decrypts in place.
+    alice_page.locator("#notes-body button.note-unlock").first.click()
+    expect(alice_page.locator("#notes-body .note-card")).to_contain_text(
+        "Alice secret XYZZY", timeout=5000)
+
+    # Cleanup: reset encryption (wipes the private note).
+    alice_page.evaluate("() => fetch('/api/notes/encryption', {method: 'DELETE'})")
+    assert not errors, f"JS console errors: {errors}"

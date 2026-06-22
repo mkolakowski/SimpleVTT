@@ -1,6 +1,6 @@
 # Notes & Handouts
 
-**Status:** 🟠 Phases 1–4 shipped (v2.554.0–v2.558.0) · Phase 5 (Notes drawer UI) in progress — 5a (GM prep notes) shipped v2.559.0; handouts / public / private-unlock panels pending (plan authored v2.553.2).
+**Status:** 🟠 Phases 1–4 shipped (v2.554.0–v2.558.0) · Phase 5 (Notes drawer UI) nearly complete — 5a GM prep + 5c public + 5d private-unlock shipped (v2.559.0–v2.560.0); only 5b (handouts panel) remains (plan authored v2.553.2).
 
 A session-prep + reference system with three audiences and a hard
 privacy guarantee:
@@ -302,8 +302,17 @@ page for out-of-session work.
      from `/notes`: GM composer (title/body/folder/pin) + per-card
      edit/delete over `gm_only` notes, with `note_updated` WS live sync.
      Playwright `tests/harness_ui/test_notes_drawer.py`.
-   - **5b — handouts panel ⚪**, **5c — player public notes ⚪**,
-     **5d — private-note passphrase set/unlock (uses notes_crypto.js) ⚪**.
+   - **5c — player public notes. ✅ Shipped v2.560.0.** A visibility
+     `<select>` in the composer (player: Public / Private; GM also Prep);
+     public notes render + edit like prep notes.
+   - **5d — private-note passphrase set/unlock. ✅ Shipped v2.560.0.**
+     `notes.js` wires in `notes_crypto.js`: set-up flow (passphrase + "no
+     recovery" warning) → `PUT /encryption`; save encrypts title+body in
+     the browser, POSTs only ciphertext; a locked private note shows
+     "🔒 Locked" + Unlock (verify against `key_check`) → decrypt in place.
+     Playwright `test_notes_drawer.py::test_alice_private_note_encrypt_unlock`.
+   - **5b — handouts panel ⚪ pending.** GM handout authoring + image +
+     reveal-to-targeted-players UI + the player `handout_revealed` toast.
 
    (Original Phase-5 polish notes:) Folders/pinning/search (search covers plaintext notes
    only — private notes are unsearchable by construction), markdown
