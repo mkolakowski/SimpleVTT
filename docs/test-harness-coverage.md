@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 4043 in `tests/harness/` + 92 in `tests/harness_ui/` (as of v2.558.0, 2026-06-21). The two newest UI tests are `tests/harness_ui/test_notes_crypto.py` — the browser PBKDF2+AES-GCM round-trip + the full encrypt→store→fetch→decrypt path (server holds no plaintext; no plaintext on the wire) for Phase 4b of the Notes & Handouts plan.
+**Total tests:** 4043 in `tests/harness/` + 93 in `tests/harness_ui/` (as of v2.559.0, 2026-06-21). Recent UI tests: `tests/harness_ui/test_notes_crypto.py` (Phase 4b — browser PBKDF2+AES-GCM round-trip + full encrypt→store→fetch→decrypt, no plaintext at rest or on the wire) and `tests/harness_ui/test_notes_drawer.py` (Phase 5a — the GM creates/edits/deletes a prep note in the Notes drawer with zero console errors).
 
 ### `test_private_notes.py`
 v2.557.0 — Notes & Handouts **Phase 4 (server side)** — E2E-encrypted private notes, [notes-and-handouts.md](../plans/notes-and-handouts.md). `note_encryption_keys` table (schema v74) + encryption-config endpoints + private-note ciphertext storage. Server tests use placeholder ciphertext (the server treats `enc_*` as opaque; real AES-GCM is the Playwright test). GM = `gm_client`; alice/bob = non-GM members.

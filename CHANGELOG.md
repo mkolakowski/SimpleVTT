@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.559.0] - 2026-06-21 — "The Open Notebook"
+
+**Schema version:** 74
+
+**Commit summary:** Notes & Handouts **Phase 5a** — the Notes drawer lands in the tabletop UI with a working GM prep-notes panel. First front-end slice; the backend (Phases 1–4) is wired to it.
+
+**Description:** Adds a "📝 Notes" tab to the tabletop sidebar (auto-wired by the existing drawer system via `data-target`) + a new `app/static/notes.js` that renders the `#notes-drawer` panel from `GET /api/campaign/{id}/notes`. The GM gets a composer ("+ New prep note" → title / body / folder / pin) and per-card Edit / Delete over `gm_only` prep notes; cards show pinned-first with the folder chip + body (escaped, whitespace-preserved). It listens for the `vtt:ws-message` document event so a `note_updated` broadcast live-upserts/removes a card (multi-tab + co-GM sync). The module is the shared rendering shell the next slices grow into — handouts + reveal (5b), player public notes (5c), and the encrypted private-note unlock flow (5d, using the v2.558.0 `notes_crypto.js`). No new endpoint (uses the Phase 1–3 `/notes` API); no schema change. Touch targets follow the dense-panel exception (32px on the compact card Edit/✕ buttons, commented).
+
+**Implementation:**
+
+- `app/templates/tabletop.html`: the Notes tab button, the `#notes-drawer` panel, and the `notes.js` script include.
+- `app/static/notes.js` (new): the GM prep-notes drawer (render + composer + edit/delete + `note_updated` WS sync).
+- `docs/plans/notes-and-handouts.md` + wiki rows: Phase 5 marked in progress (5a shipped).
+
+**Harness changes:**
+
+- `tests/harness_ui/test_notes_drawer.py` (new): +1 Playwright test — the GM opens the Notes tab, creates a prep note, sees the card, edits it, deletes it, with zero JS console errors.
+
+Total harness count → 4043 in `tests/harness/` + 93 in `tests/harness_ui/`.
+
+MINOR — new tabletop UI surface (Notes drawer) over the existing notes API. No schema change.
+
+### Added
+- The "📝 Notes" tabletop drawer with a GM prep-notes panel (create / edit / delete / pin, live WS sync). Phase 5a of the Notes & Handouts plan.
+
 ## [2.558.0] - 2026-06-21 — "The Key in the Browser"
 
 **Schema version:** 74

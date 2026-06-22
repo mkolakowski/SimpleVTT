@@ -1,6 +1,6 @@
 # Notes & Handouts
 
-**Status:** 🟠 Phases 1–4 shipped (v2.554.0–v2.558.0) · Phase 5 (Notes drawer UI) pending (plan authored v2.553.2).
+**Status:** 🟠 Phases 1–4 shipped (v2.554.0–v2.558.0) · Phase 5 (Notes drawer UI) in progress — 5a (GM prep notes) shipped v2.559.0; handouts / public / private-unlock panels pending (plan authored v2.553.2).
 
 A session-prep + reference system with three audiences and a hard
 privacy guarantee:
@@ -296,7 +296,16 @@ page for out-of-session work.
      POST private note → GET → decrypt) confirms the server stored no
      plaintext and **the POST body carried no plaintext on the wire**.
      Passphrase set/unlock UX is wired into the Phase 5 drawer.
-5. **Polish.** Folders/pinning/search (search covers plaintext notes
+5. **The Notes drawer UI.** 🟠 In progress.
+   - **5a — GM prep notes. ✅ Shipped v2.559.0.** A "📝 Notes" tabletop
+     sidebar tab + `app/static/notes.js` rendering the `#notes-drawer`
+     from `/notes`: GM composer (title/body/folder/pin) + per-card
+     edit/delete over `gm_only` notes, with `note_updated` WS live sync.
+     Playwright `tests/harness_ui/test_notes_drawer.py`.
+   - **5b — handouts panel ⚪**, **5c — player public notes ⚪**,
+     **5d — private-note passphrase set/unlock (uses notes_crypto.js) ⚪**.
+
+   (Original Phase-5 polish notes:) Folders/pinning/search (search covers plaintext notes
    only — private notes are unsearchable by construction), markdown
    niceties, the campaign-management prep surface, mobile layout.
 

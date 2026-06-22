@@ -2213,6 +2213,9 @@
            its own tab so the Battle drawer is purely "init tracker +
            GM combat controls" and Characters get full vertical room. #}
         <button class="drawer-tab-btn" data-target="characters-drawer">Characters</button>
+        {# v2.559.0 — Notes & Handouts drawer (docs/plans/notes-and-handouts.md
+           Phase 5). The panel is populated client-side by notes.js. #}
+        <button class="drawer-tab-btn" data-target="notes-drawer">📝 Notes</button>
         {# v2.99.77 — Settings tab removed; the player sound panel
            folds into the Tools drawer so there's one tab for every
            non-game user surface. The Tools drawer is visible to GM
@@ -2781,6 +2784,16 @@
         {% endif %}
         </div><!-- /#player-char-list -->
         </details><!-- /#player-chars-panel -->
+    </div>
+</div>
+
+{# v2.559.0 — Notes & Handouts drawer (docs/plans/notes-and-handouts.md
+   Phase 5). Populated client-side by notes.js: GM prep notes (Phase 5a),
+   handouts + reveal (5b), player public notes (5c), and the
+   end-to-end-encrypted private-note unlock flow (5d). #}
+<div id="notes-drawer" class="drawer-panel">
+    <div class="drawer-body" id="notes-body">
+        <p class="notes-empty" style="color:var(--fg-mute);font-size:12px;">Loading notes…</p>
     </div>
 </div>
 
@@ -4365,6 +4378,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
 <script src="/static/beast_picker.js?v={{ APP_VERSION }}"></script>
 <script src="/static/tabletop.js?v={{ APP_VERSION }}"></script>
 <script src="/static/audio.js?v={{ APP_VERSION }}"></script>
+<script src="/static/notes.js?v={{ APP_VERSION }}"></script>
 <script>
 /* ── Drawer system ── */
 (function () {
