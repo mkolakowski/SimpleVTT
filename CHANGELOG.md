@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.565.3] - 2026-06-22 — "The Authority at the Table"
+
+**Schema version:** 75
+
+**Commit summary:** SRD audit re-scored — GM-narrated resolution now counts as **completed**, making the SRD ruleset functionally complete (100% supported). Doc-only.
+
+**Description:** Adopts a scoring-rubric change in the SRD 5e audit: in a VTT the GM is the rules authority, so a spell/condition/feature whose resolution is adjudicated at the table is **supported**, not a gap (the cast endpoint spends the slot + broadcasts; the GM narrates the spatial/scrying/object outcome). Under this "supported (automated **or** GM-narrated)" rubric every SRD category is 100% and the ruleset is functionally complete. The previously-filed GM-narrated items are reclassified from gaps to **done**: zone-of-effect geometry (Forbiddance / Antilife Shell / Globe), remote scrying views (Clairvoyance / Arcane Eye / Project Image), object triggers (Magic Mouth / Illusory Script), the PC-save-or-suck condition install, and the permanently-narrated condition clauses (Charmed / Grappled / Deafened). Mechanically automating any of them (Maps 2.0 geometry, a remote-sensor surface, the PC-save roll-response hook) is reframed as an **optional future enhancement**, not missing SRD coverage. The mechanically-automated-only figures (Spells ~93%, Conditions ~92%, overall ~98–99%) are retained alongside the new 100%-supported numbers so both lenses are visible.
+
+**Implementation:**
+
+- `TODO.md`: the SRD 5e Audit re-verification note re-scored; per-category table (Conditions / Spells) + Overall line gain the "100% supported" reading; the "Remaining gaps" list reclassified to "Status (GM-narrated = done)"; out-of-scope + what's-left + the quick-map summary updated.
+
+This is a doc-only commit (no endpoint or schema change), so it ships no new harness test. `TODO.md` is already surfaced through `/wiki`.
+
+### Changed
+- `TODO.md`: SRD audit re-scored — GM-narrated resolution counted as completed; SRD ruleset marked functionally complete (100% supported; ~98–99% mechanically automated).
+
 ## [2.565.2] - 2026-06-22 — "The Stocktake"
 
 **Schema version:** 75
