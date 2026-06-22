@@ -320,6 +320,11 @@ page for out-of-session work.
      (cross-context: GM reveals → player sees live → GM hides → gone).
      A dedicated image-*upload* widget (vs. a pasted URL) is filed polish.
 
+   - **5e — search + folder grouping. ✅ Shipped v2.563.0.** A per-view
+     search box + collapsible folder groups in the drawer; private notes
+     are searchable only while unlocked (filter reads the decrypted
+     cache, never ciphertext).
+
    (Original Phase-5 polish notes:) Folders/pinning/search (search covers plaintext notes
    only — private notes are unsearchable by construction), markdown
    niceties, the campaign-management prep surface, mobile layout.

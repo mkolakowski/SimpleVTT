@@ -159,6 +159,62 @@ def test_note_markdown_rendering_and_link_safety(gm_page: Page):
     assert not errors, f"JS console errors: {errors}"
 
 
+def test_notes_search_and_folder_grouping(gm_page: Page):
+    """A folder groups notes under a collapsible header; the search box
+    filters cards without losing focus; collapsing a folder hides its
+    notes."""
+    errors = _open_notes(gm_page)
+    body = gm_page.locator("#notes-body")
+
+    while gm_page.locator("#notes-body .note-del").count():
+        gm_page.once("dialog", lambda d: d.accept())
+        gm_page.locator("#notes-body .note-del").first.click()
+        gm_page.wait_for_timeout(150)
+
+    # Note A in folder "Act One".
+    body.locator("button.note-new").click()
+    body.locator(".note-title-input").fill("Alpha clue")
+    body.locator(".note-body-input").fill("body a")
+    body.locator(".note-folder-input").fill("Act One")
+    body.locator("button.note-save").click()
+    expect(gm_page.locator("#notes-body .note-card")).to_have_count(1, timeout=3000)
+
+    # Note B, unfiled.
+    body.locator("button.note-new").click()
+    body.locator(".note-title-input").fill("Beta clue")
+    body.locator(".note-body-input").fill("body b")
+    body.locator("button.note-save").click()
+    expect(gm_page.locator("#notes-body .note-card")).to_have_count(2, timeout=3000)
+
+    # The folder header renders.
+    folder_head = gm_page.locator('#notes-body .folder-head:has-text("Act One")')
+    expect(folder_head).to_have_count(1)
+
+    # Filter to "Alpha" → only that card shows.
+    gm_page.locator("#notes-body .notes-search").fill("Alpha")
+    expect(gm_page.locator("#notes-body .note-card")).to_have_count(1, timeout=3000)
+    expect(gm_page.locator("#notes-body")).to_contain_text("Alpha clue")
+    expect(gm_page.locator("#notes-body")).not_to_contain_text("Beta clue")
+
+    # Clear the filter → both return.
+    gm_page.locator("#notes-body .notes-search").fill("")
+    expect(gm_page.locator("#notes-body .note-card")).to_have_count(2, timeout=3000)
+
+    # Collapse the "Act One" folder → its note hides (only Beta remains).
+    folder_head.click()
+    expect(gm_page.locator("#notes-body .note-card")).to_have_count(1, timeout=3000)
+    expect(gm_page.locator("#notes-body")).to_contain_text("Beta clue")
+    expect(gm_page.locator("#notes-body")).not_to_contain_text("Alpha clue")
+
+    # Cleanup: expand + delete both.
+    folder_head.click()
+    while gm_page.locator("#notes-body .note-card .note-del").count():
+        gm_page.once("dialog", lambda d: d.accept())
+        gm_page.locator("#notes-body .note-card .note-del").first.click()
+        gm_page.wait_for_timeout(150)
+    assert not errors, f"JS console errors: {errors}"
+
+
 def _open_handouts(page: Page):
     page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}")
     tab = page.locator('.drawer-tab-btn[data-target="notes-drawer"]')

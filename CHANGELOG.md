@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.563.0] - 2026-06-21 — "The Sorted Shelf"
+
+**Schema version:** 74
+
+**Commit summary:** Notes & Handouts polish — a search/filter box + collapsible folder groups in the Notes drawer, so a campaign with many notes/handouts stays navigable. Client-side only.
+
+**Description:** `app/static/notes.js` gains a per-view search box (filters notes/handouts by title + body + folder, case-insensitive) and groups cards under collapsible folder headers (unfiled first, then folders alphabetically, each with a count). The panel is split into static chrome (the Notes/Handouts toggle + composer + search box) and a `#notes-list` container that re-renders alone on a keystroke — so **typing in the search box never loses focus**. Private notes are searchable only while unlocked (the filter reads the decrypted cache, never the ciphertext). Folder collapse state is per-view + per-folder and lives in memory for the session.
+
+**Implementation:**
+
+- `app/static/notes.js`: `searchHtml` + `matchesNoteFilter`/`matchesHandoutFilter` + `groupedHtml` (folder grouping) + `listHtml`/`renderList` (list-only re-render); `render()` restructured into chrome + `#notes-list`; an `input` listener for `.notes-search` and a `.folder-head` collapse-toggle click branch.
+
+**Harness changes:**
+
+- `tests/harness_ui/test_notes_drawer.py`: +1 Playwright — a folder header groups a note, the search box filters cards (and clears back), and collapsing the folder hides its notes.
+
+Total harness count → 4043 in `tests/harness/` + 97 in `tests/harness_ui/`.
+
+MINOR — client-side search + folder grouping for the Notes drawer. No schema change.
+
+### Added
+- Notes drawer: a search/filter box + collapsible folder groups for notes and handouts.
+
 ## [2.562.0] - 2026-06-21 — "The Illuminated Margin"
 
 **Schema version:** 74

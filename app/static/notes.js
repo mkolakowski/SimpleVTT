@@ -28,6 +28,8 @@
   var members = (typeof MEMBERS !== "undefined" && MEMBERS) ? MEMBERS : [];
 
   var view = "notes";          // 'notes' | 'handouts'
+  var filterText = "";         // search box (applies to the active view)
+  var collapsed = {};          // "view|folder" -> true when collapsed
   var notes = [];
   var loaded = false;
   var composerOpen = false;
@@ -259,30 +261,110 @@
       btn("notes", "📝 Notes") + btn("handouts", "📜 Handouts") + '</div>';
   }
 
-  function notesSectionHtml() {
-    var html =
-      '<div style="font-size:11px;color:var(--accent);text-transform:uppercase;' +
-      'letter-spacing:0.5px;margin-bottom:8px;">Notes</div>';
-    html += composerOpen
+  function sectionExtrasHtml() {
+    // The chrome above the list: composer / new button / unlock. Kept out
+    // of #notes-list so a search keystroke (which re-renders only the
+    // list) never steals focus from the search box.
+    if (view === "handouts") {
+      if (!isGm) return "";
+      return handoutComposerOpen
+        ? handoutEditorHtml(null)
+        : '<button class="ho-new" style="margin-bottom:10px;">+ New handout</button>';
+    }
+    var html = composerOpen
       ? editorHtml(null)
       : '<button class="note-new" style="margin-bottom:10px;">+ New note</button>';
     if (hasLockedPrivate()) {
       html += '<button class="note-unlock" style="margin:0 0 10px 8px;">🔓 Unlock private notes</button>';
     }
-    if (!notes.length) {
-      html += '<p class="notes-empty" style="color:var(--fg-mute);font-size:12px;">' +
-        (isGm ? "No notes yet." : "No notes yet — create one above.") + '</p>';
-    } else {
-      notes.forEach(function (n) { html += cardHtml(n); });
-    }
     return html;
+  }
+
+  function searchHtml() {
+    var ph = view === "handouts" ? "Filter handouts…" : "Filter notes…";
+    return '<input class="notes-search" type="search" placeholder="' + ph + '" ' +
+      'value="' + esc(filterText) + '" style="width:100%;box-sizing:border-box;margin-bottom:8px;">';
+  }
+
+  function matchesNoteFilter(n) {
+    if (!filterText) return true;
+    var q = filterText.toLowerCase();
+    var hay;
+    if (n.visibility === "private") {
+      var dec = decrypted[n.id];
+      if (!dec || dec.error) return false;  // can't search locked ciphertext
+      hay = (dec.title || "") + " " + (dec.body || "") + " " + (n.folder || "");
+    } else {
+      hay = (n.title || "") + " " + (n.body || "") + " " + (n.folder || "");
+    }
+    return hay.toLowerCase().indexOf(q) >= 0;
+  }
+
+  function matchesHandoutFilter(h) {
+    if (!filterText) return true;
+    var q = filterText.toLowerCase();
+    return ((h.title || "") + " " + (h.body || "") + " " + (h.folder || ""))
+      .toLowerCase().indexOf(q) >= 0;
+  }
+
+  function groupedHtml(items, viewKey, cardFn) {
+    var groups = {}, order = [];
+    items.forEach(function (it) {
+      var f = it.folder || "";
+      if (!(f in groups)) { groups[f] = []; order.push(f); }
+      groups[f].push(it);
+    });
+    // Unfiled ("") first, then folders alphabetically.
+    order.sort(function (a, b) {
+      if (a === "") return -1; if (b === "") return 1;
+      return a.localeCompare(b);
+    });
+    var html = "";
+    order.forEach(function (f) {
+      var its = groups[f];
+      if (f) {
+        var key = viewKey + "|" + f;
+        var col = !!collapsed[key];
+        html += '<div class="folder-head" data-key="' + esc(key) + '" ' +
+          'style="cursor:pointer;font-size:11px;color:var(--fg-mute);' +
+          'margin:8px 0 4px;user-select:none;">' +
+          (col ? "▸" : "▾") + " " + esc(f) + " (" + its.length + ")</div>";
+        if (col) return;
+      }
+      its.forEach(function (it) { html += cardFn(it); });
+    });
+    return html;
+  }
+
+  function listHtml() {
+    if (view === "handouts") {
+      var hv = handouts.filter(matchesHandoutFilter);
+      if (!hv.length) {
+        return '<p class="notes-empty" style="color:var(--fg-mute);font-size:12px;">' +
+          (filterText ? "No matching handouts."
+            : (isGm ? "No handouts yet." : "No handouts revealed to you yet.")) + '</p>';
+      }
+      return groupedHtml(hv, "handouts", isGm ? gmHandoutCard : playerHandoutCard);
+    }
+    var nv = notes.filter(matchesNoteFilter);
+    if (!nv.length) {
+      return '<p class="notes-empty" style="color:var(--fg-mute);font-size:12px;">' +
+        (filterText ? "No matching notes."
+          : (isGm ? "No notes yet." : "No notes yet — create one above.")) + '</p>';
+    }
+    return groupedHtml(nv, "notes", cardHtml);
+  }
+
+  function renderList() {
+    var c = document.getElementById("notes-list");
+    if (c) c.innerHTML = listHtml();
   }
 
   function render() {
     var el = bodyEl();
     if (!el) return;
-    el.innerHTML = toggleHtml() +
-      (view === "handouts" ? handoutsSectionHtml() : notesSectionHtml());
+    el.innerHTML = toggleHtml() + sectionExtrasHtml() + searchHtml() +
+      '<div id="notes-list">' + listHtml() + '</div>';
   }
 
   // ───────────────────────── Handouts (5b) ─────────────────────────
@@ -387,26 +469,6 @@
         '<strong style="font-size:13px;">' + esc(h.title) + '</strong>' +
         handoutBodyHtml(h) +
       '</div>';
-  }
-
-  function handoutsSectionHtml() {
-    var html =
-      '<div style="font-size:11px;color:var(--accent);text-transform:uppercase;' +
-      'letter-spacing:0.5px;margin-bottom:8px;">Handouts</div>';
-    if (isGm) {
-      html += handoutComposerOpen
-        ? handoutEditorHtml(null)
-        : '<button class="ho-new" style="margin-bottom:10px;">+ New handout</button>';
-    }
-    if (!handouts.length) {
-      html += '<p class="notes-empty" style="color:var(--fg-mute);font-size:12px;">' +
-        (isGm ? "No handouts yet." : "No handouts revealed to you yet.") + '</p>';
-    } else {
-      handouts.forEach(function (h) {
-        html += isGm ? gmHandoutCard(h) : playerHandoutCard(h);
-      });
-    }
-    return html;
   }
 
   function upsertHandout(h) {
@@ -637,6 +699,13 @@
     if (!el) return;
     var t = ev.target;
     if (!el.contains(t)) return;
+    var fh = t.closest(".folder-head");
+    if (fh) {
+      var fk = fh.dataset.key;
+      collapsed[fk] = !collapsed[fk];
+      renderList();
+      return;
+    }
     if (t.classList.contains("note-new")) {
       composerOpen = true; editingId = null; render();
     } else if (t.classList.contains("note-cancel")) {
@@ -680,6 +749,15 @@
         .map(function (cb) { return parseInt(cb.value, 10); });
       if (!ids.length) { window.alert("Pick at least one player, or use Reveal to all."); return; }
       revealHandout(parseInt(picker.dataset.id, 10), { revealed: true, to: ids });
+    }
+  });
+
+  document.addEventListener("input", function (ev) {
+    var el = bodyEl();
+    if (!el || !el.contains(ev.target)) return;
+    if (ev.target.classList.contains("notes-search")) {
+      filterText = ev.target.value;
+      renderList();  // re-render only the list → the search box keeps focus
     }
   });
 
