@@ -38853,9 +38853,9 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     ],
     # v2.236.0 — Mantle of Spell Resistance (RAW DMG p.180, rare,
     # attunement). RAW: "you have advantage on saving throws against
-    # spells while you wear this cloak." A descriptive-only advantage in
-    # v1 — surfaced as a derived read; the resolver doesn't yet fold it
-    # into save rolls automatically.
+    # spells while you wear this cloak." Folded into save rolls at /roll
+    # time by `_roll_item_spell_save_advantage` when the save is flagged
+    # vs a spell (v2.297.0 `spell_save_advantage` substrate).
     "mantle-of-spell-resistance": [
         {"spell_save_advantage": True, "requires_attunement": True},
     ],
@@ -39570,9 +39570,9 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
     },
     # v2.266.0 — charged-items Phase 1: Wand of Binding (RAW DMG p.211,
     # rare, attunement). 7 charges; expend 1 to cast Hold Person (save
-    # DC 15). RAW the wand also casts Hold Monster for 5 charges — that
-    # spell is not yet in the catalog, so v1 ships Hold Person only (per
-    # the plan: "Start with hold person."). Single-charge drop-in like
+    # DC 15). RAW the wand also casts Hold Monster for 5 charges; v1 ships
+    # the Hold Person mode only (per the plan: "Start with hold person.")
+    # — the 5-charge Hold Monster mode is filed. Single-charge drop-in like
     # Wand of Web/Polymorph: min == max == 1, base slot 2 (the spell's
     # own level), no upcast. Regains 1d6+1 at dawn (long rest). See
     # docs/plans/charged-items.md Phase 1.

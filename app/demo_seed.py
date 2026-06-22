@@ -842,10 +842,13 @@ def _wizard_sheet(name: str) -> dict:
              "desc": "60 ft, concentration up to 1 min, CON save DC 14. On fail: Restrained as flesh hardens. CON save at end of each turn — 3 fails → Petrified for the duration (full minute = permanent). 3 successes end the spell."},
             {"name": "Fireball", "level": 3, "prepared": True, "_slug": "fireball", "casting_time": "1 action"},
             # v2.46.0 T.7a — Lightning Bolt exercises the line-shape
-            # AoE picker (100 ft × 5 ft from the caster). Sits AFTER
-            # Fireball so the FIREBALL_INDEX = 7 assumption in
-            # tests/harness/test_cast_spell_aoe.py stays valid; this
-            # spell lands at index 8.
+            # AoE picker (100 ft × 5 ft from the caster). NOTE: harness
+            # spell_index constants (e.g. FIREBALL_INDEX in
+            # tests/harness/test_cast_spell_aoe.py) index the *stored*
+            # sheet, whose order differs from this source list and has
+            # since drifted — Fireball now resolves at stored index 10,
+            # not 7. Adding/reordering spells here can shift those
+            # constants; update the test files, don't assume a fixed index.
             {"name": "Lightning Bolt", "level": 3, "prepared": True, "_slug": "lightning-bolt",
              "casting_time": "1 action", "damage": "8d6", "save_ability": "DEX",
              "desc": "100 ft × 5 ft line from caster, DEX save DC 14 for half. 8d6 lightning."},
@@ -871,12 +874,15 @@ def _wizard_sheet(name: str) -> dict:
             # concentration. Routed through the dedicated /cast_sleep
             # endpoint rather than /cast_spell because the HP-pool
             # targeting doesn't fit the existing AoE/save pipeline.
-            # Appended to keep the FIREBALL_INDEX = 7 + Counterspell = 9
-            # assumptions in existing harness tests intact.
+            # Appended at the end so it doesn't shift earlier spells'
+            # positions. Harness spell_index constants are pinned in the
+            # test files (see test_cast_spell_aoe.py) and resolve against
+            # the stored sheet — don't assume a fixed FIREBALL_INDEX here.
             {"name": "Sleep", "level": 1, "prepared": True, "_slug": "sleep", "casting_time": "1 action"},
             # v2.72.0 Phase 3d — Silvery Barbs (Strixhaven: SAI p.144).
-            # Appended at the END of the spell list so existing
-            # spell_index assertions (FIREBALL_INDEX=7, etc.) stay valid.
+            # Appended at the END of the spell list so it doesn't shift
+            # earlier spells' positions (harness spell_index constants
+            # live in the test files; see test_cast_spell_aoe.py).
             # Wizard spell list (SAI): "1 reaction" trigger when a
             # creature within 60 ft you can see succeeds on a save /
             # attack / check; they reroll the d20 and take lower.

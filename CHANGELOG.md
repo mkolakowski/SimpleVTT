@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.572.2] - 2026-06-22 — "The Corrected Margins"
+
+**Schema version:** 75
+
+**Commit summary:** Audit quick-win — fix 5 stale code comments that no longer match the code (3 dangerous `FIREBALL_INDEX = 7` invariant notes in the demo seed + 2 "not yet shipped" notes for features that have shipped). Comment-only; no behavior change.
+
+**Description:** From the code/docs audit. (1) `app/demo_seed.py` had three comments (Lightning Bolt, Sleep, Silvery Barbs) claiming spells were placed "to keep `FIREBALL_INDEX = 7` valid" — actively dangerous, since the harness was just corrected to index 10 (v2.572.1) and these notes would mislead anyone editing the spell list into re-introducing the drift bug. Rewrote them to stop citing a fixed index and explain that harness `spell_index` constants resolve against the *stored* sheet (whose order differs from the source list). (2) `tabletop_routes.py` Mantle of Spell Resistance said the advantage "doesn't yet fold into save rolls" — it does, via `_roll_item_spell_save_advantage` (v2.297.0); corrected. (3) Wand of Binding said Hold Monster "is not yet in the catalog" — it is (with a `/cast_hold_monster` endpoint); corrected the rationale to a scope choice.
+
+Verified each replacement claim against the code before rewriting (the folding helper reads `spell_save_advantage`; `hold-monster.json` + the cast endpoint exist).
+
+**Files:** `app/demo_seed.py` (3 comments), `app/routes/tabletop_routes.py` (2 comments).
+
+PATCH — comment-only corrections. No app, schema, API, or test change.
+
+### Fixed
+- Stale code comments: the demo-seed `FIREBALL_INDEX = 7` invariant notes (now misleading post-v2.572.1) and the Mantle-of-Spell-Resistance / Wand-of-Binding "not yet shipped" notes for features that have since shipped.
+
 ## [2.572.1] - 2026-06-22 — "The Right Spell"
 
 **Schema version:** 75
