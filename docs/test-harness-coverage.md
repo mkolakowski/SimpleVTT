@@ -4,7 +4,23 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3995 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.553.2, 2026-06-21).
+**Total tests:** 4005 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.554.0, 2026-06-21).
+
+### `test_notes.py`
+v2.554.0 — Notes & Handouts **Phase 1** (GM prep notes), [notes-and-handouts.md](../plans/notes-and-handouts.md). New `notes_routes.py` + `campaign_notes` table (schema v72). GM = `gm_client`; non-GM member = `alice_client`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_create_and_get_note` | GM POST → 200, `kind == "gm_note"`, `visibility == "gm_only"`, title/body echoed, `is_encrypted == false`; GET by id round-trips. |
+| `test_list_orders_pinned_first` | List returns the campaign's gm_notes with pinned ones first. |
+| `test_patch_note` | PATCH updates title + pinned; omitted `body` unchanged. |
+| `test_delete_note` | DELETE → 200 `deleted`; subsequent GET → 404. |
+| `test_create_requires_title_or_body` | Empty title + body → 400. |
+| `test_get_unknown_note_404` | Unknown note id → 404. |
+| `test_player_cannot_create_note` | **Access control:** non-GM member POST → 403. |
+| `test_player_list_excludes_gm_notes` | **Access control:** a gm_note never appears in a non-GM's list. |
+| `test_player_cannot_get_gm_note` | **Access control:** non-GM GET of a gm_note id → 404 (not a leak). |
+| `test_player_cannot_delete_gm_note` | **Access control:** non-GM DELETE of a gm_note → 404. |
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).

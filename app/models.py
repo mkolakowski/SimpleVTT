@@ -862,3 +862,61 @@ class Battle(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now(),
     )
+
+
+# Notes & Handouts (docs/plans/notes-and-handouts.md).
+NOTE_KINDS = ("gm_note", "player_note")
+NOTE_VISIBILITIES = ("gm_only", "public", "private")
+
+
+class CampaignNote(Base):
+    """A GM prep note or a player's personal note (v2.554.0, schema v72).
+
+    See ``docs/plans/notes-and-handouts.md``. Phase 1 ships the
+    ``gm_note`` kind (GM/co-GM prep, always ``gm_only`` visibility);
+    later phases extend the same table:
+
+      - ``kind == "gm_note"``     → ``visibility == "gm_only"`` (GM/co-GM).
+      - ``kind == "player_note"`` → ``visibility`` ``"public"`` (all
+        campaign members) or ``"private"`` (Phase 4: end-to-end encrypted,
+        author-only).
+
+    For a non-private note the plaintext lives in ``title`` / ``body``
+    (markdown). For a private note (Phase 4) those are NULL and the
+    AES-GCM ciphertext envelopes live in ``enc_title`` / ``enc_body`` with
+    ``is_encrypted == True`` — the server stores opaque blobs it has no
+    key to read. ``kind`` / ``visibility`` are plain strings validated at
+    the route layer (NOTE_KINDS / NOTE_VISIBILITIES) rather than DB enums
+    so later phases can add values without a postgres enum-type migration.
+    """
+    __tablename__ = "campaign_notes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="CASCADE"), index=True,
+    )
+    author_user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True,
+    )
+    kind: Mapped[str] = mapped_column(String(20), default="gm_note")
+    visibility: Mapped[str] = mapped_column(String(20), default="gm_only")
+    title: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    body: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default="")
+    # Phase 4 ciphertext envelopes for private notes; NULL otherwise.
+    enc_title: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    enc_body: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_encrypted: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false",
+    )
+    folder: Mapped[str] = mapped_column(
+        String(120), default="", server_default="",
+    )
+    pinned: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )

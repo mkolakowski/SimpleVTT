@@ -836,6 +836,17 @@ def _apply_inline_migrations() -> None:
             "ON admin_audit_log (target, created_at)"
         ))
 
+    # ---- Schema v72 (2.554.0): campaign_notes table ----
+    # Phase 1 of docs/plans/notes-and-handouts.md — GM prep notes today
+    # (kind="gm_note", visibility="gm_only"); later phases reuse the
+    # same table for player public notes (Phase 3) and E2E-encrypted
+    # private notes (Phase 4, enc_title/enc_body opaque ciphertext).
+    # ``Base.metadata.create_all`` (earlier in init_db) already creates
+    # the table; this explicit create(checkfirst) covers existing DBs +
+    # documents the schema bump. See models.CampaignNote.
+    from .models import CampaignNote
+    CampaignNote.__table__.create(bind=engine, checkfirst=True)
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.554.0] - 2026-06-21 — "The Prep Ledger"
+
+**Schema version:** 72
+
+**Commit summary:** Notes & Handouts **Phase 1** — the `campaign_notes` table + GM prep-notes CRUD (`/api/campaign/{id}/notes`). First shipped slice of `docs/plans/notes-and-handouts.md`.
+
+**Description:** Adds the backend for GM prep notes: a new `campaign_notes` table (schema v72) and a new `app/routes/notes_routes.py` router with create / list / get / patch / delete over `kind="gm_note"`, `visibility="gm_only"`. The table + endpoints are designed for the later phases to extend additively — `kind`/`visibility` are validated strings (not DB enums) so Phase 3 (player `public` notes) and Phase 4 (E2E-encrypted `private` notes, with the `enc_title`/`enc_body` ciphertext columns already on the model) drop in without an enum-type migration. Access control is the centerpiece: a GM/co-GM (via the existing `_user_is_gm`) sees every `gm_note`; a non-GM member sees none, cannot create one (403), and gets **404 (not a leak)** probing a `gm_note` by id. The Notes sidebar drawer UI is Phase 5; this commit is REST-only (no WS).
+
+**Implementation:**
+
+- `app/models.py`: new `CampaignNote` model (+ `NOTE_KINDS` / `NOTE_VISIBILITIES`) with plaintext `title`/`body` and the Phase-4 `enc_title`/`enc_body`/`is_encrypted` ciphertext columns reserved.
+- `app/database.py`: schema v72 migration — `CampaignNote.__table__.create(checkfirst=True)`.
+- `app/routes/notes_routes.py` (new) + registered in `app/main.py`.
+- `docs/plans/notes-and-handouts.md` + the wiki "Design plans" rows: status flipped from ⚪ design-only to 🟠 Phase 1 shipped.
+
+**Harness changes:**
+
+- `tests/harness/test_notes.py` (new): +10 — GM create/get/list-pinned-first/patch/delete happy paths; empty-content 400; unknown-note 404; and the access-control core: player create → 403, player list excludes gm_notes, player get/delete of a gm_note → 404.
+
+Total harness count → 4005 (+10).
+
+MINOR — new endpoints + additive `campaign_notes` table. Schema v71 → v72.
+
+### Added
+- `campaign_notes` table + `GET/POST/PATCH/DELETE /api/campaign/{id}/notes` — GM prep notes (Phase 1 of the Notes & Handouts plan). GM/co-GM only; non-GM members cannot see or reach them.
+
+### Schema
+- **v72:** `campaign_notes` table (GM prep notes today; player public/private notes in later phases).
+
 ## [2.553.2] - 2026-06-21 — "The Sealed Diary"
 
 **Schema version:** 71

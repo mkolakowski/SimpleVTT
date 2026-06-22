@@ -1,6 +1,6 @@
 # Notes & Handouts
 
-**Status:** ⚪ design only · all phases unstarted (plan authored v2.553.2).
+**Status:** 🟠 Phase 1 shipped (v2.554.0) · Phases 2–5 pending (plan authored v2.553.2).
 
 A session-prep + reference system with three audiences and a hard
 privacy guarantee:
@@ -250,10 +250,14 @@ page for out-of-session work.
 
 ## Phases
 
-1. **Schema + GM prep notes.** Add the three tables + migrations
-   (`SCHEMA_VERSION` += 3). Ship `gm_note` CRUD (`gm_only`, plaintext) +
-   the GM drawer pane. Harness tests: CRUD happy paths, GM-only gating
-   (player → 403), error paths.
+1. **Schema + GM prep notes.** ✅ **Shipped v2.554.0.** Added the
+   `campaign_notes` table (schema v72; the `handouts` +
+   `note_encryption_keys` tables land with their phases rather than all
+   up front) and `app/routes/notes_routes.py` with `gm_note` CRUD
+   (`gm_only`, plaintext) over `/api/campaign/{id}/notes`. Harness:
+   `tests/harness/test_notes.py` — CRUD happy paths + the access-control
+   core (player create → 403, player can't see/get/delete a gm_note).
+   The GM drawer pane is folded into Phase 5 (UI).
 2. **Handouts.** CRUD + image upload + `reveal` with `reveal_to`
    targeting + the `handout_revealed` WS event. Tests: reveal reaches
    only targeted players (assert the `recipient_filter` scoping), an
