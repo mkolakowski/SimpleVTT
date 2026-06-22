@@ -671,13 +671,15 @@ async def get_encryption_config(
     the user hasn't set one up yet."""
     row = db.get(NoteEncryptionKey, user.id)
     if row is None:
-        return {"configured": False}
+        return {"configured": False, "recovery_enabled": False}
     return {
         "configured": True,
         "salt": row.salt,
         "kdf": row.kdf,
         "iterations": row.iterations,
         "key_check": row.key_check,
+        "recovery_enabled": bool(row.recovery_wrapped_key),
+        "recovery_wrapped_key": row.recovery_wrapped_key,
     }
 
 
@@ -717,6 +719,28 @@ async def set_encryption_config(
     db.add(row)
     db.commit()
     return {"ok": True, "configured": True}
+
+
+@router.put("/api/notes/encryption/recovery")
+async def set_encryption_recovery(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Store (or replace) the caller's recovery wrap — the note key
+    encrypted under a recovery key the user downloaded. Built client-side
+    while unlocked; the server only ever sees this ciphertext envelope.
+    Body: ``{recovery_wrapped_key}``. 404 if encryption isn't set up."""
+    row = db.get(NoteEncryptionKey, user.id)
+    if row is None:
+        raise HTTPException(404, "encryption is not configured")
+    body = await request.json()
+    wrapped = (body.get("recovery_wrapped_key") or "").strip()
+    if not wrapped or len(wrapped) > _MAX_ENC:
+        raise HTTPException(400, "recovery_wrapped_key is required")
+    row.recovery_wrapped_key = wrapped
+    db.commit()
+    return {"ok": True, "recovery_enabled": True}
 
 
 @router.delete("/api/notes/encryption")

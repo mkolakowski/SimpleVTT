@@ -47,13 +47,49 @@
   async function deriveKey(passphrase, saltB64, iterations) {
     var baseKey = await crypto.subtle.importKey(
       "raw", encoder.encode(passphrase), "PBKDF2", false, ["deriveKey"]);
+    // Extractable so the key can be wrapped under a recovery key
+    // (the raw bytes never leave the browser; only an AES-GCM-encrypted
+    // wrap of them is stored / downloaded).
     return crypto.subtle.deriveKey(
       { name: "PBKDF2", salt: b64ToBytes(saltB64),
         iterations: iterations, hash: "SHA-256" },
       baseKey,
       { name: "AES-GCM", length: 256 },
-      false,
+      true,
       ["encrypt", "decrypt"]);
+  }
+
+  // ── Recovery key (an alternate unlock) ─────────────────────────────
+  // The note key is wrapped (AES-GCM-encrypted) under a random recovery
+  // key the user downloads. Forgot the passphrase → unwrap the note key
+  // with the recovery key. The server stores only the wrapped envelope.
+
+  function generateRecoveryKey() {
+    return bytesToB64(crypto.getRandomValues(new Uint8Array(32)));
+  }
+
+  function importRecoveryKey(recoveryKeyB64) {
+    return crypto.subtle.importKey(
+      "raw", b64ToBytes(recoveryKeyB64), { name: "AES-GCM" }, false,
+      ["encrypt", "decrypt"]);
+  }
+
+  async function wrapKeyForRecovery(noteKey, recoveryKeyB64) {
+    var rk = await importRecoveryKey(recoveryKeyB64);
+    var rawNote = await crypto.subtle.exportKey("raw", noteKey);
+    var iv = crypto.getRandomValues(new Uint8Array(12));
+    var ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, rk, rawNote);
+    return JSON.stringify({ v: 1, iv: bytesToB64(iv), ct: bytesToB64(ct) });
+  }
+
+  async function unwrapKeyFromRecovery(recoveryKeyB64, envelope) {
+    var rk = await importRecoveryKey(recoveryKeyB64);
+    var obj = JSON.parse(envelope);
+    var rawNote = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: b64ToBytes(obj.iv) }, rk, b64ToBytes(obj.ct));
+    // Re-import as the note key (extractable, so it can be re-wrapped).
+    return crypto.subtle.importKey(
+      "raw", rawNote, { name: "AES-GCM" }, true, ["encrypt", "decrypt"]);
   }
 
   async function encryptField(key, plaintext) {
@@ -89,6 +125,9 @@
     decryptField: decryptField,
     makeKeyCheck: makeKeyCheck,
     verifyKeyCheck: verifyKeyCheck,
+    generateRecoveryKey: generateRecoveryKey,
+    wrapKeyForRecovery: wrapKeyForRecovery,
+    unwrapKeyFromRecovery: unwrapKeyFromRecovery,
     SENTINEL: SENTINEL,
   };
 })();

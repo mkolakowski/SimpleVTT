@@ -867,6 +867,19 @@ def _apply_inline_migrations() -> None:
     from .models import NoteEncryptionKey
     NoteEncryptionKey.__table__.create(bind=engine, checkfirst=True)
 
+    # ---- Schema v75 (2.565.0): note_encryption_keys.recovery_wrapped_key ----
+    # Optional recovery key for private notes — the note key wrapped under
+    # a user-downloaded recovery key (an alternate unlock for a forgotten
+    # passphrase). Nullable; existing rows default to "no recovery". The
+    # server stores only the ciphertext envelope.
+    nek_cols = _column_names("note_encryption_keys")
+    with engine.begin() as conn:
+        if nek_cols and "recovery_wrapped_key" not in nek_cols:
+            conn.execute(text(
+                "ALTER TABLE note_encryption_keys "
+                "ADD COLUMN recovery_wrapped_key TEXT"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

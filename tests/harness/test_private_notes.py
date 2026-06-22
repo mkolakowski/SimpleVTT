@@ -198,3 +198,49 @@ async def test_patch_private_rejects_plaintext(alice_client):
     nid = c.json()["note"]["id"]
     p = await alice_client.patch(f"{_NOTES}/{nid}", json={"title": "leak"})
     assert p.status_code == 400, p.text
+
+
+# ── recovery key (an alternate unlock) ──────────────────────────────────
+
+_WRAPPED = '{"v":1,"iv":"EEEEEEEEEEEEEEEE","ct":"d3JhcHBlZGtleQ=="}'
+
+
+async def test_set_recovery_enables_flag(alice_client):
+    """After PUT /encryption/recovery, GET reports recovery_enabled +
+    echoes the wrapped key (opaque to the server)."""
+    await alice_client.put(_ENC, json=_CONFIG)
+    g0 = await alice_client.get(_ENC)
+    assert g0.json()["recovery_enabled"] is False
+
+    r = await alice_client.put(_ENC + "/recovery",
+                               json={"recovery_wrapped_key": _WRAPPED})
+    assert r.status_code == 200, r.text
+    g = await alice_client.get(_ENC)
+    assert g.json()["recovery_enabled"] is True
+    assert g.json()["recovery_wrapped_key"] == _WRAPPED
+
+
+async def test_recovery_without_config_404(alice_client):
+    """Setting recovery before encryption is configured → 404."""
+    r = await alice_client.put(_ENC + "/recovery",
+                               json={"recovery_wrapped_key": _WRAPPED})
+    assert r.status_code == 404, r.text
+
+
+async def test_recovery_requires_wrapped_key_400(alice_client):
+    """An empty recovery_wrapped_key → 400."""
+    await alice_client.put(_ENC, json=_CONFIG)
+    r = await alice_client.put(_ENC + "/recovery", json={})
+    assert r.status_code == 400, r.text
+
+
+async def test_reset_clears_recovery(alice_client):
+    """DELETE /encryption wipes the recovery wrap too (configured →
+    false)."""
+    await alice_client.put(_ENC, json=_CONFIG)
+    await alice_client.put(_ENC + "/recovery",
+                           json={"recovery_wrapped_key": _WRAPPED})
+    await alice_client.delete(_ENC)
+    g = await alice_client.get(_ENC)
+    assert g.json()["configured"] is False
+    assert g.json()["recovery_enabled"] is False

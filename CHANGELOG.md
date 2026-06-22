@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.565.0] - 2026-06-21 — "The Spare Key"
+
+**Schema version:** 75
+
+**Commit summary:** Optional **recovery key** for private notes — a downloadable key file that's an alternate unlock, so a forgotten passphrase isn't always fatal. The server still holds no plaintext and no key.
+
+**Description:** Adds opt-in recovery to the end-to-end-encrypted private notes. When unlocked, the user can click "🔑 Set up recovery key": the browser generates a random 256-bit recovery key, **wraps the note key under it** (`NotesCrypto.wrapKeyForRecovery` — AES-GCM), stores only that ciphertext envelope server-side (`note_encryption_keys.recovery_wrapped_key`, schema v75), and **downloads a key file** to the user. If they later forget their passphrase, "Recover with key" prompts for the key, fetches the wrapped envelope, unwraps the note key (`unwrapKeyFromRecovery`), and unlocks — decrypting notes in place. The passphrase-derived key is now extractable so it can be wrapped (the raw bytes never leave the browser; only the AES-GCM wrap is stored/downloaded). The recovery key is an **alternate unlock**, not a passphrase reset — both unlock paths coexist; a forgotten passphrase no longer means lost notes. The server stores only ciphertext envelopes and still has no decryption path; `DELETE /api/notes/encryption` wipes the recovery wrap too.
+
+**Implementation:**
+
+- `app/models.py` + `app/database.py`: `recovery_wrapped_key` column (schema v75 ALTER, nullable).
+- `app/routes/notes_routes.py`: `GET /encryption` reports `recovery_enabled` + the wrapped key; new `PUT /api/notes/encryption/recovery`.
+- `app/static/notes_crypto.js`: extractable `deriveKey`; `generateRecoveryKey` / `wrapKeyForRecovery` / `unwrapKeyFromRecovery`.
+- `app/static/notes.js`: "Set up recovery key" (wrap + PUT + download) + "Recover with key" (prompt + unwrap + unlock) buttons + flows.
+- `docs/plans/notes-and-handouts.md`: recovery-key filed item marked shipped.
+
+**Harness changes:**
+
+- `tests/harness/test_private_notes.py`: +4 — set recovery → GET reports enabled + echoes the wrapped key; recovery without config → 404; empty wrap → 400; reset clears recovery.
+- `tests/harness_ui/test_notes_crypto.py`: +1 Playwright — wrap the note key under a recovery key, unwrap it, and the recovered key decrypts the original data; a wrong recovery key fails to unwrap.
+
+Total harness count → 4050 in `tests/harness/` + 99 in `tests/harness_ui/`.
+
+MINOR — new endpoint + recovery crypto + UI. Schema v74 → v75.
+
+### Added
+- Optional private-note recovery key: `PUT /api/notes/encryption/recovery` + a downloadable key file + "Set up recovery key" / "Recover with key" in the Notes drawer — an alternate unlock for a forgotten passphrase, with the server still storing only ciphertext.
+
+### Schema
+- **v75:** `note_encryption_keys.recovery_wrapped_key` (nullable).
+
 ## [2.564.0] - 2026-06-21 — "The Pinned Illustration"
 
 **Schema version:** 74

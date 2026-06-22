@@ -276,6 +276,12 @@
       : '<button class="note-new" style="margin-bottom:10px;">+ New note</button>';
     if (hasLockedPrivate()) {
       html += '<button class="note-unlock" style="margin:0 0 10px 8px;">🔓 Unlock private notes</button>';
+      if (encConfig && encConfig.recovery_enabled) {
+        html += '<button class="note-recover" style="margin:0 0 10px 6px;">Recover with key</button>';
+      }
+    }
+    if (cryptoKey && encConfig && encConfig.configured && !encConfig.recovery_enabled) {
+      html += '<button class="note-recovery-setup" style="margin:0 0 10px 8px;">🔑 Set up recovery key</button>';
     }
     return html;
   }
@@ -599,7 +605,7 @@
   async function loadEncConfig() {
     try {
       var r = await fetch(ENC_API, { headers: { "Accept": "application/json" } });
-      if (r.ok) encConfig = await r.json();
+      if (r.ok) { encConfig = await r.json(); if (loaded) render(); }
     } catch (e) { /* ignore */ }
   }
 
@@ -635,9 +641,67 @@
       body: JSON.stringify({ salt: salt, iterations: iterations, key_check: key_check }),
     });
     if (!resp.ok) { window.alert("Could not set up encryption."); return false; }
-    encConfig = { configured: true, salt: salt, iterations: iterations, key_check: key_check };
+    encConfig = { configured: true, salt: salt, iterations: iterations,
+                  key_check: key_check, recovery_enabled: false };
     cryptoKey = newKey;
     return true;
+  }
+
+  function downloadRecoveryFile(rk) {
+    var content =
+      "SimpleVTT — Private Notes Recovery Key\n\n" +
+      "Keep this file somewhere safe and private. Anyone who has this key\n" +
+      "can read your private notes. If you ever forget your passphrase,\n" +
+      'open the Notes drawer, click "Recover with key", and paste the\n' +
+      "key below.\n\n" +
+      "Recovery key:\n" + rk + "\n";
+    var blob = new Blob([content], { type: "text/plain" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "simplevtt-notes-recovery-key.txt";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  }
+
+  async function setupRecoveryKey() {
+    if (!(await ensureUnlocked())) return;
+    if (!window.NotesCrypto) return;
+    var rk = window.NotesCrypto.generateRecoveryKey();
+    var wrapped = await window.NotesCrypto.wrapKeyForRecovery(cryptoKey, rk);
+    var r = await fetch(ENC_API + "/recovery", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recovery_wrapped_key: wrapped }),
+    });
+    if (!r.ok) { window.alert("Could not save the recovery key."); return; }
+    if (encConfig) {
+      encConfig.recovery_enabled = true;
+      encConfig.recovery_wrapped_key = wrapped;
+    }
+    downloadRecoveryFile(rk);
+    window.alert(
+      "Your recovery key file has been downloaded. Keep it safe — anyone " +
+      "with it can read your private notes, and it's the only way back in " +
+      "if you forget your passphrase.");
+    render();
+  }
+
+  async function recoverWithKey() {
+    if (!encConfig) await loadEncConfig();
+    if (!encConfig || !encConfig.recovery_wrapped_key) {
+      window.alert("No recovery key is set up for your notes.");
+      return;
+    }
+    var rk = window.prompt("Paste your recovery key to unlock your private notes:");
+    if (!rk) return;
+    try {
+      cryptoKey = await window.NotesCrypto.unwrapKeyFromRecovery(
+        rk.trim(), encConfig.recovery_wrapped_key);
+      await decryptAll();
+    } catch (e) {
+      window.alert("That recovery key didn't work.");
+    }
   }
 
   async function load() {
@@ -743,6 +807,10 @@
       if (window.confirm("Delete this note?")) deleteNote(parseInt(t.dataset.id, 10));
     } else if (t.classList.contains("note-unlock")) {
       ensureUnlocked().then(function (ok) { if (ok) decryptAll(); });
+    } else if (t.classList.contains("note-recovery-setup")) {
+      setupRecoveryKey();
+    } else if (t.classList.contains("note-recover")) {
+      recoverWithKey();
     } else if (t.classList.contains("note-save")) {
       var editor = t.closest(".note-editor");
       if (editor) saveFromEditor(editor);

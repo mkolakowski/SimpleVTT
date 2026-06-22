@@ -110,6 +110,46 @@ def test_notes_crypto_module_roundtrip(alice_page: Page, roster: dict):
     assert r["wrongDecryptThrew"] is True, "wrong key must fail to decrypt"
 
 
+_RECOVERY_TEST = """
+async () => {
+  const NC = window.NotesCrypto;
+  const salt = NC.generateSalt();
+  const noteKey = await NC.deriveKey("my passphrase", salt, 200000);
+  const PLAIN = "recover me";
+  const env = await NC.encryptField(noteKey, PLAIN);
+
+  // Wrap the note key under a fresh recovery key, then unwrap it back.
+  const recoveryKey = NC.generateRecoveryKey();
+  const wrapped = await NC.wrapKeyForRecovery(noteKey, recoveryKey);
+  const recovered = await NC.unwrapKeyFromRecovery(recoveryKey, wrapped);
+  // The recovered key decrypts what the original key encrypted.
+  const dec = await NC.decryptField(recovered, env);
+
+  // A wrong recovery key fails to unwrap.
+  const wrongKey = NC.generateRecoveryKey();
+  let wrongFailed = false;
+  try { await NC.unwrapKeyFromRecovery(wrongKey, wrapped); }
+  catch (e) { wrongFailed = true; }
+
+  return {
+    recovered: dec === PLAIN,
+    wrappedHasNoPlaintext: wrapped.indexOf(PLAIN) === -1,
+    wrongFailed: wrongFailed,
+  };
+}
+"""
+
+
+def test_notes_crypto_recovery_roundtrip(alice_page: Page, roster: dict):
+    """The note key wraps under a recovery key and unwraps back to a key
+    that decrypts the same data; a wrong recovery key fails to unwrap."""
+    _load_module(alice_page, roster)
+    r = alice_page.evaluate(_RECOVERY_TEST)
+    assert r["recovered"] is True, "recovered key must decrypt the original data"
+    assert r["wrappedHasNoPlaintext"] is True
+    assert r["wrongFailed"] is True, "a wrong recovery key must fail to unwrap"
+
+
 def test_notes_crypto_server_roundtrip(alice_page: Page, roster: dict):
     """Full path: encrypt in-browser → PUT config → POST private note →
     GET back → decrypt. The server stored NO plaintext and the POST body

@@ -332,8 +332,11 @@ page for out-of-session work.
 ### Optional / filed
 - ✅ **Markdown rendering** for note + handout bodies — shipped v2.562.0
   (safe-subset client renderer in `notes.js`; scheme-validated links).
-- **Downloadable recovery key** for private notes (opt-in; see Privacy
-  model).
+- ✅ **Downloadable recovery key** for private notes — shipped v2.565.0.
+  The note key is wrapped under a random recovery key the user downloads
+  (an alternate unlock for a forgotten passphrase); the server stores
+  only the ciphertext wrap. `PUT /api/notes/encryption/recovery` +
+  "Set up / Recover with" buttons in the drawer.
 - ✅ **Handout image *upload* widget** — shipped v2.564.0
   (`POST …/handouts/upload_image` + a composer file picker).
 - **Handout media beyond images** (PDF/audio) — reuse the upload flow.

@@ -1006,6 +1006,15 @@ class NoteEncryptionKey(Base):
     )
     iterations: Mapped[int] = mapped_column(Integer, default=600_000)
     key_check: Mapped[str] = mapped_column(Text)
+    # v2.565.0 — optional recovery key. The note key wrapped (AES-GCM
+    # encrypted) under a random recovery key the user downloads; NULL when
+    # the user hasn't opted into recovery. Lets a forgotten passphrase be
+    # recovered from the downloaded key file (an alternate unlock). The
+    # server still holds no plaintext and no key — only this ciphertext
+    # envelope, useless without the user's recovery file.
+    recovery_wrapped_key: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )
