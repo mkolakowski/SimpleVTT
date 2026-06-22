@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.572.0] - 2026-06-22 — "The Open Stacks"
+
+**Schema version:** 75
+
+**Commit summary:** Phase 3 of `docs/plans/homebrew-fork-srd.md` — browse-and-fork: a GM can search the shipped SRD by name in the Workshop and fork a mechanic without knowing its slug. Completes the fork-and-tweak plan.
+
+**Description:** `GET /api/campaign/{id}/srd_search?type=&q=` (GM-gated) searches the **shipped SRD tier offline** — never the network Open5e proxies — and returns up to 30 `{slug, name}` matches of the given content type. The Homebrew Workshop gains a search box: enter a name, get a result list, and each result's **Fork** button forks it (Phase 1) and opens the editor (Phase 2) in place.
+
+**Why a Workshop search instead of picker buttons:** the original plan put the fork button in the spell/monster/item pickers, but those (`spell_picker.js` etc.) search the network Open5e proxies (`/api/open5e/*`) — forking from them would copy *network* data, not the local shipped SRD, breaking offline-first and the SRD-only model. Searching the shipped SRD inside the Workshop serves the same goal (fork without typing the exact slug) against the *correct* source and keeps fork→edit on one page. (Plan updated with this rationale.)
+
+This closes the plan: a GM can now browse/search SRD → fork (variant or override) → tweak in a per-field form (or raw JSON) → revert, all from Campaign settings → Homebrew → Workshop, every write GM-gated + campaign-scope-forced so the shipped SRD tree is never touched.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: `GET /api/campaign/{id}/srd_search` endpoint.
+- `app/static/homebrew_workshop.js` + `app/templates/campaign_settings.html`: the Workshop search box, results list, and fork-from-result wiring (fork refactored into a shared `doFork`).
+
+**Harness changes:**
+
+- `tests/harness/test_homebrew_fork_srd.py` (+3, → 19): SRD search finds a shipped record by name, GM-gating, unknown-type 404.
+- `tests/harness_ui/test_homebrew_workshop.py` (+1, → 2): Playwright smoke — search "fireball" → click the result's Fork → editor opens pre-filled.
+
+Total harness count → 4092 in `tests/harness/` + 101 in `tests/harness_ui/`.
+
+MINOR — new GM-facing search endpoint + UI (additive).
+
+### Added
+- Homebrew Workshop SRD search: GMs find an SRD mechanic by name and fork it from the results — no slug required (`docs/plans/homebrew-fork-srd.md` Phase 3, completing the plan). New `GET /api/campaign/{id}/srd_search` endpoint.
+
 ## [2.571.0] - 2026-06-22 — "The Workshop Doors"
 
 **Schema version:** 75

@@ -248,3 +248,32 @@ async def test_list_campaign_homebrew(gm_client):
 async def test_list_campaign_homebrew_requires_gm(bob_client):
     r = await bob_client.get(f"/api/campaign/{CAMPAIGN_ID}/homebrew/custom")
     assert r.status_code == 403, r.text
+
+
+# ── Phase 3: SRD search-and-fork browser ─────────────────────────────────────
+async def _srd_search(client, ctype, q):
+    return await client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/srd_search",
+        params={"type": ctype, "q": q},
+    )
+
+
+async def test_srd_search_finds_shipped_record(gm_client):
+    """Searching SRD spells by name surfaces the shipped record (slug + name)
+    so the Workshop can fork it without the GM typing the exact slug."""
+    r = await _srd_search(gm_client, "spells", "fireball")
+    assert r.status_code == 200, r.text
+    recs = r.json()["records"]
+    hit = [x for x in recs if x["slug"] == "fireball"]
+    assert hit, recs
+    assert hit[0]["name"] == "Fireball"
+
+
+async def test_srd_search_requires_gm(bob_client):
+    r = await _srd_search(bob_client, "spells", "fireball")
+    assert r.status_code == 403, r.text
+
+
+async def test_srd_search_unknown_type_404(gm_client):
+    r = await _srd_search(gm_client, "widgets", "x")
+    assert r.status_code == 404, r.text

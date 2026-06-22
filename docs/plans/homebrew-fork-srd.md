@@ -1,6 +1,8 @@
 # Fork & tweak SRD mechanics as homebrew
 
-**Status:** 🟠 partial · **Phases 1–2 shipped** (v2.569.0–v2.571.0): fork-SRD + revert + edit endpoints (all types, variant/override) and the **Homebrew Workshop** UI panel (Campaign settings → Homebrew → Workshop — fork form + custom-record list + a per-field form editor with a raw-JSON escape hatch). Remaining: **Phase 3** (a browse-and-fork affordance in the spell/monster/item pickers, so a GM can fork straight from where they see the SRD content).
+**Status:** ✅ **complete** — Phases 1–3 shipped (v2.569.0–v2.572.0). A GM can browse/search the shipped SRD by name, fork any mechanic into campaign homebrew (variant or override), tweak its stats in a per-field form (or raw JSON), and revert — all from the **Homebrew Workshop** (Campaign settings → Homebrew → Workshop), with everything routed through GM-gated, campaign-scope-forced endpoints so the shipped SRD tree is never touched.
+
+> **Phase 3 note.** The original plan put the fork affordance in the spell/monster/item *pickers*. During the build that proved wrong: those pickers (`spell_picker.js` etc.) search the **network Open5e proxies** (`/api/open5e/*`), so forking from them would copy network data, not the local shipped SRD — breaking offline-first + the SRD-only model. Phase 3 instead added an **offline local-SRD search box inside the Workshop** (`GET /api/campaign/{id}/srd_search`), which serves the same goal (fork without typing the exact slug) against the *correct* source, and keeps fork→edit on one page.
 
 Let a **GM copy any shipped SRD mechanic into their campaign's homebrew and
 tweak it** — change Fireball's damage, give a monster an extra action, bump
@@ -116,13 +118,16 @@ unaffected — forks never enter the shipped tree.
      escape hatch for everything else. Save → the 2a edit endpoint; Revert →
      the Phase 1 delete. Playwright smoke in
      `tests/harness_ui/test_homebrew_workshop.py`.
-3. **Phase 3 — Browse-and-fork affordance.** A "Fork to homebrew" button
-   where GMs already see SRD mechanics — the spell picker
-   (`spell_picker.js`), monster page (`monster_page.html` /
-   `beast_picker.js`), item list — calling the Phase 1 endpoint then opening
-   the Phase 2 editor on the new record. Forks list in the campaign's
-   homebrew view with the *"tweaked from SRD"* badge + a "revert" (delete)
-   for override forks.
+3. **Phase 3 — Browse-and-fork. ✅ Shipped v2.572.0** (as a Workshop SRD
+   search, **not** picker buttons — see the status note at the top). The
+   sheet pickers (`spell_picker.js` etc.) search the network Open5e proxies
+   (`/api/open5e/*`), so forking from them would copy network data, not the
+   local shipped SRD. Instead: `GET /api/campaign/{id}/srd_search?type=&q=`
+   searches the shipped SRD tier **offline** (GM-gated, SRD-only), and the
+   Workshop's search box renders each match with a Fork button → forks
+   (Phase 1) + opens the editor (Phase 2) on one page. Forks already show in
+   the Workshop's custom-record list with Edit + Revert (Phase 2b). Covered
+   by `test_srd_search_*` + the `test_workshop_search_then_fork` smoke.
 
 ---
 

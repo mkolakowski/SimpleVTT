@@ -96,11 +96,8 @@
     return rec;
   }
 
-  $('hbw-fork-btn').addEventListener('click', async () => {
-    const type = $('hbw-fork-type').value;
-    const src = $('hbw-fork-slug').value.trim();
-    const mode = $('hbw-fork-mode').value;
-    if (!src) { status('Enter the SRD slug to fork (e.g. fireball).', false); return; }
+  async function doFork(type, src, mode) {
+    if (!src) { status('Enter or pick the SRD slug to fork (e.g. fireball).', false); return; }
     const r = await fetch(`/api/campaign/${cid}/homebrew/fork`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type, src_slug: src, mode }),
@@ -110,6 +107,39 @@
     status(`Forked → ${d.slug}`, true);
     await loadList();
     openEditor(type, d.slug);
+  }
+
+  $('hbw-fork-btn').addEventListener('click', () =>
+    doFork($('hbw-fork-type').value, $('hbw-fork-slug').value.trim(), $('hbw-fork-mode').value));
+
+  // Phase 3: search the shipped SRD (offline, SRD-only) for the selected
+  // type, so the GM can fork without knowing the exact slug.
+  $('hbw-search-btn').addEventListener('click', async () => {
+    const type = $('hbw-fork-type').value;
+    const q = $('hbw-search-q').value.trim();
+    const box = $('hbw-search-results');
+    box.innerHTML = '<em>Searching…</em>';
+    try {
+      const r = await fetch(`/api/campaign/${cid}/srd_search?type=${encodeURIComponent(type)}&q=${encodeURIComponent(q)}`);
+      if (!r.ok) { box.innerHTML = '<em>Search failed.</em>'; return; }
+      const recs = (await r.json()).records || [];
+      if (!recs.length) { box.innerHTML = `<p class="muted">No SRD ${esc(type)} match “${esc(q)}”.</p>`; return; }
+      box.innerHTML = recs.map(x =>
+        `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid #f0f0f0">
+           <span style="flex:1">${esc(x.name)} <span class="muted">${esc(x.slug)}</span></span>
+           <button type="button" class="hbw-search-fork" data-slug="${esc(x.slug)}">Fork</button>
+         </div>`).join('');
+    } catch (e) { box.innerHTML = '<em>Search error.</em>'; }
+  });
+
+  $('hbw-search-results').addEventListener('click', (e) => {
+    const b = e.target.closest('.hbw-search-fork');
+    if (b) doFork($('hbw-fork-type').value, b.dataset.slug, $('hbw-fork-mode').value);
+  });
+
+  // Enter in the search box triggers a search.
+  $('hbw-search-q').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); $('hbw-search-btn').click(); }
   });
 
   listEl.addEventListener('click', async (e) => {

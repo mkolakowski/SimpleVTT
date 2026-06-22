@@ -77,3 +77,31 @@ def test_workshop_fork_edit_save(gm_page: Page):
     finally:
         if forked_slug:
             _cleanup('spells', forked_slug)
+
+
+def test_workshop_search_then_fork(gm_page: Page):
+    """Phase 3: a GM finds an SRD spell by name (no slug) and forks it
+    straight from the search results, opening the editor pre-filled."""
+    page = gm_page
+    forked_slug = None
+    try:
+        page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/settings")
+        page.click('.settings-tab[data-tab="homebrew"]')
+        page.click('.settings-subtab[data-sub="workshop"]')
+        expect(page.locator('#hbw-search-btn')).to_be_visible()
+
+        page.select_option('#hbw-fork-type', 'spells')
+        page.fill('#hbw-search-q', 'fireball')
+        page.click('#hbw-search-btn')
+
+        # The SRD match renders with a Fork button; clicking it forks +
+        # opens the editor pre-filled (proving the search→fork wiring).
+        fork_btn = page.locator('.hbw-search-fork[data-slug="fireball"]')
+        expect(fork_btn).to_be_visible(timeout=8000)
+        fork_btn.click()
+        expect(page.locator('#hbw-editor')).to_be_visible(timeout=8000)
+        expect(page.locator('#hbw-ed-damage')).to_have_value('8d6', timeout=8000)
+        forked_slug = json.loads(page.locator('#hbw-ed-raw').input_value())['slug']
+    finally:
+        if forked_slug:
+            _cleanup('spells', forked_slug)

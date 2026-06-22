@@ -15228,6 +15228,32 @@ def list_campaign_homebrew(
     return {"records": out}
 
 
+@router.get("/api/campaign/{campaign_id}/srd_search")
+def srd_search_for_fork(
+    campaign_id: int,
+    type: str,
+    q: str = "",
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Search the shipped SRD content of one type by name — the Workshop's
+    browse-and-fork box (Phase 3 of docs/plans/homebrew-fork-srd.md). Lets a
+    GM find an SRD mechanic to fork without knowing its exact slug. Reads only
+    the **shipped SRD tier** (offline, SRD-only — never the network Open5e
+    proxies the sheet pickers use, which would fork the wrong source); returns
+    up to 30 ``{slug, name}`` matches. GM-gated."""
+    _require_gm_for_campaign(campaign_id, user, db)
+    if type not in local_content.TYPE_REGISTRY:
+        raise HTTPException(404, f"Unknown content type: {type!r}")
+    # campaign_id=None → no campaign-homebrew overlay; filter to shipped SRD.
+    recs, _ = local_content.search(type=type, q=q, campaign_id=None, limit=200)
+    out = [
+        {"slug": r.get("slug"), "name": r.get("name") or r.get("slug")}
+        for r in recs if (r.get("_source") == "local-srd")
+    ][:30]
+    return {"records": out}
+
+
 # ── Homebrew import / export / template ─────────────────────────────────────
 #
 # Bulk JSON I/O for every homebrew content type in one combined file. The
