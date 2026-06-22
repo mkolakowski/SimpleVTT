@@ -20,7 +20,10 @@ every ``gm_note``; a non-GM sees nothing yet), and writes to a
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+import uuid
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from ..auth import require_user
@@ -36,6 +39,15 @@ from ..realtime import hub
 from .tabletop_routes import _user_can_view_campaign, _user_is_gm
 
 router = APIRouter()
+
+# Handout image uploads (Phase 5b polish). Mirrors the portrait/token
+# upload pattern: store under /static/uploads/handouts/, return the URL.
+_HANDOUT_IMG_DIR = (
+    Path(__file__).resolve().parent.parent / "static" / "uploads" / "handouts"
+)
+_HANDOUT_IMG_DIR.mkdir(parents=True, exist_ok=True)
+_MAX_HANDOUT_IMG_BYTES = 8 * 1024 * 1024
+_ALLOWED_HANDOUT_IMG_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
 _MAX_TITLE = 200
 _MAX_BODY = 50_000
@@ -617,6 +629,30 @@ async def reveal_handout(
         recipient_filter=rfilter,
     )
     return {"ok": True, "handout": _handout_dict(h)}
+
+
+@router.post("/api/campaign/{campaign_id}/handouts/upload_image")
+async def upload_handout_image(
+    campaign_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Upload an image for a handout (GM/co-GM only) → returns its URL,
+    which the client puts in the handout's ``image_url``. Stored under
+    /static/uploads/handouts/. png/jpg/webp/gif, ≤ 8 MB."""
+    campaign = _campaign_or_403(db, user, campaign_id)
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    ext = Path(image.filename or "").suffix.lower() or ".png"
+    if ext not in _ALLOWED_HANDOUT_IMG_EXT:
+        raise HTTPException(400, "Unsupported image format (use png/jpg/webp/gif)")
+    data = await image.read()
+    if len(data) > _MAX_HANDOUT_IMG_BYTES:
+        raise HTTPException(400, "Image exceeds 8 MB limit")
+    fname = uuid.uuid4().hex + ext
+    (_HANDOUT_IMG_DIR / fname).write_bytes(data)
+    return {"ok": True, "image_url": "/static/uploads/handouts/" + fname}
 
 
 # ───────────── Private-note encryption keys (Phase 4) ─────────────

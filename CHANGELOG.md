@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.564.0] - 2026-06-21 — "The Pinned Illustration"
+
+**Schema version:** 74
+
+**Commit summary:** Handout image **upload** — a file-picker in the handout composer (reusing the established `/static/uploads` pattern) replaces the pasted-URL-only flow. New `POST /api/campaign/{id}/handouts/upload_image` endpoint.
+
+**Description:** Adds `POST /api/campaign/{id}/handouts/upload_image` (GM/co-GM only): accepts an image file (png/jpg/webp/gif, ≤ 8 MB), stores it under `/static/uploads/handouts/`, and returns the URL — modeled on the portrait/token upload endpoints. The handout composer in `notes.js` gains an "or upload" file input alongside the URL field: selecting a file uploads it, shows an "✓ Uploaded" status, and fills the `image_url` field, which Save persists as before (the pasted-URL path still works). Closes the last filed Notes & Handouts polish item.
+
+**Implementation:**
+
+- `app/routes/notes_routes.py`: `upload_handout_image` endpoint + the uploads dir/limits/extensions.
+- `app/static/notes.js`: file input + `ho-image-status` in the handout editor; a `change` listener + `uploadHandoutImage` (multipart POST → fill the URL field).
+- `docs/plans/notes-and-handouts.md`: the image-upload filed item marked shipped.
+
+**Harness changes:**
+
+- `tests/harness/test_handouts.py`: +3 — GM upload → 200 + `/static/uploads/handouts/` URL; non-GM upload → 403; non-image extension → 400.
+- `tests/harness_ui/test_notes_drawer.py`: +1 Playwright — the GM uploads a PNG via the composer, the URL field fills, and the saved handout card shows an `<img>`.
+
+Total harness count → 4046 in `tests/harness/` + 98 in `tests/harness_ui/`.
+
+MINOR — new upload endpoint + composer file-picker. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/handouts/upload_image` + a handout-composer file picker — GMs attach an image file to a handout directly (vs. pasting a URL).
+
 ## [2.563.0] - 2026-06-21 — "The Sorted Shelf"
 
 **Schema version:** 74

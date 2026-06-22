@@ -383,6 +383,9 @@
           'style="' + INPUT_STYLE + 'resize:vertical;">' + esc(b) + '</textarea>' +
         '<input class="ho-image-input" type="text" maxlength="500" ' +
           'placeholder="Image URL (optional)" value="' + esc(img) + '" style="' + INPUT_STYLE + '">' +
+        '<label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--fg-mute);margin-bottom:6px;">' +
+          'or upload: <input class="ho-image-file" type="file" accept="image/*" style="font-size:11px;"></label>' +
+        '<div class="ho-image-status" style="font-size:11px;color:var(--fg-mute);margin-bottom:6px;"></div>' +
         '<input class="ho-folder-input" type="text" maxlength="120" ' +
           'placeholder="Folder (optional)" value="' + esc(f) + '" style="' + INPUT_STYLE + '">' +
         '<div style="display:flex;gap:8px;">' +
@@ -514,6 +517,30 @@
   async function deleteHandout(id) {
     var r = await fetch(HANDOUTS_API + "/" + id, { method: "DELETE" });
     if (r.ok) { handouts = handouts.filter(function (h) { return h.id !== id; }); render(); }
+  }
+
+  async function uploadHandoutImage(file, inputEl) {
+    var editor = inputEl.closest(".ho-editor");
+    var status = editor ? editor.querySelector(".ho-image-status") : null;
+    if (status) status.textContent = "Uploading…";
+    var fd = new FormData();
+    fd.append("image", file);
+    try {
+      var r = await fetch(HANDOUTS_API + "/upload_image", { method: "POST", body: fd });
+      if (!r.ok) {
+        if (status) status.textContent = "Upload failed.";
+        else window.alert("Image upload failed.");
+        return;
+      }
+      var d = await r.json();
+      if (editor) {
+        var urlInput = editor.querySelector(".ho-image-input");
+        if (urlInput) urlInput.value = d.image_url;
+      }
+      if (status) status.textContent = "✓ Uploaded.";
+    } catch (e) {
+      if (status) status.textContent = "Upload failed.";
+    }
   }
 
   async function revealHandout(id, payload) {
@@ -758,6 +785,15 @@
     if (ev.target.classList.contains("notes-search")) {
       filterText = ev.target.value;
       renderList();  // re-render only the list → the search box keeps focus
+    }
+  });
+
+  document.addEventListener("change", function (ev) {
+    var el = bodyEl();
+    if (!el || !el.contains(ev.target)) return;
+    if (ev.target.classList.contains("ho-image-file")) {
+      var file = ev.target.files && ev.target.files[0];
+      if (file) uploadHandoutImage(file, ev.target);
     }
   });
 

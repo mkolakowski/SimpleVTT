@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 4043 in `tests/harness/` + 97 in `tests/harness_ui/` (as of v2.563.0, 2026-06-21). Recent UI tests: `tests/harness_ui/test_notes_crypto.py` (Phase 4b — browser PBKDF2+AES-GCM round-trip + full encrypt→store→fetch→decrypt, no plaintext at rest or on the wire) and `tests/harness_ui/test_notes_drawer.py` (Phase 5a GM prep-note CRUD; 5d a player writes/reloads-locked/unlocks a private note; 5b cross-context handout reveal — GM reveals → player sees it live over WS → GM hides → it disappears — zero console errors).
+**Total tests:** 4046 in `tests/harness/` + 98 in `tests/harness_ui/` (as of v2.564.0, 2026-06-21). Recent UI tests: `tests/harness_ui/test_notes_crypto.py` (Phase 4b — browser PBKDF2+AES-GCM round-trip + full encrypt→store→fetch→decrypt, no plaintext at rest or on the wire) and `tests/harness_ui/test_notes_drawer.py` (Phase 5a GM prep-note CRUD; 5d a player writes/reloads-locked/unlocks a private note; 5b cross-context handout reveal — GM reveals → player sees it live over WS → GM hides → it disappears — zero console errors).
 
 ### `test_private_notes.py`
 v2.557.0 — Notes & Handouts **Phase 4 (server side)** — E2E-encrypted private notes, [notes-and-handouts.md](../plans/notes-and-handouts.md). `note_encryption_keys` table (schema v74) + encryption-config endpoints + private-note ciphertext storage. Server tests use placeholder ciphertext (the server treats `enc_*` as opaque; real AES-GCM is the Playwright test). GM = `gm_client`; alice/bob = non-GM members.
@@ -58,6 +58,9 @@ v2.555.0 — Notes & Handouts **Phase 2** (handouts), [notes-and-handouts.md](..
 | `test_create_requires_title` | Missing title → 400. |
 | `test_reveal_unknown_handout_404` | Reveal a nonexistent handout → 404. |
 | `test_reveal_bad_to_400` | `reveal {to: 5}` (not "all"/list) → 400. |
+| `test_upload_handout_image` | GM `POST …/handouts/upload_image` (PNG) → 200 + a `/static/uploads/handouts/…png` URL. |
+| `test_upload_handout_image_player_403` | A non-GM member uploading → 403. |
+| `test_upload_handout_image_bad_ext_400` | A non-image extension → 400. |
 
 ### `test_notes.py`
 v2.554.0 — Notes & Handouts **Phase 1** (GM prep notes), [notes-and-handouts.md](../plans/notes-and-handouts.md). New `notes_routes.py` + `campaign_notes` table (schema v72). GM = `gm_client`; non-GM member = `alice_client`.

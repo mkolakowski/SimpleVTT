@@ -334,7 +334,8 @@ page for out-of-session work.
   (safe-subset client renderer in `notes.js`; scheme-validated links).
 - **Downloadable recovery key** for private notes (opt-in; see Privacy
   model).
-- **Handout image *upload* widget** (vs. the current pasted URL).
+- ✅ **Handout image *upload* widget** — shipped v2.564.0
+  (`POST …/handouts/upload_image` + a composer file picker).
 - **Handout media beyond images** (PDF/audio) — reuse the upload flow.
 - **Cross-campaign player notebook** — the encryption key is already
   per-user; a "my notebook across all my campaigns" view is a natural

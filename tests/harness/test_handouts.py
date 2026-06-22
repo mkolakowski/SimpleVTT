@@ -17,12 +17,18 @@ bob owns the demo Wizard (Thalindra Moonwhisper) — the roster's
 `owner_user_id` resolves their user_ids for targeted reveals.
 """
 import asyncio
+import base64
 
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
 
 _BASE = f"/api/campaign/{CAMPAIGN_ID}/handouts"
+
+# A minimal valid 1×1 PNG for the image-upload tests.
+_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+    "+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -176,4 +182,33 @@ async def test_reveal_bad_to_400(gm_client):
     c = await gm_client.post(_BASE, json={"title": "x"})
     hid = c.json()["handout"]["id"]
     r = await gm_client.post(f"{_BASE}/{hid}/reveal", json={"to": 5})
+    assert r.status_code == 400, r.text
+
+
+async def test_upload_handout_image(gm_client):
+    """GM uploads a PNG → 200 + a /static/uploads/handouts/ URL."""
+    r = await gm_client.post(
+        f"{_BASE}/upload_image",
+        files={"image": ("frag.png", _PNG, "image/png")},
+    )
+    assert r.status_code == 200, r.text
+    url = r.json()["image_url"]
+    assert url.startswith("/static/uploads/handouts/") and url.endswith(".png")
+
+
+async def test_upload_handout_image_player_403(gm_client, alice_client):
+    """A non-GM member cannot upload a handout image."""
+    r = await alice_client.post(
+        f"{_BASE}/upload_image",
+        files={"image": ("frag.png", _PNG, "image/png")},
+    )
+    assert r.status_code == 403, r.text
+
+
+async def test_upload_handout_image_bad_ext_400(gm_client):
+    """A non-image extension → 400."""
+    r = await gm_client.post(
+        f"{_BASE}/upload_image",
+        files={"image": ("notes.txt", b"not an image", "text/plain")},
+    )
     assert r.status_code == 400, r.text

@@ -6,11 +6,17 @@ the card render, edits it, and deletes it — with no JS console errors.
 
 GM = gm_page (authenticated GM context on the tabletop).
 """
+import base64
 import re
 
 from playwright.sync_api import Page, expect
 
 from .conftest import BASE_URL, CAMPAIGN_ID
+
+# Minimal valid 1×1 PNG for the handout image-upload test.
+_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+    "+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
 
 
 def _open_notes(page: Page):
@@ -221,6 +227,39 @@ def _open_handouts(page: Page):
     expect(tab).to_be_visible(timeout=5000)
     tab.click()
     page.locator('#notes-body .notes-view-toggle[data-view="handouts"]').click()
+
+
+def test_handout_image_upload(gm_page: Page):
+    """The GM uploads an image file in the handout composer → the URL
+    field fills + the saved handout card shows an <img>."""
+    errors = []
+    gm_page.on("pageerror", lambda e: errors.append(str(e)))
+    _open_handouts(gm_page)
+
+    while gm_page.locator("#notes-body .ho-card .ho-del").count():
+        gm_page.once("dialog", lambda d: d.accept())
+        gm_page.locator("#notes-body .ho-card .ho-del").first.click()
+        gm_page.wait_for_timeout(150)
+
+    gm_page.locator("#notes-body button.ho-new").click()
+    gm_page.locator("#notes-body .ho-title-input").fill("Map fragment")
+    gm_page.locator("#notes-body .ho-image-file").set_input_files({
+        "name": "frag.png", "mimeType": "image/png", "buffer": _PNG,
+    })
+    # Upload completes → status + URL field populated.
+    expect(gm_page.locator("#notes-body .ho-image-status")).to_contain_text(
+        "Uploaded", timeout=6000)
+    url_val = gm_page.locator("#notes-body .ho-image-input").input_value()
+    assert url_val.startswith("/static/uploads/handouts/"), url_val
+
+    gm_page.locator("#notes-body button.ho-save").click()
+    expect(gm_page.locator("#notes-body .ho-card img")).to_have_count(1, timeout=3000)
+
+    # Cleanup.
+    gm_page.once("dialog", lambda d: d.accept())
+    gm_page.locator("#notes-body .ho-card button.ho-del").click()
+    expect(gm_page.locator("#notes-body .ho-card")).to_have_count(0, timeout=3000)
+    assert not errors, f"JS console errors: {errors}"
 
 
 def test_handout_create_reveal_hide(gm_page: Page, alice_page: Page):
