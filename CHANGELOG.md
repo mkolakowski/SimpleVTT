@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.568.2] - 2026-06-22 — "The Cartographer's Warning"
+
+**Schema version:** 75
+
+**Commit summary:** Audit the SRD build-script's other derived fields after the v2.568.1 concentration fix; the heuristics are sound, but the script can no longer reproduce the curated content — guard the regen foot-gun with a loud docstring + runtime warning.
+
+**Description:** Follow-up audit of `scripts/build_srd_content.py` for more concentration-style heuristic gaps. Findings:
+
+- **`ritual`** — fine. It reads Open5e's dedicated `ritual` field (29 spells correctly flagged); concentration broke only because it was uniquely derived from the *duration string* rather than its own field.
+- **`save_ability` / `damage` / `healing` / `attack_roll`** — best-effort regex (as designed), working acceptably. Of 10 spells that mention "saving throw" but carry no `save_ability`, all but Hold Monster are false positives (Bless / Resistance / Warding Bond reference saves without imposing one), and the real one is resolved at runtime via `_SPELL_BUFF_MAP`. No fix needed.
+- **The real gap — the script can't regenerate the shipped data.** `_enrich_cast_action` emits only 9 basic action fields; the live spell JSONs carry curated fields the script never produces — `actions[].area` (AoE shape/size, 27 spells), `upcast` / `damage_per_slot` / `damage_scaling`, and action gating (`min_level` / `category` / `cost` / `resource_key` / …). The script's own "re-run when upstream changes" instruction would `os.replace` each file wholesale and **silently drop all of it**, breaking AoE placement, the persistent-AoE enter/start-of-turn trigger, and every `test_cast_*_upcast`.
+
+The curated data *is* harness-protected (`test_spell_catalog_aoe` gates the 27 AoE shapes; the upcast suites gate scaling), so CI would catch a destructive regen — but the script actively invited the foot-gun. Rather than try to make the script regenerate data it can't derive from Open5e, this adds a prominent module-docstring warning + a runtime `⚠ WARNING` banner (printed on any non-dry-run) documenting the curated fields at risk and the safe workflow (dry-run / scratch `DEST_ROOT` + a hand-merged diff).
+
+**Implementation:**
+
+- `scripts/build_srd_content.py`: expanded the module docstring (curated-field inventory + safe-regen workflow) and added a runtime warning banner in `main()` for non-dry-run invocations. No behavior change to the transform/fetch logic.
+
+No harness change — script-comment/warning only; the curated content it protects is already gated by the existing AoE + upcast suites.
+
+PATCH — build-script documentation/guard hardening. No app, schema, or API change.
+
+### Changed
+- `scripts/build_srd_content.py` now loudly warns (docstring + runtime banner) that re-running overwrites curated content fields (`area`, `upcast`, damage scaling, action gating) it does not regenerate — preventing an accidental destructive regen.
+
 ## [2.568.1] - 2026-06-22 — "The Unbroken Focus"
 
 **Schema version:** 75

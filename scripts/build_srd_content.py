@@ -1,10 +1,37 @@
 #!/usr/bin/env python3
 """Build the shipped SRD content library by pulling from Open5e.
 
-Run this once when standing up the file-based content framework, and re-run
-when the upstream SRD version changes. The generated files live at
-``app/data/local/dnd5e/<type>/<slug>.json`` and are intended to be committed
-to git as part of the image.
+This is an INITIAL-BOOTSTRAP tool. The generated files live at
+``app/data/local/dnd5e/<type>/<slug>.json`` and are committed to git as
+part of the image.
+
+⚠  RE-RUNNING OVERWRITES CURATED DATA — DO NOT BLIND-REGENERATE. ⚠
+
+Since the initial bootstrap, the shipped spell JSONs have been curated
+well beyond what this script produces. ``_enrich_cast_action`` emits only
+9 basic action fields (damage / damage_type / save_ability / healing /
+aoe_targets / attack_roll + id/name/desc); the live files additionally
+carry hand-/migration-curated fields this script does NOT derive, e.g.:
+
+  - ``actions[].area`` — AoE shape + size (27 spells). Dropping these
+    breaks ``_extract_aoe_area``, AoE placement, and the persistent-AoE
+    enter/start-of-turn trigger (docs/plans/aoe-enter-trigger.md).
+  - ``upcast`` / ``damage_per_slot`` / ``damage_scaling`` — higher-level
+    scaling. Dropping these breaks every ``test_cast_*_upcast``.
+  - ``min_level`` / ``category`` / ``cost`` / ``resource_key`` /
+    ``active_toggle`` / ``reroll_trigger`` / ``transform_picker`` — action
+    gating consumed across the cast paths.
+
+A plain re-run (``os.replace`` overwrites each file wholesale — there is
+no merge) silently discards all of the above. The harness will catch it
+(``test_spell_catalog_aoe`` gates the 27 AoE shapes; the upcast suites
+gate scaling), but don't rely on that — if you must refresh from upstream,
+write to a SCRATCH directory (point ``DEST_ROOT`` elsewhere or ``--dry-run``
++ a temp copy), DIFF against the live files, and merge only the genuinely
+new upstream changes by hand. The per-field heuristics here (notably
+``concentration``, fixed v2.568.1) are also weaker than the curated data.
+
+Run this once when standing up the file-based content framework.
 
 Usage
 -----
@@ -523,6 +550,16 @@ def main() -> int:
     print(f"Types       : {types}")
     print(f"Dry-run     : {args.dry_run}")
     print(f"Scope       : {'ALL Open5e' if args.include_all else 'SRD only (document__slug=wotc-srd)'}\n")
+
+    if not args.dry_run:
+        print(
+            "⚠  WARNING: writing to the live content dir OVERWRITES each file\n"
+            "   wholesale. The shipped JSONs carry curated fields this script\n"
+            "   does NOT regenerate (actions[].area, upcast, damage scaling,\n"
+            "   action gating — see the module docstring). A blind re-run\n"
+            "   silently drops them and breaks AoE placement + upcast tests.\n"
+            "   Prefer --dry-run / a scratch DEST_ROOT + a hand-merged diff.\n"
+        )
 
     summary = build(types, dry_run=args.dry_run, include_all=args.include_all)
 
