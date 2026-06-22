@@ -71730,6 +71730,156 @@ async def cast_project_image(
     }
 
 
+async def _do_cast_scry_sensor(
+    campaign_id: int, request: Request, db: Session, user: User,
+    *, slug: str, display_name: str, icon: str, caster_classes: set,
+    duration_rounds: int, allow_mode: bool, default_location: str,
+    sense_note: str,
+) -> "dict | JSONResponse":
+    """v2.548.0 — shared body for the Clairvoyance (#62) / Arcane Eye
+    (#63) scrying-sensor flag-buffs. Both create an invisible remote
+    sensor the caster perceives through; SimpleVTT models no remote
+    camera, so the sensor's view is GM-narrated. The mechanical half is
+    the **concentration ride**: the buff is concentration-bound, so it
+    drops via `_install_buff`'s one-at-a-time cascade when the caster
+    concentrates elsewhere. Self-cast. Body: ``{character_id,
+    location?, mode?}`` (mode only when ``allow_mode``).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows = any(
+        (s.get("_slug") == slug)
+        or (str(s.get("name", "")).lower() == display_name.lower())
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    is_caster = _cls in caster_classes or any(
+        c in caster_classes for c in _classes)
+    if not knows and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": (
+                f"knows {display_name}, or "
+                + "/".join(sorted(caster_classes))
+            ),
+            "got_class": _cls,
+        })
+
+    location = (body.get("location") or "").strip() or default_location
+    effects = {"scry_sensor_active": True, "scry_location": location}
+    mode = None
+    if allow_mode:
+        mode = (body.get("mode") or "seeing").strip().lower()
+        if mode not in ("seeing", "hearing"):
+            mode = "seeing"
+        effects["scry_mode"] = mode
+
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": slug,
+        "name": display_name,
+        "icon": icon,
+        "duration_rounds": duration_rounds,
+        "duration_max": duration_rounds,
+        "concentration": True,  # RAW "Concentration, up to ..."
+        "source_char_id": char.id,
+        "effects": effects,
+        "desc": (
+            f"An invisible sensor at {location} (concentration). "
+            f"{sense_note} The sensor's view is GM-narrated."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": f"{icon} {display_name}",
+            "feature_desc": (
+                f"{char.name} conjures an invisible sensor at {location}. "
+                "The GM narrates what it perceives."
+            ),
+            "source": slug,
+            "scry_location": location,
+        },
+    })
+
+    resp = {
+        "ok": True,
+        "feature": slug,
+        "target_character_id": char.id,
+        "location": location,
+        "concentration": True,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": duration_rounds,
+    }
+    if allow_mode:
+        resp["mode"] = mode
+    return resp
+
+
+@router.post("/api/campaign/{campaign_id}/cast_clairvoyance")
+async def cast_clairvoyance(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.548.0 — Phase 2 #62 of
+    docs/plans/cast-and-broadcast-tail.md. Clairvoyance (L3 divination,
+    Bard/Cleric/Sorcerer/Warlock/Wizard, PHB p.221): "You create an
+    invisible sensor within range in a location familiar to you ... You
+    can choose seeing or hearing." 1 action, V/S/M, 1 mile,
+    Concentration up to 10 minutes.
+
+    A scrying-sensor flag-buff on the shared `_do_cast_scry_sensor`
+    helper. Optional ``location`` + ``mode`` ("seeing" | "hearing",
+    default "seeing"). The sensor's view is GM-narrated; the
+    concentration ride is mechanical. Response: ``{ok, feature,
+    target_character_id, location, mode, concentration, buff_installed,
+    duration_rounds}``.
+    """
+    return await _do_cast_scry_sensor(
+        campaign_id, request, db, user,
+        slug="clairvoyance", display_name="Clairvoyance", icon="🔮",
+        caster_classes={"cleric", "bard", "sorcerer", "warlock", "wizard"},
+        duration_rounds=100,  # 10 min @ 6 s/round
+        allow_mode=True, default_location="a familiar location",
+        sense_note="You perceive through it (seeing or hearing).",
+    )
+
+
 @router.post("/api/campaign/{campaign_id}/cast_zone_of_truth")
 async def cast_zone_of_truth(
     campaign_id: int,

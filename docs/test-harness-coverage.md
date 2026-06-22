@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3968 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.547.0, 2026-06-21).
+**Total tests:** 3973 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.548.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4753,6 +4753,17 @@ v2.544.0 — Locate Object (L2 divination, Bard/Cleric/Druid/Ranger/Wizard, PHB 
 | `test_locate_object_drops_on_new_concentration` | **Concentration ride:** casting Barkskin (another concentration spell) drops the `locate-object` buff (one concentration at a time). |
 | `test_cast_locate_object_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected names "locate object". |
 | `test_cast_locate_object_missing_character_id_400` | Missing `character_id` → 400. |
+
+### `test_cast_clairvoyance.py`
+v2.548.0 — Clairvoyance (L3 divination, Bard/Cleric/Sorcerer/Warlock/Wizard, PHB p.221). Phase 2 #62 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `cast_clairvoyance` endpoint (shared `_do_cast_scry_sensor` helper) — a concentration flag-buff planting an invisible seeing/hearing sensor (GM-narrated view). Caster: Thalindra Moonwhisper (Wizard).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_clairvoyance_installs_concentration_buff` | Self-cast → `feature == "clairvoyance"`, `concentration == true`, `duration_rounds == 100`, default `mode == "seeing"` + `location == "a familiar location"`; buff carries `scry_sensor_active` + `scry_mode == "seeing"` + `concentration == true`. |
+| `test_cast_clairvoyance_hearing_mode_and_location` | `mode: "hearing"` + a named `location` ("the war room") surface on response + buff. |
+| `test_clairvoyance_drops_on_new_concentration` | **Concentration ride:** casting Fly drops the `clairvoyance` buff. |
+| `test_cast_clairvoyance_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected names "clairvoyance". |
+| `test_cast_clairvoyance_missing_character_id_400` | Missing `character_id` → 400. |
 
 ### `test_cast_project_image.py`
 v2.547.0 — Project Image (L7 illusion, Bard/Wizard, PHB p.270). Phase 2 #61 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `cast_project_image` endpoint — a concentration flag-buff marking a remote intangible illusory copy of the caster (GM-narrated). Caster: Thalindra Moonwhisper (Wizard).

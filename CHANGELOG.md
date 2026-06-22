@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.548.0] - 2026-06-21 — "The Borrowed Eye"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_clairvoyance` — Phase 2 #62 of the cast-and-broadcast tail. Clairvoyance (L3 divination, Bard/Cleric/Sorcerer/Warlock/Wizard) plants an invisible scrying sensor (seeing or hearing) as a concentration flag-buff.
+
+**Description:** RAW PHB p.221: "You create an invisible sensor within range in a location familiar to you ... You can choose seeing or hearing." 1 mile, Concentration up to 10 minutes. SimpleVTT models no remote camera, so the sensor's view is GM-narrated — but the **concentration ride is real**: the `clairvoyance` buff is concentration-bound, so `_install_buff`'s one-at-a-time cascade drops it when the caster concentrates elsewhere. Optional `location` + `mode` ("seeing" | "hearing", default "seeing") body fields. Built on a new shared `_do_cast_scry_sensor` helper so Arcane Eye (#63) reuses it.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_do_cast_scry_sensor` helper; `cast_clairvoyance` endpoint (self-cast; gate: knows the spell OR cleric/bard/sorcerer/warlock/wizard). 400/403/404/409 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #62.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_clairvoyance.py` (new): +5 — self-cast installs a concentration `clairvoyance` buff (`scry_sensor_active` + `scry_mode: "seeing"` + location, 100 rounds); `mode: "hearing"` + a named location surface; concentration cascade-drop via Fly; non-caster 409; missing character_id 400.
+
+Total harness count → 3973 (+5).
+
+MINOR — new cast endpoint + a reusable scrying-sensor helper. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_clairvoyance`: Clairvoyance (L3) — a concentration flag-buff planting an invisible seeing/hearing sensor at a named location (GM-narrated view). Phase 2 #62 of the cast-and-broadcast tail.
+
 ## [2.547.0] - 2026-06-21 — "The Distant Self"
 
 **Schema version:** 71
