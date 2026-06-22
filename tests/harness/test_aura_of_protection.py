@@ -35,7 +35,8 @@ import pytest_asyncio
 from .conftest import CAMPAIGN_ID
 
 
-FIREBALL_INDEX = 7  # Thalindra's spell list — DEX save
+FIREBALL_INDEX = 10  # Fireball, DEX save (stored-sheet index; 7 drifted to
+                     # Web — see test_cast_spell_aoe.py).
 
 
 @pytest_asyncio.fixture

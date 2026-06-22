@@ -32,7 +32,10 @@ import pytest_asyncio
 from .conftest import CAMPAIGN_ID
 
 
-FIREBALL_INDEX = 7  # Thalindra's spell list — see test_cast_spell_aoe.py
+FIREBALL_INDEX = 10  # Fireball (8d6) in Thalindra's stored sheet. Was 7, but
+                     # stored-index 7 drifted to Web (no damage), which made
+                     # the failed-save damage assertion below fail. See
+                     # test_cast_spell_aoe.py.
 
 
 async def _bandit_tmpl(gm_client):

@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.572.1] - 2026-06-22 — "The Right Spell"
+
+**Schema version:** 75
+
+**Commit summary:** FIREBALL_INDEX hygiene sweep — fix 5 tests that cast Web instead of Fireball (stale stored-sheet index 7 → 10), including one that was actually failing.
+
+**Description:** Follow-up to v2.569.1. Five harness tests hardcoded `FIREBALL_INDEX = 7`, but the demo seed drifted so Thalindra's *stored*-sheet index 7 is now **Web** (a DEX-save AoE that deals **no** damage), not Fireball. The DEX-save-shape tests (`test_danger_sense`, `test_opportunity_attack`, `test_aura_of_protection`) passed anyway because Web shares the DEX save — but they were validating against the wrong spell. The two damage tests were worse:
+
+- **`test_use_save_evasion::test_evasion_save_fail_half_damage` was failing** (red) — it asserts `4 ≤ damage_applied ≤ 24` for an 8d6 Fireball, but Web dealt ~1, so `4 ≤ 1` failed. (My earlier `-k` regressions never matched `save`/`resistance`, so this stayed hidden.)
+- `test_npc_resistance` passed only *trivially* — Web's ~1 damage happened to satisfy `0 < applied ≤ 24`, so the fire-resistance-halving it claims to test was exercising nothing.
+
+All five are re-pointed to index 10 (real Fireball, 8d6 fire, DEX save — matching `test_cast_spell_aoe.py`), with comments documenting the drift. Verified: all 47 tests across the five files pass, including the previously-red Evasion failed-save case (now real 8d6 damage in the 4–24 range) and a now-meaningful fire-resistance check.
+
+**Harness changes:**
+
+- `test_danger_sense.py`, `test_opportunity_attack.py`, `test_use_save_evasion.py`, `test_npc_resistance.py`, `test_aura_of_protection.py`: `FIREBALL_INDEX` 7 → 10. No count change (4092).
+
+PATCH — test-fixture correctness fix (fixes a red test + removes two false-confidence passes). No app, schema, or API change.
+
+### Fixed
+- Five harness tests cast Web instead of Fireball (stale demo-sheet index), including `test_evasion_save_fail_half_damage` which was failing and `test_npc_resistance` which passed trivially; all re-pointed to Fireball.
+
 ## [2.572.0] - 2026-06-22 — "The Open Stacks"
 
 **Schema version:** 75

@@ -34,7 +34,11 @@ from .conftest import CAMPAIGN_ID
 
 # Thalindra's wizard spell list — see app/demo_seed.py and
 # tests/harness/test_cast_spell_aoe.py.
-FIREBALL_INDEX = 7         # 8d6 fire, DEX save
+FIREBALL_INDEX = 10        # Fireball (8d6 fire, DEX save) in Thalindra's
+                           # *stored* sheet. Was 7, but the seed drifted and
+                           # stored-index 7 is now Web — a DEX-save AoE that
+                           # deals no damage, so this test passed for the
+                           # wrong spell. Aligned with test_cast_spell_aoe.py.
 HOLD_PERSON_TAVIK_INDEX = 8  # Tavik's cleric spell list — WIS save
 
 

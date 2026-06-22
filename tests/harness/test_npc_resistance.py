@@ -29,7 +29,10 @@ import pytest_asyncio
 from .conftest import CAMPAIGN_ID
 
 
-FIREBALL_INDEX = 7  # Thalindra's spell list, see test_cast_spell_aoe.py
+FIREBALL_INDEX = 10  # Fireball (8d6 fire) in Thalindra's stored sheet. Was 7,
+                     # but stored-index 7 drifted to Web (no damage / not fire),
+                     # so the fire-resistance assertion tested nothing real.
+                     # See test_cast_spell_aoe.py.
 
 
 async def _set_auto_apply(gm_client, on: bool) -> None:
