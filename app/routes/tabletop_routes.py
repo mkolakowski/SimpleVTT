@@ -72238,6 +72238,143 @@ async def cast_illusory_script(
     )
 
 
+@router.post("/api/campaign/{campaign_id}/cast_forbiddance")
+async def cast_forbiddance(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.553.0 — Phase 2 #67 of
+    docs/plans/cast-and-broadcast-tail.md. Forbiddance (L6 abjuration,
+    Cleric, ritual, PHB p.243): "You create a ward against magical travel
+    that protects up to 40,000 square feet of floor space ... A creature
+    of the chosen type or alignment takes 5d10 radiant or necrotic
+    damage (your choice ...) when it enters the area for the first time
+    on a turn or starts its turn there." 10 minutes (ritual), V/S/M,
+    Touch, 24 hours, non-concentration.
+
+    The last AoE-shape gap from the SRD audit. SimpleVTT models no
+    zone-of-effect, so this is a GM-narrated warded zone in the Zone of
+    Truth (#52) mould — but it bakes a **damage** marker rather than a
+    save-DC: the `forbiddance` buff carries ``effects.forbiddance: True``
+    + ``ward_damage_dice: "5d10"`` + the chosen ``ward_damage_type``
+    (radiant | necrotic) + the ``warded_type`` (creature type/alignment),
+    so any card can render "Forbiddance (5d10 radiant vs fiends)". The
+    40,000-sq-ft geometry, the per-creature enter/start-of-turn damage,
+    and the teleport/planar-travel block are GM-narrated. Cleric-only,
+    non-concentration (24-hour ward). Self-anchored.
+
+    Body: ``{character_id, damage_type?, warded_type?}``. Response:
+    ``{ok, feature, target_character_id, damage_dice, damage_type,
+    warded_type, buff_installed, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows = any(
+        (s.get("_slug") == "forbiddance")
+        or (str(s.get("name", "")).lower() == "forbiddance")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    is_caster = _cls == "cleric" or "cleric" in _classes
+    if not knows and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Forbiddance, or cleric",
+            "got_class": _cls,
+        })
+
+    damage_type = (body.get("damage_type") or "radiant").strip().lower()
+    if damage_type not in ("radiant", "necrotic"):
+        damage_type = "radiant"
+    warded_type = (body.get("warded_type") or "").strip() or "your chosen creatures"
+    DAMAGE_DICE = "5d10"
+    DURATION_ROUNDS = 14400  # 24 hours @ 6 s/round
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "forbiddance",
+        "name": "Forbiddance",
+        "icon": "🛡️",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "forbiddance": True,
+            "ward_damage_dice": DAMAGE_DICE,
+            "ward_damage_type": damage_type,
+            "warded_type": warded_type,
+        },
+        "desc": (
+            f"A warded zone (up to 40,000 sq ft) for 24 hours: blocks "
+            f"teleport/planar travel in, and {warded_type} take "
+            f"{DAMAGE_DICE} {damage_type} on entering or starting a turn "
+            "inside. Geometry + per-creature damage + travel-block are "
+            "GM-narrated."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🛡️ Forbiddance",
+            "feature_desc": (
+                f"{char.name} wards an area for 24 hours — blocks magical "
+                f"travel in, and {warded_type} take {DAMAGE_DICE} "
+                f"{damage_type} on entry/start of turn (GM-narrated zone)."
+            ),
+            "source": "forbiddance",
+            "ward_damage_dice": DAMAGE_DICE,
+            "ward_damage_type": damage_type,
+            "warded_type": warded_type,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "forbiddance",
+        "target_character_id": char.id,
+        "damage_dice": DAMAGE_DICE,
+        "damage_type": damage_type,
+        "warded_type": warded_type,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_zone_of_truth")
 async def cast_zone_of_truth(
     campaign_id: int,

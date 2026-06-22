@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.553.0] - 2026-06-21 — "The Hallowed Bounds"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_forbiddance` — Phase 2 #67 of the cast-and-broadcast tail. Forbiddance (L6 abjuration, Cleric) installs a warded-zone flag-buff baking a 5d10 radiant/necrotic damage marker — closing the last AoE-shape gap from the SRD audit.
+
+**Description:** RAW PHB p.243: "You create a ward against magical travel ... A creature of the chosen type or alignment takes 5d10 radiant or necrotic damage ... when it enters the area for the first time on a turn or starts its turn there." Touch, 24 hours, non-concentration. SimpleVTT models no zone-of-effect, so this is a GM-narrated warded zone in the Zone of Truth (#52) mould — but it bakes a **damage** marker rather than a save-DC: the `forbiddance` buff carries `effects.forbiddance: True` + `ward_damage_dice: "5d10"` + the chosen `ward_damage_type` (radiant | necrotic, default radiant; invalid → radiant) + the `warded_type` (creature type/alignment), so a card can render "Forbiddance (5d10 necrotic vs fiends)". The 40,000-sq-ft geometry, the per-creature enter/start-of-turn damage, and the teleport/planar-travel block are GM-narrated. Cleric-only, non-concentration (24-hour ward).
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `cast_forbiddance` endpoint (self-cast; gate: knows the spell OR cleric). Optional `damage_type` + `warded_type`. 400/403/404/409 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #67.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_forbiddance.py` (new): +4 — self-cast installs a non-concentration `forbiddance` buff (5d10 + default radiant + default warded_type, 24h); a chosen necrotic type + named warded_type surface + invalid damage_type → radiant fallback; non-caster 409; missing character_id 400.
+
+Total harness count → 3994 (+4).
+
+MINOR — new cast endpoint (GM-narrated warded zone + baked damage marker). No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_forbiddance`: Forbiddance (L6) — a 24-hour warded-zone flag-buff baking 5d10 radiant/necrotic vs a designated creature type (GM-narrated zone + travel-block). Phase 2 #67 of the cast-and-broadcast tail; closes the SRD audit's last AoE-shape gap.
+
 ## [2.552.0] - 2026-06-21 — "The Cipher Page"
 
 **Schema version:** 71
