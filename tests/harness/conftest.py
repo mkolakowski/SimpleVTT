@@ -224,3 +224,30 @@ async def clean_pcs(
             json={"type": "long"},
         )
     return roster
+
+
+# ── Live progress + per-test timing (opt-in via HARNESS_PROGRESS=1) ──────────
+# scripts/run_harness.sh sets HARNESS_PROGRESS=1 to stream a timestamped line
+# when each test STARTS and again when it FINISHES (with its duration), so a
+# long serial run shows live progress and a hang is pinpointed: a "▶" line
+# with no follow-up "✓/✗" is the test currently stuck. Inert for normal runs —
+# with the env var unset these hook functions are never defined, so pytest
+# registers nothing.
+import os as _hp_os  # noqa: E402
+import datetime as _hp_dt  # noqa: E402
+
+if _hp_os.getenv("HARNESS_PROGRESS") == "1":
+    def pytest_runtest_logstart(nodeid, location):
+        print(f"\n[{_hp_dt.datetime.now():%H:%M:%S}] ▶ {nodeid}", flush=True)
+
+    def pytest_runtest_logreport(report):
+        # The call phase is the test body; also surface any non-call failure
+        # (a setup/teardown error) so fixture failures don't go silent.
+        if report.when == "call" or (report.failed and report.when != "call"):
+            mark = {"passed": "✓", "failed": "✗",
+                    "skipped": "–"}.get(report.outcome, "?")
+            print(
+                f"[{_hp_dt.datetime.now():%H:%M:%S}] {mark} {report.nodeid} "
+                f"({report.duration:.2f}s)",
+                flush=True,
+            )

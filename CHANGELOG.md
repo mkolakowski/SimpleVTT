@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.572.4] - 2026-06-22 — "The Live Tape"
+
+**Schema version:** 75
+
+**Commit summary:** Harness progress + timing tooling — a runner that streams live timestamped per-test progress, ranks the slowest tests, and writes a JSON/JUnit report (the data source for an upcoming admin Tests dashboard). Dev tooling only.
+
+**Description:** The harness shares one campaign-1 stack so it runs serially, and `pytest -q` buffers output to the end — so a long run shows nothing until it finishes, and on this box (the demo reseeds every 60 min) a run over ~60 min straddles a reseed and fails spuriously (the 3h20m full run that just completed reported 288 failures, ~88% of a sampled subset passing clean on a fresh container — i.e. reseed contamination). This commit adds the tooling to make a run legible:
+
+- **`scripts/run_harness.sh`** — runs the suite (or any subset/`-k` expr) with `-v` + `--durations=30` + `--junitxml`, `tee`'d to a timestamped log, and post-processes a JSON summary. Sets `HARNESS_PROGRESS=1`.
+- **Live progress hook in `tests/harness/conftest.py`** — opt-in via `HARNESS_PROGRESS=1` (inert otherwise): prints `[HH:MM:SS] ▶ <test>` when each test starts and `[HH:MM:SS] ✓/✗ <test> (Ns)` when it finishes. A `▶` with no follow-up pinpoints a hanging test live — directly fixing the "buffered until the end" blind spot.
+- **`scripts/harness_report.py`** — parses the JUnit XML into counts, the slowest 30, and the failure list, and (with `--json`) writes the compact JSON the admin Tests dashboard will chart.
+- Output lands in a gitignored `test-results/` dir with `latest.{log,xml,json}` symlinks.
+
+**Files:** `scripts/run_harness.sh` + `scripts/harness_report.py` (new), `tests/harness/conftest.py` (gated hook), `.gitignore` (test-results/).
+
+PATCH — developer test-infra; no app, schema, API, or test-contract change (the conftest hook is inert without the env var).
+
+### Added
+- `scripts/run_harness.sh` + a gated live-progress conftest hook + `scripts/harness_report.py`: stream timestamped per-test progress/timing, rank the slowest tests, and emit a JSON/JUnit report (data source for the planned admin Tests dashboard).
+
 ## [2.572.3] - 2026-06-22 — "The Honest Ledger"
 
 **Schema version:** 75

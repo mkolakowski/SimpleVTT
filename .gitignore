@@ -16,3 +16,6 @@ app/static/uploads/
 .claude/worktrees/
 .claude/scheduled_tasks.lock
 .claude/*.lock
+
+# Harness run artifacts (scripts/run_harness.sh)
+test-results/
