@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.551.0] - 2026-06-21 — "The Whispering Wall"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_magic_mouth` — Phase 2 #65 of the cast-and-broadcast tail. Magic Mouth (L2 illusion, Bard/Wizard) records an implanted message + its trigger on a long-lived (until-dispelled) flag-buff.
+
+**Description:** RAW PHB p.259: "You implant a message within an object in range, a message that is uttered when a trigger condition is met." 30 ft, Until dispelled, non-concentration. SimpleVTT models no objects or trigger engine, so this is a GM-narrated utility enchantment — the `magic-mouth` buff records the (up to 25-word) message + its trigger condition and the cast broadcasts; the object choice, trigger firing, and playback are GM-narrated. Optional `message` + `trigger` body fields. Built on a new shared `_do_cast_inscribed_illusion` helper so Illusory Script (#66) reuses it.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `_do_cast_inscribed_illusion` helper; `cast_magic_mouth` endpoint (self-cast; gate: knows the spell OR bard/wizard). 400/403/404/409 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #65.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_magic_mouth.py` (new): +4 — self-cast installs a non-concentration `magic-mouth` buff (`magic_mouth_active` + default message/trigger, until-dispelled); a named message + trigger surface; non-caster 409; missing character_id 400.
+
+Total harness count → 3986 (+4).
+
+MINOR — new cast endpoint + a reusable inscribed-illusion helper. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_magic_mouth`: Magic Mouth (L2) — a long-lived flag-buff recording an implanted message + trigger (GM-narrated playback). Phase 2 #65 of the cast-and-broadcast tail.
+
 ## [2.550.0] - 2026-06-21 — "The Open Book"
 
 **Schema version:** 71

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3982 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.550.0, 2026-06-21).
+**Total tests:** 3986 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.551.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4753,6 +4753,16 @@ v2.544.0 — Locate Object (L2 divination, Bard/Cleric/Druid/Ranger/Wizard, PHB 
 | `test_locate_object_drops_on_new_concentration` | **Concentration ride:** casting Barkskin (another concentration spell) drops the `locate-object` buff (one concentration at a time). |
 | `test_cast_locate_object_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected names "locate object". |
 | `test_cast_locate_object_missing_character_id_400` | Missing `character_id` → 400. |
+
+### `test_cast_magic_mouth.py`
+v2.551.0 — Magic Mouth (L2 illusion, Bard/Wizard, PHB p.259). Phase 2 #65 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `cast_magic_mouth` endpoint (shared `_do_cast_inscribed_illusion` helper) — a long-lived flag-buff recording an implanted message + trigger (GM-narrated). Caster: Thalindra Moonwhisper (Wizard).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_magic_mouth_installs_until_dispelled_buff` | Self-cast → `feature == "magic-mouth"`, `duration == "until dispelled"`, default `message`/`trigger`; buff is non-concentration carrying `magic_mouth_active` + `magic_mouth_message` + `magic_mouth_trigger`. |
+| `test_cast_magic_mouth_named_message_and_trigger` | A named `message` + `trigger` surface on response + buff. |
+| `test_cast_magic_mouth_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected names "magic mouth". |
+| `test_cast_magic_mouth_missing_character_id_400` | Missing `character_id` → 400. |
 
 ### `test_cast_detect_thoughts.py`
 v2.550.0 — Detect Thoughts (L2 divination, Bard/Sorcerer/Warlock/Wizard, PHB p.231). Phase 2 #64 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `cast_detect_thoughts` endpoint — a concentration flag-buff in the Zone of Truth DC-bake mould (baked WIS deeper-probe save). Caster: Thalindra Moonwhisper (Wizard).

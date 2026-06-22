@@ -72045,6 +72045,159 @@ async def cast_detect_thoughts(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_magic_mouth")
+async def cast_magic_mouth(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.551.0 — Phase 2 #65 of
+    docs/plans/cast-and-broadcast-tail.md. Magic Mouth (L2 illusion,
+    Bard/Wizard, PHB p.259): "You implant a message within an object in
+    range, a message that is uttered when a trigger condition is met."
+    1 action, V/S/M, 30 ft, Until dispelled, non-concentration.
+
+    A GM-narrated utility enchantment — SimpleVTT models no objects or
+    trigger engine, so this records the implanted message + its trigger
+    on a long-lived (until-dispelled) flag-buff and broadcasts the cast.
+    The object choice, the trigger firing, and the up-to-25-word message
+    playback are GM-narrated. Self-anchored (the buff is the caster's
+    record of the active enchantment, dismissed via `/end_buff`).
+
+    Body: ``{character_id, trigger?, message?}``. Response: ``{ok,
+    feature, target_character_id, trigger, message, duration,
+    buff_installed, duration_rounds}``.
+    """
+    return await _do_cast_inscribed_illusion(
+        campaign_id, request, db, user,
+        slug="magic-mouth", display_name="Magic Mouth", icon="💬",
+        caster_classes={"bard", "wizard"},
+        duration_rounds=1_000_000, duration_label="until dispelled",
+        primary_field="message", primary_key="magic_mouth_message",
+        primary_default="(no message set)",
+        secondary_field="trigger", secondary_key="magic_mouth_trigger",
+        secondary_default="a set condition",
+        note=(
+            "Speaks the implanted message when its trigger fires "
+            "(GM-narrated)."
+        ),
+    )
+
+
+async def _do_cast_inscribed_illusion(
+    campaign_id: int, request: Request, db: Session, user: User,
+    *, slug: str, display_name: str, icon: str, caster_classes: set,
+    duration_rounds: int, duration_label: str,
+    primary_field: str, primary_key: str, primary_default: str,
+    secondary_field: str, secondary_key: str, secondary_default: str,
+    note: str,
+) -> "dict | JSONResponse":
+    """v2.551.0 — shared body for the Magic Mouth (#65) / Illusory
+    Script (#66) inscribed-illusion utility spells. Both imbue an object
+    / writing with a GM-narrated illusion that lasts a long time
+    (non-concentration). SimpleVTT models no objects, so this records the
+    enchantment's text fields on a long-lived flag-buff anchored to the
+    caster and broadcasts the cast; the trigger / reveal is GM-narrated.
+    Self-cast. Body: ``{character_id, <primary_field>?,
+    <secondary_field>?}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows = any(
+        (s.get("_slug") == slug)
+        or (str(s.get("name", "")).lower() == display_name.lower())
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    is_caster = _cls in caster_classes or any(
+        c in caster_classes for c in _classes)
+    if not knows and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": (
+                f"knows {display_name}, or " + "/".join(sorted(caster_classes))
+            ),
+            "got_class": _cls,
+        })
+
+    primary = (body.get(primary_field) or "").strip() or primary_default
+    secondary = (body.get(secondary_field) or "").strip() or secondary_default
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": slug,
+        "name": display_name,
+        "icon": icon,
+        "duration_rounds": duration_rounds,
+        "duration_max": duration_rounds,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            f"{slug.replace('-', '_')}_active": True,
+            primary_key: primary,
+            secondary_key: secondary,
+        },
+        "desc": (
+            f"{display_name} ({duration_label}). {note} Dismiss via the "
+            "buff tray."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": f"{icon} {display_name}",
+            "feature_desc": f"{char.name} casts {display_name}. {note}",
+            "source": slug,
+            primary_key: primary,
+            secondary_key: secondary,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": slug,
+        "target_character_id": char.id,
+        primary_field: primary,
+        secondary_field: secondary,
+        "duration": duration_label,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": duration_rounds,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_zone_of_truth")
 async def cast_zone_of_truth(
     campaign_id: int,
