@@ -4,7 +4,24 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 4029 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.556.0, 2026-06-21).
+**Total tests:** 4043 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.557.0, 2026-06-21).
+
+### `test_private_notes.py`
+v2.557.0 — Notes & Handouts **Phase 4 (server side)** — E2E-encrypted private notes, [notes-and-handouts.md](../plans/notes-and-handouts.md). `note_encryption_keys` table (schema v74) + encryption-config endpoints + private-note ciphertext storage. Server tests use placeholder ciphertext (the server treats `enc_*` as opaque; real AES-GCM is the Playwright test). GM = `gm_client`; alice/bob = non-GM members.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_set_and_get_encryption_config` | `GET /api/notes/encryption` → `configured:false` initially; after `PUT` → `configured:true` echoing salt/iterations/key_check. |
+| `test_encryption_config_conflict` | A second `PUT` → 409 (set-once). |
+| `test_encryption_missing_salt_400` / `test_encryption_low_iterations_400` | Validation: missing salt or iterations below the floor → 400. |
+| `test_reset_wipes_key_and_notes` | `DELETE /api/notes/encryption` → `notes_wiped ≥ 1`, config back to `false`, the author's encrypted note gone. |
+| `test_create_private_stores_ciphertext` | Private create → `is_encrypted:true`, empty title/body, `enc_*` echoed + round-trips byte-for-byte. |
+| `test_private_rejects_plaintext` / `test_private_requires_ciphertext` | Private create with plaintext → 400; with no ciphertext → 400. |
+| `test_gm_cannot_read_private_note` | **Headline:** a player's private note is absent from the GM's list + 404 by id. |
+| `test_other_player_cannot_read_private` | Another player can't list/get it either (404). |
+| `test_author_reads_own_private` | The author lists + GETs their own private note (ciphertext). |
+| `test_private_note_ws_scoped_to_author` | A private note's `note_updated` reaches only the author's socket — not bob's, not the GM's. |
+| `test_author_can_patch_private` / `test_patch_private_rejects_plaintext` | Author patches `enc_body`; patching plaintext on a private note → 400. |
 
 ### `test_player_notes.py`
 v2.556.0 — Notes & Handouts **Phase 3** (player public notes), [notes-and-handouts.md](../plans/notes-and-handouts.md). Extends `/notes` to `kind=player_note` / `visibility=public` + the scoped `note_updated` WS broadcast. GM = `gm_client`; alice/bob = non-GM members.

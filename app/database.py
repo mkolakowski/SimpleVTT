@@ -856,6 +856,17 @@ def _apply_inline_migrations() -> None:
     from .models import Handout
     Handout.__table__.create(bind=engine, checkfirst=True)
 
+    # ---- Schema v74 (2.557.0): note_encryption_keys table ----
+    # Phase 4 of docs/plans/notes-and-handouts.md — per-user crypto
+    # material (salt + KDF params + key_check) for end-to-end-encrypted
+    # private notes. The server stores no passphrase, no key, and no
+    # plaintext; private notes live as ciphertext in
+    # campaign_notes.enc_title / enc_body. ``Base.metadata.create_all``
+    # creates it on fresh DBs; this explicit create(checkfirst) covers
+    # existing DBs.
+    from .models import NoteEncryptionKey
+    NoteEncryptionKey.__table__.create(bind=engine, checkfirst=True)
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

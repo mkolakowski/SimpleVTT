@@ -971,3 +971,41 @@ class Handout(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now(),
     )
+
+
+class NoteEncryptionKey(Base):
+    """Per-user crypto material for end-to-end-encrypted private notes
+    (v2.557.0, schema v74). See ``docs/plans/notes-and-handouts.md``
+    Phase 4.
+
+    The server stores **only** what it needs to let the *browser* derive
+    the note key and verify a passphrase — never the passphrase, never
+    the key, never any plaintext:
+
+      - ``salt``       — base64 random salt for PBKDF2 (NOT secret).
+      - ``kdf`` / ``iterations`` — KDF params, pinned so they can be
+        raised later without breaking existing notes.
+      - ``key_check``  — an AES-GCM envelope of a fixed sentinel string,
+        encrypted under the derived key, so the client can detect a wrong
+        passphrase without mangling a real note.
+
+    One row per user (the passphrase unlocks the user's private notes
+    across all their campaigns). There is deliberately no column — and no
+    endpoint — that could yield plaintext; the only "reset" is DELETE,
+    which drops this row AND every one of the user's encrypted notes
+    (a lost passphrase is unrecoverable by design).
+    """
+    __tablename__ = "note_encryption_keys"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True,
+    )
+    salt: Mapped[str] = mapped_column(String(128))
+    kdf: Mapped[str] = mapped_column(
+        String(30), default="PBKDF2-SHA256", server_default="PBKDF2-SHA256",
+    )
+    iterations: Mapped[int] = mapped_column(Integer, default=600_000)
+    key_check: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )

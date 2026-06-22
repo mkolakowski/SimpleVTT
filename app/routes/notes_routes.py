@@ -25,7 +25,13 @@ from sqlalchemy.orm import Session
 
 from ..auth import require_user
 from ..database import get_db
-from ..models import Campaign, CampaignNote, Handout, User
+from ..models import (
+    Campaign,
+    CampaignNote,
+    Handout,
+    NoteEncryptionKey,
+    User,
+)
 from ..realtime import hub
 from .tabletop_routes import _user_can_view_campaign, _user_is_gm
 
@@ -33,11 +39,18 @@ router = APIRouter()
 
 _MAX_TITLE = 200
 _MAX_BODY = 50_000
+# Ciphertext envelopes ({v,iv,ct} base64) are larger than the plaintext;
+# cap generously. The server treats them as opaque.
+_MAX_ENC = 200_000
+_MIN_KDF_ITERATIONS = 100_000
+_MAX_KDF_ITERATIONS = 10_000_000
 
 
 def _note_dict(n: CampaignNote) -> dict:
-    """Serialize a note for the API. Plaintext fields only — Phase 4
-    will add the ciphertext envelopes for private notes."""
+    """Serialize a note for the API. For a private note the plaintext
+    fields are empty and the ciphertext envelopes (`enc_title` /
+    `enc_body`) carry the content — only ever returned to the author
+    (read path + WS are author-scoped), and useless without their key."""
     return {
         "id": n.id,
         "campaign_id": n.campaign_id,
@@ -46,9 +59,11 @@ def _note_dict(n: CampaignNote) -> dict:
         "visibility": n.visibility,
         "title": n.title or "",
         "body": n.body or "",
+        "enc_title": n.enc_title,
+        "enc_body": n.enc_body,
+        "is_encrypted": bool(n.is_encrypted),
         "folder": n.folder or "",
         "pinned": bool(n.pinned),
-        "is_encrypted": bool(n.is_encrypted),
         "created_at": n.created_at.isoformat() if n.created_at else None,
         "updated_at": n.updated_at.isoformat() if n.updated_at else None,
     }
@@ -134,7 +149,16 @@ async def list_notes(
     campaign = _campaign_or_403(db, user, campaign_id)
     rows = (
         db.query(CampaignNote)
-        .filter(CampaignNote.campaign_id == campaign_id)
+        .filter(
+            CampaignNote.campaign_id == campaign_id,
+            # Defense in depth: a private note is loaded ONLY for its
+            # author — the GM's query never even fetches another user's
+            # private row (the ciphertext is unreadable anyway, but this
+            # keeps it off the wire entirely). The Python _can_see_note
+            # below still applies the gm_only / public rules.
+            (CampaignNote.visibility != "private")
+            | (CampaignNote.author_user_id == user.id),
+        )
         .order_by(CampaignNote.pinned.desc(), CampaignNote.updated_at.desc())
         .all()
     )
@@ -178,9 +202,11 @@ async def create_note(
       (``kind="gm_note"``); GM/co-GM only.
     - ``visibility == "public"`` → a player note visible to all campaign
       members (``kind="player_note"``); any member may create.
-    - ``visibility == "private"`` → rejected for now: private notes are
-      end-to-end encrypted (Phase 4) and created through the encrypted
-      client, never as server-stored plaintext.
+    - ``visibility == "private"`` → an end-to-end-encrypted player note:
+      the client sends ciphertext envelopes ``enc_title`` / ``enc_body``
+      (at least one), and **must not** send plaintext title/body. The
+      server stores the opaque blobs (``is_encrypted=True``) and can
+      never read them.
     """
     campaign = _campaign_or_403(db, user, campaign_id)
     body = await request.json()
@@ -189,34 +215,52 @@ async def create_note(
         if not _user_is_gm(user, campaign, db):
             raise HTTPException(403, "GM only")
         kind = "gm_note"
-    elif visibility == "public":
+    elif visibility in ("public", "private"):
         kind = "player_note"  # any campaign member
-    elif visibility == "private":
-        raise HTTPException(
-            400, "private notes are end-to-end encrypted and not yet "
-                 "available; create them through the encrypted client")
     else:
-        raise HTTPException(400, "visibility must be 'gm_only' or 'public'")
+        raise HTTPException(
+            400, "visibility must be 'gm_only', 'public', or 'private'")
 
-    title = (body.get("title") or "").strip()
-    note_body = (body.get("body") or "").strip()
-    if not title and not note_body:
-        raise HTTPException(400, "title or body is required")
-    if len(title) > _MAX_TITLE:
-        raise HTTPException(400, f"title exceeds {_MAX_TITLE} characters")
-    if len(note_body) > _MAX_BODY:
-        raise HTTPException(400, f"body exceeds {_MAX_BODY} characters")
+    folder = (body.get("folder") or "").strip()[:120]
+    pinned = bool(body.get("pinned"))
 
-    note = CampaignNote(
-        campaign_id=campaign_id,
-        author_user_id=user.id,
-        kind=kind,
-        visibility=visibility,
-        title=title or None,
-        body=note_body,
-        folder=(body.get("folder") or "").strip()[:120],
-        pinned=bool(body.get("pinned")),
-    )
+    if visibility == "private":
+        # E2E: ciphertext only — refuse to store plaintext for a private
+        # note so a server-readable note can never masquerade as GM-proof.
+        if (body.get("title") or "").strip() or (body.get("body") or "").strip():
+            raise HTTPException(
+                400, "private notes must not include plaintext title/body; "
+                     "send enc_title / enc_body ciphertext")
+        enc_title = body.get("enc_title") or None
+        enc_body = body.get("enc_body") or None
+        if not enc_title and not enc_body:
+            raise HTTPException(400, "enc_title or enc_body is required")
+        for blob in (enc_title, enc_body):
+            if blob is not None and len(blob) > _MAX_ENC:
+                raise HTTPException(400, "encrypted payload too large")
+        note = CampaignNote(
+            campaign_id=campaign_id, author_user_id=user.id,
+            kind=kind, visibility="private",
+            title=None, body=None,
+            enc_title=enc_title, enc_body=enc_body, is_encrypted=True,
+            folder=folder, pinned=pinned,
+        )
+    else:
+        title = (body.get("title") or "").strip()
+        note_body = (body.get("body") or "").strip()
+        if not title and not note_body:
+            raise HTTPException(400, "title or body is required")
+        if len(title) > _MAX_TITLE:
+            raise HTTPException(400, f"title exceeds {_MAX_TITLE} characters")
+        if len(note_body) > _MAX_BODY:
+            raise HTTPException(400, f"body exceeds {_MAX_BODY} characters")
+        note = CampaignNote(
+            campaign_id=campaign_id, author_user_id=user.id,
+            kind=kind, visibility=visibility,
+            title=title or None, body=note_body,
+            folder=folder, pinned=pinned,
+        )
+
     db.add(note)
     db.commit()
     db.refresh(note)
@@ -232,8 +276,11 @@ async def update_note(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """Edit a note. Phase 1: gm_note → GM/co-GM only. Updatable fields:
-    title, body, folder, pinned (all optional; omitted fields unchanged)."""
+    """Edit a note (omitted fields unchanged). Write rule per
+    `_can_edit_note` (gm_only → GM; public → author-or-GM; private →
+    author). For a private note the client sends new `enc_title` /
+    `enc_body` ciphertext and must not send plaintext title/body;
+    folder/pinned are editable on any note."""
     campaign = _campaign_or_403(db, user, campaign_id)
     note = (
         db.query(CampaignNote)
@@ -247,23 +294,38 @@ async def update_note(
         raise HTTPException(403, "Not allowed to edit this note")
 
     body = await request.json()
-    if "title" in body:
-        t = (body.get("title") or "").strip()
-        if len(t) > _MAX_TITLE:
-            raise HTTPException(400, f"title exceeds {_MAX_TITLE} characters")
-        note.title = t or None
-    if "body" in body:
-        b = (body.get("body") or "").strip()
-        if len(b) > _MAX_BODY:
-            raise HTTPException(400, f"body exceeds {_MAX_BODY} characters")
-        note.body = b
+    if note.visibility == "private":
+        # Ciphertext-only path; refuse plaintext on a private note.
+        if (body.get("title") or "").strip() or (body.get("body") or "").strip():
+            raise HTTPException(
+                400, "private notes must not include plaintext title/body")
+        if "enc_title" in body:
+            note.enc_title = body.get("enc_title") or None
+        if "enc_body" in body:
+            note.enc_body = body.get("enc_body") or None
+        for blob in (note.enc_title, note.enc_body):
+            if blob is not None and len(blob) > _MAX_ENC:
+                raise HTTPException(400, "encrypted payload too large")
+        if not note.enc_title and not note.enc_body:
+            raise HTTPException(400, "enc_title or enc_body is required")
+    else:
+        if "title" in body:
+            t = (body.get("title") or "").strip()
+            if len(t) > _MAX_TITLE:
+                raise HTTPException(400, f"title exceeds {_MAX_TITLE} characters")
+            note.title = t or None
+        if "body" in body:
+            b = (body.get("body") or "").strip()
+            if len(b) > _MAX_BODY:
+                raise HTTPException(400, f"body exceeds {_MAX_BODY} characters")
+            note.body = b
+        if not (note.title or "") and not (note.body or ""):
+            raise HTTPException(400, "title or body is required")
+
     if "folder" in body:
         note.folder = (body.get("folder") or "").strip()[:120]
     if "pinned" in body:
         note.pinned = bool(body.get("pinned"))
-
-    if not (note.title or "") and not (note.body or ""):
-        raise HTTPException(400, "title or body is required")
 
     db.commit()
     db.refresh(note)
@@ -555,3 +617,89 @@ async def reveal_handout(
         recipient_filter=rfilter,
     )
     return {"ok": True, "handout": _handout_dict(h)}
+
+
+# ───────────── Private-note encryption keys (Phase 4) ─────────────
+# User-scoped (not campaign-scoped): one passphrase unlocks the user's
+# private notes across all their campaigns. The server stores salt + KDF
+# params + a key_check token — never the passphrase, key, or plaintext.
+
+
+@router.get("/api/notes/encryption")
+async def get_encryption_config(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Return the caller's note-encryption material so the browser can
+    derive the key + verify a passphrase. ``{configured: false}`` when
+    the user hasn't set one up yet."""
+    row = db.get(NoteEncryptionKey, user.id)
+    if row is None:
+        return {"configured": False}
+    return {
+        "configured": True,
+        "salt": row.salt,
+        "kdf": row.kdf,
+        "iterations": row.iterations,
+        "key_check": row.key_check,
+    }
+
+
+@router.put("/api/notes/encryption")
+async def set_encryption_config(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Set up the caller's note encryption (once). Body: ``{salt,
+    iterations, key_check, kdf?}`` — all generated client-side; the
+    passphrase never leaves the browser. 409 if already configured
+    (changing the passphrase requires re-encrypting every note
+    client-side; the only server-side path is DELETE = wipe + restart)."""
+    if db.get(NoteEncryptionKey, user.id) is not None:
+        raise HTTPException(409, "encryption already configured")
+    body = await request.json()
+    salt = (body.get("salt") or "").strip()
+    key_check = (body.get("key_check") or "").strip()
+    kdf = (body.get("kdf") or "PBKDF2-SHA256").strip()[:30]
+    try:
+        iterations = int(body.get("iterations") or 0)
+    except (TypeError, ValueError):
+        iterations = 0
+    if not salt or len(salt) > 128:
+        raise HTTPException(400, "salt is required (<=128 chars)")
+    if not key_check or len(key_check) > _MAX_ENC:
+        raise HTTPException(400, "key_check is required")
+    if not (_MIN_KDF_ITERATIONS <= iterations <= _MAX_KDF_ITERATIONS):
+        raise HTTPException(
+            400, f"iterations must be between {_MIN_KDF_ITERATIONS} and "
+                 f"{_MAX_KDF_ITERATIONS}")
+    row = NoteEncryptionKey(
+        user_id=user.id, salt=salt, kdf=kdf,
+        iterations=iterations, key_check=key_check,
+    )
+    db.add(row)
+    db.commit()
+    return {"ok": True, "configured": True}
+
+
+@router.delete("/api/notes/encryption")
+async def reset_encryption_config(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Reset note encryption: delete the key material **and every one of
+    the caller's encrypted notes** (they're unreadable without the old
+    passphrase — this is the lost-passphrase recovery path, and the only
+    way to change the passphrase for now). Returns the count wiped."""
+    wiped = (
+        db.query(CampaignNote)
+        .filter(CampaignNote.author_user_id == user.id,
+                CampaignNote.is_encrypted == True)  # noqa: E712
+        .delete(synchronize_session=False)
+    )
+    row = db.get(NoteEncryptionKey, user.id)
+    if row is not None:
+        db.delete(row)
+    db.commit()
+    return {"ok": True, "notes_wiped": int(wiped)}

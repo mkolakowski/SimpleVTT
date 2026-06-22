@@ -1,6 +1,6 @@
 # Notes & Handouts
 
-**Status:** 🟠 Phases 1–3 shipped (v2.554.0–v2.556.0) · Phases 4–5 pending (plan authored v2.553.2).
+**Status:** 🟠 Phases 1–3 + Phase 4 server-side shipped (v2.554.0–v2.557.0) · Phase 4 browser crypto + Phase 5 UI pending (plan authored v2.553.2).
 
 A session-prep + reference system with three audiences and a hard
 privacy guarantee:
@@ -276,23 +276,23 @@ page for out-of-session work.
    moderation, non-author 403, the gm_note WS scoping (player never sees
    a gm_note event). The GM-excluded-query test for *private* notes lands
    with Phase 4 (no private notes exist to exclude yet).
-4. **Private notes — E2E encryption.** The `note_encryption_keys`
-   row + the browser crypto module (Web Crypto PBKDF2 + AES-GCM),
-   passphrase set/unlock UX, ciphertext storage, `key_check`
-   verification, private-note WS scoping. Server treats `enc_*` as opaque
-   blobs.
-   - **Server-side harness tests** (`tests/harness/`): a POSTed
-     ciphertext envelope round-trips **byte-for-byte** (server never
-     mutates it); the GM list/get endpoints return ciphertext-or-404 for
-     a private note, never plaintext; `note_updated` for a private note
-     is *not* delivered to a GM socket (assert via a second WS client);
-     the encryption-key PUT/GET stores salt+params+check but exposes no
-     decryption path.
-   - **Browser harness test** (`tests/harness_ui/`, Playwright — Web
-     Crypto only runs in a browser): set a passphrase → write a private
-     note → reload → unlock → read it back; **assert the POST request
-     body contained no plaintext** (only the `{v,iv,ct}` envelope), and a
-     wrong passphrase fails closed.
+4. **Private notes — E2E encryption.**
+   - **4a — server side. ✅ Shipped v2.557.0.** The `note_encryption_keys`
+     table (schema v74) + `GET/PUT/DELETE /api/notes/encryption`
+     (set-once; DELETE = wipe key + the user's encrypted notes) + the
+     private branch of `create_note`/`update_note` (ciphertext-only,
+     plaintext refused). Server treats `enc_title`/`enc_body` as opaque.
+     Harness `tests/harness/test_private_notes.py`: ciphertext
+     round-trips byte-for-byte; **the GM can't list/get a private note
+     (404)**; another player can't either; private `note_updated` WS
+     reaches only the author; `list_notes` excludes others' private rows
+     at the SQL level. Real AES-GCM is exercised in 4b.
+   - **4b — browser crypto + round-trip. ⚪ pending.** The Web Crypto
+     module (PBKDF2 + AES-GCM), passphrase set/unlock, `key_check`
+     verification, and a Playwright test (`tests/harness_ui/`): write a
+     private note → reload → unlock → read back; **assert the POST body
+     carried no plaintext** (only the `{v,iv,ct}` envelope); wrong
+     passphrase fails closed.
 5. **Polish.** Folders/pinning/search (search covers plaintext notes
    only — private notes are unsearchable by construction), markdown
    niceties, the campaign-management prep surface, mobile layout.

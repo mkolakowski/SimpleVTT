@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.557.0] - 2026-06-21 — "The Cipher Vault"
+
+**Schema version:** 74
+
+**Commit summary:** Notes & Handouts **Phase 4 (server side)** — E2E-encrypted private notes. Adds the `note_encryption_keys` table + encryption-config endpoints + private-note ciphertext storage, with the server holding no passphrase, no key, and no plaintext. The browser crypto module + a real round-trip land in the next commit.
+
+**Description:** Private player notes are now end-to-end encrypted. The server stores only ciphertext: a private note's `title`/`body` are NULL and the opaque `enc_title`/`enc_body` envelopes carry the content (`is_encrypted=True`); `POST /notes {visibility:"private", enc_title, enc_body}` **refuses any plaintext title/body** so a server-readable note can never masquerade as GM-proof. New `note_encryption_keys` table (schema v74) holds per-user `salt` + KDF params + a `key_check` token — generated client-side, the passphrase never leaving the browser; there is deliberately no column or endpoint that yields plaintext. Endpoints: `GET/PUT /api/notes/encryption` (set up once; 409 if already configured), and `DELETE /api/notes/encryption` — the lost-passphrase reset that wipes the key **and** every one of the user's encrypted notes (unrecoverable by design). Security: `list_notes` excludes other users' private rows at the **SQL** level (defense in depth — the GM's query never even loads them), and the private-note `note_updated` WS event is scoped to the author's socket. The server tests use placeholder ciphertext (the server treats `enc_*` as opaque); real AES-GCM + a round-trip are the next commit's Playwright test.
+
+**Implementation:**
+
+- `app/models.py`: `NoteEncryptionKey` model.
+- `app/database.py`: schema v74 migration.
+- `app/routes/notes_routes.py`: private branch in `create_note`/`update_note` (ciphertext-only, plaintext refused); `_note_dict` adds `enc_title`/`enc_body`; `list_notes` SQL exclusion of others' private notes; `GET/PUT/DELETE /api/notes/encryption`.
+- `docs/plans/notes-and-handouts.md` + wiki rows: status updated.
+
+**Harness changes:**
+
+- `tests/harness/test_private_notes.py` (new): +14 — encryption config set/get/409/validation/reset-wipes-notes; private create stores ciphertext byte-for-byte + refuses plaintext + requires ciphertext; **GM cannot list/get a private note (404)**; another player can't either; the author can read/patch their own; **private `note_updated` WS reaches only the author** (not bob, not the GM); patch refuses plaintext.
+
+Total harness count → 4043 (+14).
+
+MINOR — new endpoints + additive `note_encryption_keys` table + ciphertext private-note path. Schema v73 → v74.
+
+### Added
+- E2E-encrypted private notes (server side): `note_encryption_keys` table + `GET/PUT/DELETE /api/notes/encryption` + ciphertext `visibility:"private"` notes that the GM (and a DB operator) can never read. Phase 4 server half of the Notes & Handouts plan.
+
+### Schema
+- **v74:** `note_encryption_keys` table.
+
 ## [2.556.0] - 2026-06-21 — "The Shared Page"
 
 **Schema version:** 73
