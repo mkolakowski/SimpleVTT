@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.555.0] - 2026-06-21 — "The Revealed Letter"
+
+**Schema version:** 73
+
+**Commit summary:** Notes & Handouts **Phase 2** — the `handouts` table + GM handout CRUD and a reveal endpoint that broadcasts `handout_revealed` scoped to the targeted players. First WS work in the system.
+
+**Description:** Adds GM-authored handouts (a letter, a map fragment, an item card) over a new `handouts` table (schema v73) + handout endpoints in `notes_routes.py`. Handouts are created un-revealed (GM-only); `POST /handouts/{id}/reveal` with `{revealed, to}` sets the reveal state — `to: "all"` (every member) or `to: [user_id, …]` (specific players). Revealing broadcasts a `handout_revealed` WS event: reveal-to-all goes to every campaign client, reveal-to-a-list is **scoped via `hub.broadcast(..., recipient_filter=…)` so a secret handout never toasts on a non-target's screen** (the event carries the title + has_image only to its targets), and hide (`revealed: false`) sends a minimal `{handout_id, revealed: false}` to everyone so any client holding it drops it — no title leak. Player visibility is enforced server-side too: a player's list/get only returns handouts revealed to them; an un-revealed or non-targeted handout is 404 (not a leak). `reveal_to` is JSON holding `"all"` or a user_id list, like `Token.hidden_from_user_ids`.
+
+**Implementation:**
+
+- `app/models.py`: new `Handout` model (`revealed`, `reveal_to` JSON, `image_url`).
+- `app/database.py`: schema v73 migration — `Handout.__table__.create(checkfirst=True)`.
+- `app/routes/notes_routes.py`: handout CRUD + `/reveal` (imports `hub`).
+- `docs/plans/notes-and-handouts.md` + wiki "Design plans" rows: status → Phase 2 shipped.
+
+**Harness changes:**
+
+- `tests/harness/test_handouts.py` (new): +13 — GM create-unrevealed/list/patch/delete; reveal-to-all visible to a player + un-revealed hidden (list excl. + 404); reveal-to-specific scopes HTTP visibility; **WS scoping** (reveal-to-alice delivers `handout_revealed` to alice's socket but NOT bob's; reveal-to-all reaches both); player create → 403; missing-title 400; reveal unknown → 404; reveal bad `to` → 400.
+
+Total harness count → 4018 (+13).
+
+MINOR — new endpoints + additive `handouts` table + a `handout_revealed` WS broadcast. Schema v72 → v73.
+
+### Added
+- `handouts` table + `GET/POST/PATCH/DELETE /api/campaign/{id}/handouts` and `POST …/handouts/{id}/reveal` — GM handouts revealable to all or specific players (Phase 2 of the Notes & Handouts plan).
+
+### Schema
+- **v73:** `handouts` table.
+
 ## [2.554.0] - 2026-06-21 — "The Prep Ledger"
 
 **Schema version:** 72

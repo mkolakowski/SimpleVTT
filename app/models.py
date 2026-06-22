@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import enum
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import (
     Boolean,
@@ -914,6 +914,57 @@ class CampaignNote(Base):
     pinned: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false",
     )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )
+
+
+class Handout(Base):
+    """A GM-authored handout that can be revealed to the table (v2.555.0,
+    schema v73). See ``docs/plans/notes-and-handouts.md`` Phase 2.
+
+    Handouts are GM-authored content meant to be shown — a letter, a map
+    fragment, an item card, an NPC portrait. Unlike notes they are never
+    encrypted; the "who can see it" control is ``revealed`` + ``reveal_to``:
+
+      - ``revealed == False``     → GM/co-GM only (still being prepped).
+      - ``revealed == True`` and  → every campaign member sees it.
+        ``reveal_to == "all"``
+      - ``revealed == True`` and  → only the listed user_ids (plus the
+        ``reveal_to == [uid…]``     GM) see it.
+
+    Revealing broadcasts a ``handout_revealed`` WS event scoped to the
+    targets via ``hub.broadcast(..., recipient_filter=...)`` — a handout
+    revealed to one player never toasts on another player's screen.
+    ``reveal_to`` is JSON holding either the string ``"all"`` or a list
+    of user_ids (same JSON column type as ``Token.hidden_from_user_ids``).
+    """
+    __tablename__ = "handouts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="CASCADE"), index=True,
+    )
+    author_user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+    )
+    title: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(Text, default="")
+    image_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    folder: Mapped[str] = mapped_column(
+        String(120), default="", server_default="",
+    )
+    revealed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false",
+    )
+    # "all" (string) OR a list of user_ids. Default empty list = revealed
+    # to nobody (only meaningful once `revealed` is True). Typed Mapped[Any]
+    # because the JSON value is a str OR a list — the column type is given
+    # explicitly (JSON), so the annotation is just the ORM mapped marker.
+    reveal_to: Mapped[Any] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )

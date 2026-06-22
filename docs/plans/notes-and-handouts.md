@@ -1,6 +1,6 @@
 # Notes & Handouts
 
-**Status:** 🟠 Phase 1 shipped (v2.554.0) · Phases 2–5 pending (plan authored v2.553.2).
+**Status:** 🟠 Phases 1–2 shipped (v2.554.0–v2.555.0) · Phases 3–5 pending (plan authored v2.553.2).
 
 A session-prep + reference system with three audiences and a hard
 privacy guarantee:
@@ -258,11 +258,14 @@ page for out-of-session work.
    `tests/harness/test_notes.py` — CRUD happy paths + the access-control
    core (player create → 403, player can't see/get/delete a gm_note).
    The GM drawer pane is folded into Phase 5 (UI).
-2. **Handouts.** CRUD + image upload + `reveal` with `reveal_to`
-   targeting + the `handout_revealed` WS event. Tests: reveal reaches
-   only targeted players (assert the `recipient_filter` scoping), an
-   un-revealed handout is absent from a player's list, reveal-to-all,
-   error paths.
+2. **Handouts.** ✅ **Shipped v2.555.0.** `handouts` table (schema v73) +
+   CRUD + `POST …/handouts/{id}/reveal` with `reveal_to` targeting + the
+   `handout_revealed` WS event scoped via `recipient_filter`. Harness:
+   `tests/harness/test_handouts.py` — reveal-to-specific reaches only the
+   targeted player's socket (not another's), reveal-to-all reaches
+   everyone, un-revealed handouts are 404 to players, error paths. Image
+   *upload* UI is folded into Phase 5; the endpoint already accepts an
+   `image_url`.
 3. **Player public notes.** `public` visibility + the app-layer ACL +
    the GM-excluded query + `note_updated` broadcast. **Headline security
    test:** the GM's list endpoint cannot return another user's note when

@@ -4,7 +4,26 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 4005 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.554.0, 2026-06-21).
+**Total tests:** 4018 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.555.0, 2026-06-21).
+
+### `test_handouts.py`
+v2.555.0 — Notes & Handouts **Phase 2** (handouts), [notes-and-handouts.md](../plans/notes-and-handouts.md). `handouts` table (schema v73) + CRUD + `/reveal` (the first `handout_revealed` WS broadcast). GM = `gm_client`; alice owns the Rogue (Pip Quickfingers), bob the Wizard (Thalindra Moonwhisper) — roster `owner_user_id` resolves their user_ids.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_create_handout_unrevealed` | GM POST → 200, `revealed == false`, `reveal_to == []`. |
+| `test_gm_list_includes_handout` | GM list includes the created handout. |
+| `test_patch_handout` | PATCH updates title + image_url. |
+| `test_reveal_all_visible_to_player` | Before reveal a player can't see it (list excl. + 404); after `reveal {to:"all"}` the player sees it in list + by id. |
+| `test_unrevealed_hidden_from_player` | An un-revealed handout is absent from a player's list + 404 by id. |
+| `test_reveal_to_specific_player_scopes_visibility` | Revealed to alice only → alice sees it (HTTP), bob's list excludes it + bob GET → 404. |
+| `test_reveal_to_specific_player_ws_scoping` | **Security core:** reveal-to-alice delivers `handout_revealed` (with title) to alice's WS, and bob's WS receives nothing. |
+| `test_reveal_all_ws_reaches_everyone` | Reveal-to-all delivers `handout_revealed` to both alice's + bob's WS. |
+| `test_delete_handout` | DELETE → 200; subsequent GET → 404. |
+| `test_player_cannot_create_handout` | Non-GM POST → 403. |
+| `test_create_requires_title` | Missing title → 400. |
+| `test_reveal_unknown_handout_404` | Reveal a nonexistent handout → 404. |
+| `test_reveal_bad_to_400` | `reveal {to: 5}` (not "all"/list) → 400. |
 
 ### `test_notes.py`
 v2.554.0 — Notes & Handouts **Phase 1** (GM prep notes), [notes-and-handouts.md](../plans/notes-and-handouts.md). New `notes_routes.py` + `campaign_notes` table (schema v72). GM = `gm_client`; non-GM member = `alice_client`.

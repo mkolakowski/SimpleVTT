@@ -847,6 +847,15 @@ def _apply_inline_migrations() -> None:
     from .models import CampaignNote
     CampaignNote.__table__.create(bind=engine, checkfirst=True)
 
+    # ---- Schema v73 (2.555.0): handouts table ----
+    # Phase 2 of docs/plans/notes-and-handouts.md — GM-authored handouts
+    # revealable to all or specific players (reveal_to JSON = "all" or a
+    # user_id list). Reveal broadcasts a handout_revealed WS event scoped
+    # via recipient_filter. ``Base.metadata.create_all`` creates it on
+    # fresh DBs; this explicit create(checkfirst) covers existing DBs.
+    from .models import Handout
+    Handout.__table__.create(bind=engine, checkfirst=True)
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

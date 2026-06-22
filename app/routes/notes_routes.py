@@ -25,7 +25,8 @@ from sqlalchemy.orm import Session
 
 from ..auth import require_user
 from ..database import get_db
-from ..models import Campaign, CampaignNote, User
+from ..models import Campaign, CampaignNote, Handout, User
+from ..realtime import hub
 from .tabletop_routes import _user_can_view_campaign, _user_is_gm
 
 router = APIRouter()
@@ -225,3 +226,262 @@ async def delete_note(
     db.delete(note)
     db.commit()
     return {"ok": True, "deleted": note_id}
+
+
+# ───────────────────────── Handouts (Phase 2) ─────────────────────────
+
+
+def _handout_dict(h: Handout) -> dict:
+    return {
+        "id": h.id,
+        "campaign_id": h.campaign_id,
+        "author_user_id": h.author_user_id,
+        "title": h.title,
+        "body": h.body or "",
+        "image_url": h.image_url,
+        "folder": h.folder or "",
+        "revealed": bool(h.revealed),
+        "reveal_to": h.reveal_to if h.reveal_to is not None else [],
+        "created_at": h.created_at.isoformat() if h.created_at else None,
+        "updated_at": h.updated_at.isoformat() if h.updated_at else None,
+    }
+
+
+def _can_see_handout(db: Session, user: User, campaign: Campaign,
+                     h: Handout) -> bool:
+    """GM/co-GM always; a player only when revealed to them (all or in
+    the reveal_to list)."""
+    if _user_is_gm(user, campaign, db):
+        return True
+    if not h.revealed:
+        return False
+    rt = h.reveal_to
+    if rt == "all":
+        return True
+    if isinstance(rt, list):
+        return user.id in rt
+    return False
+
+
+@router.get("/api/campaign/{campaign_id}/handouts")
+async def list_handouts(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """List handouts the caller can see — GM/co-GM see all; a player
+    sees only those revealed to them."""
+    campaign = _campaign_or_403(db, user, campaign_id)
+    rows = (
+        db.query(Handout)
+        .filter(Handout.campaign_id == campaign_id)
+        .order_by(Handout.updated_at.desc())
+        .all()
+    )
+    visible = [h for h in rows if _can_see_handout(db, user, campaign, h)]
+    return {"handouts": [_handout_dict(h) for h in visible]}
+
+
+@router.get("/api/campaign/{campaign_id}/handouts/{handout_id}")
+async def get_handout(
+    campaign_id: int,
+    handout_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Fetch one handout. 404 if it doesn't exist OR isn't revealed to
+    the caller (never a leak that an un-revealed handout exists)."""
+    campaign = _campaign_or_403(db, user, campaign_id)
+    h = (
+        db.query(Handout)
+        .filter(Handout.id == handout_id,
+                Handout.campaign_id == campaign_id)
+        .first()
+    )
+    if not h or not _can_see_handout(db, user, campaign, h):
+        raise HTTPException(404, "Handout not found")
+    return {"handout": _handout_dict(h)}
+
+
+@router.post("/api/campaign/{campaign_id}/handouts")
+async def create_handout(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Author a handout (GM/co-GM only). Created un-revealed. Body:
+    ``{title, body?, image_url?, folder?}`` — title is required."""
+    campaign = _campaign_or_403(db, user, campaign_id)
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+
+    body = await request.json()
+    title = (body.get("title") or "").strip()
+    if not title:
+        raise HTTPException(400, "title is required")
+    if len(title) > _MAX_TITLE:
+        raise HTTPException(400, f"title exceeds {_MAX_TITLE} characters")
+    note_body = (body.get("body") or "").strip()
+    if len(note_body) > _MAX_BODY:
+        raise HTTPException(400, f"body exceeds {_MAX_BODY} characters")
+
+    h = Handout(
+        campaign_id=campaign_id,
+        author_user_id=user.id,
+        title=title,
+        body=note_body,
+        image_url=(body.get("image_url") or None),
+        folder=(body.get("folder") or "").strip()[:120],
+        revealed=False,
+        reveal_to=[],
+    )
+    db.add(h)
+    db.commit()
+    db.refresh(h)
+    return {"ok": True, "handout": _handout_dict(h)}
+
+
+@router.patch("/api/campaign/{campaign_id}/handouts/{handout_id}")
+async def update_handout(
+    campaign_id: int,
+    handout_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Edit a handout (GM/co-GM only). Updatable: title, body,
+    image_url, folder. Reveal state is changed via /reveal, not here."""
+    campaign = _campaign_or_403(db, user, campaign_id)
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    h = (
+        db.query(Handout)
+        .filter(Handout.id == handout_id,
+                Handout.campaign_id == campaign_id)
+        .first()
+    )
+    if not h:
+        raise HTTPException(404, "Handout not found")
+
+    body = await request.json()
+    if "title" in body:
+        t = (body.get("title") or "").strip()
+        if not t:
+            raise HTTPException(400, "title is required")
+        if len(t) > _MAX_TITLE:
+            raise HTTPException(400, f"title exceeds {_MAX_TITLE} characters")
+        h.title = t
+    if "body" in body:
+        b = (body.get("body") or "").strip()
+        if len(b) > _MAX_BODY:
+            raise HTTPException(400, f"body exceeds {_MAX_BODY} characters")
+        h.body = b
+    if "image_url" in body:
+        h.image_url = body.get("image_url") or None
+    if "folder" in body:
+        h.folder = (body.get("folder") or "").strip()[:120]
+
+    db.commit()
+    db.refresh(h)
+    return {"ok": True, "handout": _handout_dict(h)}
+
+
+@router.delete("/api/campaign/{campaign_id}/handouts/{handout_id}")
+async def delete_handout(
+    campaign_id: int,
+    handout_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Delete a handout (GM/co-GM only)."""
+    campaign = _campaign_or_403(db, user, campaign_id)
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    h = (
+        db.query(Handout)
+        .filter(Handout.id == handout_id,
+                Handout.campaign_id == campaign_id)
+        .first()
+    )
+    if not h:
+        raise HTTPException(404, "Handout not found")
+    db.delete(h)
+    db.commit()
+    return {"ok": True, "deleted": handout_id}
+
+
+@router.post("/api/campaign/{campaign_id}/handouts/{handout_id}/reveal")
+async def reveal_handout(
+    campaign_id: int,
+    handout_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Reveal (or hide) a handout (GM/co-GM only). Body:
+    ``{revealed?: bool = true, to?: "all" | [user_id, …]}``.
+
+    Broadcasts a ``handout_revealed`` WS event:
+      - reveal to ``"all"`` → to every campaign client.
+      - reveal to a user_id list → scoped to those users (+ GMs) via
+        ``recipient_filter`` so a secret handout never toasts on a
+        non-target's screen; the event carries the title + has_image.
+      - hide (``revealed: false``) → a minimal ``{handout_id,
+        revealed: false}`` event to everyone so any client holding it
+        drops it (no title leak).
+    """
+    campaign = _campaign_or_403(db, user, campaign_id)
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    h = (
+        db.query(Handout)
+        .filter(Handout.id == handout_id,
+                Handout.campaign_id == campaign_id)
+        .first()
+    )
+    if not h:
+        raise HTTPException(404, "Handout not found")
+
+    body = await request.json()
+    revealed = bool(body.get("revealed", True))
+    to = body.get("to", "all")
+    if to == "all":
+        reveal_to = "all"
+    elif isinstance(to, list):
+        try:
+            reveal_to = [int(x) for x in to]
+        except (TypeError, ValueError):
+            raise HTTPException(400, "to must be 'all' or a list of user ids")
+    else:
+        raise HTTPException(400, "to must be 'all' or a list of user ids")
+
+    h.revealed = revealed
+    h.reveal_to = reveal_to
+    db.commit()
+    db.refresh(h)
+
+    if revealed:
+        data = {
+            "handout_id": h.id,
+            "title": h.title,
+            "has_image": bool(h.image_url),
+            "revealed": True,
+        }
+        if reveal_to == "all":
+            rfilter = None
+        else:
+            targets = set(reveal_to)
+            def rfilter(ident, _t=targets):  # noqa: E306
+                return bool(ident.get("is_gm")) or ident.get("user_id") in _t
+    else:
+        # Hide: tell everyone holding it to drop it; no content in payload.
+        data = {"handout_id": h.id, "revealed": False}
+        rfilter = None
+
+    await hub.broadcast(
+        campaign_id,
+        {"type": "handout_revealed", "data": data},
+        recipient_filter=rfilter,
+    )
+    return {"ok": True, "handout": _handout_dict(h)}
