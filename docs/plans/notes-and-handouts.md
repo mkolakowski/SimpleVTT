@@ -1,6 +1,6 @@
 # Notes & Handouts
 
-**Status:** 🟠 Phases 1–3 + Phase 4 server-side shipped (v2.554.0–v2.557.0) · Phase 4 browser crypto + Phase 5 UI pending (plan authored v2.553.2).
+**Status:** 🟠 Phases 1–4 shipped (v2.554.0–v2.558.0) · Phase 5 (Notes drawer UI) pending (plan authored v2.553.2).
 
 A session-prep + reference system with three audiences and a hard
 privacy guarantee:
@@ -287,12 +287,15 @@ page for out-of-session work.
      (404)**; another player can't either; private `note_updated` WS
      reaches only the author; `list_notes` excludes others' private rows
      at the SQL level. Real AES-GCM is exercised in 4b.
-   - **4b — browser crypto + round-trip. ⚪ pending.** The Web Crypto
-     module (PBKDF2 + AES-GCM), passphrase set/unlock, `key_check`
-     verification, and a Playwright test (`tests/harness_ui/`): write a
-     private note → reload → unlock → read back; **assert the POST body
-     carried no plaintext** (only the `{v,iv,ct}` envelope); wrong
-     passphrase fails closed.
+   - **4b — browser crypto + round-trip. ✅ Shipped v2.558.0.**
+     `app/static/notes_crypto.js` (`window.NotesCrypto`: PBKDF2-SHA256 →
+     AES-GCM-256, `{v,iv,ct}` envelopes, `key_check` verification — Web
+     Crypto only, no deps). Playwright `tests/harness_ui/test_notes_crypto.py`:
+     the module round-trips with no plaintext in the ciphertext + wrong
+     passphrase fails closed, and the full path (encrypt → PUT config →
+     POST private note → GET → decrypt) confirms the server stored no
+     plaintext and **the POST body carried no plaintext on the wire**.
+     Passphrase set/unlock UX is wired into the Phase 5 drawer.
 5. **Polish.** Folders/pinning/search (search covers plaintext notes
    only — private notes are unsearchable by construction), markdown
    niceties, the campaign-management prep surface, mobile layout.

@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.558.0] - 2026-06-21 — "The Key in the Browser"
+
+**Schema version:** 74
+
+**Commit summary:** Notes & Handouts **Phase 4b** — the browser crypto module (`app/static/notes_crypto.js`) + a Playwright round-trip. Completes Phase 4: private notes are now genuinely end-to-end encrypted, browser to database.
+
+**Description:** Adds the Web Crypto module that the server-side Phase 4a (v2.557.0) was built to receive. `window.NotesCrypto` (no third-party dependency — platform Web Crypto only, so it works offline) stretches a passphrase with **PBKDF2-SHA256** into an **AES-GCM-256** key and seals each field in a self-describing `{v,iv,ct}` envelope; `makeKeyCheck`/`verifyKeyCheck` validate a passphrase without mangling real notes. The passphrase never leaves the browser. Two Playwright tests in `tests/harness_ui/` prove it in a real browser: the module round-trips (encrypt→decrypt) with no plaintext in the ciphertext, the key_check accepts the right passphrase and rejects the wrong one, a wrong key fails to decrypt; and the **full path** — derive key → `PUT /api/notes/encryption` → `POST` a private note with encrypted fields → `GET` it back → decrypt — confirms the server stored **no plaintext** (title/body empty, `is_encrypted` true) and the POST body carried **no plaintext on the wire**.
+
+**Implementation:**
+
+- `app/static/notes_crypto.js` (new): `generateSalt` / `deriveKey` / `encryptField` / `decryptField` / `makeKeyCheck` / `verifyKeyCheck`. Served at `/static/notes_crypto.js` (app/ is COPY'd whole; no Dockerfile change).
+- `docs/plans/notes-and-handouts.md` + wiki rows: Phase 4 marked fully shipped.
+
+**Harness changes:**
+
+- `tests/harness_ui/test_notes_crypto.py` (new): +2 Playwright tests — the crypto-module round-trip + the full encrypt→store→fetch→decrypt server path (server holds no plaintext; no plaintext on the wire).
+
+Total harness count → 4043 in `tests/harness/` + 92 in `tests/harness_ui/`.
+
+MINOR — new client crypto module + Playwright coverage. No server endpoint or schema change.
+
+### Added
+- `app/static/notes_crypto.js` — browser-side PBKDF2 + AES-GCM for private notes; completes the Phase 4 end-to-end encryption (the passphrase never leaves the browser; the server stores only ciphertext).
+
 ## [2.557.0] - 2026-06-21 — "The Cipher Vault"
 
 **Schema version:** 74
