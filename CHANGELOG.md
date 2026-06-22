@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.552.0] - 2026-06-21 — "The Cipher Page"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_illusory_script` — Phase 2 #66 of the cast-and-broadcast tail. The L1, 10-day sibling of Magic Mouth (#65), reusing the shared `_do_cast_inscribed_illusion` helper.
+
+**Description:** RAW PHB p.252: "You write on parchment ... and imbue it with a potent illusion that lasts for the duration. To you and any creatures you designate ... the writing appears normal ... To all others the writing appears as ... unintelligible text." Touch, 10 days, non-concentration. Same shape as Magic Mouth — a GM-narrated utility enchantment: the `illusory-script` buff records the concealed `message` + the designated `readers`, and who can read it (vs. the gibberish others see) is GM-narrated. Differs from #65 only in slug, the Bard/Warlock/Wizard gate, the 10-day (144000-round) duration, and the message/readers fields.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: `cast_illusory_script` endpoint (thin wrapper over `_do_cast_inscribed_illusion`).
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #66.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_illusory_script.py` (new): +4 — self-cast installs a non-concentration `illusory-script` buff (`illusory_script_active` + default message/readers, 10 days); a named message + readers surface; non-caster 409; missing character_id 400.
+
+Total harness count → 3990 (+4).
+
+MINOR — new cast endpoint reusing the inscribed-illusion helper. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_illusory_script`: Illusory Script (L1) — a 10-day flag-buff recording a concealed message + its designated readers (GM-narrated reveal). Phase 2 #66 of the cast-and-broadcast tail.
+
 ## [2.551.0] - 2026-06-21 — "The Whispering Wall"
 
 **Schema version:** 71

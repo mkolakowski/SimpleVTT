@@ -72198,6 +72198,46 @@ async def _do_cast_inscribed_illusion(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_illusory_script")
+async def cast_illusory_script(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.552.0 — Phase 2 #66 of
+    docs/plans/cast-and-broadcast-tail.md. Illusory Script (L1 illusion,
+    Bard/Warlock/Wizard, PHB p.252): "You write on parchment, paper, or
+    some other suitable writing material and imbue it with a potent
+    illusion that lasts for the duration. To you and any creatures you
+    designate when you cast the spell, the writing appears normal ... To
+    all others the writing appears as ... unintelligible text." 1
+    minute, S/M, Touch, 10 days, non-concentration.
+
+    The L1, 10-day sibling of Magic Mouth (#65) on the shared
+    `_do_cast_inscribed_illusion` helper. Records the concealed `message`
+    + the designated `readers` on a 10-day flag-buff; who can read it and
+    the gibberish-to-others illusion are GM-narrated. Self-cast. Body:
+    ``{character_id, message?, readers?}``. Response: ``{ok, feature,
+    target_character_id, message, readers, duration, buff_installed,
+    duration_rounds}``.
+    """
+    return await _do_cast_inscribed_illusion(
+        campaign_id, request, db, user,
+        slug="illusory-script", display_name="Illusory Script", icon="📜",
+        caster_classes={"bard", "warlock", "wizard"},
+        duration_rounds=144000, duration_label="10 days",
+        primary_field="message", primary_key="illusory_script_message",
+        primary_default="(no message set)",
+        secondary_field="readers", secondary_key="illusory_script_readers",
+        secondary_default="those you designate",
+        note=(
+            "Only designated readers see the true message; others see "
+            "unintelligible text (GM-narrated)."
+        ),
+    )
+
+
 @router.post("/api/campaign/{campaign_id}/cast_zone_of_truth")
 async def cast_zone_of_truth(
     campaign_id: int,
