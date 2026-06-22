@@ -255,8 +255,11 @@ async def test_scanner_jail_loaded_with_env_thresholds():
         "get", "simplevtt-scanner", "bantime",
     )
 
-    assert "20" in r_maxretry.stdout, (
-        f"scanner maxretry mismatch — expected 20, got "
+    # v2.566.1 — the scanner default was lowered 20 → 10 at v2.488.3
+    # (see FAIL2BAN_SCANNER_MAXRETRY in docker-compose.yml + the jail
+    # comment); this assertion had been left at the old 20.
+    assert "10" in r_maxretry.stdout, (
+        f"scanner maxretry mismatch — expected 10, got "
         f"{r_maxretry.stdout!r}"
     )
     assert "300" in r_findtime.stdout, (

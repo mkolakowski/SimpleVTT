@@ -148,9 +148,12 @@ def test_compose_passes_fail2ban_action_and_cloudflare_vars():
 
 
 def test_render_script_allowlist_includes_new_placeholders():
-    """render-jail.sh's allowlist must include the new Phase 4d
-    placeholders or they pass through to fail2ban literally and
-    break the action."""
+    """render-jail.sh's ``VARS`` allowlist must name the Phase 4d
+    placeholders or they pass through to fail2ban literally and break
+    the action. (v2.566.1: the v2.473.1 POSIX rewrite replaced
+    envsubst's literal ``${VAR}`` markers with a bare-name allowlist —
+    ``VARS='… CLOUDFLARE_API_TOKEN …'`` — so this asserts the bare
+    names, matching the shipped script.)"""
     text = _load_text(_RENDER_SCRIPT)
     for v in (
         "FAIL2BAN_ACTION",
@@ -158,8 +161,8 @@ def test_render_script_allowlist_includes_new_placeholders():
         "CLOUDFLARE_ZONE_ID",
         "CLOUDFLARE_API_BASE_URL",
     ):
-        assert f"${{{v}}}" in text, (
-            f"render-jail.sh allowlist missing ${{{v}}}"
+        assert v in text, (
+            f"render-jail.sh allowlist missing {v}"
         )
 
 

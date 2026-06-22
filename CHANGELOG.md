@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.566.1] - 2026-06-22 — "Two Stale Yardsticks"
+
+**Schema version:** 75
+
+**Commit summary:** Reconcile two pre-existing stale fail2ban tests with the shipped code (surfaced while regression-running the v2.566.0 Discord work). Test-only.
+
+**Description:** Running the full fail2ban suite during the Discord-webhook commit surfaced two tests that had drifted from the code (verify-substrate — the assertions outlived refactors):
+1. `test_fail2ban_cloudflare_bouncer.py::test_render_script_allowlist_includes_new_placeholders` asserted `render-jail.sh` contains literal `${CLOUDFLARE_API_TOKEN}` (brace) markers — but the **v2.473.1 POSIX rewrite** replaced envsubst's `${VAR}` markers with a **bare-name `VARS` allowlist**. Fixed the assertion to check the bare names (what the shipped script actually uses; this is also why the new `test_fail2ban_discord_notify` check was written that way).
+2. `test_fail2ban_end_to_end.py::test_scanner_jail_loaded_with_env_thresholds` asserted scanner `maxretry == 20`, but the default was **lowered 20 → 10 at v2.488.3** (compose `FAIL2BAN_SCANNER_MAXRETRY` + the jail comment). Fixed to 10.
+
+Both were red before the Discord change too (it touches neither the render-script `${...}` format nor the scanner threshold); fixing them keeps the fail2ban suite green. No code or behavior change — assertions only.
+
+**Implementation:**
+
+- `tests/harness/test_fail2ban_cloudflare_bouncer.py`: bare-name allowlist assertion + a note.
+- `tests/harness/test_fail2ban_end_to_end.py`: scanner maxretry 20 → 10 + a note.
+
+Test-only commit (no endpoint / schema / behavior change).
+
+### Fixed
+- Two stale fail2ban test assertions reconciled with shipped config (render-script bare-name allowlist; scanner maxretry default of 10).
+
 ## [2.566.0] - 2026-06-22 — "The Town Crier"
 
 **Schema version:** 75
