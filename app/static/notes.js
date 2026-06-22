@@ -21,14 +21,24 @@
   if (typeof CAMPAIGN_ID === "undefined") return;
 
   var API = "/api/campaign/" + CAMPAIGN_ID + "/notes";
+  var HANDOUTS_API = "/api/campaign/" + CAMPAIGN_ID + "/handouts";
   var ENC_API = "/api/notes/encryption";
   var me = (typeof ME !== "undefined" && ME) ? ME : { id: null, isGm: false };
   var isGm = !!me.isGm;
+  var members = (typeof MEMBERS !== "undefined" && MEMBERS) ? MEMBERS : [];
 
+  var view = "notes";          // 'notes' | 'handouts'
   var notes = [];
   var loaded = false;
   var composerOpen = false;
   var editingId = null;
+
+  // Handouts (Phase 5b).
+  var handouts = [];
+  var handoutsLoaded = false;
+  var handoutComposerOpen = false;
+  var editingHandoutId = null;
+  var revealPickerId = null;   // handout id whose "Reveal to…" picker is open
 
   // Crypto state (Phase 5d). cryptoKey is held in memory for the session
   // only; never persisted, never sent to the server.
@@ -160,28 +170,224 @@
     return !cryptoKey && notes.some(function (n) { return n.visibility === "private"; });
   }
 
-  function render() {
-    var el = bodyEl();
-    if (!el) return;
+  function toggleHtml() {
+    function btn(v, label) {
+      var active = view === v;
+      // Dense-panel exception (CLAUDE.md): 32px sub-tab toggle.
+      return '<button class="notes-view-toggle" data-view="' + v + '" ' +
+        'style="min-height:32px;flex:1;' +
+        (active ? "background:var(--accent);color:var(--accent-fg,#fff);" : "") +
+        '">' + label + '</button>';
+    }
+    return '<div style="display:flex;gap:6px;margin-bottom:10px;">' +
+      btn("notes", "📝 Notes") + btn("handouts", "📜 Handouts") + '</div>';
+  }
+
+  function notesSectionHtml() {
     var html =
       '<div style="font-size:11px;color:var(--accent);text-transform:uppercase;' +
       'letter-spacing:0.5px;margin-bottom:8px;">Notes</div>';
-
     html += composerOpen
       ? editorHtml(null)
       : '<button class="note-new" style="margin-bottom:10px;">+ New note</button>';
-
     if (hasLockedPrivate()) {
       html += '<button class="note-unlock" style="margin:0 0 10px 8px;">🔓 Unlock private notes</button>';
     }
-
     if (!notes.length) {
       html += '<p class="notes-empty" style="color:var(--fg-mute);font-size:12px;">' +
         (isGm ? "No notes yet." : "No notes yet — create one above.") + '</p>';
     } else {
       notes.forEach(function (n) { html += cardHtml(n); });
     }
-    el.innerHTML = html;
+    return html;
+  }
+
+  function render() {
+    var el = bodyEl();
+    if (!el) return;
+    el.innerHTML = toggleHtml() +
+      (view === "handouts" ? handoutsSectionHtml() : notesSectionHtml());
+  }
+
+  // ───────────────────────── Handouts (5b) ─────────────────────────
+
+  function handoutEditorHtml(h) {
+    var id = h ? h.id : "";
+    var t = h ? (h.title || "") : "";
+    var b = h ? (h.body || "") : "";
+    var img = h ? (h.image_url || "") : "";
+    var f = h ? (h.folder || "") : "";
+    return '' +
+      '<div class="ho-editor" data-id="' + id + '" style="' + CARD_STYLE + '">' +
+        '<input class="ho-title-input" type="text" maxlength="200" ' +
+          'placeholder="Title" value="' + esc(t) + '" style="' + INPUT_STYLE + '">' +
+        '<textarea class="ho-body-input" rows="4" placeholder="Body (shown to revealed players)" ' +
+          'style="' + INPUT_STYLE + 'resize:vertical;">' + esc(b) + '</textarea>' +
+        '<input class="ho-image-input" type="text" maxlength="500" ' +
+          'placeholder="Image URL (optional)" value="' + esc(img) + '" style="' + INPUT_STYLE + '">' +
+        '<input class="ho-folder-input" type="text" maxlength="120" ' +
+          'placeholder="Folder (optional)" value="' + esc(f) + '" style="' + INPUT_STYLE + '">' +
+        '<div style="display:flex;gap:8px;">' +
+          '<button class="ho-save" data-id="' + id + '">Save</button>' +
+          '<button class="ho-cancel">Cancel</button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function revealStatus(h) {
+    if (!h.revealed) return "Hidden (GM only)";
+    if (h.reveal_to === "all") return "Revealed to all";
+    if (Array.isArray(h.reveal_to)) {
+      var names = h.reveal_to.map(function (uid) {
+        var m = members.find(function (x) { return x.id === uid; });
+        return m ? m.name : ("#" + uid);
+      });
+      return "Revealed to: " + (names.join(", ") || "—");
+    }
+    return "Revealed";
+  }
+
+  function revealPickerHtml(h) {
+    var checked = Array.isArray(h.reveal_to) ? h.reveal_to : [];
+    var rows = members.length
+      ? members.map(function (m) {
+          var c = checked.indexOf(m.id) >= 0 ? "checked" : "";
+          return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;">' +
+            '<input type="checkbox" class="ho-member" value="' + m.id + '" ' + c + '> ' +
+            esc(m.name) + '</label>';
+        }).join("")
+      : '<em style="font-size:12px;color:var(--fg-mute);">No players in this campaign yet.</em>';
+    return '<div class="ho-picker" data-id="' + h.id + '" ' +
+      'style="margin-top:6px;padding:6px;border:1px dashed var(--border);border-radius:6px;">' +
+      rows +
+      '<div style="margin-top:6px;display:flex;gap:8px;">' +
+        '<button class="ho-reveal-confirm" data-id="' + h.id + '" style="' + EDIT_BTN_STYLE + '">Reveal selected</button>' +
+        '<button class="ho-reveal-cancel" style="' + EDIT_BTN_STYLE + '">Cancel</button>' +
+      '</div></div>';
+  }
+
+  function handoutBodyHtml(h) {
+    var img = h.image_url
+      ? '<img src="' + esc(h.image_url) + '" alt="" ' +
+        'style="max-width:100%;border-radius:6px;margin-top:6px;display:block;">'
+      : "";
+    var body = h.body
+      ? '<div style="white-space:pre-wrap;font-size:12px;margin-top:6px;color:var(--fg);">' +
+        esc(h.body) + '</div>'
+      : "";
+    var folder = h.folder
+      ? '<div style="margin-top:6px;"><span style="font-size:10px;color:var(--fg-mute);' +
+        'border:1px solid var(--border);border-radius:10px;padding:1px 7px;">' +
+        esc(h.folder) + '</span></div>'
+      : "";
+    return body + img + folder;
+  }
+
+  function gmHandoutCard(h) {
+    if (editingHandoutId === h.id) return handoutEditorHtml(h);
+    var controls =
+      '<div style="margin-top:8px;font-size:11px;color:var(--fg-mute);">' + revealStatus(h) + '</div>' +
+      '<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">' +
+        '<button class="ho-reveal-all" data-id="' + h.id + '" style="' + EDIT_BTN_STYLE + '">Reveal to all</button>' +
+        '<button class="ho-reveal-pick" data-id="' + h.id + '" style="' + EDIT_BTN_STYLE + '">Reveal to…</button>' +
+        (h.revealed ? '<button class="ho-hide" data-id="' + h.id + '" style="' + EDIT_BTN_STYLE + '">Hide</button>' : '') +
+      '</div>' +
+      (revealPickerId === h.id ? revealPickerHtml(h) : '');
+    return '' +
+      '<div class="ho-card" data-id="' + h.id + '" style="' + CARD_STYLE + '">' +
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">' +
+          '<strong style="font-size:13px;">' + esc(h.title) + '</strong>' +
+          '<span style="white-space:nowrap;display:flex;gap:4px;">' +
+            '<button class="ho-edit" data-id="' + h.id + '" style="' + EDIT_BTN_STYLE + '">Edit</button>' +
+            '<button class="ho-del" data-id="' + h.id + '" title="Delete" style="' + EDIT_BTN_STYLE + '">✕</button>' +
+          '</span>' +
+        '</div>' + handoutBodyHtml(h) + controls +
+      '</div>';
+  }
+
+  function playerHandoutCard(h) {
+    return '' +
+      '<div class="ho-card" data-id="' + h.id + '" style="' + CARD_STYLE + '">' +
+        '<strong style="font-size:13px;">' + esc(h.title) + '</strong>' +
+        handoutBodyHtml(h) +
+      '</div>';
+  }
+
+  function handoutsSectionHtml() {
+    var html =
+      '<div style="font-size:11px;color:var(--accent);text-transform:uppercase;' +
+      'letter-spacing:0.5px;margin-bottom:8px;">Handouts</div>';
+    if (isGm) {
+      html += handoutComposerOpen
+        ? handoutEditorHtml(null)
+        : '<button class="ho-new" style="margin-bottom:10px;">+ New handout</button>';
+    }
+    if (!handouts.length) {
+      html += '<p class="notes-empty" style="color:var(--fg-mute);font-size:12px;">' +
+        (isGm ? "No handouts yet." : "No handouts revealed to you yet.") + '</p>';
+    } else {
+      handouts.forEach(function (h) {
+        html += isGm ? gmHandoutCard(h) : playerHandoutCard(h);
+      });
+    }
+    return html;
+  }
+
+  function upsertHandout(h) {
+    if (!h || !h.id) return;
+    var i = handouts.findIndex(function (x) { return x.id === h.id; });
+    if (i >= 0) handouts[i] = h; else handouts.unshift(h);
+  }
+
+  async function loadHandouts() {
+    try {
+      var r = await fetch(HANDOUTS_API, { headers: { "Accept": "application/json" } });
+      if (!r.ok) return;
+      var d = await r.json();
+      handouts = (d && d.handouts) || [];
+      handoutsLoaded = true;
+      if (view === "handouts") render();
+    } catch (e) { /* ignore */ }
+  }
+
+  async function saveHandoutFromEditor(editor) {
+    var id = editor.dataset.id;
+    var payload = {
+      title: editor.querySelector(".ho-title-input").value.trim(),
+      body: editor.querySelector(".ho-body-input").value.trim(),
+      image_url: editor.querySelector(".ho-image-input").value.trim(),
+      folder: editor.querySelector(".ho-folder-input").value.trim(),
+    };
+    if (!payload.title) { window.alert("Give the handout a title."); return; }
+    var url = id ? (HANDOUTS_API + "/" + id) : HANDOUTS_API;
+    var method = id ? "PATCH" : "POST";
+    var r = await fetch(url, {
+      method: method, headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) { window.alert("Could not save the handout."); return; }
+    var d = await r.json();
+    upsertHandout(d.handout);
+    handoutComposerOpen = false;
+    editingHandoutId = null;
+    render();
+  }
+
+  async function deleteHandout(id) {
+    var r = await fetch(HANDOUTS_API + "/" + id, { method: "DELETE" });
+    if (r.ok) { handouts = handouts.filter(function (h) { return h.id !== id; }); render(); }
+  }
+
+  async function revealHandout(id, payload) {
+    var r = await fetch(HANDOUTS_API + "/" + id + "/reveal", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) { window.alert("Could not change the reveal state."); return; }
+    var d = await r.json();
+    upsertHandout(d.handout);
+    revealPickerId = null;
+    render();
   }
 
   function sortNotes() {
@@ -368,26 +574,76 @@
     } else if (t.classList.contains("note-save")) {
       var editor = t.closest(".note-editor");
       if (editor) saveFromEditor(editor);
+    } else if (t.classList.contains("notes-view-toggle")) {
+      view = t.dataset.view;
+      if (view === "handouts" && !handoutsLoaded) loadHandouts();
+      render();
+    } else if (t.classList.contains("ho-new")) {
+      handoutComposerOpen = true; editingHandoutId = null; render();
+    } else if (t.classList.contains("ho-cancel")) {
+      handoutComposerOpen = false; editingHandoutId = null; render();
+    } else if (t.classList.contains("ho-edit")) {
+      editingHandoutId = parseInt(t.dataset.id, 10); handoutComposerOpen = false; render();
+    } else if (t.classList.contains("ho-del")) {
+      if (window.confirm("Delete this handout?")) deleteHandout(parseInt(t.dataset.id, 10));
+    } else if (t.classList.contains("ho-save")) {
+      var hed = t.closest(".ho-editor");
+      if (hed) saveHandoutFromEditor(hed);
+    } else if (t.classList.contains("ho-reveal-all")) {
+      revealHandout(parseInt(t.dataset.id, 10), { revealed: true, to: "all" });
+    } else if (t.classList.contains("ho-reveal-pick")) {
+      revealPickerId = parseInt(t.dataset.id, 10); render();
+    } else if (t.classList.contains("ho-reveal-cancel")) {
+      revealPickerId = null; render();
+    } else if (t.classList.contains("ho-hide")) {
+      revealHandout(parseInt(t.dataset.id, 10), { revealed: false });
+    } else if (t.classList.contains("ho-reveal-confirm")) {
+      var picker = t.closest(".ho-picker");
+      if (!picker) return;
+      var ids = [].slice.call(picker.querySelectorAll(".ho-member:checked"))
+        .map(function (cb) { return parseInt(cb.value, 10); });
+      if (!ids.length) { window.alert("Pick at least one player, or use Reveal to all."); return; }
+      revealHandout(parseInt(picker.dataset.id, 10), { revealed: true, to: ids });
     }
   });
 
   document.addEventListener("vtt:ws-message", function (ev) {
     var msg = ev.detail;
-    if (!msg || msg.type !== "note_updated" || !msg.data) return;
-    if (msg.data.deleted) {
-      removeNote(msg.data.note_id);
-      if (loaded) render();
-    } else if (msg.data.note) {
-      upsert(msg.data.note);
-      if (msg.data.note.visibility === "private" && cryptoKey) {
-        decryptOne(msg.data.note).then(function () { if (loaded) render(); });
-      } else if (loaded) {
-        render();
+    if (!msg || !msg.data) return;
+
+    if (msg.type === "note_updated") {
+      if (msg.data.deleted) {
+        removeNote(msg.data.note_id);
+        if (loaded) render();
+      } else if (msg.data.note) {
+        upsert(msg.data.note);
+        if (msg.data.note.visibility === "private" && cryptoKey) {
+          decryptOne(msg.data.note).then(function () { if (loaded) render(); });
+        } else if (loaded) {
+          render();
+        }
+      }
+      return;
+    }
+
+    if (msg.type === "handout_revealed") {
+      if (isGm) {
+        // The GM sees every handout; just refresh the reveal state.
+        loadHandouts();
+      } else if (msg.data.revealed) {
+        if (typeof window.showToast === "function") {
+          window.showToast("📜 New handout: " + (msg.data.title || "Handout"), "info");
+        }
+        loadHandouts();  // fetch the body/image now that it's revealed to us
+      } else {
+        // Hidden from us — drop it.
+        handouts = handouts.filter(function (h) { return h.id !== msg.data.handout_id; });
+        if (view === "handouts") render();
       }
     }
   });
 
-  function init() { loadEncConfig(); load(); }
+  function init() { loadEncConfig(); load(); loadHandouts(); }
   if (document.readyState !== "loading") init();
   else document.addEventListener("DOMContentLoaded", init);
 

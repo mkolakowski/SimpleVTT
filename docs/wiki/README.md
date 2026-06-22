@@ -53,7 +53,7 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 
 | Plan | Format | Audience | Status |
 |------|--------|----------|--------|
-| [Notes & handouts (GM prep + E2E-encrypted player notes)](../plans/notes-and-handouts.md) | Markdown (design) | Contributors | 🟠 Phases 1–4 + Phase 5a/5c/5d shipped (v2.554.0–v2.560.0); only 5b (handouts panel) remains |
+| [Notes & handouts (GM prep + E2E-encrypted player notes)](../plans/notes-and-handouts.md) | Markdown (design) | Contributors | ✅ all phases shipped (v2.554.0–v2.561.0) |
 | [Advantage & disadvantage](../plans/advantage-disadvantage.md) | Markdown (design) | Contributors | 🟠 Phases 1 + 2a–2f shipped (v2.2.0–v2.157.0); Phase 3 blocked on Maps 2.0; Phase 4a (Cloak of Displacement) shipped v2.252.0; Phase 4b (Cloak of Elvenkind) shipped v2.253.0 |
 | [Class / subclass / feat / race content](../plans/class-content-status.md) | Markdown (inventory) | Contributors | 🟢 / 🟠 / ⚪ living inventory |
 | [Full class-feature automation](../plans/full-feature-automation.md) | Markdown (design) | Contributors | 🟠 Phases 0–7 shipped; Phase 8 in progress (v2.158.x) |

@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.561.0] - 2026-06-21 — "The Sealed Scroll"
+
+**Schema version:** 74
+
+**Commit summary:** Notes & Handouts **Phase 5b** — the Handouts panel in the Notes drawer. Completes Phase 5 and the entire Notes & Handouts plan.
+
+**Description:** Adds a "📜 Handouts" sub-view to the Notes drawer (a toggle alongside "📝 Notes"). The GM authors handouts (title / body / image URL / folder), edits + deletes them, and controls reveal: **Reveal to all**, **Reveal to…** (a per-player checkbox picker built from the `MEMBERS` global), and **Hide**, with a live reveal-status line. Players see only handouts revealed to them, read-only (title + body + image). The whole thing rides the Phase 2 backend (`/handouts` + `/handouts/{id}/reveal`); revealing fires the scoped `handout_revealed` WS event, so a player's drawer updates **live** — a `window.showToast` "📜 New handout" notification + the card appearing — and hiding removes it. The GM refreshes reveal state on the same event. Handout images use a pasted URL for now (a dedicated upload widget is a filed polish item). No new endpoint, no schema change.
+
+**Implementation:**
+
+- `app/static/notes.js`: the Notes/Handouts view toggle; handout render (GM cards with reveal controls + picker, player read-only cards); create/edit/delete + reveal/hide; the `handout_revealed` WS path (player toast + live add/remove, GM refresh).
+- `docs/plans/notes-and-handouts.md` + wiki rows: Phase 5 (and the whole plan) marked complete.
+
+**Harness changes:**
+
+- `tests/harness_ui/test_notes_drawer.py`: +1 Playwright (two contexts) — the GM authors a handout (hidden), reveals to all and the player sees it appear **live over WS**, the GM hides it and it disappears from the player, then the GM deletes it. Zero console errors on either side.
+
+Total harness count → 4043 in `tests/harness/` + 95 in `tests/harness_ui/`.
+
+MINOR — new Handouts UI over the existing Phase 2 handout API. No schema change.
+
+### Added
+- The "📜 Handouts" Notes-drawer sub-view: GM authoring + reveal-to-all / reveal-to-specific-players / hide, with live `handout_revealed` updates + a player toast. Phase 5b — completes the Notes & Handouts plan.
+
 ## [2.560.0] - 2026-06-21 — "The Locked Page"
 
 **Schema version:** 74

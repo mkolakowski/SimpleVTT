@@ -1,6 +1,6 @@
 # Notes & Handouts
 
-**Status:** 🟠 Phases 1–4 shipped (v2.554.0–v2.558.0) · Phase 5 (Notes drawer UI) nearly complete — 5a GM prep + 5c public + 5d private-unlock shipped (v2.559.0–v2.560.0); only 5b (handouts panel) remains (plan authored v2.553.2).
+**Status:** ✅ All phases shipped (v2.554.0–v2.561.0). GM prep notes, handouts (author + reveal-to-all/specific + the player toast), player public notes, and end-to-end-encrypted private notes (browser PBKDF2+AES-GCM; the server stores only ciphertext) — all live in the Notes drawer. (Plan authored v2.553.2.)
 
 A session-prep + reference system with three audiences and a hard
 privacy guarantee:
@@ -311,8 +311,14 @@ page for out-of-session work.
      the browser, POSTs only ciphertext; a locked private note shows
      "🔒 Locked" + Unlock (verify against `key_check`) → decrypt in place.
      Playwright `test_notes_drawer.py::test_alice_private_note_encrypt_unlock`.
-   - **5b — handouts panel ⚪ pending.** GM handout authoring + image +
-     reveal-to-targeted-players UI + the player `handout_revealed` toast.
+   - **5b — handouts panel. ✅ Shipped v2.561.0.** A "📜 Handouts"
+     sub-view toggle; GM authoring (title/body/image URL/folder) +
+     edit/delete + Reveal to all / Reveal to… (per-player checkbox
+     picker from `MEMBERS`) / Hide; players see revealed handouts
+     read-only with a live `handout_revealed` toast + add/remove.
+     Playwright `test_notes_drawer.py::test_handout_create_reveal_hide`
+     (cross-context: GM reveals → player sees live → GM hides → gone).
+     A dedicated image-*upload* widget (vs. a pasted URL) is filed polish.
 
    (Original Phase-5 polish notes:) Folders/pinning/search (search covers plaintext notes
    only — private notes are unsearchable by construction), markdown

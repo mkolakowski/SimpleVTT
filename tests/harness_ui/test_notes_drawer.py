@@ -114,3 +114,61 @@ def test_alice_private_note_encrypt_unlock(alice_page: Page):
     # Cleanup: reset encryption (wipes the private note).
     alice_page.evaluate("() => fetch('/api/notes/encryption', {method: 'DELETE'})")
     assert not errors, f"JS console errors: {errors}"
+
+
+def _open_handouts(page: Page):
+    page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}")
+    tab = page.locator('.drawer-tab-btn[data-target="notes-drawer"]')
+    expect(tab).to_be_visible(timeout=5000)
+    tab.click()
+    page.locator('#notes-body .notes-view-toggle[data-view="handouts"]').click()
+
+
+def test_handout_create_reveal_hide(gm_page: Page, alice_page: Page):
+    """Phase 5b: the GM authors a handout (hidden), reveals it to all and
+    the player sees it appear live over WS; the GM hides it and it
+    disappears from the player's view; the GM deletes it. No console
+    errors on either side."""
+    gm_errors, alice_errors = [], []
+    gm_page.on("pageerror", lambda e: gm_errors.append(str(e)))
+    alice_page.on("pageerror", lambda e: alice_errors.append(str(e)))
+
+    _open_handouts(gm_page)
+    _open_handouts(alice_page)
+
+    # Clear any leftover handouts via the GM UI for determinism.
+    while gm_page.locator("#notes-body .ho-card .ho-del").count():
+        gm_page.once("dialog", lambda d: d.accept())
+        gm_page.locator("#notes-body .ho-card .ho-del").first.click()
+        gm_page.wait_for_timeout(150)
+
+    # GM authors a handout (created hidden).
+    gm_page.locator("#notes-body button.ho-new").click()
+    gm_page.locator("#notes-body .ho-title-input").fill("The Duke's Summons")
+    gm_page.locator("#notes-body .ho-body-input").fill("Come to the keep at dusk.")
+    gm_page.locator("#notes-body button.ho-save").click()
+    gm_card = gm_page.locator("#notes-body .ho-card")
+    expect(gm_card).to_contain_text("The Duke's Summons", timeout=3000)
+    expect(gm_card).to_contain_text("Hidden (GM only)")
+
+    # The player does NOT see it yet.
+    expect(alice_page.locator("#notes-body")).not_to_contain_text(
+        "The Duke's Summons", timeout=2000)
+
+    # GM reveals to all → the player sees it appear live over WS.
+    gm_page.locator("#notes-body .ho-card button.ho-reveal-all").click()
+    expect(alice_page.locator("#notes-body .ho-card")).to_contain_text(
+        "The Duke's Summons", timeout=6000)
+    expect(alice_page.locator("#notes-body")).to_contain_text("Come to the keep at dusk.")
+
+    # GM hides it → it disappears from the player's view live.
+    gm_page.locator("#notes-body .ho-card button.ho-hide").click()
+    expect(alice_page.locator("#notes-body .ho-card")).to_have_count(0, timeout=6000)
+
+    # GM deletes it (cleanup).
+    gm_page.once("dialog", lambda d: d.accept())
+    gm_page.locator("#notes-body .ho-card button.ho-del").click()
+    expect(gm_page.locator("#notes-body .ho-card")).to_have_count(0, timeout=3000)
+
+    assert not gm_errors, f"GM JS errors: {gm_errors}"
+    assert not alice_errors, f"player JS errors: {alice_errors}"
