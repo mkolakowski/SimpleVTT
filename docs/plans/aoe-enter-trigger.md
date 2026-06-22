@@ -102,20 +102,35 @@ triggers once; next turn it can trigger again. Markers get a stable
 
 ## Phases
 
-1. **Phase 1 — radius-shaped damage AoEs.** Spirit Guardians, Spike
-   Growth, Sleet Storm, Moonbeam (cylinder ≈ radius), etc. Enter-trigger
-   in the move handler + per-turn dedupe + save-for-half via the existing
-   per-target orchestration + the affects/caster filter. Harness tests
-   (below).
-2. **Phase 2 — cube / cone / line shapes.** Needs either server-side
-   point-in-shape helpers (`_point_in_cube` / `_point_in_cone` /
-   `_point_in_line`, with the shape's stored orientation) **or** a
-   client-reported "entered AoE `<id>`" signal piggy-backed on the move
-   POST (the client already renders the marker shapes). Decide at Phase 2
-   time; radius covers the most common damage-on-enter spells first.
+1. **Phase 1 — radius-shaped damage AoEs.** ✅ **Shipped v2.567.0–v2.567.1.**
+   Enter + start-of-turn triggers, per-turn dedupe, save-for-half,
+   caster/affects filter. Covers **all** placed/self radius save-on-enter
+   damaging AoEs — and there turn out to be more than the static
+   `concentration` flag suggests: the cast path treats any *"Up to …"*
+   duration as concentration, so **Spirit Guardians (self_sphere) AND
+   placed spheres like Moonbeam / Insect Plague / Cloudkill** all create
+   markers and trigger. The v2.567.1 `save_ability` guard excludes
+   **Spike Growth** (sphere with damage but *no save* — 2d4 per 5 ft moved,
+   a different mechanic) and non-damaging AoEs (Sleet Storm, Web).
+2. **Phase 2 — cube / cone / line shapes.** ❌ **N/A — no SRD spell.**
+   Audited at v2.567.1: **zero** concentration damaging AoEs use a
+   cube/cone/line area (Spirit Guardians is the only flagged one, and it's
+   self_sphere; every other damaging AoE is a sphere or a wall). Building
+   `_point_in_cube` / `_point_in_cone` / `_point_in_line` geometry would be
+   dead code. Reopen only if homebrew/expansion content adds such a spell.
 3. **Phase 3 (optional) — forced-movement entry.** Wire the same check
    into `_force_move` so a push/pull/Thorn-Whip that drags a creature
    into a zone also triggers it (RAW: forced movement counts as entering).
+   Real for Spirit Guardians + the placed spheres today.
+
+**Filed follow-up (content data):** the SRD `concentration: False` flag on
+Moonbeam / Spike Growth / Sleet Storm / Insect Plague / Cloudkill / Call
+Lightning / Wall of Fire/Ice / Flaming Sphere is wrong (a
+`scripts/build_srd_content.py` extraction gap — these are Concentration in
+RAW). The duration fallback masks it for the AoE trigger, but concentration
+*tracking* (dropping a prior concentration spell, the ConcentrationEffect
+row) is still off. Fix belongs in the build script / an override layer, not
+a hand-edit of the generated JSON.
 
 ---
 

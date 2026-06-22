@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.567.1] - 2026-06-22 — "The Honest Yardstick"
+
+**Schema version:** 75
+
+**Commit summary:** Phase 2 investigation of `docs/plans/aoe-enter-trigger.md` found cube/cone/line geometry would be dead code (no spell uses it), but surfaced that placed radius AoEs (Moonbeam et al.) are *already* covered by Phase 1 via the duration-based concentration fallback — plus a latent mis-fire bug. Adds a no-save guard + a Moonbeam coverage test.
+
+**Description:** Phase 2 was planned as cube/cone/line point-in-shape geometry. Auditing the SRD first: **Spirit Guardians is the only concentration damaging AoE with the `concentration` flag set**, and zero spells have a cube/cone/line damaging area — so the geometry would never fire. But the cast path treats any *"Up to …"* duration as concentration (`_is_concentration = flag OR duration.startswith("up to")`), so **placed radius damaging AoEs already create markers and are already covered by Phase 1's enter + start-of-turn triggers** — Moonbeam (demo · Mira), Insect Plague, Cloudkill. This commit proves that with a Moonbeam test (a *placed* sphere — the fixed-center path SG's `self_sphere` didn't exercise) rather than building inert geometry.
+
+It also fixes a **latent mis-fire**: Spike Growth is a sphere with damage (`2d4`) but **no save** (it's 2d4 per 5 ft of forced/voluntary movement, not a save-on-enter). Its marker carried a `damage_expr` + the caster's DC but an empty `save_ability`, so the trigger would have auto-rolled a *defaulted* DEX save + half damage — wrong. Both triggers now require a non-empty `save_ability`, so no-save damaging AoEs (Spike Growth) and non-damaging AoEs (Sleet Storm, Web, Hypnotic Pattern) are correctly skipped.
+
+Cube/cone/line (the original Phase 2) is recorded as **N/A — no SRD spell** in the plan. The static `concentration: False` data inconsistency on these spells (a `scripts/build_srd_content.py` extraction gap) doesn't affect the trigger but does affect concentration *tracking* — filed as a separate content-data follow-up, not edited here (the JSONs are build-generated and would be clobbered on regeneration).
+
+**Implementation (`app/routes/tabletop_routes.py`):**
+
+- `_trigger_persistent_aoe_on_move` + `_tick_persistent_aoe_start_of_turn`: the damage-marker guard now also requires `marker.get("save_ability")`.
+
+**Harness changes:**
+
+- `tests/harness/test_aoe_enter_trigger.py`: +1 — `test_moonbeam_placed_sphere_enter` (Mira casts Moonbeam, places the 5-ft sphere; an NPC moving in takes save-for-half damage). Proves a second real spell + the fixed-center path.
+
+Total harness count → 4066 in `tests/harness/` + 99 in `tests/harness_ui/`.
+
+PATCH — correctness fix (no-save guard) + coverage test + plan reconciliation. No schema or API-shape change.
+
+### Fixed
+- Persistent-AoE trigger no longer auto-rolls a (defaulted) save against no-save damaging AoEs like Spike Growth — it now requires the AoE to carry a real `save_ability`.
+
+### Changed
+- Recorded that placed radius damaging AoEs (Moonbeam, Insect Plague, Cloudkill) are already covered by the Phase 1 enter + start-of-turn triggers via the duration-based concentration fallback; cube/cone/line (Phase 2) is N/A — no SRD spell uses it.
+
 ## [2.567.0] - 2026-06-22 — "The Trespasser's Toll"
 
 **Schema version:** 75

@@ -10521,9 +10521,14 @@ async def _trigger_persistent_aoe_on_move(
     triggered = _aoe_enter_triggered.setdefault(campaign_id, set())
 
     for marker in markers:
-        # Only damaging AoEs with a save (non-damaging AoEs are handled
-        # at cast / GM-narrated).
-        if not (marker.get("damage_expr") and marker.get("dc")):
+        # Only damaging AoEs with a SAVE on enter/start-of-turn. The
+        # save_ability guard excludes no-save movement-damage AoEs like
+        # Spike Growth (2d4 per 5 ft moved, no save) — those carry a
+        # damage_expr but an empty save_ability and must not auto-roll a
+        # (defaulted) save here. Non-damaging AoEs (Sleet Storm, Web,
+        # Hypnotic Pattern) self-exclude via the empty damage_expr.
+        if not (marker.get("damage_expr") and marker.get("dc")
+                and marker.get("save_ability")):
             continue
         if (marker.get("shape") or "").strip() not in ("sphere", "self_sphere"):
             continue  # Phase 1: radius shapes only
@@ -10597,7 +10602,10 @@ async def _tick_persistent_aoe_start_of_turn(
     char_id = active_combatant.get("char_id")
     triggered = _aoe_enter_triggered.setdefault(campaign_id, set())
     for marker in markers:
-        if not (marker.get("damage_expr") and marker.get("dc")):
+        # Save-on-enter damaging radius AoEs only (see the enter-trigger
+        # note re: the save_ability guard excluding Spike Growth).
+        if not (marker.get("damage_expr") and marker.get("dc")
+                and marker.get("save_ability")):
             continue
         if (marker.get("shape") or "").strip() not in ("sphere", "self_sphere"):
             continue

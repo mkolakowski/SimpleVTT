@@ -36,6 +36,13 @@ from .conftest import CAMPAIGN_ID
 # ``pending_aoe_placement`` assert in ``_cast_and_place_sg`` fails loudly
 # rather than silently testing the wrong spell.
 SPIRIT_GUARDIANS_INDEX = 11
+# Moonbeam in Mira Greenleaf's stored sheet (Druid). A PLACED 5-ft sphere
+# — concentration via its "Up to 1 minute" duration (the SRD `concentration`
+# flag is False, but the cast path treats "Up to …" as concentration), so it
+# creates a fixed-center damaging marker. Exercises the non-self-anchored
+# center path (vs SG's self_sphere) + a second real spell. The
+# pending_aoe_placement assert guards against seed drift.
+MOONBEAM_INDEX = 6
 PX_PER_CELL = 70  # demo map: 5 ft / cell
 
 
@@ -135,6 +142,32 @@ async def _cast_and_place_sg(gm_client, tavik, cx, cy):
     r = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/place_aoe",
         json={"cast_id": cast_id, "center": {"x": float(cx), "y": float(cy)},
+              "override": True},
+    )
+    assert r.status_code == 200, r.text
+
+
+async def _cast_and_place_moonbeam(gm_client, mira, cx, cy):
+    """Mira casts Moonbeam + places the 5-ft sphere at (cx, cy) — a
+    fixed-center (non-self-anchored) damaging concentration marker."""
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{mira['id']}/rest",
+        json={"type": "long"},
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={"character_id": mira["id"], "spell_index": MOONBEAM_INDEX,
+              "slot_level": 2, "class_slug": "druid", "override": True},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data.get("pending_aoe_placement") is True, (
+        f"expected Moonbeam to be a pending AoE placement; the demo seed may "
+        f"have drifted off index {MOONBEAM_INDEX}: {data}"
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/place_aoe",
+        json={"cast_id": data["id"], "center": {"x": float(cx), "y": float(cy)},
               "override": True},
     )
     assert r.status_code == 200, r.text
@@ -302,6 +335,44 @@ async def test_start_of_turn_in_aoe_takes_damage(gm_client, roster):
         )
     finally:
         await _end_conc(gm_client, tavik["id"])
+        await _clear_battle(gm_client)
+
+
+async def test_moonbeam_placed_sphere_enter(gm_client, roster):
+    """A PLACED damaging sphere (Moonbeam — concentration via its 'Up to 1
+    minute' duration) covers a second real spell + the fixed-center path.
+    An NPC moving into the 5-ft sphere takes save-for-half radiant damage."""
+    mira = roster.get("Mira Greenleaf")
+    standin = roster.get("Krieger Stonefist")
+    if not (mira and standin):
+        pytest.skip("demo roster missing Mira/Krieger")
+    tmpl = await _bandit_tmpl(gm_client)
+    await _place(gm_client, mira["id"], 100.0, 100.0)  # caster, away from the beam
+    await _place(gm_client, standin["id"], 700.0, 350.0)  # 25 ft from the beam
+    victim_tok_id = (await _tokens_by_char(gm_client))[standin["id"]]["id"]
+    victim_cid = "npc_mb_victim"
+    await _put_battle(gm_client, [
+        {"id": f"tok_mb_{mira['id']}", "char_id": mira["id"],
+         "name": mira["name"], "initiative": 20,
+         "hp_current": 40, "hp_max": 40, "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+        {"id": victim_cid, "char_id": None,
+         "token_template_id": tmpl["id"], "source_token_id": victim_tok_id,
+         "name": "Bandit Strayer", "initiative": 10,
+         "hp_current": 50, "hp_max": 50, "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+    ])
+    await _cast_and_place_moonbeam(gm_client, mira, 350.0, 350.0)
+    try:
+        before = _combatant(await _get_battle(gm_client), victim_cid)["hp_current"]
+        r = await _move(gm_client, victim_tok_id, 360.0, 350.0)  # ~1 ft, inside 5 ft
+        assert r.status_code == 200, r.text
+        after = _combatant(await _get_battle(gm_client), victim_cid)["hp_current"]
+        assert after < before, (
+            f"entering Moonbeam should deal damage; hp {before} → {after}"
+        )
+    finally:
+        await _end_conc(gm_client, mira["id"])
         await _clear_battle(gm_client)
 
 
