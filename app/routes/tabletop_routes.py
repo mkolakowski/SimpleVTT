@@ -15021,6 +15021,134 @@ def clone_custom_subclass(
     )
 
 
+# ── Fork & tweak SRD mechanics as homebrew ──────────────────────────────────
+# Phase 1 of docs/plans/homebrew-fork-srd.md. Unlike `_clone_homebrew_record`
+# (which refuses shipped-SRD sources and only duplicates existing homebrew),
+# this lets a GM copy ANY shipped SRD record into their campaign's homebrew
+# scope to tweak it. The fork lands in the homebrew tier as `source:"custom"`
+# — never the shipped tree — so the v2.568.3 "ships SRD 5.1 only" provenance
+# gate stays green.
+def _fork_record_into_campaign(
+    *, campaign_id: int, user: User, db: Session,
+    content_type: str, src_slug: str, mode: str,
+) -> dict:
+    """Fork the record the campaign currently RESOLVES for ``src_slug``
+    (shipped SRD, or an inherited global homebrew) into campaign-scoped
+    homebrew. ``mode``:
+
+    - ``"variant"`` — fresh ``copy-of-<slug>`` slug + " (Homebrew)" name: a
+      distinct new mechanic the GM adds to sheets/encounters explicitly.
+    - ``"override"`` — same slug at campaign scope: shadows the SRD record
+      for THIS campaign via the loader's campaign→global→shipped priority +
+      ``/cast_spell``'s ``resolve(_slug, campaign_id)`` enrichment, so every
+      sheet referencing the slug picks up the tweak. 409 if the campaign
+      already overrides it (edit the existing copy / revert first).
+
+    GM-gated. Returns a summary dict."""
+    _require_gm_for_campaign(campaign_id, user, db)
+    if content_type not in local_content.TYPE_REGISTRY:
+        raise HTTPException(404, f"Unknown content type: {content_type!r}")
+    if mode not in ("variant", "override"):
+        raise HTTPException(400, "mode must be 'variant' or 'override'")
+    if not src_slug:
+        raise HTTPException(400, "src_slug is required")
+    hit = local_content.resolve(
+        src_slug, type=content_type, campaign_id=campaign_id,
+    )
+    if not hit:
+        raise HTTPException(404, f"No {content_type}/{src_slug} found to fork")
+    source, source_label = hit
+    campaign_scope = f"campaign-{campaign_id}"
+    if mode == "override":
+        # A record already scoped to THIS campaign means a fork exists —
+        # don't clobber the GM's tweaks; tell them to edit / revert it.
+        if (source.get("scope") or "") == campaign_scope:
+            raise HTTPException(
+                409,
+                "This campaign already overrides that record — edit the "
+                "existing homebrew copy, or revert it first.",
+            )
+        new_slug = src_slug
+        new_name = source.get("name") or src_slug
+    else:  # variant
+        new_slug = _unique_clone_slug(src_slug, content_type, campaign_id)
+        new_name = f"{source.get('name') or src_slug} (Homebrew)"[:200]
+    new_record = {
+        **source,
+        "slug": new_slug,
+        "name": new_name,
+        "scope": campaign_scope,
+        "source": "custom",
+        "owner": user.id,
+        "_attribution": (
+            f"Tweaked from SRD '{src_slug}' (forked in-app by user {user.id})."
+        ),
+    }
+    try:
+        local_content.write_homebrew(
+            new_record, type=content_type, scope=campaign_scope,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {
+        "ok": True,
+        "type": content_type,
+        "slug": new_slug,
+        "name": new_name,
+        "mode": mode,
+        "forked_from": src_slug,
+        "forked_from_label": source_label,
+        "scope": campaign_scope,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/homebrew/fork")
+async def fork_homebrew(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Fork a shipped SRD (or inherited) mechanic into campaign homebrew so a
+    GM can tweak it. Body: ``{type, src_slug, mode}`` (mode defaults to
+    ``"variant"``). See `_fork_record_into_campaign`."""
+    body = await request.json()
+    return _fork_record_into_campaign(
+        campaign_id=campaign_id, user=user, db=db,
+        content_type=(body.get("type") or "").strip(),
+        src_slug=(body.get("src_slug") or "").strip(),
+        mode=(body.get("mode") or "variant").strip().lower(),
+    )
+
+
+@router.delete("/api/campaign/{campaign_id}/homebrew/{content_type}/{slug}")
+async def revert_homebrew(
+    campaign_id: int,
+    content_type: str,
+    slug: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Revert (delete) a campaign-scoped homebrew record — the un-fork. For an
+    ``override`` fork this restores the shipped SRD record for the campaign;
+    for a ``variant`` it removes the custom mechanic. GM-gated;
+    campaign-scope only (a GM can't delete global / shipped content)."""
+    _require_gm_for_campaign(campaign_id, user, db)
+    if content_type not in local_content.TYPE_REGISTRY:
+        raise HTTPException(404, f"Unknown content type: {content_type!r}")
+    try:
+        removed = local_content.delete_homebrew(
+            slug, type=content_type, scope=f"campaign-{campaign_id}",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not removed:
+        raise HTTPException(
+            404, f"No campaign homebrew {content_type}/{slug} to revert",
+        )
+    return {"ok": True, "reverted": slug, "type": content_type}
+
+
 # ── Homebrew import / export / template ─────────────────────────────────────
 #
 # Bulk JSON I/O for every homebrew content type in one combined file. The

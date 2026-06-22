@@ -1,6 +1,6 @@
 # Fork & tweak SRD mechanics as homebrew
 
-**Status:** ⚪ design only · all phases unstarted (plan authored v2.568.4).
+**Status:** 🟠 partial · **Phase 1 shipped v2.569.0** (the fork-SRD + revert endpoints, all content types, variant + override modes). Phases 2 (GM editor) and 3 (browse-and-fork UI) unstarted.
 
 Let a **GM copy any shipped SRD mechanic into their campaign's homebrew and
 tweak it** — change Fireball's damage, give a monster an extra action, bump
@@ -87,15 +87,16 @@ unaffected — forks never enter the shipped tree.
 
 ## Phases
 
-1. **Phase 1 — Fork-SRD endpoint (all types).** Generalize
-   `_clone_homebrew_record` (or add `_fork_srd_record`) to accept a **shipped
-   SRD** source: `resolve` the slug across tiers, allow a `local-srd` hit,
-   and write a campaign-scoped homebrew copy in the chosen mode
-   (override = same slug / variant = fresh slug), `source:"custom"`,
-   GM-gated via `_require_gm_for_campaign`. One route —
-   `POST /api/campaign/{id}/homebrew/fork` with `{type, src_slug, mode}` —
-   covering **every** content type (replacing the 3 narrow per-type clone
-   routes' SRD case). Harness tests below.
+1. **Phase 1 — Fork-SRD endpoint (all types).** ✅ **Shipped v2.569.0.**
+   `_fork_record_into_campaign` + `POST /api/campaign/{id}/homebrew/fork`
+   (`{type, src_slug, mode}`) accept a **shipped SRD** source (or an
+   inherited global homebrew), writing a campaign-scoped homebrew copy in
+   the chosen mode (override = same slug, shadows SRD for the campaign /
+   variant = fresh `copy-of-…` slug), `source:"custom"`, GM-gated, for
+   **every** content type. Companion `DELETE /api/campaign/{id}/homebrew/
+   {type}/{slug}` reverts (un-forks). 409 on re-overriding an existing
+   campaign fork; the shipped tree is never written (provenance gate stays
+   green). Covered by `tests/harness/test_homebrew_fork_srd.py`.
 2. **Phase 2 — GM-facing editor.** Expose the field/Action editor (today in
    `admin/homebrew/list.html`, `require_admin`) to the **GM for their own
    campaign scope**: a campaign-scoped editor page/drawer that loads a

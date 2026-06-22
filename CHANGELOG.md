@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.569.0] - 2026-06-22 — "The Forge Lit"
+
+**Schema version:** 75
+
+**Commit summary:** Phase 1 of `docs/plans/homebrew-fork-srd.md` — a GM can now fork any shipped SRD mechanic into editable campaign homebrew (variant or override mode), plus a revert/un-fork. The tweaking UI is Phase 2.
+
+**Description:** `POST /api/campaign/{id}/homebrew/fork` (`{type, src_slug, mode}`) copies the record a campaign currently resolves for `src_slug` — a shipped SRD record, or an inherited global homebrew — into the campaign's homebrew scope so the GM can tweak it. Two modes:
+
+- **variant** (default) — a fresh `copy-of-<slug>` slug + " (Homebrew)" name: a distinct new mechanic the GM adds to sheets/encounters explicitly.
+- **override** — the same slug at `campaign-N` scope: shadows the SRD record for *that campaign only*, via the loader's campaign→global→shipped priority + `/cast_spell`'s `resolve(_slug, campaign_id)` enrichment, so every sheet referencing the slug picks up the tweak. Returns 409 if the campaign already overrides that slug (edit / revert it first).
+
+Companion `DELETE /api/campaign/{id}/homebrew/{type}/{slug}` reverts (un-forks) a campaign-scoped record — for an override that restores the shipped SRD record for the campaign; for a variant it removes the custom mechanic. Both endpoints are GM-gated (`_require_gm_for_campaign`) and campaign-scoped (a GM cannot write global or the shipped tree). Works for **every** content type (spells, monsters, items, conditions, feats, backgrounds, races, class/subclass features) — unlike the prior `_clone_homebrew_record`, which deliberately refuses shipped-SRD sources and only covered feats/backgrounds/races.
+
+Forks land in the homebrew tier as `source: "custom"`, never `app/data/local/`, so the v2.568.3 "ships SRD 5.1 only" provenance gate stays green. This commit forks the record *verbatim* — mechanical editing is Phase 2 (a GM-facing editor); a forked record is identical to its SRD source until the GM edits it.
+
+**Implementation (`app/routes/tabletop_routes.py`):**
+
+- `_fork_record_into_campaign` helper + `POST .../homebrew/fork` + `DELETE .../homebrew/{type}/{slug}` (revert), next to the existing clone routes.
+
+**Harness changes:**
+
+- `tests/harness/test_homebrew_fork_srd.py` (new): +9 — variant fork (fresh slug, source:"custom", verbatim 8d6 carried over), override fork (campaign resolves the homebrew copy while a no-campaign lookup stays pristine SRD), double-override 409, monster type-generality, non-GM 403, unknown slug/type/mode errors, revert + its 404.
+
+Total harness count → 4082 in `tests/harness/` + 99 in `tests/harness_ui/`.
+
+MINOR — new GM-facing endpoints (additive; no schema or API-shape change to existing routes).
+
+### Added
+- GMs can fork any shipped SRD mechanic into editable campaign homebrew — `POST /api/campaign/{id}/homebrew/fork` (variant/override) + `DELETE .../homebrew/{type}/{slug}` revert (`docs/plans/homebrew-fork-srd.md` Phase 1).
+
 ## [2.568.4] - 2026-06-22 — "The Borrowed Spark"
 
 **Schema version:** 75
