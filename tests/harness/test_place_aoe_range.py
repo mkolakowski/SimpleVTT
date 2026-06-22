@@ -26,7 +26,11 @@ import pytest_asyncio
 from .conftest import CAMPAIGN_ID
 
 # Demo Thalindra's spells (see test_cast_spell_aoe.py).
-FIREBALL_INDEX = 7   # range = 150 ft
+FIREBALL_INDEX = 10  # Fireball (range 150 ft) in Thalindra's *stored* sheet.
+                     # Was 7, but the demo seed drifted and stored-index 7 is
+                     # now Web (range 60 ft), silently breaking the
+                     # range_ft==150 assertion below (Web reports 60). Aligned
+                     # with test_cast_spell_aoe.py's index map.
 
 # Demo grid: 70 px = 1 cell = 5 ft. Fireball 150 ft = 30 cells = 2100 px.
 PX_PER_CELL = 70

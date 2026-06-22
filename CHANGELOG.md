@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.569.1] - 2026-06-22 — "The Drifted Index"
+
+**Schema version:** 75
+
+**Commit summary:** Fix a stale `FIREBALL_INDEX` in `test_place_aoe_range.py` — it pointed at Web (range 60 ft), silently breaking the range assertion. Discovered while regression-testing the v2.569.0 fork work (not caused by it).
+
+**Description:** `test_place_aoe_range.py` hardcoded `FIREBALL_INDEX = 7` ("range = 150 ft"), but the demo seed drifted so Thalindra's *stored*-sheet index 7 is now **Web** (range 60 ft). The file's three other tests pass anyway (they place in-range / override / GM-bypass, all valid for Web's 60 ft too), but `test_place_aoe_out_of_range_409` asserts `range_ft == 150` and got 60 — a real but masked staleness. `test_cast_spell_aoe.py` already corrected the same drift to index 10; this aligns `test_place_aoe_range.py` to match (Fireball, 150 ft). No app code involved.
+
+Note: five other tests (`test_danger_sense`, `test_opportunity_attack`, `test_use_save_evasion`, `test_npc_resistance`, `test_aura_of_protection`) still use index 7 (Web) but **pass** because they assert on the DEX-save behavior Web shares with Fireball, not on damage/range — left as-is here (re-pointing them to Fireball is a separate, careful sweep since Web ≠ Fireball mechanically). Filed for a follow-up.
+
+**Harness changes:**
+
+- `tests/harness/test_place_aoe_range.py`: `FIREBALL_INDEX` 7 → 10 (+ a comment documenting the drift). No count change (4082).
+
+PATCH — test-fixture correctness fix. No app, schema, or API change.
+
+### Fixed
+- `test_place_aoe_range.py` cast Web instead of Fireball (stale demo-sheet index), making its range assertion test the wrong spell; re-pointed to Fireball.
+
 ## [2.569.0] - 2026-06-22 — "The Forge Lit"
 
 **Schema version:** 75
