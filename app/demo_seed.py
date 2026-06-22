@@ -46,9 +46,11 @@ from .models import (
     AdminAuditLog,
     Campaign,
     CampaignMembership,
+    CampaignNote,
     Character,
     DiceRoll,
     Encounter,
+    Handout,
     Map,
     Token,
     TokenTemplate,
@@ -8242,6 +8244,97 @@ def seed_roll_history(
     return out
 
 
+def seed_notes(
+    db: Session, camp: Campaign, users: dict[str, User]
+) -> int:
+    """Sample notes + handouts so the Notes drawer isn't empty in the
+    demo: a few GM prep notes (folders, a pin, Markdown), two public
+    player notes, and two handouts (one revealed to all, one still
+    hidden). No private notes — those are end-to-end encrypted and can
+    only be created client-side with a passphrase."""
+    gm_id = users["gm"].id
+    alice_id = users["alice"].id
+    bob_id = users["bob"].id
+    n = 0
+
+    # ── GM prep notes (gm_only) ──
+    gm_notes = [
+        # (title, body, folder, pinned)
+        ("Session 12 — The Sunken Vault",
+         "Tonight's beats:\n\n"
+         "- Open on the **flooded antechamber** (DC 13 Athletics to wade)\n"
+         "- The vault door needs *both* halves of the bronze key\n"
+         "- Reveal the doppelganger if they trust Lord Vey\n"
+         "- End on the **drowned choir** waking up",
+         "Sessions", True),
+        ("NPC — Lord Castellan Vey",
+         "Genial, silver-tongued, always *just* slightly too helpful.\n\n"
+         "> Secret: Vey is a **doppelganger**. The real Vey is in the vault.\n\n"
+         "Tell: he never eats at the feast.",
+         "NPCs", False),
+        ("Open plot threads",
+         "1. Who hired the Crimson Sails to burn the docks?\n"
+         "2. The amulet hums near running water — why?\n"
+         "3. Sister Aldra still owes the party a favor.",
+         "Plot", False),
+        ("Tavern name generator",
+         "When the party wanders somewhere unplanned:\n\n"
+         "- The Gilded Newt\n- Three Copper Kettles\n- The Salt & Sorrow\n"
+         "- The Last Lantern",
+         "", False),
+    ]
+    for title, body, folder, pinned in gm_notes:
+        db.add(CampaignNote(
+            campaign_id=camp.id, author_user_id=gm_id,
+            kind="gm_note", visibility="gm_only",
+            title=title, body=body, folder=folder, pinned=pinned,
+        ))
+        n += 1
+
+    # ── Public player notes (visible to the whole table) ──
+    db.add(CampaignNote(
+        campaign_id=camp.id, author_user_id=alice_id,
+        kind="player_note", visibility="public",
+        title="Party loot (shared)",
+        body="- 47 gp, 3 sp\n- *Potion of Healing* ×2\n- A silver ring "
+             "with a kraken sigil\n- The bronze key (top half)",
+        folder="Party", pinned=False,
+    ))
+    n += 1
+    db.add(CampaignNote(
+        campaign_id=camp.id, author_user_id=bob_id,
+        kind="player_note", visibility="public",
+        title="Things we know",
+        body="The choir only sings at **low tide**. The amulet got warm "
+             "when we crossed the bridge. Vey *smiled* when Aldra's name "
+             "came up.",
+        folder="Party", pinned=False,
+    ))
+    n += 1
+
+    # ── Handouts (one revealed to all, one still hidden) ──
+    db.add(Handout(
+        campaign_id=camp.id, author_user_id=gm_id,
+        title="The Duke's Letter",
+        body="*Found pinned to the harbormaster's door:*\n\n"
+             "> Bring the key to the Sunken Vault by the next low tide, "
+             "or the city drinks the sea. **Tell no one.**",
+        folder="Reveals", revealed=True, reveal_to="all",
+    ))
+    n += 1
+    db.add(Handout(
+        campaign_id=camp.id, author_user_id=gm_id,
+        title="Vault map (GM copy)",
+        body="Reveal **after** the antechamber. The choir is in the "
+             "north alcove; the real Lord Vey is chained in the east cell.",
+        folder="Reveals", revealed=False, reveal_to=[],
+    ))
+    n += 1
+
+    db.flush()
+    return n
+
+
 def seed_encounter(
     db: Session,
     camp: Campaign,
@@ -8512,6 +8605,7 @@ def reset_and_reseed(db: Session) -> dict[str, int]:
     templates = seed_token_templates(db, camp)
     tokens = seed_tokens(db, map_, chars, templates, users)
     rolls = seed_roll_history(db, camp, users)
+    notes = seed_notes(db, camp, users)
     encounter, battle_state = seed_encounter(db, camp, map_, tokens, chars)
 
     db.commit()

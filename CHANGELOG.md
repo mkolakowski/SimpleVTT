@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.565.1] - 2026-06-21 — "The Furnished Study"
+
+**Schema version:** 75
+
+**Commit summary:** Seed sample notes + handouts in the demo so the Notes drawer isn't empty on first open.
+
+**Description:** Adds a `seed_notes` step to `app/demo_seed.py`: four GM prep notes (folders `Sessions`/`NPCs`/`Plot` + an unfiled one, a pinned session plan, Markdown bodies — checklists, a blockquote secret, lists), two **public** player notes (Alice's shared loot, Bob's clues, in a `Party` folder), and two handouts — "The Duke's Letter" revealed to all and a "Vault map (GM copy)" still hidden. No private notes are seeded (those are end-to-end encrypted and can only be created client-side with a passphrase). The content showcases folders, pinning, Markdown, public-vs-GM visibility, and handout reveal state. On reseed the rows cascade-delete with the demo campaign (`campaign_id` FK `ON DELETE CASCADE`), so no reset changes are needed.
+
+**Implementation:**
+
+- `app/demo_seed.py`: `seed_notes(db, camp, users)` + wired into the seed orchestration; `CampaignNote` + `Handout` imports.
+
+This is a demo-data commit (no HTTP endpoint or schema change), so it ships no new harness test. (The harness suite's note/handout cleanup fixtures wipe the seeded rows early in a run; the hourly demo reseed restores them.)
+
+### Added
+- Demo seed: sample GM prep notes (folders/pin/Markdown), public player notes, and handouts (one revealed, one hidden) so the Notes drawer is populated in the demo.
+
 ## [2.565.0] - 2026-06-21 — "The Spare Key"
 
 **Schema version:** 75
