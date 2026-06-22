@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.568.4] - 2026-06-22 — "The Borrowed Spark"
+
+**Schema version:** 75
+
+**Commit summary:** Review the homebrew suite + design plan for a GM-facing "fork & tweak SRD mechanics as homebrew" flow. Plan + wiki surfacing; no implementation.
+
+**Description:** Reviewed the existing homebrew suite and found it mature but missing exactly the requested capability. As-built: a two-tier file loader (`app/local_content.py`, campaign→global→shipped-SRD override priority), an admin-only CRUD/Action editor (`/admin/homebrew`, `require_admin`), Open5e + paste/upload import, and GM-facing campaign homebrew export/template/import + clone (`campaign_settings.html`, `tabletop_routes._clone_homebrew_record`). The gap: `_clone_homebrew_record` **deliberately refuses to clone shipped SRD content** (only duplicates existing homebrew), the only "copy existing" source is the *network* Open5e import (non-SRD), clone covers just feats/backgrounds/races, and the capable editor is admin-only — so a GM cannot copy an SRD mechanic (Fireball, a monster, a magic item) into editable campaign homebrew.
+
+New `docs/plans/homebrew-fork-srd.md` designs the fill: a GM-gated **fork-SRD endpoint** for *all* content types with two modes — **override** (same slug at campaign scope, transparently shadowing the SRD record via the loader's existing priority + the cast path's `resolve(_slug, campaign_id)` enrichment — "tweak Fireball in place") and **variant** (fresh slug, a distinct new mechanic) — plus a GM-facing editor (the admin editor scoped to GM+campaign) and a browse-and-fork affordance in the spell/monster/item pickers. Forks land in the homebrew tier as `source:"custom"`, so the v2.568.3 "ships SRD 5.1 only" provenance gate stays green (the shipped tree is never touched). The plan is grounded against verified substrate (every claim cites a file) and includes the Phase 1–3 test contract.
+
+**Implementation:**
+
+- `docs/plans/homebrew-fork-srd.md` (new): the design plan.
+- Wiki surfacing (doc-discovery rule): `_DOC_ALLOWLIST` entry `plan-homebrew-fork-srd` in `app/routes/wiki_routes.py`; a "Design plans" row in `app/templates/wiki.html`; a row in `docs/wiki/README.md`.
+
+**Harness changes:**
+
+- `tests/harness/test_wiki.py`: +1 — `test_wiki_doc_serves_homebrew_fork_srd_plan` (slug 200 + H1 substring + nav); slug added to `test_wiki_home_renders`'s assertion list.
+
+Total harness count → 4073 in `tests/harness/` + 99 in `tests/harness_ui/`.
+
+PATCH — design doc + wiki surfacing. No code or schema change.
+
+### Added
+- `docs/plans/homebrew-fork-srd.md` — design plan for a GM-facing flow to fork & tweak shipped SRD mechanics into campaign homebrew; surfaced at `/wiki/doc/plan-homebrew-fork-srd`.
+
 ## [2.568.3] - 2026-06-22 — "The Sealed Perimeter"
 
 **Schema version:** 75

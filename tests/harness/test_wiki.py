@@ -99,6 +99,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-notes-and-handouts" in resp.text
     # v2.566.2: persistent-AoE enter-trigger plan listed.
     assert "/wiki/doc/plan-aoe-enter-trigger" in resp.text
+    # v2.568.4: fork-&-tweak-SRD-as-homebrew plan listed.
+    assert "/wiki/doc/plan-homebrew-fork-srd" in resp.text
     assert "/wiki/doc/plan-movement-and-summons" in resp.text
     # v2.99.447: automation-coverage audit doc listed in the references table.
     assert "/wiki/doc/automation-coverage" in resp.text
@@ -454,6 +456,19 @@ async def test_wiki_doc_serves_aoe_enter_trigger_plan():
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "enter-trigger" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_homebrew_fork_srd_plan():
+    """v2.568.4: GET /wiki/doc/plan-homebrew-fork-srd — 200 + body
+    contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/homebrew-fork-srd.md``.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-homebrew-fork-srd")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "homebrew" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 
