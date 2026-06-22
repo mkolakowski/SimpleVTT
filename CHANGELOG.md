@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.549.0] - 2026-06-21 — "The Hovering Watcher"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_arcane_eye` — Phase 2 #63 of the cast-and-broadcast tail. The L4, 1-hour movable sibling of Clairvoyance (#62), reusing the shared `_do_cast_scry_sensor` helper.
+
+**Description:** RAW PHB p.213: "You create an invisible, magical eye within range that hovers in the air for the duration. You mentally receive visual information from the eye, which has normal vision and darkvision out to 30 feet. ... As an action, you can move the eye up to 30 feet in any direction." 30 ft, Concentration up to 1 hour. Same shape as Clairvoyance — the eye's view is GM-narrated, the concentration ride is mechanical (the `arcane-eye` buff is concentration-bound, so `_install_buff`'s one-at-a-time cascade drops it when the caster concentrates elsewhere). No seeing/hearing mode (the eye is always visual + darkvision 30 ft); its 30-ft-per-action movement is GM-narrated. Differs from #62 only in slug, Cleric/Wizard gate, the L4 1-hour (600-round) duration, and no mode field.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: `cast_arcane_eye` endpoint (thin wrapper over `_do_cast_scry_sensor`).
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #63.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_arcane_eye.py` (new): +5 — self-cast installs a concentration `arcane-eye` buff (`scry_sensor_active` + location, no `scry_mode`, 600 rounds); a named location surfaces; concentration cascade-drop via Fly; non-caster 409; missing character_id 400.
+
+Total harness count → 3978 (+5).
+
+MINOR — new cast endpoint reusing the scrying-sensor helper. No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_arcane_eye`: Arcane Eye (L4) — a concentration flag-buff planting an invisible movable eye (visual + darkvision 30 ft, GM-narrated). Phase 2 #63 of the cast-and-broadcast tail.
+
 ## [2.548.0] - 2026-06-21 — "The Borrowed Eye"
 
 **Schema version:** 71

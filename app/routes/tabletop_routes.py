@@ -71880,6 +71880,40 @@ async def cast_clairvoyance(
     )
 
 
+@router.post("/api/campaign/{campaign_id}/cast_arcane_eye")
+async def cast_arcane_eye(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.549.0 — Phase 2 #63 of
+    docs/plans/cast-and-broadcast-tail.md. Arcane Eye (L4 divination,
+    Cleric/Wizard, PHB p.213): "You create an invisible, magical eye
+    within range that hovers in the air for the duration. You mentally
+    receive visual information from the eye, which has normal vision and
+    darkvision out to 30 feet. ... As an action, you can move the eye up
+    to 30 feet in any direction." 1 action, V/S/M, 30 ft, Concentration
+    up to 1 hour.
+
+    The L4, 1-hour movable sibling of Clairvoyance (#62) on the shared
+    `_do_cast_scry_sensor` helper. No seeing/hearing mode (the eye is
+    always visual + darkvision 30 ft). Optional ``location``. The eye's
+    view + its 30-ft-per-action movement are GM-narrated; the
+    concentration ride is mechanical. Response: ``{ok, feature,
+    target_character_id, location, concentration, buff_installed,
+    duration_rounds}``.
+    """
+    return await _do_cast_scry_sensor(
+        campaign_id, request, db, user,
+        slug="arcane-eye", display_name="Arcane Eye", icon="👁️",
+        caster_classes={"cleric", "wizard"},
+        duration_rounds=600,  # 1 hour @ 6 s/round
+        allow_mode=False, default_location="within 30 ft of you",
+        sense_note="Visual + darkvision 30 ft; movable 30 ft per action.",
+    )
+
+
 @router.post("/api/campaign/{campaign_id}/cast_zone_of_truth")
 async def cast_zone_of_truth(
     campaign_id: int,
