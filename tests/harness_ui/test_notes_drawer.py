@@ -116,6 +116,49 @@ def test_alice_private_note_encrypt_unlock(alice_page: Page):
     assert not errors, f"JS console errors: {errors}"
 
 
+def test_note_markdown_rendering_and_link_safety(gm_page: Page):
+    """A GM prep note with Markdown renders to real tags (bold / list /
+    safe link), and a javascript: link is NOT turned into an anchor."""
+    errors = _open_notes(gm_page)
+    body = gm_page.locator("#notes-body")
+
+    while gm_page.locator("#notes-body .note-del").count():
+        gm_page.once("dialog", lambda d: d.accept())
+        gm_page.locator("#notes-body .note-del").first.click()
+        gm_page.wait_for_timeout(150)
+
+    md = (
+        "**Bold** and *italic*\n"
+        "- first\n"
+        "- second\n"
+        "[safe](https://example.com)\n"
+        "[bad](javascript:alert(1))"
+    )
+    body.locator("button.note-new").click()
+    body.locator(".note-title-input").fill("Markdown note")
+    body.locator(".note-body-input").fill(md)
+    body.locator("button.note-save").click()
+
+    md_el = gm_page.locator("#notes-body .note-card .note-md")
+    expect(md_el).to_be_visible(timeout=3000)
+    # Real tags rendered.
+    expect(md_el.locator("strong")).to_contain_text("Bold")
+    expect(md_el.locator("em")).to_contain_text("italic")
+    expect(md_el.locator("li")).to_have_count(2)
+    # Safe link rendered as an anchor to the real URL.
+    expect(md_el.locator('a[href="https://example.com"]')).to_have_count(1)
+    # Security: the javascript: link is NOT an anchor anywhere in the panel.
+    assert gm_page.locator('#notes-body a[href^="javascript"]').count() == 0
+    # The bad link text survives literally (rendered, not executed).
+    expect(md_el).to_contain_text("javascript:alert(1)")
+
+    # Cleanup.
+    gm_page.once("dialog", lambda d: d.accept())
+    gm_page.locator("#notes-body .note-card button.note-del").click()
+    expect(gm_page.locator("#notes-body .note-card")).to_have_count(0, timeout=3000)
+    assert not errors, f"JS console errors: {errors}"
+
+
 def _open_handouts(page: Page):
     page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}")
     tab = page.locator('.drawer-tab-btn[data-target="notes-drawer"]')

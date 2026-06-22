@@ -325,8 +325,11 @@ page for out-of-session work.
    niceties, the campaign-management prep surface, mobile layout.
 
 ### Optional / filed
+- ✅ **Markdown rendering** for note + handout bodies — shipped v2.562.0
+  (safe-subset client renderer in `notes.js`; scheme-validated links).
 - **Downloadable recovery key** for private notes (opt-in; see Privacy
   model).
+- **Handout image *upload* widget** (vs. the current pasted URL).
 - **Handout media beyond images** (PDF/audio) — reuse the upload flow.
 - **Cross-campaign player notebook** — the encryption key is already
   per-user; a "my notebook across all my campaigns" view is a natural

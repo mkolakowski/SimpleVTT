@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.562.0] - 2026-06-21 — "The Illuminated Margin"
+
+**Schema version:** 74
+
+**Commit summary:** Notes & Handouts polish — note + handout bodies now render **Markdown** (bold / italic / code / headers / lists / blockquotes / links) via a safe-subset client renderer. No new endpoint, no schema change.
+
+**Description:** `app/static/notes.js` gains a `renderMarkdown` used for every note body (GM prep, public, and decrypted private) + every handout body, replacing the previous escaped-plain-text rendering. It's **XSS-safe by construction**: the input is HTML-escaped first (so no raw markup survives), then a whitelist of transforms injects only our own tags (`strong`/`em`/`code`/`a`/`li`/`blockquote`/`p`/`br`). Links are **scheme-validated** — only `http(s)://` and site-relative URLs become anchors (with `rel="noopener noreferrer"`); `javascript:` / `data:` URLs render as literal text, never as an `href`. Soft newlines become `<br>` (notes-friendly). The composer placeholders note "Markdown supported". Private-note bodies are decrypted in the browser and then Markdown-rendered locally, so the plaintext still never reaches the server.
+
+**Implementation:**
+
+- `app/static/notes.js`: `mdInline` + `renderMarkdown` (block parser: headers / ul / ol / blockquote / paragraphs); wired into the note + handout body render; composer placeholder hints.
+
+**Harness changes:**
+
+- `tests/harness_ui/test_notes_drawer.py`: +1 Playwright — a Markdown note renders `<strong>` / `<em>` / two `<li>` / a safe `<a href="https://…">`, and a `javascript:` link is **not** turned into an anchor (rendered as literal text).
+
+Total harness count → 4043 in `tests/harness/` + 96 in `tests/harness_ui/`.
+
+MINOR — client-side Markdown rendering for notes + handouts. No schema change.
+
+### Added
+- Markdown rendering (safe subset) for note + handout bodies in the Notes drawer — bold / italic / code / headers / lists / blockquotes / scheme-validated links.
+
 ## [2.561.0] - 2026-06-21 — "The Sealed Scroll"
 
 **Schema version:** 74

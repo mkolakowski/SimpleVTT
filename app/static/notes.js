@@ -54,6 +54,82 @@
     return d.innerHTML;
   }
 
+  // ── Safe-subset Markdown renderer ──────────────────────────────────
+  // XSS-safe by construction: the input is HTML-escaped FIRST, so no raw
+  // markup survives; the transforms below only inject our own known tags
+  // (strong/em/code/a/li/blockquote/p/br). Links are scheme-validated so
+  // javascript:/data: URLs render as literal text, never as an href.
+
+  function mdInline(s) {
+    // `s` is already HTML-escaped.
+    s = s.replace(/`([^`]+)`/g, '<code style="background:var(--bg-2);padding:0 3px;' +
+      'border-radius:3px;">$1</code>');
+    s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+    s = s.replace(/(^|[^_])_([^_\n]+)_/g, "$1<em>$2</em>");
+    s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (m, text, url) {
+      // Only http(s) or site-relative URLs become links; anything else
+      // (javascript:, data:, …) stays literal text.
+      if (/^(https?:\/\/|\/)/i.test(url)) {
+        return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' +
+          text + "</a>";
+      }
+      return m;
+    });
+    return s;
+  }
+
+  function renderMarkdown(raw) {
+    if (raw == null || raw === "") return "";
+    var lines = esc(String(raw)).split(/\r?\n/);
+    var out = [];
+    var i = 0;
+    var isUl = function (l) { return /^\s*[-*]\s+/.test(l); };
+    var isOl = function (l) { return /^\s*\d+\.\s+/.test(l); };
+    var isQuote = function (l) { return /^\s*>\s?/.test(l); };
+    var isHeader = function (l) { return /^#{1,6}\s+/.test(l); };
+    var list = function (tag, items) {
+      return "<" + tag + ' style="margin:4px 0;padding-left:18px;">' +
+        items.map(function (x) { return "<li>" + mdInline(x) + "</li>"; }).join("") +
+        "</" + tag + ">";
+    };
+    while (i < lines.length) {
+      var line = lines[i];
+      var h = /^(#{1,6})\s+(.*)$/.exec(line);
+      if (h) {
+        out.push('<strong style="display:block;font-size:13px;margin:6px 0 2px;">' +
+          mdInline(h[2]) + "</strong>");
+        i++; continue;
+      }
+      if (isUl(line)) {
+        var ul = [];
+        while (i < lines.length && isUl(lines[i])) { ul.push(lines[i].replace(/^\s*[-*]\s+/, "")); i++; }
+        out.push(list("ul", ul)); continue;
+      }
+      if (isOl(line)) {
+        var ol = [];
+        while (i < lines.length && isOl(lines[i])) { ol.push(lines[i].replace(/^\s*\d+\.\s+/, "")); i++; }
+        out.push(list("ol", ol)); continue;
+      }
+      if (isQuote(line)) {
+        var q = [];
+        while (i < lines.length && isQuote(lines[i])) { q.push(lines[i].replace(/^\s*>\s?/, "")); i++; }
+        out.push('<blockquote style="margin:4px 0;padding-left:8px;' +
+          'border-left:2px solid var(--border);color:var(--fg-mute);">' +
+          q.map(mdInline).join("<br>") + "</blockquote>");
+        continue;
+      }
+      if (/^\s*$/.test(line)) { i++; continue; }
+      var para = [];
+      while (i < lines.length && !/^\s*$/.test(lines[i]) && !isHeader(lines[i]) &&
+             !isUl(lines[i]) && !isOl(lines[i]) && !isQuote(lines[i])) {
+        para.push(lines[i]); i++;
+      }
+      out.push('<p style="margin:4px 0;">' + para.map(mdInline).join("<br>") + "</p>");
+    }
+    return out.join("");
+  }
+
   var CARD_STYLE =
     "border:1px solid var(--border);border-radius:8px;padding:8px 10px;" +
     "margin-bottom:8px;background:var(--bg-1);";
@@ -96,7 +172,7 @@
         visSelect +
         '<input class="note-title-input" type="text" maxlength="200" ' +
           'placeholder="Title" value="' + esc(t) + '" style="' + INPUT_STYLE + '">' +
-        '<textarea class="note-body-input" rows="5" placeholder="Note text" ' +
+        '<textarea class="note-body-input" rows="5" placeholder="Note text (Markdown supported)" ' +
           'style="' + INPUT_STYLE + 'resize:vertical;">' + esc(b) + '</textarea>' +
         '<input class="note-folder-input" type="text" maxlength="120" ' +
           'placeholder="Folder (optional)" value="' + esc(f) + '" style="' + INPUT_STYLE + '">' +
@@ -154,8 +230,8 @@
         esc(n.folder) + '</span></div>'
       : "";
     var bodyHtml = body
-      ? '<div style="white-space:pre-wrap;font-size:12px;margin-top:6px;color:var(--fg);">' +
-        esc(body) + '</div>'
+      ? '<div class="note-md" style="font-size:12px;margin-top:6px;color:var(--fg);">' +
+        renderMarkdown(body) + '</div>'
       : "";
     return '' +
       '<div class="note-card" data-id="' + n.id + '" style="' + CARD_STYLE + '">' +
@@ -221,7 +297,7 @@
       '<div class="ho-editor" data-id="' + id + '" style="' + CARD_STYLE + '">' +
         '<input class="ho-title-input" type="text" maxlength="200" ' +
           'placeholder="Title" value="' + esc(t) + '" style="' + INPUT_STYLE + '">' +
-        '<textarea class="ho-body-input" rows="4" placeholder="Body (shown to revealed players)" ' +
+        '<textarea class="ho-body-input" rows="4" placeholder="Body (Markdown; shown to revealed players)" ' +
           'style="' + INPUT_STYLE + 'resize:vertical;">' + esc(b) + '</textarea>' +
         '<input class="ho-image-input" type="text" maxlength="500" ' +
           'placeholder="Image URL (optional)" value="' + esc(img) + '" style="' + INPUT_STYLE + '">' +
@@ -272,8 +348,8 @@
         'style="max-width:100%;border-radius:6px;margin-top:6px;display:block;">'
       : "";
     var body = h.body
-      ? '<div style="white-space:pre-wrap;font-size:12px;margin-top:6px;color:var(--fg);">' +
-        esc(h.body) + '</div>'
+      ? '<div class="note-md" style="font-size:12px;margin-top:6px;color:var(--fg);">' +
+        renderMarkdown(h.body) + '</div>'
       : "";
     var folder = h.folder
       ? '<div style="margin-top:6px;"><span style="font-size:10px;color:var(--fg-mute);' +
