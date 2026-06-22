@@ -63,8 +63,8 @@ def _campaign_or_403(db: Session, user: User, campaign_id: int) -> Campaign:
 
 def _can_see_note(db: Session, user: User, campaign: Campaign,
                   note: CampaignNote) -> bool:
-    """Phase 1 visibility: gm_note → GM/co-GM only. (Phase 3 adds
-    public → any member; Phase 4 adds private → author only.)"""
+    """Visibility read rule: gm_only → GM/co-GM; public → any member;
+    private → author only (Phase 4)."""
     if note.visibility == "gm_only":
         return _user_is_gm(user, campaign, db)
     if note.visibility == "public":
@@ -74,16 +74,63 @@ def _can_see_note(db: Session, user: User, campaign: Campaign,
     return False
 
 
+def _can_edit_note(db: Session, user: User, campaign: Campaign,
+                   note: CampaignNote) -> bool:
+    """Write rule: gm_only → GM/co-GM; public → author OR GM (GM may
+    moderate); private → author only."""
+    if note.visibility == "private":
+        return note.author_user_id == user.id
+    if note.visibility == "gm_only":
+        return _user_is_gm(user, campaign, db)
+    if note.visibility == "public":
+        return note.author_user_id == user.id or _user_is_gm(user, campaign, db)
+    return False
+
+
+async def _broadcast_note_event(
+    campaign_id: int, *, note: "CampaignNote | None" = None,
+    deleted_id: "int | None" = None, visibility: str = "",
+    author_user_id: "int | None" = None,
+) -> None:
+    """Broadcast a ``note_updated`` event scoped to who may see the note:
+    public → everyone; gm_only → GMs only; private → the author only
+    (via the hub's ``recipient_filter``). For a delete, pass
+    ``deleted_id`` + ``visibility`` (+ ``author_user_id`` for private)
+    since the row is gone. A private/gm_only note's content therefore
+    never crosses the wire to a client that couldn't read it."""
+    if deleted_id is not None:
+        data = {"note_id": deleted_id, "deleted": True}
+        vis = visibility
+        author = author_user_id
+    else:
+        data = {"note": _note_dict(note)}
+        vis = note.visibility
+        author = note.author_user_id
+
+    if vis == "public":
+        rfilter = None
+    elif vis == "private":
+        def rfilter(ident, _a=author):  # noqa: E306
+            return ident.get("user_id") == _a
+    else:  # gm_only (and any unknown → GM-only, fail safe)
+        def rfilter(ident):  # noqa: E306
+            return bool(ident.get("is_gm"))
+    await hub.broadcast(
+        campaign_id, {"type": "note_updated", "data": data},
+        recipient_filter=rfilter,
+    )
+
+
 @router.get("/api/campaign/{campaign_id}/notes")
 async def list_notes(
     campaign_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """List the notes the caller is allowed to see. Phase 1: a GM/co-GM
-    sees every ``gm_note`` in the campaign; a non-GM sees nothing yet
-    (no public/private notes exist until Phases 3-4). Ordered pinned
-    first, then most-recently-updated."""
+    """List the notes the caller is allowed to see: a GM/co-GM sees
+    every ``gm_note`` + every ``public`` note; a player sees ``public``
+    notes + their own ``private`` notes (Phase 4). Ordered pinned first,
+    then most-recently-updated."""
     campaign = _campaign_or_403(db, user, campaign_id)
     rows = (
         db.query(CampaignNote)
@@ -124,14 +171,33 @@ async def create_note(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """Create a GM prep note (Phase 1: kind=gm_note, visibility=gm_only).
-    GM/co-GM only. Body: ``{title?, body?, folder?, pinned?}`` — at
-    least one of title/body must be non-empty."""
-    campaign = _campaign_or_403(db, user, campaign_id)
-    if not _user_is_gm(user, campaign, db):
-        raise HTTPException(403, "GM only")
+    """Create a note. Body: ``{visibility?, title?, body?, folder?,
+    pinned?}`` — at least one of title/body must be non-empty.
 
+    - ``visibility`` omitted or ``"gm_only"`` → a GM prep note
+      (``kind="gm_note"``); GM/co-GM only.
+    - ``visibility == "public"`` → a player note visible to all campaign
+      members (``kind="player_note"``); any member may create.
+    - ``visibility == "private"`` → rejected for now: private notes are
+      end-to-end encrypted (Phase 4) and created through the encrypted
+      client, never as server-stored plaintext.
+    """
+    campaign = _campaign_or_403(db, user, campaign_id)
     body = await request.json()
+    visibility = (body.get("visibility") or "gm_only").strip().lower()
+    if visibility == "gm_only":
+        if not _user_is_gm(user, campaign, db):
+            raise HTTPException(403, "GM only")
+        kind = "gm_note"
+    elif visibility == "public":
+        kind = "player_note"  # any campaign member
+    elif visibility == "private":
+        raise HTTPException(
+            400, "private notes are end-to-end encrypted and not yet "
+                 "available; create them through the encrypted client")
+    else:
+        raise HTTPException(400, "visibility must be 'gm_only' or 'public'")
+
     title = (body.get("title") or "").strip()
     note_body = (body.get("body") or "").strip()
     if not title and not note_body:
@@ -144,8 +210,8 @@ async def create_note(
     note = CampaignNote(
         campaign_id=campaign_id,
         author_user_id=user.id,
-        kind="gm_note",
-        visibility="gm_only",
+        kind=kind,
+        visibility=visibility,
         title=title or None,
         body=note_body,
         folder=(body.get("folder") or "").strip()[:120],
@@ -154,6 +220,7 @@ async def create_note(
     db.add(note)
     db.commit()
     db.refresh(note)
+    await _broadcast_note_event(campaign_id, note=note)
     return {"ok": True, "note": _note_dict(note)}
 
 
@@ -176,9 +243,8 @@ async def update_note(
     )
     if not note or not _can_see_note(db, user, campaign, note):
         raise HTTPException(404, "Note not found")
-    # Phase 1: only gm_notes exist, and editing one is GM-gated.
-    if note.visibility == "gm_only" and not _user_is_gm(user, campaign, db):
-        raise HTTPException(403, "GM only")
+    if not _can_edit_note(db, user, campaign, note):
+        raise HTTPException(403, "Not allowed to edit this note")
 
     body = await request.json()
     if "title" in body:
@@ -201,6 +267,7 @@ async def update_note(
 
     db.commit()
     db.refresh(note)
+    await _broadcast_note_event(campaign_id, note=note)
     return {"ok": True, "note": _note_dict(note)}
 
 
@@ -221,10 +288,13 @@ async def delete_note(
     )
     if not note or not _can_see_note(db, user, campaign, note):
         raise HTTPException(404, "Note not found")
-    if note.visibility == "gm_only" and not _user_is_gm(user, campaign, db):
-        raise HTTPException(403, "GM only")
+    if not _can_edit_note(db, user, campaign, note):
+        raise HTTPException(403, "Not allowed to delete this note")
+    vis, author = note.visibility, note.author_user_id
     db.delete(note)
     db.commit()
+    await _broadcast_note_event(
+        campaign_id, deleted_id=note_id, visibility=vis, author_user_id=author)
     return {"ok": True, "deleted": note_id}
 
 

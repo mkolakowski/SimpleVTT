@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.556.0] - 2026-06-21 — "The Shared Page"
+
+**Schema version:** 73
+
+**Commit summary:** Notes & Handouts **Phase 3** — player public notes. Extends the `/notes` endpoints to `kind="player_note"` / `visibility="public"` with a scoped `note_updated` WS broadcast. No new table (reuses `campaign_notes`).
+
+**Description:** Any campaign member can now create a note visible to the whole table (`POST /notes {visibility:"public", …}` → `kind=player_note`), edit/delete their own, and the GM may moderate (edit/delete) any public note. Every create/edit/delete broadcasts a `note_updated` WS event **scoped to who may see the note** via `hub.broadcast(..., recipient_filter=…)`: public → every member, gm_only → GMs only (a player never even learns a gm_note changed), private → the author only (Phase 4). The write rule is new `_can_edit_note` (gm_only → GM; public → author-or-GM; private → author). `visibility="private"` is **rejected** (400) until Phase 4 ships the browser-side encryption — the system never stores a plaintext "private" note, so a player can't be tricked into thinking a server-readable note is GM-proof. The read path (`_can_see_note`) already excludes gm_notes from players and will exclude other users' private notes from the GM.
+
+**Implementation:**
+
+- `app/routes/notes_routes.py`: visibility-driven `create_note`; `_can_edit_note` + `_broadcast_note_event` (scoped `note_updated`); PATCH/DELETE now author-or-GM for public, and broadcast.
+- `docs/plans/notes-and-handouts.md` + wiki "Design plans" rows: status → Phases 1–3 shipped.
+
+**Harness changes:**
+
+- `tests/harness/test_player_notes.py` (new): +11 — player creates a public note; public note visible to GM + other players; author edits/deletes own; **GM moderates** a player's public note; a non-author player can't edit/delete (403); `visibility=private` → 400; invalid visibility → 400; **WS** (public create broadcasts `note_updated` to all; a gm_note's `note_updated` reaches the GM socket but NOT a player's).
+
+Total harness count → 4029 (+11).
+
+MINOR — extends existing endpoints (player public notes) + a new `note_updated` WS broadcast. No schema change.
+
+### Added
+- Player public notes: `POST /api/campaign/{id}/notes {visibility:"public"}` (any member) + author-or-GM edit/delete + a scoped `note_updated` WS event (Phase 3 of the Notes & Handouts plan).
+
 ## [2.555.0] - 2026-06-21 — "The Revealed Letter"
 
 **Schema version:** 73

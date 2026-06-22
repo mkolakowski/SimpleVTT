@@ -1,6 +1,6 @@
 # Notes & Handouts
 
-**Status:** 🟠 Phases 1–2 shipped (v2.554.0–v2.555.0) · Phases 3–5 pending (plan authored v2.553.2).
+**Status:** 🟠 Phases 1–3 shipped (v2.554.0–v2.556.0) · Phases 4–5 pending (plan authored v2.553.2).
 
 A session-prep + reference system with three audiences and a hard
 privacy guarantee:
@@ -266,11 +266,16 @@ page for out-of-session work.
    everyone, un-revealed handouts are 404 to players, error paths. Image
    *upload* UI is folded into Phase 5; the endpoint already accepts an
    `image_url`.
-3. **Player public notes.** `public` visibility + the app-layer ACL +
-   the GM-excluded query + `note_updated` broadcast. **Headline security
-   test:** the GM's list endpoint cannot return another user's note when
-   that note is private (set up below), and a non-owner gets 404 on
-   `GET /notes/{id}` for someone else's private note.
+3. **Player public notes.** ✅ **Shipped v2.556.0.** `public` visibility
+   on the `/notes` endpoints (`kind=player_note`) + author-or-GM write
+   rule (`_can_edit_note`) + a scoped `note_updated` WS broadcast
+   (`_broadcast_note_event`: public → all, gm_only → GMs only, private →
+   author only). `visibility=private` is rejected (400) until Phase 4's
+   encrypted client — no plaintext "private" notes ever. Harness:
+   `tests/harness/test_player_notes.py` — public visible to all, GM
+   moderation, non-author 403, the gm_note WS scoping (player never sees
+   a gm_note event). The GM-excluded-query test for *private* notes lands
+   with Phase 4 (no private notes exist to exclude yet).
 4. **Private notes — E2E encryption.** The `note_encryption_keys`
    row + the browser crypto module (Web Crypto PBKDF2 + AES-GCM),
    passphrase set/unlock UX, ciphertext storage, `key_check`

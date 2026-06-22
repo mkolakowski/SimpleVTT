@@ -4,7 +4,24 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 4018 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.555.0, 2026-06-21).
+**Total tests:** 4029 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.556.0, 2026-06-21).
+
+### `test_player_notes.py`
+v2.556.0 — Notes & Handouts **Phase 3** (player public notes), [notes-and-handouts.md](../plans/notes-and-handouts.md). Extends `/notes` to `kind=player_note` / `visibility=public` + the scoped `note_updated` WS broadcast. GM = `gm_client`; alice/bob = non-GM members.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_player_creates_public_note` | Member POST `{visibility:"public"}` → 200, `kind == "player_note"`, `visibility == "public"`. |
+| `test_public_note_visible_to_all` | A public note appears in the GM's list + another player's list + GET by id 200. |
+| `test_author_can_edit_own_public` | The author PATCHes their own public note → 200. |
+| `test_gm_can_moderate_player_public` | The GM may PATCH + DELETE a player's public note. |
+| `test_non_author_player_cannot_edit` | A different player PATCHing another's public note → 403. |
+| `test_non_author_player_cannot_delete` | A different player DELETEing another's public note → 403. |
+| `test_author_can_delete_own` | The author deletes their own note → 200; GET → 404. |
+| `test_private_not_available` | `visibility="private"` → 400 (deferred to Phase 4's encrypted client). |
+| `test_invalid_visibility_400` | An unknown visibility → 400. |
+| `test_public_note_create_broadcasts_ws` | Creating a public note broadcasts `note_updated` to the GM + other players. |
+| `test_gm_note_ws_scoped_to_gms` | **Security:** a gm_note's `note_updated` reaches the GM socket but NOT a player's. |
 
 ### `test_handouts.py`
 v2.555.0 — Notes & Handouts **Phase 2** (handouts), [notes-and-handouts.md](../plans/notes-and-handouts.md). `handouts` table (schema v73) + CRUD + `/reveal` (the first `handout_revealed` WS broadcast). GM = `gm_client`; alice owns the Rogue (Pip Quickfingers), bob the Wizard (Thalindra Moonwhisper) — roster `owner_user_id` resolves their user_ids.
