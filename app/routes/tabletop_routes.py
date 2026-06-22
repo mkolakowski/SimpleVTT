@@ -15198,6 +15198,36 @@ async def edit_homebrew(
     }
 
 
+@router.get("/api/campaign/{campaign_id}/homebrew/custom")
+def list_campaign_homebrew(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """List this campaign's OWN homebrew records (the forked / hand-authored
+    ones, scope ``campaign-N``) across every content type — the Homebrew
+    Workshop's record list (Phase 2b of docs/plans/homebrew-fork-srd.md).
+    Excludes global homebrew + shipped SRD (those aren't the GM's to edit
+    here). GM-gated."""
+    _require_gm_for_campaign(campaign_id, user, db)
+    scope = f"campaign-{campaign_id}"
+    out: list[dict] = []
+    for ctype in sorted(local_content.TYPE_REGISTRY):
+        recs, _ = local_content.search(
+            type=ctype, campaign_id=campaign_id, limit=500,
+        )
+        for r in recs:
+            if (r.get("scope") or "") == scope:
+                out.append({
+                    "type": ctype,
+                    "slug": r.get("slug"),
+                    "name": r.get("name") or r.get("slug"),
+                    "source": r.get("source") or "custom",
+                })
+    out.sort(key=lambda x: (x["type"], (x["name"] or "").lower()))
+    return {"records": out}
+
+
 # ── Homebrew import / export / template ─────────────────────────────────────
 #
 # Bulk JSON I/O for every homebrew content type in one combined file. The

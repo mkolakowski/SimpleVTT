@@ -1,6 +1,6 @@
 # Fork & tweak SRD mechanics as homebrew
 
-**Status:** 🟠 partial · **Phase 1 shipped v2.569.0** (fork-SRD + revert endpoints, all types, variant/override). **Phase 2a shipped v2.570.0** (the GM editor *write path* — a GM-gated, campaign-scope-forced edit endpoint that tweaks a forked record's mechanics). Remaining: **Phase 2b** (the editor UI panel in campaign settings) and **Phase 3** (browse-and-fork affordance in the pickers).
+**Status:** 🟠 partial · **Phases 1–2 shipped** (v2.569.0–v2.571.0): fork-SRD + revert + edit endpoints (all types, variant/override) and the **Homebrew Workshop** UI panel (Campaign settings → Homebrew → Workshop — fork form + custom-record list + a per-field form editor with a raw-JSON escape hatch). Remaining: **Phase 3** (a browse-and-fork affordance in the spell/monster/item pickers, so a GM can fork straight from where they see the SRD content).
 
 Let a **GM copy any shipped SRD mechanic into their campaign's homebrew and
 tweak it** — change Fireball's damage, give a monster an extra action, bump
@@ -106,11 +106,16 @@ unaffected — forks never enter the shipped tree.
      content types. The admin editor's payload shape is just the record JSON
      (a `<textarea name="payload">`), so 2b's UI shares this contract.
      Covered by `tests/harness/test_homebrew_fork_srd.py`.
-   - **Phase 2b — editor UI (unstarted).** A campaign-settings "Homebrew
-     workshop" panel: list the campaign's `source:"custom"` records, open one
-     in a JSON editor pre-filled via `/api/content/{type}/{slug}?campaign_id=`,
-     Save → the 2a endpoint, plus the Phase 1 fork form + revert. Playwright
-     smoke.
+   - **Phase 2b — editor UI. ✅ Shipped v2.571.0.** The campaign-settings
+     **Homebrew Workshop** sub-tab (`app/static/homebrew_workshop.js`):
+     a fork form (type + SRD slug + variant/override), the campaign's
+     custom-record list via the new `GET /api/campaign/{id}/homebrew/custom`,
+     and a per-field form editor (name + the primary action's damage /
+     damage-type / save / healing / area) pre-filled via
+     `/api/content/{type}/{slug}?campaign_id=`, with a raw-JSON `<details>`
+     escape hatch for everything else. Save → the 2a edit endpoint; Revert →
+     the Phase 1 delete. Playwright smoke in
+     `tests/harness_ui/test_homebrew_workshop.py`.
 3. **Phase 3 — Browse-and-fork affordance.** A "Fork to homebrew" button
    where GMs already see SRD mechanics — the spell picker
    (`spell_picker.js`), monster page (`monster_page.html` /

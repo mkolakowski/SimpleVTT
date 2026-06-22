@@ -10,6 +10,38 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.571.0] - 2026-06-22 — "The Workshop Doors"
+
+**Schema version:** 75
+
+**Commit summary:** Phase 2b of `docs/plans/homebrew-fork-srd.md` — the GM-facing Homebrew Workshop UI: fork an SRD mechanic, then tweak its stats in a per-field form, all from Campaign settings. Plus a `/homebrew/custom` list endpoint.
+
+**Description:** A new **Workshop** sub-tab under Campaign settings → Homebrew gives GMs the end-to-end fork-and-tweak flow without touching JSON files or the admin console:
+
+- **Fork form** — pick a content type + SRD slug + mode (variant / override), one click forks it into campaign homebrew (Phase 1 endpoint) and opens the editor on the result.
+- **Custom-record list** — the campaign's own forked/authored records, via the new `GET /api/campaign/{id}/homebrew/custom` (GM-gated; lists `campaign-N`-scoped records across every content type, excluding shipped SRD + global homebrew). Each row has Edit + Revert.
+- **Per-field form editor** — friendly inputs for the common mechanics (name + the primary action's damage, damage type, save ability, healing, area shape + size), pre-filled via `/api/content/{type}/{slug}?campaign_id=`, with a raw-JSON `<details>` escape hatch for anything the form doesn't surface. Save merges the form fields onto the loaded record and writes via the Phase 2a edit endpoint; Revert un-forks via the Phase 1 delete.
+
+Everything routes through the existing GM-gated, campaign-scope-forced endpoints, so the shipped SRD tree is never written — the v2.568.3 provenance gate stays green. The editor's field merge preserves any record fields the form doesn't expose.
+
+**Implementation:**
+
+- `app/static/homebrew_workshop.js` (new): the panel logic (fork / list / form editor / raw-JSON / save / revert).
+- `app/templates/campaign_settings.html`: the Workshop sub-tab button + section + script include.
+- `app/routes/tabletop_routes.py`: `GET /api/campaign/{id}/homebrew/custom` list endpoint.
+
+**Harness changes:**
+
+- `tests/harness/test_homebrew_fork_srd.py` (+2, → 16): the `/homebrew/custom` list (campaign records only, not shipped SRD) + its GM-gating.
+- `tests/harness_ui/test_homebrew_workshop.py` (new, +1): Playwright smoke — fork Fireball in the panel → the form pre-fills 8d6 → save a 12d6 tweak → it resolves server-side.
+
+Total harness count → 4089 in `tests/harness/` + 100 in `tests/harness_ui/`.
+
+MINOR — new GM-facing list endpoint + UI (additive).
+
+### Added
+- Homebrew Workshop (Campaign settings → Homebrew → Workshop): GMs fork an SRD mechanic and tweak its stats in a per-field form, with revert — completing the in-app fork-and-tweak flow (`docs/plans/homebrew-fork-srd.md` Phase 2). New `GET /api/campaign/{id}/homebrew/custom` list endpoint.
+
 ## [2.570.0] - 2026-06-22 — "The Tuning Bench"
 
 **Schema version:** 75

@@ -221,3 +221,30 @@ async def test_edit_requires_gm(gm_client, bob_client):
 async def test_edit_unknown_type_404(gm_client):
     r = await _edit(gm_client, "widgets", "whatever", {"slug": "whatever"})
     assert r.status_code == 404, r.text
+
+
+# ── Phase 2b: campaign homebrew list (Workshop record list) ──────────────────
+async def test_list_campaign_homebrew(gm_client):
+    """GET /homebrew/custom lists the campaign's own forked records (and not
+    shipped SRD)."""
+    r = await _fork(gm_client, "spells", "fireball", "variant")
+    assert r.status_code == 200, r.text
+    slug = r.json()["slug"]
+    try:
+        lst = await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/homebrew/custom",
+        )
+        assert lst.status_code == 200, lst.text
+        recs = lst.json()["records"]
+        mine = [x for x in recs if x["slug"] == slug and x["type"] == "spells"]
+        assert mine, recs
+        assert "(Homebrew)" in mine[0]["name"]
+        # Shipped SRD (e.g. pristine 'fireball' globally) is NOT listed here.
+        assert not any(x["slug"] == "fireball" and x["type"] == "spells" for x in recs), recs
+    finally:
+        await _revert(gm_client, "spells", slug)
+
+
+async def test_list_campaign_homebrew_requires_gm(bob_client):
+    r = await bob_client.get(f"/api/campaign/{CAMPAIGN_ID}/homebrew/custom")
+    assert r.status_code == 403, r.text

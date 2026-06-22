@@ -128,6 +128,7 @@
     <button type="button" class="settings-subtab" data-sub="monsters">Monsters</button>
     <button type="button" class="settings-subtab" data-sub="backgrounds">Backgrounds</button>
     <button type="button" class="settings-subtab" data-sub="feats">Feats</button>
+    <button type="button" class="settings-subtab" data-sub="workshop">Workshop</button>
     <button type="button" class="settings-subtab" data-sub="io">Import &amp; export</button>
 </nav>
 
@@ -2634,6 +2635,86 @@
     </details>
 </section>
 
+<!-- ── Homebrew workshop: fork & tweak SRD mechanics ── -->
+<section class="settings-section" id="custom-workshop" data-tab="homebrew" data-sub="workshop">
+    <h2>Homebrew workshop</h2>
+    <p class="muted">Fork a shipped SRD mechanic into this campaign, then tweak its stats.
+       Forks are <strong>campaign-only</strong> — they never change the shipped SRD or any other campaign.
+       <em>Variant</em> makes a separate "(Homebrew)" copy; <em>Override</em> replaces the original
+       for this campaign (every sheet using that spell/item picks up the tweak).</p>
+
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:10px 0">
+        <label>Type
+            <select id="hbw-fork-type">
+                <option value="spells">spells</option>
+                <option value="monsters">monsters</option>
+                <option value="items">items</option>
+                <option value="conditions">conditions</option>
+                <option value="feats">feats</option>
+                <option value="backgrounds">backgrounds</option>
+                <option value="races">races</option>
+                <option value="class_features">class_features</option>
+                <option value="subclass_features">subclass_features</option>
+            </select>
+        </label>
+        <label>SRD slug <input id="hbw-fork-slug" placeholder="e.g. fireball"></label>
+        <label>Mode
+            <select id="hbw-fork-mode">
+                <option value="variant">Variant (new copy)</option>
+                <option value="override">Override (replace in this campaign)</option>
+            </select>
+        </label>
+        <button type="button" id="hbw-fork-btn">Fork into homebrew</button>
+    </div>
+    <div id="hbw-status" aria-live="polite" style="min-height:1.3em;font-weight:600"></div>
+
+    <h3>Your campaign homebrew</h3>
+    <div id="hbw-list"></div>
+
+    <div id="hbw-editor" hidden style="margin-top:14px;border:1px solid #ddd;padding:12px;border-radius:8px">
+        <h3 id="hbw-ed-title">Edit</h3>
+        <label>Name <input id="hbw-ed-name"></label>
+        <fieldset style="margin-top:8px">
+            <legend>Primary action (cast / effect)</legend>
+            <label>Damage <input id="hbw-ed-damage" placeholder="e.g. 8d6"></label>
+            <label>Damage type
+                <select id="hbw-ed-damage-type">
+                    <option value="">—</option>
+                    <option>acid</option><option>bludgeoning</option><option>cold</option>
+                    <option>fire</option><option>force</option><option>lightning</option>
+                    <option>necrotic</option><option>piercing</option><option>poison</option>
+                    <option>psychic</option><option>radiant</option><option>slashing</option>
+                    <option>thunder</option>
+                </select>
+            </label>
+            <label>Save
+                <select id="hbw-ed-save">
+                    <option value="">—</option>
+                    <option>STR</option><option>DEX</option><option>CON</option>
+                    <option>INT</option><option>WIS</option><option>CHA</option>
+                </select>
+            </label>
+            <label>Healing <input id="hbw-ed-healing" placeholder="e.g. 2d8+3"></label>
+            <label>Area shape
+                <select id="hbw-ed-shape">
+                    <option value="">—</option>
+                    <option>sphere</option><option>cube</option><option>cone</option>
+                    <option>line</option><option>self_sphere</option><option>self_cube</option>
+                </select>
+            </label>
+            <label>Area size (ft) <input id="hbw-ed-size" type="number" min="0"></label>
+        </fieldset>
+        <details style="margin-top:8px">
+            <summary>Advanced: raw JSON (anything not in the form above)</summary>
+            <textarea id="hbw-ed-raw" rows="14" spellcheck="false" style="width:100%;font-family:monospace"></textarea>
+        </details>
+        <div style="margin-top:10px;display:flex;gap:8px">
+            <button type="button" id="hbw-save-btn">Save changes</button>
+            <button type="button" id="hbw-cancel-btn">Cancel</button>
+        </div>
+    </div>
+</section>
+
 <!-- ── Homebrew import / export ── -->
 <section class="settings-section" id="custom-io" data-tab="homebrew" data-sub="io">
     <h2>Import &amp; export</h2>
@@ -3688,6 +3769,7 @@ document.querySelectorAll('.tmpl-card[data-tmpl-id]').forEach(card => {
 <script src="/static/features_editor.js?v={{ APP_VERSION }}"></script>
 <script src="/static/spell_picker.js?v={{ APP_VERSION }}"></script>
 <script src="/static/resources_editor.js?v={{ APP_VERSION }}"></script>
+<script src="/static/homebrew_workshop.js?v={{ APP_VERSION }}"></script>
 <script>
 (function () {
     const form = document.getElementById('map-upload-form');
