@@ -71914,6 +71914,137 @@ async def cast_arcane_eye(
     )
 
 
+@router.post("/api/campaign/{campaign_id}/cast_detect_thoughts")
+async def cast_detect_thoughts(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.550.0 — Phase 2 #64 of
+    docs/plans/cast-and-broadcast-tail.md. Detect Thoughts (L2
+    divination, Bard/Sorcerer/Warlock/Wizard, PHB p.231): "For the
+    duration, you can read the thoughts of certain creatures. ... you
+    can read its surface thoughts ... you can probe deeper into [a]
+    creature's mind. ... it must make a Wisdom saving throw." 1 action,
+    V/S/M, Self, Concentration up to 1 minute.
+
+    A concentration flag-buff in the Zone of Truth (#52) DC-bake mould:
+    the `detect-thoughts` buff carries ``effects.detect_thoughts: True``
+    + the baked ``save_dc`` (8 + prof + spellcasting mod, via
+    `_compute_spell_save_dc_from_sheet`) + ``save_ability: "WIS"`` for
+    the deeper-probe save, so any chat/sheet card can render "Detect
+    Thoughts active (deeper probe DC N)". Reading surface thoughts,
+    choosing a target each turn, and resolving the deeper-probe save are
+    GM-narrated (no mind-reading model). Concentration-bound, so it drops
+    via `_install_buff`'s one-at-a-time cascade. Self-cast.
+
+    Body: ``{character_id}``. Response: ``{ok, feature,
+    target_character_id, save_dc, save_ability, concentration,
+    buff_installed, duration_rounds}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows = any(
+        (s.get("_slug") == "detect-thoughts")
+        or (str(s.get("name", "")).lower() == "detect thoughts")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"bard", "sorcerer", "warlock", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": (
+                "knows Detect Thoughts, or bard/sorcerer/warlock/wizard"
+            ),
+            "got_class": _cls,
+        })
+
+    save_dc = _compute_spell_save_dc_from_sheet(sheet)
+    DURATION_ROUNDS = 10  # 1 minute @ 6 s/round
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "detect-thoughts",
+        "name": "Detect Thoughts",
+        "icon": "🧠",
+        "duration_rounds": DURATION_ROUNDS,
+        "duration_max": DURATION_ROUNDS,
+        "concentration": True,  # RAW "Concentration, up to 1 minute"
+        "source_char_id": char.id,
+        "effects": {
+            "detect_thoughts": True,
+            "save_dc": save_dc,
+            "save_ability": "WIS",
+        },
+        "desc": (
+            f"Read surface thoughts of a creature within 30 ft each turn "
+            f"(concentration, up to 1 minute). A deeper probe forces a WIS "
+            f"save (DC {save_dc}). Thought-reading + the save are "
+            "GM-narrated."
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": "🧠 Detect Thoughts",
+            "feature_desc": (
+                f"{char.name} reads surface thoughts of a creature within "
+                f"30 ft each turn (concentration). A deeper probe forces a "
+                f"WIS save (DC {save_dc}) — GM-narrated."
+            ),
+            "source": "detect-thoughts",
+            "save_dc": save_dc,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "detect-thoughts",
+        "target_character_id": char.id,
+        "save_dc": save_dc,
+        "save_ability": "WIS",
+        "concentration": True,
+        "buff_installed": bool(buff_installed),
+        "duration_rounds": DURATION_ROUNDS,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/cast_zone_of_truth")
 async def cast_zone_of_truth(
     campaign_id: int,

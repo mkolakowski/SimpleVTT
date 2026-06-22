@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 3978 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.549.0, 2026-06-21).
+**Total tests:** 3982 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.550.0, 2026-06-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4753,6 +4753,16 @@ v2.544.0 — Locate Object (L2 divination, Bard/Cleric/Druid/Ranger/Wizard, PHB 
 | `test_locate_object_drops_on_new_concentration` | **Concentration ride:** casting Barkskin (another concentration spell) drops the `locate-object` buff (one concentration at a time). |
 | `test_cast_locate_object_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected names "locate object". |
 | `test_cast_locate_object_missing_character_id_400` | Missing `character_id` → 400. |
+
+### `test_cast_detect_thoughts.py`
+v2.550.0 — Detect Thoughts (L2 divination, Bard/Sorcerer/Warlock/Wizard, PHB p.231). Phase 2 #64 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). New `cast_detect_thoughts` endpoint — a concentration flag-buff in the Zone of Truth DC-bake mould (baked WIS deeper-probe save). Caster: Thalindra Moonwhisper (Wizard).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_detect_thoughts_installs_dc_concentration_buff` | Self-cast → `feature == "detect-thoughts"`, `save_ability == "WIS"`, `save_dc >= 8`, `concentration == true`, `duration_rounds == 10`; buff carries `detect_thoughts` + `save_ability == "WIS"` + `save_dc` == response + `concentration == true`. |
+| `test_detect_thoughts_drops_on_new_concentration` | **Concentration ride:** casting Fly drops the `detect-thoughts` buff. |
+| `test_cast_detect_thoughts_non_caster_rejected` | Krieger (Barbarian) → 409 `cannot_cast`, expected names "detect thoughts". |
+| `test_cast_detect_thoughts_missing_character_id_400` | Missing `character_id` → 400. |
 
 ### `test_cast_arcane_eye.py`
 v2.549.0 — Arcane Eye (L4 divination, Cleric/Wizard, PHB p.213). Phase 2 #63 of [cast-and-broadcast-tail.md](../plans/cast-and-broadcast-tail.md). The L4, 1-hour movable sibling of Clairvoyance on the shared `_do_cast_scry_sensor` helper (no seeing/hearing mode). Caster: Thalindra Moonwhisper (Wizard).

@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.550.0] - 2026-06-21 — "The Open Book"
+
+**Schema version:** 71
+
+**Commit summary:** Adds `POST /api/campaign/{id}/cast_detect_thoughts` — Phase 2 #64 of the cast-and-broadcast tail. Detect Thoughts (L2 divination, Bard/Sorcerer/Warlock/Wizard) installs a concentration flag-buff with a baked WIS save-DC for the deeper probe.
+
+**Description:** RAW PHB p.231: "For the duration, you can read the thoughts of certain creatures. ... you can read its surface thoughts ... you can probe deeper ... it must make a Wisdom saving throw." Self, Concentration up to 1 minute. A concentration flag-buff in the Zone of Truth (#52) DC-bake mould: the `detect-thoughts` buff carries `effects.detect_thoughts: True` + the baked `save_dc` (8 + prof + spellcasting mod, via `_compute_spell_save_dc_from_sheet`) + `save_ability: "WIS"`, so any chat/sheet card can render "Detect Thoughts active (deeper probe DC N)". Reading surface thoughts, the per-turn target choice, and the deeper-probe save are GM-narrated (no mind-reading model). Concentration-bound, so `_install_buff`'s one-at-a-time cascade drops it when the caster concentrates elsewhere.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: new `cast_detect_thoughts` endpoint (self-cast; gate: knows the spell OR bard/sorcerer/warlock/wizard). 400/403/404/409 error paths.
+- `docs/plans/cast-and-broadcast-tail.md`: status refreshed to #64.
+
+**Harness changes:**
+
+- `tests/harness/test_cast_detect_thoughts.py` (new): +4 — self-cast installs a concentration `detect-thoughts` buff with a baked WIS `save_dc` (10 rounds); concentration cascade-drop via Fly; non-caster 409; missing character_id 400.
+
+Total harness count → 3982 (+4).
+
+MINOR — new cast endpoint (concentration + baked WIS save-DC). No schema change.
+
+### Added
+- `POST /api/campaign/{id}/cast_detect_thoughts`: Detect Thoughts (L2) — a concentration flag-buff with a baked WIS deeper-probe save-DC; thought-reading GM-narrated. Phase 2 #64 of the cast-and-broadcast tail.
+
 ## [2.549.0] - 2026-06-21 — "The Hovering Watcher"
 
 **Schema version:** 71
