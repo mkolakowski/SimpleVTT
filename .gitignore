@@ -17,5 +17,6 @@ app/static/uploads/
 .claude/scheduled_tasks.lock
 .claude/*.lock
 
-# Harness run artifacts (scripts/run_harness.sh)
-test-results/
+# Harness run artifacts (scripts/run_harness.sh) — keep the dir, ignore runs
+test-results/*
+!test-results/.gitkeep

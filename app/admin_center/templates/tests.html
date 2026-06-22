@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tests — SimpleVTT Admin Center</title>
+<link rel="icon" href="/favicon.svg">
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: system-ui, -apple-system, sans-serif; background:#1a2036; color:#e6e9f0; margin:0; padding:0 0 48px; }
+  header { background:#252c45; padding:14px 24px; display:flex; align-items:center; gap:16px; border-bottom:1px solid #333c5c; }
+  header h1 { font-size:18px; margin:0; }
+  header nav a { color:#9fb3ff; text-decoration:none; }
+  header nav a:hover { text-decoration:underline; }
+  main { max-width:1100px; margin:0 auto; padding:20px 24px; }
+  .card { background:#252c45; border:1px solid #333c5c; border-radius:8px; padding:16px; margin-bottom:18px; }
+  h2 { font-size:15px; margin:0 0 12px; color:#cdd6f4; }
+  .muted { color:#8b93b0; }
+  .stacked { display:flex; height:26px; border-radius:5px; overflow:hidden; margin:10px 0; background:#5a6280; }
+  .seg { height:100%; }
+  .seg.pass { background:#3ba55d; } .seg.fail { background:#d83c3c; }
+  .seg.err { background:#e0813b; } .seg.skip { background:#5a6280; }
+  .legend span { display:inline-block; margin-right:14px; font-size:13px; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:middle; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:5px 8px; border-bottom:1px solid #333c5c; vertical-align:middle; }
+  th { color:#9aa3c4; font-weight:600; }
+  .bar { background:#3a4470; height:8px; border-radius:3px; min-width:40px; }
+  .bar > i { display:block; height:100%; background:#6f86ff; border-radius:3px; }
+  .pill { font-size:11px; padding:1px 7px; border-radius:9px; }
+  .pill.failed { background:#5a1e1e; color:#ffb3b3; } .pill.error { background:#5a3a1e; color:#ffd1a3; }
+  code { background:#1a2036; padding:1px 5px; border-radius:3px; font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧪 Test results</h1>
+  <nav><a href="/">← Dashboard</a></nav>
+  <span class="muted" style="margin-left:auto">SimpleVTT {{ app_version }}{% if admin_user %} · {{ admin_user }}{% endif %}</span>
+</header>
+<main>
+{% if not latest %}
+  <div class="card">
+    <h2>No test runs yet</h2>
+    <p class="muted">No <code>harness-*.json</code> reports found in <code>{{ results_dir }}</code>.
+       Run <code>scripts/run_harness.sh</code> (whole suite) or
+       <code>scripts/run_harness.sh tests/harness/test_x.py</code> (a subset) to generate one.</p>
+  </div>
+{% else %}
+  {% set c = latest.counts %}
+  {% set tot = latest.total if latest.total else 1 %}
+  <div class="card">
+    <h2>Latest run · {{ latest._run_id }}</h2>
+    <p class="muted">{{ latest.total }} tests in {{ latest.duration_s }}s</p>
+    <div class="stacked">
+      <div class="seg pass" style="width:{{ (100*c.passed/tot)|round(2) }}%" title="{{ c.passed }} passed"></div>
+      <div class="seg fail" style="width:{{ (100*c.failed/tot)|round(2) }}%" title="{{ c.failed }} failed"></div>
+      <div class="seg err" style="width:{{ (100*c.error/tot)|round(2) }}%" title="{{ c.error }} errored"></div>
+      <div class="seg skip" style="width:{{ (100*c.skipped/tot)|round(2) }}%" title="{{ c.skipped }} skipped"></div>
+    </div>
+    <div class="legend">
+      <span><i class="dot" style="background:#3ba55d"></i>{{ c.passed }} passed</span>
+      <span><i class="dot" style="background:#d83c3c"></i>{{ c.failed }} failed</span>
+      <span><i class="dot" style="background:#e0813b"></i>{{ c.error }} errored</span>
+      <span><i class="dot" style="background:#5a6280"></i>{{ c.skipped }} skipped</span>
+    </div>
+  </div>
+
+  {% if latest.failures %}
+  <div class="card">
+    <h2>Failures &amp; errors ({{ latest.failures|length }})</h2>
+    <table>
+      <thead><tr><th style="width:64px">Status</th><th style="width:46%">Test</th><th>Message</th></tr></thead>
+      <tbody>
+      {% for f in latest.failures[:80] %}
+        <tr>
+          <td><span class="pill {{ f.status }}">{{ f.status }}</span></td>
+          <td><code>{{ f.classname }}::{{ f.name }}</code></td>
+          <td class="muted">{{ f.message }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h2>Slowest tests</h2>
+    {% set maxt = latest.slowest[0].time if latest.slowest and latest.slowest[0].time else 1 %}
+    <table>
+      <thead><tr><th style="width:72px">Time</th><th style="width:42%">Test</th><th>Duration</th></tr></thead>
+      <tbody>
+      {% for s in latest.slowest[:25] %}
+        <tr>
+          <td>{{ "%.2f"|format(s.time) }}s</td>
+          <td><code>{{ s.name }}</code></td>
+          <td><div class="bar"><i style="width:{{ (100*s.time/maxt)|round(1) }}%"></i></div></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Run history</h2>
+    <table>
+      <thead><tr><th>Run</th><th style="width:64px">Tests</th><th style="width:30%">Pass rate</th><th style="width:90px">Duration</th><th style="width:72px">Failed</th></tr></thead>
+      <tbody>
+      {% for r in runs %}
+        {% set rt = r.total if r.total else 1 %}
+        <tr>
+          <td><code>{{ r._run_id }}</code></td>
+          <td>{{ r.total }}</td>
+          <td><div class="bar" style="background:#5a1e1e"><i style="width:{{ (100*r.counts.passed/rt)|round(1) }}%; background:#3ba55d"></i></div></td>
+          <td>{{ r.duration_s }}s</td>
+          <td>{{ r.counts.failed + r.counts.error }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+</main>
+</body>
+</html>

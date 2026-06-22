@@ -133,6 +133,8 @@ services:
       # (row counts). Same connection string as the app service.
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-simplevtt}:${POSTGRES_PASSWORD:-simplevtt}@db:5432/${POSTGRES_DB:-simplevtt}
       AUDIT_LOG_PATH: ${AUDIT_LOG_PATH:-/var/log/simplevtt/audit.log}
+      # v2.573.0 — where the /tests dashboard reads harness JSON reports.
+      TEST_RESULTS_DIR: ${TEST_RESULTS_DIR:-/data/test-results}
       ADMIN_CENTER_USER: ${ADMIN_CENTER_USER:-admin}
       ADMIN_CENTER_PASS: ${ADMIN_CENTER_PASS:-changeme}
       ADMIN_CENTER_PORT: ${ADMIN_CENTER_PORT:-8015}
@@ -186,6 +188,11 @@ services:
       # fail2ban watcher. Read-write here; the admin center only ever
       # writes small request files (no fail2ban control-socket access).
       - fail2ban_control:/data/control
+      # v2.573.0 — read-only harness test-results (JSON reports from
+      # scripts/run_harness.sh) for the /tests dashboard. Bind-mounted
+      # from the repo; empty/absent in production where the suite isn't
+      # run (the page shows an empty-state).
+      - ./test-results:/data/test-results:ro
     ports:
       - "${ADMIN_CENTER_PORT:-8015}:${ADMIN_CENTER_PORT:-8015}"
     command:

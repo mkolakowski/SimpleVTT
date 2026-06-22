@@ -27,6 +27,14 @@ behind the login.
 | Traffic statistics (top IPs, paths, signal counters) | parsed audit log | ✅ v2.483.0 |
 | fail2ban status + currently-banned IPs | `fail2ban_data` volume → `fail2ban.sqlite3` | ✅ v2.484.0 |
 | Database data-inventory (users, campaigns, …) | app database (read-only) | ✅ v2.485.0 |
+| **Test results dashboard** (`/tests`) — pass/fail summary, slowest tests, failures, run-history trend | `test-results/` JSON from `scripts/run_harness.sh` (read-only mount) | ✅ v2.573.0 |
+
+The **Tests** page (linked from the dashboard header) visualizes the harness
+runs that `scripts/run_harness.sh` writes — a stacked pass/fail bar, the
+slowest-test durations, the failure list, and a per-run trend. It reads
+`harness-*.json` reports from the `test-results/` dir bind-mounted read-only
+into the container; it shows an empty-state in production, where the suite
+isn't run.
 
 ---
 

@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.573.0] - 2026-06-22 — "The Glass Lab"
+
+**Schema version:** 75
+
+**Commit summary:** A Tests dashboard in the Admin Center (`/tests`) — visualizes harness run data (pass/fail, slowest tests, failures, run-history trend) from the JSON the v2.572.4 runner writes.
+
+**Description:** New read-only `/tests` page in the standalone Admin Center (port 8015). It reads the `harness-*.json` reports `scripts/run_harness.sh` writes (counts, slowest tests, failures) from a `test-results/` dir bind-mounted read-only into the container, and renders, with no chart-lib dependency (pure CSS): a stacked pass/fail/error/skip bar for the latest run, the slowest-25 tests with duration bars, the failure/error list with messages, and a run-history table with per-run pass-rate bars. Auto-gated by the center's existing session auth (unauth → 303 to login, no basic-auth popup); linked from the dashboard header. Shows a documented empty-state where no runs exist (e.g. production, where the suite isn't run). First step toward consolidating admin surfaces into the Admin Center.
+
+**Implementation:**
+
+- `app/admin_center/main.py`: `_TEST_RESULTS_DIR` + `_load_test_run` / `_list_test_runs` helpers + the `GET /tests` route.
+- `app/admin_center/templates/tests.html` (new) + a `🧪 Tests` link in `dashboard.html`.
+- `docker-compose.yml`: read-only `./test-results:/data/test-results` mount + `TEST_RESULTS_DIR` env on the admin-center service.
+- `.gitignore` + `test-results/.gitkeep`: keep the mount dir present (ignore the run files) so the bind mount binds a real dir on a fresh clone.
+- `docs/wiki/admin-center.md`: documented the Tests page.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py` (+2): `/tests` redirects to login when unauthenticated (no basic-auth challenge); renders after session login (latest run or the empty-state).
+
+Total harness count → 4094 in `tests/harness/` + 101 in `tests/harness_ui/`.
+
+MINOR — new Admin Center page (additive). No schema or app-API change.
+
+### Added
+- Admin Center **Tests** dashboard (`/tests`): visualizes harness run data — pass/fail summary, slowest tests, failures, and a run-history trend — from the `scripts/run_harness.sh` JSON reports.
+
 ## [2.572.4] - 2026-06-22 — "The Live Tape"
 
 **Schema version:** 75

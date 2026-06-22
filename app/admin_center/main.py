@@ -67,6 +67,43 @@ AUDIT_LOG_PATH = os.environ.get(
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
+# v2.573.0 — harness test-results dashboard. The runner
+# (scripts/run_harness.sh) writes harness-<ts>.json reports (counts +
+# slowest tests + failures, via scripts/harness_report.py) into
+# TEST_RESULTS_DIR, mounted read-only into this container; the /tests page
+# reads + visualizes them.
+_TEST_RESULTS_DIR = Path(os.getenv(
+    "TEST_RESULTS_DIR",
+    str(Path(__file__).resolve().parent.parent.parent / "test-results"),
+))
+
+
+def _load_test_run(path: Path) -> "dict | None":
+    """Parse one harness-<ts>.json report; tag it with its run id + mtime."""
+    import json as _json
+    try:
+        data = _json.loads(path.read_text())
+    except Exception:
+        return None
+    data["_run_id"] = path.stem.replace("harness-", "")
+    try:
+        data["_mtime"] = path.stat().st_mtime
+    except OSError:
+        data["_mtime"] = 0
+    return data
+
+
+def _list_test_runs(limit: int = 30) -> list:
+    """Newest-first list of harness run reports (excludes the latest.json
+    symlink — the glob only matches harness-*.json files)."""
+    if not _TEST_RESULTS_DIR.is_dir():
+        return []
+    files = sorted(
+        _TEST_RESULTS_DIR.glob("harness-*.json"),
+        key=lambda p: p.name, reverse=True,
+    )
+    return [r for r in (_load_test_run(p) for p in files[:limit]) if r]
+
 # Reuse the main site's favicon (baked into the same image at
 # app/static/favicon.svg). The admin center has no /static mount, so
 # it's served via the dedicated /favicon.svg route below.
@@ -470,5 +507,26 @@ def dashboard(
             "cf_removed": cf,
             "logs_cleared": logs_cleared,
             "logs_error": logs_error,
+        },
+    )
+
+
+@app.get("/tests", response_class=HTMLResponse)
+def tests_dashboard(request: Request):
+    """v2.573.0 — harness test-results dashboard: pass/fail summary, the
+    slowest tests, the failure list, and a run-history trend, from the JSON
+    reports the harness runner writes. Read-only; auto-gated by the auth
+    middleware. Shows an empty-state when no runs are present (e.g. in
+    production, where the suite isn't run)."""
+    runs = _list_test_runs(limit=30)
+    return templates.TemplateResponse(
+        "tests.html",
+        {
+            "request": request,
+            "app_version": APP_VERSION,
+            "admin_user": request.session.get("admin_user", ""),
+            "results_dir": str(_TEST_RESULTS_DIR),
+            "latest": runs[0] if runs else None,
+            "runs": runs,
         },
     )

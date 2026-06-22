@@ -903,3 +903,34 @@ def test_api_events_dns_adds_ptr_field():
     if events:
         # ptr key present (value may be None for IPs with no PTR).
         assert "ptr" in events[0]
+
+
+# ---- /tests dashboard (v2.573.0) ------------------------------------------
+@_LIVE
+def test_tests_page_redirects_when_unauthenticated():
+    """The /tests dashboard is auth-gated like the rest of the center —
+    a no-session navigation bounces to the login page, no basic-auth popup."""
+    r = httpx.get(f"{ADMIN_BASE_URL}/tests", timeout=5.0, follow_redirects=False)
+    assert r.status_code == 303
+    assert "/login" in r.headers.get("location", "")
+    assert "www-authenticate" not in {k.lower() for k in r.headers}
+
+
+@_LIVE
+def test_tests_page_renders_authenticated():
+    """After session login, /tests renders the harness test-results
+    dashboard (heading + nav back to the dashboard). It shows either the
+    latest run or the documented empty-state — both are a valid 200."""
+    with httpx.Client(base_url=ADMIN_BASE_URL, timeout=5.0, follow_redirects=False) as c:
+        r = c.post(
+            "/login",
+            data={"username": _ADMIN_USER, "password": _ADMIN_PASS, "next": "/tests"},
+        )
+        assert r.status_code == 303
+        _complete_mfa_if_pending(c, r)
+        page = c.get("/tests", follow_redirects=False)
+        assert page.status_code == 200, page.text[:200]
+        assert "Test results" in page.text
+        assert 'href="/"' in page.text  # back-to-dashboard link
+        # Either a run summary or the empty-state — never a server error.
+        assert ("Latest run" in page.text) or ("No test runs yet" in page.text)
