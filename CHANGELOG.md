@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.553.1] - 2026-06-21 — "The Surveyor's Ledger"
+
+**Schema version:** 71
+
+**Commit summary:** Doc-only — refreshes the TODO.md SRD audit to a v2.553.0 pass, capturing the cast-and-broadcast tail #36–#67 continuation + the conjure-catalog override. No code change.
+
+**Description:** The TODO.md SRD audit had stalled at the v2.502.0 refresh (tail #35) and badly understated current coverage — it still filed See Invisibility, the illusion-duplicates, the scrying-sensors, the AoE-shape zones, and the Conjure family as open substrate-blocked gaps, all of which shipped this arc. Added a new **SRD 5e Audit (v2.553.0 refresh)** section at the top of the audit stack (the v2.502.0 section is retained verbatim below as history): records that every substrate-blocked cluster now has a wired cast endpoint (real-substrate ride where SimpleVTT models the mechanic, GM-narrated marker where it deliberately models no engine), bumps **Spells ~90% → ~93%** (overall ~98–99%), and rewrites gap #1 from "substrate-blocked utility spells (P2)" to "GM-narrated spatial/object/scrying resolution (P3)" — an engine-depth deferral, not an un-wired surface. Updated the quick-map audit pointer to the new refresh.
+
+**Implementation:**
+
+- `TODO.md`: new v2.553.0 audit section + quick-map pointer + prior-passes list now includes v2.502.0.
+
+This is a doc-only commit (no HTTP endpoint or WS shape change), so per the harness-discipline rule it ships no new harness test. TODO.md is already surfaced through `/wiki` (the `todo` allowlist entry), so no wiki-surfacing edit is needed.
+
+### Changed
+- `TODO.md`: refreshed the SRD audit to v2.553.0 — Spells coverage ~90% → ~93%, cast-and-broadcast tail marked complete through #67, gap #1 reframed as deferred engine depth.
+
 ## [2.553.0] - 2026-06-21 — "The Hallowed Bounds"
 
 **Schema version:** 71

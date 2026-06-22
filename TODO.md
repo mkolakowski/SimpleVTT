@@ -17,11 +17,64 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 
 **Quick map of where to look:**
 
-- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (v2.502.0 refresh)](#srd-5e-audit-v25020-refresh) for the current per-category coverage (overall **~98%** — the v2.437.0–v2.502.0 **cast-and-broadcast utility-spell tail arc** closed ~35 utility spells, lifting **Spells from ~85% → ~90%**). Prior passes: [v2.434.0](#srd-5e-audit-v24340-refresh), [v2.399.0](#srd-5e-audit-v23990-refresh), [v2.390.0](#srd-5e-audit-v23900-refresh), [v2.382.0](#srd-5e-audit-v23820-refresh), [v2.379.0](#srd-5e-audit-v23790-refresh), [v2.376.0](#srd-5e-audit-v23760-refresh), [v2.344.1](#srd-5e-audit-v23441-refresh), [v2.315.0](#srd-5e-audit-v23150-refresh), [2026-06-14](#srd-5e-audit-2026-06-14-refresh), [2026-06-13](#srd-5e-audit-2026-06-13-refresh), [2026-06-11](#srd-5e-audit-2026-06-11-refresh), [2026-06-10](#srd-5e-audit-2026-06-10). The v2.315.0 refresh **corrects two denominators** that all prior passes got wrong: magic items now sit at **239/239 wired (100%)** post-v2.404.0 — the old "292" figure counted total equipment (239 magic + 37 mundane weapons + 18 mundane armor); class features are **222 per-row entries (strictly-✅ 100%)**, not the stale "133".
+- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (v2.553.0 refresh)](#srd-5e-audit-v25530-refresh) for the current per-category coverage (overall **~98–99%** — the **cast-and-broadcast utility-spell tail** is now **complete** through #67, wiring a cast endpoint for every substrate-blocked cluster and lifting **Spells from ~85% → ~93%**; the conjure-catalog override shipped alongside). Prior passes: [v2.502.0](#srd-5e-audit-v25020-refresh), [v2.434.0](#srd-5e-audit-v24340-refresh), [v2.399.0](#srd-5e-audit-v23990-refresh), [v2.390.0](#srd-5e-audit-v23900-refresh), [v2.382.0](#srd-5e-audit-v23820-refresh), [v2.379.0](#srd-5e-audit-v23790-refresh), [v2.376.0](#srd-5e-audit-v23760-refresh), [v2.344.1](#srd-5e-audit-v23441-refresh), [v2.315.0](#srd-5e-audit-v23150-refresh), [2026-06-14](#srd-5e-audit-2026-06-14-refresh), [2026-06-13](#srd-5e-audit-2026-06-13-refresh), [2026-06-11](#srd-5e-audit-2026-06-11-refresh), [2026-06-10](#srd-5e-audit-2026-06-10). The v2.315.0 refresh **corrects two denominators** that all prior passes got wrong: magic items now sit at **239/239 wired (100%)** post-v2.404.0 — the old "292" figure counted total equipment (239 magic + 37 mundane weapons + 18 mundane armor); class features are **222 per-row entries (strictly-✅ 100%)**, not the stale "133".
 - **Active class-feature automation backlog** → see [Full Class-Feature Automation — remaining backlog](#full-class-feature-automation--remaining-backlog) (just Phase 8 + a few per-feature Phase-2 finishers remain after v2.149.1).
 - **Design plans with deferred phases** → see [Design Plans Backlog](#design-plans-backlog) (every `docs/plans/*.md` indexed with a priority tag).
 - **One-off bugs + UI polish that don't have a design plan** → see [Manually Added](#manually-added).
 - **Big feature buckets that aren't tracked by a plan** → see the topic sections below (Character Sheet, GM Tools, Combat, Maps, Media, Player Features, UI/Mobile, Rules Reference, Legal & Compliance, Security, Test Infrastructure, Integrations, Visual, Class Features (next cycle)). The priority legend doesn't apply to these — they're topic-grouped, not P-tagged. Topic sections may contain entries that *do* have a design plan (e.g. Combat's Advantage & Disadvantage; Security's three v2.423.3–v2.423.5 plans) — the topic split is about audience navigation, not plan-vs.-no-plan status.
+
+---
+
+## SRD 5e Audit (v2.553.0 refresh)
+
+**Audit scope.** Recomputed against the codebase as of v2.553.0, capturing the **continuation of the cast-and-broadcast utility-spell tail arc** ([`docs/plans/cast-and-broadcast-tail.md`](plans/cast-and-broadcast-tail.md)) from **#36 → #67** (v2.503.0 → v2.553.0), plus the **conjure-catalog summon override** (v2.539.0 → v2.541.0). The v2.502.0 refresh below stopped at tail #35; this pass captures ~32 more wired spell endpoints. The headline: **every substrate-blocked cluster the v2.502.0 audit filed as gap #1 now has a wired cast endpoint** — either riding a real substrate (a mechanical effect) or installing a GM-narrated marker buff where SimpleVTT deliberately models no engine (geometry / objects / scrying views).
+
+- **Invisibility-detection — shipped.** See Invisibility (#42) + True Seeing (#56) ride the `sees_invisible` attack-edge substrate (v2.510.0/.514.0): a creature that sees invisible negates an invisible attacker's advantage AND the disadvantage of attacking an invisible target. True Seeing also rides `darkvision_ft`.
+- **Illusion-duplicates — shipped.** Mirror Image (#57) added a genuinely **new attack-pipeline deflection mechanic** (`_resolve_mirror_image_deflection` in `/attack` + `/npc_attack` — a hitting swing rolls a d20 to strike a duplicate, which is destroyed if the swing meets its AC). Mislead (#60) rides the `invisible` substrate; Project Image (#61) is a GM-narrated concentration projection.
+- **Scrying-sensors — shipped.** Clairvoyance (#62) + Arcane Eye (#63) on the shared `_do_cast_scry_sensor` helper (concentration flag-buffs; views GM-narrated).
+- **AoE-shape zones — shipped (GM-narrated markers).** Antilife Shell (#45), Globe of Invulnerability (#44), and Forbiddance (#67) install marker buffs; Forbiddance bakes a 5d10 damage marker, Globe a spell-level block, Antilife a barrier flag — geometry GM-narrated.
+- **Summon-catalog depth — shipped.** All six Conjure spells (Animals / Woodland Beings / Minor Elementals / Elemental / Fey / Celestial) accept an optional catalog creature slug, validated by type + CR (count-tier or CR-cap), via `_monster_summon_template` + `_summon_companion(template=…)`.
+- **Other tail #36–#67 utility spells** ride existing substrates: concentration cascade (Locate Object/Creature #58/#59, Detect Thoughts #64, the scrying pair), DC-bake (Zone of Truth #52, Detect Thoughts #64, Forbiddance #67), flag-buffs (Darkvision #51, Water Walk/Breathing, Fire Shield, Nondetection), and GM-narrated inscriptions (Magic Mouth #65, Illusory Script #66 on `_do_cast_inscribed_illusion`).
+
+**Substrate take-aways for the next contributor:** the tail is effectively **complete** for the simple flag-buff / DC-bake / concentration-marker / GM-narrated-zone shapes. What remains genuinely un-modelable in 2.x is the spatial/object/scrying *resolution* (40,000-sq-ft zones, remote camera views, object trigger engines) — those ship as GM-narrated markers by design. The one new mechanical substrate this continuation added is the Mirror Image deflection; everything else rode a pre-existing read-site (verify-substrate, prefer-zero-code).
+
+### v2.502.0 → v2.553.0 audit scope (prior section retained below)
+
+The v2.437.0 → v2.502.0 arc (tail #1–#35) is documented in the [v2.502.0 refresh](#srd-5e-audit-v25020-refresh) immediately below, retained verbatim. The rest of *this* section's headline numbers supersede it.
+
+### Per-category coverage (the headline numbers)
+
+| Category | SRD count | Automated | Notes |
+|---|---|---|---|
+| Races | 9 | **✅ ~100%** | Unchanged. |
+| Monsters | 322 | **✅ ~100%** | Unchanged. |
+| Conditions | 15 | **~92%** | Unchanged (permanently-GM-narrated clauses). |
+| Class features | **222 rows** | **✅ 100%** | Unchanged. |
+| Spells | 319 | **~93%** | **+3 pts vs. v2.502.0 (~90% → ~93%).** The tail #36–#67 continuation + conjure-catalog work wired a cast endpoint for **every substrate-blocked cluster** the v2.502.0 audit filed as open — invisibility-detection, illusion-duplicates, scrying-sensors, AoE-shape zones, summon-catalog depth. Where SimpleVTT models the mechanic it's a real effect (Mirror Image deflection; See Invisibility / True Seeing / Mislead attack-edge; catalog summons; baked save-DCs / damage markers; concentration cascade). Where it deliberately models no engine (zone geometry, remote scrying views, object triggers) the cast is wired + slot-spent + a marker buff installed, with the spatial/object resolution **GM-narrated**. The residual ~7% is that GM-narrated spatial/object/scrying resolution + the filed PC-save-or-suck install hook. |
+| Magic items | **239 / 239 wired** | **✅ 100%** | Unchanged. |
+
+**Overall ~98–99%** automated across the SRD ruleset (the Spells bump from ~90% → ~93% is the mover). Four of six categories stay strictly-✅ 100% (Races, Monsters, Class features, Magic items); Conditions ~92%; Spells ~93% with the remaining gap now dominated by deliberately-GM-narrated spatial/object/scrying resolution rather than any un-wired cast surface.
+
+### Remaining gaps (priority order — toward full SRD automation)
+
+1. 🟢 **P3 — GM-narrated spatial/object/scrying resolution.** Not an un-wired-endpoint gap anymore — every cluster has a cast endpoint. What's left is *engine depth* SimpleVTT deliberately defers: zone-of-effect geometry (Forbiddance / Antilife Shell / Globe per-creature enter/start-of-turn resolution), remote scrying camera views (Clairvoyance / Arcane Eye / Project Image), and object-trigger engines (Magic Mouth / Illusory Script). These would need Maps 2.0 geometry + a remote-sensor surface; they ship as GM-narrated markers by design until then.
+2. 🟠 **Filed follow-up — PC save-or-suck install for condition-shape spells.** Unchanged — the per-target condition install on a failed PC save still needs the v2.32.0 PC-save roll-response hook.
+3. 🟠 **Filed follow-ups — Bucket D announce-only magic items; race-features Phases 1b/1c + 4b/5b + 7.** Unchanged.
+4. ✅ **DONE — Cast-and-broadcast utility-spell tail (v2.437.0–v2.553.0).** Phase 1 (5) + Phase 2 (#1–#67). Every substrate-blocked cluster wired. See [`docs/plans/cast-and-broadcast-tail.md`](plans/cast-and-broadcast-tail.md).
+5. ✅ **DONE — Conjure-catalog summon override (v2.539.0–v2.541.0).** All six Conjure spells accept arbitrary catalog creatures (type + CR validated).
+6. ✅ **DONE — Spell utility-upcast + target-scaling arcs; Magic-items closure; Security spine.** Unchanged.
+
+### Out-of-scope (unchanged)
+
+Tasha's, Xanathar's-beyond-SRD, Strixhaven, post-SRD feats, backgrounds beyond Acolyte, 2024 rules + Mythic Actions stay future-3.x scope. Charmed clause 2 (social-check advantage), Grappled clause 3 (out-of-reach), Deafened (hearing-narrative): permanently GM-narrated per the v2.384.0 audit doc.
+
+### What's left to ship in SimpleVTT 2.x?
+
+The SRD ruleset sits at ~98–99% automated end-to-end, and **the cast-and-broadcast tail is complete** — there is no longer an un-wired spell cluster. The remaining inflection points:
+
+- **3.0 scope expansion** — post-SRD content (Tasha's, Xanathar's, 2024-PHB rules, Mythic Actions) + the Bucket D announce-only mechanization arc.
+- **Maps 2.0 geometry + remote-sensor substrates** — would upgrade the GM-narrated spatial/object/scrying markers (gap #1) to fully-resolved effects, and unlock race-features Phases 4b + 5b + the positional advantage-disadvantage Phase 3.
+- **Polish + UX** — Manually Added P3 items + Combat / GM Tools sections.
 
 ---
 
