@@ -18,7 +18,7 @@
   "desc": "A shimmering field appears and surrounds a creature of your choice within range, granting it a +2 bonus to AC for the duration.",
   "higher_level": "",
   "ritual": false,
-  "concentration": false,
+  "concentration": true,
   "actions": [
     {
       "id": "cast",

@@ -14,12 +14,17 @@ at a PC target in an active battle and assert two RAW contracts —
     ``replaced_concentration`` list.
 
 The concentration set mirrors the ``_SPELL_BUFF_MAP`` registry entries
-flagged ``concentration: True`` (the code registry, not the JSON catalog
-whose ``concentration`` field is a known SRD-build bug — Bless ships
-``concentration: false`` there). It's listed explicitly here because the
-harness runs against the docker container over HTTP and can't import the
-fastapi-dependent route module locally. For each of these the installed
-buff key equals the spell slug.
+flagged ``concentration: True`` (the code registry). It's listed
+explicitly here because the harness runs against the docker container
+over HTTP and can't import the fastapi-dependent route module locally.
+For each of these the installed buff key equals the spell slug.
+
+The JSON catalog's ``concentration`` field — historically an SRD-build
+bug that shipped Bless / Moonbeam / Hold Person / ~125 others as
+``concentration: false`` (the build script keyed off the literal word
+"concentration" in the duration, missing the common "Up to N …" phrasing)
+— was corrected in v2.568.1. ``test_concentration_flag_matches_duration``
+below now gates the catalog data directly.
 
 Same scratch-caster bulk-inject scaffolding as ``test_spell_catalog_
 save.py`` (Phase 2B): one test patches the caster with the whole
@@ -244,3 +249,53 @@ def test_concentration_catalog_subset_nonempty():
     assert not missing, (
         f"concentration slugs absent from the spell catalog: {missing}"
     )
+
+
+# ── v2.568.1 — JSON catalog concentration-flag correctness ───────────────────
+def _implies_concentration(duration: str) -> bool:
+    """5e's canonical concentration phrasing is a duration of "Up to N …";
+    a few SRD entries also spell it out literally in the duration."""
+    d = (duration or "").strip().lower()
+    return d.startswith("up to") or "concentration" in d
+
+
+def test_concentration_flag_matches_duration():
+    """The catalog ``concentration`` flag matches each spell's duration in
+    BOTH directions — the invariant the v2.568.1 build-script fix restored.
+    A regression (the heuristic reverting to "concentration" in duration,
+    which misses "Up to N …") trips the first assert."""
+    spells = load_all_spells()
+    assert spells, "no spells loaded from the catalog"
+    wrong_false = sorted(
+        s.get("slug") for s in spells
+        if _implies_concentration(s.get("duration", ""))
+        and not bool(s.get("concentration"))
+    )
+    wrong_true = sorted(
+        s.get("slug") for s in spells
+        if not _implies_concentration(s.get("duration", ""))
+        and bool(s.get("concentration"))
+    )
+    assert not wrong_false, (
+        f"{len(wrong_false)} spell(s) have a concentration duration but are "
+        f"flagged concentration:false — the build-script heuristic regressed: "
+        f"{wrong_false[:12]}"
+    )
+    assert not wrong_true, (
+        f"{len(wrong_true)} spell(s) are flagged concentration:true but their "
+        f"duration doesn't imply concentration: {wrong_true[:12]}"
+    )
+
+
+def test_known_concentration_spells_flagged():
+    """Spot-check a sample of the spells corrected by v2.568.1 (each was
+    ``concentration: false`` in the catalog before the fix)."""
+    spells = {s.get("slug"): s for s in load_all_spells()}
+    for slug in (
+        "moonbeam", "bless", "hold-person", "fly", "haste", "web",
+        "insect-plague", "cloudkill", "call-lightning", "hunters-mark",
+    ):
+        assert slug in spells, f"{slug} missing from the catalog"
+        assert bool(spells[slug].get("concentration")), (
+            f"{slug} should be flagged concentration:true after v2.568.1"
+        )

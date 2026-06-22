@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.568.1] - 2026-06-22 — "The Unbroken Focus"
+
+**Schema version:** 75
+
+**Commit summary:** Fix the SRD build-script concentration heuristic + correct the `concentration` flag on 125 mis-flagged spells (Bless, Moonbeam, Hold Person, Fly, Haste, …). Closes the filed content-data follow-up from the AoE-trigger arc.
+
+**Description:** `scripts/build_srd_content.py` derived a spell's `concentration` flag from `"concentration" in duration` — but Open5e's common phrasing is *"Up to N …"* with the flag in a separate field, so the heuristic silently shipped **125 of 319 SRD spells as `concentration: false`** when they are Concentration in RAW (only spells whose duration literally contained the word — Spirit Guardians — were flagged right). The runtime masked this for some paths (`_install_buff` reads `_SPELL_BUFF_MAP`'s own flag; the AoE cast path has an `_is_concentration` duration fallback), but the raw flag still fed the cast response's `spell_concentration` field (the client's concentration badge) and any other raw-flag reader — so e.g. the UI showed Bless and Moonbeam as non-concentration.
+
+Two-part fix: (1) the build script now reads Open5e's `concentration` field (like the adjacent `ritual` handling) and falls back to the duration — *"Up to …"* or a literal "concentration" — matching the runtime's own check, so future regenerations are correct; (2) the 125 affected `app/data/local/dnd5e/spells/*.json` files are patched in place (a minimal one-line flip each — the corrected build script reproduces the same values, so no regeneration clobber). Verified: 0 spells remain mis-flagged in either direction.
+
+This was the filed loose thread from the persistent-AoE-trigger arc (`docs/plans/aoe-enter-trigger.md`): the trigger itself rode the duration fallback, but concentration *display/tracking* for these spells was off until now.
+
+**Implementation:**
+
+- `scripts/build_srd_content.py`: `transform_spell` concentration now `= Open5e concentration flag OR "concentration" in duration OR duration.startswith("up to")`.
+- `app/data/local/dnd5e/spells/*.json`: 125 files flipped `concentration: false → true` (Bless, Bane, Moonbeam, Hold Person/Monster, Fly, Haste, Invisibility, Hunter's Mark, Web, Faerie Fire, Conjure *, Wall of *, the damaging AoEs, … — every "Up to …"-duration spell).
+
+**Harness changes:**
+
+- `tests/harness/test_spell_catalog_concentration.py`: +2 — `test_concentration_flag_matches_duration` (every catalog spell's flag matches its duration, both directions — gates the build-script heuristic) and `test_known_concentration_spells_flagged` (spot-check of fixed spells). Updated the module docstring (the "known SRD-build bug — Bless ships concentration:false" note is now the *fixed* invariant).
+
+Total harness count → 4069 in `tests/harness/` + 99 in `tests/harness_ui/`.
+
+PATCH — content-data correctness fix + build-script fix. No schema or API-shape change (the cast response `spell_concentration` *values* flip for the corrected spells).
+
+### Fixed
+- 125 SRD spells (Bless, Moonbeam, Hold Person, Fly, Haste, …) were flagged `concentration: false` in the content data and showed as non-concentration in the client; the build-script heuristic that caused it is fixed and the data corrected.
+
 ## [2.568.0] - 2026-06-22 — "The Shoving Spirits"
 
 **Schema version:** 75

@@ -200,7 +200,19 @@ def transform_spell(up: dict) -> dict:
         "desc": desc,
         "higher_level": up.get("higher_level", "") or "",
         "ritual": (up.get("ritual") or "").strip().lower() in ("yes", "true", "1"),
-        "concentration": "concentration" in (up.get("duration") or "").lower(),
+        # Concentration: Open5e's `concentration` flag ("yes"/"no") is the
+        # authority; fall back to the duration string. The older heuristic
+        # ("concentration" in duration) silently missed every spell whose
+        # duration is phrased "Up to N …" (the common form) with the flag in
+        # a separate field — mis-flagging ~125 SRD spells as non-concentration
+        # (fixed v2.568.1). "Up to …" is 5e's canonical concentration phrasing,
+        # so it's a reliable fallback and matches the runtime's own
+        # `_is_concentration` check.
+        "concentration": (
+            (up.get("concentration") or "").strip().lower() in ("yes", "true", "1")
+            or "concentration" in (up.get("duration") or "").lower()
+            or (up.get("duration") or "").strip().lower().startswith("up to")
+        ),
         "actions": [_enrich_cast_action(up, desc)],
         "system": "dnd5e",
         "scope": "global",
