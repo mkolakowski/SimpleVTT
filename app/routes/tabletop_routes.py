@@ -15149,6 +15149,55 @@ async def revert_homebrew(
     return {"ok": True, "reverted": slug, "type": content_type}
 
 
+@router.post("/api/campaign/{campaign_id}/homebrew/{content_type}/{slug}/edit")
+async def edit_homebrew(
+    campaign_id: int,
+    content_type: str,
+    slug: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Save edits to a campaign-scoped homebrew record — the GM editor's write
+    path (Phase 2 of docs/plans/homebrew-fork-srd.md). This is how a GM tweaks
+    a forked SRD mechanic (damage, save, area, actions, …) for their campaign.
+
+    Body: the full record JSON (or ``{"record": {...}}``). The ``scope`` is
+    **forced** to ``campaign-N`` — a GM can only write THEIR campaign's
+    homebrew, never global or the shipped SRD tree — so the v2.568.3 SRD-only
+    provenance gate stays green. Create-or-update: works on a forked record or
+    a hand-authored one. GM-gated; the URL slug must match the record slug.
+    Validation runs in ``write_homebrew`` (per-type Pydantic model) → 400."""
+    _require_gm_for_campaign(campaign_id, user, db)
+    if content_type not in local_content.TYPE_REGISTRY:
+        raise HTTPException(404, f"Unknown content type: {content_type!r}")
+    body = await request.json()
+    record = (
+        body.get("record")
+        if isinstance(body, dict) and isinstance(body.get("record"), dict)
+        else body
+    )
+    if not isinstance(record, dict):
+        raise HTTPException(400, "request body must be the record JSON object")
+    if str(record.get("slug") or "").lower() != slug.lower():
+        raise HTTPException(400, "slug in URL does not match record slug")
+    campaign_scope = f"campaign-{campaign_id}"
+    # Force campaign scope + custom provenance — a GM can't escalate to global
+    # or write the shipped tree no matter what the payload claims.
+    record["scope"] = campaign_scope
+    record.setdefault("source", "custom")
+    record["owner"] = user.id
+    try:
+        local_content.write_homebrew(
+            record, type=content_type, scope=campaign_scope,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {
+        "ok": True, "type": content_type, "slug": slug, "scope": campaign_scope,
+    }
+
+
 # ── Homebrew import / export / template ─────────────────────────────────────
 #
 # Bulk JSON I/O for every homebrew content type in one combined file. The

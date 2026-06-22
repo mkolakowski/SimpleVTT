@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.570.0] - 2026-06-22 — "The Tuning Bench"
+
+**Schema version:** 75
+
+**Commit summary:** Phase 2a of `docs/plans/homebrew-fork-srd.md` — the GM editor *write path*: a GM-gated, campaign-scope-forced endpoint to tweak a forked SRD mechanic's stats. (The editor UI panel is Phase 2b.)
+
+**Description:** `POST /api/campaign/{id}/homebrew/{type}/{slug}/edit` takes the full record JSON and saves it as the campaign's homebrew — the write half of "tweak a forked mechanic" (change Fireball's damage, a monster's actions, an item's bonus). The `scope` is **forced** to `campaign-N` and `source` defaults to `"custom"` no matter what the payload claims, so a GM can only write *their* campaign's homebrew — never `global` or the shipped SRD tree — keeping the v2.568.3 SRD-only provenance gate green. GM-gated (`_require_gm_for_campaign`); the URL slug must match the record slug; validation runs in `write_homebrew` (per-type Pydantic model) → 400. Create-or-update across all content types, so it works on a forked record or a hand-authored one.
+
+The admin homebrew editor turned out to be a plain JSON `<textarea name="payload">` (no bespoke Action-builder), so this endpoint shares that exact payload contract — Phase 2b's campaign-settings UI panel (list custom records → JSON editor → Save → this endpoint, plus the Phase 1 fork form + revert) will reuse it directly.
+
+**Implementation (`app/routes/tabletop_routes.py`):**
+
+- `edit_homebrew` route next to the Phase 1 `fork_homebrew` / `revert_homebrew`.
+
+**Harness changes:**
+
+- `tests/harness/test_homebrew_fork_srd.py` (+5, → 14): tweak a forked spell's mechanics (8d6→10d6) + name and have it persist; scope forced to campaign-N even when the payload says `global` (the variant slug stays invisible to a no-campaign lookup); slug-mismatch 400; non-GM 403; unknown-type 404.
+
+Total harness count → 4087 in `tests/harness/` + 99 in `tests/harness_ui/`.
+
+MINOR — new GM-facing endpoint (additive). No schema or API-shape change to existing routes.
+
+### Added
+- GMs can edit a forked campaign-homebrew record's mechanics via `POST /api/campaign/{id}/homebrew/{type}/{slug}/edit` (campaign-scope-forced, GM-gated) — the write path for the homebrew editor (`docs/plans/homebrew-fork-srd.md` Phase 2a).
+
 ## [2.569.1] - 2026-06-22 — "The Drifted Index"
 
 **Schema version:** 75
