@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.565.2] - 2026-06-22 — "The Stocktake"
+
+**Schema version:** 75
+
+**Commit summary:** SRD 5e audit re-verification — confirms the v2.553.0 coverage numbers still hold, against the actual data layer. Doc-only.
+
+**Description:** Re-ran the SRD audit as of v2.565.1. Verified the denominators directly against `app/data/local/dnd5e/` (319 spells, 322 monsters, 9 races, 15 conditions, 294 equipment / 239 magic items, 12 class-feature + 13 subclass-feature files → 222 per-row entries) and confirmed via `git diff` that **nothing in the SRD content layer or the spell engine (`app/routes/tabletop_routes.py`) changed since the v2.553.1 audit** — the entire interim (v2.554.0–v2.565.1) was the Notes & Handouts feature. So coverage is unchanged: Spells ~93%, Conditions ~92%, Races/Monsters/Class-features/Magic-items ~100%, overall ~98–99%; the remaining gap is the deliberately-GM-narrated spatial/object/scrying resolution + the filed PC-save-or-suck hook. Recorded as a dated re-verification note atop the existing audit section rather than a duplicate refresh (the numbers didn't move).
+
+**Implementation:**
+
+- `TODO.md`: a "Re-verified 2026-06-22 (v2.565.1) — no change" note at the top of the SRD 5e Audit (v2.553.0 refresh) section.
+
+This is a doc-only commit (no endpoint or schema change), so it ships no new harness test. `TODO.md` is already surfaced through `/wiki`.
+
+### Changed
+- `TODO.md`: dated SRD-audit re-verification (denominators confirmed against the data layer; no SRD changes since v2.553.1).
+
 ## [2.565.1] - 2026-06-21 — "The Furnished Study"
 
 **Schema version:** 75
