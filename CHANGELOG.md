@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.566.2] - 2026-06-22 — "The Stepped-On Glyph"
+
+**Schema version:** 75
+
+**Commit summary:** Design plan for the persistent-AoE enter-trigger — the one genuinely-buildable-on-existing-substrate SRD mechanic surfaced by the v2.565.5 audit verify-pass. Plan + wiki surfacing; no implementation.
+
+**Description:** New `docs/plans/aoe-enter-trigger.md` designs automating the *"enters the area for the first time on a turn"* half of persistent damaging AoEs (Spirit Guardians, Spike Growth, Sleet Storm, Moonbeam, …). The start-of-turn half is already automated (`_tick_auras`); the enter-mid-move half is GM-narrated today. The plan is grounded against verified substrate: the `_concentration_aoes` markers already carry the `dc`/`damage_expr`/`damage_type`/`save_ability` payload; the token-move handler already has the entry hook point (where the Antilife barrier check lives); the per-target AoE save-for-half resolution already exists (cast_spell's T.5d/T.5e orchestration + `_resolve_feature_save`); and `_distance_ft_between_points` covers radius geometry. The only true gap is invoking that resolution on movement entry. Since the server has no cone/line/cube point-in-shape geometry (placement is client-side), **Phase 1 scopes to radius shapes** (`sphere`/`self_sphere`) with a per-turn "first entry" dedupe + caster/affects filter; cube/cone/line (Phase 2) and forced-movement entry (Phase 3) are deferred. Linked from the SRD audit's status note in `TODO.md`.
+
+**Implementation:**
+
+- `docs/plans/aoe-enter-trigger.md` (new): the design plan.
+- Wiki surfacing (doc-discovery rule): `_DOC_ALLOWLIST` entry `plan-aoe-enter-trigger` in `app/routes/wiki_routes.py`; a "Design plans" row in `app/templates/wiki.html`; a row in `docs/wiki/README.md`.
+- `TODO.md`: the audit verify-pass note now links the plan as the one buildable item.
+
+**Harness changes:**
+
+- `tests/harness/test_wiki.py`: +1 — `test_wiki_doc_serves_aoe_enter_trigger_plan` (slug 200 + H1 substring + nav); slug added to `test_wiki_home_renders`'s assertion list.
+
+Total harness count → 4058 in `tests/harness/` + 99 in `tests/harness_ui/`.
+
+PATCH — design doc + wiki surfacing. No code or schema change.
+
+### Added
+- `docs/plans/aoe-enter-trigger.md` — design plan for automating persistent-AoE damage-on-enter (Spirit Guardians et al.); surfaced at `/wiki/doc/plan-aoe-enter-trigger`.
+
 ## [2.566.1] - 2026-06-22 — "Two Stale Yardsticks"
 
 **Schema version:** 75
