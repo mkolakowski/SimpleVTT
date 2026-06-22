@@ -200,3 +200,45 @@ and removes runtime internet calls from the hot path.
    _MY_API_BASE = os.getenv("MY_API_BASE_URL", "https://api.example.com/v1").rstrip("/")
    ```
 5. Use that variable everywhere instead of a hardcoded URL.
+
+## SimpleVTT ships SRD 5.1 content only
+
+The shipped image carries **D&D 5e SRD 5.1 mechanics only** — the
+CC-BY/OGL perimeter the codebase's attribution cites. Anything outside
+the SRD (Tasha's, Xanathar's, the 2024 PHB, third-party books, table
+homebrew) is **not** baked into shipped content; it belongs in the
+campaign/operator **homebrew tier**. This keeps the redistribution
+license clean and the rules surface predictable.
+
+The content layer has two tiers (`app/local_content.py`):
+
+- **Shipped tier** — `app/data/local/dnd5e/<type>/<slug>.json`, loaded as
+  `scope: global`. **SRD-only.** Every record must carry `source: "srd"`,
+  `scope: "global"`, and an `_attribution` citing the SRD 5.1 / Open5e.
+- **Homebrew tier** — `app/data/homebrew/` (or `HOMEBREW_DATA_DIR`) +
+  campaign-scoped DB content, `source: "local-homebrew"`. **This is the
+  sanctioned home for non-SRD mechanics** — it overrides the shipped tier
+  per-campaign and is never part of the image.
+
+**Two halves, enforced asymmetrically:**
+
+- **"Only SRD mechanics"** — *fully enforced.* `tests/harness/test_srd_provenance.py`
+  asserts every shipped record is `source: "srd"` + `scope: "global"` + SRD-
+  attributed, and that no homebrew-sourced record leaks into the shipped
+  tree. **If you must add a non-SRD spell/feat/monster, put it in the
+  homebrew tier — do not add it under `app/data/local/`.** New shipped SRD
+  content must keep the provenance fields (the build script
+  `scripts/build_srd_content.py` sets them; see its header before ever
+  re-running it — it does **not** reproduce the curated `area`/`upcast`/
+  scaling fields and will clobber them).
+- **"All SRD mechanics implemented"** — *tracked, not unit-asserted.* This
+  is a VTT where the GM is the rules authority, so a mechanic counts as
+  **supported** when it is automated **or** deliberately GM-narrated — full
+  automation of every SRD line is explicitly **not** the bar. Coverage is
+  tracked by the SRD audit in [`TODO.md`](TODO.md) +
+  [`docs/test-harness-coverage.md`](docs/test-harness-coverage.md), and the
+  catalog's **completeness floor** (per-type record counts can only grow,
+  never silently shrink) is enforced by `test_srd_catalog_meets_completeness_floor`
+  so a destructive content regen / deletion can't quietly drop SRD mechanics.
+  When you implement a new SRD mechanic, update the audit; when you find an
+  SRD gap, file it there — don't claim 100% automation.

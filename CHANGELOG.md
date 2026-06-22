@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.568.3] - 2026-06-22 — "The Sealed Perimeter"
+
+**Schema version:** 75
+
+**Commit summary:** New governance rule + enforcing test — "SimpleVTT ships SRD 5.1 content only." Locks the SRD-only scope of the shipped content tree and a catalog completeness floor.
+
+**Description:** Adds a documented rule (CLAUDE.md) and a harness gate for the two falsifiable halves of "all mechanics are SRD, and only SRD mechanics ship":
+
+- **Only SRD** — *enforced.* All 986 records in the shipped content tree (`app/data/local/dnd5e/`, the global tier the engine loads) are already uniformly `source: "srd"` + `scope: "global"` + SRD-attributed; the test locks that and bars any homebrew-sourced record from leaking in. Non-SRD mechanics (Tasha's / Xanathar's / 2024 PHB / table homebrew) belong in the **homebrew tier** (`app/data/homebrew/` · `source: "local-homebrew"`), which the loader overlays per-campaign and which is never baked into the image.
+- **All SRD present** — *enforced as a floor.* Per-type counts (spells 319, monsters 322, items 294, conditions 15, races 9, class_features 12, subclass_features 13, feats 1, backgrounds 1) are asserted as minimums, so a destructive content regen or deletion (cf. the v2.568.2 build-script foot-gun) can't silently shed SRD mechanics. (SRD 5.1 genuinely ships one feat — Grappler — and one sample background, so those floors of 1 are correct, not stubs.)
+
+The third half — "every SRD mechanic is *implemented*" — is deliberately **not** unit-asserted: SimpleVTT is a VTT where the GM is the rules authority, so a mechanic counts as **supported** when it is automated **or** GM-narrated; full automation of every SRD line is explicitly not the bar. That coverage stays tracked by the SRD audit in `TODO.md` + `docs/test-harness-coverage.md`, with the rule pointing contributors there.
+
+**Implementation:**
+
+- `CLAUDE.md`: new "SimpleVTT ships SRD 5.1 content only" rule — the two-tier content model, the provenance requirement, where non-SRD content goes, and the enforced-vs-tracked split.
+- `tests/harness/test_srd_provenance.py` (new): the three gates below.
+
+**Harness changes:**
+
+- `tests/harness/test_srd_provenance.py` (+3): `test_all_shipped_content_is_srd_sourced` (provenance on every shipped record), `test_srd_catalog_meets_completeness_floor` (per-type count floors), `test_homebrew_tier_is_the_documented_extension_point` (no homebrew leak into the shipped tree + documents the boundary).
+
+Total harness count → 4072 in `tests/harness/` + 99 in `tests/harness_ui/`.
+
+PATCH — governance rule + enforcing test. No app, schema, or API change.
+
+### Added
+- "SimpleVTT ships SRD 5.1 content only" rule (CLAUDE.md) + `test_srd_provenance.py` enforcing SRD provenance on all shipped content and a catalog completeness floor.
+
 ## [2.568.2] - 2026-06-22 — "The Cartographer's Warning"
 
 **Schema version:** 75
