@@ -126,6 +126,38 @@ to the fail2ban service ONLY. The base compose is unchanged.
 > tenancy or strict-isolation hosts, prefer Cloudflare bouncer
 > instead.
 
+### Optional add-on: Discord notifications
+
+Get a live feed of bans/unbans in a Discord channel. This is a
+**notify-only** action — it doesn't ban anything, so you add it
+*alongside* whichever ban action you picked above.
+
+1. In Discord: **Server Settings → Integrations → Webhooks → New
+   Webhook**, pick the channel, and **Copy Webhook URL**. Treat that
+   URL like a secret — anyone who has it can post to the channel.
+2. In `.env`, paste the URL and add `discord-notify` to
+   `FAIL2BAN_ACTION` (space-separated):
+
+   ```
+   FAIL2BAN_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123/abc
+   # iptables ban + a Discord ping:
+   FAIL2BAN_ACTION=%(action_)s discord-notify
+   # …or Cloudflare ban + a Discord ping:
+   FAIL2BAN_ACTION=cloudflare-bouncer discord-notify
+   ```
+
+   Optionally set `FAIL2BAN_DISCORD_USERNAME` to override the
+   message's display name (defaults to `SimpleVTT fail2ban`).
+3. Recreate the service (`docker compose --profile fail2ban up -d`).
+
+Each ban posts e.g. *":hammer: fail2ban **banned** `203.0.113.7` —
+jail `simplevtt-auth`, 5 failure(s), bantime 3600s"*; each expiry posts
+the matching unban. If `FAIL2BAN_DISCORD_WEBHOOK_URL` is left empty the
+action **no-ops gracefully** — it's safe to leave `discord-notify` in
+`FAIL2BAN_ACTION` even before you've set a URL. A slow or failing
+webhook never blocks or fails the ban itself (10-second curl timeout,
+errors swallowed).
+
 ---
 
 ## Step 4 — bring up the profile

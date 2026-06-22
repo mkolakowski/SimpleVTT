@@ -315,6 +315,12 @@ services:
       CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
       CLOUDFLARE_ZONE_ID: ${CLOUDFLARE_ZONE_ID:-}
       CLOUDFLARE_API_BASE_URL: ${CLOUDFLARE_API_BASE_URL:-https://api.cloudflare.com/client/v4}
+      # v2.566.0 — optional Discord webhook notifications. The
+      # action.d/discord-notify.conf [Init] block resolves these via
+      # render-jail.sh. Empty webhook URL → the action no-ops. Opt in
+      # by adding `discord-notify` to FAIL2BAN_ACTION (space-separated).
+      FAIL2BAN_DISCORD_WEBHOOK_URL: ${FAIL2BAN_DISCORD_WEBHOOK_URL:-}
+      FAIL2BAN_DISCORD_USERNAME: ${FAIL2BAN_DISCORD_USERNAME:-SimpleVTT fail2ban}
     # v2.471.0 — Phase 4c. Override the image's entrypoint with the
     # render-jail.sh helper that envsubsts the FAIL2BAN_* placeholders
     # into the jail.d configs before exec'ing the image's standard

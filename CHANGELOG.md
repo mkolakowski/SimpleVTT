@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.566.0] - 2026-06-22 — "The Town Crier"
+
+**Schema version:** 75
+
+**Commit summary:** Optional Discord webhook notifications for the fail2ban integration — a notify-only `discord-notify` action that pings a channel on each ban/unban, configured via env. fail2ban Phase 4h.
+
+**Description:** Adds `docs/integrations/fail2ban/action.d/discord-notify.conf`, a **notify-only** fail2ban action (it doesn't ban anything — you add it alongside a real ban action). On ban it POSTs `🔨 fail2ban banned <ip> — jail <name>, <failures> failure(s), bantime <bantime>s` to a Discord channel webhook; on unban it posts the matching follow-up. The webhook URL comes from `FAIL2BAN_DISCORD_WEBHOOK_URL` (an env var, resolved by `render-jail.sh`'s envsubst — the same path the cloudflare bouncer uses), and `FAIL2BAN_DISCORD_USERNAME` (default "SimpleVTT fail2ban") overrides the display name. Opt in by adding `discord-notify` to `FAIL2BAN_ACTION` (space-separated, e.g. `%(action_)s discord-notify` or `cloudflare-bouncer discord-notify`). It's safe to leave in unconfigured: an empty webhook URL makes the action **no-op gracefully** (a `[ -n "<webhook_url>" ]` guard skips the curl), and `curl -m 10 … || true` ensures a slow/failing webhook never blocks or fails the ban itself. The webhook URL is operator-supplied (their own Discord server) and treated as a secret — kept in `.env`, never committed; no in-repo mock (consistent with the cloudflare bouncer's fail2ban-side action, which calls the real API too).
+
+**Implementation:**
+
+- `docs/integrations/fail2ban/action.d/discord-notify.conf` (new): the notify action + `[Init]` env placeholders.
+- `docs/integrations/fail2ban/scripts/render-jail.sh`: `FAIL2BAN_DISCORD_WEBHOOK_URL` + `FAIL2BAN_DISCORD_USERNAME` added to the envsubst allowlist.
+- `docker-compose.yml`: the two vars plumbed through the `fail2ban` service env block (empty URL default; named username default).
+- `.env.example`: documented opt-in slot + how-to.
+- `docs/plans/fail2ban-crowdsec-integration.md` (Phase 4h) + `docs/wiki/fail2ban-deployment.md` (a "Discord notifications" add-on section).
+
+**Harness changes:**
+
+- `tests/harness/test_fail2ban_discord_notify.py` (new): +7 — action file exists; defines ban+unban curl POSTs; `[Init]` uses the `${FAIL2BAN_DISCORD_*}` placeholders; both actions guard on a non-empty webhook URL (graceful no-op); `render-jail.sh` allowlist + compose env + `.env.example` all carry the new vars.
+
+Total harness count → 4057 in `tests/harness/` + 99 in `tests/harness_ui/`.
+
+MINOR — new opt-in integration config (fail2ban Discord action) + wiring tests. No app endpoint or schema change.
+
+### Added
+- Optional Discord webhook notifications on fail2ban ban/unban (`discord-notify` action; `FAIL2BAN_DISCORD_WEBHOOK_URL` / `FAIL2BAN_DISCORD_USERNAME` env vars). fail2ban Phase 4h.
+
 ## [2.565.5] - 2026-06-22 — "The Finer Print"
 
 **Schema version:** 75

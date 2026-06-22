@@ -270,6 +270,13 @@ This is the canonical end-to-end test: log line → fail2ban filter → ban deci
 - Update `docs/integrations/README.md` with a "running fail2ban" section pointing at the wiki guide.
 - Per the doc-surfacing rule in [`CLAUDE.md`](../../CLAUDE.md#every-doc-must-be-surfaced-through-the-wiki) — landing-page row in `app/templates/wiki.html` + index row in `docs/wiki/README.md` + harness test `test_wiki_doc_serves_fail2ban_deployment` + landing-page assertion in `test_wiki_home_renders`.
 
+#### Phase 4h — Optional Discord webhook notifications (v2.566.0 — ✅ shipped)
+
+- New `docs/integrations/fail2ban/action.d/discord-notify.conf` — a **notify-only** action that POSTs a short message to a Discord channel webhook on each ban + unban (jail / IP / failure count / ban time). It does not ban anything; it's added *alongside* a real ban action.
+- Opt-in: set `FAIL2BAN_DISCORD_WEBHOOK_URL` in `.env` and add `discord-notify` to `FAIL2BAN_ACTION` (space-separated, e.g. `cloudflare-bouncer discord-notify` or `%(action_)s discord-notify`). The webhook URL resolves through the same `render-jail.sh` envsubst path as the cloudflare bouncer; an empty URL makes the action **no-op gracefully** (a `[ -n "<webhook_url>" ]` guard skips the curl). `curl -m 10 … || true` ensures a slow/failing webhook never blocks or fails the ban itself.
+- `FAIL2BAN_DISCORD_USERNAME` (default "SimpleVTT fail2ban") overrides the webhook's display name.
+- Compose passes both env vars through to the `--profile fail2ban` service; `render-jail.sh`'s allowlist covers them. Harness wiring test: `tests/harness/test_fail2ban_discord_notify.py`. Operator guide: a "Discord notifications" section in `docs/wiki/fail2ban-deployment.md`. Live delivery is operator-verified (no in-repo mock — same as the cloudflare bouncer's fail2ban-side action).
+
 ---
 
 ## Non-goals
