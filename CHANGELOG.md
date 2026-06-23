@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.605.6] - 2026-06-23 — "The Red and the Green"
+
+**Schema version:** 79
+
+**Commit summary:** Colour the Admin Center account toggle — red to disable a user, green to (re-)enable.
+
+**Description:** Small UI affordance on the user "Manage ▾" menu. The single account toggle now reads its colour from its action: when the user is active it shows a red **Disable user** button (the existing `.danger` style); when the user is disabled it shows a green **Enable user** button. Makes the destructive vs. restorative action obvious at a glance. Template/CSS-only — the form, endpoint, and confirm are unchanged.
+
+**Implementation:**
+
+- `app/admin_center/templates/users.html` — split the toggle into an `if`/`else` so the Disable variant gets `class="danger"` (red) and the Enable variant gets a new `class="btn-enable"` (green, mirroring the theme's danger-red treatment).
+
+No harness change (layout-only; the `test_admin_center.py` disable/enable test asserts on the row's `disabled` pill, not the button styling).
+
+### Changed
+- Admin Center user menu: the account toggle is red to disable / green to enable.
+
 ## [2.605.5] - 2026-06-23 — "The Updated Playbill"
 
 **Schema version:** 79

@@ -36,6 +36,9 @@
   .menu-panel .menu-row { display:flex; gap:5px; }
   .menu-panel .menu-row form { flex:1; margin:0; }
   .menu-panel .menu-row form > button { width:100%; }
+  /* v2.605.6 — colour the account toggle by its action: red to disable,
+     green to (re-)enable. Mirrors the theme's button.danger red. */
+  .menu-panel button.btn-enable { background:#2d4a2e; border-color:#3c6b3e; color:#bfe9c2; }
 </style>
 </head>
 <body>
@@ -96,7 +99,11 @@
                 <div class="menu-group">
                   <div class="menu-label">Account</div>
                   <form method="post" action="/users/{{ u.id }}/disable">
-                    <button type="submit">{{ "Enable user" if u.is_disabled else "Disable user" }}</button>
+                    {% if u.is_disabled %}
+                    <button type="submit" class="btn-enable">Enable user</button>
+                    {% else %}
+                    <button type="submit" class="danger">Disable user</button>
+                    {% endif %}
                   </form>
                   <form method="post" action="/users/{{ u.id }}/reset-password"
                         onsubmit="return confirm('Reset the password for {{ u.email }}?');">
