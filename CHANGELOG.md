@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.605.1] - 2026-06-23 — "The Tidy Drawer"
+
+**Schema version:** 79
+
+**Commit summary:** De-clutter the Admin Center user-admin table — the eight per-row management controls collapse behind a single "Manage ▾" menu.
+
+**Description:** UI-only cleanup (no endpoint or behavior change). The Admin Center's `/users` table crammed **eight controls** into every row's Actions cell — Make/Revoke GM, Make/Revoke admin, Enable/Disable, Reset-password (with an inline field), Set storage-limit (with an inline field), Scrub audit log, and Delete — which made the table very hard to scan. Those controls now collapse behind a single per-row **"⚙ Manage ▾"** disclosure that opens a grouped dropdown (Roles · Account · Storage limit · Danger). Every form, endpoint, confirm-dialog, and the GDPR scrub JS is unchanged — only the layout moved, so the row now shows just ID / Email / Display name / Roles (pills) / Created / Manage.
+
+**Implementation:**
+
+- `app/admin_center/templates/users.html` — wrap the per-row actions in a `<details class="manage-menu">` with a grouped `.menu-panel`; add scoped dropdown CSS (32px compact touch targets, matching the existing `.row-actions` convention). Button labels lightly clarified ("Reset" / "Delete user" / "Disable user" / "Scrub audit log"). The row prefix (`<td>id</td><td>email</td>`), the role pills, and the create-user form are unchanged.
+
+No harness change (template-only; the existing `test_admin_center.py` role/disable/delete/storage tests POST the endpoints directly and assert on the unchanged row structure + role pills, which this preserves).
+
+### Changed
+- Admin Center user-admin table: per-row management controls moved into a compact "Manage ▾" dropdown to de-clutter the listing.
+
 ## [2.605.0] - 2026-06-23 — "The Drowned Lighthouse"
 
 **Schema version:** 79

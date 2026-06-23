@@ -6,6 +6,33 @@
 <title>User admin — SimpleVTT Admin Center</title>
 <link rel="icon" href="/favicon.svg">
 {% include "_theme.html" %}
+<style>
+  /* v2.605.1 — per-row action menu. The eight user-management controls
+     (role toggles, enable/disable, reset pw, storage limit, scrub log,
+     delete) used to sit inline in the Actions cell, which made the table
+     very cluttered. They now collapse behind a single "Manage ▾"
+     disclosure so the row stays scannable. Dense admin panel → 32px min
+     touch target (matches the existing .row-actions convention). */
+  td .manage-menu { position:relative; display:inline-block; }
+  td .manage-menu > summary { list-style:none; cursor:pointer; min-height:32px;
+    display:inline-flex; align-items:center; gap:5px; padding:5px 11px;
+    border:1px solid var(--line); border-radius:6px; background:var(--panel2);
+    font-size:12px; white-space:nowrap; }
+  td .manage-menu > summary::-webkit-details-marker { display:none; }
+  td .manage-menu[open] > summary { border-color:var(--accent); color:var(--accent); }
+  td .manage-menu .menu-panel { position:absolute; right:0; top:calc(100% + 5px);
+    z-index:30; min-width:240px; background:var(--panel); border:1px solid var(--line);
+    border-radius:8px; box-shadow:0 10px 30px rgba(0,0,0,.45); padding:9px; text-align:left; }
+  .menu-panel .menu-group + .menu-group { margin-top:9px; padding-top:9px; border-top:1px solid var(--line); }
+  .menu-panel .menu-label { font-size:10px; text-transform:uppercase; letter-spacing:.5px; opacity:.55; margin-bottom:5px; }
+  .menu-panel form { display:flex; gap:5px; margin:0 0 5px; }
+  .menu-panel form:last-child { margin-bottom:0; }
+  .menu-panel .menu-group > button,
+  .menu-panel form > button { min-height:32px; font-size:12px; padding:5px 8px; }
+  .menu-panel form:not(:has(input)) > button,
+  .menu-panel .menu-group > button { width:100%; }
+  .menu-panel form > input { flex:1; min-width:0; min-height:32px; font-size:12px; padding:5px 8px; }
+</style>
 </head>
 <body>
 {% set nav_active = "users" %}{% include "_nav.html" %}
@@ -43,41 +70,55 @@
           <td class="muted">{{ u.created_at }}</td>
           {% if mfa_verified %}
           <td>
-            <div class="row-actions">
-              <form method="post" action="/users/{{ u.id }}/role">
-                <input type="hidden" name="role" value="gm">
-                <input type="hidden" name="value" value="{{ 0 if u.is_gm else 1 }}">
-                <button type="submit">{{ "Revoke GM" if u.is_gm else "Make GM" }}</button>
-              </form>
-              <form method="post" action="/users/{{ u.id }}/role"
-                    onsubmit="return confirm('{{ 'Revoke' if u.is_admin else 'Grant' }} admin for {{ u.email }}?');">
-                <input type="hidden" name="role" value="admin">
-                <input type="hidden" name="value" value="{{ 0 if u.is_admin else 1 }}">
-                <button type="submit">{{ "Revoke admin" if u.is_admin else "Make admin" }}</button>
-              </form>
-              <form method="post" action="/users/{{ u.id }}/disable">
-                <button type="submit">{{ "Enable" if u.is_disabled else "Disable" }}</button>
-              </form>
-              <form method="post" action="/users/{{ u.id }}/reset-password"
-                    onsubmit="return confirm('Reset the password for {{ u.email }}?');">
-                <input type="password" name="new_password" placeholder="new password" minlength="8" required>
-                <button type="submit">Reset pw</button>
-              </form>
-              <form method="post" action="/users/{{ u.id }}/delete"
-                    onsubmit="return confirm('Delete {{ u.email }}? This cannot be undone.');">
-                <button type="submit" class="danger">Delete</button>
-              </form>
-              <button type="button" class="scrub-log-btn"
-                      data-uid="{{ u.id }}" data-email="{{ u.email }}"
-                      onclick="scrubUserLog(this)"
-                      title="GDPR Art. 17: pseudonymize this user's identifiers in the audit log (rewrites matching lines to an opaque token; never deletes)">Scrub log</button>
-              <form method="post" action="/users/{{ u.id }}/storage-limit" title="Aggregate upload-storage limit in MB; blank/0 = unlimited">
-                <input type="number" name="limit_mb" min="0" step="1" style="width:80px"
-                       placeholder="MB"
-                       value="{{ (u.storage_limit_bytes // 1048576) if u.storage_limit_bytes else '' }}">
-                <button type="submit">Set limit</button>
-              </form>
-            </div>
+            <details class="manage-menu">
+              <summary>⚙ Manage ▾</summary>
+              <div class="menu-panel">
+                <div class="menu-group">
+                  <div class="menu-label">Roles</div>
+                  <form method="post" action="/users/{{ u.id }}/role">
+                    <input type="hidden" name="role" value="gm">
+                    <input type="hidden" name="value" value="{{ 0 if u.is_gm else 1 }}">
+                    <button type="submit">{{ "Revoke GM" if u.is_gm else "Make GM" }}</button>
+                  </form>
+                  <form method="post" action="/users/{{ u.id }}/role"
+                        onsubmit="return confirm('{{ 'Revoke' if u.is_admin else 'Grant' }} admin for {{ u.email }}?');">
+                    <input type="hidden" name="role" value="admin">
+                    <input type="hidden" name="value" value="{{ 0 if u.is_admin else 1 }}">
+                    <button type="submit">{{ "Revoke admin" if u.is_admin else "Make admin" }}</button>
+                  </form>
+                </div>
+                <div class="menu-group">
+                  <div class="menu-label">Account</div>
+                  <form method="post" action="/users/{{ u.id }}/disable">
+                    <button type="submit">{{ "Enable user" if u.is_disabled else "Disable user" }}</button>
+                  </form>
+                  <form method="post" action="/users/{{ u.id }}/reset-password"
+                        onsubmit="return confirm('Reset the password for {{ u.email }}?');">
+                    <input type="password" name="new_password" placeholder="new password" minlength="8" required>
+                    <button type="submit">Reset</button>
+                  </form>
+                </div>
+                <div class="menu-group">
+                  <div class="menu-label">Storage limit</div>
+                  <form method="post" action="/users/{{ u.id }}/storage-limit" title="Aggregate upload-storage limit in MB; blank/0 = unlimited">
+                    <input type="number" name="limit_mb" min="0" step="1" placeholder="MB (blank = unlimited)"
+                           value="{{ (u.storage_limit_bytes // 1048576) if u.storage_limit_bytes else '' }}">
+                    <button type="submit">Set</button>
+                  </form>
+                </div>
+                <div class="menu-group">
+                  <div class="menu-label">Danger</div>
+                  <button type="button" class="scrub-log-btn"
+                          data-uid="{{ u.id }}" data-email="{{ u.email }}"
+                          onclick="scrubUserLog(this)"
+                          title="GDPR Art. 17: pseudonymize this user's identifiers in the audit log (rewrites matching lines to an opaque token; never deletes)">Scrub audit log</button>
+                  <form method="post" action="/users/{{ u.id }}/delete"
+                        onsubmit="return confirm('Delete {{ u.email }}? This cannot be undone.');">
+                    <button type="submit" class="danger">Delete user</button>
+                  </form>
+                </div>
+              </div>
+            </details>
           </td>
           {% endif %}
         </tr>
