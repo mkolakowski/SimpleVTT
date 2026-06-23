@@ -41,12 +41,13 @@ def test_disabled_by_default(monkeypatch):
     assert visitor_log.visitor_request_log_enabled() is False
 
 
-def test_flag_on_but_no_trusted_hop_stays_closed(monkeypatch):
-    """The flag alone isn't enough — without TRUSTED_PROXY_HOPS>=1 the
-    only IP we could record is the proxy's, so the interlock keeps the
-    gate closed."""
+def test_flag_on_but_no_trustworthy_ip_source_stays_closed(monkeypatch):
+    """The flag alone isn't enough — with NO trusted hop AND CF-Connecting-IP
+    off, the only IP we could record is the proxy's, so the interlock keeps
+    the gate closed."""
     monkeypatch.setenv("VISITOR_REQUEST_LOG_ENABLED", "true")
     monkeypatch.setenv("TRUSTED_PROXY_HOPS", "0")
+    monkeypatch.delenv("TRUST_CF_CONNECTING_IP", raising=False)
     assert visitor_log.visitor_request_log_enabled() is False
 
 
@@ -60,6 +61,17 @@ def test_trusted_hop_but_flag_off_stays_closed(monkeypatch):
 def test_both_gates_open(monkeypatch):
     monkeypatch.setenv("VISITOR_REQUEST_LOG_ENABLED", "true")
     monkeypatch.setenv("TRUSTED_PROXY_HOPS", "1")
+    monkeypatch.delenv("TRUST_CF_CONNECTING_IP", raising=False)
+    assert visitor_log.visitor_request_log_enabled() is True
+
+
+def test_cf_connecting_ip_opens_gate_without_xff_hop(monkeypatch):
+    """v2.599.1 — behind a pure Cloudflare Tunnel the correct config is
+    TRUSTED_PROXY_HOPS=0 + TRUST_CF_CONNECTING_IP=true: CF-Connecting-IP is a
+    trustworthy real-visitor IP, so the gate opens even with zero XFF hops."""
+    monkeypatch.setenv("VISITOR_REQUEST_LOG_ENABLED", "true")
+    monkeypatch.setenv("TRUSTED_PROXY_HOPS", "0")
+    monkeypatch.setenv("TRUST_CF_CONNECTING_IP", "true")
     assert visitor_log.visitor_request_log_enabled() is True
 
 

@@ -22,11 +22,16 @@ Two-gate interlock — BOTH must hold for an event to fire:
 
   * ``VISITOR_REQUEST_LOG_ENABLED`` in {1,true,yes,on} — the explicit
     operator opt-in.
-  * ``TRUSTED_PROXY_HOPS >= 1`` — without a trusted proxy hop the only
-    IP we could record is the tunnel/proxy's own internal address,
-    which is useless for visitor accounting and would mislead a
-    fail2ban filter into banning the proxy itself. Requiring a trusted
-    hop is a safety interlock, not belt-and-suspenders.
+  * a **trustworthy client IP source** — ``TRUSTED_PROXY_HOPS >= 1``
+    (a trusted ``X-Forwarded-For`` hop) **or** ``TRUST_CF_CONNECTING_IP``
+    (Cloudflare's ``CF-Connecting-IP``, the authoritative source behind a
+    pure Cloudflare Tunnel, where there are no XFF hops). Without either,
+    the only IP we could record is the tunnel/proxy's own internal
+    address, which is useless for visitor accounting and would mislead a
+    fail2ban filter into banning the proxy itself. (v2.599.1 — the gate
+    previously required a positive hop count, which wrongly closed it on
+    the correct pure-CF-tunnel config ``TRUSTED_PROXY_HOPS=0`` +
+    ``TRUST_CF_CONNECTING_IP=true``.)
 
 Reusing ``audit()`` (with the same ``_extract_client_ip`` path) keeps
 the recorded IP identical to what every other audit event records for
@@ -42,7 +47,7 @@ import logging
 import os
 from typing import TYPE_CHECKING, Optional
 
-from .audit_log import _trusted_proxy_hops, audit
+from .audit_log import _trust_cf_connecting_ip, _trusted_proxy_hops, audit
 
 if TYPE_CHECKING:
     from fastapi import Request
@@ -54,12 +59,13 @@ def visitor_request_log_enabled() -> bool:
     """True iff per-request visitor logging should fire.
 
     Read at call time (not cached) so a runtime env flip is honored.
-    Requires BOTH the explicit ``VISITOR_REQUEST_LOG_ENABLED`` opt-in
-    AND ``TRUSTED_PROXY_HOPS >= 1`` — see the module docstring for why
-    the trusted-hop gate is a safety interlock.
+    Requires the explicit ``VISITOR_REQUEST_LOG_ENABLED`` opt-in AND a
+    trustworthy client-IP source — a trusted ``X-Forwarded-For`` hop
+    (``TRUSTED_PROXY_HOPS >= 1``) OR Cloudflare's ``CF-Connecting-IP``
+    (``TRUST_CF_CONNECTING_IP``). See the module docstring.
     """
     flag = os.environ.get("VISITOR_REQUEST_LOG_ENABLED", "").strip().lower() in _TRUTHY
-    return flag and _trusted_proxy_hops() >= 1
+    return flag and (_trusted_proxy_hops() >= 1 or _trust_cf_connecting_ip())
 
 
 def emit_visitor_request(

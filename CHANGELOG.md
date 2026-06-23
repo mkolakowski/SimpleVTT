@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.599.1] - 2026-06-23 — "Only the Real Caller"
+
+**Schema version:** 77
+
+**Commit summary:** Cloudflare-Tunnel attribution hardening: trust only `CF-Connecting-IP` (drop the X-Forwarded-For fallback) and let it satisfy the visitor-log gate; document the WARP-egress finding.
+
+**Description:** Follows the `172.67.x` fail2ban investigation, which confirmed (via live A/B/C probes through Cloudflare) that IP attribution is **working and un-spoofable**: the app records the real client IP from `CF-Connecting-IP`, Cloudflare 403s any client attempt to forge that header, and a forged `X-Forwarded-For` loses to `CF-Connecting-IP` in the precedence. The `172.67.137.205` bans were a client **egressing through Cloudflare** (WARP / Worker / CF-hosted CI) running the harness — its `CF-Connecting-IP` is legitimately a Cloudflare address; correctly recorded, but shared + Cloudflare-owned, so never bannable (handled by the v2.599.0 fail2ban allowlist).
+
+Two hardening changes:
+- **Visitor-log gate fix.** `app/visitor_log.py` required `TRUSTED_PROXY_HOPS >= 1`; that interlock predated `CF-Connecting-IP` support and **wrongly closed** on the correct pure-CF-Tunnel config (`TRUSTED_PROXY_HOPS=0` + `TRUST_CF_CONNECTING_IP=true`). The gate now opens when **either** a trusted XFF hop **or** `TRUST_CF_CONNECTING_IP` provides a trustworthy IP — so per-request visitor logging keeps working with zero XFF hops behind a tunnel.
+- **`TRUSTED_PROXY_HOPS=0` on the public demo** (the box is behind a *pure* Cloudflare Tunnel). `CF-Connecting-IP` is the only authoritative source and already wins the precedence, so the X-Forwarded-For fallback adds nothing and is dropped — removing the only path by which a forged XFF could ever be trusted (it can't be reached here anyway, since the origin is tunnel-only). The committed defaults were already `0`/`false`; only the live `.env` (gitignored) needed flipping.
+
+**Implementation:**
+
+- `app/visitor_log.py`: `visitor_request_log_enabled()` → `flag and (_trusted_proxy_hops() >= 1 or _trust_cf_connecting_ip())`; docstring updated.
+- `.env.example`: document the pure-CF-Tunnel recommendation (`TRUSTED_PROXY_HOPS=0` + `TRUST_CF_CONNECTING_IP=true`), the updated visitor-log gate, and the WARP/CF-egress finding (such clients appear as Cloudflare IPs — expected, and covered by the fail2ban allowlist).
+- Live `.env` (gitignored): `TRUSTED_PROXY_HOPS` 1 → 0.
+
+**Harness changes:**
+
+- `tests/harness/test_visitor_log.py` (+1, and one renamed/updated): a new test asserts `CF-Connecting-IP` opens the visitor-log gate with `TRUSTED_PROXY_HOPS=0`; the "no trusted hop stays closed" test now also disables `TRUST_CF_CONNECTING_IP` so it still asserts the closed case.
+
+Total harness count → 4181 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+### Changed
+- Behind a pure Cloudflare Tunnel, per-request visitor logging now works with `TRUSTED_PROXY_HOPS=0` (the gate accepts `CF-Connecting-IP` as the trustworthy IP source); the public demo drops its X-Forwarded-For trust (`TRUSTED_PROXY_HOPS=0`).
+
 ## [2.599.0] - 2026-06-23 — "Don't Ban the Doorman"
 
 **Schema version:** 77
