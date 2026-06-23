@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.599.9] - 2026-06-23 — "The Right Doorframe"
+
+**Schema version:** 77
+
+**Commit summary:** Fix the same-origin CSRF test's host derivation — httpx's `request.url.netloc` is bytes, so it sent a malformed Origin and the test (not the code) failed.
+
+**Description:** Follow-up to v2.599.8. The live `test_csrf_allows_same_origin_post` built its `Origin` from `httpx ….request.url.netloc`, which returns `bytes` — yielding `Origin: http://b'localhost:8015'`, a host that (correctly) didn't match `Host`, so the CSRF check 403'd and the test failed. The CSRF code is correct (verified live: foreign Origin → 403, no Origin → 303, same Origin → 303); only the test was wrong. It now derives the host from `ADMIN_BASE_URL` via `urllib.parse.urlsplit` (a str). Test-only change.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center_csrf.py`: same-origin test derives the Origin host from `ADMIN_BASE_URL` (str) instead of httpx's bytes `netloc`.
+
+Total harness count → 4199 in `tests/harness/` + 103 in `tests/harness_ui/` (unchanged).
+
+### Fixed
+- Test-only: the same-origin Admin Center CSRF test no longer sends a malformed (bytes-derived) Origin.
+
 ## [2.599.8] - 2026-06-23 — "The Bouncer's List"
 
 **Schema version:** 77

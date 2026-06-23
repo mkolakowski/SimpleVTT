@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx
 import pytest
@@ -61,10 +62,12 @@ def test_csrf_allows_header_less_post():
 
 @_LIVE
 def test_csrf_allows_same_origin_post():
-    host = httpx.get(f"{ADMIN_BASE_URL}/healthz", timeout=5.0).request.url.netloc
+    # netloc as a str (httpx's request.url.netloc is bytes) so the Origin host
+    # matches the Host the server sees for this same base URL.
+    split = urlsplit(ADMIN_BASE_URL)
     r = httpx.post(
         f"{ADMIN_BASE_URL}/users/create",
-        headers={"Origin": f"http://{host}"},
+        headers={"Origin": f"{split.scheme}://{split.netloc}"},
         data={}, timeout=5.0, follow_redirects=False,
     )
     assert not _is_csrf_403(r), "same-origin POST must pass the CSRF check"
