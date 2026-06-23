@@ -1,0 +1,68 @@
+{# Shared Admin Center theme (v2.589.2). Included in the <head> of every
+   page so the whole console uses one palette + element style — matching the
+   dashboard and the shared _nav.html top bar. Page-specific tweaks may still
+   live in inline styles; this is the common base. #}
+<style>
+  :root {
+    --bg:#14171c; --panel:#1d2128; --panel2:#242a33;
+    --fg:#e6e9ef; --muted:#9aa4b2; --line:#2e3540;
+    --accent:#6ea8fe; --warn:#ffb454; --bad:#ff6b6b; --ok:#5ad19a;
+    color-scheme: dark;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:0 0 48px; background:var(--bg); color:var(--fg);
+         font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  a { color:var(--accent); }
+  a.link { color:var(--accent); text-decoration:none; }
+  main { max-width:1100px; margin:0 auto; padding:24px; }
+  h1 { font-size:20px; }
+  h2 { font-size:15px; margin:0 0 10px; color:#cdd6f4; }
+  .muted { color:var(--muted); }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:16px; margin-bottom:18px; }
+  .card.danger { border-color:#7a2e2e; }
+  label { display:block; margin:8px 0; }
+  select, input, button, textarea { font-size:14px; padding:8px 10px; border-radius:6px;
+        border:1px solid var(--line); background:var(--bg); color:var(--fg); }
+  button { background:var(--panel2); cursor:pointer; }
+  button.danger { background:#7a2e2e; border-color:#7a2e2e; }
+  code { background:var(--bg); padding:1px 5px; border-radius:3px; font-size:12px; }
+  .banner { padding:10px 12px; border-radius:6px; margin-bottom:14px; font-size:14px; word-break:break-all; }
+  .banner.ok { background:#1e3a24; color:#b6f0c2; }
+  .banner.err { background:#3a1e1e; color:#ffb3b3; }
+  .banner.warn { background:#3a341e; color:#ffe9a8; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  th { color:var(--accent); font-weight:600; }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .pill { display:inline-block; padding:1px 7px; border-radius:10px; font-size:11px; }
+  .pill.admin { background:#2d3a6b; color:#bcd0ff; }
+  .pill.gm { background:#2d4a2e; color:#bfe9c2; }
+  .pill.player { background:#3a3550; color:#cfc6e8; }
+  .pill.off, .pill.failed { background:#3a1e1e; color:#ffb3b3; }
+  .pill.error { background:#5a3a1e; color:#ffd1a3; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  @media (max-width:640px){ .grid { grid-template-columns:1fr; } }
+  /* Dense operator-console row controls: 32px min target (the standalone
+     Admin Center is a deliberately compact console, not the touch-first
+     main app). */
+  .row-actions { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .row-actions button, .row-actions select, .row-actions input { min-height:32px; padding:5px 8px; font-size:12px; }
+  .row-actions button.danger { background:#7a2e2e; }
+  .row-actions input[type=password] { width:120px; }
+  .inline-form { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+  dl { display:grid; grid-template-columns:max-content 1fr; gap:4px 16px; font-size:14px; margin:0; }
+  dt { color:var(--muted); }
+  .totals { display:flex; gap:24px; flex-wrap:wrap; font-size:14px; }
+  .totals b { color:#bcd0ff; }
+  details summary { cursor:pointer; }
+  .sub { margin:6px 0 4px 14px; font-size:12px; }
+  .chip { display:inline-block; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:1px 8px; margin:2px 4px 2px 0; font-size:11px; }
+  /* tests.html result bars */
+  .stacked { display:flex; height:26px; border-radius:5px; overflow:hidden; margin:10px 0; background:#5a6280; }
+  .seg { height:100%; } .seg.pass { background:#3ba55d; } .seg.fail { background:#d83c3c; }
+  .seg.err { background:#e0813b; } .seg.skip { background:#5a6280; }
+  .legend span { display:inline-block; margin-right:14px; font-size:13px; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:middle; }
+  .bar { background:var(--panel2); height:8px; border-radius:3px; min-width:40px; }
+  .bar > i { display:block; height:100%; background:#6f86ff; border-radius:3px; }
+</style>

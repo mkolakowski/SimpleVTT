@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.589.2] - 2026-06-23 — "The House Style"
+
+**Schema version:** 77
+
+**Commit summary:** Unify the Admin Center page theme — one shared palette/stylesheet across all pages (was: the dashboard on one dark theme, the other pages on a lighter blue one).
+
+**Description:** Follows the shared top-bar work (v2.589.1): the Admin Center sub-pages (Users, Campaigns, campaign detail, Storage, Tools, Tests) each carried their own near-duplicate `<style>` block on a lighter `#1a2036`/`#252c45`/`#9fb3ff` palette, while the dashboard + the shared nav used the darker `#14171c`/`#1d2128`/`#6ea8fe` palette. They now all include a single shared **`_theme.html`** head partial (the canonical palette as CSS vars + the common element styles — cards, tables, banners, pills, inputs, chips, row-actions, the tests result bars, etc.), so the whole console renders on one consistent theme that matches the dashboard and the top bar. Net code reduction — six duplicated style blocks collapse to one.
+
+**Implementation:**
+
+- `app/admin_center/templates/_theme.html` (new): the shared palette + base element styles (union of what the pages used), expressed with CSS vars.
+- `users.html`, `campaigns.html`, `campaign_detail.html`, `storage.html`, `tools.html`, `tests.html`: per-page `<style>` block replaced with `{% include "_theme.html" %}`. The dashboard keeps its own (already-matching) palette + its dashboard-specific panel CSS.
+
+**Harness changes:** none — the change is purely visual (CSS); the existing `test_admin_center.py` live tests already assert the pages render + their landmark content, which is unaffected.
+
+### Changed
+- Admin Center pages now share one theme via `_theme.html` (consistent palette + element styling across the whole console).
+
 ## [2.589.1] - 2026-06-23 — "The Common Rail"
 
 **Schema version:** 77

@@ -5,32 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tests — SimpleVTT Admin Center</title>
 <link rel="icon" href="/favicon.svg">
-<style>
-  :root { color-scheme: dark; }
-  body { font-family: system-ui, -apple-system, sans-serif; background:#1a2036; color:#e6e9f0; margin:0; padding:0 0 48px; }
-  header { background:#252c45; padding:14px 24px; display:flex; align-items:center; gap:16px; border-bottom:1px solid #333c5c; }
-  header h1 { font-size:18px; margin:0; }
-  header nav a { color:#9fb3ff; text-decoration:none; }
-  header nav a:hover { text-decoration:underline; }
-  main { max-width:1100px; margin:0 auto; padding:20px 24px; }
-  .card { background:#252c45; border:1px solid #333c5c; border-radius:8px; padding:16px; margin-bottom:18px; }
-  h2 { font-size:15px; margin:0 0 12px; color:#cdd6f4; }
-  .muted { color:#8b93b0; }
-  .stacked { display:flex; height:26px; border-radius:5px; overflow:hidden; margin:10px 0; background:#5a6280; }
-  .seg { height:100%; }
-  .seg.pass { background:#3ba55d; } .seg.fail { background:#d83c3c; }
-  .seg.err { background:#e0813b; } .seg.skip { background:#5a6280; }
-  .legend span { display:inline-block; margin-right:14px; font-size:13px; }
-  .dot { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:middle; }
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  th, td { text-align:left; padding:5px 8px; border-bottom:1px solid #333c5c; vertical-align:middle; }
-  th { color:#9aa3c4; font-weight:600; }
-  .bar { background:#3a4470; height:8px; border-radius:3px; min-width:40px; }
-  .bar > i { display:block; height:100%; background:#6f86ff; border-radius:3px; }
-  .pill { font-size:11px; padding:1px 7px; border-radius:9px; }
-  .pill.failed { background:#5a1e1e; color:#ffb3b3; } .pill.error { background:#5a3a1e; color:#ffd1a3; }
-  code { background:#1a2036; padding:1px 5px; border-radius:3px; font-size:12px; }
-</style>
+{% include "_theme.html" %}
 </head>
 <body>
 {% set nav_active = "tests" %}{% include "_nav.html" %}

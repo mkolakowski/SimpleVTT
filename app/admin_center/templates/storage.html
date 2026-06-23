@@ -5,28 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Storage — SimpleVTT Admin Center</title>
 <link rel="icon" href="/favicon.svg">
-<style>
-  :root { color-scheme: dark; }
-  body { font-family: system-ui, -apple-system, sans-serif; background:#1a2036; color:#e6e9f0; margin:0; padding:0 0 48px; }
-  header { background:#252c45; padding:14px 24px; display:flex; align-items:center; gap:16px; border-bottom:1px solid #333c5c; }
-  header h1 { font-size:18px; margin:0; }
-  header nav a { color:#9fb3ff; text-decoration:none; }
-  main { max-width:1000px; margin:0 auto; padding:20px 24px; }
-  .card { background:#252c45; border:1px solid #333c5c; border-radius:8px; padding:16px; margin-bottom:18px; }
-  h2 { font-size:15px; margin:0 0 10px; color:#cdd6f4; }
-  .muted { color:#8b93b0; }
-  .banner { padding:10px 12px; border-radius:6px; margin-bottom:14px; font-size:14px; }
-  .banner.err { background:#3a1e1e; color:#ffb3b3; }
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  th, td { text-align:left; padding:7px 10px; border-bottom:1px solid #333c5c; }
-  th { color:#9fb3ff; font-weight:600; }
-  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
-  .totals { display:flex; gap:24px; flex-wrap:wrap; font-size:14px; }
-  .totals b { color:#bcd0ff; }
-  details summary { cursor:pointer; }
-  .sub { margin:6px 0 4px 14px; font-size:12px; }
-  .chip { display:inline-block; background:#1a2036; border:1px solid #333c5c; border-radius:10px; padding:1px 8px; margin:2px 4px 2px 0; font-size:11px; }
-</style>
+{% include "_theme.html" %}
 </head>
 <body>
 {% set nav_active = "storage" %}{% include "_nav.html" %}

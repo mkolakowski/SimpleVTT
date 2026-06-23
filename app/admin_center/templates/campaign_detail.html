@@ -5,36 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ campaign.name }} — Campaign admin — SimpleVTT Admin Center</title>
 <link rel="icon" href="/favicon.svg">
-<style>
-  :root { color-scheme: dark; }
-  body { font-family: system-ui, -apple-system, sans-serif; background:#1a2036; color:#e6e9f0; margin:0; padding:0 0 48px; }
-  header { background:#252c45; padding:14px 24px; display:flex; align-items:center; gap:16px; border-bottom:1px solid #333c5c; }
-  header h1 { font-size:18px; margin:0; }
-  header nav a { color:#9fb3ff; text-decoration:none; }
-  main { max-width:1000px; margin:0 auto; padding:20px 24px; }
-  .card { background:#252c45; border:1px solid #333c5c; border-radius:8px; padding:16px; margin-bottom:18px; }
-  .card.danger { border-color:#7a2e2e; }
-  h2 { font-size:15px; margin:0 0 10px; color:#cdd6f4; }
-  .muted { color:#8b93b0; }
-  .banner { padding:10px 12px; border-radius:6px; margin-bottom:14px; font-size:14px; }
-  .banner.warn { background:#3a341e; color:#ffe9a8; }
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  th, td { text-align:left; padding:7px 10px; border-bottom:1px solid #333c5c; }
-  th { color:#9fb3ff; font-weight:600; }
-  .pill { display:inline-block; padding:1px 7px; border-radius:10px; font-size:11px; background:#2d3a6b; color:#bcd0ff; }
-  button { font-size:14px; padding:8px 12px; border-radius:6px; border:1px solid #3a4470; background:#3a4470; color:#e6e9f0; cursor:pointer; }
-  button.danger { background:#7a2e2e; border-color:#7a2e2e; }
-  dl { display:grid; grid-template-columns:max-content 1fr; gap:4px 16px; font-size:14px; margin:0; }
-  dt { color:#8b93b0; }
-  .banner.ok { background:#1e3a24; color:#b6f0c2; }
-  .banner.err { background:#3a1e1e; color:#ffb3b3; }
-  select, input[type=text] { font-size:13px; padding:6px 8px; border-radius:6px; border:1px solid #3a4470; background:#1a2036; color:#e6e9f0; }
-  /* Dense operator-console row controls: 32px min target (same compact
-     exception the Admin Center's other tables use). */
-  .row-actions { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
-  .row-actions button, .row-actions select, .row-actions input { min-height:32px; padding:5px 8px; font-size:12px; }
-  .inline-form { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:8px; }
-</style>
+{% include "_theme.html" %}
 </head>
 <body>
 {% set nav_active = "campaigns" %}{% include "_nav.html" %}
