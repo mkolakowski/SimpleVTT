@@ -52,9 +52,9 @@
     </div>
     <div class="mini-attack-detail mini-row-detail">
         {% set _bits = [] %}
-        {% if a.range %}{% set _ = _bits.append('<span><strong>Range:</strong> ' ~ a.range ~ '</span>') %}{% endif %}
-        {% if a.damage_type %}{% set _ = _bits.append('<span><strong>Type:</strong> ' ~ a.damage_type ~ '</span>') %}{% endif %}
-        {% if a.properties %}{% set _ = _bits.append('<span><strong>Properties:</strong> ' ~ a.properties ~ '</span>') %}{% endif %}
+        {% if a.range %}{% set _ = _bits.append('<span><strong>Range:</strong> ' ~ (a.range | e) ~ '</span>') %}{% endif %}
+        {% if a.damage_type %}{% set _ = _bits.append('<span><strong>Type:</strong> ' ~ (a.damage_type | e) ~ '</span>') %}{% endif %}
+        {% if a.properties %}{% set _ = _bits.append('<span><strong>Properties:</strong> ' ~ (a.properties | e) ~ '</span>') %}{% endif %}
         {% if _bits %}<div class="mini-row-detail-bits">{{ _bits | join(' · ') | safe }}</div>{% endif %}
         {% if a.desc %}<div class="mini-row-detail-desc">{{ a.desc }}</div>{% endif %}
         {% if not _bits and not a.desc %}<span class="muted">No additional details.</span>{% endif %}

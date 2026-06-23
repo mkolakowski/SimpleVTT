@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.599.3] - 2026-06-23 — "The Escaped Bard"
+
+**Schema version:** 77
+
+**Commit summary:** Fix stored XSS in the mini-sheet action/spell detail bits — player/GM free-text fields were concatenated into a `| safe` HTML string without escaping.
+
+**Description:** First of four XSS fixes from the whole-app security review. `_tab_actions.html` and `_tab_spells.html` build a `<span><strong>…</strong> value</span>` "detail bits" string via Jinja string-concat (`~`) and emit it with `| safe` (needed to render the literal `<span>` wrappers). The interpolated values were raw, so `| safe` disabled autoescape on them. A **player** can set a custom attack/item's `range` / `damage_type` / `properties` (and a GM a homebrew spell's `casting_time` / `range` / `duration` / `components`) to `<img src=x onerror=…>`; the mini-sheet card renders on the shared tabletop, so the script executed in the **GM's and other players' browsers** — a player→GM stored-XSS / session-theft path. Each interpolated field now pipes through `| e`, so the values are HTML-escaped while the static `<span>` markup still renders.
+
+**Implementation:**
+
+- `app/templates/_tab_actions.html`: escape `a.range` / `a.damage_type` / `a.properties` with `| e` in the `_bits` construction.
+- `app/templates/_tab_spells.html`: escape `s.casting_time` / `s.range` / `s.duration` / `s.components` with `| e` in the `_sbits` construction.
+
+**Harness changes:**
+
+- `tests/harness/test_mini_sheet_xss.py` (new, +2): renders `_tab_actions.html` with a malicious payload and asserts it is HTML-escaped (not raw) in the output; guards `_tab_spells.html` at the source level (every detail-bit field pipes through `| e`).
+
+Total harness count → 4184 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+### Fixed
+- Stored XSS: custom attack/item and homebrew-spell detail fields rendered on the mini-sheet are now HTML-escaped (were emitted raw inside a `| safe` block).
+
 ## [2.599.2] - 2026-06-23 — "The Unplugged Logger"
 
 **Schema version:** 77

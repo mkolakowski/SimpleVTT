@@ -151,10 +151,10 @@
         </div>
         <div class="mini-spell-detail mini-row-detail" data-slug="{{ s._slug or '' }}" data-content-loaded="0">
             {% set _sbits = [] %}
-            {% if s.casting_time %}{% set _ = _sbits.append('<span><strong>Cast:</strong> ' ~ s.casting_time ~ '</span>') %}{% endif %}
-            {% if s.range %}{% set _ = _sbits.append('<span><strong>Range:</strong> ' ~ s.range ~ '</span>') %}{% endif %}
-            {% if s.duration %}{% set _ = _sbits.append('<span><strong>Duration:</strong> ' ~ s.duration ~ '</span>') %}{% endif %}
-            {% if s.components %}{% set _ = _sbits.append('<span><strong>Components:</strong> ' ~ s.components ~ '</span>') %}{% endif %}
+            {% if s.casting_time %}{% set _ = _sbits.append('<span><strong>Cast:</strong> ' ~ (s.casting_time | e) ~ '</span>') %}{% endif %}
+            {% if s.range %}{% set _ = _sbits.append('<span><strong>Range:</strong> ' ~ (s.range | e) ~ '</span>') %}{% endif %}
+            {% if s.duration %}{% set _ = _sbits.append('<span><strong>Duration:</strong> ' ~ (s.duration | e) ~ '</span>') %}{% endif %}
+            {% if s.components %}{% set _ = _sbits.append('<span><strong>Components:</strong> ' ~ (s.components | e) ~ '</span>') %}{% endif %}
             {% if _sbits %}<div class="mini-row-detail-bits">{{ _sbits | join(' · ') | safe }}</div>{% endif %}
             {% if s.desc %}<div class="mini-row-detail-desc">{{ s.desc }}</div>{% endif %}
             <div class="mini-spell-content-slot"></div>
