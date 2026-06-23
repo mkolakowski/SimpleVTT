@@ -43,3 +43,17 @@ async def test_demo_account_can_log_in(email):
         assert resp.status_code == 200, f"{email}: {resp.status_code}"
     finally:
         await client.aclose()
+
+
+@_LIVE
+@pytest.mark.parametrize("email", ["demo-gm@example.com", "demo-alice@example.com", "demo-carol@example.com"])
+async def test_goblin_warrens_present_for_gm_and_members(email):
+    """D3 — the level-3 'Goblin Warrens' campaign shows in its GM's lobby
+    (demo-gm owns it) and its members' lobbies (alice + carol are members)."""
+    client = await login_client(email, "demopass")
+    try:
+        resp = await client.get("/")
+        assert resp.status_code == 200
+        assert "Goblin Warrens" in resp.text, f"{email} lobby missing the L3 campaign"
+    finally:
+        await client.aclose()

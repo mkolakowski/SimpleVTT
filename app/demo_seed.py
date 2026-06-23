@@ -174,9 +174,15 @@ def wipe(db: Session) -> dict[str, int]:
     counts["users_found"] = len(demo_users)
 
     # 2) Find the demo campaigns by name (defensive — only ours use
-    # these exact strings). v2.590.0: a set of leveled sample campaigns.
+    # these exact strings). v2.590.0: a set of leveled sample campaigns —
+    # the Sundered Vault (here) + the leveled campaigns registered in
+    # demo_campaigns (lazy import to avoid a cycle). Names must all match so
+    # each campaign's Tokens/Maps/Characters cascade-clean before the user
+    # delete (which would otherwise FK-fail on a still-populated campaign).
+    from . import demo_campaigns as _dc
+    all_campaign_names = (*DEMO_CAMPAIGN_NAMES, *_dc.campaign_names())
     demo_campaigns = (
-        db.query(Campaign).filter(Campaign.name.in_(DEMO_CAMPAIGN_NAMES)).all()
+        db.query(Campaign).filter(Campaign.name.in_(all_campaign_names)).all()
     )
     demo_campaign_ids = [c.id for c in demo_campaigns]
     counts["campaigns_found"] = len(demo_campaigns)
@@ -8729,9 +8735,17 @@ def reset_and_reseed(db: Session) -> dict[str, int]:
     # do them AFTER commit so any DB failure rolls back the records.
     homebrew_count = seed_homebrew_files(camp)
 
+    # v2.592.0 — the leveled sample campaigns (levels 3/9/13/18). Seeded
+    # AFTER the Sundered Vault so it keeps id 1 (the harness CAMPAIGN_ID).
+    # Lazy import to avoid an import cycle (demo_campaigns imports helpers
+    # from this module). See docs/wiki/demo-content.md.
+    from . import demo_campaigns
+    extra_campaigns = demo_campaigns.seed_leveled_campaigns(db, users)
+    db.commit()
+
     counts = {
         "users":           len(users),
-        "campaign":        1,
+        "campaign":        1 + len(extra_campaigns),
         "memberships":     2,
         "map":             1,
         "characters":      len(chars),
@@ -8740,6 +8754,7 @@ def reset_and_reseed(db: Session) -> dict[str, int]:
         "encounters":      1,
         "roll_history":    rolls,
         "homebrew_files":  homebrew_count,
+        "leveled_campaigns": len(extra_campaigns),
     }
     log.info("demo reset complete: %s", counts)
     return counts

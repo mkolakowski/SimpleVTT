@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.592.0] - 2026-06-23 — "The Goblin Warrens"
+
+**Schema version:** 77
+
+**Commit summary:** Demo rework phase D3 — the first new leveled campaign: **The Goblin Warrens** (party level 3), via a reusable per-campaign seeder.
+
+**Description:** Adds the first of the new leveled sample campaigns and the generic infrastructure the rest (D4–D6) reuse. New module **`app/demo_campaigns.py`** holds a data-driven `CAMPAIGN_SPECS` registry + a generic `seed_leveled_campaigns(db, users)` that builds each campaign (campaign row + memberships + placeholder map + PCs via `build_dnd5e_sheet` + NPC token-templates + PC/NPC tokens on the map). The level-3 entry, **"Demo L3: The Goblin Warrens"** (GM: demo-gm; members: alice + carol), is a 5-PC party where each PC showcases a class feature gained around level 3 — Fighter/Battle Master (**Maneuvers**), Rogue/Assassin (**Assassinate**), Cleric/Light (**Channel Divinity + 2nd-level spells**), Wizard/Evocation (**Sculpt Spells**), Ranger/Hunter (**Colossus Slayer**) — each with a `Description / Roleplay / How to play` notes block. NPCs are SRD slugs (goblin, wolf, bandit, bandit-captain boss). The battle map is a **placeholder** (blank grid, `image_url=None`) until art is generated (prompt to come in the D8 wiki catalog). The Sundered Vault is seeded first so it keeps id 1 (the harness `CAMPAIGN_ID`); the leveled campaigns seed after it. The `wipe()` now matches the Sundered Vault + every `demo_campaigns` name so each campaign's rows cascade-clean before the user delete.
+
+**Implementation:**
+
+- `app/demo_campaigns.py` (new): `CAMPAIGN_SPECS` + `seed_leveled_campaigns` + `campaign_names`; helpers `_notes` / `_slots` / `_spell`. Imports `build_dnd5e_sheet` + `_npc_sheet` from `demo_seed` (lazy import the other way to avoid a cycle).
+- `app/demo_seed.py`: `wipe()` unions `demo_campaigns.campaign_names()` into the name filter; `reset_and_reseed()` calls `seed_leveled_campaigns` after the Sundered Vault + adds counts.
+
+**Harness changes:**
+
+- `tests/harness/test_demo_campaigns.py` (+3): the L3 "Goblin Warrens" shows in its GM's lobby and its members' lobbies (demo-gm / alice / carol).
+
+Total harness count → 4165 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+### Added
+- Demo level-3 campaign **The Goblin Warrens** + the reusable `demo_campaigns` per-campaign seeder (demo-rework phase D3). Each PC showcases a level-3 class feature; map art is a placeholder pending the D8 catalog.
+
 ## [2.591.0] - 2026-06-23 — "The Wider Table"
 
 **Schema version:** 77
