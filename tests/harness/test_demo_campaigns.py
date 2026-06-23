@@ -102,6 +102,19 @@ async def test_dragons_apotheosis_present(email):
 
 
 @_LIVE
+async def test_shared_player_sees_multiple_campaigns():
+    """D7 — carol is a shared player: a member of both the level-3 Goblin
+    Warrens and the level-5 Sundered Vault, so her lobby lists both."""
+    client = await login_client("demo-carol@example.com", "demopass")
+    try:
+        resp = await client.get("/")
+        assert resp.status_code == 200
+        assert "Goblin Warrens" in resp.text and "Sundered Vault" in resp.text
+    finally:
+        await client.aclose()
+
+
+@_LIVE
 async def test_all_five_campaigns_seeded():
     """D6 — the full arc: an admin sees all five leveled campaigns by name.
     (demo-gm is site-admin by default → the lobby's admin 'all campaigns'

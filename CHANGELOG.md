@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.596.0] - 2026-06-23 — "One of Five"
+
+**Schema version:** 77
+
+**Commit summary:** Demo rework phase D7 — fold the Sundered Vault into the five-campaign arc: re-theme it as the level-5/Tier-2 entry and add a shared player.
+
+**Description:** Positions the original demo campaign as the **level-5 (Tier 2)** member of the leveled set rather than "the" demo campaign — its description now names the five-campaign ladder (3/5/9/13/18) and points at the wiki Demo-content guide. Adds **carol** as a member so a player is **shared across campaigns** (she also plays in the level-3 Goblin Warrens), exercising the cross-campaign lobby. The 15-PC one-of-every-class party + the Tavern Brawl encounter are intentionally **kept intact** — they remain the richest single-campaign showcase and the harness backbone (the `roster` fixture + the per-character suites assert them at their current builds), so they're preserved rather than trimmed/releveled.
+
+**Implementation:** `app/demo_seed.py` — `seed_campaign` description re-theme + carol membership (reseed `memberships` count 2 → 3).
+
+**Harness changes:** `tests/harness/test_demo_campaigns.py` (+1): the shared player (carol) sees both the L3 Goblin Warrens and the L5 Sundered Vault in her lobby. Total → 4178 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+### Changed
+- The Sundered Vault is re-themed as the level-5 entry of the demo's five-campaign ladder; carol added as a shared cross-campaign player (demo-rework phase D7).
+
 ## [2.595.0] - 2026-06-23 — "The Dragon's Apotheosis"
 
 **Schema version:** 77

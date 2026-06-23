@@ -369,8 +369,11 @@ def seed_campaign(db: Session, users: dict[str, User]) -> Campaign:
     camp = Campaign(
         name=DEMO_CAMPAIGN_NAME,
         description=(
-            "Public demo campaign. Resets on a fixed interval — anything "
-            "you change here will be wiped soon."
+            "Tier-2 demo campaign (party level ~5–8) — the flagship of the "
+            "demo's five leveled sample campaigns (levels 3 / 5 / 9 / 13 / 18; "
+            "see the wiki's Demo content guide). A full one-of-every-class "
+            "party walks into the Tavern Brawl. Resets on a fixed interval — "
+            "anything you change here will be wiped soon."
         ),
         gm_user_id=users["gm"].id,
         game_system="dnd5e",
@@ -395,7 +398,9 @@ def seed_campaign(db: Session, users: dict[str, User]) -> Campaign:
     db.add(camp)
     db.flush()
 
-    # Players join as members; GM is implicit via gm_user_id.
+    # Players join as members; GM is implicit via gm_user_id. v2.596.0 —
+    # carol joins too so a player is shared across campaigns (she also plays
+    # in the level-3 Goblin Warrens), showing the cross-campaign roster.
     db.add_all([
         CampaignMembership(
             campaign_id=camp.id, user_id=users["alice"].id,
@@ -404,6 +409,10 @@ def seed_campaign(db: Session, users: dict[str, User]) -> Campaign:
         CampaignMembership(
             campaign_id=camp.id, user_id=users["bob"].id,
             is_gm=False, color="#4ade80",
+        ),
+        CampaignMembership(
+            campaign_id=camp.id, user_id=users["carol"].id,
+            is_gm=False, color="#f59e0b",
         ),
     ])
     db.flush()
@@ -8746,7 +8755,7 @@ def reset_and_reseed(db: Session) -> dict[str, int]:
     counts = {
         "users":           len(users),
         "campaign":        1 + len(extra_campaigns),
-        "memberships":     2,
+        "memberships":     3,
         "map":             1,
         "characters":      len(chars),
         "token_templates": len(templates),
