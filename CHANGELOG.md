@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.599.13] - 2026-06-23 — "The Phantom Backlog"
+
+**Schema version:** 77
+
+**Commit summary:** Reconcile the stale "spell upcast scaling (~110 spells)" P1 — verified complete, not open work.
+
+**Description:** Doc-status reconciliation (no code change), from a review of the top-listed Design Plans Backlog P1 against the corpus, the resolver, and the harness:
+
+- The Design Plans Backlog led with **"Spell upcast scaling (~110 spells)"** as the #1 open 🔴 P1, framed as data-only content work moving Spells from ~70% → ~90%+. That figure was **stale audit text**, not open work — it counted spells lacking the *structured field*, not spells lacking *scaling*.
+- **Verified directly against `app/data/local/dnd5e/spells/`:** of **295 leveled spells**, **39 dice-scale automatically** (32 carry structured `damage_per_slot`/`healing_per_slot`; 7 derive per-slot dice from `higher_level` prose via [`spell_upcast_parse.py`](app/content/spell_upcast_parse.py)). The **34** leveled spells with a damage/heal base that don't scale **genuinely don't dice-scale in RAW** (Finger of Death, Meteor Swarm, Harm, Sunburst — all empty `higher_level`) or scale by count via separate fields (Magic Missile / Scorching Ray / Chain Lightning). The remaining **222 are utility spells with no damage/heal base**. There is **no clean dice/heal backfill batch left** — matching the [spell-upcasting plan](docs/plans/spell-upcasting.md)'s v2.344.2 note.
+- All three approaches shipped long ago (A picker / B dice resolver / C free-text fallback, v2.108.0–v2.110.0), and the bespoke +targets/HP-pool math (Hold Person `upcast_target_count`, Sleep `upcast_pool_dice`) already rides shared helpers. End-to-end coverage exists in [`test_cast_spell.py`](tests/harness/test_cast_spell.py) (Burning Hands 3d6→4d6, Heat Metal 2d8→3d8, Thunderwave via parser, Cure Wounds healing) plus unit coverage in [`test_spell_upcast_parser.py`](tests/harness/test_spell_upcast_parser.py).
+
+The forward-looking P1 list now leads with **reactions-automation v3** (the pending-damage state machine), the genuine next substantial slice.
+
+**Implementation:**
+
+- `TODO.md`: removed the "Spell upcast scaling (~110 spells)" P1 bullet, replaced it with a `✅ DONE (reconciled)` note recording the corpus measurement; corrected the v2.315.0 refresh banner's "remaining levers" line.
+
+No harness change (doc-only).
+
+### Changed
+- TODO.md reconciled: the long-stale "spell upcast scaling backfill" P1 is retired as ✅ done; reactions-automation v3 now leads the P1 list.
+
 ## [2.599.12] - 2026-06-23 — "The Cleared Backlog"
 
 **Schema version:** 77
