@@ -101,6 +101,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-aoe-enter-trigger" in resp.text
     # v2.568.4: fork-&-tweak-SRD-as-homebrew plan listed.
     assert "/wiki/doc/plan-homebrew-fork-srd" in resp.text
+    # v2.573.1: admin-center-consolidation plan listed.
+    assert "/wiki/doc/plan-admin-center-consolidation" in resp.text
     assert "/wiki/doc/plan-movement-and-summons" in resp.text
     # v2.99.447: automation-coverage audit doc listed in the references table.
     assert "/wiki/doc/automation-coverage" in resp.text
@@ -469,6 +471,19 @@ async def test_wiki_doc_serves_homebrew_fork_srd_plan():
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "homebrew" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_admin_center_consolidation_plan():
+    """v2.573.1: GET /wiki/doc/plan-admin-center-consolidation — 200 +
+    body contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/admin-center-consolidation.md``.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-admin-center-consolidation")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "admin center" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

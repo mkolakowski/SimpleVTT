@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.573.1] - 2026-06-22 — "The Drafted Console"
+
+**Schema version:** 75
+
+**Commit summary:** Design plan for consolidating site-admin into the Admin Center (the security-sensitive admin migration), surfaced through the wiki. Plan only; no implementation.
+
+**Description:** New `docs/plans/admin-center-consolidation.md` designs moving the scattered site-admin surfaces — **stubs + demo tools**, then **user admin**, then **campaign admin** — out of the main app's in-app `/admin` portal and into the standalone Admin Center (port 8015), per the request. Campaign-GM settings and homebrew authoring are explicitly out of scope. The plan is grounded against verified substrate (the two admin systems; the Center shares the app image + has DB access + TOTP MFA) and leads with the security model, since this turns the Center from a read-only operator dashboard into a read-write admin app on the public box: a default-off `ADMIN_CENTER_ADMIN_TOOLS` opt-in flag, **MFA-hard-gated destructive actions** (user/campaign delete, password reset), operator-attributed audit logging, and a phased migration (low-risk stubs/demo first, then the MFA-gated user + campaign admin, then retiring the in-app portal) with a per-surface + security-gate test contract.
+
+**Implementation:**
+
+- `docs/plans/admin-center-consolidation.md` (new): the design plan.
+- Wiki surfacing: `_DOC_ALLOWLIST` entry `plan-admin-center-consolidation` (`app/routes/wiki_routes.py`); a "Design plans" row in `app/templates/wiki.html`; a row in `docs/wiki/README.md`.
+
+**Harness changes:**
+
+- `tests/harness/test_wiki.py`: +1 — `test_wiki_doc_serves_admin_center_consolidation_plan` (slug 200 + H1 substring + nav); slug added to `test_wiki_home_renders`.
+
+Total harness count → 4095 in `tests/harness/` + 101 in `tests/harness_ui/`.
+
+PATCH — design doc + wiki surfacing. No code or schema change.
+
+### Added
+- `docs/plans/admin-center-consolidation.md` — design plan for the MFA-gated migration of site-admin (stubs/demo + user + campaign admin) into the Admin Center; surfaced at `/wiki/doc/plan-admin-center-consolidation`.
+
 ## [2.573.0] - 2026-06-22 — "The Glass Lab"
 
 **Schema version:** 75
