@@ -327,10 +327,165 @@ _STORM_SALTMARSH = {
 }
 
 
+# ── Level 13 — The Shadowfell Spire (Tier 3) ────────────────────────
+_SHADOWFELL_SPIRE = {
+    "name": "Demo L13: The Shadowfell Spire",
+    "level": 13,
+    "gm": "gm",
+    "gm_color": "#a855f7",
+    "members": [("bob", "#818cf8"), ("dave", "#f472b6")],
+    "desc": ("Tier-3 dark-fantasy siege (party level 13). A spire of black "
+             "glass bleeds the Shadowfell into the world; undead and worse "
+             "spill out. Each PC shows off a feature gained around level 13 — "
+             "full casters' first 7th-level spells, and tier-3 martial power. "
+             "Demo campaign — resets on a fixed interval."),
+    "map": {"name": "The Shadowfell Spire (threshold)", "width": 1600, "height": 1200},
+    "party": [
+        {"owner": "bob", "name": "Maelen Farsight", "sheet": dict(
+            klass="Wizard", subclass="School of Divination", race="High Elf", level=13,
+            abilities={"STR": 8, "DEX": 14, "CON": 14, "INT": 20, "WIS": 12, "CHA": 10},
+            ac=12, hp_max=84,
+            attacks=[
+                {"name": "Quarterstaff", "attack_bonus": "+5", "damage": "1d6+1",
+                 "damage_type": "bludgeoning", "range": "5 ft", "desc": "Versatile (1d8)"},
+            ],
+            spells=[
+                _spell("Fire Bolt", 0, "fire-bolt"),
+                _spell("Shield", 1, "shield"),
+                _spell("Misty Step", 2, "misty-step"),
+                _spell("Counterspell", 3, "counterspell"),
+                _spell("Banishment", 4, "banishment"),
+                _spell("Wall of Force", 5, "wall-of-force"),
+                _spell("Chain Lightning", 6, "chain-lightning"),
+                _spell("Forcecage", 7, "forcecage"),
+            ],
+            spell_slots=_slots("wizard", **{"1": 4, "2": 3, "3": 3, "4": 3, "5": 2, "6": 1, "7": 1}),
+            notes=_notes(
+                "Ice-calm elf diviner who has already seen how the fight ends.",
+                "Speaks in certainties; unnerving because he's usually right.",
+                "Level-13 showcase: his first 7th-level slot → Forcecage (trap "
+                "the spire's lich). Portent: two foretold d20s replace any roll "
+                "(turn the boss's save into a 1)."),
+        )},
+        {"owner": "dave", "name": "Cassius Emberbinder", "sheet": dict(
+            klass="Warlock", subclass="The Fiend", race="Tiefling", level=13,
+            abilities={"STR": 8, "DEX": 14, "CON": 16, "INT": 11, "WIS": 12, "CHA": 20},
+            ac=15, hp_max=94,
+            attacks=[
+                {"name": "Eldritch Blast", "attack_bonus": "+10", "damage": "1d10+5",
+                 "damage_type": "force", "range": "120 ft",
+                 "desc": "Cantrip — 3 beams at level 13; Agonizing Blast (+CHA each)"},
+            ],
+            spells=[
+                _spell("Eldritch Blast", 0, "eldritch-blast"),
+                _spell("Hex", 1, "hex"),
+                _spell("Hunger of Hadar", 3, "hunger-of-hadar"),
+                _spell("Banishment", 4, "banishment"),
+                _spell("Scrying", 5, "scrying"),
+                _spell("Circle of Death", 6, "circle-of-death"),
+                _spell("Finger of Death", 7, "finger-of-death"),
+            ],
+            spell_slots=_slots("warlock", **{"5": 3}),
+            notes=_notes(
+                "Charismatic tiefling warlock paying a fiend's tab one soul at a time.",
+                "Glib, makes terrible deals sound reasonable.",
+                "Level-13 showcase: Mystic Arcanum — a free 6th- AND 7th-level "
+                "spell once per long rest (Circle of Death, Finger of Death) on "
+                "top of three level-5 pact slots. Spam Eldritch Blast (3 beams) "
+                "between Arcanum nukes."),
+        )},
+        {"owner": "gm", "name": "High Cleric Doran", "sheet": dict(
+            klass="Cleric", subclass="War Domain", race="Goliath", level=13,
+            abilities={"STR": 16, "DEX": 10, "CON": 15, "INT": 10, "WIS": 20, "CHA": 12},
+            ac=19, hp_max=97,
+            attacks=[
+                {"name": "Maul", "attack_bonus": "+9", "damage": "2d6+3",
+                 "damage_type": "bludgeoning", "range": "5 ft",
+                 "desc": "Divine Strike adds 2d8 radiant 1/turn"},
+            ],
+            spells=[
+                _spell("Sacred Flame", 0, "sacred-flame"),
+                _spell("Healing Word", 1, "healing-word"),
+                _spell("Spiritual Weapon", 2, "spiritual-weapon"),
+                _spell("Spirit Guardians", 3, "spirit-guardians"),
+                _spell("Guardian of Faith", 4, "guardian-of-faith"),
+                _spell("Flame Strike", 5, "flame-strike"),
+                _spell("Heal", 6, "heal"),
+                _spell("Divine Word", 7, "divine-word"),
+            ],
+            spell_slots=_slots("cleric", **{"1": 4, "2": 3, "3": 3, "4": 3, "5": 2, "6": 1, "7": 1}),
+            notes=_notes(
+                "Mountainous goliath war-priest who answers the spire with light.",
+                "Booming, fearless; treats retreat as heresy.",
+                "Level-13 showcase: first 7th-level slot → Divine Word (banish/"
+                "stun the undead host). War Priest bonus attacks + Divine Strike "
+                "(+2d8 radiant) make his Maul hit like a siege ram."),
+        )},
+        {"owner": "gm", "name": "Hruld Skullcleaver", "sheet": dict(
+            klass="Barbarian", subclass="Path of the Totem Warrior", race="Half-Orc", level=13,
+            abilities={"STR": 20, "DEX": 14, "CON": 18, "INT": 8, "WIS": 12, "CHA": 8},
+            ac=17, hp_max=140,
+            attacks=[
+                {"name": "Greataxe", "attack_bonus": "+9", "damage": "1d12+5",
+                 "damage_type": "slashing", "range": "5 ft",
+                 "desc": "Rage +3 damage; Brutal Critical +2 dice on a crit"},
+                {"name": "Javelin (thrown)", "attack_bonus": "+9", "damage": "1d6+5",
+                 "damage_type": "piercing", "range": "30/120 ft"},
+            ],
+            notes=_notes(
+                "Half-orc totem barbarian who simply will not fall down.",
+                "Few words; laughs when he's bloodied.",
+                "Level-13 showcase: Brutal Critical (2) — a crit rolls THREE "
+                "extra weapon dice. Bear Totem halves nearly all damage while "
+                "raging; Relentless Rage keeps him at 1 HP instead of dropping."),
+        )},
+        {"owner": "gm", "name": "Wisp Underbough", "sheet": dict(
+            klass="Rogue", subclass="Arcane Trickster", race="Forest Gnome", level=13,
+            abilities={"STR": 8, "DEX": 20, "CON": 14, "INT": 16, "WIS": 12, "CHA": 10},
+            ac=16, hp_max=82,
+            attacks=[
+                {"name": "Rapier +1", "attack_bonus": "+10", "damage": "1d8+6",
+                 "damage_type": "piercing", "range": "5 ft",
+                 "desc": "Finesse; Sneak Attack 7d6"},
+                {"name": "Hand Crossbow", "attack_bonus": "+9", "damage": "1d6+5",
+                 "damage_type": "piercing", "range": "30/120 ft"},
+            ],
+            spells=[
+                _spell("Mage Hand", 0, "mage-hand"),
+                _spell("Minor Illusion", 0, "minor-illusion"),
+                _spell("Charm Person", 1, "charm-person"),
+                _spell("Mirror Image", 2, "mirror-image"),
+                _spell("Hypnotic Pattern", 3, "hypnotic-pattern"),
+            ],
+            spell_slots=_slots("rogue", **{"1": 4, "2": 3, "3": 2}),
+            notes=_notes(
+                "Gnome arcane trickster who fights dirty with a spellbook.",
+                "Impish, never where you last saw her.",
+                "Level-13 showcase: Magical Ambush — when she casts a spell from "
+                "hiding, the target has disadvantage on the save. Open with a "
+                "near-guaranteed Hypnotic Pattern, then Sneak Attack 7d6."),
+        )},
+    ],
+    "npcs": [
+        ("wraith", "Wraith"),
+        ("vampire-spawn", "Vampire Spawn"),
+        ("mind-flayer", "Mind Flayer"),
+        ("specter", "Specter"),
+    ],
+    "npc_tokens": [
+        ("wraith", "Spire Wraith", "#6d28d9"),
+        ("vampire-spawn", "Vampire Spawn", "#7f1d1d"),
+        ("vampire-spawn", "Vampire Spawn", "#7f1d1d"),
+        ("mind-flayer", "Illithid Adept", "#581c87"),
+    ],
+}
+
+
 # Registry — appended to as each leveled campaign lands (D3–D6).
 CAMPAIGN_SPECS = [
     _GOBLIN_WARRENS,
     _STORM_SALTMARSH,
+    _SHADOWFELL_SPIRE,
 ]
 
 

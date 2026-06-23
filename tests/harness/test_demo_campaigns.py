@@ -74,6 +74,20 @@ async def test_saltmarsh_present_for_second_gm_and_members(email):
 
 
 @_LIVE
+@pytest.mark.parametrize("email", ["demo-gm@example.com", "demo-bob@example.com", "demo-dave@example.com"])
+async def test_shadowfell_spire_present(email):
+    """D5 — the level-13 'Shadowfell Spire' campaign shows in its GM's
+    (demo-gm) + members' (bob/dave) lobbies."""
+    client = await login_client(email, "demopass")
+    try:
+        resp = await client.get("/")
+        assert resp.status_code == 200
+        assert "Shadowfell Spire" in resp.text, f"{email} lobby missing the L13 campaign"
+    finally:
+        await client.aclose()
+
+
+@_LIVE
 async def test_second_gm_owns_only_its_campaign():
     """demo-gm2 owns exactly the L9 campaign — its lobby shows Saltmarsh but
     not the demo-gm-owned campaigns (e.g. the Goblin Warrens)."""

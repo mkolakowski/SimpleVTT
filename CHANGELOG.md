@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.594.0] - 2026-06-23 — "The Shadowfell Spire"
+
+**Schema version:** 77
+
+**Commit summary:** Demo rework phase D5 — the level-13 campaign **The Shadowfell Spire** (tier 3).
+
+**Description:** Adds the level-13 sample campaign (GM: demo-gm; members bob + dave). The 5-PC party each showcases a level-13 feature: Wizard/Divination (**7th-level: Forcecage** + Portent), Warlock/Fiend (**Mystic Arcanum 6th + 7th**), Cleric/War (**7th-level: Divine Word** + Divine Strike), Barbarian/Totem (**Brutal Critical (2)** + Relentless Rage), Rogue/Arcane Trickster (**Magical Ambush** + Sneak Attack 7d6) — each with Description/Roleplay/How-to-play notes. NPCs: wraith, vampire-spawn, mind-flayer, specter (SRD). Placeholder map (art pending D8).
+
+**Implementation:** `app/demo_campaigns.py` — append `_SHADOWFELL_SPIRE` to `CAMPAIGN_SPECS`.
+
+**Harness changes:** `tests/harness/test_demo_campaigns.py` (+3): L13 shows in its GM's + members' lobbies (demo-gm/bob/dave). Total → 4173 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+### Added
+- Demo level-13 campaign **The Shadowfell Spire** (demo-rework phase D5).
+
 ## [2.593.0] - 2026-06-23 — "Storm Over Saltmarsh"
 
 **Schema version:** 77
