@@ -146,6 +146,12 @@ class Campaign(Base):
     # NULL/0 = unlimited. Set in the Admin Center. See
     # docs/plans/app-wide-roles-and-storage.md.
     storage_limit_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    # v2.603.0 — soft archive. Archived campaigns drop out of the active
+    # lobby sections into a collapsed "Archived" section but keep all
+    # data and stay reachable by URL; reversible (unarchive). Distinct
+    # from delete (permanent cascade). See docs/plans/campaign-pc-archive.md.
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     active_map_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("maps.id", use_alter=True, name="fk_campaign_active_map"), nullable=True
     )

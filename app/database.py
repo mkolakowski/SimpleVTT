@@ -908,6 +908,21 @@ def _apply_inline_migrations() -> None:
                 "ALTER TABLE campaigns ADD COLUMN storage_limit_bytes BIGINT"
             ))
 
+    # ---- Schema v78 (2.603.0): campaigns.is_archived + archived_at ----
+    # Soft archive for campaigns — archived campaigns drop out of the
+    # active lobby sections but keep all data. Reversible (unarchive).
+    # See docs/plans/campaign-pc-archive.md.
+    camp_cols_v78 = _column_names("campaigns")
+    with engine.begin() as conn:
+        if camp_cols_v78 and "is_archived" not in camp_cols_v78:
+            conn.execute(text(
+                "ALTER TABLE campaigns ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+        if camp_cols_v78 and "archived_at" not in camp_cols_v78:
+            conn.execute(text(
+                "ALTER TABLE campaigns ADD COLUMN archived_at TIMESTAMP"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

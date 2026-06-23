@@ -12501,7 +12501,18 @@ def home(request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    primary_gm_campaigns = db.query(Campaign).filter(Campaign.gm_user_id == user.id).all()
+    # v2.603.0 — soft archive: archived campaigns drop out of the active
+    # lobby sections into a separate "Archived" section (GM-owned/co-GM
+    # only, with an Unarchive control). The active queries filter
+    # is_archived == False. See docs/plans/campaign-pc-archive.md.
+    primary_gm_campaigns = (
+        db.query(Campaign)
+        .filter(
+            Campaign.gm_user_id == user.id,
+            Campaign.is_archived == False,  # noqa: E712
+        )
+        .all()
+    )
     co_gm_memberships = (
         db.query(CampaignMembership)
         .filter(
@@ -12512,7 +12523,13 @@ def home(request: Request, db: Session = Depends(get_db)):
     )
     co_gm_ids = [m.campaign_id for m in co_gm_memberships]
     co_gm_campaigns = (
-        db.query(Campaign).filter(Campaign.id.in_(co_gm_ids)).all() if co_gm_ids else []
+        db.query(Campaign)
+        .filter(
+            Campaign.id.in_(co_gm_ids),
+            Campaign.is_archived == False,  # noqa: E712
+        )
+        .all()
+        if co_gm_ids else []
     )
     seen = {c.id for c in primary_gm_campaigns}
     gm_campaigns = primary_gm_campaigns + [c for c in co_gm_campaigns if c.id not in seen]
@@ -12526,10 +12543,43 @@ def home(request: Request, db: Session = Depends(get_db)):
         .all()
     ]
     member_campaigns = (
-        db.query(Campaign).filter(Campaign.id.in_(player_member_ids)).all() if player_member_ids else []
+        db.query(Campaign)
+        .filter(
+            Campaign.id.in_(player_member_ids),
+            Campaign.is_archived == False,  # noqa: E712
+        )
+        .all()
+        if player_member_ids else []
     )
+    # Archived campaigns the user can manage (owned or co-GM) — shown in
+    # the collapsed "Archived" lobby section with an Unarchive button.
+    archived_owned = (
+        db.query(Campaign)
+        .filter(
+            Campaign.gm_user_id == user.id,
+            Campaign.is_archived == True,  # noqa: E712
+        )
+        .all()
+    )
+    archived_co_gm = (
+        db.query(Campaign)
+        .filter(
+            Campaign.id.in_(co_gm_ids),
+            Campaign.is_archived == True,  # noqa: E712
+        )
+        .all()
+        if co_gm_ids else []
+    )
+    _seen_arch = {c.id for c in archived_owned}
+    archived_campaigns = archived_owned + [
+        c for c in archived_co_gm if c.id not in _seen_arch
+    ]
     if user.is_admin:
-        all_campaigns = db.query(Campaign).all()
+        all_campaigns = (
+            db.query(Campaign)
+            .filter(Campaign.is_archived == False)  # noqa: E712
+            .all()
+        )
     else:
         all_campaigns = []
     gm_names = {
@@ -12555,6 +12605,7 @@ def home(request: Request, db: Session = Depends(get_db)):
             "gm_campaigns": gm_campaigns,
             "member_campaigns": member_campaigns,
             "all_campaigns": all_campaigns,
+            "archived_campaigns": archived_campaigns,
             "gm_names": gm_names,
             "system_choices": system_choices(),
             "get_system": get_system,
@@ -118534,5 +118585,47 @@ def settings_delete_campaign(
     c.active_map_id = None
     db.commit()
     db.delete(c)
+    db.commit()
+    return RedirectResponse("/", status_code=303)
+
+
+@router.post("/campaign/{campaign_id}/archive")
+def archive_campaign(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.603.0 — soft-archive a campaign (GM-only). Drops it out of the
+    active lobby sections into the collapsed "Archived" section; keeps
+    all data; reversible via /unarchive. Distinct from delete (the
+    admin-only permanent cascade). See docs/plans/campaign-pc-archive.md.
+    """
+    c = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not c:
+        raise HTTPException(404, "campaign not found")
+    if not _user_is_gm(user, c, db):
+        raise HTTPException(403, "GM only")
+    c.is_archived = True
+    c.archived_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse("/", status_code=303)
+
+
+@router.post("/campaign/{campaign_id}/unarchive")
+def unarchive_campaign(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.603.0 — restore an archived campaign to the active lobby
+    (GM-only). Clears is_archived + archived_at.
+    """
+    c = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not c:
+        raise HTTPException(404, "campaign not found")
+    if not _user_is_gm(user, c, db):
+        raise HTTPException(403, "GM only")
+    c.is_archived = False
+    c.archived_at = None
     db.commit()
     return RedirectResponse("/", status_code=303)

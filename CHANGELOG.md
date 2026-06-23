@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.603.0] - 2026-06-23 — "The Quiet Shelf"
+
+**Schema version:** 78
+
+**Commit summary:** Campaigns can be archived — a reversible GM-only soft-state that hides a campaign from the active lobby while keeping all its data.
+
+**Description:** Phase 2 of the campaign-pc-archive arc. A GM who finishes (or pauses) a campaign can now **archive** it instead of deleting it: the campaign drops out of the active lobby sections into a collapsed "Archived" section, keeps every byte of its data, stays reachable by URL, and can be restored any time. This is **not** delete — delete remains the admin-only permanent cascade.
+
+**Schema:** `campaigns.is_archived` (BOOLEAN NOT NULL DEFAULT FALSE) + `archived_at` (TIMESTAMP NULL), added in a v78 migration block.
+
+**Implementation:**
+
+- `app/models.py` — `Campaign.is_archived` + `archived_at`.
+- `app/database.py` — v78 migration block (idempotent ALTER TABLE add-column).
+- `app/version.py` — `SCHEMA_VERSION` 77 → 78.
+- `app/routes/tabletop_routes.py`:
+  - `home()` (lobby `GET /`) — the owned / co-GM / member queries filter `is_archived == False`; a new `archived_campaigns` list (GM-owned + co-GM archived) feeds the lobby's Archived section.
+  - `POST /campaign/{id}/archive` + `POST /campaign/{id}/unarchive` — GM-only (`_user_is_gm`), set/clear `is_archived` + `archived_at`.
+- `app/templates/lobby.html` — collapsed `<details>` "Archived campaigns" section with an Unarchive control.
+- `app/templates/campaign_settings.html` — an "Archive / Unarchive" control in the always-GM-visible Basic-info tab (distinct from the admin-only Delete in the danger zone).
+
+**Harness:** `tests/harness/test_campaign_archive.py` (new, +3) — archive hides the campaign from the active lobby + surfaces it in the Archived section + unarchive restores it (round-trip on the demo campaign, restored in a `finally`); a non-GM member gets 403; an unknown campaign 404s.
+
+### Added
+- Campaign archive: GM-only reversible soft-archive (`/campaign/{id}/archive` + `/unarchive`), a collapsed "Archived" lobby section, and an archive control in campaign settings.
+
+### Schema
+- v78: `campaigns.is_archived` + `campaigns.archived_at`.
+
 ## [2.602.1] - 2026-06-23 — "The Filing Cabinet"
 
 **Schema version:** 77

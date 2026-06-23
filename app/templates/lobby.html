@@ -151,4 +151,34 @@
     </ul>
 </section>
 {% endif %}
+
+{% if archived_campaigns %}
+<section>
+    <details class="archived-campaigns">
+        <summary><h2 style="display:inline;">Archived campaigns ({{ archived_campaigns|length }})</h2></summary>
+        <p class="muted">Archived campaigns are hidden from your active lists but keep all their data. Unarchive to restore one to the lobby.</p>
+        <ul class="campaign-grid">
+            {% for c in archived_campaigns %}
+                {% set s = get_system(c.game_system) %}
+                <li class="campaign-card archived">
+                    <a href="/campaign/{{ c.id }}" class="thumb" {% if c.thumbnail_url %}style="background-image:url('{{ c.thumbnail_url }}')"{% endif %}>
+                        {% if not c.thumbnail_url %}<span>{{ c.name[:1]|upper }}</span>{% endif %}
+                    </a>
+                    <div class="body">
+                        <h3><a href="/campaign/{{ c.id }}">{{ c.name }}</a></h3>
+                        <div class="badge-row">
+                            <span class="badge idle">Archived</span>
+                            <span class="badge system">{{ s.label }}</span>
+                        </div>
+                        <div class="desc">{{ c.description or "—" }}</div>
+                        <form method="post" action="/campaign/{{ c.id }}/unarchive" style="margin-top:8px;">
+                            <button type="submit">♻ Unarchive</button>
+                        </form>
+                    </div>
+                </li>
+            {% endfor %}
+        </ul>
+    </details>
+</section>
+{% endif %}
 {% endblock %}

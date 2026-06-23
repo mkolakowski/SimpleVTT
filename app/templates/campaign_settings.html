@@ -258,6 +258,21 @@
         </fieldset>
         <div><button type="submit">Save basic info</button></div>
     </form>
+    <!-- ── Archive (GM lifecycle — reversible, not delete) ── -->
+    <fieldset style="margin-top:16px;">
+        <legend>📦 Archive</legend>
+        {% if campaign.is_archived %}
+        <p class="muted" style="margin:0 0 8px;">This campaign is <strong>archived</strong> — hidden from the active lobby but fully preserved. Restore it to the lobby below.</p>
+        <form method="post" action="/campaign/{{ campaign.id }}/unarchive">
+            <button type="submit">♻ Unarchive campaign</button>
+        </form>
+        {% else %}
+        <p class="muted" style="margin:0 0 8px;">Archiving hides this campaign from the active lobby into a collapsed "Archived" section. All data is kept and you can unarchive any time. This is <em>not</em> a delete.</p>
+        <form method="post" action="/campaign/{{ campaign.id }}/archive" onsubmit="return confirm('Archive campaign &quot;{{ campaign.name }}&quot;? It will be hidden from the active lobby but kept and reversible.')">
+            <button type="submit">📦 Archive campaign</button>
+        </form>
+        {% endif %}
+    </fieldset>
 </section>
 
 <!-- ── Members ── -->
