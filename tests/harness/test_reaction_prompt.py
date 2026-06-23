@@ -3167,6 +3167,119 @@ async def test_use_defensive_duelist_marks_reaction(
     assert fu[-1]["data"].get("pb_bonus") == 3
 
 
+async def test_defensive_duelist_auto_negates_in_band_hit(
+    gm_client, gm_ws, roster,
+):
+    """v2.601.0 — same retroactive-HP-restore recipe as v2.600.0
+    Shield, but +PB AC instead of +5. When the +3 AC (Lyra is Bard 6,
+    PB +3) turns a non-crit hit into a miss
+    (target_ac <= attack_total < target_ac + 3), using Defensive
+    Duelist via the prompt restores the full applied damage. Probes
+    Krieger swings until an in-band non-crit hit lands, healing Lyra
+    back to full between probes.
+    """
+    lyra = roster["Lyra Sunstrider"]
+    krieger = roster["Krieger Stonefist"]
+    await _set_auto_apply(gm_client, True)
+
+    lyra_cid = f"tok_dd_negate_{lyra['id']}"
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+        {
+            "id": lyra_cid,
+            "char_id": lyra["id"],
+            "name": lyra["name"],
+            "initiative": 10,
+            "hp_current": 40, "hp_max": 40,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    # Probe until a non-crit hit lands in the +PB negation band.
+    in_band = None
+    for _ in range(60):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": krieger["id"],
+                "attack_index": 0,
+                "target_combatant_id": lyra_cid,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        d = resp.json()
+        atk_total = d.get("attack_total")
+        target_ac = d.get("target_ac")
+        if (
+            d.get("hit")
+            and not d.get("is_crit")
+            and int(d.get("damage_applied") or 0) > 0
+            and isinstance(atk_total, int)
+            and isinstance(target_ac, int)
+            and atk_total < target_ac + 3
+        ):
+            in_band = d
+            break
+        # Heal Lyra back to full between probes so each swing starts
+        # from the same HP and we don't drop her to 0.
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{lyra['id']}/rest",
+            json={"type": "long"},
+        )
+    assert in_band is not None, (
+        "no in-band (negatable, non-crit) hit landed in 60 swings"
+    )
+    dmg = int(in_band["damage_applied"])
+
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == lyra["id"]
+        and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+    ]
+    assert prompts, "expected attack_targeted prompt for Lyra"
+    prompt_id = prompts[-1]["data"]["prompt_id"]
+
+    gm_ws.mark()
+    use = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "use-defensive-duelist",
+            "watcher_char_id": lyra["id"],
+        },
+    )
+    assert use.status_code == 200, use.text
+    await asyncio.sleep(0.2)
+
+    neg = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "defensive-duelist-negate"
+        and (m.get("data") or {}).get("character_id") == lyra["id"]
+    ]
+    assert neg, (
+        f"expected feature_used(source=defensive-duelist-negate); got "
+        f"{[(m.get('data') or {}).get('source') for m in gm_ws.buffered('feature_used')]}"
+    )
+    assert int(neg[-1]["data"].get("heal_back") or 0) == dmg
+
+    hp_up = [
+        m for m in gm_ws.buffered("character_hp_update")
+        if (m.get("data") or {}).get("character_id") == lyra["id"]
+        and (m.get("data") or {}).get("source") == "defensive-duelist-negate"
+    ]
+    assert hp_up, "expected character_hp_update(source=defensive-duelist-negate)"
+    assert int(hp_up[-1]["data"].get("delta") or 0) == dmg
+
+
 # ── v2.73.0 — Phase 6: NPC monster reactions ──
 
 

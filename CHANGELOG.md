@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.601.0] - 2026-06-23 — "The Finesse Parry"
+
+**Schema version:** 77
+
+**Commit summary:** Defensive Duelist now auto-negates the triggering hit, reusing the v2.600.0 Shield recipe with a +PB AC bump instead of +5.
+
+**Description:** Second slice of the reactions-automation **v3 auto-resolution** backlog, following the same-shape recipe established by v2.600.0 Shield. Defensive Duelist fires on the same `attack_targeted` trigger and bumps AC by the character's proficiency bonus instead of a flat +5, so the negation logic is identical aside from the bump value.
+
+**Behavior:** when `use-defensive-duelist` resolves and `target_ac <= attack_total < target_ac + pb` (the +PB AC turns the hit into a miss) **and the attack was not a natural-20 crit** **and** auto-applied damage landed, the watcher's full applied damage is restored via `_apply_hp_change`, with a `character_hp_update(source="defensive-duelist-negate")` + a `feature_used(source="defensive-duelist-negate")` card. If the attack still hits at AC+PB, or it was a crit, the damage stands (unchanged advisory path). The `is_crit` context plumbing landed in v2.600.0 and is reused here.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py` — `/use_reaction` `use-defensive-duelist` dispatch: after marking the reaction + broadcasting the feat card, read the triggering attack's `attack_total` / `target_ac` / `damage_applied` / `is_crit` from the prompt context and, when the +PB AC turns the non-crit hit into a miss, heal back the full applied damage + broadcast the negation.
+
+**Harness:** `tests/harness/test_reaction_prompt.py::test_defensive_duelist_auto_negates_in_band_hit` — probes Krieger swings until a non-crit hit lands in Lyra's +3 negation band (`target_ac <= total < target_ac + 3`), uses Defensive Duelist via `/use_reaction`, and asserts a `feature_used(source="defensive-duelist-negate")` with `heal_back == damage_applied` plus a `character_hp_update(source="defensive-duelist-negate")` restoring exactly the applied damage.
+
+### Added
+- Defensive Duelist auto-negation: using the feat via the reaction prompt now retroactively restores the triggering hit's damage when its +PB AC turns a non-crit hit into a miss.
+
 ## [2.600.0] - 2026-06-23 — "The Returned Blow"
 
 **Schema version:** 77

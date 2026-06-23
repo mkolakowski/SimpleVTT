@@ -31433,10 +31433,13 @@ async def use_reaction(
     elif reaction_key == "use-defensive-duelist" and watcher_char_id:
         # v2.74.0 Phase 4a — Defensive Duelist feat. Pure reaction
         # spend (no slot cost). Marks reaction + broadcasts
-        # feature_used naming the AC bonus formula. Retroactive AC
-        # negation of the triggering attack is filed for v3 alongside
-        # the v2.69.0 Shield work — chat-card surfaces whether the
-        # new AC would have made the d20 miss.
+        # feature_used naming the AC bonus formula.
+        # v2.601.0 — auto-negation: same retroactive-HP-restore recipe
+        # as v2.600.0 Shield, but the AC bump is +PB instead of +5. If
+        # the boosted AC turns the triggering hit into a non-crit miss
+        # (target_ac <= attack_total < target_ac + pb), the full applied
+        # damage is healed back; a crit (RAW: always hits) or an
+        # at-or-above-AC+PB hit leaves the damage standing (advisory).
         try:
             options = entry.get("options") or []
             matching = next(
@@ -31469,6 +31472,57 @@ async def use_reaction(
                     "pb_bonus": pb,
                 },
             })
+            # v2.601.0 — auto-negate the triggering attack when +PB AC
+            # turns the non-crit hit into a miss.
+            _ctx = entry.get("context") or {}
+            _atk_total = _ctx.get("attack_total")
+            _target_ac = _ctx.get("target_ac")
+            _dmg_applied = int(_ctx.get("damage_applied") or 0)
+            _was_crit = bool(_ctx.get("is_crit"))
+            if (
+                isinstance(_atk_total, int)
+                and isinstance(_target_ac, int)
+                and not _was_crit
+                and _dmg_applied > 0
+                and _atk_total < _target_ac + pb
+            ):
+                _sheet = dict(watcher_char.sheet or {})
+                _hp = dict(_sheet.get("hp") or {})
+                _cur = int(_hp.get("current") or 0)
+                _max = int(_hp.get("max") or 0)
+                _new_hp = (
+                    min(_max, _cur + _dmg_applied)
+                    if _max else _cur + _dmg_applied
+                )
+                _hp_res = _apply_hp_change(watcher_char, _new_hp)
+                db.commit()
+                await hub.broadcast(campaign_id, {
+                    "type": "character_hp_update",
+                    "data": {
+                        "character_id": watcher_char.id,
+                        "hp": _hp_res["hp"],
+                        "delta": _dmg_applied,
+                        "source": "defensive-duelist-negate",
+                    },
+                })
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "character_id": int(watcher_char_id),
+                        "character_name": watcher_char.name,
+                        "user_color": watcher_char.color,
+                        "feature_name": "🗡 Defensive Duelist negated the hit",
+                        "feature_desc": (
+                            f"d20 {_atk_total} now MISSES AC "
+                            f"{_target_ac + pb}; restored {_dmg_applied} HP."
+                        ),
+                        "source": "defensive-duelist-negate",
+                        "reaction_kind": "feat",
+                        "damage_applied": _dmg_applied,
+                        "heal_back": _dmg_applied,
+                        "attack_id": _ctx.get("attack_id"),
+                    },
+                })
         except HTTPException:
             raise
         except Exception:
