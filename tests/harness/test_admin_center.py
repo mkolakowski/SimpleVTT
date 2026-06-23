@@ -1354,6 +1354,40 @@ def test_users_page_renders_when_enabled():
 
 
 @_LIVE
+def test_users_page_shows_last_login():
+    """v2.606.0 — a successful login stamps users.last_login_at, and the
+    admin-center user table surfaces it (formatted YYYY-MM-DD HH:MM:SS;
+    'never' until the first login). Logs demo-alice into the MAIN app
+    (:8013) to stamp her, then reads the admin-center user table."""
+    import re as _re
+    # Stamp a login on the main app so demo-alice has a last_login_at.
+    with httpx.Client(
+        base_url="http://localhost:8013", timeout=8.0, follow_redirects=False,
+    ) as app:
+        r = app.post("/login", data={
+            "email": "demo-alice@example.com", "password": "demopass",
+        })
+        assert r.status_code in (302, 303), r.text[:200]
+    with httpx.Client(base_url=ADMIN_BASE_URL, timeout=8.0, follow_redirects=False) as c:
+        r = c.post("/login", data={"username": _ADMIN_USER, "password": _ADMIN_PASS, "next": "/users"})
+        _complete_mfa_if_pending(c, r)
+        page = c.get("/users", follow_redirects=False)
+        if page.status_code == 404:
+            pytest.skip("admin tools disabled on this stack")
+        assert page.status_code == 200, page.text[:200]
+        assert "Last login" in page.text  # the new column header
+        row = _re.search(
+            r"<td>\d+</td>\s*<td>demo-alice@example\.com</td>.*?</tr>",
+            page.text, _re.S,
+        )
+        assert row, "demo-alice row not found in the user table"
+        row_html = row.group(0)
+        assert ">never<" not in row_html, "alice has logged in — last login != 'never'"
+        assert _re.search(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", row_html), \
+            "expected a YYYY-MM-DD HH:MM:SS timestamp in alice's row"
+
+
+@_LIVE
 def test_users_create_rejects_duplicate_email():
     """Creating a user with an already-used email redirects back with an
     error banner (no duplicate row). Uses the seeded admin's own email,

@@ -938,6 +938,16 @@ def _apply_inline_migrations() -> None:
                 "ALTER TABLE characters ADD COLUMN archived_at TIMESTAMP"
             ))
 
+    # ---- Schema v80 (2.606.0): users.last_login_at ----
+    # Last successful login timestamp (NULL = never). Stamped in
+    # auth.login_user; surfaced in the Admin Center user table.
+    user_cols_v80 = _column_names("users")
+    with engine.begin() as conn:
+        if user_cols_v80 and "last_login_at" not in user_cols_v80:
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

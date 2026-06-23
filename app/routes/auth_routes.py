@@ -98,7 +98,7 @@ def login_submit(
     if settings.is_admin_email(user.email) and not user.is_admin:
         user.is_admin = True
         db.commit()
-    login_user(request, user)
+    login_user(request, user, db)
     audit("auth.login_ok", request=request, user_id=user.id)
     return RedirectResponse(_safe_next_path(next), status_code=303)
 
@@ -162,7 +162,7 @@ def register_submit(
     db.add(user)
     db.commit()
     db.refresh(user)
-    login_user(request, user)
+    login_user(request, user, db)
     return RedirectResponse("/", status_code=303)
 
 
@@ -204,5 +204,5 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
     user = get_or_create_google_user(db, settings, google_sub=sub, email=email, name=name)
     if user.is_disabled:
         return RedirectResponse("/login?error=disabled", status_code=303)
-    login_user(request, user)
+    login_user(request, user, db)
     return RedirectResponse("/", status_code=303)

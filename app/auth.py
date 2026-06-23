@@ -79,8 +79,19 @@ def get_or_create_google_user(
     return user
 
 
-def login_user(request: Request, user: User) -> None:
+def login_user(request: Request, user: User, db: Optional[Session] = None) -> None:
     request.session["user_id"] = user.id
+    # v2.606.0 — stamp the last successful login. Best-effort: when a db
+    # session is passed, record now() on the user and commit. All login
+    # paths (password, SSO, demo magic-link) pass it; a None db (legacy
+    # caller) just skips the stamp rather than failing the login.
+    if db is not None:
+        from datetime import datetime as _dt
+        try:
+            user.last_login_at = _dt.utcnow()
+            db.commit()
+        except Exception:
+            db.rollback()
 
 
 def logout_user(request: Request) -> None:

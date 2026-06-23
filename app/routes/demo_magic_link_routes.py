@@ -138,7 +138,7 @@ def demo_login(
             jti=result.jti,
         )
         raise HTTPException(status_code=401, detail="invalid_token")
-    login_user(request, user)
+    login_user(request, user, db)
     audit(
         "demo_magic_link.verify_ok",
         request=request,

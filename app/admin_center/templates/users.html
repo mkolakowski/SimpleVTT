@@ -80,7 +80,7 @@
     <h2>Users ({{ users|length }})</h2>
     <table>
       <thead>
-        <tr><th>ID</th><th>Email</th><th>Display name</th><th>Roles</th><th>Created</th>{% if mfa_verified %}<th>Actions</th>{% endif %}</tr>
+        <tr><th>ID</th><th>Email</th><th>Display name</th><th>Roles</th><th>Created</th><th>Last login</th>{% if mfa_verified %}<th>Actions</th>{% endif %}</tr>
       </thead>
       <tbody>
         {% for u in users %}
@@ -94,7 +94,8 @@
             {% if not u.is_admin and not u.is_gm %}<span class="pill player">player</span>{% endif %}
             {% if u.is_disabled %}<span class="pill off">disabled</span>{% endif %}
           </td>
-          <td class="muted">{{ u.created_at }}</td>
+          <td class="muted">{{ u.created_at.strftime('%Y-%m-%d %H:%M:%S') if u.created_at else '—' }}</td>
+          <td class="muted">{{ u.last_login_at.strftime('%Y-%m-%d %H:%M:%S') if u.last_login_at else 'never' }}</td>
           {% if mfa_verified %}
           <td>
             <details class="manage-menu">
@@ -156,7 +157,7 @@
           {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="{{ 6 if mfa_verified else 5 }}" class="muted">No users.</td></tr>
+        <tr><td colspan="{{ 7 if mfa_verified else 6 }}" class="muted">No users.</td></tr>
         {% endfor %}
       </tbody>
     </table>

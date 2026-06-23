@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.606.0] - 2026-06-23 — "The Last Seen"
+
+**Schema version:** 80
+
+**Commit summary:** Track each user's last login and surface it (with compact dates) in the Admin Center user table.
+
+**Description:** The Admin Center user table now shows **when each user last logged in**, alongside their creation date. A new `users.last_login_at` column is stamped on every successful login — across all paths (password, Google SSO, and the demo magic-link) — by centralizing the stamp in `auth.login_user`. The user table gains a **Last login** column ("never" until the first login), and both the **Created** and **Last login** timestamps are now rendered in a compact `YYYY-MM-DD HH:MM:SS` form instead of the raw datetime (microseconds + timezone trimmed).
+
+**Schema:** `users.last_login_at` (TIMESTAMP NULL), added in a v80 migration block.
+
+**Implementation:**
+
+- `app/models.py` — `User.last_login_at`.
+- `app/database.py` — v80 migration block (idempotent ALTER TABLE add-column); `app/version.py` `SCHEMA_VERSION` 79 → 80.
+- `app/auth.py` — `login_user(request, user, db=None)` now stamps `last_login_at = utcnow()` + commits when a db session is passed (best-effort; a None db skips it). All four call sites — password login, register, Google callback (`auth_routes.py`), and the demo magic-link (`demo_magic_link_routes.py`) — pass `db`.
+- `app/admin_center/templates/users.html` — new "Last login" column; both date cells formatted `%Y-%m-%d %H:%M:%S`; empty-state colspan bumped.
+
+**Harness:** `tests/harness/test_admin_center.py::test_users_page_shows_last_login` (+1) — logs demo-alice into the main app to stamp her `last_login_at`, then asserts the admin-center user table shows the "Last login" column and a real `YYYY-MM-DD HH:MM:SS` timestamp (not "never") in her row.
+
+### Added
+- `users.last_login_at` tracking + a "Last login" column in the Admin Center user table.
+
+### Changed
+- Admin Center user table: Created + Last login timestamps render in a compact `YYYY-MM-DD HH:MM:SS` form.
+
+### Schema
+- v80: `users.last_login_at`.
+
 ## [2.605.7] - 2026-06-23 — "The Big Red Button"
 
 **Schema version:** 79

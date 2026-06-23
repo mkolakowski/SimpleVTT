@@ -76,6 +76,10 @@ class User(Base):
     # docs/plans/app-wide-roles-and-storage.md.
     storage_limit_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    # v2.606.0 — last successful login (any path: password, SSO, demo
+    # magic-link). Stamped in auth.login_user. NULL = never logged in.
+    # Surfaced in the Admin Center user table.
+    last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     theme: Mapped[str] = mapped_column(String(20), default=_default_user_theme, server_default="dark")
     # Per-user fantasy font preference (None = system default sans-serif)
     font_preference: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
