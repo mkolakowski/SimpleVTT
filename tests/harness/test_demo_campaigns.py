@@ -4,6 +4,13 @@ Tracks the demo-rework arc: five leveled sample campaigns (levels 3/5/9/13/18),
 shared players, and a second GM (demo-gm2) who owns one campaign. This file
 grows as each campaign lands (phases D3–D6); for now it locks in the expanded
 user roster from phase D2. Live-only — skips when the app isn't reachable.
+
+v2.605.0 (campaign-pc-archive Phase 4): the original hand-built L5 ("Demo:
+The Sundered Vault", id=1) is now seeded **archived** — it drops out of the
+active lobby into the "Archived" section. The active Level-5 game is the
+remade "Demo L5: The Tide-Wracked Catacombs". So the active leveled lineup
+is L3 (Goblin Warrens) / L5 (Catacombs) / L9 (Saltmarsh) / L13 (Shadowfell
+Spire) / L18 (Apotheosis).
 """
 import httpx
 import pytest
@@ -104,29 +111,55 @@ async def test_dragons_apotheosis_present(email):
 @_LIVE
 async def test_shared_player_sees_multiple_campaigns():
     """D7 — carol is a shared player: a member of both the level-3 Goblin
-    Warrens and the level-5 Sundered Vault, so her lobby lists both."""
+    Warrens and the remade level-5 Tide-Wracked Catacombs, so her active
+    lobby lists both. The original Sundered Vault is archived and carol is
+    only a (non-GM) member of it, so it does NOT show in her lobby."""
     client = await login_client("demo-carol@example.com", "demopass")
     try:
         resp = await client.get("/")
         assert resp.status_code == 200
-        assert "Goblin Warrens" in resp.text and "Sundered Vault" in resp.text
+        assert "Goblin Warrens" in resp.text and "Catacombs" in resp.text
+        # The archived Vault (campaign id 1) is not shown to carol as a
+        # campaign card (she's only a non-GM member). Check for the card
+        # link rather than the name — the phrase "Sundered Vault" also
+        # appears inside the Catacombs campaign description.
+        assert 'href="/campaign/1"' not in resp.text
     finally:
         await client.aclose()
 
 
 @_LIVE
-async def test_all_five_campaigns_seeded():
-    """D6 — the full arc: an admin sees all five leveled campaigns by name.
-    (demo-gm is site-admin by default → the lobby's admin 'all campaigns'
-    list includes every campaign; skips if the GM isn't admin on this stack.)"""
+async def test_all_five_active_leveled_campaigns_seeded():
+    """D6 — the full arc: demo-gm (owner of 4 of the 5 active leveled
+    campaigns) sees them all by name. The archived original Sundered Vault
+    also shows for demo-gm (its GM/owner) in the lobby's Archived section."""
     client = await login_client("demo-gm@example.com", "demopass")
     try:
         resp = await client.get("/")
         assert resp.status_code == 200
         text = resp.text
-        # demo-gm owns 4 of the 5 (all but Saltmarsh); those 4 always show.
-        for name in ("Sundered Vault", "Goblin Warrens", "Shadowfell Spire", "Apotheosis"):
+        # demo-gm owns 4 of the 5 active leveled (all but Saltmarsh) + the
+        # archived Vault; all show (active sections + the Archived section).
+        for name in ("Catacombs", "Goblin Warrens", "Shadowfell Spire", "Apotheosis"):
             assert name in text, f"lobby missing {name!r}"
+        # The archived original still surfaces for its owner (Archived section).
+        assert "Sundered Vault" in text and "Archived campaigns" in text
+    finally:
+        await client.aclose()
+
+
+@_LIVE
+async def test_sundered_vault_seeded_archived():
+    """v2.605.0 (Phase 4) — the original demo (id=1) is archived: it shows
+    in demo-gm's (its owner's) Archived section with an Unarchive control,
+    not in the active sections. A plain member never sees it."""
+    client = await login_client("demo-gm@example.com", "demopass")
+    try:
+        resp = await client.get("/")
+        assert resp.status_code == 200
+        # Archived section + the unarchive affordance for campaign id 1.
+        assert "Archived campaigns" in resp.text
+        assert 'action="/campaign/1/unarchive"' in resp.text
     finally:
         await client.aclose()
 

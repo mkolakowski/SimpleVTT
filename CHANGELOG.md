@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.605.0] - 2026-06-23 — "The Drowned Lighthouse"
+
+**Schema version:** 79
+
+**Commit summary:** Demo reseed — the original "Sundered Vault" is now seeded archived, and a fresh "Demo L5: The Tide-Wracked Catacombs" takes its place in the active leveled lineup.
+
+**Description:** Phase 4 (final) of the campaign-pc-archive arc — it dogfoods the v2.603.0 archive feature in the demo seed:
+
+- **The original demo is archived.** "Demo: The Sundered Vault" (`seed_campaign`, campaign **id 1** — the harness `CAMPAIGN_ID` anchor that all 4,200+ tests hit) is now seeded with `is_archived=True`. It keeps id 1 (every fixture + the whole suite keep their anchor) and stays fully reachable by URL and via the API; it just drops out of the active lobby into the "Archived" section — a live in-product showcase of the archive feature.
+- **The Level 5 is remade.** A fresh `Demo L5: The Tide-Wracked Catacombs` joins `CAMPAIGN_SPECS` (`demo_campaigns.py`) between L3 and L9, so the **active** leveled lineup is now **L3 / L5 / L9 / L13 / L18**. It's a Tier-2 drowned-crypt undead crawl whose five PCs each show off a level-5 power-spike feature: Extra Attack (Champion Fighter + Berserker Barbarian), Fireball (Evocation Wizard), Spirit Guardians (Tempest Cleric), and Uncanny Dodge (Assassin Rogue). NPCs are SRD undead (Skeleton / Zombie / Ghoul / Wight). carol + alice are members (carol owns the Cleric, alice the Rogue), preserving the shared-player demo.
+
+No schema change (uses the v78 `campaigns.is_archived` column from v2.603.0).
+
+**Implementation:**
+
+- `app/demo_campaigns.py` — new `_TIDEWRACKED_CATACOMBS` spec, inserted into `CAMPAIGN_SPECS` at the L5 slot (existing leveled campaign ids are unaffected — the Vault stays id 1; the new L5 slots in after it).
+- `app/demo_seed.py` — `seed_campaign` marks the Sundered Vault `is_archived=True` + `archived_at`, with an updated description.
+- `docs/wiki/demo-content.md` — the L5 section now documents the Catacombs (party table) + the archived Sundered Vault; lineup note updated.
+
+**Harness:** `tests/harness/test_demo_campaigns.py` — D7 (`test_shared_player_sees_multiple_campaigns`) now asserts carol sees Goblin Warrens + Catacombs and *not* the archived Vault; D6 renamed to `test_all_five_active_leveled_campaigns_seeded` (active lineup + the Vault in demo-gm's Archived section); new `test_sundered_vault_seeded_archived` (the Vault renders in demo-gm's Archived section with an Unarchive control). `tests/harness/test_wiki.py::test_wiki_guide_serves_demo_content` adds the Catacombs to the catalogued-campaigns assertion.
+
+### Added
+- A fresh `Demo L5: The Tide-Wracked Catacombs` leveled demo campaign (Tier-2 undead crawl, five level-5-showcase PCs).
+
+### Changed
+- The original "Sundered Vault" demo (id 1) is seeded archived — it now showcases the archive feature in the lobby's Archived section while remaining the harness anchor.
+
 ## [2.604.0] - 2026-06-23 — "The Honored Retirement"
 
 **Schema version:** 79

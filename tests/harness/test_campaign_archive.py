@@ -4,24 +4,28 @@ Soft-archive endpoints + lobby filtering. Archived campaigns drop out of
 the active lobby sections into the collapsed "Archived" section and are
 reversible via /unarchive. GM-only; distinct from the admin-only delete.
 
-The happy-path test archives + unarchives the demo campaign (id=1) and
-restores it (unarchive) in a `finally` so the shared dev container is
-left clean. The signal used to tell "archived" from "active" is the
-presence of the `/campaign/{id}/unarchive` form, which only renders in
-the lobby's Archived section.
+The happy-path test drives a full round-trip on the demo campaign (id=1)
+from a known state. NOTE (v2.605.0): the demo campaign is now seeded
+ARCHIVED, so the `finally` restores it to archived (its seed default).
+The signal used to tell "archived" from "active" is the presence of the
+`/campaign/{id}/unarchive` form, which only renders in the lobby's
+Archived section.
 
 See docs/plans/campaign-pc-archive.md.
 """
 from .conftest import CAMPAIGN_ID
 
 
-async def test_archive_hides_from_active_lobby_and_unarchive_restores(gm_client):
+async def test_archive_unarchive_round_trip(gm_client):
     unarchive_marker = f'action="/campaign/{CAMPAIGN_ID}/unarchive"'
     try:
-        # Baseline: campaign is active — no unarchive form in the lobby.
+        # Force a known ACTIVE state (the demo seeds id=1 archived).
+        await gm_client.post(
+            f"/campaign/{CAMPAIGN_ID}/unarchive", follow_redirects=False,
+        )
         r = await gm_client.get("/", follow_redirects=False)
         assert r.status_code == 200, r.text
-        assert unarchive_marker not in r.text
+        assert unarchive_marker not in r.text  # active → no unarchive form
 
         # Archive → 303 redirect back to the lobby.
         r = await gm_client.post(
@@ -35,20 +39,18 @@ async def test_archive_hides_from_active_lobby_and_unarchive_restores(gm_client)
         assert "Archived campaigns" in r.text
         assert unarchive_marker in r.text
 
-        # Unarchive → 303.
+        # Unarchive → 303 → back to active.
         r = await gm_client.post(
             f"/campaign/{CAMPAIGN_ID}/unarchive", follow_redirects=False,
         )
         assert r.status_code in (302, 303), r.text
-
-        # Back to active — the unarchive form is gone again.
         r = await gm_client.get("/", follow_redirects=False)
         assert r.status_code == 200
         assert unarchive_marker not in r.text
     finally:
-        # Safety net: never leave the demo campaign archived for other tests.
+        # Restore the demo default (id=1 is seeded archived).
         await gm_client.post(
-            f"/campaign/{CAMPAIGN_ID}/unarchive", follow_redirects=False,
+            f"/campaign/{CAMPAIGN_ID}/archive", follow_redirects=False,
         )
 
 
@@ -58,11 +60,8 @@ async def test_archive_requires_gm(alice_client):
     r = await alice_client.post(
         f"/campaign/{CAMPAIGN_ID}/archive", follow_redirects=False,
     )
-    if r.status_code != 403:
-        # Defensive cleanup in case a regression let a non-GM archive it.
-        await alice_client.post(
-            f"/campaign/{CAMPAIGN_ID}/unarchive", follow_redirects=False,
-        )
+    # (No cleanup needed: a 403 means no state change, and the demo seeds
+    # id=1 archived anyway.)
     assert r.status_code == 403, r.text
 
 

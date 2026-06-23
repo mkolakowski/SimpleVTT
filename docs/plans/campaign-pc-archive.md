@@ -1,6 +1,6 @@
 # Campaign & PC Retirement / Archive — Design Plan
 
-**Status:** 🔥 IN PROGRESS — Phase 1 (this plan doc) shipping; Phases 2–4 queued.
+**Status:** ✅ SHIPPED end-to-end (v2.602.1–v2.605.0). Phase 1 (plan) v2.602.1 · Phase 2 (campaign archive, schema v78) v2.603.0 · Phase 3 (PC retirement, schema v79) v2.604.0 · Phase 4 (demo reseed — Sundered Vault archived + fresh Demo L5) v2.605.0.
 
 Campaigns end and characters retire. Today the only non-active state is
 **delete** (permanent, cascade). That's too sharp: a GM who finishes a

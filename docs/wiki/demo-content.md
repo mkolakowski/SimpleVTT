@@ -33,6 +33,10 @@ All accounts share the password **`demopass`**.
 
 ## The five campaigns
 
+The active leveled lineup is **L3 / L5 / L9 / L13 / L18**. The original
+hand-built L5 ("The Sundered Vault") is kept as an **archived** showcase
+(see the Level 5 section) — six campaigns seed in total, five active.
+
 ### Level 3 — The Goblin Warrens (Tier 1) · GM: demo-gm
 A goblin warband raids the trade road from a tunnel warren. *Art: ❌ map placeholder.*
 
@@ -46,17 +50,28 @@ A goblin warband raids the trade road from a tunnel warren. *Art: ❌ map placeh
 
 NPCs: Goblin, Wolf, Bandit, Bandit-Captain "warlord" (SRD). *Art: ❌ token placeholders.*
 
-### Level 5 — The Sundered Vault (Tier 2) · GM: demo-gm
-The flagship demo — a full one-of-every-class party walks into the **Tavern
-Brawl**. 15 PCs across all 12 classes (levels ~5–8). *Art: ✅ map `tavern.png`; ✅ some PC/NPC tokens (`rogue.jpg`, `wizard.jpg`, `cleric.jpg`, `bandit-*.jpg`, …).*
+### Level 5 — The Tide-Wracked Catacombs (Tier 2) · GM: demo-gm
+The remade Level-5 demo — a drowned crypt beneath a ruined lighthouse spills
+undead onto the coast at every high tide. Each PC shows off a feature their
+class gains at the level-5 power spike. *Art: ❌ map placeholder.*
 
-Headliners: **Pip Quickfingers** (Rogue/Thief — Uncanny Dodge), **Thalindra
-Moonwhisper** (Wizard/Evocation — Fireball), **Brother Tavik Stonebrow**
-(Cleric/Life — Spirit Guardians), **Sir Caelan Lightbringer** (Paladin —
-Extra Attack + Divine Smite), **Garrik Ironside** (Fighter — Extra Attack),
-plus Bard, Druid, Monk, Sorcerer, Barbarian, Ranger, Warlock and three
-subclass-specialist paladins/barbarians/monks. NPCs: Bandit Captain (Vex),
-bandits, Thug, Goblin Captain (homebrew), Cult Acolyte; drag-spawn dragons.
+| PC | Class / subclass · race | Owner | Level-5 showcase |
+|---|---|---|---|
+| Sir Gareth Tidebreaker | Fighter / Champion · Human | demo-gm | **Extra Attack** (two swings) + Improved Critical |
+| Maelis Stormcaller | Wizard / Evocation · High Elf | demo-gm | **3rd-level: Fireball** (8d6) + Sculpt Spells |
+| Mother Coralind | Cleric / Tempest · Half-Elf | carol | **3rd-level: Spirit Guardians** (15-ft radiant aura) |
+| Vesh Quillon | Rogue / Assassin · Wood Elf | alice | **Uncanny Dodge** (halve a hit) + Sneak Attack 3d6 |
+| Hrudd Saltmane | Barbarian / Berserker · Half-Orc | demo-gm | **Extra Attack** + Fast Movement + Frenzy |
+
+NPCs: Skeleton, Zombie, Ghoul, Wight "Captain of the Drowned" (SRD undead). *Art: ❌ token placeholders.*
+
+> **Archived original — The Sundered Vault.** The flagship hand-built demo (a
+> full one-of-every-class party of 15 PCs in the **Tavern Brawl** — Pip
+> Quickfingers, Thalindra Moonwhisper, Brother Tavik Stonebrow, Sir Caelan
+> Lightbringer, Garrik Ironside, …) is still seeded as campaign **id 1** (the
+> harness anchor) but is now **archived** (v2.605.0) — it lives in the lobby's
+> **Archived** section as a live showcase of the archive feature, fully
+> reachable by URL and via the API. *Art: ✅ map `tavern.png` + some PC/NPC tokens.*
 
 ### Level 9 — Storm Over Saltmarsh (Tier 2→3) · GM: demo-gm2 *(the second GM)*
 Sahuagin raiders boil up from a storm-wracked reef. *Art: ❌ map placeholder.*

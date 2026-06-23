@@ -170,8 +170,9 @@ async def test_wiki_guide_serves_demo_content():
     assert "text/html" in resp.headers.get("content-type", "")
     text = resp.text
     assert "Demo content" in text
-    # All five leveled campaigns are catalogued.
-    for name in ("Goblin Warrens", "Sundered Vault", "Saltmarsh", "Shadowfell Spire", "Apotheosis"):
+    # All five active leveled campaigns are catalogued, plus the archived
+    # original L5 (Sundered Vault, kept as the harness anchor + archive demo).
+    for name in ("Goblin Warrens", "Catacombs", "Sundered Vault", "Saltmarsh", "Shadowfell Spire", "Apotheosis"):
         assert name in text, f"demo-content guide missing {name!r}"
     # The collapsed generation-prompts section is present.
     assert "Generation prompts" in text and "<details>" in text

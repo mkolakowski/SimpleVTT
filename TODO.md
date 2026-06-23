@@ -1152,7 +1152,7 @@ Every design doc under [`docs/plans/`](docs/plans/) + the two repo-root planning
 
 ### 🔥 IN PROGRESS
 
-- [`campaign-pc-archive.md`](docs/plans/campaign-pc-archive.md) — campaign archive + PC retirement (reversible soft-state alongside delete) + demo reseed (archive the Sundered Vault, add a fresh `Demo L5`). Phase 1 (plan doc) shipped v2.602.1; Phases 2–4 (campaign archive / PC retirement / demo reseed) queued.
+- [`campaign-pc-archive.md`](docs/plans/campaign-pc-archive.md) — ✅ **shipped end-to-end** (v2.602.1–v2.605.0): plan doc → campaign archive (v2.603.0, schema v78) → PC retirement (v2.604.0, schema v79) → demo reseed (v2.605.0: Sundered Vault archived, fresh `Demo L5: The Tide-Wracked Catacombs` added). Reversible soft-state alongside delete, dogfooded in the demo.
 - [`reactions-automation.md`](docs/plans/reactions-automation.md) — v3 auto-resolution arc: AC-bump negations shipping one reaction at a time (Shield v2.600.0, Defensive Duelist v2.601.0, Form of the Beast Tail v2.602.0). Next same-recipe slice: Combat Inspiration; then NPC Parry / d20-reroll surfaces.
 - [`full-feature-automation.md`](docs/plans/full-feature-automation.md) — see the section above; Phase 8 is the next slice.
 

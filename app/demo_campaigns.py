@@ -637,8 +637,154 @@ _DRAGONS_APOTHEOSIS = {
 
 
 # Registry — appended to as each leveled campaign lands (D3–D6).
+# ── Level 5 — The Tide-Wracked Catacombs (Tier 2) — the remade L5 ─────
+# v2.605.0 — the fresh Level-5 demo. The original hand-built L5 ("Demo:
+# The Sundered Vault", app/demo_seed.py) is kept as the harness anchor
+# (id=1) but seeded **archived**, so this is the active L5 in the leveled
+# lineup (L3 / L5 / L9 / L13 / L18). Each PC shows off a feature their
+# class gains at level 5 (the Tier-2 power spike).
+_TIDEWRACKED_CATACOMBS = {
+    "name": "Demo L5: The Tide-Wracked Catacombs",
+    "level": 5,
+    "gm": "gm",
+    "gm_color": "#22d3ee",
+    "members": [("alice", "#6cb4ff"), ("carol", "#f59e0b")],
+    "desc": ("Tier-2 sample campaign (party level 5) — the power-spike tier. "
+             "A drowned crypt beneath a ruined lighthouse spills undead onto "
+             "the coast at every high tide. Each PC shows off a feature their "
+             "class gains at level 5 (Extra Attack, 3rd-level spells, Uncanny "
+             "Dodge). The remade Level-5 demo — the original 'Sundered Vault' "
+             "is kept as an archived example. Resets on a fixed interval."),
+    "map": {"name": "The Tide-Wracked Catacombs", "width": 1400, "height": 1000},
+    "party": [
+        {"owner": "gm", "name": "Sir Gareth Tidebreaker", "sheet": dict(
+            klass="Fighter", subclass="Champion", race="Human", level=5,
+            abilities={"STR": 18, "DEX": 13, "CON": 16, "INT": 9, "WIS": 12, "CHA": 11},
+            ac=18, hp_max=44,
+            attacks=[
+                {"name": "Longsword", "attack_bonus": "+7", "damage": "1d8+4",
+                 "damage_type": "slashing", "range": "5 ft",
+                 "desc": "Versatile (1d10); two swings (Extra Attack)"},
+                {"name": "Javelin (thrown)", "attack_bonus": "+7", "damage": "1d6+4",
+                 "damage_type": "piercing", "range": "30/120 ft"},
+            ],
+            notes=_notes(
+                "Storm-cloaked knight who holds the crypt stair against the tide.",
+                "Steady and dutiful; calls the line and never breaks it.",
+                "Level-5 showcase: Extra Attack — two longsword swings every "
+                "Attack action. Champion's Improved Critical crits on 19-20, "
+                "doubling that burst."),
+        )},
+        {"owner": "gm", "name": "Maelis Stormcaller", "sheet": dict(
+            klass="Wizard", subclass="School of Evocation", race="High Elf", level=5,
+            abilities={"STR": 8, "DEX": 14, "CON": 14, "INT": 18, "WIS": 12, "CHA": 10},
+            ac=12, hp_max=27,
+            attacks=[
+                {"name": "Fire Bolt", "attack_bonus": "+7", "damage": "2d10",
+                 "damage_type": "fire", "range": "120 ft",
+                 "desc": "Cantrip (scales to 2d10 at level 5)"},
+                {"name": "Dagger", "attack_bonus": "+5", "damage": "1d4+2",
+                 "damage_type": "piercing", "range": "20/60 ft", "desc": "Finesse"},
+            ],
+            spells=[
+                _spell("Fire Bolt", 0, "fire-bolt"),
+                _spell("Mage Hand", 0, "mage-hand"),
+                _spell("Magic Missile", 1, "magic-missile"),
+                _spell("Burning Hands", 1, "burning-hands"),
+                _spell("Scorching Ray", 2, "scorching-ray"),
+                _spell("Shatter", 2, "shatter"),
+                _spell("Fireball", 3, "fireball"),
+                _spell("Fly", 3, "fly"),
+            ],
+            spell_slots=_slots("wizard", **{"1": 4, "2": 3, "3": 2}),
+            notes=_notes(
+                "Tempest-touched elf whose first Fireball is the campaign's "
+                "fireworks moment.",
+                "Theatrical; narrates the blast radius like a stage cue.",
+                "Level-5 showcase: 3rd-level slots — Fireball (8d6, 20-ft "
+                "radius). Sculpt Spells carves allies out of the blast so he "
+                "can drop it into melee."),
+        )},
+        {"owner": "carol", "name": "Mother Coralind", "sheet": dict(
+            klass="Cleric", subclass="Tempest Domain", race="Half-Elf", level=5,
+            abilities={"STR": 12, "DEX": 10, "CON": 14, "INT": 11, "WIS": 17, "CHA": 13},
+            ac=18, hp_max=38,
+            attacks=[
+                {"name": "Warhammer", "attack_bonus": "+4", "damage": "1d8+1",
+                 "damage_type": "bludgeoning", "range": "5 ft", "desc": "Versatile (1d10)"},
+            ],
+            spells=[
+                _spell("Sacred Flame", 0, "sacred-flame"),
+                _spell("Guidance", 0, "guidance"),
+                _spell("Cure Wounds", 1, "cure-wounds"),
+                _spell("Guiding Bolt", 1, "guiding-bolt"),
+                _spell("Spiritual Weapon", 2, "spiritual-weapon"),
+                _spell("Hold Person", 2, "hold-person"),
+                _spell("Spirit Guardians", 3, "spirit-guardians"),
+                _spell("Revivify", 3, "revivify"),
+            ],
+            spell_slots=_slots("cleric", **{"1": 4, "2": 3, "3": 2}),
+            notes=_notes(
+                "Storm-priestess of the drowned coast who walks in a ring of "
+                "spectral wrath.",
+                "Grave and tidal; speaks in the cadence of breaking waves.",
+                "Level-5 showcase: Spirit Guardians — a 15-ft aura of radiant "
+                "wrath (3d8, half on save) that shreds the undead swarm as she "
+                "advances."),
+        )},
+        {"owner": "alice", "name": "Vesh Quillon", "sheet": dict(
+            klass="Rogue", subclass="Assassin", race="Wood Elf", level=5,
+            abilities={"STR": 10, "DEX": 18, "CON": 14, "INT": 12, "WIS": 13, "CHA": 10},
+            ac=16, hp_max=33,
+            attacks=[
+                {"name": "Rapier", "attack_bonus": "+7", "damage": "1d8+4",
+                 "damage_type": "piercing", "range": "5 ft", "desc": "Finesse; Sneak Attack 3d6"},
+                {"name": "Hand Crossbow", "attack_bonus": "+7", "damage": "1d6+4",
+                 "damage_type": "piercing", "range": "30/120 ft"},
+            ],
+            notes=_notes(
+                "Marsh-born cutthroat who opens from the dark and survives the reply.",
+                "Laconic; counts the exits before the threats.",
+                "Level-5 showcase: Uncanny Dodge — a reaction to halve a big "
+                "hit (try the v2.600.0 reaction prompt). Sneak Attack is now 3d6."),
+        )},
+        {"owner": "gm", "name": "Hrudd Saltmane", "sheet": dict(
+            klass="Barbarian", subclass="Path of the Berserker", race="Half-Orc", level=5,
+            abilities={"STR": 18, "DEX": 14, "CON": 16, "INT": 8, "WIS": 10, "CHA": 10},
+            ac=15, hp_max=52,
+            attacks=[
+                {"name": "Greataxe", "attack_bonus": "+7", "damage": "1d12+4",
+                 "damage_type": "slashing", "range": "5 ft",
+                 "desc": "Two swings (Extra Attack); +2 rage damage while raging"},
+                {"name": "Handaxe (thrown)", "attack_bonus": "+7", "damage": "1d6+4",
+                 "damage_type": "slashing", "range": "20/60 ft"},
+            ],
+            notes=_notes(
+                "Half-orc reaver who wades the flooded halls swinging for two.",
+                "Loud, fearless, treats the rising tide as a personal insult.",
+                "Level-5 showcase: Extra Attack + Fast Movement (40 ft). "
+                "Frenzy gives a bonus-action greataxe swing while raging — "
+                "three hits a turn into the undead line."),
+        )},
+    ],
+    "npcs": [
+        ("skeleton", "Skeleton"),
+        ("zombie", "Zombie"),
+        ("ghoul", "Ghoul"),
+        ("wight", "Wight"),
+    ],
+    "npc_tokens": [
+        ("skeleton", "Brine Skeleton", "#9ca3af"),
+        ("zombie", "Drowned Zombie", "#6b7a5a"),
+        ("ghoul", "Tide Ghoul", "#7c8a8a"),
+        ("wight", "Captain of the Drowned (Wight)", "#3f6f6f"),
+    ],
+}
+
+
 CAMPAIGN_SPECS = [
     _GOBLIN_WARRENS,
+    _TIDEWRACKED_CATACOMBS,
     _STORM_SALTMARSH,
     _SHADOWFELL_SPIRE,
     _DRAGONS_APOTHEOSIS,

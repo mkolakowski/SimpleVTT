@@ -369,17 +369,27 @@ def seed_campaign(db: Session, users: dict[str, User]) -> Campaign:
     camp = Campaign(
         name=DEMO_CAMPAIGN_NAME,
         description=(
-            "Tier-2 demo campaign (party level ~5–8) — the flagship of the "
-            "demo's five leveled sample campaigns (levels 3 / 5 / 9 / 13 / 18; "
-            "see the wiki's Demo content guide). A full one-of-every-class "
-            "party walks into the Tavern Brawl. Resets on a fixed interval — "
-            "anything you change here will be wiped soon."
+            "The original hand-built demo campaign (party level ~5–8) — a "
+            "full one-of-every-class party in the Tavern Brawl. v2.605.0: "
+            "kept as the harness anchor (id 1) but seeded ARCHIVED — it now "
+            "lives in the lobby's 'Archived' section as a showcase of the "
+            "archive feature, while the fresh 'Demo L5: The Tide-Wracked "
+            "Catacombs' is the active Level-5 game in the leveled lineup "
+            "(L3 / L5 / L9 / L13 / L18; see the wiki's Demo content guide). "
+            "Resets on a fixed interval — anything you change here is wiped soon."
         ),
         gm_user_id=users["gm"].id,
         game_system="dnd5e",
         gm_color="#a78bfa",
         session_active=True,
         session_started_at=datetime.utcnow(),
+        # v2.605.0 — seed the original demo as archived (campaign-pc-archive
+        # Phase 4). It stays id=1 (the harness CAMPAIGN_ID anchor) and is
+        # fully reachable by URL + via the API; it just drops out of the
+        # active lobby into the "Archived" section. See
+        # docs/plans/campaign-pc-archive.md.
+        is_archived=True,
+        archived_at=datetime.utcnow(),
         # v2.49.209: enable auto-apply-damage on the demo campaign. The
         # Campaign model defaults this to False (per the v2.21.0
         # rationale: "existing tables aren't surprised by unexpected
