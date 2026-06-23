@@ -103,7 +103,13 @@ def test_right_click_drag_pans_canvas(gm_page: Page) -> None:
     map_pane_box = gm_page.locator(".map-pane").bounding_box()
     assert map_pane_box is not None, "Map pane has no bounding box"
 
-    initial_transform = canvas.evaluate("el => el.style.transform")
+    # v2.583.0: read the transform off ``#map-transform`` — the wrapper
+    # the pan/zoom matrix has been applied to since the v2.88.0 single-
+    # wrapper refactor. ``#vtt-canvas``'s own ``style.transform`` has
+    # been empty since then, so this assertion read a dead element and
+    # silently failed regardless of whether pan worked. Reading the
+    # wrapper restores the intended right-click-pan regression coverage.
+    initial_transform = gm_page.eval_on_selector("#map-transform", "el => el.style.transform")
     initial_x, initial_y = _parse_translate(initial_transform)
 
     # Right-click drag from map-pane center to +120, +80.
@@ -124,7 +130,7 @@ def test_right_click_drag_pans_canvas(gm_page: Page) -> None:
     # Allow the mousemove → applyTransform() → style write to settle.
     gm_page.wait_for_timeout(150)
 
-    final_transform = canvas.evaluate("el => el.style.transform")
+    final_transform = gm_page.eval_on_selector("#map-transform", "el => el.style.transform")
     final_x, final_y = _parse_translate(final_transform)
 
     dx = final_x - initial_x

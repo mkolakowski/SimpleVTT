@@ -3403,6 +3403,22 @@
                 return;
             }
         }
+        // v2.583.0: left-drag on empty map area pans the map. The loop
+        // above returns early when the click lands on a movable token
+        // (token drag), so falling through here means empty space —
+        // start a pan. This is the reliable cross-device pan gesture:
+        // right-button drag (the ``ev.button === 2`` path above) is
+        // intercepted by the native context menu on macOS Safari and on
+        // some trackpads, which swallows the follow-up mousemove/mouseup
+        // and leaves the map "stuck" (zoom still works because the wheel
+        // listener is a separate path). Left-drag works everywhere and
+        // doesn't depend on the fragile right-click/contextmenu coupling.
+        // Only the left button starts a pan here; other buttons fall
+        // through untouched.
+        if (ev.button === 0) {
+            panning = { startX: ev.clientX - panX, startY: ev.clientY - panY };
+            canvas.style.cursor = 'move';
+        }
     });
 
     // Encounter spawn-points helpers used by the encounter panel
@@ -3544,11 +3560,16 @@
     });
 
     canvas.addEventListener('mouseup', (ev) => {
-        if (ev.button === 2) {
+        // v2.583.0: clear an active pan regardless of which button
+        // started it (left-drag-on-empty or right-drag). Must come
+        // before the token-drop logic so a pan release never falls into
+        // the drag-commit path.
+        if (panning) {
             panning = null;
             canvas.style.cursor = 'grab';
             return;
         }
+        if (ev.button === 2) return;
         if (!dragging) return;
         const [sx, sy] = snapToGrid(dragging.token.x, dragging.token.y);
         dragging.token.x = sx;

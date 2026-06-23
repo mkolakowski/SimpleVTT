@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.583.0] - 2026-06-22 — "The Unstuck Map"
+
+**Schema version:** 75
+
+**Commit summary:** Fix "the map can't be moved" — add **left-drag-on-empty-canvas** panning to the tabletop, the reliable cross-device pan gesture.
+
+**Description:** Reported bug: the battle map could no longer be panned (zoom still worked). Root cause is structural, not a regression — panning was bound **only** to right-button drag (`tabletop.js` `mousedown`, `ev.button === 2`), and the native context menu on macOS Safari (and some trackpads) intercepts the right-button press, swallowing the follow-up `mousemove`/`mouseup` that drive the pan. Zoom kept working because it's a separate wheel listener on `#map-pane`. Right-button drag is also impossible on a trackpad. The fix adds the standard VTT gesture used by Roll20/Foundry: **left-drag on empty map area pans the map**. It only triggers when the click misses every movable token (the token-drag path returns first), so it never conflicts with token dragging, and it doesn't depend on the fragile right-click/contextmenu coupling. Right-button pan is kept as-is for anyone already using it. Pure client-side change — no endpoint, schema, or broadcast-shape change.
+
+**Implementation:**
+
+- `app/static/tabletop.js`: canvas `mousedown` now starts a pan when a left-button (`ev.button === 0`) press falls through the token hit-test (empty space); canvas `mouseup` clears an active pan regardless of which button started it, before the token-drop logic. `mousemove`'s existing `if (panning)` branch already handles the drag.
+
+**Harness changes:**
+
+- `tests/harness_ui/test_map_pan.py` (+2): a left-drag over empty map area changes the `#map-transform` translate (happy path), and the wheel still zooms (guard against regressing the path that kept working).
+
+Total harness count → 4132 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+MINOR — new tabletop interaction (additive; right-drag pan unchanged).
+
+### Fixed
+- Tabletop map could not be panned on macOS Safari / trackpads because pan was right-button-only and the OS context menu ate the drag. **Left-drag on empty map area now pans** (`app/static/tabletop.js`), the standard cross-device VTT gesture; right-button pan is retained.
+
 ## [2.582.0] - 2026-06-22 — "The Shared Darkroom"
 
 **Schema version:** 75
