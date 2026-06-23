@@ -833,13 +833,15 @@ def admin_campaigns(request: Request, done: str = "", err: str = ""):
 
 
 @app.get("/campaigns/{campaign_id}", response_class=HTMLResponse)
-def admin_campaign_detail(request: Request, campaign_id: int):
-    """Read-only campaign detail. The delete control renders only on an
+def admin_campaign_detail(request: Request, campaign_id: int, done: str = "", err: str = ""):
+    """Campaign detail. Read-only sections always render; the management
+    controls (members / system / characters / delete) render only on an
     MFA-verified session."""
     if not _ADMIN_TOOLS_ENABLED:
         return _TOOLS_DISABLED
     from . import campaign_admin
     from ..database import SessionLocal
+    from ..game_systems import system_choices
     db = SessionLocal()
     try:
         try:
@@ -857,8 +859,13 @@ def admin_campaign_detail(request: Request, campaign_id: int):
                 "members": detail["members"],
                 "characters": detail["characters"],
                 "maps": detail["maps"],
+                "non_members": detail["non_members"],
+                "all_users": detail["all_users"],
+                "system_choices": system_choices(),
                 "mfa_verified": _mfa_verified(request),
                 "mfa_enabled": mfa.mfa_enabled(),
+                "done": done,
+                "err": err,
             },
         )
     finally:
@@ -886,5 +893,163 @@ def admin_campaign_delete(request: Request, campaign_id: int):
         )
         log.warning("admin-center operator %r deleted campaign %s (id=%s)", operator, name, campaign_id)
         return RedirectResponse(f"/campaigns?done={quote('deleted ' + name)}", status_code=303)
+    finally:
+        db.close()
+
+
+# ── Campaign management mutations (Phase 3b — all MFA-gated) ──────────────────
+# Member add/remove, system change, character create/assign/delete. The
+# upload-bearing surfaces (maps, thumbnails) are intentionally NOT here —
+# the Center has no /static mount, so the upload target needs design (filed
+# as the remainder of Phase 3b). Every mutation runs through
+# _destructive_gate (admin-tools + MFA) and is audited; on success it
+# redirects back to the campaign detail page.
+
+def _campaign_redirect(campaign_id: int, *, done: str = "", err: str = "") -> RedirectResponse:
+    q = f"?done={quote(done)}" if done else (f"?err={quote(err)}" if err else "")
+    return RedirectResponse(f"/campaigns/{campaign_id}{q}", status_code=303)
+
+
+@app.post("/campaigns/{campaign_id}/members/add")
+def admin_campaign_member_add(request: Request, campaign_id: int, user_id: int = Form(...)):
+    blocked = _destructive_gate(request)
+    if blocked is not None:
+        return blocked
+    from . import campaign_admin, operator_audit
+    from ..database import SessionLocal
+    operator = request.session.get("admin_user", "?")
+    db = SessionLocal()
+    try:
+        try:
+            u = campaign_admin.add_member(db, campaign_id, user_id=user_id)
+        except campaign_admin.CampaignAdminError as exc:
+            return _campaign_redirect(campaign_id, err=str(exc))
+        operator_audit.record(
+            "admin.campaign_member_add", operator=operator, target=u.email,
+            request=request, notes=f"campaign:{campaign_id}",
+        )
+        return _campaign_redirect(campaign_id, done=f"added {u.email}")
+    finally:
+        db.close()
+
+
+@app.post("/campaigns/{campaign_id}/members/remove")
+def admin_campaign_member_remove(request: Request, campaign_id: int, user_id: int = Form(...)):
+    blocked = _destructive_gate(request)
+    if blocked is not None:
+        return blocked
+    from . import campaign_admin, operator_audit
+    from ..database import SessionLocal
+    operator = request.session.get("admin_user", "?")
+    db = SessionLocal()
+    try:
+        target = campaign_admin.remove_member(db, campaign_id, user_id=user_id)
+        operator_audit.record(
+            "admin.campaign_member_remove", operator=operator, target=target,
+            request=request, notes=f"campaign:{campaign_id}",
+        )
+        return _campaign_redirect(campaign_id, done=f"removed {target}")
+    finally:
+        db.close()
+
+
+@app.post("/campaigns/{campaign_id}/system")
+def admin_campaign_system(request: Request, campaign_id: int, game_system: str = Form(...)):
+    blocked = _destructive_gate(request)
+    if blocked is not None:
+        return blocked
+    from . import campaign_admin, operator_audit
+    from ..database import SessionLocal
+    operator = request.session.get("admin_user", "?")
+    db = SessionLocal()
+    try:
+        try:
+            key = campaign_admin.set_system(db, campaign_id, game_system=game_system)
+        except campaign_admin.CampaignAdminError as exc:
+            return _campaign_redirect(campaign_id, err=str(exc))
+        operator_audit.record(
+            "admin.campaign_system", operator=operator, target=key,
+            request=request, notes=f"campaign:{campaign_id}",
+        )
+        return _campaign_redirect(campaign_id, done=f"system set to {key}")
+    finally:
+        db.close()
+
+
+@app.post("/campaigns/{campaign_id}/characters/create")
+def admin_campaign_character_create(
+    request: Request, campaign_id: int,
+    name: str = Form(...), owner_user_id: "int | None" = Form(None),
+):
+    blocked = _destructive_gate(request)
+    if blocked is not None:
+        return blocked
+    from . import campaign_admin, operator_audit
+    from ..database import SessionLocal
+    operator = request.session.get("admin_user", "?")
+    db = SessionLocal()
+    try:
+        try:
+            char = campaign_admin.create_character(
+                db, campaign_id, name=name, owner_user_id=owner_user_id,
+            )
+        except campaign_admin.CampaignAdminError as exc:
+            return _campaign_redirect(campaign_id, err=str(exc))
+        operator_audit.record(
+            "admin.campaign_character_create", operator=operator, target=char.name,
+            request=request, notes=f"campaign:{campaign_id}",
+        )
+        return _campaign_redirect(campaign_id, done=f"created character {char.name}")
+    finally:
+        db.close()
+
+
+@app.post("/campaigns/{campaign_id}/characters/{char_id}/assign")
+def admin_campaign_character_assign(
+    request: Request, campaign_id: int, char_id: int,
+    owner_user_id: "int | None" = Form(None),
+):
+    blocked = _destructive_gate(request)
+    if blocked is not None:
+        return blocked
+    from . import campaign_admin, operator_audit
+    from ..database import SessionLocal
+    operator = request.session.get("admin_user", "?")
+    db = SessionLocal()
+    try:
+        try:
+            char = campaign_admin.assign_character(
+                db, campaign_id, char_id, owner_user_id=owner_user_id,
+            )
+        except campaign_admin.CampaignAdminError as exc:
+            return _campaign_redirect(campaign_id, err=str(exc))
+        operator_audit.record(
+            "admin.campaign_character_assign", operator=operator, target=char.name,
+            request=request, notes=f"campaign:{campaign_id} owner={char.owner_user_id}",
+        )
+        return _campaign_redirect(campaign_id, done=f"reassigned {char.name}")
+    finally:
+        db.close()
+
+
+@app.post("/campaigns/{campaign_id}/characters/{char_id}/delete")
+def admin_campaign_character_delete(request: Request, campaign_id: int, char_id: int):
+    blocked = _destructive_gate(request)
+    if blocked is not None:
+        return blocked
+    from . import campaign_admin, operator_audit
+    from ..database import SessionLocal
+    operator = request.session.get("admin_user", "?")
+    db = SessionLocal()
+    try:
+        try:
+            name = campaign_admin.delete_character(db, campaign_id, char_id)
+        except campaign_admin.CampaignAdminError as exc:
+            return _campaign_redirect(campaign_id, err=str(exc))
+        operator_audit.record(
+            "admin.campaign_character_delete", operator=operator, target=name,
+            request=request, notes=f"campaign:{campaign_id}",
+        )
+        return _campaign_redirect(campaign_id, done=f"deleted character {name}")
     finally:
         db.close()

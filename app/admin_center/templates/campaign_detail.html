@@ -26,6 +26,14 @@
   button.danger { background:#7a2e2e; border-color:#7a2e2e; }
   dl { display:grid; grid-template-columns:max-content 1fr; gap:4px 16px; font-size:14px; margin:0; }
   dt { color:#8b93b0; }
+  .banner.ok { background:#1e3a24; color:#b6f0c2; }
+  .banner.err { background:#3a1e1e; color:#ffb3b3; }
+  select, input[type=text] { font-size:13px; padding:6px 8px; border-radius:6px; border:1px solid #3a4470; background:#1a2036; color:#e6e9f0; }
+  /* Dense operator-console row controls: 32px min target (same compact
+     exception the Admin Center's other tables use). */
+  .row-actions { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .row-actions button, .row-actions select, .row-actions input { min-height:32px; padding:5px 8px; font-size:12px; }
+  .inline-form { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:8px; }
 </style>
 </head>
 <body>
@@ -35,6 +43,9 @@
   <span class="muted" style="margin-left:auto">SimpleVTT {{ app_version }}{% if admin_user %} · {{ admin_user }}{% endif %}</span>
 </header>
 <main>
+  {% if err %}<div class="banner err">⚠️ {{ err }}</div>{% endif %}
+  {% if done %}<div class="banner ok">✅ {{ done }}</div>{% endif %}
+
   <div class="card">
     <h2>Overview</h2>
     <dl>
@@ -44,34 +55,94 @@
       <dt>Active map</dt><dd>{{ campaign.active_map_id or "—" }}</dd>
     </dl>
     {% if campaign.description %}<p class="muted" style="margin-top:10px">{{ campaign.description }}</p>{% endif %}
+    {% if mfa_verified %}
+    <form class="inline-form" method="post" action="/campaigns/{{ campaign.id }}/system">
+      <label class="muted">Change system</label>
+      <select name="game_system">
+        {% for s in system_choices %}<option value="{{ s.key }}" {{ "selected" if s.key == campaign.game_system else "" }}>{{ s.label }}</option>{% endfor %}
+      </select>
+      <button type="submit">Set</button>
+    </form>
+    {% endif %}
   </div>
 
   <div class="card">
     <h2>Members ({{ members|length }})</h2>
     <table>
-      <thead><tr><th>Email</th><th>Display name</th><th>Role</th></tr></thead>
+      <thead><tr><th>Email</th><th>Display name</th><th>Role</th>{% if mfa_verified %}<th>Actions</th>{% endif %}</tr></thead>
       <tbody>
         {% for m in members %}
-        <tr><td>{{ m.email }}</td><td>{{ m.display_name }}</td><td>{% if m.is_gm %}<span class="pill">GM</span>{% else %}player{% endif %}</td></tr>
+        <tr>
+          <td>{{ m.email }}</td><td>{{ m.display_name }}</td>
+          <td>{% if m.is_gm %}<span class="pill">GM</span>{% else %}player{% endif %}</td>
+          {% if mfa_verified %}
+          <td>
+            <form method="post" action="/campaigns/{{ campaign.id }}/members/remove"
+                  onsubmit="return confirm('Remove {{ m.email }} from this campaign?');">
+              <input type="hidden" name="user_id" value="{{ m.user_id }}">
+              <button type="submit" class="danger" style="min-height:32px;padding:5px 8px;font-size:12px">Remove</button>
+            </form>
+          </td>
+          {% endif %}
+        </tr>
         {% else %}
-        <tr><td colspan="3" class="muted">No members.</td></tr>
+        <tr><td colspan="{{ 4 if mfa_verified else 3 }}" class="muted">No members.</td></tr>
         {% endfor %}
       </tbody>
     </table>
+    {% if mfa_verified %}
+    <form class="inline-form" method="post" action="/campaigns/{{ campaign.id }}/members/add">
+      <label class="muted">Add member</label>
+      <select name="user_id" required>
+        {% for u in non_members %}<option value="{{ u.id }}">{{ u.email }}</option>{% endfor %}
+      </select>
+      <button type="submit">Add</button>
+    </form>
+    {% endif %}
   </div>
 
   <div class="card">
     <h2>Characters ({{ characters|length }})</h2>
     <table>
-      <thead><tr><th>ID</th><th>Name</th><th>Template</th><th>Owner</th></tr></thead>
+      <thead><tr><th>ID</th><th>Name</th><th>Template</th><th>Owner</th>{% if mfa_verified %}<th>Actions</th>{% endif %}</tr></thead>
       <tbody>
         {% for ch in characters %}
-        <tr><td>{{ ch.id }}</td><td>{{ ch.name }}</td><td class="muted">{{ ch.template }}</td><td class="muted">{{ ch.owner_user_id or "—" }}</td></tr>
+        <tr>
+          <td>{{ ch.id }}</td><td>{{ ch.name }}</td><td class="muted">{{ ch.template }}</td><td class="muted">{{ ch.owner_user_id or "—" }}</td>
+          {% if mfa_verified %}
+          <td>
+            <div class="row-actions">
+              <form method="post" action="/campaigns/{{ campaign.id }}/characters/{{ ch.id }}/assign">
+                <select name="owner_user_id">
+                  <option value="">— unassigned —</option>
+                  {% for u in all_users %}<option value="{{ u.id }}" {{ "selected" if u.id == ch.owner_user_id else "" }}>{{ u.email }}</option>{% endfor %}
+                </select>
+                <button type="submit">Assign</button>
+              </form>
+              <form method="post" action="/campaigns/{{ campaign.id }}/characters/{{ ch.id }}/delete"
+                    onsubmit="return confirm('Delete character {{ ch.name }}?');">
+                <button type="submit" class="danger">Delete</button>
+              </form>
+            </div>
+          </td>
+          {% endif %}
+        </tr>
         {% else %}
-        <tr><td colspan="4" class="muted">No characters.</td></tr>
+        <tr><td colspan="{{ 5 if mfa_verified else 4 }}" class="muted">No characters.</td></tr>
         {% endfor %}
       </tbody>
     </table>
+    {% if mfa_verified %}
+    <form class="inline-form" method="post" action="/campaigns/{{ campaign.id }}/characters/create">
+      <label class="muted">New character</label>
+      <input type="text" name="name" placeholder="name" required>
+      <select name="owner_user_id">
+        <option value="">— unassigned —</option>
+        {% for u in all_users %}<option value="{{ u.id }}">{{ u.email }}</option>{% endfor %}
+      </select>
+      <button type="submit">Create</button>
+    </form>
+    {% endif %}
   </div>
 
   <div class="card">

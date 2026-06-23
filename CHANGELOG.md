@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.577.0] - 2026-06-22 — "The Table Manager"
+
+**Schema version:** 75
+
+**Commit summary:** Phase 3b (no-upload subset) of `docs/plans/admin-center-consolidation.md` — campaign member / system / character management in the Admin Center, MFA-gated.
+
+**Description:** Extends the Center's `/campaigns/{id}` detail page with the non-upload campaign-management mutations, all behind the shared MFA gate (`_destructive_gate`): **member add / remove**, **system change**, and **character create / assign-owner / delete**. The management controls render only on an MFA-verified session (the read-only sections always render); each mutation is audited to the operator identity (`admin.campaign_member_add` / `_member_remove` / `_system` / `_character_create` / `_character_assign` / `_character_delete`, `actor=admin-center:<operator>`). The map / thumbnail **upload** paths are deliberately *not* included — the Center has no `/static` mount, so the upload target needs design (the remainder of Phase 3b, filed). The in-app `/admin/campaign/{id}` routes stay live for now (Phase 4 retires them).
+
+**Implementation:**
+
+- `app/admin_center/campaign_admin.py`: `add_member` / `remove_member` (idempotent) / `set_system` (normalized via `get_system`) / `create_character` (forced to the campaign's locked system template) / `assign_character` / `delete_character`; `get_campaign_detail` now also returns `non_members` + `all_users` for the management dropdowns, and each member dict carries its `user_id`.
+- `app/admin_center/main.py`: six `POST /campaigns/{id}/…` routes (members add/remove, system, characters create/assign/delete) via `_destructive_gate`, each audited; the detail route passes `system_choices` / `non_members` / `all_users` + `done`/`err` banners.
+- `app/admin_center/templates/campaign_detail.html`: MFA-verified inline management forms (system select, add-member, per-character assign/delete, create-character) using the compact 32px dense-console controls; a 🔒 nag + read-only view otherwise.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py` (+11): `campaign_admin` member/system/character mutations round-trip (host-side sqlite, `importorskip`, incl. idempotent add + wrong-campaign/unknown guards); all six management routes require auth (unauth → 303, parametrized); a representative subset is refused for basic-auth header callers (403 gated / 404 off, parametrized); and a net-zero character create → assign → delete round-trip on a real campaign on an MFA-on stack (skipped when MFA is off).
+
+Total harness count → 4130 in `tests/harness/` + 101 in `tests/harness_ui/`.
+
+MINOR — new Admin Center surface (additive; opt-in, off by default).
+
+### Added
+- Admin Center **campaign management** (`/campaigns/{id}` member add/remove, system change, character create/assign/delete; opt-in via `ADMIN_CENTER_ADMIN_TOOLS`, MFA-gated): the non-upload half of Phase 3b (`docs/plans/admin-center-consolidation.md`). Map/thumbnail uploads remain to do.
+
 ## [2.576.0] - 2026-06-22 — "The Campaign Ledger"
 
 **Schema version:** 75

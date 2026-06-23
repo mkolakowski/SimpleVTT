@@ -61,7 +61,7 @@ def get_campaign_detail(db: Session, campaign_id: int) -> dict:
         .all()
     )
     members = [
-        {"email": u.email, "display_name": u.display_name, "is_gm": m.is_gm}
+        {"user_id": u.id, "email": u.email, "display_name": u.display_name, "is_gm": m.is_gm}
         for m, u in member_rows
     ]
     gm = db.query(User).filter(User.id == c.gm_user_id).first()
@@ -73,13 +73,115 @@ def get_campaign_detail(db: Session, campaign_id: int) -> dict:
         db.query(Map).filter(Map.campaign_id == campaign_id)
         .order_by(Map.id).all()
     )
+    # Phase 3b management inputs: users not yet a member (for the add-member
+    # dropdown, excluding the GM who is implicitly attached) + all users (for
+    # character ownership) + the system choices.
+    member_ids = {
+        uid for (uid,) in db.query(CampaignMembership.user_id)
+        .filter(CampaignMembership.campaign_id == campaign_id).all()
+    }
+    non_members = [
+        u for u in db.query(User).order_by(User.id).all()
+        if u.id not in member_ids and u.id != c.gm_user_id
+    ]
     return {
         "campaign": c,
         "gm_email": gm.email if gm else f"<user {c.gm_user_id}>",
         "members": members,
         "characters": characters,
         "maps": maps,
+        "non_members": non_members,
+        "all_users": db.query(User).order_by(User.id).all(),
     }
+
+
+def add_member(db: Session, campaign_id: int, *, user_id: int) -> User:
+    """Add a user to a campaign (idempotent — a no-op if already a member)."""
+    if not db.query(Campaign).filter(Campaign.id == campaign_id).first():
+        raise CampaignAdminError(f"No campaign with id {campaign_id}")
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise CampaignAdminError(f"No user with id {user_id}")
+    existing = (
+        db.query(CampaignMembership)
+        .filter(
+            CampaignMembership.campaign_id == campaign_id,
+            CampaignMembership.user_id == user_id,
+        ).first()
+    )
+    if not existing:
+        db.add(CampaignMembership(campaign_id=campaign_id, user_id=user_id))
+        db.commit()
+    return u
+
+
+def remove_member(db: Session, campaign_id: int, *, user_id: int) -> str:
+    """Remove a user's membership. Returns the user's email (for the audit
+    line). Idempotent — removing a non-member is a no-op."""
+    u = db.query(User).filter(User.id == user_id).first()
+    target = u.email if u else f"<user {user_id}>"
+    db.query(CampaignMembership).filter(
+        CampaignMembership.campaign_id == campaign_id,
+        CampaignMembership.user_id == user_id,
+    ).delete()
+    db.commit()
+    return target
+
+
+def set_system(db: Session, campaign_id: int, *, game_system: str) -> str:
+    """Set the campaign's game system (validated/normalized via get_system).
+    Returns the resolved system key."""
+    from ..game_systems import get_system
+    c = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not c:
+        raise CampaignAdminError(f"No campaign with id {campaign_id}")
+    c.game_system = get_system(game_system).key
+    db.commit()
+    return c.game_system
+
+
+def create_character(db: Session, campaign_id: int, *, name: str, owner_user_id=None) -> Character:
+    """Create a character in the campaign, forced to the campaign's locked
+    system template (mirrors the in-app admin create)."""
+    from ..game_systems import get_system
+    from ..sheet_templates import get_template
+    c = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not c:
+        raise CampaignAdminError(f"No campaign with id {campaign_id}")
+    sys = get_system(c.game_system)
+    char = Character(
+        campaign_id=campaign_id,
+        name=(name or "").strip()[:120] or "New character",
+        template=sys.sheet_template,
+        sheet=get_template(sys.sheet_template),
+        owner_user_id=owner_user_id or None,
+    )
+    db.add(char)
+    db.commit()
+    db.refresh(char)
+    return char
+
+
+def assign_character(db: Session, campaign_id: int, char_id: int, *, owner_user_id=None) -> Character:
+    """Set (or clear) a character's owner. Validates the character belongs to
+    the campaign."""
+    char = db.query(Character).filter(Character.id == char_id).first()
+    if not char or char.campaign_id != campaign_id:
+        raise CampaignAdminError(f"No character {char_id} in campaign {campaign_id}")
+    char.owner_user_id = owner_user_id or None
+    db.commit()
+    return char
+
+
+def delete_character(db: Session, campaign_id: int, char_id: int) -> str:
+    """Delete a character. Returns its name (captured before delete)."""
+    char = db.query(Character).filter(Character.id == char_id).first()
+    if not char or char.campaign_id != campaign_id:
+        raise CampaignAdminError(f"No character {char_id} in campaign {campaign_id}")
+    name = char.name
+    db.delete(char)
+    db.commit()
+    return name
 
 
 def delete_campaign(db: Session, campaign_id: int) -> str:

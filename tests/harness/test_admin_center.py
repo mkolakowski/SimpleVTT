@@ -641,6 +641,58 @@ def test_campaign_admin_list_detail_delete_roundtrip():
         db.close()
 
 
+# ---- campaign-admin management mutations (Phase 3b) -----------------
+
+def test_campaign_admin_member_system_character_mutations():
+    """Member add/remove, system change, character create/assign/delete
+    exercised host-side against in-memory sqlite."""
+    pytest.importorskip("sqlalchemy")
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.admin_center import campaign_admin
+    from app.models import Base, Campaign, Character, CampaignMembership, User
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    try:
+        gm = User(email="gm@example.com", display_name="GM", password_hash="x")
+        player = User(email="player@example.com", display_name="P", password_hash="x")
+        db.add_all([gm, player])
+        db.commit()
+        c = Campaign(name="Quest", gm_user_id=gm.id, game_system="generic", description="")
+        db.add(c)
+        db.commit()
+        # Member add → appears in detail's non_members shrinks; remove → gone.
+        campaign_admin.add_member(db, c.id, user_id=player.id)
+        assert db.query(CampaignMembership).filter_by(campaign_id=c.id, user_id=player.id).count() == 1
+        # Idempotent add.
+        campaign_admin.add_member(db, c.id, user_id=player.id)
+        assert db.query(CampaignMembership).filter_by(campaign_id=c.id, user_id=player.id).count() == 1
+        email = campaign_admin.remove_member(db, c.id, user_id=player.id)
+        assert email == "player@example.com"
+        assert db.query(CampaignMembership).filter_by(campaign_id=c.id, user_id=player.id).count() == 0
+        # System change (normalized via get_system).
+        key = campaign_admin.set_system(db, c.id, game_system="dnd5e")
+        assert key == "dnd5e"
+        # Character create → assign → delete.
+        ch = campaign_admin.create_character(db, c.id, name="Bob", owner_user_id=None)
+        assert ch.id and ch.campaign_id == c.id and ch.owner_user_id is None
+        campaign_admin.assign_character(db, c.id, ch.id, owner_user_id=player.id)
+        assert db.query(Character).get(ch.id).owner_user_id == player.id
+        name = campaign_admin.delete_character(db, c.id, ch.id)
+        assert name == "Bob"
+        assert db.query(Character).count() == 0
+        # Wrong-campaign / unknown guards.
+        with pytest.raises(campaign_admin.CampaignAdminError):
+            campaign_admin.delete_character(db, c.id, 9999)
+        with pytest.raises(campaign_admin.CampaignAdminError):
+            campaign_admin.add_member(db, c.id, user_id=9999)
+    finally:
+        db.close()
+
+
 # ---- display timezone -----------------------------------------------
 
 def test_timefmt_log_ts_converts_utc_to_offset():
@@ -1323,3 +1375,69 @@ def test_campaign_delete_refused_for_header_auth():
     would wipe a real demo campaign)."""
     r = httpx.post(f"{ADMIN_BASE_URL}/campaigns/1/delete", auth=_AUTH, timeout=5.0, follow_redirects=False)
     assert r.status_code in (403, 404), r.text[:200]
+
+
+# ---- /campaigns management mutations (v2.577.0, Phase 3b) -----------------
+_CAMPAIGN_MUTATIONS = [
+    "/campaigns/1/members/add",
+    "/campaigns/1/members/remove",
+    "/campaigns/1/system",
+    "/campaigns/1/characters/create",
+    "/campaigns/1/characters/1/assign",
+    "/campaigns/1/characters/1/delete",
+]
+
+
+@_LIVE
+@pytest.mark.parametrize("path", _CAMPAIGN_MUTATIONS)
+def test_campaign_mutations_require_auth(path):
+    """Unauthenticated management POSTs are bounced to login, never run."""
+    r = httpx.post(f"{ADMIN_BASE_URL}{path}", timeout=5.0, follow_redirects=False)
+    assert r.status_code in (303, 307)
+    assert "/login" in r.headers.get("location", "")
+
+
+@_LIVE
+@pytest.mark.parametrize("path", ["/campaigns/1/members/remove", "/campaigns/1/characters/1/delete", "/campaigns/1/system"])
+def test_campaign_mutations_refused_for_header_auth(path):
+    """The MFA gate: a basic-auth header caller is never MFA-verified, so the
+    management mutations are refused — 403 (gated) or 404 (surface off)."""
+    r = httpx.post(f"{ADMIN_BASE_URL}{path}", auth=_AUTH, timeout=5.0,
+                   data={"user_id": "1", "game_system": "generic"}, follow_redirects=False)
+    assert r.status_code in (403, 404), r.text[:200]
+
+
+@_LIVE
+@pytest.mark.skipif(not _MFA_ON, reason="campaign mutations need an MFA-verified session; stack has MFA off")
+def test_campaign_character_create_assign_delete_roundtrip():
+    """Net-zero character round-trip on a real campaign (create → assign →
+    delete) on an MFA-on stack — no demo data is left changed. Skips when
+    admin-tools is off or there are no campaigns."""
+    import re as _re
+    c = _logged_in_client()
+    try:
+        lst = c.get("/campaigns", follow_redirects=False)
+        if lst.status_code == 404:
+            pytest.skip("admin tools disabled on this stack")
+        m = _re.search(r'href="/campaigns/(\d+)"', lst.text)
+        if not m:
+            pytest.skip("no campaigns to manage")
+        cid = m.group(1)
+        made = c.post(f"/campaigns/{cid}/characters/create",
+                      data={"name": "phase3b-throwaway", "owner_user_id": ""},
+                      follow_redirects=False)
+        assert made.status_code == 303 and "done=" in made.headers.get("location", "")
+        detail = c.get(f"/campaigns/{cid}", follow_redirects=False).text
+        ch = _re.search(r"<td>(\d+)</td><td>phase3b-throwaway</td>", detail)
+        assert ch, "throwaway character not listed after create"
+        chid = ch.group(1)
+        # Assign to an arbitrary existing user, then delete (net-zero).
+        uid = _re.search(r'name="owner_user_id">\s*<option value="">[^<]*</option>\s*<option value="(\d+)"', detail)
+        if uid:
+            a = c.post(f"/campaigns/{cid}/characters/{chid}/assign",
+                       data={"owner_user_id": uid.group(1)}, follow_redirects=False)
+            assert a.status_code == 303 and "done=" in a.headers.get("location", "")
+        d = c.post(f"/campaigns/{cid}/characters/{chid}/delete", follow_redirects=False)
+        assert d.status_code == 303 and "done=" in d.headers.get("location", "")
+    finally:
+        c.close()
