@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.590.0] - 2026-06-23 — "The Five Doors"
+
+**Schema version:** 77
+
+**Commit summary:** Demo rework phase D1 (`docs/plans/...` demo arc) — make the seed multi-campaign-ready: a campaign-name list the wipe keys on + a `build_dnd5e_sheet(level=…)` helper. No behavior change yet (still one campaign).
+
+**Description:** Groundwork for growing the demo from one campaign to five leveled sample campaigns (levels 3/5/9/13/18). The reseed `wipe()` now matches **all** demo campaigns via a new `DEMO_CAMPAIGN_NAMES` list (currently just the Sundered Vault) instead of a single hardcoded name, so future campaigns are cleaned on every reset. Adds `build_dnd5e_sheet(name, *, klass, level, abilities, ac, hp_max, …, notes, extra)` — a level-parameterized sheet builder (starts from the blank dnd5e template, derives the proficiency bonus via `character_presets._prof_bonus`) so the upcoming new campaigns' PCs can be authored as concise per-PC specs at arbitrary levels rather than bespoke ~150-line dicts. The existing single-campaign seed path is unchanged; the reseed still produces exactly the current dataset (1 campaign, 15 PCs, 3 users).
+
+**Implementation:**
+
+- `app/demo_seed.py`: `DEMO_CAMPAIGN_NAMES` constant + `wipe()` matches `Campaign.name.in_(DEMO_CAMPAIGN_NAMES)`; new `build_dnd5e_sheet` helper; imports `_prof_bonus` + `get_template`.
+
+**Harness changes:** none — no behavior change. The `conftest.roster` fixture is already scoped to the L5 campaign (`/api/campaign/{CAMPAIGN_ID}/roster`, id 1), so the upcoming campaigns won't pollute it.
+
+### Added
+- `build_dnd5e_sheet` level-N sheet builder + multi-campaign-ready demo `wipe()` (demo-rework phase D1). No behavior change yet.
+
 ## [2.589.2] - 2026-06-23 — "The House Style"
 
 **Schema version:** 77

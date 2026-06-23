@@ -41,7 +41,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .auth import hash_password
+from .character_presets import _prof_bonus
 from .local_content import HOMEBREW_ROOT, write_homebrew
+from .sheet_templates import get_template
 from .models import (
     AdminAuditLog,
     Campaign,
@@ -68,6 +70,12 @@ DEMO_BOB_EMAIL = "demo-bob@example.com"
 DEMO_EMAILS = (DEMO_GM_EMAIL, DEMO_ALICE_EMAIL, DEMO_BOB_EMAIL)
 DEMO_PASSWORD = "demopass"
 DEMO_CAMPAIGN_NAME = "Demo: The Sundered Vault"
+# v2.590.0 — the demo is growing from one campaign to a set of leveled
+# sample campaigns (docs/wiki/demo-content.md). The wipe keys on this list
+# so every demo campaign is cleaned on reseed; each new campaign appends its
+# name here. The Sundered Vault (level 5) stays first so it keeps id 1
+# (CAMPAIGN_ID the harness uses).
+DEMO_CAMPAIGN_NAMES = (DEMO_CAMPAIGN_NAME,)
 
 _TRUTHY = ("1", "true", "yes", "on")
 
@@ -92,6 +100,58 @@ def _demo_gm_site_admin() -> bool:
     return os.getenv("DEMO_GM_SITE_ADMIN", "true").strip().lower() in _TRUTHY
 
 
+# ── Level-N sheet builder (for the leveled sample campaigns) ─────────
+def build_dnd5e_sheet(
+    name: str,
+    *,
+    klass: str,
+    level: int,
+    abilities: dict,
+    ac: int,
+    hp_max: int,
+    subclass: str = "",
+    race: str = "",
+    attacks: "list | None" = None,
+    spells: "list | None" = None,
+    spell_slots: "dict | None" = None,
+    notes: str = "",
+    extra: "dict | None" = None,
+) -> dict:
+    """Build a playable D&D 5e sheet dict at an arbitrary ``level`` for the
+    demo's leveled sample campaigns (docs/wiki/demo-content.md).
+
+    Starts from the blank dnd5e template (so every load-bearing field has a
+    default), then sets level + derived proficiency bonus + the curated
+    fields. Each PC should include its **level-N showcase feature** as a
+    clickable attack/spell/ability (with slots/uses set), and ``notes``
+    should carry the three blocks shown on the sheet:
+
+        Description: …  /  Roleplay: …  /  How to play: …
+
+    ``extra`` merges arbitrary additional sheet keys (e.g. ``class_hit_die``,
+    ``resources``, ``features``) for per-PC needs.
+    """
+    sheet = get_template("dnd5e")
+    sheet.update({
+        "class": klass,
+        "subclass": subclass,
+        "race": race,
+        "level": level,
+        "proficiency_bonus": _prof_bonus(level),
+        "abilities": abilities,
+        "ac": ac,
+        "hp": {"current": hp_max, "max": hp_max, "temp": 0},
+        "hit_dice": {"current": level, "max": level},
+        "attacks": attacks or [],
+        "spells": spells or [],
+        "spell_slots": spell_slots or {},
+        "notes": notes,
+    })
+    if extra:
+        sheet.update(extra)
+    return sheet
+
+
 # ── Wipe ────────────────────────────────────────────────────────────
 def wipe(db: Session) -> dict[str, int]:
     """Delete every row tagged as demo. Returns per-table counts."""
@@ -102,10 +162,10 @@ def wipe(db: Session) -> dict[str, int]:
     demo_user_ids = [u.id for u in demo_users]
     counts["users_found"] = len(demo_users)
 
-    # 2) Find the demo campaign by name (defensive — only ours uses
-    # this exact string)
+    # 2) Find the demo campaigns by name (defensive — only ours use
+    # these exact strings). v2.590.0: a set of leveled sample campaigns.
     demo_campaigns = (
-        db.query(Campaign).filter(Campaign.name == DEMO_CAMPAIGN_NAME).all()
+        db.query(Campaign).filter(Campaign.name.in_(DEMO_CAMPAIGN_NAMES)).all()
     )
     demo_campaign_ids = [c.id for c in demo_campaigns]
     counts["campaigns_found"] = len(demo_campaigns)
