@@ -741,6 +741,51 @@ def test_campaign_admin_create_and_activate_map():
         db.close()
 
 
+# ---- storage accounting (Arc B1) ------------------------------------
+
+def test_storage_aggregate_attribution(tmp_path):
+    """Pure aggregator (no DB): files attribute to campaign→GM, standalone
+    portraits to the owner, and unreferenced files to the unattributed
+    bucket; by_type sums by subdir."""
+    from app.admin_center import storage as _storage
+
+    (tmp_path / "maps").mkdir()
+    (tmp_path / "portraits").mkdir()
+    (tmp_path / "tokens").mkdir()
+    (tmp_path / "maps" / "m1.png").write_bytes(b"x" * 100)
+    (tmp_path / "portraits" / "p1.png").write_bytes(b"y" * 40)
+    (tmp_path / "tokens" / "orphan.png").write_bytes(b"z" * 7)
+
+    index = {
+        "m1.png": {"campaign_id": 1, "user_id": None},
+        "p1.png": {"campaign_id": None, "user_id": 7},  # standalone portrait
+        # orphan.png intentionally absent → unattributed
+    }
+    campaign_meta = {1: {"name": "C1", "gm_user_id": 5}}
+    user_email = {5: "gm@x", 7: "player@x"}
+
+    r = _storage.aggregate(tmp_path, index, campaign_meta, user_email)
+    assert r["available"] is True
+    assert r["totals"] == {"bytes": 147, "files": 3}
+    assert r["by_type"]["maps"] == 100 and r["by_type"]["portraits"] == 40 and r["by_type"]["tokens"] == 7
+    assert r["unattributed"] == {"bytes": 7, "files": 1}
+    # Campaign 1 = the map's 100 bytes, attributed to GM user 5.
+    camp = {c["campaign_id"]: c for c in r["by_campaign"]}
+    assert camp[1]["bytes"] == 100 and camp[1]["gm_email"] == "gm@x"
+    users = {u["user_id"]: u for u in r["by_user"]}
+    assert users[5]["bytes"] == 100          # GM via campaign
+    assert users[7]["bytes"] == 40 and users[7]["standalone_bytes"] == 40
+    assert len(users[5]["by_campaign"]) == 1
+
+
+def test_storage_aggregate_empty_tree(tmp_path):
+    from app.admin_center import storage as _storage
+    r = _storage.aggregate(tmp_path, {}, {}, {})
+    assert r["available"] is True
+    assert r["totals"] == {"bytes": 0, "files": 0}
+    assert r["by_user"] == [] and r["by_campaign"] == []
+
+
 # ---- display timezone -----------------------------------------------
 
 def test_timefmt_log_ts_converts_utc_to_offset():
@@ -1663,3 +1708,40 @@ def test_campaign_character_create_assign_delete_roundtrip():
         assert d.status_code == 303 and "done=" in d.headers.get("location", "")
     finally:
         c.close()
+
+
+# ---- /api/storage + /storage page (Arc B1, v2.588.0) ----------------------
+@_LIVE
+def test_api_storage_shape():
+    r = httpx.get(f"{ADMIN_BASE_URL}/api/storage", auth=_AUTH, timeout=15.0)
+    assert r.status_code == 200
+    body = r.json()
+    assert body.get("available") is True
+    for key in ("totals", "by_type", "by_user", "by_campaign", "unattributed"):
+        assert key in body, f"storage report missing {key!r}"
+    assert "bytes" in body["totals"] and "files" in body["totals"]
+
+
+@_LIVE
+def test_api_storage_requires_auth():
+    r = httpx.get(f"{ADMIN_BASE_URL}/api/storage", timeout=5.0)
+    assert r.status_code == 401
+
+
+@_LIVE
+def test_storage_page_redirects_when_unauthenticated():
+    r = httpx.get(f"{ADMIN_BASE_URL}/storage", timeout=5.0, follow_redirects=False)
+    assert r.status_code == 303
+    assert "/login" in r.headers.get("location", "")
+
+
+@_LIVE
+def test_storage_page_renders_authenticated():
+    with httpx.Client(base_url=ADMIN_BASE_URL, timeout=15.0, follow_redirects=False) as c:
+        r = c.post("/login", data={"username": _ADMIN_USER, "password": _ADMIN_PASS, "next": "/storage"})
+        assert r.status_code == 303
+        _complete_mfa_if_pending(c, r)
+        page = c.get("/storage", follow_redirects=False)
+        assert page.status_code == 200, page.text[:200]
+        assert "Storage" in page.text
+        assert "By user" in page.text and "By campaign" in page.text

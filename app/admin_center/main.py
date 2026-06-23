@@ -138,8 +138,22 @@ def _fmt_duration(s) -> str:
     return f"{sec}s"
 
 
+def _fmt_bytes(n) -> str:
+    """Compact human byte size (e.g. 0 B, 4.2 KB, 1.3 GB)."""
+    try:
+        n = float(n or 0)
+    except (TypeError, ValueError):
+        return "0 B"
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if abs(n) < 1024.0 or unit == "TB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024.0
+    return f"{n:.1f} TB"
+
+
 templates.env.filters["epoch"] = timefmt.fmt_epoch
 templates.env.filters["duration"] = _fmt_duration
+templates.env.filters["bytes"] = _fmt_bytes
 templates.env.filters["explain"] = event_help.explain
 # Audit-log line timestamps (app writes UTC) → the display zone.
 templates.env.filters["localtime"] = timefmt.fmt_log_ts
@@ -411,6 +425,15 @@ def api_inventory():
     return JSONResponse(inventory.read_inventory())
 
 
+@app.get("/api/storage")
+def api_storage():
+    """Read-only storage accounting: per-user + per-campaign byte
+    breakdowns of uploaded files (Arc B1 of
+    docs/plans/app-wide-roles-and-storage.md)."""
+    from . import storage as _storage
+    return JSONResponse(_storage.read_storage())
+
+
 @app.post("/logs/clear")
 def logs_clear(request: Request):
     """Clear the audit log (truncate + drop rotated backups). Leaves a
@@ -551,6 +574,25 @@ _TOOLS_DISABLED = HTMLResponse(
     "<code>ADMIN_CENTER_ADMIN_TOOLS=true</code> to enable this surface.</p>",
     status_code=404,
 )
+
+
+@app.get("/storage", response_class=HTMLResponse)
+def storage_dashboard(request: Request):
+    """v2.588.0 — storage accounting dashboard: per-user + per-campaign byte
+    breakdowns of uploaded files (Arc B1 of
+    docs/plans/app-wide-roles-and-storage.md). Read-only; auto-gated by the
+    auth middleware."""
+    from . import storage as _storage
+    report = _storage.read_storage()
+    return templates.TemplateResponse(
+        "storage.html",
+        {
+            "request": request,
+            "app_version": APP_VERSION,
+            "admin_user": request.session.get("admin_user", ""),
+            "report": report,
+        },
+    )
 
 
 @app.get("/tools", response_class=HTMLResponse)

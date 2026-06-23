@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.588.0] - 2026-06-23 — "The Stocktake"
+
+**Schema version:** 76
+
+**Commit summary:** Arc B1 of `docs/plans/app-wide-roles-and-storage.md` — storage accounting + a per-user / per-campaign storage view in the Admin Center.
+
+**Description:** New **Storage** dashboard in the Admin Center (`/storage` + `GET /api/storage`) that breaks down how many **bytes** of uploaded files SimpleVTT holds, **per user** and **per campaign**. Usage is computed by an on-demand filesystem walk of the shared `uploads_data` volume (no per-file DB size tracking): each file under `/static/uploads/<subdir>/` is attributed to its **campaign** (via the DB URL columns — maps, tokens, portraits, thumbnails, backgrounds, handouts, audio, token-templates) and the campaign to its **GM user**; standalone-character portraits attribute to their owner; files referenced by no DB row land in an **unattributed** bucket. The page shows totals + by-type chips, a per-user table (expand a row → per-type + per-campaign breakdown of where that user's storage is allocated), and a per-campaign table (with per-type breakdown). Read-only, auth-gated like the rest of the Center. Linked from the dashboard header (💾 Storage). This is the accounting half of Arc B; admin-settable per-user/per-campaign **limits** + enforcement follow in B2.
+
+**Implementation:**
+
+- `app/admin_center/storage.py` (new): `aggregate(uploads_root, index, campaign_meta, user_email)` — a **pure** FS walker/attributor (DB-free, unit-testable on a tmp tree) — plus `read_storage()` which builds the basename→owner index from the DB (lazy import, mirroring `inventory.py`) and calls it. Attribution priority: campaign → its GM; else standalone owner; else unattributed.
+- `app/admin_center/main.py`: `GET /api/storage` + the `/storage` page + a `bytes` Jinja filter (`_fmt_bytes`); dashboard nav link.
+- `app/admin_center/templates/storage.html` (new).
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py` (+6): pure-`aggregate` attribution (campaign→GM, standalone→owner, orphan→unattributed, by-type sums) + empty-tree (host-side, no DB); live `/api/storage` shape + requires-auth; `/storage` page redirects unauthenticated + renders (By user / By campaign) after login.
+
+Total harness count → 4147 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+MINOR — new Admin Center read-only surface (additive).
+
+### Added
+- Admin Center **Storage** view (`/storage`, `GET /api/storage`): per-user + per-campaign byte breakdowns of uploaded files via an on-demand scan of the shared uploads volume — Arc B1 of `docs/plans/app-wide-roles-and-storage.md`. Limits + enforcement follow in B2.
+
 ## [2.587.0] - 2026-06-22 — "The Keymaster"
 
 **Schema version:** 76

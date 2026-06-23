@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Storage — SimpleVTT Admin Center</title>
+<link rel="icon" href="/favicon.svg">
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: system-ui, -apple-system, sans-serif; background:#1a2036; color:#e6e9f0; margin:0; padding:0 0 48px; }
+  header { background:#252c45; padding:14px 24px; display:flex; align-items:center; gap:16px; border-bottom:1px solid #333c5c; }
+  header h1 { font-size:18px; margin:0; }
+  header nav a { color:#9fb3ff; text-decoration:none; }
+  main { max-width:1000px; margin:0 auto; padding:20px 24px; }
+  .card { background:#252c45; border:1px solid #333c5c; border-radius:8px; padding:16px; margin-bottom:18px; }
+  h2 { font-size:15px; margin:0 0 10px; color:#cdd6f4; }
+  .muted { color:#8b93b0; }
+  .banner { padding:10px 12px; border-radius:6px; margin-bottom:14px; font-size:14px; }
+  .banner.err { background:#3a1e1e; color:#ffb3b3; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:7px 10px; border-bottom:1px solid #333c5c; }
+  th { color:#9fb3ff; font-weight:600; }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .totals { display:flex; gap:24px; flex-wrap:wrap; font-size:14px; }
+  .totals b { color:#bcd0ff; }
+  details summary { cursor:pointer; }
+  .sub { margin:6px 0 4px 14px; font-size:12px; }
+  .chip { display:inline-block; background:#1a2036; border:1px solid #333c5c; border-radius:10px; padding:1px 8px; margin:2px 4px 2px 0; font-size:11px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>💾 Storage</h1>
+  <nav><a href="/">← Dashboard</a></nav>
+  <span class="muted" style="margin-left:auto">SimpleVTT {{ app_version }}{% if admin_user %} · {{ admin_user }}{% endif %}</span>
+</header>
+<main>
+  {% if not report.available %}
+    <div class="banner err">⚠️ Storage report unavailable: {{ report.reason }}</div>
+  {% else %}
+  <div class="card">
+    <h2>Totals</h2>
+    <div class="totals">
+      <span><b>{{ report.totals.bytes | bytes }}</b> across {{ report.totals.files }} file(s)</span>
+      <span class="muted">Unattributed: {{ report.unattributed.bytes | bytes }} ({{ report.unattributed.files }} file(s))</span>
+    </div>
+    <div style="margin-top:10px">
+      {% for t, b in report.by_type.items() %}<span class="chip">{{ t }}: {{ b | bytes }}</span>{% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>By user ({{ report.by_user | length }})</h2>
+    <p class="muted" style="font-size:12px">A user's usage = the files in the campaigns they GM (plus any standalone-character portraits they own). Expand a row to see where it's allocated.</p>
+    <table>
+      <thead><tr><th>User</th><th class="num">Total</th><th class="num">Files</th><th>Where</th></tr></thead>
+      <tbody>
+        {% for u in report.by_user %}
+        <tr>
+          <td>{{ u.email }}</td>
+          <td class="num">{{ u.bytes | bytes }}</td>
+          <td class="num">{{ u.files }}</td>
+          <td>
+            <details>
+              <summary class="muted">breakdown</summary>
+              <div class="sub">
+                {% for t, b in u.by_type.items() %}<span class="chip">{{ t }}: {{ b | bytes }}</span>{% endfor %}
+                {% if u.standalone_bytes %}<span class="chip">standalone portraits: {{ u.standalone_bytes | bytes }}</span>{% endif %}
+              </div>
+              {% for c in u.by_campaign %}
+              <div class="sub">📁 {{ c.name }} — {{ c.bytes | bytes }}</div>
+              {% endfor %}
+            </details>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="muted">No attributed storage.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>By campaign ({{ report.by_campaign | length }})</h2>
+    <table>
+      <thead><tr><th>Campaign</th><th>GM</th><th class="num">Total</th><th class="num">Files</th><th>By type</th></tr></thead>
+      <tbody>
+        {% for c in report.by_campaign %}
+        <tr>
+          <td>{{ c.name }}</td>
+          <td class="muted">{{ c.gm_email }}</td>
+          <td class="num">{{ c.bytes | bytes }}</td>
+          <td class="num">{{ c.files }}</td>
+          <td>{% for t, b in c.by_type.items() %}<span class="chip">{{ t }}: {{ b | bytes }}</span>{% endfor %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="muted">No campaign storage.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</main>
+</body>
+</html>
