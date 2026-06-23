@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.574.0] - 2026-06-22 — "The Roster Desk"
+
+**Schema version:** 75
+
+**Commit summary:** Phase 2a of `docs/plans/admin-center-consolidation.md` — move the site-admin **user list + create** into the Admin Center behind the existing opt-in flag, with operator-attributed audit.
+
+**Description:** New opt-in `/users` page in the standalone Admin Center (8015), the second surface ported in from the main app's `/admin` portal. Gated by the same **`ADMIN_CENTER_ADMIN_TOOLS` (default off)** flag as the Tools page. Phase 2a ships the **non-destructive** half: a read-only user list (id / email / display-name / admin+disabled roles / created) and a **create-user** form (`POST /users/create`) that mirrors the in-app create — lowercases/strips the email, rejects duplicates (case-insensitive) + short (<8-char) passwords, and derives `is_admin` from the operator's configured admin-email list. The destructive ops (disable / reset-password / delete) land in Phase 2b behind a hard MFA gate. The in-app `/admin` user routes stay live for now (additive — retiring them is Phase 4).
+
+**Operator-attributed audit.** The Center authenticates an *operator* (a session string), not an app `User`, so it can't use `app.admin_audit.record_admin_action` (that writes an `admin_audit_log` row keyed on a `User` FK). Instead a new `operator_audit` helper appends a canonical audit line — `actor=admin-center:<operator>` — directly to the shared audit-log file (the same stream the dashboard reads + fail2ban/CrowdSec consume), mirroring the existing `/logs/clear` marker-append pattern. The Center process has no `RotatingFileHandler` on `simplevtt.audit` (that's the *app* process), and the `audit_logs` volume is already mounted read-write for the log-clear button, so a hand-formatted append is the correct mechanism.
+
+**Implementation:**
+
+- `app/admin_center/operator_audit.py` (new): `format_line()` + `record()` — clock-injectable, best-effort (never raises — the mutation already happened), round-trips through the dashboard's own `audit_parse`.
+- `app/admin_center/user_admin.py` (new): dependency-light service functions (`list_users` / `create_user` / `get_user` / `set_user_disabled` / `reset_password` / `delete_user`) re-homing the in-app DB logic free of FastAPI/auth concerns; validation failures raise `UserAdminError`. (The destructive functions ship now but are wired by Phase 2b.)
+- `app/admin_center/main.py`: `GET /users` + `POST /users/create` (gated by `_ADMIN_TOOLS_ENABLED`, audited).
+- `app/admin_center/templates/users.html` (new) + a conditional `👥 Users` link in `dashboard.html` and `tools.html`.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py` (+8): operator-audit line is canonical + parseable (×3, incl. the no-`AUDIT_LOG_PATH` path that must not raise); `user_admin` create validates + rejects duplicates + toggles/deletes (host-side sqlite, `importorskip`); `/users` auth-gated (unauth → 303); renders when enabled; create rejects a duplicate email (303 + `err=`); create requires auth.
+
+Total harness count → 4107 in `tests/harness/` + 101 in `tests/harness_ui/`.
+
+MINOR — new Admin Center surface (additive; opt-in, off by default).
+
+### Added
+- Admin Center **User admin** page (`/users`, opt-in via `ADMIN_CENTER_ADMIN_TOOLS`): user list + create, ported from the in-app `/admin` portal (`docs/plans/admin-center-consolidation.md` Phase 2a). Operator mutations are audited via the new `operator_audit` helper (`actor=admin-center:<operator>`). Destructive ops follow in Phase 2b behind an MFA gate.
+
 ## [2.573.2] - 2026-06-22 — "The Operator's Bench"
 
 **Schema version:** 75

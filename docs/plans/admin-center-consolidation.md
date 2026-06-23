@@ -1,6 +1,6 @@
 # Consolidate site-admin into the Admin Center
 
-**Status:** 🟠 partial · **Phase 1 (demo tools) shipped v2.573.2** — an opt-in `/tools` page in the Center (demo magic-link mint + demo reset), gated by `ADMIN_CENTER_ADMIN_TOOLS` (default off). **Stubs is deferred** out of Phase 1: its miss-store (`local_features._misses`) is an **in-memory module global in the main-app process**, so a separate Center process would always show an empty list — it can't move until the miss-store is made shared (DB/file-backed). Phases 2 (user admin) + 3 (campaign admin) + 4 (retire in-app) unstarted.
+**Status:** 🟠 partial · **Phase 1 (demo tools) shipped v2.573.2** — an opt-in `/tools` page in the Center (demo magic-link mint + demo reset), gated by `ADMIN_CENTER_ADMIN_TOOLS` (default off). **Stubs is deferred** out of Phase 1: its miss-store (`local_features._misses`) is an **in-memory module global in the main-app process**, so a separate Center process would always show an empty list — it can't move until the miss-store is made shared (DB/file-backed). **Phase 2a (user list + create) shipped v2.574.0** — an opt-in `/users` page (read-only list + non-destructive create), same flag, with operator-attributed audit via the new `operator_audit` helper (`actor=admin-center:<operator>`). **Phase 2b (destructive user ops — disable/reset-password/delete, MFA-gated) + Phase 3 (campaign admin) + Phase 4 (retire in-app) unstarted.**
 
 Move the scattered **site-admin** surfaces out of the main app's in-app
 `/admin` portal and into the standalone **Admin Center** (port 8015), so
@@ -104,6 +104,17 @@ NOT left as a live duplicate write-path.
    destructive routes (disable/delete/reset-password) refused unless MFA is
    on + verified. Audit each mutation. Redirect the in-app `/admin` users
    section to the Center.
+   - **Phase 2a — list + create (non-destructive). ✅ Shipped v2.574.0.**
+     `/users` page (read-only list + create form) gated by
+     `ADMIN_CENTER_ADMIN_TOOLS`. New `operator_audit` helper appends
+     operator-attributed audit lines (`actor=admin-center:<operator>`) to
+     the shared log — the Center has no `User` row so `record_admin_action`
+     (User-FK row) doesn't apply. Service functions live in
+     `user_admin.py` (the destructive ones ship but are wired by 2b).
+   - **Phase 2b — destructive ops (disable/reset-password/delete). ⚪ Next.**
+     Wire the destructive routes behind a hard MFA gate (refused unless MFA
+     enabled + session MFA-verified). Audit each. Redirect the in-app
+     `/admin` users section once parity lands (or defer that to Phase 4).
 3. **Phase 3 — campaign admin (high-risk, MFA-gated).** Port site-admin
    campaign management (members/characters/maps/system/**delete**), same MFA
    gate + audit. Redirect `/admin/campaign/{id}`.

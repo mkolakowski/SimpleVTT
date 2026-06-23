@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>User admin — SimpleVTT Admin Center</title>
+<link rel="icon" href="/favicon.svg">
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: system-ui, -apple-system, sans-serif; background:#1a2036; color:#e6e9f0; margin:0; padding:0 0 48px; }
+  header { background:#252c45; padding:14px 24px; display:flex; align-items:center; gap:16px; border-bottom:1px solid #333c5c; }
+  header h1 { font-size:18px; margin:0; }
+  header nav a { color:#9fb3ff; text-decoration:none; }
+  main { max-width:1000px; margin:0 auto; padding:20px 24px; }
+  .card { background:#252c45; border:1px solid #333c5c; border-radius:8px; padding:16px; margin-bottom:18px; }
+  h2 { font-size:15px; margin:0 0 10px; color:#cdd6f4; }
+  .muted { color:#8b93b0; }
+  label { display:block; margin:8px 0; }
+  select, input, button { font-size:14px; padding:8px 10px; border-radius:6px; border:1px solid #3a4470; background:#1a2036; color:#e6e9f0; }
+  button { background:#3a4470; cursor:pointer; }
+  .banner { padding:10px 12px; border-radius:6px; margin-bottom:14px; font-size:14px; word-break:break-all; }
+  .banner.ok { background:#1e3a24; color:#b6f0c2; }
+  .banner.err { background:#3a1e1e; color:#ffb3b3; }
+  code { background:#1a2036; padding:1px 5px; border-radius:3px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid #333c5c; }
+  th { color:#9fb3ff; font-weight:600; }
+  .pill { display:inline-block; padding:1px 7px; border-radius:10px; font-size:11px; }
+  .pill.admin { background:#2d3a6b; color:#bcd0ff; }
+  .pill.off { background:#3a1e1e; color:#ffb3b3; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  @media (max-width:640px){ .grid { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>👥 User admin</h1>
+  <nav><a href="/">← Dashboard</a> · <a href="/tools">Tools</a></nav>
+  <span class="muted" style="margin-left:auto">SimpleVTT {{ app_version }}{% if admin_user %} · {{ admin_user }}{% endif %}</span>
+</header>
+<main>
+  {% if err %}<div class="banner err">⚠️ {{ err }}</div>{% endif %}
+  {% if created %}<div class="banner ok">✅ Created user <code>{{ created }}</code></div>{% endif %}
+
+  <div class="card">
+    <h2>Users ({{ users|length }})</h2>
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Email</th><th>Display name</th><th>Roles</th><th>Created</th></tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td>{{ u.id }}</td>
+          <td>{{ u.email }}</td>
+          <td>{{ u.display_name }}</td>
+          <td>
+            {% if u.is_admin %}<span class="pill admin">admin</span>{% endif %}
+            {% if u.is_disabled %}<span class="pill off">disabled</span>{% endif %}
+          </td>
+          <td class="muted">{{ u.created_at }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="muted">No users.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Create user</h2>
+    <p class="muted">Adds a local password account. Admin status is derived
+      from the operator's configured admin-email list. Minimum 8-char
+      password.</p>
+    <form method="post" action="/users/create">
+      <div class="grid">
+        <label>Email
+          <input type="email" name="email" required autocomplete="off" style="width:100%">
+        </label>
+        <label>Display name
+          <input type="text" name="display_name" autocomplete="off" style="width:100%">
+        </label>
+        <label>Password
+          <input type="password" name="password" required minlength="8" autocomplete="new-password" style="width:100%">
+        </label>
+      </div>
+      <button type="submit">Create user</button>
+    </form>
+  </div>
+</main>
+</body>
+</html>

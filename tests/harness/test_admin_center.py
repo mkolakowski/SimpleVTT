@@ -27,6 +27,7 @@ from app.admin_center import (
     log_control,
     login_guard,
     mfa,
+    operator_audit,
     stats,
     timefmt,
 )
@@ -511,6 +512,92 @@ def test_provisioning_uri(monkeypatch):
     assert mfa.provisioning_uri() == ""
 
 
+# ---- operator audit (Phase 2 — Center-attributed mutations) ---------
+
+def test_operator_audit_line_is_canonical_and_parseable():
+    """A line the Center appends round-trips through the dashboard's own
+    parser, with the operator attributed via actor=admin-center:<op>."""
+    line = operator_audit.format_line(
+        "admin.user_create", operator="admin",
+        target="alice@example.com", ip="203.0.113.7", ua="curl/8",
+        notes="display_name=Alice",
+    )
+    ev = audit_parse.parse_line(line)
+    assert ev is not None
+    assert ev["event"] == "admin.user_create"
+    assert ev["level"] == "WARNING"  # mutations default to WARNING
+    assert ev["fields"]["actor"] == "admin-center:admin"
+    assert ev["fields"]["target"] == "alice@example.com"
+    assert ev["fields"]["ip"] == "203.0.113.7"
+    assert ev["fields"]["notes"] == "display_name=Alice"
+
+
+def test_operator_audit_record_appends_parseable_line(tmp_path):
+    p = tmp_path / "audit.log"
+    p.write_text("")  # pre-existing (the app owns the real file)
+    returned = operator_audit.record(
+        "admin.user_delete", operator="op2",
+        target="bob@example.com", path=str(p),
+    )
+    body = p.read_text().strip()
+    assert body == returned
+    ev = audit_parse.parse_line(body)
+    assert ev["event"] == "admin.user_delete"
+    assert ev["fields"]["actor"] == "admin-center:op2"
+
+
+def test_operator_audit_record_no_path_returns_line_without_raising():
+    # Stdout-only deploy: no AUDIT_LOG_PATH → returns the formatted line,
+    # never raises (the mutation already happened).
+    line = operator_audit.record(
+        "admin.user_disable", operator="op", target="x@example.com", path="",
+    )
+    assert "admin.user_disable" in line
+    assert "actor=admin-center:op" in line
+
+
+# ---- user-admin service functions -----------------------------------
+
+def test_user_admin_create_validates_and_rejects_duplicate():
+    """Validation is exercised host-side against an in-memory sqlite so it
+    needs no running container (skips on a host without the app deps)."""
+    pytest.importorskip("sqlalchemy")
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.admin_center import user_admin
+    from app.models import Base, User
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    try:
+        u = user_admin.create_user(
+            db, email="  NEW@Example.com ", display_name="", password="hunter2!!",
+        )
+        assert u.email == "new@example.com"
+        # Blank display_name derives from the email local-part.
+        assert u.display_name == "new"
+        # Duplicate (case-insensitive) is rejected.
+        with pytest.raises(user_admin.UserAdminError):
+            user_admin.create_user(
+                db, email="new@example.com", display_name="x", password="hunter2!!",
+            )
+        # Short password rejected.
+        with pytest.raises(user_admin.UserAdminError):
+            user_admin.create_user(
+                db, email="b@example.com", display_name="b", password="short",
+            )
+        # Toggle disable + delete round-trip.
+        _, disabled = user_admin.set_user_disabled(db, u.id)
+        assert disabled is True
+        email = user_admin.delete_user(db, u.id)
+        assert email == "new@example.com"
+        assert db.query(User).count() == 0
+    finally:
+        db.close()
+
+
 # ---- display timezone -----------------------------------------------
 
 def test_timefmt_log_ts_converts_utc_to_offset():
@@ -986,5 +1073,79 @@ def test_tools_demo_reset_requires_auth():
     bounced to login and never fires the reseed. (We never POST it
     authenticated in tests; that would wipe the demo data.)"""
     r = httpx.post(f"{ADMIN_BASE_URL}/tools/demo/reset", timeout=5.0, follow_redirects=False)
+    assert r.status_code in (303, 307)
+    assert "/login" in r.headers.get("location", "")
+
+
+# ---- /users user-admin page (v2.574.0, Phase 2a) --------------------------
+@_LIVE
+def test_users_page_redirects_when_unauthenticated():
+    """The /users surface is auth-gated like the rest of the center."""
+    r = httpx.get(f"{ADMIN_BASE_URL}/users", timeout=5.0, follow_redirects=False)
+    assert r.status_code == 303
+    assert "/login" in r.headers.get("location", "")
+    assert "www-authenticate" not in {k.lower() for k in r.headers}
+
+
+def _tools_enabled(c: httpx.Client) -> bool:
+    """True iff ADMIN_CENTER_ADMIN_TOOLS is on (the surface returns 404 when
+    off). Assumes the client is already logged in."""
+    return c.get("/users", follow_redirects=False).status_code != 404
+
+
+@_LIVE
+def test_users_page_renders_when_enabled():
+    """With ADMIN_CENTER_ADMIN_TOOLS=true the page lists users + the create
+    form. (If the flag is off this stack returns 404 — handle both so the
+    suite is portable across configs.)"""
+    with httpx.Client(base_url=ADMIN_BASE_URL, timeout=5.0, follow_redirects=False) as c:
+        r = c.post("/login", data={"username": _ADMIN_USER, "password": _ADMIN_PASS, "next": "/users"})
+        assert r.status_code == 303
+        _complete_mfa_if_pending(c, r)
+        page = c.get("/users", follow_redirects=False)
+        if page.status_code == 404:
+            assert "Admin tools are disabled" in page.text  # flag off
+            return
+        assert page.status_code == 200, page.text[:200]
+        assert "User admin" in page.text
+        assert 'action="/users/create"' in page.text
+
+
+@_LIVE
+def test_users_create_rejects_duplicate_email():
+    """Creating a user with an already-used email redirects back with an
+    error banner (no duplicate row). Uses the seeded admin's own email,
+    which always exists, so the duplicate path is deterministic without
+    leaving a new row behind. Skips when admin-tools is off."""
+    with httpx.Client(base_url=ADMIN_BASE_URL, timeout=8.0, follow_redirects=False) as c:
+        r = c.post("/login", data={"username": _ADMIN_USER, "password": _ADMIN_PASS, "next": "/users"})
+        _complete_mfa_if_pending(c, r)
+        if not _tools_enabled(c):
+            pytest.skip("admin tools disabled on this stack")
+        # Look up an existing email from the rendered table to force the
+        # duplicate path without inventing+leaving a new account.
+        import re as _re
+        page = c.get("/users", follow_redirects=False)
+        m = _re.search(r"<td>([^<@]+@[^<]+)</td>", page.text)
+        if not m:
+            pytest.skip("no existing user to duplicate")
+        existing = m.group(1).strip()
+        resp = c.post(
+            "/users/create",
+            data={"email": existing, "display_name": "dupe", "password": "hunter2!!"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "err=" in resp.headers.get("location", "")
+
+
+@_LIVE
+def test_users_create_requires_auth():
+    """An unauthenticated create POST is bounced to login, never creating."""
+    r = httpx.post(
+        f"{ADMIN_BASE_URL}/users/create",
+        data={"email": "x@example.com", "display_name": "x", "password": "hunter2!!"},
+        timeout=5.0, follow_redirects=False,
+    )
     assert r.status_code in (303, 307)
     assert "/login" in r.headers.get("location", "")

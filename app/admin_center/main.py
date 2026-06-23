@@ -622,3 +622,68 @@ def admin_tools_demo_reset(request: Request):
         db.close()
     log.warning("admin-center operator %r triggered a demo reset: %s", operator, counts)
     return RedirectResponse(f"/tools?reset={quote(str(counts))}", status_code=303)
+
+
+# ── User admin (Phase 2 — opt-in, MFA-gated for destructive ops) ──────────────
+# Phase 2a (this surface): the read-only user list + non-destructive
+# create. Phase 2b adds the destructive ops (disable / reset-password /
+# delete), which are refused unless MFA is enabled + the session is
+# MFA-verified. All gated by ADMIN_CENTER_ADMIN_TOOLS (default off).
+
+
+@app.get("/users", response_class=HTMLResponse)
+def admin_users(request: Request, created: str = "", err: str = ""):
+    """User-admin list + create form. Opt-in via ADMIN_CENTER_ADMIN_TOOLS;
+    auto-gated by the auth middleware."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    from . import user_admin
+    from ..database import SessionLocal
+    db = SessionLocal()
+    try:
+        users = user_admin.list_users(db)
+        return templates.TemplateResponse(
+            "users.html",
+            {
+                "request": request,
+                "app_version": APP_VERSION,
+                "admin_user": request.session.get("admin_user", ""),
+                "users": users,
+                "created": created,
+                "err": err,
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.post("/users/create")
+def admin_users_create(
+    request: Request,
+    email: str = Form(...),
+    display_name: str = Form(""),
+    password: str = Form(...),
+):
+    """Create a local user account (non-destructive — no MFA gate). Audited
+    to the operator identity."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    from . import operator_audit, user_admin
+    from ..database import SessionLocal
+    operator = request.session.get("admin_user", "?")
+    db = SessionLocal()
+    try:
+        try:
+            u = user_admin.create_user(
+                db, email=email, display_name=display_name, password=password,
+            )
+        except user_admin.UserAdminError as exc:
+            return RedirectResponse(f"/users?err={quote(str(exc))}", status_code=303)
+        operator_audit.record(
+            "admin.user_create", operator=operator, target=u.email,
+            request=request, notes=f"display_name={u.display_name[:60]}",
+        )
+        log.warning("admin-center operator %r created user %s", operator, u.email)
+        return RedirectResponse(f"/users?created={quote(u.email)}", status_code=303)
+    finally:
+        db.close()
