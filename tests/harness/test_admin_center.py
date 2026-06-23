@@ -1411,6 +1411,66 @@ def test_users_scrub_missing_email_400_and_noop_happy_path():
         c.close()
 
 
+# ---- /users/{id}/role role assignment (v2.587.0, Arc A4) ------------------
+@_LIVE
+def test_users_role_requires_auth():
+    """Unauthenticated role POST is bounced to login, never run."""
+    r = httpx.post(
+        f"{ADMIN_BASE_URL}/users/1/role", data={"role": "gm", "value": "1"},
+        timeout=5.0, follow_redirects=False,
+    )
+    assert r.status_code in (303, 307)
+    assert "/login" in r.headers.get("location", "")
+
+
+@_LIVE
+def test_users_role_refused_for_header_auth():
+    """The MFA gate: a basic-auth header caller is never MFA-verified, so
+    role changes are refused (403 gated / 404 off)."""
+    r = httpx.post(
+        f"{ADMIN_BASE_URL}/users/1/role", auth=_AUTH,
+        data={"role": "gm", "value": "1"}, timeout=5.0, follow_redirects=False,
+    )
+    assert r.status_code in (403, 404), r.text[:200]
+
+
+@_LIVE
+@pytest.mark.skipif(not _MFA_ON, reason="role changes need an MFA-verified session; stack has MFA off")
+def test_users_role_grant_revoke_roundtrip():
+    """On an MFA-verified session: create a throwaway user (a player),
+    grant GM → the GM pill shows, revoke GM, grant admin, revoke admin,
+    then delete. Net-zero."""
+    import re as _re
+    c = _logged_in_client()
+    try:
+        if not _tools_enabled(c):
+            pytest.skip("admin tools disabled on this stack")
+        email = "a4-role-throwaway@example.com"
+        page = c.get("/users", follow_redirects=False).text
+        m = _re.search(r"<td>(\d+)</td>\s*<td>" + _re.escape(email) + r"</td>", page)
+        if m:
+            c.post(f"/users/{m.group(1)}/delete", follow_redirects=False)
+        c.post("/users/create", data={"email": email, "display_name": "Role", "password": "hunter2!!"},
+               follow_redirects=False)
+        page = c.get("/users", follow_redirects=False).text
+        uid = _re.search(r"<td>(\d+)</td>\s*<td>" + _re.escape(email) + r"</td>", page).group(1)
+        # Grant GM → done + GM pill on the row.
+        g = c.post(f"/users/{uid}/role", data={"role": "gm", "value": "1"}, follow_redirects=False)
+        assert g.status_code == 303 and "done=" in g.headers.get("location", "")
+        row = _re.search(r"<td>" + uid + r"</td>.*?</tr>", c.get("/users").text, _re.S).group(0)
+        assert "GM</span>" in row
+        # Revoke GM, grant + revoke admin.
+        assert c.post(f"/users/{uid}/role", data={"role": "gm", "value": "0"}, follow_redirects=False).status_code == 303
+        assert c.post(f"/users/{uid}/role", data={"role": "admin", "value": "1"}, follow_redirects=False).status_code == 303
+        assert c.post(f"/users/{uid}/role", data={"role": "admin", "value": "0"}, follow_redirects=False).status_code == 303
+        # Unknown role → err redirect (no change).
+        bad = c.post(f"/users/{uid}/role", data={"role": "wizard", "value": "1"}, follow_redirects=False)
+        assert bad.status_code == 303 and "err=" in bad.headers.get("location", "")
+        c.post(f"/users/{uid}/delete", follow_redirects=False)  # cleanup
+    finally:
+        c.close()
+
+
 # ---- /campaigns campaign-admin page (v2.576.0, Phase 3a) ------------------
 @_LIVE
 def test_campaigns_page_redirects_when_unauthenticated():

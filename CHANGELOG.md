@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.587.0] - 2026-06-22 — "The Keymaster"
+
+**Schema version:** 76
+
+**Commit summary:** Arc A4 of `docs/plans/app-wide-roles-and-storage.md` — assign the GM / admin roles to users from the Admin Center.
+
+**Description:** Completes Arc A — admins can now grant/revoke the app-wide **GM** and **admin** roles on the Admin Center `/users` page. The Roles column shows admin / GM / player pills; the Actions column (MFA-verified only) gains **Make/Revoke GM** and **Make/Revoke admin** toggles. The new `POST /users/{id}/role` route sits behind the shared `_destructive_gate` (MFA required; basic-auth header callers refused) and is audited to the operator identity (`admin.user_role_grant` / `admin.user_role_revoke`, `actor=admin-center:<operator>`). This is the assignment surface the role model needs — GM is otherwise console-only.
+
+**Implementation:**
+
+- `app/admin_center/user_admin.py`: `set_role(db, user_id, *, role, value)` (role ∈ {gm, admin}).
+- `app/admin_center/main.py`: `POST /users/{id}/role` (gated + audited; unknown role → err redirect).
+- `app/admin_center/templates/users.html`: admin/GM/player role pills + MFA-gated GM/admin toggle buttons.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py` (+3): role route requires auth (unauth → 303); refused for basic-auth header callers (403/404); and an MFA-on grant-GM → (pill shows) → revoke → grant/revoke admin → unknown-role-errors → delete round-trip on a throwaway user.
+
+Total harness count → 4141 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+MINOR — new Admin Center endpoint (additive; opt-in, MFA-gated).
+
+### Added
+- Admin Center **role assignment** (`POST /users/{id}/role`, MFA-gated): grant/revoke the app-wide GM/admin roles, with role pills + toggles on `/users` — Arc A4 of `docs/plans/app-wide-roles-and-storage.md`. Completes Arc A (roles + caps).
+
 ## [2.586.0] - 2026-06-22 — "The Modest Stable"
 
 **Schema version:** 76

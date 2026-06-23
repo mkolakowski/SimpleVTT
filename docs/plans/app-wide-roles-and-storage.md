@@ -1,11 +1,11 @@
 # App-wide roles + GM/player caps + storage accounting & limits
 
-**Status:** 🟠 partial · **Arc A1 (role substrate) shipped v2.584.0** — the
-app-wide `User.is_gm` role (schema v76), `PLAYER_CHARACTER_LIMIT` (default 5)
-+ `GM_CAMPAIGN_LIMIT` (default 10) config, the `require_gm` auth gate, and
-demo-seed role back-fill. Arcs A2–A4 (campaign-create gating + GM cap;
-player character cap; Admin Center role assignment) and Arc B (storage
-accounting + per-user/per-campaign limits) are pending.
+**Status:** 🟠 partial · **Arc A (roles + caps) shipped v2.584.0–v2.587.0** —
+A1 role substrate (`User.is_gm`, schema v76, `require_gm`, caps config, demo
+roles); A2 campaign creation gated on GM + `GM_CAMPAIGN_LIMIT` cap; A3 player
+character cap (`PLAYER_CHARACTER_LIMIT`); A4 Admin Center role assignment
+(`POST /users/{id}/role`, MFA-gated). **Arc B (storage accounting +
+per-user/per-campaign limits) is pending.**
 
 ## Context
 
@@ -55,11 +55,12 @@ scan** (cached briefly) — no per-file DB size tracking. Storage limits are
 1. **A1 — substrate. ✅ v2.584.0.** `User.is_gm` (schema v76),
    `PLAYER_CHARACTER_LIMIT`/`GM_CAMPAIGN_LIMIT` config, `require_gm`, demo
    roles (demo GM `is_gm=True`; players are players).
-2. **A2 — campaign creation gated + GM cap.** `POST /campaigns` requires
-   `is_gm or is_admin`; GM-not-admin capped at `GM_CAMPAIGN_LIMIT`. UI gating.
-3. **A3 — player character cap.** The player character-create paths cap at
-   `PLAYER_CHARACTER_LIMIT`; GM/admin uncapped. UI.
-4. **A4 — Admin Center role assignment.** `POST /users/{id}/role`
+2. **A2 — campaign creation gated + GM cap. ✅ v2.585.0.** `POST /campaigns`
+   requires `is_gm or is_admin`; GM-not-admin capped at `GM_CAMPAIGN_LIMIT`.
+   Lobby create form gated + quota.
+3. **A3 — player character cap. ✅ v2.586.0.** The player character-create
+   paths cap at `PLAYER_CHARACTER_LIMIT`; GM/admin uncapped. `/characters` UI.
+4. **A4 — Admin Center role assignment. ✅ v2.587.0.** `POST /users/{id}/role`
    (MFA-gated, audited) + role pills/toggles on the Center `/users` page.
 
 ### Arc B — storage accounting + limits

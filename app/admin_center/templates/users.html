@@ -27,6 +27,8 @@
   th { color:#9fb3ff; font-weight:600; }
   .pill { display:inline-block; padding:1px 7px; border-radius:10px; font-size:11px; }
   .pill.admin { background:#2d3a6b; color:#bcd0ff; }
+  .pill.gm { background:#2d4a2e; color:#bfe9c2; }
+  .pill.player { background:#3a3550; color:#cfc6e8; }
   .pill.off { background:#3a1e1e; color:#ffb3b3; }
   .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   @media (max-width:640px){ .grid { grid-template-columns:1fr; } }
@@ -72,12 +74,25 @@
           <td>{{ u.display_name }}</td>
           <td>
             {% if u.is_admin %}<span class="pill admin">admin</span>{% endif %}
+            {% if u.is_gm %}<span class="pill gm">GM</span>{% endif %}
+            {% if not u.is_admin and not u.is_gm %}<span class="pill player">player</span>{% endif %}
             {% if u.is_disabled %}<span class="pill off">disabled</span>{% endif %}
           </td>
           <td class="muted">{{ u.created_at }}</td>
           {% if mfa_verified %}
           <td>
             <div class="row-actions">
+              <form method="post" action="/users/{{ u.id }}/role">
+                <input type="hidden" name="role" value="gm">
+                <input type="hidden" name="value" value="{{ 0 if u.is_gm else 1 }}">
+                <button type="submit">{{ "Revoke GM" if u.is_gm else "Make GM" }}</button>
+              </form>
+              <form method="post" action="/users/{{ u.id }}/role"
+                    onsubmit="return confirm('{{ 'Revoke' if u.is_admin else 'Grant' }} admin for {{ u.email }}?');">
+                <input type="hidden" name="role" value="admin">
+                <input type="hidden" name="value" value="{{ 0 if u.is_admin else 1 }}">
+                <button type="submit">{{ "Revoke admin" if u.is_admin else "Make admin" }}</button>
+              </form>
               <form method="post" action="/users/{{ u.id }}/disable">
                 <button type="submit">{{ "Enable" if u.is_disabled else "Disable" }}</button>
               </form>

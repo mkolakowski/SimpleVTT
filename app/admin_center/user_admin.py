@@ -84,6 +84,21 @@ def reset_password(db: Session, user_id: int, *, new_password: str) -> User:
     return u
 
 
+def set_role(db: Session, user_id: int, *, role: str, value: bool) -> User:
+    """Grant/revoke an app-wide role on a user (v2.587.0). ``role`` is
+    ``"gm"`` (``User.is_gm``) or ``"admin"`` (``User.is_admin``). Returns the
+    updated user. See docs/plans/app-wide-roles-and-storage.md."""
+    u = get_user(db, user_id)
+    if role == "gm":
+        u.is_gm = bool(value)
+    elif role == "admin":
+        u.is_admin = bool(value)
+    else:
+        raise UserAdminError(f"Unknown role: {role!r} (expected 'gm' or 'admin')")
+    db.commit()
+    return u
+
+
 def delete_user(db: Session, user_id: int) -> str:
     """Delete a user. Returns the email captured BEFORE the delete so the
     caller can audit a human-readable target after the row is gone."""

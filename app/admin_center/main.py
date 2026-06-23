@@ -799,6 +799,42 @@ def admin_users_delete(request: Request, user_id: int):
         db.close()
 
 
+@app.post("/users/{user_id}/role")
+def admin_users_set_role(
+    request: Request, user_id: int, role: str = Form(...), value: str = Form(""),
+):
+    """Grant/revoke an app-wide role (gm/admin) on a user. MFA-gated +
+    audited. value truthy → grant, else revoke. See
+    docs/plans/app-wide-roles-and-storage.md."""
+    blocked = _destructive_gate(request)
+    if blocked is not None:
+        return blocked
+    if role not in ("gm", "admin"):
+        return RedirectResponse("/users?err=Unknown+role", status_code=303)
+    grant = value.strip().lower() in ("1", "true", "yes", "on", "grant")
+    from . import operator_audit, user_admin
+    from ..database import SessionLocal
+    operator = request.session.get("admin_user", "?")
+    db = SessionLocal()
+    try:
+        try:
+            u = user_admin.set_role(db, user_id, role=role, value=grant)
+        except user_admin.UserAdminError as exc:
+            return RedirectResponse(f"/users?err={quote(str(exc))}", status_code=303)
+        action = "admin.user_role_grant" if grant else "admin.user_role_revoke"
+        operator_audit.record(
+            action, operator=operator, target=u.email, request=request,
+            notes=f"role={role}",
+        )
+        log.warning("admin-center operator %r %s %s for %s",
+                    operator, action, role, u.email)
+        verb = "granted" if grant else "revoked"
+        return RedirectResponse(
+            f"/users?done={quote(f'{verb} {role} for {u.email}')}", status_code=303)
+    finally:
+        db.close()
+
+
 @app.post("/users/{user_id}/scrub-audit-log")
 def admin_users_scrub_audit(request: Request, user_id: int, email: str = Form("")):
     """GDPR Art. 17 pseudonymization of a user's identifiers in the audit
