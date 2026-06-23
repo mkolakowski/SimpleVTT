@@ -107,6 +107,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-admin-center-consolidation" in resp.text
     # v2.584.0: app-wide-roles-and-storage plan listed.
     assert "/wiki/doc/plan-app-wide-roles-and-storage" in resp.text
+    # v2.602.1: campaign & PC archive plan listed.
+    assert "/wiki/doc/plan-campaign-pc-archive" in resp.text
     assert "/wiki/doc/plan-movement-and-summons" in resp.text
     # v2.99.447: automation-coverage audit doc listed in the references table.
     assert "/wiki/doc/automation-coverage" in resp.text
@@ -518,6 +520,19 @@ async def test_wiki_doc_serves_app_wide_roles_plan():
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "roles" in resp.text.lower() and "storage" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_campaign_pc_archive_plan():
+    """v2.602.1: GET /wiki/doc/plan-campaign-pc-archive — 200 + body
+    contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/campaign-pc-archive.md``.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-campaign-pc-archive")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "archive" in resp.text.lower() and "retire" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

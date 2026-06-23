@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.602.1] - 2026-06-23 — "The Filing Cabinet"
+
+**Schema version:** 77
+
+**Commit summary:** Design plan for the campaign + PC retirement/archive system, surfaced through the wiki.
+
+**Description:** Phase 1 (plan doc) of a new feature arc. Campaigns end and characters retire, but today the only non-active state is a permanent cascade **delete**. This arc adds a reversible soft **archive** (campaigns) / **retire** (characters) state that drops the row out of the active lists but keeps all data (sheet, history, encounter), then reshapes the demo: archive the original "Sundered Vault" (id=1, the harness anchor) and add a fresh `Demo L5` so the leveled lineup becomes L3/L5/L9/L13/L18.
+
+The plan ([`docs/plans/campaign-pc-archive.md`](docs/plans/campaign-pc-archive.md)) lays out four one-commit phases: this plan doc; campaign archive (schema + GM-only endpoints + lobby/settings UI); PC retirement (schema + owner-only endpoints + `/characters` UI); and the demo reseed.
+
+**Implementation:**
+
+- `docs/plans/campaign-pc-archive.md` — new design plan.
+- Surfaced through `/wiki`: `_DOC_ALLOWLIST` row (`plan-campaign-pc-archive`), the wiki landing-page "Design plans" table, and `docs/wiki/README.md`.
+
+**Harness:** `tests/harness/test_wiki.py::test_wiki_doc_serves_campaign_pc_archive_plan` (slug 200 + H1 + nav) + the `test_wiki_home_renders` landing-page assertion.
+
+### Added
+- Design plan for campaign archive + PC retirement, surfaced through the wiki.
+
 ## [2.602.0] - 2026-06-23 — "The Lashing Tail"
 
 **Schema version:** 77
