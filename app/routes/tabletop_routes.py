@@ -116986,7 +116986,16 @@ async def campaign_ws(websocket: WebSocket, campaign_id: int):
     try:
         user = db.query(User).filter(User.id == user_id).first()
         campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
-        if not user or not campaign or not _user_can_view_campaign(db, user, campaign):
+        # v2.599.10 — reject disabled users on connect, matching the HTTP path
+        # (auth.get_current_user rejects user.is_disabled). Without this, an
+        # account disabled mid-session could keep an open socket observing
+        # broadcasts until it disconnected. Same 4403 close as a non-member.
+        if (
+            not user
+            or user.is_disabled
+            or not campaign
+            or not _user_can_view_campaign(db, user, campaign)
+        ):
             await websocket.close(code=4403)
             return
         # v2.9.1: build the presence identity here while the DB session

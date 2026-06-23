@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.599.10] - 2026-06-23 — "The Revoked Pass"
+
+**Schema version:** 77
+
+**Commit summary:** The campaign WebSocket now rejects a user disabled mid-session, matching the HTTP path.
+
+**Description:** Closes the last open security-review item. `campaign_ws` authenticated the socket from the session and checked campaign membership, but did **not** re-check `user.is_disabled`. Every HTTP route rejects a disabled user (`auth.get_current_user`), so a disabled account couldn't *mutate* anything — but it could keep an already-open socket (or open a new one while its session cookie was still valid) and keep **observing** broadcasts until it disconnected. The connect guard now also rejects `user.is_disabled`, closing the socket with the same `4403` as a non-member. Read-only-but-real information leak, now closed.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: `campaign_ws` connect guard adds `user.is_disabled` to the reject condition (alongside the existing `_user_can_view_campaign` check).
+
+**Harness changes:**
+
+- `tests/harness/test_ws_disabled_user.py` (new, +1): end-to-end — log in as a demo player, confirm the WS connects, flip `is_disabled` in the DB (via `docker compose exec db psql`) **without touching the session**, and confirm a fresh connect with the same session is refused; always reverts the flag in a `finally`. Skips when the stack/docker isn't reachable or the demo user is absent.
+
+Total harness count → 4200 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+### Fixed
+- The campaign WebSocket rejects a user whose account was disabled mid-session (it previously kept streaming broadcasts to a still-open/just-reopened session until disconnect).
+
 ## [2.599.9] - 2026-06-23 — "The Right Doorframe"
 
 **Schema version:** 77
