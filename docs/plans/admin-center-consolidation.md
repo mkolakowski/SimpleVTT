@@ -138,6 +138,19 @@ NOT left as a live duplicate write-path.
      wiring (shared uploads volume? proxy to the app?) needs design.
 4. **Phase 4 — retire the in-app portal.** Once 1–3 are in the Center, reduce
    `admin_home.html` to a pointer to the Center; drop the moved routes.
+   - **Phase 4 (soft-deprecation step). 🟠 Shipped v2.577.2.** A migration
+     notice atop the in-app `/admin` page points operators to the Center;
+     the in-app forms stay live. Hard route removal is deferred per-surface
+     because (a) three surfaces lack Center parity — `users/{id}/scrub-audit-log`,
+     campaign `maps`/`thumbnail` uploads, and the stubs tracker — and (b) five
+     harness suites (`test_admin_audit`, `test_demo_magic_link`,
+     `test_admin_user_audit_scrub`, `test_admin_demo_reset`,
+     `test_cloudflare_banning`) still exercise the in-app routes.
+   - **Phase 4 (route removal). ⚪ Per-surface, after parity.** Remove each
+     in-app write route once its Center equivalent ships and its harness
+     coverage is migrated: user CRUD (needs audit-scrub ported first),
+     campaign mgmt (needs uploads ported), demo tools, stubs (needs shared
+     miss-store).
 
 ---
 

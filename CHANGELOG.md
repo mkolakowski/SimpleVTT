@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.577.2] - 2026-06-22 — "The Forwarding Address"
+
+**Schema version:** 75
+
+**Commit summary:** Phase 4 (soft-deprecation step) of `docs/plans/admin-center-consolidation.md` — add a "site administration is moving to the Admin Center" notice on the in-app `/admin` portal.
+
+**Description:** Begins Phase 4 (retire the in-app portal) with the safe first move: a prominent notice atop the in-app `/admin` page pointing operators to the standalone **Admin Center** (port 8015) for user / campaign management + demo tools, and naming the surfaces still served only in-app (audit-log scrub, campaign map/thumbnail uploads, the stubs tracker). The in-app forms stay **live** during the migration — a hard route removal is deliberately deferred because (a) three surfaces have no Center equivalent yet (uploads need the Center's upload-target design; the stubs tracker needs a shared miss-store; audit-scrub wasn't ported), and (b) five harness suites (`test_admin_audit`, `test_demo_magic_link`, `test_admin_user_audit_scrub`, `test_admin_demo_reset`, `test_cloudflare_banning`) still exercise the in-app routes. Removing routes will land per-surface once each has Center parity and its tests are migrated.
+
+### Changed
+- In-app `/admin` portal now shows a migration notice pointing to the Admin Center (`docs/plans/admin-center-consolidation.md` Phase 4, soft-deprecation step). No routes removed yet — the in-app write surface stays live during the transition.
+
 ## [2.577.1] - 2026-06-22 — "The Empty Seat"
 
 **Schema version:** 75

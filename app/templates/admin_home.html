@@ -3,6 +3,18 @@
 {% block content %}
 <h1>Admin portal</h1>
 
+<div role="note" style="border:1px solid #b58900;border-left-width:5px;background:rgba(181,137,0,0.08);
+     border-radius:8px;padding:12px 16px;margin:0 0 20px;line-height:1.5">
+  <strong>🛠️ Site administration is moving to the Admin Center.</strong>
+  User &amp; campaign management (and the demo tools) now live in the
+  standalone <strong>Admin Center</strong> (default port <code>8015</code>),
+  behind its own operator login + optional MFA — set
+  <code>ADMIN_CENTER_ADMIN_TOOLS=true</code> to enable the write surface there.
+  These in-app forms stay live during the migration. Surfaces still served
+  only here: <em>audit-log scrub</em>, campaign <em>map / thumbnail uploads</em>,
+  and the <em>stubs tracker</em>.
+</div>
+
 <section>
     <h2>Users</h2>
     <table class="data filterable" data-export-name="users">
