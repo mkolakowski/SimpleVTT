@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.591.0] - 2026-06-23 — "The Wider Table"
+
+**Schema version:** 77
+
+**Commit summary:** Demo rework phase D2 — expand the demo cast: a second GM (app-wide GM role, not site-admin) + three more shared players.
+
+**Description:** The demo now seeds **seven** accounts instead of three, in service of the upcoming multi-campaign arc: the original `demo-gm` (GM+admin), `demo-alice`, `demo-bob`, plus **`demo-gm2`** (holds the app-wide GM role but is **not** site-admin — it will own the level-9 campaign, demonstrating that a GM can run games without admin-console access) and three more players **`demo-carol`** / **`demo-dave`** / **`demo-erin`** (shared across campaigns as the leveled campaigns land in D3–D6). All share `demopass`. No campaign memberships change yet — the new users own/join campaigns in the following phases.
+
+**Implementation:**
+
+- `app/demo_seed.py`: new `DEMO_GM2_EMAIL` / `DEMO_CAROL_EMAIL` / `DEMO_DAVE_EMAIL` / `DEMO_ERIN_EMAIL`; `DEMO_EMAILS` expands to all seven; `seed_users` creates them (gm2 `is_gm=True, is_admin=False`; the three players plain); reseed `users` count is now `len(users)`.
+
+**Harness changes:**
+
+- `tests/harness/test_demo_gm_admin_gate.py` (+2): `demo-gm2` (GM, not admin) → 403 on `/admin`; the three new players → 403.
+- `tests/harness/test_demo_campaigns.py` (+7, new): every one of the seven demo accounts logs in with the shared password (this file grows with each campaign phase).
+
+Total harness count → 4162 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+### Added
+- Demo cast expanded to 7 accounts: a second GM (`demo-gm2`, GM role only) + players `demo-carol`/`demo-dave`/`demo-erin` (demo-rework phase D2).
+
 ## [2.590.0] - 2026-06-23 — "The Five Doors"
 
 **Schema version:** 77

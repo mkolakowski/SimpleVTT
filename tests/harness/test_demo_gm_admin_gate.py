@@ -60,3 +60,26 @@ async def test_demo_bob_denied_admin_portal():
         assert resp.status_code == 403, resp.text
     finally:
         await client.aclose()
+
+
+async def test_demo_gm2_denied_admin_portal():
+    """v2.591.0 — demo-gm2 holds the app-wide GM role but is NOT site-admin,
+    so GET /admin is forbidden (403). Locks in that the GM role and the admin
+    console are independent."""
+    client = await _client("demo-gm2@example.com")
+    try:
+        resp = await client.get("/admin")
+        assert resp.status_code == 403, resp.text
+    finally:
+        await client.aclose()
+
+
+async def test_demo_new_players_denied_admin_portal():
+    """v2.591.0 — the new shared players are never admin → 403."""
+    for email in ("demo-carol@example.com", "demo-dave@example.com", "demo-erin@example.com"):
+        client = await _client(email)
+        try:
+            resp = await client.get("/admin")
+            assert resp.status_code == 403, f"{email}: {resp.text}"
+        finally:
+            await client.aclose()

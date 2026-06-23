@@ -67,7 +67,18 @@ log = logging.getLogger(__name__)
 DEMO_GM_EMAIL = "demo-gm@example.com"
 DEMO_ALICE_EMAIL = "demo-alice@example.com"
 DEMO_BOB_EMAIL = "demo-bob@example.com"
-DEMO_EMAILS = (DEMO_GM_EMAIL, DEMO_ALICE_EMAIL, DEMO_BOB_EMAIL)
+# v2.591.0 — the demo grows to several leveled campaigns with shared
+# players + a second GM. demo-gm2 holds the app-wide GM role (not site
+# admin) and owns one campaign (the level-9 game); carol/dave/erin are
+# players shared across campaigns. All share DEMO_PASSWORD.
+DEMO_GM2_EMAIL = "demo-gm2@example.com"
+DEMO_CAROL_EMAIL = "demo-carol@example.com"
+DEMO_DAVE_EMAIL = "demo-dave@example.com"
+DEMO_ERIN_EMAIL = "demo-erin@example.com"
+DEMO_EMAILS = (
+    DEMO_GM_EMAIL, DEMO_ALICE_EMAIL, DEMO_BOB_EMAIL,
+    DEMO_GM2_EMAIL, DEMO_CAROL_EMAIL, DEMO_DAVE_EMAIL, DEMO_ERIN_EMAIL,
+)
 DEMO_PASSWORD = "demopass"
 DEMO_CAMPAIGN_NAME = "Demo: The Sundered Vault"
 # v2.590.0 — the demo is growing from one campaign to a set of leveled
@@ -324,9 +335,28 @@ def seed_users(db: Session) -> dict[str, User]:
         is_admin=False,
         is_gm=False,
     )
-    db.add_all([gm, alice, bob])
+    # v2.591.0 — a second GM (app-wide GM role, NOT site admin) who owns one
+    # campaign, plus three more shared players. demo-gm2 demonstrates the
+    # role model: a GM who can create/run campaigns without admin-console
+    # access (GET /admin still 403s for them).
+    gm2 = User(
+        email=DEMO_GM2_EMAIL,
+        display_name="Demo GM 2 (Saltmarsh)",
+        password_hash=pw,
+        is_admin=False,
+        is_gm=True,
+        roll_log_position="left",
+    )
+    carol = User(email=DEMO_CAROL_EMAIL, display_name="Carol (Demo Paladin)",
+                 password_hash=pw, is_admin=False, is_gm=False)
+    dave = User(email=DEMO_DAVE_EMAIL, display_name="Dave (Demo Sorcerer)",
+                password_hash=pw, is_admin=False, is_gm=False)
+    erin = User(email=DEMO_ERIN_EMAIL, display_name="Erin (Demo Druid)",
+                password_hash=pw, is_admin=False, is_gm=False)
+    db.add_all([gm, alice, bob, gm2, carol, dave, erin])
     db.flush()
-    return {"gm": gm, "alice": alice, "bob": bob}
+    return {"gm": gm, "alice": alice, "bob": bob,
+            "gm2": gm2, "carol": carol, "dave": dave, "erin": erin}
 
 
 def seed_campaign(db: Session, users: dict[str, User]) -> Campaign:
@@ -8700,7 +8730,7 @@ def reset_and_reseed(db: Session) -> dict[str, int]:
     homebrew_count = seed_homebrew_files(camp)
 
     counts = {
-        "users":           3,
+        "users":           len(users),
         "campaign":        1,
         "memberships":     2,
         "map":             1,
