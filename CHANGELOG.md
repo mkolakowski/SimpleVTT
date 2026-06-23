@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.599.11] - 2026-06-23 — "The Honest Headers"
+
+**Schema version:** 77
+
+**Commit summary:** Sync two drifted design-plan status headers against shipped reality (fail2ban Phase 4 closed; Admin Center map upload shipped).
+
+**Description:** Doc-status reconciliation (no code change). A review of the plan docs found two stale `Status:` headers:
+- `docs/plans/fail2ban-crowdsec-integration.md` still said **"Phase 4 OPEN"** and that the Phase 4g deployment-guide wiki page "lands" — but Phase 4 closed at v2.476.0, and several post-arc hardening items shipped since (`FAIL2BAN_IGNOREIP` v2.495.4, Discord notify v2.566.0, the Cloudflare IP-range `ignoreip` v2.599.0, CF-Tunnel attribution hardening v2.599.1). Header now reads "Phases 1, 2, 4 shipped" with the post-arc hardening listed; the only genuine remainder (Phase 2 WS connect-storm signals) is called out.
+- `docs/plans/admin-center-consolidation.md` said the Phase 3b "map/thumbnail uploads" remained — but the map upload shipped at v2.582.0 (verified firsthand: the Admin Center `POST /campaigns/{id}/maps` route). Header now notes the map upload shipped; only the thumbnail upload + the Phase 4 campaign-mgmt/stubs in-app route removal remain.
+
+**Implementation:**
+
+- `docs/plans/fail2ban-crowdsec-integration.md`: status header rewritten (Phase 4 closed + post-arc hardening).
+- `docs/plans/admin-center-consolidation.md`: status header notes the v2.582.0 map upload.
+
+No harness change (doc-only; both plans are already surfaced via `/wiki`).
+
+### Changed
+- Plan status headers for the fail2ban/CrowdSec integration and the Admin Center consolidation now reflect shipped reality.
+
 ## [2.599.10] - 2026-06-23 — "The Revoked Pass"
 
 **Schema version:** 77
