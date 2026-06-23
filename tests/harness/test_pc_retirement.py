@@ -74,3 +74,25 @@ async def test_retire_unknown_character_404(alice_client):
         "/characters/999999/retire", follow_redirects=False,
     )
     assert r.status_code == 404, r.text
+
+
+async def test_retire_redirect_flashes_toast(alice_client, roster):
+    """v2.605.3 — the retire redirect carries ?flash=retired, and the
+    My-Characters page renders a transient confirmation toast for it.
+    Restores Pip (unretire) in a `finally`."""
+    pip_id = roster["Pip Quickfingers"]["id"]
+    try:
+        r = await alice_client.post(
+            f"/characters/{pip_id}/retire", follow_redirects=False,
+        )
+        assert r.status_code in (302, 303), r.text
+        assert "flash=retired" in r.headers.get("location", "")
+        r = await alice_client.get(
+            "/characters?flash=retired", follow_redirects=False,
+        )
+        assert r.status_code == 200
+        assert 'id="flash-toast"' in r.text and "Character retired" in r.text
+    finally:
+        await alice_client.post(
+            f"/characters/{pip_id}/unretire", follow_redirects=False,
+        )

@@ -70,3 +70,22 @@ async def test_archive_unknown_campaign_404(gm_client):
         "/campaign/999999/archive", follow_redirects=False,
     )
     assert r.status_code == 404, r.text
+
+
+async def test_archive_redirect_flashes_toast(gm_client):
+    """v2.605.3 — the archive redirect carries ?flash=archived, and the
+    lobby renders a transient confirmation toast for it. Restores the
+    archived demo default in a `finally`."""
+    try:
+        r = await gm_client.post(
+            f"/campaign/{CAMPAIGN_ID}/archive", follow_redirects=False,
+        )
+        assert r.status_code in (302, 303), r.text
+        assert "flash=archived" in r.headers.get("location", "")
+        r = await gm_client.get("/?flash=archived", follow_redirects=False)
+        assert r.status_code == 200
+        assert 'id="flash-toast"' in r.text and "Campaign archived" in r.text
+    finally:
+        await gm_client.post(
+            f"/campaign/{CAMPAIGN_ID}/archive", follow_redirects=False,
+        )

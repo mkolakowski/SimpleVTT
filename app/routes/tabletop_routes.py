@@ -118608,7 +118608,7 @@ def archive_campaign(
     c.is_archived = True
     c.archived_at = datetime.utcnow()
     db.commit()
-    return RedirectResponse("/", status_code=303)
+    return RedirectResponse("/?flash=archived", status_code=303)
 
 
 @router.post("/campaign/{campaign_id}/unarchive")
@@ -118628,4 +118628,4 @@ def unarchive_campaign(
     c.is_archived = False
     c.archived_at = None
     db.commit()
-    return RedirectResponse("/", status_code=303)
+    return RedirectResponse("/?flash=unarchived", status_code=303)

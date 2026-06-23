@@ -275,7 +275,7 @@ def retire_my_character(
     char.is_archived = True
     char.archived_at = datetime.utcnow()
     db.commit()
-    return RedirectResponse("/characters", status_code=303)
+    return RedirectResponse("/characters?flash=retired", status_code=303)
 
 
 @router.post("/characters/{char_id}/unretire")
@@ -295,7 +295,7 @@ def unretire_my_character(
     char.is_archived = False
     char.archived_at = None
     db.commit()
-    return RedirectResponse("/characters", status_code=303)
+    return RedirectResponse("/characters?flash=unretired", status_code=303)
 
 
 @router.get("/character/{char_id}/sheet", response_class=HTMLResponse)

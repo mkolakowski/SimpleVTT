@@ -59,6 +59,52 @@
         };
     })();
     </script>
+    {# v2.605.3 — flash toast. Endpoints that POST→redirect (campaign
+       archive/unarchive, PC retire/unretire) append ?flash=<key>; this
+       renders a transient confirmation toast on the landing page, then
+       auto-dismisses + scrubs the query param so a refresh doesn't repeat
+       it. Self-contained: the lobby / My-Characters pages don't load the
+       tabletop's window.showToast, so this is its own tiny widget. #}
+    {% set _flash = request.query_params.get("flash") if request else None %}
+    {% set _flash_msgs = {
+        "archived": "📦 Campaign archived — moved to the Archived section.",
+        "unarchived": "♻ Campaign restored to the lobby.",
+        "retired": "📦 Character retired — moved to the Retired section.",
+        "unretired": "♻ Character restored to your active list.",
+    } %}
+    {% if _flash and _flash in _flash_msgs %}
+    <div id="flash-toast" role="status" aria-live="polite">{{ _flash_msgs[_flash] }}</div>
+    <style>
+        #flash-toast {
+            position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+            z-index: 9999; max-width: min(90vw, 460px);
+            background: var(--bg-2, #1d2128); color: var(--fg, #e6e6e6);
+            border: 1px solid var(--border, #2a2d3a); border-left: 4px solid var(--ok, #5ad19a);
+            border-radius: 8px; padding: 12px 18px; font-size: 14px;
+            box-shadow: 0 10px 30px rgba(0,0,0,.45);
+            opacity: 0; transition: opacity .25s ease, transform .25s ease;
+        }
+        #flash-toast.show { opacity: 1; }
+        #flash-toast.hide { opacity: 0; transform: translateX(-50%) translateY(8px); }
+    </style>
+    <script>
+        (function () {
+            // Strip ?flash from the URL so a reload / back doesn't re-toast.
+            try {
+                const u = new URL(window.location.href);
+                u.searchParams.delete("flash");
+                window.history.replaceState({}, "", u.pathname + u.search + u.hash);
+            } catch (_) { /* older browser — harmless */ }
+            const el = document.getElementById("flash-toast");
+            if (!el) return;
+            requestAnimationFrame(() => el.classList.add("show"));
+            setTimeout(() => {
+                el.classList.add("hide");
+                setTimeout(() => el.remove(), 300);
+            }, 3500);
+        })();
+    </script>
+    {% endif %}
     {% include "_demo_banner.html" %}
     {# v2.90.0 — topnav is now a Jinja block so pages can suppress it.
        The tabletop page overrides this block (and the version footer)

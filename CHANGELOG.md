@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.605.3] - 2026-06-23 — "The Gentle Nudge"
+
+**Schema version:** 79
+
+**Commit summary:** Archiving a campaign / retiring a character now shows a transient confirmation toast instead of a silent page reload.
+
+**Description:** UX polish for the campaign-pc-archive feature. The archive / unarchive / retire / unretire actions POST→redirect (a full-page reload), so the only feedback was the row silently jumping to (or out of) the Archived/Retired section — easy to miss. Each action now redirects with a `?flash=<key>` query param, and a small self-contained flash-toast in the shared base template renders a confirmation ("📦 Campaign archived — moved to the Archived section.", "♻ Character restored to your active list.", etc.), fades out after ~3.5 s, and scrubs the query param from the URL via `history.replaceState` so a reload or back-navigation doesn't repeat it. Self-contained because the lobby / My-Characters pages don't load the tabletop's `window.showToast`.
+
+**Implementation:**
+
+- `app/templates/base.html` — a flash-toast widget that maps the four `?flash` keys (`archived` / `unarchived` / `retired` / `unretired`) to a message, with scoped CSS + an auto-dismiss + param-scrub script. Renders only when a known `?flash` key is present.
+- `app/routes/tabletop_routes.py` — `archive_campaign` / `unarchive_campaign` redirect to `/?flash=archived` / `/?flash=unarchived`.
+- `app/routes/user_routes.py` — `retire_my_character` / `unretire_my_character` redirect to `/characters?flash=retired` / `/characters?flash=unretired`.
+
+**Harness:** `tests/harness/test_campaign_archive.py::test_archive_redirect_flashes_toast` + `tests/harness/test_pc_retirement.py::test_retire_redirect_flashes_toast` (+2) — assert the redirect Location carries the flash key and the landing page renders `#flash-toast` with the confirmation text.
+
+### Added
+- Confirmation toasts on campaign archive/unarchive and PC retire/unretire.
+
 ## [2.605.2] - 2026-06-23 — "The Cartographer's Brief"
 
 **Schema version:** 79
