@@ -90,6 +90,10 @@
                     onsubmit="return confirm('Delete {{ u.email }}? This cannot be undone.');">
                 <button type="submit" class="danger">Delete</button>
               </form>
+              <button type="button" class="scrub-log-btn"
+                      data-uid="{{ u.id }}" data-email="{{ u.email }}"
+                      onclick="scrubUserLog(this)"
+                      title="GDPR Art. 17: pseudonymize this user's identifiers in the audit log (rewrites matching lines to an opaque token; never deletes)">Scrub log</button>
             </div>
           </td>
           {% endif %}
@@ -122,5 +126,44 @@
     </form>
   </div>
 </main>
+<script>
+  // GDPR Art. 17 audit-log scrub — pseudonymize a user's email / user_id /
+  // actor_id across the audit log to a stable opaque token. Posts
+  // form-encoded to the JSON endpoint and reports the line count. Ported
+  // from the in-app /admin portal (admin-center-consolidation Phase 4).
+  async function scrubUserLog(btn) {
+    const uid = btn.getAttribute('data-uid');
+    const email = btn.getAttribute('data-email');
+    if (!confirm("Pseudonymize " + email + "'s identifiers in the audit log?\n\n" +
+        "Rewrites (never deletes) matching lines to an opaque <deleted-…> token. " +
+        "Idempotent — safe to re-run.")) {
+      return;
+    }
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Scrubbing…';
+    try {
+      const resp = await fetch('/users/' + uid + '/scrub-audit-log', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'email=' + encodeURIComponent(email),
+      });
+      if (!resp.ok) {
+        const txt = await resp.text();
+        btn.disabled = false;
+        btn.textContent = orig;
+        alert('Scrub failed: ' + resp.status + ' — ' + (txt || 'unknown'));
+        return;
+      }
+      const j = await resp.json();
+      btn.textContent = 'Scrubbed ✓ (' + j.lines_rewritten + ' line' +
+        (j.lines_rewritten === 1 ? '' : 's') + ')';
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = orig;
+      alert('Network error: ' + (e.message || e));
+    }
+  }
+</script>
 </body>
 </html>

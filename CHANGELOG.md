@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.578.0] - 2026-06-22 — "The Quiet Eraser"
+
+**Schema version:** 75
+
+**Commit summary:** Port the GDPR audit-log scrub into the Admin Center (the last user-admin parity gap), MFA-gated.
+
+**Description:** Adds `POST /users/{id}/scrub-audit-log` to the Center — GDPR Art. 17 pseudonymization of a user's `email` / `user_id` / `actor_id` across the audit log to a stable opaque `<deleted-…>` token (rewrites matching lines, never deletes; preserves `ip` / `ua` / the event tag fail2ban+CrowdSec read). Same JSON contract as the in-app route. Destructive (it rewrites the audit-log files), so it runs behind the shared `_destructive_gate` (MFA-verified session required; basic-auth header callers refused). The scrub runs **before** the operator-audit append, and the append records the *pseudonym* — so the real email is never written back into the freshly-scrubbed log. A per-row **Scrub log** button (MFA-verified only) on the `/users` page calls it via `fetch`, ported from the in-app portal. This closes the last user-admin parity gap, unblocking the eventual removal of the in-app user CRUD routes.
+
+**Implementation:**
+
+- `app/admin_center/main.py`: `POST /users/{id}/scrub-audit-log` (gated + audited `admin.user_audit_scrub` against the pseudonym; reuses `app.audit_scrub.scrub_user_from_audit_log`, importable from the shared image and operating on the RW-mounted `audit_logs` volume).
+- `app/admin_center/templates/users.html`: per-row MFA-gated **Scrub log** button + `scrubUserLog` fetch handler (parity with the in-app portal's button).
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py` (+3): scrub requires auth (unauth → 303); refused for basic-auth header callers (403 gated / 404 off — never runs, so the shared log is untouched); and on an MFA-verified session, missing email → 400 + a never-logged-email scrub rewrites 0 lines with the JSON contract intact (a safe no-op that touches no real user's data; skipped when MFA off).
+
+Total harness count → 4133 in `tests/harness/` + 101 in `tests/harness_ui/`.
+
+MINOR — new Admin Center endpoint (additive; opt-in, off by default).
+
+### Added
+- Admin Center **audit-log scrub** (`POST /users/{id}/scrub-audit-log`, opt-in via `ADMIN_CENTER_ADMIN_TOOLS`, MFA-gated): GDPR Art. 17 pseudonymization ported from the in-app portal (`docs/plans/admin-center-consolidation.md` Phase 4) — the last user-admin parity gap. Per-row **Scrub log** button on `/users`.
+
 ## [2.577.2] - 2026-06-22 — "The Forwarding Address"
 
 **Schema version:** 75

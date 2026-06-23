@@ -146,9 +146,13 @@ NOT left as a live duplicate write-path.
      harness suites (`test_admin_audit`, `test_demo_magic_link`,
      `test_admin_user_audit_scrub`, `test_admin_demo_reset`,
      `test_cloudflare_banning`) still exercise the in-app routes.
+   - **Audit-scrub ported. ✅ v2.578.0.** `POST /users/{id}/scrub-audit-log`
+     now lives in the Center (MFA-gated, JSON-contract parity, per-row
+     **Scrub log** button) — the last user-admin parity gap. In-app user
+     CRUD is now fully duplicated and ready to retire.
    - **Phase 4 (route removal). ⚪ Per-surface, after parity.** Remove each
      in-app write route once its Center equivalent ships and its harness
-     coverage is migrated: user CRUD (needs audit-scrub ported first),
+     coverage is migrated: **user CRUD — now unblocked (full parity);**
      campaign mgmt (needs uploads ported), demo tools, stubs (needs shared
      miss-store).
 

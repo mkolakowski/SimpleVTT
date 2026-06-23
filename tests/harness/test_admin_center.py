@@ -1310,6 +1310,59 @@ def test_users_disable_reset_delete_roundtrip():
         c.close()
 
 
+# ---- /users/{id}/scrub-audit-log (v2.578.0, Phase 4 — audit-scrub port) ---
+@_LIVE
+def test_users_scrub_requires_auth():
+    """Unauthenticated scrub POST is bounced to login, never run."""
+    r = httpx.post(
+        f"{ADMIN_BASE_URL}/users/1/scrub-audit-log",
+        data={"email": "x@example.com"}, timeout=5.0, follow_redirects=False,
+    )
+    assert r.status_code in (303, 307)
+    assert "/login" in r.headers.get("location", "")
+
+
+@_LIVE
+def test_users_scrub_refused_for_header_auth():
+    """The MFA gate: a basic-auth header caller is never MFA-verified, so the
+    destructive scrub is refused — 403 (gated) or 404 (surface off). Never
+    runs the scrub, so the shared audit log is untouched."""
+    r = httpx.post(
+        f"{ADMIN_BASE_URL}/users/1/scrub-audit-log", auth=_AUTH,
+        data={"email": "x@example.com"}, timeout=5.0, follow_redirects=False,
+    )
+    assert r.status_code in (403, 404), r.text[:200]
+
+
+@_LIVE
+@pytest.mark.skipif(not _MFA_ON, reason="scrub needs an MFA-verified session; stack has MFA off")
+def test_users_scrub_missing_email_400_and_noop_happy_path():
+    """On an MFA-verified session: missing email → 400; and a scrub for an
+    email that was never logged rewrites 0 lines (safe no-op — touches no
+    real user's data) with the JSON contract intact."""
+    c = _logged_in_client()
+    try:
+        if not _tools_enabled(c):
+            pytest.skip("admin tools disabled on this stack")
+        # Missing email → 400.
+        bad = c.post("/users/1/scrub-audit-log", data={}, follow_redirects=False)
+        assert bad.status_code == 400, bad.text[:200]
+        # Never-logged email + bogus id → 0 lines, JSON contract present.
+        ok = c.post(
+            "/users/99999999/scrub-audit-log",
+            data={"email": "never-logged-scrub-test@example.invalid"},
+            follow_redirects=False,
+        )
+        assert ok.status_code == 200, ok.text[:200]
+        body = ok.json()
+        assert body["ok"] is True
+        assert body["lines_rewritten"] == 0
+        for key in ("user_id", "pseudonym", "files_scanned", "lines_rewritten"):
+            assert key in body
+    finally:
+        c.close()
+
+
 # ---- /campaigns campaign-admin page (v2.576.0, Phase 3a) ------------------
 @_LIVE
 def test_campaigns_page_redirects_when_unauthenticated():

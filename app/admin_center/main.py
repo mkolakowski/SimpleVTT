@@ -799,6 +799,44 @@ def admin_users_delete(request: Request, user_id: int):
         db.close()
 
 
+@app.post("/users/{user_id}/scrub-audit-log")
+def admin_users_scrub_audit(request: Request, user_id: int, email: str = Form("")):
+    """GDPR Art. 17 pseudonymization of a user's identifiers in the audit
+    log (rewrites matching lines to an opaque ``<deleted-…>`` token; never
+    deletes lines, preserves ip/ua/event-tag). MFA-gated (destructive — it
+    rewrites the audit-log files). Returns the same JSON contract as the
+    in-app route; the action is recorded against the *pseudonym* (the real
+    email is never written back into the freshly-scrubbed log), so the scrub
+    runs BEFORE the operator-audit append."""
+    blocked = _destructive_gate(request)
+    if blocked is not None:
+        return blocked
+    addr = (email or "").strip()
+    if not addr:
+        return JSONResponse({"detail": "email is required"}, status_code=400)
+    from ..audit_scrub import scrub_user_from_audit_log
+    from . import operator_audit
+    operator = request.session.get("admin_user", "?")
+    summary = scrub_user_from_audit_log(user_id=user_id, email=addr)
+    operator_audit.record(
+        "admin.user_audit_scrub", operator=operator, target=summary["pseudonym"],
+        request=request,
+        notes=(
+            f"audit-log scrub: {summary['lines_rewritten']} line(s) "
+            f"pseudonymized across {summary['files_scanned']} file(s)"
+        ),
+    )
+    log.warning("admin-center operator %r scrubbed audit log for user_id=%s (%s lines)",
+                operator, user_id, summary["lines_rewritten"])
+    return {
+        "ok": True,
+        "user_id": user_id,
+        "pseudonym": summary["pseudonym"],
+        "files_scanned": summary["files_scanned"],
+        "lines_rewritten": summary["lines_rewritten"],
+    }
+
+
 # ── Campaign admin (Phase 3 — opt-in; delete MFA-gated) ───────────────────────
 # Phase 3a (this surface): a campaign list + read-only detail (members /
 # characters / maps / system) + the headline destructive action, delete
