@@ -39,6 +39,26 @@
   /* v2.605.6 — colour the account toggle by its action: red to disable,
      green to (re-)enable. Mirrors the theme's button.danger red. */
   .menu-panel button.btn-enable { background:#2d4a2e; border-color:#3c6b3e; color:#bfe9c2; }
+  /* v2.605.7 — make the irreversible Delete-user action look extra
+     dangerous: brighter red, bold uppercase, a warning glow, and a
+     subtle pulse so it can't be confused with the reversible actions. */
+  .menu-panel button.btn-delete-extreme {
+    background:#b91c1c; border:1px solid #ff6b6b; color:#fff;
+    font-weight:700; text-transform:uppercase; letter-spacing:.6px;
+    box-shadow:0 0 0 1px rgba(255,107,107,.25), 0 0 12px rgba(220,38,38,.45);
+    animation:delete-danger-pulse 1.8s ease-in-out infinite;
+  }
+  .menu-panel button.btn-delete-extreme:hover {
+    background:#dc2626; box-shadow:0 0 0 1px rgba(255,107,107,.5), 0 0 18px rgba(220,38,38,.7);
+    animation:none;
+  }
+  @keyframes delete-danger-pulse {
+    0%,100% { box-shadow:0 0 0 1px rgba(255,107,107,.25), 0 0 8px rgba(220,38,38,.35); }
+    50%     { box-shadow:0 0 0 1px rgba(255,107,107,.45), 0 0 16px rgba(220,38,38,.6); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .menu-panel button.btn-delete-extreme { animation:none; }
+  }
 </style>
 </head>
 <body>
@@ -127,7 +147,7 @@
                           title="GDPR Art. 17: pseudonymize this user's identifiers in the audit log (rewrites matching lines to an opaque token; never deletes)">Scrub audit log</button>
                   <form method="post" action="/users/{{ u.id }}/delete"
                         onsubmit="return confirm('Delete {{ u.email }}? This cannot be undone.');">
-                    <button type="submit" class="danger">Delete user</button>
+                    <button type="submit" class="danger btn-delete-extreme">⚠ Delete user</button>
                   </form>
                 </div>
               </div>

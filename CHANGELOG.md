@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.605.7] - 2026-06-23 — "The Big Red Button"
+
+**Schema version:** 79
+
+**Commit summary:** Make the irreversible Delete-user button look extra dangerous.
+
+**Description:** The Delete-user action in the Admin Center user "Manage ▾" menu is the one permanent, unrecoverable operation in the list, so it now stands well apart from the reversible toggles around it: a brighter red fill (`#b91c1c`), a bold uppercase label with a ⚠ prefix, a red border + glow, and a slow pulse (disabled under `prefers-reduced-motion`). Template/CSS-only — the form, endpoint, and the "this cannot be undone" confirm are unchanged.
+
+**Implementation:**
+
+- `app/admin_center/templates/users.html` — add a `btn-delete-extreme` class (alongside the existing `danger`) to the delete button + the scoped CSS (brighter red, bold/uppercase, glow, pulse keyframes, reduced-motion opt-out).
+
+No harness change (styling-only; the `test_admin_center.py` delete test POSTs the endpoint directly).
+
+### Changed
+- Admin Center user menu: the Delete-user button now has an extra-dangerous bright-red, glowing, pulsing treatment to set the permanent action apart from the reversible ones.
+
 ## [2.605.6] - 2026-06-23 — "The Red and the Green"
 
 **Schema version:** 79
