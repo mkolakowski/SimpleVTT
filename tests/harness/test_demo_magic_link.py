@@ -29,7 +29,7 @@ import pytest
 
 from app import demo_magic_link as mlr
 
-from .helpers import BASE_URL, login_client
+from .helpers import BASE_URL
 
 
 _DEMO_SUB = "demo-gm@example.com"
@@ -166,24 +166,61 @@ async def test_demo_login_endpoint_404_when_gate_off():
     assert resp.status_code == 404
 
 
-async def test_mint_endpoint_404_when_gate_off_even_for_admin():
-    """The mint endpoint is admin-only AND gate-gated. With the gate
-    off, an unauthenticated request 404s without ever revealing
-    whether admin auth would have succeeded — protects against
-    leaking "feature exists but you're not admin" vs. "feature
-    doesn't exist." Because the order of Depends is gate-first via
-    the per-request check inside the handler, the 401 (Login
-    required) from ``require_admin`` fires before the 404 — that's
-    by design: the admin-auth requirement is the load-bearing check
-    and we want it to win the response code so the standard auth
-    redirect to /login still works for admins exploring the UI.
+# v2.581.0 — the in-app mint route (`POST /admin/demo/mint-magic-link`) was
+# retired (moved to the Admin Center, Phase 4 of
+# docs/plans/admin-center-consolidation.md). That it's gone is asserted by
+# test_admin_routes_retired.py; the Center's mint is covered by
+# test_admin_center.py::test_tools_mint_magic_link. The happy-path below now
+# mints container-side via the Center (same SECRET_KEY → tokens verify at the
+# app's /demo-login), which also exercises the real cross-service contract.
+
+ADMIN_CENTER_BASE_URL = os.getenv("ADMIN_CENTER_BASE_URL", "http://localhost:8015")
+
+
+def _env_file_value(key: str, default: str = "") -> str:
+    """Read a value from the repo-root .env (the file docker-compose reads),
+    falling back to a shell env var then the default."""
+    from pathlib import Path
+    val = default
+    env_path = Path(__file__).resolve().parents[2] / ".env"
+    if env_path.is_file():
+        for line in env_path.read_text().splitlines():
+            s = line.strip()
+            if s.startswith(f"{key}=") and not s.startswith("#"):
+                val = s.split("=", 1)[1].strip() or val
+    return os.getenv(key, val)
+
+
+async def _center_mint(sub: str) -> "str | None":
+    """Mint a demo magic link via the Admin Center (container-side, same
+    SECRET_KEY as the app). Returns the token, or None to skip — Center
+    unreachable / admin-tools off / magic-link off / login or mint refused.
     """
-    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0, follow_redirects=False) as client:
-        resp = await client.post("/admin/demo/mint-magic-link", data={"sub": "demo-gm@example.com"})
-    # require_admin fires before the gate check → 401 unauthorized
-    # (or 303 redirect to /login if the test framework happens to
-    # be logged in, but the harness clients here aren't).
-    assert resp.status_code in (401, 303, 404)
+    from urllib.parse import parse_qs, unquote, urlparse
+
+    user = _env_file_value("ADMIN_CENTER_USER", "admin")
+    pw = _env_file_value("ADMIN_CENTER_PASS", "changeme")
+    secret = _env_file_value("ADMIN_CENTER_TOTP_SECRET", "")
+    try:
+        async with httpx.AsyncClient(
+            base_url=ADMIN_CENTER_BASE_URL, timeout=8.0, follow_redirects=False
+        ) as c:
+            r = await c.post("/login", data={"username": user, "password": pw, "next": "/tools"})
+            if "/login/mfa" in r.headers.get("location", "") and secret:
+                import time as _t
+
+                from app.admin_center import mfa as _mfa
+                await c.post("/login/mfa", data={"code": _mfa._hotp(secret, int(_t.time() // 30))})
+            m = await c.post("/tools/demo/mint-magic-link", data={"sub": sub})
+    except httpx.HTTPError:
+        return None
+    if m.status_code != 303:
+        return None
+    minted = parse_qs(urlparse(m.headers.get("location", "")).query).get("minted", [""])[0]
+    url = unquote(minted)
+    if "token=" not in url:
+        return None
+    return url.split("token=", 1)[1]
 
 
 async def _magic_link_gate_open() -> bool:
@@ -199,41 +236,29 @@ async def _magic_link_gate_open() -> bool:
 
 
 async def test_happy_path_when_gate_open():
-    """End-to-end mint → verify → replay. Only runs when the
-    container has both gates open (see
-    docs/integrations/demo-magic-link/docker-compose.app-demo.yml
-    for the operator override that flips them on without
-    disturbing the main dev app).
+    """End-to-end mint (via the Admin Center) → verify → replay against the
+    app's public /demo-login. Only runs when the app's magic-link gate is
+    open AND the Admin Center can mint (admin-tools on + reachable);
+    otherwise skips. This exercises the real cross-service contract: the
+    Center mints with the shared SECRET_KEY, the app redeems.
 
     Verifies:
-      1. Admin can POST /admin/demo/mint-magic-link and gets back a URL.
-      2. The URL's token verifies — second client following the URL
-         lands on / with the demo user's session cookie.
-      3. A second attempt with the same token returns 401 (replay).
+      1. The Center mints a one-time URL whose token reaches /demo-login.
+      2. First redemption → 303 to / with the demo user's session cookie.
+      3. A second attempt with the same token → 401 (replay rejected).
     """
     if not await _magic_link_gate_open():
         pytest.skip(
-            "demo magic-link gates closed on the running container — "
-            "bring up the override at "
-            "docs/integrations/demo-magic-link/docker-compose.app-demo.yml "
-            "and point HARNESS_BASE_URL at it (port 8113) to run this test."
+            "demo magic-link gate closed on the app container — set "
+            "DEMO_MODE=true + SIMPLEVTT_DEMO_MAGIC_LINK_ENABLED=true to run."
         )
-    # 1. Login as the demo GM (admin) to authorize the mint endpoint.
-    admin = await login_client("demo-gm@example.com", "demopass")
-    try:
-        resp = await admin.post(
-            "/admin/demo/mint-magic-link",
-            data={"sub": "demo-alice@example.com"},
+    # 1. Mint container-side via the Admin Center (same SECRET_KEY as the app).
+    token = await _center_mint("demo-alice@example.com")
+    if not token:
+        pytest.skip(
+            "could not mint via the Admin Center (unreachable / admin-tools "
+            "off / magic-link off) — skipping the cross-service happy path."
         )
-        assert resp.status_code == 200, f"mint failed: {resp.status_code} {resp.text[:200]}"
-        body = resp.json()
-        assert body.get("ok") is True
-        url = body.get("url") or ""
-        assert "/demo-login?token=" in url
-        token = url.split("token=", 1)[1]
-        assert body.get("expires_in_seconds") == 15 * 60
-    finally:
-        await admin.aclose()
 
     # 2. First verify (success → 303 redirect + auth cookie).
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0, follow_redirects=False) as anon:
@@ -241,8 +266,6 @@ async def test_happy_path_when_gate_open():
     assert resp.status_code == 303, (
         f"first verify should 303-redirect on success; got {resp.status_code} {resp.text[:200]}"
     )
-    # The redirect target is "/" (the home page); the session
-    # cookie is set on the response.
     assert resp.headers.get("location") == "/"
     cookies = resp.headers.get("set-cookie") or ""
     assert "session=" in cookies, "first verify should set the session cookie"
@@ -253,40 +276,3 @@ async def test_happy_path_when_gate_open():
     assert resp2.status_code == 401, (
         f"second verify should 401 on replay; got {resp2.status_code} {resp2.text[:200]}"
     )
-
-
-async def test_unknown_sub_when_gate_open():
-    """When the gate is open, requesting a mint for a sub not in
-    DEMO_EMAILS returns 400 — the allowlist is a hard rejection
-    even for admin callers. Protects against an admin accidentally
-    (or maliciously) minting a token for a real user's account.
-    """
-    if not await _magic_link_gate_open():
-        pytest.skip("demo magic-link gates closed on the running container")
-    admin = await login_client("demo-gm@example.com", "demopass")
-    try:
-        resp = await admin.post(
-            "/admin/demo/mint-magic-link",
-            data={"sub": "real-user@example.com"},
-        )
-    finally:
-        await admin.aclose()
-    assert resp.status_code == 400
-    assert resp.json().get("detail") == "unknown_sub"
-
-
-async def test_admin_home_does_not_show_mint_section_when_gate_off():
-    """Belt-and-suspenders: a regression that exposes the mint
-    section on admin_home.html without flipping the gate would let
-    a curious admin probe the endpoint. Confirm the section is
-    hidden when the gate is off by requiring no magic-link header
-    on the rendered admin page. The harness has no admin session by
-    default, so we settle for the easier check: admin home with no
-    auth returns 401 — the section's visibility is asserted in the
-    Jinja template via ``{% if magic_link_enabled %}`` so a unit
-    test on the gate predicate is sufficient (covered above).
-    """
-    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0, follow_redirects=False) as client:
-        resp = await client.get("/admin", headers={"Accept": "application/json"})
-    # No admin auth → require_admin raises 401.
-    assert resp.status_code == 401

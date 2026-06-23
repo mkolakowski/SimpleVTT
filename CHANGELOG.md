@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.581.0] - 2026-06-22 — "The Minted Elsewhere"
+
+**Schema version:** 75
+
+**Commit summary:** Phase 4 (route removal) of `docs/plans/admin-center-consolidation.md` — retire the in-app demo magic-link **mint** route; the Admin Center mints it. The public `/demo-login` redemption stays.
+
+**Description:** Removes `POST /admin/demo/mint-magic-link` (the in-app admin mint) + its `/admin` UI section/JS, now that the Admin Center carries it (`/tools` → demo magic-link, shipped v2.573.2). The Center's mint reuses `app.demo_magic_link.mint_token` with the same `SECRET_KEY`, so the tokens it produces verify at the app's `/demo-login`. **The public `/demo-login` redemption endpoint is unchanged** — it's the link target, not an admin surface. This completes the demo-tools half of Phase 4 (demo reset retired in v2.580.0).
+
+**Implementation:**
+
+- `app/routes/demo_magic_link_routes.py`: deleted the `admin_mint_magic_link` handler; dropped the now-unused `Form` / `require_admin` / `mint_token` / `TOKEN_MAX_AGE_SECONDS` / `get_settings` imports; updated the module docstring.
+- `app/templates/admin_home.html`: removed the "Demo magic-link login" section + its `mintDemoMagicLink` fetch JS.
+- `app/routes/admin_routes.py`: `admin_home` no longer passes `magic_link_enabled` / `demo_emails` to the template (the section consuming them is gone).
+
+**Harness changes:**
+
+- `tests/harness/test_demo_magic_link.py`: **rewired** the end-to-end happy path to mint **container-side via the Admin Center** (`_center_mint` helper — same SECRET_KEY, so the token verifies at the app's `/demo-login`), then assert first-redeem 303 + cookie and replay 401; this now exercises the real cross-service contract (Center mints → app redeems). **Removed** the three in-app-mint-specific tests (`test_mint_endpoint_404_when_gate_off_even_for_admin`, `test_unknown_sub_when_gate_open`, `test_admin_home_does_not_show_mint_section_when_gate_off`) — superseded by the Center mint coverage in `test_admin_center.py` and the retirement regression. The token mint/verify **unit** tests are unchanged.
+- `tests/harness/test_admin_routes_retired.py` (+1): `POST /admin/demo/mint-magic-link` now asserted gone.
+
+Total harness count → 4126 in `tests/harness/` + 101 in `tests/harness_ui/`.
+
+MINOR — relocates an internal admin surface (full Center parity; the public redemption is untouched).
+
+### Removed
+- In-app `POST /admin/demo/mint-magic-link` + its `/admin` UI — moved to the Admin Center `/tools` (`docs/plans/admin-center-consolidation.md` Phase 4). The public `/demo-login` redemption stays.
+
 ## [2.580.0] - 2026-06-22 — "The Last Call"
 
 **Schema version:** 75

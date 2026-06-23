@@ -74,12 +74,9 @@ def admin_home(
 ):
     users = db.query(User).order_by(User.id).all()
     campaigns = db.query(Campaign).order_by(Campaign.id).all()
-    # v2.425.0 — surface the demo magic-link section only when both
-    # gates are open. The runtime check lives in
-    # ``demo_magic_link_routes.magic_link_enabled``; importing the
-    # predicate here keeps the gate logic in one place.
-    from ..demo_magic_link import magic_link_enabled
-    from ..demo_seed import DEMO_EMAILS as _DEMO_EMAILS
+    # v2.581.0 — the demo magic-link mint section was retired from this
+    # portal (moved to the Admin Center, Phase 4). No magic-link context
+    # is passed to the template anymore.
     from ..integrations.cloudflare import cloudflare_banning_enabled
     from ..models import AdminAuditLog
     cf_enabled = cloudflare_banning_enabled()
@@ -105,8 +102,6 @@ def admin_home(
             "users": users,
             "campaigns": campaigns,
             "settings": get_settings(),
-            "magic_link_enabled": magic_link_enabled(),
-            "demo_emails": _DEMO_EMAILS,
             "cloudflare_banning_enabled": cf_enabled,
             "recent_edge_bans": recent_edge_bans,
         },

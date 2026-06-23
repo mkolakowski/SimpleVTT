@@ -1,6 +1,6 @@
 # Consolidate site-admin into the Admin Center
 
-**Status:** 🟠 partial · **Phase 1 (demo tools) shipped v2.573.2** — an opt-in `/tools` page in the Center (demo magic-link mint + demo reset), gated by `ADMIN_CENTER_ADMIN_TOOLS` (default off). **Stubs is deferred** out of Phase 1: its miss-store (`local_features._misses`) is an **in-memory module global in the main-app process**, so a separate Center process would always show an empty list — it can't move until the miss-store is made shared (DB/file-backed). **Phase 2a (user list + create) shipped v2.574.0** — an opt-in `/users` page (read-only list + non-destructive create), same flag, with operator-attributed audit via the new `operator_audit` helper (`actor=admin-center:<operator>`). **Phase 2b (destructive user ops — disable/reset-password/delete, MFA-gated) shipped v2.575.0** — refused unless the session is MFA-verified (403 to header-auth callers); per-row controls render only when verified. **Phase 3a (campaign browse + delete) shipped v2.576.0** — `/campaigns` list + read-only detail + MFA-gated delete. **Phase 3b (member/system/character management, no-upload subset) shipped v2.577.0** — MFA-gated member add/remove, system change, character create/assign/delete. **Audit-scrub ported to the Center (v2.578.0). Phase 4 (route removal) — user CRUD removed from the in-app portal (v2.579.0); in-app Users is now read-only.** Map/thumbnail uploads (the upload remainder of 3b) + Phase 4 removal of the campaign/demo/stubs in-app routes remain.
+**Status:** 🟠 partial · **Phase 1 (demo tools) shipped v2.573.2** — an opt-in `/tools` page in the Center (demo magic-link mint + demo reset), gated by `ADMIN_CENTER_ADMIN_TOOLS` (default off). **Stubs is deferred** out of Phase 1: its miss-store (`local_features._misses`) is an **in-memory module global in the main-app process**, so a separate Center process would always show an empty list — it can't move until the miss-store is made shared (DB/file-backed). **Phase 2a (user list + create) shipped v2.574.0** — an opt-in `/users` page (read-only list + non-destructive create), same flag, with operator-attributed audit via the new `operator_audit` helper (`actor=admin-center:<operator>`). **Phase 2b (destructive user ops — disable/reset-password/delete, MFA-gated) shipped v2.575.0** — refused unless the session is MFA-verified (403 to header-auth callers); per-row controls render only when verified. **Phase 3a (campaign browse + delete) shipped v2.576.0** — `/campaigns` list + read-only detail + MFA-gated delete. **Phase 3b (member/system/character management, no-upload subset) shipped v2.577.0** — MFA-gated member add/remove, system change, character create/assign/delete. **Audit-scrub ported to the Center (v2.578.0). Phase 4 (route removal) — user CRUD (v2.579.0) + demo reset (v2.580.0) + demo magic-link mint (v2.581.0) removed from the in-app portal; in-app Users is read-only; the public `/demo-login` redemption stays.** Map/thumbnail uploads (the upload remainder of 3b) + Phase 4 removal of the campaign-mgmt/stubs in-app routes remain.
 
 Move the scattered **site-admin** surfaces out of the main app's in-app
 `/admin` portal and into the standalone **Admin Center** (port 8015), so
@@ -156,15 +156,15 @@ NOT left as a live duplicate write-path.
      section is now read-only with a pointer to the Center. Deleted the
      superseded `test_admin_audit.py` + `test_admin_user_audit_scrub.py`;
      added `test_admin_routes_retired.py` (routes-are-gone regression).
-   - **Phase 4 (route removal) — demo reset. ✅ Shipped v2.580.0.** Removed
-     the in-app `POST /admin/demo/reset` (Center `/tools` carries it); deleted
-     `test_admin_demo_reset.py`; extended the routes-gone regression. The
-     scheduler's periodic reseed is unchanged.
+   - **Phase 4 (route removal) — demo tools. ✅ Shipped v2.580.0 + v2.581.0.**
+     Removed the in-app `POST /admin/demo/reset` (v2.580.0) and `POST
+     /admin/demo/mint-magic-link` + its UI (v2.581.0) — the Center `/tools`
+     carries both. The public `/demo-login` redemption stays; the demo
+     magic-link happy-path test was rewired to mint via the Center (real
+     cross-service contract). Scheduler reseed unchanged.
    - **Phase 4 (route removal) — remaining. ⚪ Per-surface, after parity.**
-     Demo magic-link **mint** (`/admin/demo/mint-magic-link` — entangled with
-     the public `/demo-login` redemption + token unit tests), campaign mgmt
-     routes (needs uploads ported first), and stubs (needs the shared
-     miss-store) still live in-app.
+     Campaign mgmt routes (needs uploads ported to the Center first) and the
+     stubs tracker (needs the shared miss-store) still live in-app.
 
 ---
 

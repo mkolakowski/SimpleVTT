@@ -1,10 +1,11 @@
 """Demo magic-link login endpoints — Phase 1 of
 ``docs/plans/demo-magic-link.md``.
 
-URL-based passwordless login for the public demo instance. A GM
-admin mints a `?token=<...>` link from `/admin`; the link works
-exactly once, expires in 15 minutes, and only resolves a seeded
-demo account (never a real user). Hard-gated by two deploy-time
+URL-based passwordless login for the public demo instance. An
+operator mints a `?token=<...>` link from the Admin Center (port
+8015, ``/tools``; the in-app `/admin` mint was retired in v2.581.0);
+the link works exactly once, expires in 15 minutes, and only
+resolves a seeded demo account (never a real user). Hard-gated by two deploy-time
 env vars — `DEMO_MODE=true` AND `SIMPLEVTT_DEMO_MAGIC_LINK_ENABLED=true`
 — so a production deploy never accepts these tokens regardless of
 payload.
@@ -28,21 +29,15 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..audit_log import audit
-from ..auth import login_user, require_admin
-from ..config import get_settings
+from ..auth import login_user
 from ..database import get_db
-from ..demo_magic_link import (
-    TOKEN_MAX_AGE_SECONDS,
-    magic_link_enabled,
-    mint_token,
-    verify_token,
-)
+from ..demo_magic_link import magic_link_enabled, verify_token
 from ..demo_seed import DEMO_EMAILS
 from ..models import DemoMagicLink, User
 
@@ -69,41 +64,13 @@ def _consume_jti(db: Session, *, jti: str, sub: str) -> bool:
 # ─── Routes ───────────────────────────────────────────────────────────
 
 
-@router.post("/admin/demo/mint-magic-link")
-def admin_mint_magic_link(
-    request: Request,
-    sub: str = Form(...),
-    db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
-):
-    """Mint a magic link for a seeded demo account. Admin-only +
-    double-env-var-gated. Returns ``{ok, url, expires_in_seconds}``.
-
-    Refuses 404 (not 403) when the feature is off so the admin UI's
-    button can detect "feature not deployed" vs. "feature deployed
-    but I'm not admin" cleanly.
-    """
-    if not magic_link_enabled():
-        raise HTTPException(status_code=404, detail="Not found")
-    sub_norm = sub.strip().lower()
-    if sub_norm not in DEMO_EMAILS:
-        # Don't audit-emit this — it's an admin-side typo, not a
-        # banning-relevant event.
-        raise HTTPException(status_code=400, detail="unknown_sub")
-    token = mint_token(sub_norm)
-    base_url = get_settings().app.base_url.rstrip("/")
-    url = f"{base_url}/demo-login?token={token}"
-    audit(
-        "demo_magic_link.mint_ok",
-        request=request,
-        sub=sub_norm,
-        admin_id=user.id,
-    )
-    return {
-        "ok": True,
-        "url": url,
-        "expires_in_seconds": TOKEN_MAX_AGE_SECONDS,
-    }
+# v2.581.0 — the in-app magic-link MINT (`POST /admin/demo/mint-magic-link`)
+# was RETIRED and re-homed in the Admin Center (port 8015, /tools → demo
+# magic-link), per docs/plans/admin-center-consolidation.md Phase 4. The
+# Center's mint reuses ``app.demo_magic_link.mint_token`` (same SECRET_KEY,
+# so tokens it mints verify here), double-gated by DEMO_MODE +
+# ADMIN_CENTER_ADMIN_TOOLS. The PUBLIC redemption endpoint below
+# (``/demo-login``) stays — it's the link target, not an admin surface.
 
 
 @router.get("/demo-login")

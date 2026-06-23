@@ -7,6 +7,8 @@ Retired so far:
     delete / scrub-audit-log) → Admin Center ``/users``.
   * v2.580.0 — on-demand demo reset (``POST /admin/demo/reset``) → Admin
     Center ``/tools``.
+  * v2.581.0 — demo magic-link mint (``POST /admin/demo/mint-magic-link``)
+    → Admin Center ``/tools`` (the public ``/demo-login`` redemption stays).
 
 This file asserts those routes are GONE (no live duplicate write-path),
 replacing the old ``test_admin_audit.py`` / ``test_admin_user_audit_scrub.py``
@@ -48,6 +50,8 @@ _RETIRED = [
     ("POST", "/admin/users/1/scrub-audit-log"),
     # v2.580.0 — demo on-demand reset moved to the Admin Center (/tools).
     ("POST", "/admin/demo/reset"),
+    # v2.581.0 — demo magic-link mint moved to the Admin Center (/tools).
+    ("POST", "/admin/demo/mint-magic-link"),
 ]
 
 
