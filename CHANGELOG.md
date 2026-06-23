@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.605.5] - 2026-06-23 — "The Updated Playbill"
+
+**Schema version:** 79
+
+**Commit summary:** Refresh the README Demo section for the v2.605.0 reseed — the leveled lineup + the now-archived Sundered Vault.
+
+**Description:** Doc-only. The README's Demo section predated the demo-rework arc: it still described three sign-in accounts and framed "The Sundered Vault" as the single active demo session. It now reflects reality post-v2.605.0:
+
+- A new intro paragraph lists the **five active leveled campaigns** (L3 Goblin Warrens / L5 Tide-Wracked Catacombs / L9 Storm Over Saltmarsh / L13 Shadowfell Spire / L18 Dragon's Apotheosis) and notes the **Sundered Vault is seeded archived** (kept at id 1, in the lobby's Archived section), pointing to the wiki Demo content guide for the full catalog.
+- "Sign in" updated from three to the **seven** demo accounts (primary three highlighted; second GM + shared players noted).
+- "The setting" reframed as the **archived flagship** — the rich 12-class Tavern Brawl roster is retained (it still accurately describes campaign 1) but clearly labelled as the archived Vault, with a note on how to reach/unarchive it.
+- "What gets wiped on reset" wording corrected (demo accounts + all six campaign names; the Vault is re-archived on every reseed).
+
+**Implementation:**
+
+- `README.md` — Demo section intro, sign-in table, setting framing, and reset note updated.
+
+No harness change (doc-only).
+
+### Changed
+- README Demo section refreshed for the leveled-campaign lineup + the archived Sundered Vault.
+
 ## [2.605.4] - 2026-06-23 — "The Paired Toggles"
 
 **Schema version:** 79

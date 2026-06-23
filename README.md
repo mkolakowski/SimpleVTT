@@ -1,6 +1,6 @@
 # SimpleVTT
 
-> Current version: **2.605.4** · Schema: **v79** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
+> Current version: **2.605.5** · Schema: **v79** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
 
 A self-hosted virtual tabletop for online TTRPG sessions. Python (FastAPI) backend with a Jinja2 + HTMX + vanilla JS frontend, PostgreSQL for storage, real-time sync over WebSockets, and Docker Compose deployment that works on both `linux/amd64` and `linux/arm64` (Raspberry Pi, Apple Silicon, etc.).
 
@@ -18,21 +18,24 @@ A self-hosted virtual tabletop for online TTRPG sessions. Python (FastAPI) backe
 
 A `DEMO_MODE=true` deploy ships with a fully-staged sample session that resets every 60 minutes (see [`docs/plans/demo-mode.md`](docs/plans/demo-mode.md) for the full design). The reset cadence and credentials are configurable in `.env`; see the **Demo mode** section of [`.env.example`](.env.example).
 
+The demo seeds **five active leveled campaigns** — **L3** *The Goblin Warrens*, **L5** *The Tide-Wracked Catacombs*, **L9** *Storm Over Saltmarsh*, **L13** *The Shadowfell Spire*, and **L18** *The Dragon's Apotheosis* — each a small party whose PCs show off features their classes gain at that level. A sixth campaign, the original flagship **The Sundered Vault** (the 12-class *Tavern Brawl* detailed below), is seeded **archived** as of v2.605.0: it keeps campaign id `1` and is fully reachable, but lives in the lobby's **Archived** section as a live showcase of the archive feature. The full per-campaign roster + art-generation prompts live in the wiki's **[Demo content guide](docs/wiki/demo-content.md)** (`/wiki/demo-content`).
+
 ### Sign in
 
-Three accounts, all with the password **`demopass`** (also surfaced on the login page when `DEMO_CREDENTIALS_VISIBLE=true`):
+Seven accounts, all with the password **`demopass`** (also surfaced on the login page when `DEMO_CREDENTIALS_VISIBLE=true`). The three primary accounts are the quickest start; the full account → campaign map is in the [Demo content guide](docs/wiki/demo-content.md):
 
 | Email | Role |
 |---|---|
-| `demo-gm@example.com` | Game Master (also owns Brother Tavik below) |
-| `demo-alice@example.com` | Player — controls Pip Quickfingers |
-| `demo-bob@example.com` | Player — controls Thalindra Moonwhisper |
+| `demo-gm@example.com` | Game Master — runs L3 / L5 / L13 / L18 (+ the archived Vault) |
+| `demo-alice@example.com` | Player — Pip Quickfingers (Vault), plus L3 + L5 parties |
+| `demo-bob@example.com` | Player — Thalindra Moonwhisper (Vault), plus L9 / L13 |
+| `demo-gm2@example.com` · `demo-carol` · `demo-dave` · `demo-erin` | Second GM + shared players across the leveled campaigns |
 
-### The setting
+### The flagship setting — *The Sundered Vault* (now archived)
 
-**Demo: The Sundered Vault**, opening scene — **The Tavern Brawl**. The party have cornered a band of brigands inside a roadside tavern; the brigands turn nasty. The bar is to the east, the door to the west, and the floor is about to get loud.
+The original demo, **Demo: The Sundered Vault**, opens on **The Tavern Brawl**: the party have cornered a band of brigands inside a roadside tavern; the brigands turn nasty. The bar is to the east, the door to the west, and the floor is about to get loud. It's a full one-of-every-class party (the 12-PC + NPC roster below) and remains the richest single encounter in the demo. As of v2.605.0 it's seeded **archived** — find it in `demo-gm`'s lobby **Archived** section (or go straight to `/campaign/1`), unarchive it any time, or just open its tabletop directly.
 
-### Player characters
+### Player characters (the archived Sundered Vault party)
 
 | Name | Class & level | Race | Owner | Notes |
 |---|---|---|---|---|
@@ -87,7 +90,7 @@ The encounter ships with a deterministic initiative order so you can hit "Load e
 
 ### What gets wiped on reset
 
-The hourly reset surgically deletes everything tagged with the three demo emails or the demo campaign name — no other rows are touched. Token positions, HP edits, custom rolls, and any extra characters / homebrew anyone created are reverted to the seed dataset. See `app/demo_seed.py` `wipe()` for the full list and `_reset_sequences()` (v2.3.27) for why the campaign URL stays at `/campaign/1` across cycles.
+The hourly reset surgically deletes everything tagged with the demo accounts or the demo campaign names (the Sundered Vault + the five leveled campaigns) — no other rows are touched. Token positions, HP edits, custom rolls, and any extra characters / homebrew anyone created are reverted to the seed dataset. See `app/demo_seed.py` `wipe()` for the full list and `_reset_sequences()` (v2.3.27) for why the Vault's campaign URL stays at `/campaign/1` across cycles (and is re-archived on every reseed).
 
 ### Enabling demo mode on your own deploy
 
