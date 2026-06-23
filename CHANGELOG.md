@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.599.7] - 2026-06-23 — "The Locked Tin"
+
+**Schema version:** 77
+
+**Commit summary:** Session cookie hardening — explicit `SameSite=Lax` + an env-driven `Secure` flag (`SESSION_COOKIE_SECURE`) on both the app and the Admin Center.
+
+**Description:** First of the two deferred defense-in-depth items from the security review. Both apps configured `SessionMiddleware` with `https_only=False` and relied on Starlette's implicit `SameSite=Lax`. This makes `same_site="lax"` explicit (it blocks the classic cross-site POST CSRF vector, so a regression to a weaker value is now visible in the diff) and adds `SESSION_COOKIE_SECURE` to drive the `Secure` flag. Default OFF so plain-HTTP dev and the localhost harness still authenticate (a `Secure` cookie isn't set over `http://localhost`); an HTTPS-only deployment sets it `true` so the session cookie is never sent over plaintext. (This box is dual-use — it also serves the localhost-HTTP harness — so its live `.env` keeps the default; a dedicated HTTPS-only deploy is where `true` belongs.)
+
+**Implementation:**
+
+- `app/main.py` + `app/admin_center/main.py`: `SessionMiddleware(..., same_site="lax", https_only=_COOKIE_SECURE)` where `_COOKIE_SECURE` reads `SESSION_COOKIE_SECURE`.
+- `docker-compose.yml`: plumb `SESSION_COOKIE_SECURE` (default false) to both the `app` and `admin-center` services.
+- `.env.example`: document the flag (default false; true on an HTTPS-only deploy).
+
+**Harness changes:**
+
+- `tests/harness/test_session_cookie_hardening.py` (new, +3): both services plumb `SESSION_COOKIE_SECURE`; both middleware configs set `same_site="lax"` + env-driven `Secure`; `.env.example` documents the flag.
+
+Total harness count → 4195 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+### Changed
+- Session cookies are now explicitly `SameSite=Lax` with an opt-in `Secure` flag (`SESSION_COOKIE_SECURE`) for HTTPS-only deployments.
+
 ## [2.599.6] - 2026-06-23 — "The Wild Shape Ward"
 
 **Schema version:** 77

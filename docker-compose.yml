@@ -80,6 +80,10 @@ services:
       # the gate also needs a trustworthy IP source (a trusted XFF hop OR
       # TRUST_CF_CONNECTING_IP). See docs/wiki/privacy.md.
       VISITOR_REQUEST_LOG_ENABLED: ${VISITOR_REQUEST_LOG_ENABLED:-false}
+      # v2.599.7 — set the Secure flag on the session cookie. Default off so
+      # HTTP dev / the localhost harness still authenticate; set true on an
+      # HTTPS-only deployment so the cookie is never sent over plaintext.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
       # v2.469.0 — fail2ban Phase 4a. File path for the audit-log
       # RotatingFileHandler tee. The default lands on the shared
       # `audit_logs` named volume mounted below at /var/log/simplevtt,
@@ -167,6 +171,8 @@ services:
       # IP behind a tunnel rather than the Cloudflare/proxy address.
       TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-0}
       TRUST_CF_CONNECTING_IP: ${TRUST_CF_CONNECTING_IP:-false}
+      # v2.599.7 — Secure flag on the admin-center session cookie (see app).
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
       # v2.485.3 — secret for the login-page session cookie. Falls back
       # to APP_SECRET_KEY, then a dev default, inside the app.
       ADMIN_CENTER_SECRET_KEY: ${ADMIN_CENTER_SECRET_KEY:-}

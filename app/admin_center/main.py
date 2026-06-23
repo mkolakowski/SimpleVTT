@@ -221,11 +221,15 @@ async def _auth_mw(request: Request, call_next):
 # OUTERMOST — the session is decoded before _auth_mw reads it. The
 # admin-center-specific cookie name avoids colliding with the main
 # app's `session` cookie on the same host.
+# v2.599.7 — session cookie hardening (see app/main.py). same_site=lax explicit
+# + env-driven Secure flag (default off for HTTP dev / the harness).
+_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "false").strip().lower() in ("1", "true", "yes", "on")
 app.add_middleware(
     SessionMiddleware,
     secret_key=_SESSION_SECRET,
     session_cookie="admin_center_session",
-    https_only=False,
+    same_site="lax",
+    https_only=_COOKIE_SECURE,
 )
 
 

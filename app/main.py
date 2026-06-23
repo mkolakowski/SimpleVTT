@@ -73,7 +73,18 @@ if AUDIT_LOG_PATH:
 settings = get_settings()
 app = FastAPI(title="SimpleVTT", version=APP_VERSION)
 
-app.add_middleware(SessionMiddleware, secret_key=settings.app.secret_key, https_only=False)
+# v2.599.7 — session cookie hardening. ``same_site="lax"`` is made explicit
+# (it blocks cross-site POSTs, the classic CSRF vector). ``https_only`` (the
+# Secure flag) is env-driven: default OFF so HTTP dev / the localhost harness
+# still authenticate, but an HTTPS-only deployment should set
+# SESSION_COOKIE_SECURE=true so the cookie is never sent over plaintext.
+_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "false").strip().lower() in ("1", "true", "yes", "on")
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.app.secret_key,
+    same_site="lax",
+    https_only=_COOKIE_SECURE,
+)
 
 
 # v2.480.0 — opt-in per-request visitor logging (TODO.md P2 follow-up
