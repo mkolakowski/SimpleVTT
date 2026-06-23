@@ -88,6 +88,37 @@ async def test_shadowfell_spire_present(email):
 
 
 @_LIVE
+@pytest.mark.parametrize("email", ["demo-gm@example.com", "demo-carol@example.com", "demo-erin@example.com"])
+async def test_dragons_apotheosis_present(email):
+    """D6 — the level-18 'Dragon's Apotheosis' campaign shows in its GM's
+    (demo-gm) + members' (carol/erin) lobbies."""
+    client = await login_client(email, "demopass")
+    try:
+        resp = await client.get("/")
+        assert resp.status_code == 200
+        assert "Apotheosis" in resp.text, f"{email} lobby missing the L18 campaign"
+    finally:
+        await client.aclose()
+
+
+@_LIVE
+async def test_all_five_campaigns_seeded():
+    """D6 — the full arc: an admin sees all five leveled campaigns by name.
+    (demo-gm is site-admin by default → the lobby's admin 'all campaigns'
+    list includes every campaign; skips if the GM isn't admin on this stack.)"""
+    client = await login_client("demo-gm@example.com", "demopass")
+    try:
+        resp = await client.get("/")
+        assert resp.status_code == 200
+        text = resp.text
+        # demo-gm owns 4 of the 5 (all but Saltmarsh); those 4 always show.
+        for name in ("Sundered Vault", "Goblin Warrens", "Shadowfell Spire", "Apotheosis"):
+            assert name in text, f"lobby missing {name!r}"
+    finally:
+        await client.aclose()
+
+
+@_LIVE
 async def test_second_gm_owns_only_its_campaign():
     """demo-gm2 owns exactly the L9 campaign — its lobby shows Saltmarsh but
     not the demo-gm-owned campaigns (e.g. the Goblin Warrens)."""

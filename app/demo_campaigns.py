@@ -481,11 +481,167 @@ _SHADOWFELL_SPIRE = {
 }
 
 
+# ── Level 18 — The Dragon's Apotheosis (Tier 4 capstone) ────────────
+_DRAGONS_APOTHEOSIS = {
+    "name": "Demo L18: The Dragon's Apotheosis",
+    "level": 18,
+    "gm": "gm",
+    "gm_color": "#ef4444",
+    "members": [("carol", "#fbbf24"), ("erin", "#34d399")],
+    "desc": ("Tier-4 capstone (party level 18). An ancient red wyrm is "
+             "ascending to godhood atop a volcano; the party has one shot to "
+             "stop it. Each PC shows off a high-tier feature — full casters' "
+             "9th-level spells and martial capstones. Demo campaign — resets "
+             "on a fixed interval."),
+    "map": {"name": "The Caldera Throne", "width": 1800, "height": 1300},
+    "party": [
+        {"owner": "gm", "name": "Archmagus Selene", "sheet": dict(
+            klass="Wizard", subclass="School of Evocation", race="High Elf", level=18,
+            abilities={"STR": 8, "DEX": 14, "CON": 16, "INT": 20, "WIS": 12, "CHA": 11},
+            ac=15, hp_max=122,
+            attacks=[
+                {"name": "Fire Bolt", "attack_bonus": "+11", "damage": "4d10",
+                 "damage_type": "fire", "range": "120 ft", "desc": "Cantrip (level 17+: 4d10)"},
+            ],
+            spells=[
+                _spell("Fire Bolt", 0, "fire-bolt"),
+                _spell("Shield", 1, "shield"),
+                _spell("Counterspell", 3, "counterspell"),
+                _spell("Wall of Force", 5, "wall-of-force"),
+                _spell("Chain Lightning", 6, "chain-lightning"),
+                _spell("Delayed Blast Fireball", 7, "delayed-blast-fireball"),
+                _spell("Sunburst", 8, "sunburst"),
+                _spell("Meteor Swarm", 9, "meteor-swarm"),
+                _spell("Wish", 9, "wish"),
+            ],
+            spell_slots=_slots("wizard", **{"1": 4, "2": 3, "3": 3, "4": 3, "5": 3, "6": 1, "7": 1, "8": 1, "9": 1}),
+            notes=_notes(
+                "Elven archmage who has prepared for this fight for a century.",
+                "Detached, speaks of the wyrm the way one discusses weather.",
+                "Level-18 showcase: a 9th-level slot → Meteor Swarm (40d6 across "
+                "four 40-ft spheres). Overchannel max-damages a low-level evocation; "
+                "Spell Mastery casts Shield / Misty Step at will."),
+        )},
+        {"owner": "gm", "name": "Ignar Flamesoul", "sheet": dict(
+            klass="Sorcerer", subclass="Draconic Bloodline", race="Dragonborn", level=18,
+            abilities={"STR": 10, "DEX": 14, "CON": 18, "INT": 11, "WIS": 12, "CHA": 20},
+            ac=15, hp_max=131,
+            attacks=[
+                {"name": "Fire Bolt", "attack_bonus": "+11", "damage": "4d10",
+                 "damage_type": "fire", "range": "120 ft", "desc": "Cantrip (4d10 at 17+)"},
+            ],
+            spells=[
+                _spell("Fire Bolt", 0, "fire-bolt"),
+                _spell("Fireball", 3, "fireball"),
+                _spell("Wall of Fire", 4, "wall-of-fire"),
+                _spell("Cone of Cold", 5, "cone-of-cold"),
+                _spell("Disintegrate", 6, "disintegrate"),
+                _spell("Delayed Blast Fireball", 7, "delayed-blast-fireball"),
+                _spell("Power Word Stun", 8, "power-word-stun"),
+                _spell("Time Stop", 9, "time-stop"),
+                _spell("Power Word Kill", 9, "power-word-kill"),
+            ],
+            spell_slots=_slots("sorcerer", **{"1": 4, "2": 3, "3": 3, "4": 3, "5": 3, "6": 1, "7": 1, "8": 1, "9": 1}),
+            notes=_notes(
+                "Dragonborn sorcerer who answers a dragon-god with dragon-fire.",
+                "Proud, theatrical; treats the duel as a family reunion.",
+                "Level-18 showcase: Draconic Presence — a 60-ft aura of awe/fear "
+                "(CHA save) — plus a 9th-level slot for Time Stop → stacked nukes. "
+                "20 Sorcery Points fuel Quicken + Twin."),
+        )},
+        {"owner": "carol", "name": "Dame Aurelia Dawnward", "sheet": dict(
+            klass="Paladin", subclass="Oath of Devotion", race="Aasimar", level=18,
+            abilities={"STR": 20, "DEX": 10, "CON": 16, "INT": 10, "WIS": 12, "CHA": 18},
+            ac=21, hp_max=164,
+            attacks=[
+                {"name": "Holy Avenger Longsword", "attack_bonus": "+11", "damage": "1d8+5",
+                 "damage_type": "slashing", "range": "5 ft",
+                 "desc": "Extra Attack (2 swings); +2d10 radiant vs. fiends/undead"},
+                {"name": "Javelin (thrown)", "attack_bonus": "+11", "damage": "1d6+5",
+                 "damage_type": "piercing", "range": "30/120 ft"},
+            ],
+            spells=[
+                _spell("Bless", 1, "bless"),
+                _spell("Lesser Restoration", 2, "lesser-restoration"),
+                _spell("Crusader's Mantle", 3, "crusaders-mantle"),
+                _spell("Banishing Smite", 5, "banishing-smite"),
+            ],
+            spell_slots=_slots("paladin", **{"1": 4, "2": 3, "3": 3, "4": 3, "5": 2}),
+            notes=_notes(
+                "Radiant aasimar paladin and the party's unbreakable anchor.",
+                "Serene, certain; her light steadies everyone near her.",
+                "Level-18 showcase: her Auras of Protection + Devotion now reach "
+                "30 ft — the whole party adds her +4 CHA to every save. Holy Nimbus "
+                "(Channel Divinity) burns nearby fiends; Divine Smite on demand."),
+        )},
+        {"owner": "gm", "name": "Bryn Ironwall", "sheet": dict(
+            klass="Fighter", subclass="Champion", race="Goliath", level=18,
+            abilities={"STR": 20, "DEX": 13, "CON": 18, "INT": 9, "WIS": 12, "CHA": 8},
+            ac=20, hp_max=184,
+            attacks=[
+                {"name": "Greatsword", "attack_bonus": "+11", "damage": "2d6+5",
+                 "damage_type": "slashing", "range": "5 ft",
+                 "desc": "Extra Attack (3) — 3 swings; crit on 18–20 (Superior Critical)"},
+                {"name": "Heavy Crossbow", "attack_bonus": "+7", "damage": "1d10+1",
+                 "damage_type": "piercing", "range": "100/400 ft"},
+            ],
+            notes=_notes(
+                "Goliath champion who simply outlasts dragons.",
+                "Stoic mountain of a man; grins only when outnumbered.",
+                "Level-18 showcase: Survivor — regains HP each turn while bloodied, "
+                "and Superior Critical crits on 18–20. Three attacks a turn, four "
+                "with Action Surge; Indomitable rerolls two failed saves."),
+        )},
+        {"owner": "erin", "name": "Thornroot Elder", "sheet": dict(
+            klass="Druid", subclass="Circle of the Moon", race="Firbolg", level=18,
+            abilities={"STR": 12, "DEX": 12, "CON": 17, "INT": 10, "WIS": 20, "CHA": 11},
+            ac=16, hp_max=140,
+            attacks=[
+                {"name": "Shillelagh Quarterstaff", "attack_bonus": "+11", "damage": "1d8+5",
+                 "damage_type": "bludgeoning", "range": "5 ft", "desc": "Shillelagh (WIS to hit/damage)"},
+            ],
+            spells=[
+                _spell("Produce Flame", 0, "produce-flame"),
+                _spell("Healing Word", 1, "healing-word"),
+                _spell("Moonbeam", 2, "moonbeam"),
+                _spell("Conjure Animals", 3, "conjure-animals"),
+                _spell("Ice Storm", 4, "ice-storm"),
+                _spell("Conjure Elemental", 5, "conjure-elemental"),
+                _spell("Heal", 6, "heal"),
+                _spell("Fire Storm", 7, "fire-storm"),
+                _spell("Sunburst", 8, "sunburst"),
+                _spell("Storm of Vengeance", 9, "storm-of-vengeance"),
+            ],
+            spell_slots=_slots("druid", **{"1": 4, "2": 3, "3": 3, "4": 3, "5": 3, "6": 1, "7": 1, "8": 1, "9": 1}),
+            notes=_notes(
+                "Ancient firbolg archdruid speaking for a mountain that hates the wyrm.",
+                "Grave, elemental; refers to the volcano by name.",
+                "Level-18 showcase: a 9th-level slot → Storm of Vengeance (sky-"
+                "wide control), plus Archdruid — unlimited Wild Shape and ignores "
+                "verbal/somatic components. Tank as a high-CR beast, control as a caster."),
+        )},
+    ],
+    "npcs": [
+        ("adult-red-dragon", "Adult Red Dragon", "dragon"),
+        ("fire-giant", "Fire Giant"),
+        ("archmage", "Cult Archmage"),
+        ("salamander", "Salamander"),
+    ],
+    "npc_tokens": [
+        ("adult-red-dragon", "Pyraxis the Ascendant (Adult Red Dragon)", "#b91c1c"),
+        ("fire-giant", "Fire Giant Honor Guard", "#ea580c"),
+        ("fire-giant", "Fire Giant Honor Guard", "#ea580c"),
+        ("archmage", "Cult Archmage", "#7c3aed"),
+    ],
+}
+
+
 # Registry — appended to as each leveled campaign lands (D3–D6).
 CAMPAIGN_SPECS = [
     _GOBLIN_WARRENS,
     _STORM_SALTMARSH,
     _SHADOWFELL_SPIRE,
+    _DRAGONS_APOTHEOSIS,
 ]
 
 

@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.595.0] - 2026-06-23 — "The Dragon's Apotheosis"
+
+**Schema version:** 77
+
+**Commit summary:** Demo rework phase D6 — the level-18 capstone campaign **The Dragon's Apotheosis** (tier 4). All five leveled campaigns now seed.
+
+**Description:** Adds the final leveled sample campaign (party level 18; GM: demo-gm; members carol + erin), completing the set at levels **3 / 5 / 9 / 13 / 18**. The 5-PC party each showcases a tier-4 capstone: Wizard/Evocation (**9th-level: Meteor Swarm / Wish**, Overchannel, Spell Mastery), Sorcerer/Draconic (**Draconic Presence** + Time Stop), Paladin/Devotion (**30-ft auras** + Holy Nimbus + Holy Avenger), Fighter/Champion (**Survivor** + 3 attacks + crit 18–20), Druid/Moon (**9th-level: Storm of Vengeance** + Archdruid) — each with Description/Roleplay/How-to-play notes. NPCs: an Adult Red Dragon (the ascending wyrm), fire giants, a cult archmage, salamander (SRD). Placeholder map (art pending the D8 catalog).
+
+**Implementation:** `app/demo_campaigns.py` — append `_DRAGONS_APOTHEOSIS` to `CAMPAIGN_SPECS` (now 4 leveled campaigns + the Sundered Vault = five total).
+
+**Harness changes:** `tests/harness/test_demo_campaigns.py` (+4): L18 shows in its GM's + members' lobbies; the full-arc check confirms an admin sees all the leveled campaigns by name. Total → 4177 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+### Added
+- Demo level-18 capstone campaign **The Dragon's Apotheosis** (demo-rework phase D6). Completes the five-campaign level ladder (3/5/9/13/18).
+
 ## [2.594.0] - 2026-06-23 — "The Shadowfell Spire"
 
 **Schema version:** 77
