@@ -74,6 +74,12 @@ services:
       # via Cloudflare (e.g. a Cloudflare Tunnel) — otherwise an
       # attacker hitting the origin directly could spoof their IP.
       TRUST_CF_CONNECTING_IP: ${TRUST_CF_CONNECTING_IP:-false}
+      # v2.599.2 — opt-in per-request visitor logging (app/visitor_log.py).
+      # Was wired in code + .env.example but never plumbed here, so it
+      # silently never fired. Default off (high-volume + privacy-sensitive);
+      # the gate also needs a trustworthy IP source (a trusted XFF hop OR
+      # TRUST_CF_CONNECTING_IP). See docs/wiki/privacy.md.
+      VISITOR_REQUEST_LOG_ENABLED: ${VISITOR_REQUEST_LOG_ENABLED:-false}
       # v2.469.0 — fail2ban Phase 4a. File path for the audit-log
       # RotatingFileHandler tee. The default lands on the shared
       # `audit_logs` named volume mounted below at /var/log/simplevtt,

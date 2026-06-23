@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.599.2] - 2026-06-23 — "The Unplugged Logger"
+
+**Schema version:** 77
+
+**Commit summary:** Plumb `VISITOR_REQUEST_LOG_ENABLED` into the app container — it was wired in code + `.env` but never passed through docker-compose, so per-request visitor logging silently never fired.
+
+**Description:** Caught while verifying the v2.599.1 visitor-log gate fix: even with the gate open and `.env` setting `VISITOR_REQUEST_LOG_ENABLED=true`, the running container showed the var **empty** and **zero** `visitor.request` events ever. docker-compose's `app` service didn't declare `VISITOR_REQUEST_LOG_ENABLED`, so the `.env` value never reached the container (compose only injects declared vars). The feature (added v2.480.0) has therefore been a no-op since it shipped. Now declared on the `app` service (default off), so an operator who sets it in `.env` actually gets per-request visitor accounting — which, combined with v2.599.1, works behind a pure Cloudflare Tunnel at `TRUSTED_PROXY_HOPS=0` via `CF-Connecting-IP`.
+
+**Implementation:**
+
+- `docker-compose.yml`: add `VISITOR_REQUEST_LOG_ENABLED: ${VISITOR_REQUEST_LOG_ENABLED:-false}` to the `app` service.
+
+**Harness changes:**
+
+- `tests/harness/test_visitor_log.py` (+1): asserts the `app` service plumbs `VISITOR_REQUEST_LOG_ENABLED` (regression guard so it can't silently un-plumb again).
+
+Total harness count → 4182 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+### Fixed
+- `VISITOR_REQUEST_LOG_ENABLED` is now passed to the app container; per-request `visitor.request` logging actually fires when enabled (it never reached the container before, so the feature was inert since v2.480.0).
+
 ## [2.599.1] - 2026-06-23 — "Only the Real Caller"
 
 **Schema version:** 77

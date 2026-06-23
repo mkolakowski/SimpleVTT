@@ -75,6 +75,23 @@ def test_cf_connecting_ip_opens_gate_without_xff_hop(monkeypatch):
     assert visitor_log.visitor_request_log_enabled() is True
 
 
+def test_compose_plumbs_visitor_log_env():
+    """v2.599.2 — the app service must pass VISITOR_REQUEST_LOG_ENABLED
+    through from the host env; without it the flag in .env never reaches
+    the container and visitor logging silently never fires (the bug this
+    guards against)."""
+    import yaml
+    from pathlib import Path
+    compose = yaml.safe_load(
+        (Path(__file__).resolve().parents[2] / "docker-compose.yml").read_text())
+    env = compose["services"]["app"].get("environment") or {}
+    if isinstance(env, list):
+        env = dict(e.split("=", 1) for e in env if "=" in e)
+    assert "VISITOR_REQUEST_LOG_ENABLED" in env, (
+        "docker-compose app service must plumb VISITOR_REQUEST_LOG_ENABLED"
+    )
+
+
 def test_flag_accepts_truthy_synonyms(monkeypatch):
     monkeypatch.setenv("TRUSTED_PROXY_HOPS", "1")
     for raw in ("1", "true", "TRUE", "Yes", "on"):
