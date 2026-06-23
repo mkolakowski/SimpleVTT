@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.599.5] - 2026-06-23 — "The Named Aggressor"
+
+**Schema version:** 77
+
+**Commit summary:** Fix DOM XSS in the Dash/opportunity-attack modal — a combatant's `watcher_name` was injected into `innerHTML` unescaped.
+
+**Description:** Third of four XSS fixes from the security review. In `app/static/tabletop.js`, the Dash/opportunity-attack confirmation modal builds a `provokers` string from each triggering combatant's `watcher_name` (a free-text token/character display name) and assigns it into `summary.innerHTML`. The value was injected raw, so a token named `<img src=x onerror=…>` executed script in the moving player's browser when the modal fired. (The sibling pre-move OA modal already used `.textContent` for the same value — this path was the inconsistency.) Each name now passes through the file's existing `escapeHTML()` helper before the dedupe/join/inject.
+
+**Implementation:**
+
+- `app/static/tabletop.js`: `provokers` maps `watcher_name` through `escapeHTML(...)` before `innerHTML` injection.
+
+**Harness changes:**
+
+- `tests/harness/test_js_xss_escaping.py` (new, +1): source guard — `watcher_name` must be escaped (`escapeHTML(t.watcher_name …)`) and the pre-fix raw form must not return. (The frontend has no JS test runner, so DOM-XSS fixes are guarded at the source.)
+
+Total harness count → 4191 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+### Fixed
+- DOM XSS: a token/combatant display name (`watcher_name`) can no longer execute script via the Dash/opportunity-attack modal — it is HTML-escaped before injection.
+
 ## [2.599.4] - 2026-06-23 — "No Costumes at the Door"
 
 **Schema version:** 77

@@ -3633,7 +3633,7 @@
         summary.style.cssText = 'margin:0 0 10px 0; font-size:12px; opacity:0.85; line-height:1.4;';
         const distTxt = distanceFt > 0 ? ' (~' + distanceFt + ' ft)' : '';
         const provokers = (triggers || [])
-            .map(t => t.watcher_name || 'a hostile')
+            .map(t => escapeHTML(t.watcher_name || 'a hostile'))  // v2.599.5 — escape: injected via innerHTML below
             .filter((v, i, a) => a.indexOf(v) === i)
             .join(', ');
         // v2.100.2 — this modal only appears when the move is BEYOND
