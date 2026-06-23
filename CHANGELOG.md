@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.576.0] - 2026-06-22 — "The Campaign Ledger"
+
+**Schema version:** 75
+
+**Commit summary:** Phase 3a of `docs/plans/admin-center-consolidation.md` — move site-admin campaign **browse + delete** into the Admin Center (delete MFA-gated).
+
+**Description:** New opt-in `/campaigns` surface in the Center: a **campaign list** (id / name / system / GM email / member-character-map counts) and a **read-only detail** view (`/campaigns/{id}` — overview, members with role, characters, maps), plus the headline destructive site-admin action, **delete campaign** (`POST /campaigns/{id}/delete`). Delete is refused unless the session is **MFA-verified** (the same `_destructive_gate()` the user-admin destructive ops use — 404 when admin-tools off, 403 when not MFA-verified, so a basic-auth header caller is always refused); the delete control renders only on a verified session, otherwise a 🔒 nag. The delete clears the campaign's self-referential `active_map_id` before deleting (so the maps cascade doesn't trip the FK), captures the name before the delete for the audit line, and audits `admin.campaign_delete` (`actor=admin-center:<operator>`). Member / character / map / system management (incl. file uploads) is a later 3b. The in-app `/admin/campaign/{id}` routes stay live for now (retiring them is Phase 4).
+
+**Implementation:**
+
+- `app/admin_center/campaign_admin.py` (new): dependency-light service functions — `list_campaigns` (with GM email + counts), `get_campaign_detail` (campaign + members/characters/maps bundle), `delete_campaign` (FK-safe + name capture). Failures raise `CampaignAdminError`.
+- `app/admin_center/main.py`: `GET /campaigns` + `GET /campaigns/{id}` + `POST /campaigns/{id}/delete` (delete via the shared `_destructive_gate`, audited).
+- `app/admin_center/templates/campaigns.html` + `campaign_detail.html` (new) + a conditional `🗺️ Campaigns` link in `dashboard.html` / `users.html` / `tools.html`.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py` (+6): `campaign_admin` list → detail → delete round-trip (host-side sqlite, `importorskip`, incl. unknown-id + re-delete raising); `/campaigns` auth-gated (unauth → 303), renders when enabled + drills into the read-only detail; unknown campaign id redirects with an error (no 500); delete requires auth (unauth → 303); delete refused for basic-auth header callers (403 gated / 404 off — never POSTed from a verified session, which would wipe a real demo campaign).
+
+Total harness count → 4119 in `tests/harness/` + 101 in `tests/harness_ui/`.
+
+MINOR — new Admin Center surface (additive; opt-in, off by default).
+
+### Added
+- Admin Center **Campaign admin** (`/campaigns` + `/campaigns/{id}`, opt-in via `ADMIN_CENTER_ADMIN_TOOLS`): browse campaigns + read-only detail, and delete a campaign behind the MFA gate, audited to the operator identity (`docs/plans/admin-center-consolidation.md` Phase 3a). Member/character/map/system management follows in Phase 3b.
+
 ## [2.575.0] - 2026-06-22 — "The Second Factor"
 
 **Schema version:** 75

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ campaign.name }} — Campaign admin — SimpleVTT Admin Center</title>
+<link rel="icon" href="/favicon.svg">
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: system-ui, -apple-system, sans-serif; background:#1a2036; color:#e6e9f0; margin:0; padding:0 0 48px; }
+  header { background:#252c45; padding:14px 24px; display:flex; align-items:center; gap:16px; border-bottom:1px solid #333c5c; }
+  header h1 { font-size:18px; margin:0; }
+  header nav a { color:#9fb3ff; text-decoration:none; }
+  main { max-width:1000px; margin:0 auto; padding:20px 24px; }
+  .card { background:#252c45; border:1px solid #333c5c; border-radius:8px; padding:16px; margin-bottom:18px; }
+  .card.danger { border-color:#7a2e2e; }
+  h2 { font-size:15px; margin:0 0 10px; color:#cdd6f4; }
+  .muted { color:#8b93b0; }
+  .banner { padding:10px 12px; border-radius:6px; margin-bottom:14px; font-size:14px; }
+  .banner.warn { background:#3a341e; color:#ffe9a8; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:7px 10px; border-bottom:1px solid #333c5c; }
+  th { color:#9fb3ff; font-weight:600; }
+  .pill { display:inline-block; padding:1px 7px; border-radius:10px; font-size:11px; background:#2d3a6b; color:#bcd0ff; }
+  button { font-size:14px; padding:8px 12px; border-radius:6px; border:1px solid #3a4470; background:#3a4470; color:#e6e9f0; cursor:pointer; }
+  button.danger { background:#7a2e2e; border-color:#7a2e2e; }
+  dl { display:grid; grid-template-columns:max-content 1fr; gap:4px 16px; font-size:14px; margin:0; }
+  dt { color:#8b93b0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🗺️ {{ campaign.name }}</h1>
+  <nav><a href="/campaigns">← Campaigns</a> · <a href="/">Dashboard</a></nav>
+  <span class="muted" style="margin-left:auto">SimpleVTT {{ app_version }}{% if admin_user %} · {{ admin_user }}{% endif %}</span>
+</header>
+<main>
+  <div class="card">
+    <h2>Overview</h2>
+    <dl>
+      <dt>ID</dt><dd>{{ campaign.id }}</dd>
+      <dt>System</dt><dd>{{ campaign.game_system }}</dd>
+      <dt>GM</dt><dd>{{ gm_email }}</dd>
+      <dt>Active map</dt><dd>{{ campaign.active_map_id or "—" }}</dd>
+    </dl>
+    {% if campaign.description %}<p class="muted" style="margin-top:10px">{{ campaign.description }}</p>{% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Members ({{ members|length }})</h2>
+    <table>
+      <thead><tr><th>Email</th><th>Display name</th><th>Role</th></tr></thead>
+      <tbody>
+        {% for m in members %}
+        <tr><td>{{ m.email }}</td><td>{{ m.display_name }}</td><td>{% if m.is_gm %}<span class="pill">GM</span>{% else %}player{% endif %}</td></tr>
+        {% else %}
+        <tr><td colspan="3" class="muted">No members.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Characters ({{ characters|length }})</h2>
+    <table>
+      <thead><tr><th>ID</th><th>Name</th><th>Template</th><th>Owner</th></tr></thead>
+      <tbody>
+        {% for ch in characters %}
+        <tr><td>{{ ch.id }}</td><td>{{ ch.name }}</td><td class="muted">{{ ch.template }}</td><td class="muted">{{ ch.owner_user_id or "—" }}</td></tr>
+        {% else %}
+        <tr><td colspan="4" class="muted">No characters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Maps ({{ maps|length }})</h2>
+    <table>
+      <thead><tr><th>ID</th><th>Name</th><th>Grid</th><th>Size</th></tr></thead>
+      <tbody>
+        {% for mp in maps %}
+        <tr><td>{{ mp.id }}</td><td>{{ mp.name }}</td><td class="muted">{{ mp.grid_type.value if mp.grid_type else "—" }}</td><td class="muted">{{ mp.width_px }}×{{ mp.height_px }}</td></tr>
+        {% else %}
+        <tr><td colspan="4" class="muted">No maps.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card danger">
+    <h2>Delete campaign</h2>
+    {% if mfa_verified %}
+      <p class="muted">⚠️ <strong>Destructive.</strong> Permanently deletes the
+        campaign and its characters, maps, and memberships. Cannot be undone.</p>
+      <form method="post" action="/campaigns/{{ campaign.id }}/delete"
+            onsubmit="return confirm('Delete campaign &quot;{{ campaign.name }}&quot; and ALL its data? This cannot be undone.');">
+        <button type="submit" class="danger">Delete campaign</button>
+      </form>
+    {% else %}
+      <div class="banner warn">🔒 Deleting a campaign requires an MFA-verified session —
+        {% if not mfa_enabled %}enable <code>ADMIN_CENTER_MFA_ENABLED</code> and log in with your second factor.
+        {% else %}complete the second-factor step this session.{% endif %}
+      </div>
+    {% endif %}
+  </div>
+</main>
+</body>
+</html>

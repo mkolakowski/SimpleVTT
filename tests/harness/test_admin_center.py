@@ -598,6 +598,49 @@ def test_user_admin_create_validates_and_rejects_duplicate():
         db.close()
 
 
+# ---- campaign-admin service functions (Phase 3a) --------------------
+
+def test_campaign_admin_list_detail_delete_roundtrip():
+    """List → detail → delete exercised host-side against in-memory sqlite."""
+    pytest.importorskip("sqlalchemy")
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.admin_center import campaign_admin
+    from app.models import Base, Campaign, User
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    try:
+        gm = User(email="gm@example.com", display_name="GM", password_hash="x")
+        db.add(gm)
+        db.commit()
+        c = Campaign(name="Test Quest", gm_user_id=gm.id, game_system="dnd5e", description="")
+        db.add(c)
+        db.commit()
+        rows = campaign_admin.list_campaigns(db)
+        assert len(rows) == 1
+        assert rows[0]["name"] == "Test Quest"
+        assert rows[0]["gm_email"] == "gm@example.com"
+        assert rows[0]["members"] == 0 and rows[0]["characters"] == 0 and rows[0]["maps"] == 0
+        detail = campaign_admin.get_campaign_detail(db, c.id)
+        assert detail["campaign"].name == "Test Quest"
+        assert detail["gm_email"] == "gm@example.com"
+        assert detail["members"] == [] and detail["characters"] == [] and detail["maps"] == []
+        # Unknown id raises.
+        with pytest.raises(campaign_admin.CampaignAdminError):
+            campaign_admin.get_campaign_detail(db, 9999)
+        # Delete returns the captured name; re-delete raises.
+        name = campaign_admin.delete_campaign(db, c.id)
+        assert name == "Test Quest"
+        assert db.query(Campaign).count() == 0
+        with pytest.raises(campaign_admin.CampaignAdminError):
+            campaign_admin.delete_campaign(db, c.id)
+    finally:
+        db.close()
+
+
 # ---- display timezone -----------------------------------------------
 
 def test_timefmt_log_ts_converts_utc_to_offset():
@@ -1213,3 +1256,70 @@ def test_users_disable_reset_delete_roundtrip():
         assert again.status_code == 303 and "err=" in again.headers.get("location", "")
     finally:
         c.close()
+
+
+# ---- /campaigns campaign-admin page (v2.576.0, Phase 3a) ------------------
+@_LIVE
+def test_campaigns_page_redirects_when_unauthenticated():
+    """The /campaigns surface is auth-gated like the rest of the center."""
+    r = httpx.get(f"{ADMIN_BASE_URL}/campaigns", timeout=5.0, follow_redirects=False)
+    assert r.status_code == 303
+    assert "/login" in r.headers.get("location", "")
+    assert "www-authenticate" not in {k.lower() for k in r.headers}
+
+
+@_LIVE
+def test_campaigns_page_renders_when_enabled():
+    """With ADMIN_CENTER_ADMIN_TOOLS=true the page lists campaigns; a detail
+    link drills into a read-only view. (404 when the flag is off.)"""
+    with httpx.Client(base_url=ADMIN_BASE_URL, timeout=8.0, follow_redirects=False) as c:
+        r = c.post("/login", data={"username": _ADMIN_USER, "password": _ADMIN_PASS, "next": "/campaigns"})
+        assert r.status_code == 303
+        _complete_mfa_if_pending(c, r)
+        page = c.get("/campaigns", follow_redirects=False)
+        if page.status_code == 404:
+            assert "Admin tools are disabled" in page.text  # flag off
+            return
+        assert page.status_code == 200, page.text[:200]
+        assert "Campaign admin" in page.text
+        # Drill into the first campaign, if any, and confirm the read-only
+        # detail renders its sections.
+        import re as _re
+        m = _re.search(r'href="/campaigns/(\d+)"', page.text)
+        if m:
+            detail = c.get(f"/campaigns/{m.group(1)}", follow_redirects=False)
+            assert detail.status_code == 200, detail.text[:200]
+            assert "Overview" in detail.text and "Members" in detail.text
+
+
+@_LIVE
+def test_campaign_detail_unknown_redirects_with_error():
+    """An unknown campaign id redirects back to the list with an error
+    (no 500). Skips when admin-tools is off."""
+    c = _logged_in_client()
+    try:
+        if c.get("/campaigns", follow_redirects=False).status_code == 404:
+            pytest.skip("admin tools disabled on this stack")
+        r = c.get("/campaigns/99999999", follow_redirects=False)
+        assert r.status_code == 303
+        assert "/campaigns" in r.headers.get("location", "") and "err=" in r.headers.get("location", "")
+    finally:
+        c.close()
+
+
+@_LIVE
+def test_campaign_delete_requires_auth():
+    """An unauthenticated delete POST is bounced to login, never deleting."""
+    r = httpx.post(f"{ADMIN_BASE_URL}/campaigns/1/delete", timeout=5.0, follow_redirects=False)
+    assert r.status_code in (303, 307)
+    assert "/login" in r.headers.get("location", "")
+
+
+@_LIVE
+def test_campaign_delete_refused_for_header_auth():
+    """The MFA gate: a basic-auth header caller has no MFA-verified session,
+    so campaign-delete is refused — 403 (gated) or 404 (surface off). We
+    deliberately never POST it from an MFA-verified session in tests (that
+    would wipe a real demo campaign)."""
+    r = httpx.post(f"{ADMIN_BASE_URL}/campaigns/1/delete", auth=_AUTH, timeout=5.0, follow_redirects=False)
+    assert r.status_code in (403, 404), r.text[:200]

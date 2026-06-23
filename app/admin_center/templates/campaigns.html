@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Campaign admin — SimpleVTT Admin Center</title>
+<link rel="icon" href="/favicon.svg">
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: system-ui, -apple-system, sans-serif; background:#1a2036; color:#e6e9f0; margin:0; padding:0 0 48px; }
+  header { background:#252c45; padding:14px 24px; display:flex; align-items:center; gap:16px; border-bottom:1px solid #333c5c; }
+  header h1 { font-size:18px; margin:0; }
+  header nav a { color:#9fb3ff; text-decoration:none; }
+  main { max-width:1000px; margin:0 auto; padding:20px 24px; }
+  .card { background:#252c45; border:1px solid #333c5c; border-radius:8px; padding:16px; margin-bottom:18px; }
+  h2 { font-size:15px; margin:0 0 10px; color:#cdd6f4; }
+  .muted { color:#8b93b0; }
+  .banner { padding:10px 12px; border-radius:6px; margin-bottom:14px; font-size:14px; word-break:break-all; }
+  .banner.ok { background:#1e3a24; color:#b6f0c2; }
+  .banner.err { background:#3a1e1e; color:#ffb3b3; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid #333c5c; }
+  th { color:#9fb3ff; font-weight:600; }
+  a.link { color:#9fb3ff; text-decoration:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🗺️ Campaign admin</h1>
+  <nav><a href="/">← Dashboard</a> · <a href="/users">Users</a> · <a href="/tools">Tools</a></nav>
+  <span class="muted" style="margin-left:auto">SimpleVTT {{ app_version }}{% if admin_user %} · {{ admin_user }}{% endif %}</span>
+</header>
+<main>
+  {% if err %}<div class="banner err">⚠️ {{ err }}</div>{% endif %}
+  {% if done %}<div class="banner ok">✅ {{ done }}</div>{% endif %}
+
+  <div class="card">
+    <h2>Campaigns ({{ campaigns|length }})</h2>
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Name</th><th>System</th><th>GM</th><th>Members</th><th>Characters</th><th>Maps</th></tr>
+      </thead>
+      <tbody>
+        {% for c in campaigns %}
+        <tr>
+          <td>{{ c.id }}</td>
+          <td><a class="link" href="/campaigns/{{ c.id }}">{{ c.name }}</a></td>
+          <td class="muted">{{ c.game_system }}</td>
+          <td class="muted">{{ c.gm_email }}</td>
+          <td>{{ c.members }}</td>
+          <td>{{ c.characters }}</td>
+          <td>{{ c.maps }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="muted">No campaigns.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</main>
+</body>
+</html>

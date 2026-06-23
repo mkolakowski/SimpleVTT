@@ -1,6 +1,6 @@
 # Consolidate site-admin into the Admin Center
 
-**Status:** 🟠 partial · **Phase 1 (demo tools) shipped v2.573.2** — an opt-in `/tools` page in the Center (demo magic-link mint + demo reset), gated by `ADMIN_CENTER_ADMIN_TOOLS` (default off). **Stubs is deferred** out of Phase 1: its miss-store (`local_features._misses`) is an **in-memory module global in the main-app process**, so a separate Center process would always show an empty list — it can't move until the miss-store is made shared (DB/file-backed). **Phase 2a (user list + create) shipped v2.574.0** — an opt-in `/users` page (read-only list + non-destructive create), same flag, with operator-attributed audit via the new `operator_audit` helper (`actor=admin-center:<operator>`). **Phase 2b (destructive user ops — disable/reset-password/delete, MFA-gated) shipped v2.575.0** — refused unless the session is MFA-verified (403 to header-auth callers); per-row controls render only when verified. **Phase 3 (campaign admin) + Phase 4 (retire in-app) unstarted.**
+**Status:** 🟠 partial · **Phase 1 (demo tools) shipped v2.573.2** — an opt-in `/tools` page in the Center (demo magic-link mint + demo reset), gated by `ADMIN_CENTER_ADMIN_TOOLS` (default off). **Stubs is deferred** out of Phase 1: its miss-store (`local_features._misses`) is an **in-memory module global in the main-app process**, so a separate Center process would always show an empty list — it can't move until the miss-store is made shared (DB/file-backed). **Phase 2a (user list + create) shipped v2.574.0** — an opt-in `/users` page (read-only list + non-destructive create), same flag, with operator-attributed audit via the new `operator_audit` helper (`actor=admin-center:<operator>`). **Phase 2b (destructive user ops — disable/reset-password/delete, MFA-gated) shipped v2.575.0** — refused unless the session is MFA-verified (403 to header-auth callers); per-row controls render only when verified. **Phase 3a (campaign browse + delete) shipped v2.576.0** — `/campaigns` list + read-only detail + MFA-gated delete. **Phase 3b (campaign member/character/map/system management) + Phase 4 (retire in-app) unstarted.**
 
 Move the scattered **site-admin** surfaces out of the main app's in-app
 `/admin` portal and into the standalone **Admin Center** (port 8015), so
@@ -123,6 +123,15 @@ NOT left as a live duplicate write-path.
 3. **Phase 3 — campaign admin (high-risk, MFA-gated).** Port site-admin
    campaign management (members/characters/maps/system/**delete**), same MFA
    gate + audit. Redirect `/admin/campaign/{id}`.
+   - **Phase 3a — browse + delete. ✅ Shipped v2.576.0.** `/campaigns` list +
+     read-only `/campaigns/{id}` detail (members/characters/maps/system) +
+     **delete campaign** behind the shared `_destructive_gate()` (MFA-gated,
+     audited `admin.campaign_delete`). Service funcs in `campaign_admin.py`.
+   - **Phase 3b — member/character/map/system management. ⚪ Next.** Port the
+     remaining campaign mutations (member add/remove, character create/
+     assign/delete, system change, map upload/activate, thumbnail). The
+     file-upload paths (maps/thumbnails) are the heavy lift — the Center has
+     no `/static` mount, so the upload-target wiring needs design.
 4. **Phase 4 — retire the in-app portal.** Once 1–3 are in the Center, reduce
    `admin_home.html` to a pointer to the Center; drop the moved routes.
 

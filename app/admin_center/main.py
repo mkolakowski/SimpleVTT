@@ -797,3 +797,94 @@ def admin_users_delete(request: Request, user_id: int):
         return RedirectResponse(f"/users?done={quote('deleted ' + target_email)}", status_code=303)
     finally:
         db.close()
+
+
+# ── Campaign admin (Phase 3 — opt-in; delete MFA-gated) ───────────────────────
+# Phase 3a (this surface): a campaign list + read-only detail (members /
+# characters / maps / system) + the headline destructive action, delete
+# campaign (refused unless MFA-verified, audited). Member / character /
+# map / system management is a later 3b. All gated by
+# ADMIN_CENTER_ADMIN_TOOLS (default off).
+
+
+@app.get("/campaigns", response_class=HTMLResponse)
+def admin_campaigns(request: Request, done: str = "", err: str = ""):
+    """Campaign list. Opt-in via ADMIN_CENTER_ADMIN_TOOLS."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    from . import campaign_admin
+    from ..database import SessionLocal
+    db = SessionLocal()
+    try:
+        campaigns = campaign_admin.list_campaigns(db)
+        return templates.TemplateResponse(
+            "campaigns.html",
+            {
+                "request": request,
+                "app_version": APP_VERSION,
+                "admin_user": request.session.get("admin_user", ""),
+                "campaigns": campaigns,
+                "done": done,
+                "err": err,
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.get("/campaigns/{campaign_id}", response_class=HTMLResponse)
+def admin_campaign_detail(request: Request, campaign_id: int):
+    """Read-only campaign detail. The delete control renders only on an
+    MFA-verified session."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    from . import campaign_admin
+    from ..database import SessionLocal
+    db = SessionLocal()
+    try:
+        try:
+            detail = campaign_admin.get_campaign_detail(db, campaign_id)
+        except campaign_admin.CampaignAdminError as exc:
+            return RedirectResponse(f"/campaigns?err={quote(str(exc))}", status_code=303)
+        return templates.TemplateResponse(
+            "campaign_detail.html",
+            {
+                "request": request,
+                "app_version": APP_VERSION,
+                "admin_user": request.session.get("admin_user", ""),
+                "campaign": detail["campaign"],
+                "gm_email": detail["gm_email"],
+                "members": detail["members"],
+                "characters": detail["characters"],
+                "maps": detail["maps"],
+                "mfa_verified": _mfa_verified(request),
+                "mfa_enabled": mfa.mfa_enabled(),
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.post("/campaigns/{campaign_id}/delete")
+def admin_campaign_delete(request: Request, campaign_id: int):
+    """Delete a campaign (and its cascaded data). MFA-gated + audited."""
+    blocked = _destructive_gate(request)
+    if blocked is not None:
+        return blocked
+    from . import campaign_admin, operator_audit
+    from ..database import SessionLocal
+    operator = request.session.get("admin_user", "?")
+    db = SessionLocal()
+    try:
+        try:
+            name = campaign_admin.delete_campaign(db, campaign_id)
+        except campaign_admin.CampaignAdminError as exc:
+            return RedirectResponse(f"/campaigns?err={quote(str(exc))}", status_code=303)
+        operator_audit.record(
+            "admin.campaign_delete", operator=operator, target=name, request=request,
+            notes=f"campaign:{campaign_id}",
+        )
+        log.warning("admin-center operator %r deleted campaign %s (id=%s)", operator, name, campaign_id)
+        return RedirectResponse(f"/campaigns?done={quote('deleted ' + name)}", status_code=303)
+    finally:
+        db.close()
