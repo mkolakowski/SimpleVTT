@@ -154,6 +154,10 @@ def _fmt_bytes(n) -> str:
 templates.env.filters["epoch"] = timefmt.fmt_epoch
 templates.env.filters["duration"] = _fmt_duration
 templates.env.filters["bytes"] = _fmt_bytes
+# v2.589.1 — expose the admin-tools flag to every template so the shared
+# top-bar partial (_nav.html) can gate the write-surface links without each
+# route having to pass it explicitly.
+templates.env.globals["admin_tools_enabled"] = _ADMIN_TOOLS_ENABLED
 templates.env.filters["explain"] = event_help.explain
 # Audit-log line timestamps (app writes UTC) → the display zone.
 templates.env.filters["localtime"] = timefmt.fmt_log_ts

@@ -27,12 +27,9 @@
 </style>
 </head>
 <body>
-<header>
-  <h1>🛠️ Admin tools</h1>
-  <nav><a href="/">← Dashboard</a> · <a href="/users">Users</a> · <a href="/campaigns">Campaigns</a></nav>
-  <span class="muted" style="margin-left:auto">SimpleVTT {{ app_version }}{% if admin_user %} · {{ admin_user }}{% endif %}</span>
-</header>
+{% set nav_active = "tools" %}{% include "_nav.html" %}
 <main>
+  <h1 style="font-size:18px;margin:0 0 14px">🛠️ Admin tools</h1>
   {% if err %}<div class="banner err">⚠️ {{ err }}</div>{% endif %}
   {% if minted %}<div class="banner ok">🔗 Magic link minted: <code>{{ minted }}</code></div>{% endif %}
   {% if reset %}<div class="banner ok">♻️ Demo reset complete: <code>{{ reset }}</code></div>{% endif %}

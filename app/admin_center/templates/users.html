@@ -43,12 +43,9 @@
 </style>
 </head>
 <body>
-<header>
-  <h1>👥 User admin</h1>
-  <nav><a href="/">← Dashboard</a> · <a href="/campaigns">Campaigns</a> · <a href="/tools">Tools</a></nav>
-  <span class="muted" style="margin-left:auto">SimpleVTT {{ app_version }}{% if admin_user %} · {{ admin_user }}{% endif %}</span>
-</header>
+{% set nav_active = "users" %}{% include "_nav.html" %}
 <main>
+  <h1 style="font-size:18px;margin:0 0 14px">👥 User admin</h1>
   {% if err %}<div class="banner err">⚠️ {{ err }}</div>{% endif %}
   {% if created %}<div class="banner ok">✅ Created user <code>{{ created }}</code></div>{% endif %}
   {% if done %}<div class="banner ok">✅ {{ done }}</div>{% endif %}

@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.589.1] - 2026-06-23 — "The Common Rail"
+
+**Schema version:** 77
+
+**Commit summary:** Give every Admin Center page the same top navigation bar (extracted into a shared partial).
+
+**Description:** The Admin Center pages had each grown their own ad-hoc header — the dashboard carried the full link set (Users / Campaigns / Tools / Storage / Tests / Log out) while Users, Campaigns, Storage, Tools, Tests, and campaign-detail each showed a different reduced `<nav>`. They now all include one shared **`_nav.html`** top bar so navigation is identical everywhere: brand (→ dashboard), version, then the full link set (write-surface links gated by `admin_tools_enabled`), the operator name, and Log out — with the current page's link highlighted. The bar is self-contained (its own styling, not the page's theme vars) so it renders the same on every page; each page's title moved into its `<main>` as an `<h1>`.
+
+**Implementation:**
+
+- `app/admin_center/templates/_nav.html` (new): the shared bar; `nav_active` highlights the current page.
+- `app/admin_center/main.py`: `admin_tools_enabled` registered as a Jinja global so the partial can gate links without per-route context.
+- `dashboard.html`, `users.html`, `campaigns.html`, `campaign_detail.html`, `storage.html`, `tools.html`, `tests.html`: bespoke `<header>` replaced with `{% include "_nav.html" %}` + the page title relocated to `<main>`.
+
+**Harness changes:** none — the existing `tests/harness/test_admin_center.py` live tests already assert the per-page nav/landmark content (Log out, the page titles, `href="/"`), which the shared bar preserves.
+
+### Changed
+- Admin Center pages now share one consistent top navigation bar (`_nav.html`); previously each page had a slightly different ad-hoc nav.
+
 ## [2.589.0] - 2026-06-23 — "The Watermark"
 
 **Schema version:** 77

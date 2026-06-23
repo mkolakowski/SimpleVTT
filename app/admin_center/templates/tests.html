@@ -33,12 +33,9 @@
 </style>
 </head>
 <body>
-<header>
-  <h1>🧪 Test results</h1>
-  <nav><a href="/">← Dashboard</a></nav>
-  <span class="muted" style="margin-left:auto">SimpleVTT {{ app_version }}{% if admin_user %} · {{ admin_user }}{% endif %}</span>
-</header>
+{% set nav_active = "tests" %}{% include "_nav.html" %}
 <main>
+  <h1 style="font-size:18px;margin:0 0 14px">🧪 Test results</h1>
 {% if not latest %}
   <div class="card">
     <h2>No test runs yet</h2>

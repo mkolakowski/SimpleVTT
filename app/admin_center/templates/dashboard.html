@@ -148,19 +148,9 @@
   </style>
 </head>
 <body>
-  <header>
-    <h1>🛡️ SimpleVTT Admin Center</h1>
-    <span class="ver">v{{ app_version }}</span>
-    <span class="spacer"></span>
-    {% if admin_tools_enabled %}<a class="logout" href="/users" style="margin-right:12px">👥 Users</a>{% endif %}
-    {% if admin_tools_enabled %}<a class="logout" href="/campaigns" style="margin-right:12px">🗺️ Campaigns</a>{% endif %}
-    {% if admin_tools_enabled %}<a class="logout" href="/tools" style="margin-right:12px">🛠️ Tools</a>{% endif %}
-    <a class="logout" href="/storage" style="margin-right:12px">💾 Storage</a>
-    <a class="logout" href="/tests" style="margin-right:12px">🧪 Tests</a>
-    {% if admin_user %}<span class="who">{{ admin_user }}</span>{% endif %}
-    <a class="logout" href="/logout">Log out</a>
-  </header>
+  {% include "_nav.html" %}
   <main>
+    <h1 style="font-size:20px;margin:0 0 16px">🛡️ SimpleVTT Admin Center</h1>
 
     {% if default_password %}
     <div class="banner">

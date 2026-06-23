@@ -29,12 +29,9 @@
 </style>
 </head>
 <body>
-<header>
-  <h1>💾 Storage</h1>
-  <nav><a href="/">← Dashboard</a></nav>
-  <span class="muted" style="margin-left:auto">SimpleVTT {{ app_version }}{% if admin_user %} · {{ admin_user }}{% endif %}</span>
-</header>
+{% set nav_active = "storage" %}{% include "_nav.html" %}
 <main>
+  <h1 style="font-size:18px;margin:0 0 14px">💾 Storage</h1>
   {% if not report.available %}
     <div class="banner err">⚠️ Storage report unavailable: {{ report.reason }}</div>
   {% else %}

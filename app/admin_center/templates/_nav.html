@@ -1,0 +1,35 @@
+{# Shared Admin Center top bar (v2.589.1). Included by every page so the
+   navigation is identical everywhere. Self-contained styling (its own colors,
+   not the page's theme vars) so it renders the same regardless of which page
+   includes it. Context used: ``app_version`` + ``admin_user`` (passed by each
+   route) and ``admin_tools_enabled`` (a Jinja global). Optional ``nav_active``
+   ("users"/"campaigns"/"tools"/"storage"/"tests") highlights the current
+   page's link. The brand links home (the dashboard). #}
+<style>
+  .ac-nav { background:#1d2128; border-bottom:1px solid #2e3540; padding:12px 24px;
+            display:flex; align-items:center; gap:10px; flex-wrap:wrap; font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  .ac-nav .brand { font-size:18px; font-weight:600; color:#e6e9ef; text-decoration:none; }
+  .ac-nav .brand:hover { color:#fff; }
+  .ac-nav .ver { color:#9aa4b2; font-size:13px; }
+  .ac-nav .spacer { flex:1; }
+  /* 44px touch targets per the project's tap-target rule. */
+  .ac-nav a.link { min-height:44px; display:inline-flex; align-items:center; padding:0 12px;
+                   border:1px solid #2e3540; border-radius:8px; color:#e6e9ef; text-decoration:none; font-size:14px; }
+  .ac-nav a.link:hover { background:#242a33; }
+  .ac-nav a.link.active { background:#242a33; border-color:#6ea8fe; }
+  .ac-nav .who { color:#9aa4b2; font-size:13px; }
+</style>
+<header class="ac-nav">
+  <a class="brand" href="/" title="Admin Center dashboard">🛡️ SimpleVTT Admin</a>
+  <span class="ver">v{{ app_version }}</span>
+  <span class="spacer"></span>
+  {% if admin_tools_enabled %}
+  <a class="link {% if nav_active == 'users' %}active{% endif %}" href="/users">👥 Users</a>
+  <a class="link {% if nav_active == 'campaigns' %}active{% endif %}" href="/campaigns">🗺️ Campaigns</a>
+  <a class="link {% if nav_active == 'tools' %}active{% endif %}" href="/tools">🛠️ Tools</a>
+  {% endif %}
+  <a class="link {% if nav_active == 'storage' %}active{% endif %}" href="/storage">💾 Storage</a>
+  <a class="link {% if nav_active == 'tests' %}active{% endif %}" href="/tests">🧪 Tests</a>
+  {% if admin_user %}<span class="who">{{ admin_user }}</span>{% endif %}
+  <a class="link" href="/logout">Log out</a>
+</header>
