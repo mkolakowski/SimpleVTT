@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.605.4] - 2026-06-23 — "The Paired Toggles"
+
+**Schema version:** 79
+
+**Commit summary:** In the Admin Center user "Manage ▾" menu, the GM and Admin role toggles now sit on one line.
+
+**Description:** Small follow-up to the v2.605.1 user-table declutter. The two role toggles (Make/Revoke GM and Make/Revoke admin) stacked vertically in the Roles group of the per-row Manage dropdown; they now share a single row so the Roles section reads as a compact pair. Template/CSS-only — the forms, endpoints, and confirms are unchanged.
+
+**Implementation:**
+
+- `app/admin_center/templates/users.html` — wrap the two role forms in a `.menu-row` flex container (each form `flex:1`) so the GM and Admin buttons share a line.
+
+No harness change (layout-only; the `test_admin_center.py` role tests POST the endpoints directly and assert on the unchanged row pills).
+
+### Changed
+- Admin Center "Manage ▾" menu: GM + Admin role toggles share one line.
+
 ## [2.605.3] - 2026-06-23 — "The Gentle Nudge"
 
 **Schema version:** 79

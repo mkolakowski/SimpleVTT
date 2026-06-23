@@ -32,6 +32,10 @@
   .menu-panel form:not(:has(input)) > button,
   .menu-panel .menu-group > button { width:100%; }
   .menu-panel form > input { flex:1; min-width:0; min-height:32px; font-size:12px; padding:5px 8px; }
+  /* v2.605.4 — GM + Admin role toggles share one line. */
+  .menu-panel .menu-row { display:flex; gap:5px; }
+  .menu-panel .menu-row form { flex:1; margin:0; }
+  .menu-panel .menu-row form > button { width:100%; }
 </style>
 </head>
 <body>
@@ -75,17 +79,19 @@
               <div class="menu-panel">
                 <div class="menu-group">
                   <div class="menu-label">Roles</div>
-                  <form method="post" action="/users/{{ u.id }}/role">
-                    <input type="hidden" name="role" value="gm">
-                    <input type="hidden" name="value" value="{{ 0 if u.is_gm else 1 }}">
-                    <button type="submit">{{ "Revoke GM" if u.is_gm else "Make GM" }}</button>
-                  </form>
-                  <form method="post" action="/users/{{ u.id }}/role"
-                        onsubmit="return confirm('{{ 'Revoke' if u.is_admin else 'Grant' }} admin for {{ u.email }}?');">
-                    <input type="hidden" name="role" value="admin">
-                    <input type="hidden" name="value" value="{{ 0 if u.is_admin else 1 }}">
-                    <button type="submit">{{ "Revoke admin" if u.is_admin else "Make admin" }}</button>
-                  </form>
+                  <div class="menu-row">
+                    <form method="post" action="/users/{{ u.id }}/role">
+                      <input type="hidden" name="role" value="gm">
+                      <input type="hidden" name="value" value="{{ 0 if u.is_gm else 1 }}">
+                      <button type="submit">{{ "Revoke GM" if u.is_gm else "Make GM" }}</button>
+                    </form>
+                    <form method="post" action="/users/{{ u.id }}/role"
+                          onsubmit="return confirm('{{ 'Revoke' if u.is_admin else 'Grant' }} admin for {{ u.email }}?');">
+                      <input type="hidden" name="role" value="admin">
+                      <input type="hidden" name="value" value="{{ 0 if u.is_admin else 1 }}">
+                      <button type="submit">{{ "Revoke admin" if u.is_admin else "Make admin" }}</button>
+                    </form>
+                  </div>
                 </div>
                 <div class="menu-group">
                   <div class="menu-label">Account</div>
