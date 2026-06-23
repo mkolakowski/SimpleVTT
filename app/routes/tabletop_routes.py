@@ -20314,7 +20314,8 @@ async def upload_token_image(
         raise HTTPException(413, _q)
     token_dir = _Path(__file__).resolve().parent.parent / "static" / "uploads" / "tokens"
     token_dir.mkdir(parents=True, exist_ok=True)
-    ext = _Path(image.filename or "img.png").suffix.lower() or ".png"
+    from ..upload_safety import safe_ext, IMAGE_EXTS
+    ext = safe_ext(image.filename, IMAGE_EXTS, message="Unsupported image type")
     fname = f"{uuid.uuid4().hex}{ext}"
     (token_dir / fname).write_bytes(data)
     token.image_url = f"/static/uploads/tokens/{fname}"
@@ -117974,7 +117975,8 @@ async def settings_upload_map(
         if _q:
             raise HTTPException(413, _q)
         _MAP_DIR.mkdir(parents=True, exist_ok=True)
-        ext = Path(image.filename).suffix.lower() or ".png"
+        from ..upload_safety import safe_ext, IMAGE_VIDEO_EXTS
+        ext = safe_ext(image.filename, IMAGE_VIDEO_EXTS, message="Unsupported image type")
         stem = uuid.uuid4().hex
         fname = f"{stem}{ext}"
         (_MAP_DIR / fname).write_bytes(data)
@@ -118206,7 +118208,8 @@ async def _save_background_upload(image: UploadFile, db=None, campaign_id=None) 
         if _q:
             raise HTTPException(413, _q)
     _BG_DIR.mkdir(parents=True, exist_ok=True)
-    ext = Path(image.filename or "").suffix.lower() or ".png"
+    from ..upload_safety import safe_ext, IMAGE_VIDEO_EXTS
+    ext = safe_ext(image.filename, IMAGE_VIDEO_EXTS, message="Unsupported background type")
     fname = f"{uuid.uuid4().hex}{ext}"
     (_BG_DIR / fname).write_bytes(data)
     return f"/static/uploads/encounter_bg/{fname}"

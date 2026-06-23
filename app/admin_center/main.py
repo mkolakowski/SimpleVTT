@@ -1284,7 +1284,13 @@ async def admin_campaign_map_upload(
             _qdb.close()
         if _q:
             return _campaign_redirect(campaign_id, err=_q)
-        ext = Path(image.filename).suffix.lower() or ".png"
+        # Validate the extension (not just the spoofable Content-Type) so a
+        # filename like x.html can't be written + served as text/html → XSS.
+        # v2.599.4 — mirrors app/upload_safety.py (redirect-style errors here).
+        from ..upload_safety import IMAGE_VIDEO_EXTS
+        ext = Path(image.filename or "").suffix.lower() or ".png"
+        if ext not in IMAGE_VIDEO_EXTS:
+            return _campaign_redirect(campaign_id, err="Unsupported image type")
         fname = f"{uuid.uuid4().hex}{ext}"
         try:
             _MAP_DIR.mkdir(parents=True, exist_ok=True)

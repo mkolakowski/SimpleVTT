@@ -59,7 +59,8 @@ async def _save_thumbnail(file: UploadFile) -> str:
     data = await file.read()
     if len(data) > MAX_THUMB_BYTES:
         raise HTTPException(400, "Thumbnail too large (>5MB)")
-    ext = Path(file.filename).suffix.lower() or ".png"
+    from ..upload_safety import safe_ext, IMAGE_VIDEO_EXTS
+    ext = safe_ext(file.filename, IMAGE_VIDEO_EXTS, message="Unsupported image type")
     fname = f"{uuid.uuid4().hex}{ext}"
     out = THUMB_DIR / fname
     out.write_bytes(data)
@@ -298,7 +299,8 @@ async def admin_upload_map(
     if image and image.filename:
         if image.content_type not in ALLOWED_IMG_TYPES:
             raise HTTPException(400, "Unsupported image type")
-        ext = Path(image.filename).suffix.lower() or ".png"
+        from ..upload_safety import safe_ext, IMAGE_VIDEO_EXTS
+        ext = safe_ext(image.filename, IMAGE_VIDEO_EXTS, message="Unsupported image type")
         fname = f"{uuid.uuid4().hex}{ext}"
         out = MAP_DIR / fname
         data = await image.read()

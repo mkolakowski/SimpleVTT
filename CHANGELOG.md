@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.599.4] - 2026-06-23 — "No Costumes at the Door"
+
+**Schema version:** 77
+
+**Commit summary:** Fix stored XSS via upload file extensions — endpoints validated only the spoofable Content-Type, then took the on-disk extension from the user filename. Add a shared `safe_ext()` allowlist and wire it into every affected upload site.
+
+**Description:** Second of four XSS fixes from the security review. Map, token, background, audio, admin-thumbnail, admin-map, and Admin-Center-map uploads validated only the attacker-controlled multipart `Content-Type` header, then derived the file extension from the user-supplied *filename* with no allowlist. Files are served from the `/static` mount, where Starlette sets the response `Content-Type` from the file **extension** (`mimetypes.guess_type`). So an attacker could send `Content-Type: image/png` (passing the type check) with `filename=x.html` (or `x.svg`) and have the file written as `<uuid>.html` and served back as `text/html` — a stored, same-origin XSS (cookie theft for anyone who opens the asset URL). New `app/upload_safety.py` provides `safe_ext(filename, allowed, …)` that validates the extension against a strict allowlist (`IMAGE_EXTS` / `IMAGE_VIDEO_EXTS` / `AUDIO_EXTS`) and raises `HTTPException(400)` otherwise; the on-disk extension is now decided by the allowlist, never the raw filename. Endpoints that already gated on an extension allowlist (portrait `_ALLOWED_PORTRAIT_EXT`, token-template, handout `_ALLOWED_HANDOUT_IMG_EXT`) were already safe and are unchanged.
+
+**Implementation:**
+
+- `app/upload_safety.py` (new): `safe_ext()` + the three allowlists, with a host-side `HTTPException` shim so it's unit-testable without fastapi installed.
+- `app/routes/tabletop_routes.py`: token image, map, and background uploads route through `safe_ext`.
+- `app/routes/admin_routes.py`: campaign thumbnail (`_save_thumbnail`) + campaign map upload route through `safe_ext`.
+- `app/routes/audio_routes.py`: audio upload routes through `safe_ext` — closes the gap where the existing extension check was *skipped* whenever the (spoofable) Content-Type was already in the allowed set.
+- `app/admin_center/main.py`: the Center's map upload gates on `IMAGE_VIDEO_EXTS` (redirect-style error to match its form UX).
+
+**Harness changes:**
+
+- `tests/harness/test_upload_safety.py` (new, +6): allowed exts pass + lowercase; no-suffix → default; `.html`/`.svg`/`.js`/… rejected with 400; video only in the image+video set; audio set rejects non-audio; and a wiring guard that the affected route files route through `safe_ext` / `IMAGE_VIDEO_EXTS`.
+
+Total harness count → 4190 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+### Fixed
+- Stored XSS: uploaded files can no longer be written with a dangerous extension (e.g. `.html`/`.svg`) smuggled past the Content-Type check via the filename, then served from `/static` with an executable content type.
+
 ## [2.599.3] - 2026-06-23 — "The Escaped Bard"
 
 **Schema version:** 77

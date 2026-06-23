@@ -406,7 +406,8 @@ async def upload_track(
         _q = check_quota(db, campaign_id, len(data))
         if _q:
             raise HTTPException(413, _q)
-        ext = Path(file.filename).suffix.lower() or ".mp3"
+        from ..upload_safety import safe_ext, AUDIO_EXTS
+        ext = safe_ext(file.filename, AUDIO_EXTS, default=".mp3", message="Unsupported audio type")
         fname = f"{uuid.uuid4().hex}{ext}"
         (AUDIO_DIR / fname).write_bytes(data)
         meta = _extract_audio_metadata(data, file.filename)
