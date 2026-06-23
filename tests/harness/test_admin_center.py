@@ -693,6 +693,54 @@ def test_campaign_admin_member_system_character_mutations():
         db.close()
 
 
+# ---- campaign-admin map service (Phase 3b uploads) ------------------
+
+def test_campaign_admin_create_and_activate_map():
+    """create_map clamps dims + sets the first map active; activate_map
+    switches + validates campaign membership. Host-side sqlite."""
+    pytest.importorskip("sqlalchemy")
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.admin_center import campaign_admin
+    from app.models import Base, Campaign, User
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    try:
+        gm = User(email="gm@example.com", display_name="GM", password_hash="x")
+        db.add(gm)
+        db.commit()
+        c = Campaign(name="Quest", gm_user_id=gm.id, game_system="generic", description="")
+        db.add(c)
+        db.commit()
+        # Tiny dims get clamped up to the 200px floor; first map auto-activates.
+        m1 = campaign_admin.create_map(
+            db, c.id, name="Cave", image_url="/static/uploads/maps/x.png",
+            grid_type="square", grid_size_px=5, width_px=1, height_px=1,
+        )
+        assert m1.grid_size_px == 20 and m1.width_px == 200 and m1.height_px == 200
+        db.refresh(c)
+        assert c.active_map_id == m1.id  # first map becomes active
+        m2 = campaign_admin.create_map(
+            db, c.id, name="Town", image_url=None,
+            grid_type="bogus", grid_size_px=70, width_px=3000, height_px=2000,
+        )
+        from app.models import GridType
+        assert m2.grid_type == GridType.SQUARE  # bad grid_type falls back
+        db.refresh(c)
+        assert c.active_map_id == m1.id  # second map does NOT steal active
+        # Activate the second; validate cross-campaign rejection.
+        campaign_admin.activate_map(db, c.id, m2.id)
+        db.refresh(c)
+        assert c.active_map_id == m2.id
+        with pytest.raises(campaign_admin.CampaignAdminError):
+            campaign_admin.activate_map(db, c.id, 9999)
+    finally:
+        db.close()
+
+
 # ---- display timezone -----------------------------------------------
 
 def test_timefmt_log_ts_converts_utc_to_offset():
@@ -1458,6 +1506,67 @@ def test_campaign_mutations_refused_for_header_auth(path):
     r = httpx.post(f"{ADMIN_BASE_URL}{path}", auth=_AUTH, timeout=5.0,
                    data={"user_id": "1", "game_system": "generic"}, follow_redirects=False)
     assert r.status_code in (403, 404), r.text[:200]
+
+
+# ---- /campaigns map uploads (v2.582.0, Phase 3b uploads) ------------------
+# A minimal valid 1x1 PNG (dimensions get clamped up to the 200px floor).
+_TINY_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108020000009077"
+    "53de0000000c4944415408d7636060606000000005000100a5f645ee0000000049454e44ae426082"
+)
+
+
+@_LIVE
+@pytest.mark.parametrize("path", ["/campaigns/1/maps", "/campaigns/1/maps/1/activate"])
+def test_campaign_map_routes_require_auth(path):
+    """Unauthenticated map POSTs are bounced to login, never run."""
+    r = httpx.post(f"{ADMIN_BASE_URL}{path}", timeout=5.0, follow_redirects=False)
+    assert r.status_code in (303, 307)
+    assert "/login" in r.headers.get("location", "")
+
+
+@_LIVE
+@pytest.mark.parametrize("path", ["/campaigns/1/maps", "/campaigns/1/maps/1/activate"])
+def test_campaign_map_routes_refused_for_header_auth(path):
+    """The MFA gate: a basic-auth header caller is never MFA-verified — the
+    map upload/activate routes are refused (403 gated / 404 off)."""
+    r = httpx.post(f"{ADMIN_BASE_URL}{path}", auth=_AUTH, timeout=5.0, follow_redirects=False)
+    assert r.status_code in (403, 404), r.text[:200]
+
+
+@_LIVE
+@pytest.mark.skipif(not _MFA_ON, reason="map upload needs an MFA-verified session; stack has MFA off")
+def test_campaign_map_upload_and_activate():
+    """Upload a tiny map to a real campaign on an MFA-on stack, confirm it's
+    listed + (as the activate target) becomes active. The file lands on the
+    shared uploads volume; the row persists until the demo reseed (no Center
+    map-delete yet). Skips when admin-tools is off or there are no campaigns."""
+    import re as _re
+    c = _logged_in_client()
+    try:
+        lst = c.get("/campaigns", follow_redirects=False)
+        if lst.status_code == 404:
+            pytest.skip("admin tools disabled on this stack")
+        m = _re.search(r'href="/campaigns/(\d+)"', lst.text)
+        if not m:
+            pytest.skip("no campaigns to manage")
+        cid = m.group(1)
+        up = c.post(
+            f"/campaigns/{cid}/maps",
+            data={"name": "phase3b-upload-test", "grid_type": "square", "grid_size_px": "70"},
+            files={"image": ("tiny.png", _TINY_PNG, "image/png")},
+            follow_redirects=False,
+        )
+        assert up.status_code == 303 and "done=" in up.headers.get("location", ""), up.text[:200]
+        detail = c.get(f"/campaigns/{cid}", follow_redirects=False).text
+        assert "phase3b-upload-test" in detail
+        mm = _re.search(r"<td>(\d+)</td><td>phase3b-upload-test</td>", detail)
+        assert mm, "uploaded map not listed"
+        # Activate it explicitly (idempotent if it auto-activated as first map).
+        act = c.post(f"/campaigns/{cid}/maps/{mm.group(1)}/activate", follow_redirects=False)
+        assert act.status_code == 303 and "done=" in act.headers.get("location", "")
+    finally:
+        c.close()
 
 
 @_LIVE

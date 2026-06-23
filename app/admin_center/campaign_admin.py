@@ -184,6 +184,51 @@ def delete_character(db: Session, campaign_id: int, char_id: int) -> str:
     return name
 
 
+def create_map(
+    db: Session, campaign_id: int, *,
+    name: str, image_url, grid_type: str, grid_size_px: int,
+    width_px: int, height_px: int,
+):
+    """Create a Map row (mirrors the in-app admin upload). The route owns
+    the file write + dimension detection; this clamps + persists, and sets
+    the campaign's active map when it has none yet. Returns the Map."""
+    from ..models import GridType, Map
+    c = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not c:
+        raise CampaignAdminError(f"No campaign with id {campaign_id}")
+    try:
+        gt = GridType(grid_type)
+    except ValueError:
+        gt = GridType.SQUARE
+    m = Map(
+        campaign_id=campaign_id,
+        name=(name or "").strip()[:120] or "Map",
+        image_url=image_url,
+        grid_type=gt,
+        grid_size_px=max(20, min(int(grid_size_px), 300)),
+        width_px=max(200, min(int(width_px), 8000)),
+        height_px=max(200, min(int(height_px), 8000)),
+    )
+    db.add(m)
+    db.commit()
+    db.refresh(m)
+    if not c.active_map_id:
+        c.active_map_id = m.id
+        db.commit()
+    return m
+
+
+def activate_map(db: Session, campaign_id: int, map_id: int):
+    """Set the campaign's active map. Validates the map belongs to it."""
+    c = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    m = db.query(Map).filter(Map.id == map_id).first()
+    if not c or not m or m.campaign_id != campaign_id:
+        raise CampaignAdminError(f"No map {map_id} in campaign {campaign_id}")
+    c.active_map_id = m.id
+    db.commit()
+    return m
+
+
 def delete_campaign(db: Session, campaign_id: int) -> str:
     """Delete a campaign. Clears the self-referential ``active_map_id``
     first (so the maps cascade doesn't trip the FK), captures the name

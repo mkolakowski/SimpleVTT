@@ -201,6 +201,12 @@ services:
       # from the repo; empty/absent in production where the suite isn't
       # run (the page shows an empty-state).
       - ./test-results:/data/test-results:ro
+      # v2.582.0 — read-WRITE share of the app's uploads volume so the
+      # Admin Center's campaign-management surface (Phase 3b) can write
+      # map / thumbnail files the APP serves at /static/uploads/...
+      # (the Center has no /static mount of its own). Same path the app
+      # mounts it at, so the in-image UPLOAD_ROOT resolves identically.
+      - uploads_data:/app/app/static/uploads
     ports:
       - "${ADMIN_CENTER_PORT:-8015}:${ADMIN_CENTER_PORT:-8015}"
     command:

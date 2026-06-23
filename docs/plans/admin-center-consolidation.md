@@ -132,10 +132,15 @@ NOT left as a live duplicate write-path.
      `/characters/create|{cid}/assign|{cid}/delete`, audited; the management
      controls render only on an MFA-verified detail page. Service funcs in
      `campaign_admin.py`.
-   - **Phase 3b (upload remainder) — maps + thumbnails. ⚪ Next.** Port
-     map upload/activate + thumbnail upload/clear. The file-upload paths are
-     the heavy lift — the Center has no `/static` mount, so the upload-target
-     wiring (shared uploads volume? proxy to the app?) needs design.
+   - **Phase 3b (uploads) — map upload + activate. ✅ Shipped v2.582.0.**
+     Answered the upload-target question with a **shared volume**: the app's
+     `uploads_data` volume is mounted RW into the admin-center at the same
+     path, so the Center writes the file (uuid-named, Pillow dimension
+     detection, ≤80 MB) and the app serves it at `/static/uploads/maps/...`.
+     `create_map`/`activate_map` in `campaign_admin.py`; MFA-gated + audited.
+   - **Phase 3b (uploads) — thumbnails. ⚪ Next.** Port thumbnail
+     upload/clear (same shared volume, smaller surface). After this the
+     in-app campaign upload routes can retire.
 4. **Phase 4 — retire the in-app portal.** Once 1–3 are in the Center, reduce
    `admin_home.html` to a pointer to the Center; drop the moved routes.
    - **Phase 4 (soft-deprecation step). 🟠 Shipped v2.577.2.** A migration

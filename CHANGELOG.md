@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.582.0] - 2026-06-22 — "The Shared Darkroom"
+
+**Schema version:** 75
+
+**Commit summary:** Phase 3b (uploads) of `docs/plans/admin-center-consolidation.md` — campaign **map upload + activate** in the Admin Center, via a shared uploads volume.
+
+**Description:** The Admin Center can now upload battle maps to a campaign and set the active map, from the `/campaigns/{id}` detail page (MFA-gated). The design question — the Center has no `/static` mount of its own — is answered with a **shared volume**: the app's `uploads_data` named volume (mounted at `/app/app/static/uploads`) is now mounted **read-write** into the admin-center service at the same in-image path. The Center writes the map file there (uuid-named, image dimensions auto-detected via Pillow, ≤80 MB, content-type allowlisted); the **app** serves it at `/static/uploads/maps/<name>` exactly as before. This is the same volume-sharing pattern the Center already uses for `audit_logs` (RW) and `fail2ban_data` (RO). Each upload/activate is audited to the operator identity (`admin.campaign_map_upload` / `admin.campaign_map_activate`). The first map uploaded auto-activates. **Thumbnail upload/clear is a follow-up** (same volume, smaller surface), after which the in-app campaign upload routes can retire.
+
+**Implementation:**
+
+- `docker-compose.yml`: `uploads_data:/app/app/static/uploads` (RW) added to the admin-center service.
+- `app/admin_center/campaign_admin.py`: `create_map` (clamps grid/size, sets active when none) + `activate_map` (validates campaign membership).
+- `app/admin_center/main.py`: `POST /campaigns/{id}/maps` (async — file write + Pillow dimension detection, `_UPLOAD_ROOT`/`_MAP_DIR`/`_ALLOWED_IMG_TYPES`/80 MB cap) + `POST /campaigns/{id}/maps/{map_id}/activate`, both via `_destructive_gate`, audited.
+- `app/admin_center/templates/campaign_detail.html`: MFA-verified Maps table gains an Active column + per-row Activate button + an upload form.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py` (+6): `campaign_admin` `create_map`/`activate_map` round-trip (host-side sqlite — dim clamping, first-map auto-activate, bad-grid fallback, cross-campaign reject); the upload + activate routes require auth (unauth → 303, parametrized) and are refused for basic-auth header callers (403/404, parametrized); and an MFA-on upload-a-tiny-PNG → listed → activate round-trip against a real campaign (skipped when MFA off; the row persists until the demo reseed — no Center map-delete yet).
+
+Total harness count → 4132 in `tests/harness/` + 101 in `tests/harness_ui/`.
+
+MINOR — new Admin Center surface (additive; opt-in, off by default).
+
+### Added
+- Admin Center **campaign map upload + activate** (`POST /campaigns/{id}/maps`, `/maps/{id}/activate`, opt-in via `ADMIN_CENTER_ADMIN_TOOLS`, MFA-gated) via a shared `uploads_data` volume (`docs/plans/admin-center-consolidation.md` Phase 3b). Thumbnail upload/clear follows.
+
 ## [2.581.0] - 2026-06-22 — "The Minted Elsewhere"
 
 **Schema version:** 75

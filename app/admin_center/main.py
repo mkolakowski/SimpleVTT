@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
@@ -948,6 +948,17 @@ def _campaign_redirect(campaign_id: int, *, done: str = "", err: str = "") -> Re
     return RedirectResponse(f"/campaigns/{campaign_id}{q}", status_code=303)
 
 
+# Map uploads (Phase 3b). The Admin Center shares the app's uploads volume
+# (docker-compose: uploads_data RW) mounted at the same in-image path, so a
+# file written here is served by the APP at /static/uploads/maps/<name>.
+_UPLOAD_ROOT = Path(__file__).resolve().parent.parent / "static" / "uploads"
+_MAP_DIR = _UPLOAD_ROOT / "maps"
+_ALLOWED_IMG_TYPES = {
+    "image/png", "image/jpeg", "image/webp", "image/gif", "video/webm", "video/mp4",
+}
+_MAX_MAP_BYTES = 80 * 1024 * 1024
+
+
 @app.post("/campaigns/{campaign_id}/members/add")
 def admin_campaign_member_add(request: Request, campaign_id: int, user_id: int = Form(...)):
     blocked = _destructive_gate(request)
@@ -1091,5 +1102,94 @@ def admin_campaign_character_delete(request: Request, campaign_id: int, char_id:
             request=request, notes=f"campaign:{campaign_id}",
         )
         return _campaign_redirect(campaign_id, done=f"deleted character {name}")
+    finally:
+        db.close()
+
+
+@app.post("/campaigns/{campaign_id}/maps")
+async def admin_campaign_map_upload(
+    request: Request, campaign_id: int,
+    name: str = Form("Map"),
+    grid_type: str = Form("square"),
+    grid_size_px: int = Form(70),
+    width_px: int = Form(2000),
+    height_px: int = Form(1500),
+    image: UploadFile = File(None),
+):
+    """Upload a battle map to a campaign. MFA-gated + audited. The file is
+    written to the shared uploads volume (served by the app at
+    /static/uploads/maps/...); dimensions are auto-detected from the image
+    when possible. Mirrors the in-app admin upload."""
+    blocked = _destructive_gate(request)
+    if blocked is not None:
+        return blocked
+    import uuid
+    image_url = None
+    if image is not None and image.filename:
+        if image.content_type not in _ALLOWED_IMG_TYPES:
+            return _campaign_redirect(campaign_id, err="Unsupported image type")
+        data = await image.read()
+        if len(data) > _MAX_MAP_BYTES:
+            return _campaign_redirect(campaign_id, err="Map image too large (>80 MB)")
+        ext = Path(image.filename).suffix.lower() or ".png"
+        fname = f"{uuid.uuid4().hex}{ext}"
+        try:
+            _MAP_DIR.mkdir(parents=True, exist_ok=True)
+            (_MAP_DIR / fname).write_bytes(data)
+        except OSError as exc:
+            log.exception("admin-center map upload write failed")
+            return _campaign_redirect(campaign_id, err=f"Could not save image: {exc}")
+        image_url = f"/static/uploads/maps/{fname}"
+        if image.content_type and image.content_type.startswith("image/"):
+            try:
+                import io as _io
+
+                from PIL import Image as _PILImage
+                with _PILImage.open(_io.BytesIO(data)) as _img:
+                    width_px, height_px = _img.size
+            except Exception:  # noqa: BLE001 — keep the form-provided dims
+                pass
+    from . import campaign_admin, operator_audit
+    from ..database import SessionLocal
+    operator = request.session.get("admin_user", "?")
+    db = SessionLocal()
+    try:
+        try:
+            m = campaign_admin.create_map(
+                db, campaign_id, name=name, image_url=image_url,
+                grid_type=grid_type, grid_size_px=grid_size_px,
+                width_px=width_px, height_px=height_px,
+            )
+        except campaign_admin.CampaignAdminError as exc:
+            return _campaign_redirect(campaign_id, err=str(exc))
+        operator_audit.record(
+            "admin.campaign_map_upload", operator=operator, target=m.name,
+            request=request, notes=f"campaign:{campaign_id} map:{m.id}",
+        )
+        return _campaign_redirect(campaign_id, done=f"uploaded map {m.name}")
+    finally:
+        db.close()
+
+
+@app.post("/campaigns/{campaign_id}/maps/{map_id}/activate")
+def admin_campaign_map_activate(request: Request, campaign_id: int, map_id: int):
+    """Set the campaign's active map. MFA-gated + audited."""
+    blocked = _destructive_gate(request)
+    if blocked is not None:
+        return blocked
+    from . import campaign_admin, operator_audit
+    from ..database import SessionLocal
+    operator = request.session.get("admin_user", "?")
+    db = SessionLocal()
+    try:
+        try:
+            m = campaign_admin.activate_map(db, campaign_id, map_id)
+        except campaign_admin.CampaignAdminError as exc:
+            return _campaign_redirect(campaign_id, err=str(exc))
+        operator_audit.record(
+            "admin.campaign_map_activate", operator=operator, target=m.name,
+            request=request, notes=f"campaign:{campaign_id} map:{m.id}",
+        )
+        return _campaign_redirect(campaign_id, done=f"activated map {m.name}")
     finally:
         db.close()

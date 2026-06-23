@@ -148,15 +148,43 @@
   <div class="card">
     <h2>Maps ({{ maps|length }})</h2>
     <table>
-      <thead><tr><th>ID</th><th>Name</th><th>Grid</th><th>Size</th></tr></thead>
+      <thead><tr><th>ID</th><th>Name</th><th>Grid</th><th>Size</th><th>Active</th>{% if mfa_verified %}<th>Actions</th>{% endif %}</tr></thead>
       <tbody>
         {% for mp in maps %}
-        <tr><td>{{ mp.id }}</td><td>{{ mp.name }}</td><td class="muted">{{ mp.grid_type.value if mp.grid_type else "—" }}</td><td class="muted">{{ mp.width_px }}×{{ mp.height_px }}</td></tr>
+        <tr>
+          <td>{{ mp.id }}</td><td>{{ mp.name }}</td>
+          <td class="muted">{{ mp.grid_type.value if mp.grid_type else "—" }}</td>
+          <td class="muted">{{ mp.width_px }}×{{ mp.height_px }}</td>
+          <td>{% if mp.id == campaign.active_map_id %}<span class="pill">active</span>{% endif %}</td>
+          {% if mfa_verified %}
+          <td>
+            {% if mp.id != campaign.active_map_id %}
+            <form method="post" action="/campaigns/{{ campaign.id }}/maps/{{ mp.id }}/activate">
+              <button type="submit" style="min-height:32px;padding:5px 8px;font-size:12px">Activate</button>
+            </form>
+            {% endif %}
+          </td>
+          {% endif %}
+        </tr>
         {% else %}
-        <tr><td colspan="4" class="muted">No maps.</td></tr>
+        <tr><td colspan="{{ 6 if mfa_verified else 5 }}" class="muted">No maps.</td></tr>
         {% endfor %}
       </tbody>
     </table>
+    {% if mfa_verified %}
+    <form class="inline-form" method="post" action="/campaigns/{{ campaign.id }}/maps" enctype="multipart/form-data">
+      <input type="text" name="name" placeholder="map name" required>
+      <input type="file" name="image" accept="image/*,video/webm,video/mp4">
+      <select name="grid_type">
+        <option value="square">square</option>
+        <option value="hex">hex</option>
+        <option value="none">none</option>
+      </select>
+      <input type="number" name="grid_size_px" value="70" min="20" max="300" title="grid size px" style="width:6em">
+      <button type="submit">Upload map</button>
+    </form>
+    <p class="muted" style="font-size:12px;margin-top:4px">Image dimensions are auto-detected; max 80&nbsp;MB. The first map uploaded becomes active.</p>
+    {% endif %}
   </div>
 
   <div class="card danger">
