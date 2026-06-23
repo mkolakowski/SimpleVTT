@@ -30,7 +30,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from .. import dice as dice_mod
-from ..auth import get_current_user, require_user
+from ..auth import get_current_user, require_gm, require_user
 from ..config import get_settings
 from ..database import SessionLocal, get_db
 from ..game_systems import SYSTEMS, get_system, system_choices
@@ -12540,6 +12540,13 @@ def home(request: Request, db: Session = Depends(get_db)):
         )
         for c in member_campaigns + all_campaigns
     }
+    # v2.585.0 — campaign creation is GM/admin-gated, GMs capped at
+    # gm_campaign_limit (admins uncapped). Surface the affordance + quota.
+    _settings = get_settings()
+    can_create_campaign = bool(user.is_gm or user.is_admin)
+    campaign_limit = 0 if user.is_admin else _settings.gm_campaign_limit
+    campaign_used = len(primary_gm_campaigns)
+    campaign_at_limit = bool(campaign_limit and campaign_used >= campaign_limit)
     return templates.TemplateResponse(
         "lobby.html",
         {
@@ -12551,6 +12558,10 @@ def home(request: Request, db: Session = Depends(get_db)):
             "gm_names": gm_names,
             "system_choices": system_choices(),
             "get_system": get_system,
+            "can_create_campaign": can_create_campaign,
+            "campaign_limit": campaign_limit,
+            "campaign_used": campaign_used,
+            "campaign_at_limit": campaign_at_limit,
         },
     )
 
@@ -12563,8 +12574,22 @@ async def create_campaign(
     game_system: str = Form("generic"),
     thumbnail: UploadFile = File(None),
     db: Session = Depends(get_db),
-    user: User = Depends(require_user),
+    user: User = Depends(require_gm),
 ):
+    # v2.585.0 — app-wide GM role gates campaign creation (require_gm =
+    # is_gm or is_admin). A GM who is NOT an admin is capped at
+    # gm_campaign_limit owned campaigns; admins are uncapped (0 =
+    # unlimited). See docs/plans/app-wide-roles-and-storage.md.
+    settings = get_settings()
+    limit = settings.gm_campaign_limit
+    if not user.is_admin and limit and limit > 0:
+        owned = db.query(Campaign).filter(Campaign.gm_user_id == user.id).count()
+        if owned >= limit:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Campaign limit reached ({owned} of {limit}). "
+                       "Ask an admin to raise your limit.",
+            )
     sys = get_system(game_system)
     c = Campaign(
         name=name.strip(),

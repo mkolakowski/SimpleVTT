@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.585.0] - 2026-06-22 — "The Gatekeeper's Ledger"
+
+**Schema version:** 76
+
+**Commit summary:** Arc A2 of `docs/plans/app-wide-roles-and-storage.md` — gate campaign creation on the GM role and cap GMs at `GM_CAMPAIGN_LIMIT` campaigns.
+
+**Description:** `POST /campaigns` (`app/routes/tabletop_routes.py`) now requires the app-wide **GM role** (`require_gm` = `is_gm or is_admin`) instead of any logged-in user. A GM who is **not** an admin is capped at `GM_CAMPAIGN_LIMIT` owned campaigns (default 10; admins uncapped; 0 = unlimited) — exceeding it returns 403 with a clear "ask an admin to raise your limit" message. The lobby UI reflects this: the **Create a new campaign** form renders only for GMs/admins (with a `used of N` quota hint), shows an at-limit notice when the cap is hit, and otherwise tells players that creating campaigns needs the GM role. The creator still becomes the per-campaign GM (`gm_user_id`) as before.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`: `create_campaign` now `Depends(require_gm)` + inline cap check (`Campaign.gm_user_id == user.id` count vs `gm_campaign_limit`); the `home` lobby route passes `can_create_campaign` / `campaign_limit` / `campaign_used` / `campaign_at_limit`.
+- `app/templates/lobby.html`: gates the create form on the role + quota.
+
+**Harness changes:**
+
+- `tests/harness/test_campaign_roles.py` (+3, new): a player (demo-alice) → 403 on `POST /campaigns` (role gate); a GM (demo-gm) → creates a campaign (303 → campaign page); an unauthenticated POST is refused (no campaign created).
+
+Total harness count → 4136 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+MINOR — campaign creation is now role-gated (existing non-GM users can no longer create campaigns; in dev there are none, and the demo GM holds the role).
+
+### Changed
+- Campaign creation (`POST /campaigns`) now requires the GM role (or admin) and enforces a per-GM campaign cap (`GM_CAMPAIGN_LIMIT`, default 10) — Arc A2 of `docs/plans/app-wide-roles-and-storage.md`. The lobby create form is gated + shows the quota.
+
 ## [2.584.0] - 2026-06-22 — "The Three Keys"
 
 **Schema version:** 76

@@ -71,8 +71,12 @@
         <p class="muted">You aren't running any campaigns yet.</p>
     {% endif %}
 
+    {% if can_create_campaign %}
     <details>
-        <summary>+ Create a new campaign</summary>
+        <summary>+ Create a new campaign{% if campaign_limit %} <span class="muted">({{ campaign_used }} of {{ campaign_limit }} used)</span>{% endif %}</summary>
+        {% if campaign_at_limit %}
+        <p class="muted">You've reached your campaign limit ({{ campaign_used }} of {{ campaign_limit }}). Ask an admin to raise it.</p>
+        {% else %}
         <form method="post" action="/campaigns" enctype="multipart/form-data" class="stacked">
             <label>Name <input type="text" name="name" required></label>
             <label>Description <textarea name="description" rows="2"></textarea></label>
@@ -86,7 +90,11 @@
             <label>Thumbnail (optional, png/jpg/webp, max 5 MB) <input type="file" name="thumbnail" accept="image/*"></label>
             <button type="submit">Create</button>
         </form>
+        {% endif %}
     </details>
+    {% else %}
+    <p class="muted">Creating campaigns requires the <strong>GM</strong> role — ask an admin to grant it.</p>
+    {% endif %}
 </section>
 
 <section>
