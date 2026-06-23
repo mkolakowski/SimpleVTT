@@ -104,6 +104,18 @@ def _list_test_runs(limit: int = 30) -> list:
     )
     return [r for r in (_load_test_run(p) for p in files[:limit]) if r]
 
+
+# v2.573.2 — Phase 1 of docs/plans/admin-center-consolidation.md: an opt-in
+# "Admin tools" surface in the Center. OFF by default so an existing
+# read-only deployment doesn't silently gain write-admin; the operator sets
+# ADMIN_CENTER_ADMIN_TOOLS=true to enable it.
+_ADMIN_TOOLS_ENABLED = os.getenv(
+    "ADMIN_CENTER_ADMIN_TOOLS", "").strip().lower() in ("1", "true", "yes")
+
+
+def _demo_mode() -> bool:
+    return os.getenv("DEMO_MODE", "").strip().lower() in ("1", "true", "yes")
+
 # Reuse the main site's favicon (baked into the same image at
 # app/static/favicon.svg). The admin center has no /static mount, so
 # it's served via the dedicated /favicon.svg route below.
@@ -507,6 +519,7 @@ def dashboard(
             "cf_removed": cf,
             "logs_cleared": logs_cleared,
             "logs_error": logs_error,
+            "admin_tools_enabled": _ADMIN_TOOLS_ENABLED,
         },
     )
 
@@ -530,3 +543,82 @@ def tests_dashboard(request: Request):
             "runs": runs,
         },
     )
+
+
+# ── Admin tools (Phase 1 — opt-in, demo operator tools) ──────────────────────
+_TOOLS_DISABLED = HTMLResponse(
+    "<h1>Admin tools are disabled</h1><p>Set "
+    "<code>ADMIN_CENTER_ADMIN_TOOLS=true</code> to enable this surface.</p>",
+    status_code=404,
+)
+
+
+@app.get("/tools", response_class=HTMLResponse)
+def admin_tools(request: Request, minted: str = "", reset: str = "", err: str = ""):
+    """Operator tools page: demo reset + demo magic-link minting, moved here
+    from the main app's /admin portal. Opt-in via ADMIN_CENTER_ADMIN_TOOLS;
+    auto-gated by the auth middleware."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    from ..demo_magic_link import magic_link_enabled
+    from ..demo_seed import DEMO_EMAILS
+    return templates.TemplateResponse(
+        "tools.html",
+        {
+            "request": request,
+            "app_version": APP_VERSION,
+            "admin_user": request.session.get("admin_user", ""),
+            "demo_mode": _demo_mode(),
+            "magic_link_enabled": magic_link_enabled(),
+            "demo_emails": sorted(DEMO_EMAILS),
+            "minted": minted,
+            "reset": reset,
+            "err": err,
+        },
+    )
+
+
+@app.post("/tools/demo/mint-magic-link")
+def admin_tools_mint(request: Request, sub: str = Form(...)):
+    """Mint a one-time demo login link (non-destructive). Double-gated by
+    ADMIN_CENTER_ADMIN_TOOLS + the app's magic_link_enabled()."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    from ..demo_magic_link import magic_link_enabled, mint_token
+    from ..demo_seed import DEMO_EMAILS
+    from ..config import get_settings
+    if not magic_link_enabled():
+        return RedirectResponse("/tools?err=Magic-link+login+is+not+enabled", status_code=303)
+    sub_norm = sub.strip().lower()
+    if sub_norm not in DEMO_EMAILS:
+        return RedirectResponse("/tools?err=Unknown+demo+account", status_code=303)
+    token = mint_token(sub_norm)
+    base_url = get_settings().app.base_url.rstrip("/")
+    url = f"{base_url}/demo-login?token={token}"
+    log.info("admin-center operator %r minted a demo magic link for %s",
+             request.session.get("admin_user", "?"), sub_norm)
+    return RedirectResponse(f"/tools?minted={quote(url)}", status_code=303)
+
+
+@app.post("/tools/demo/reset")
+def admin_tools_demo_reset(request: Request):
+    """DESTRUCTIVE: wipe + reseed the demo database. Double-gated by
+    ADMIN_CENTER_ADMIN_TOOLS + DEMO_MODE (so it can never fire in
+    production), and audit-logged with the operator identity."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    if not _demo_mode():
+        return RedirectResponse("/tools?err=DEMO_MODE+is+not+enabled", status_code=303)
+    from ..demo_seed import reset_and_reseed
+    from ..database import SessionLocal
+    operator = request.session.get("admin_user", "?")
+    db = SessionLocal()
+    try:
+        counts = reset_and_reseed(db)
+    except Exception as exc:  # pragma: no cover - surfaced to the operator
+        log.exception("admin-center demo reset failed")
+        return RedirectResponse(f"/tools?err={quote('Reset failed: ' + str(exc))}", status_code=303)
+    finally:
+        db.close()
+    log.warning("admin-center operator %r triggered a demo reset: %s", operator, counts)
+    return RedirectResponse(f"/tools?reset={quote(str(counts))}", status_code=303)

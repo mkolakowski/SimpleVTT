@@ -934,3 +934,57 @@ def test_tests_page_renders_authenticated():
         assert 'href="/"' in page.text  # back-to-dashboard link
         # Either a run summary or the empty-state — never a server error.
         assert ("Latest run" in page.text) or ("No test runs yet" in page.text)
+
+
+# ---- /tools admin-tools page (v2.573.2) -----------------------------------
+@_LIVE
+def test_tools_page_redirects_when_unauthenticated():
+    """The /tools surface is auth-gated like the rest of the center."""
+    r = httpx.get(f"{ADMIN_BASE_URL}/tools", timeout=5.0, follow_redirects=False)
+    assert r.status_code == 303
+    assert "/login" in r.headers.get("location", "")
+
+
+@_LIVE
+def test_tools_page_renders_when_enabled():
+    """With ADMIN_CENTER_ADMIN_TOOLS=true (set in the test env), the page
+    renders the operator tools. (If the flag is off this stack returns 404 —
+    handle both so the suite is portable across configs.)"""
+    with httpx.Client(base_url=ADMIN_BASE_URL, timeout=5.0, follow_redirects=False) as c:
+        r = c.post("/login", data={"username": _ADMIN_USER, "password": _ADMIN_PASS, "next": "/tools"})
+        assert r.status_code == 303
+        _complete_mfa_if_pending(c, r)
+        page = c.get("/tools", follow_redirects=False)
+        if page.status_code == 404:
+            assert "Admin tools are disabled" in page.text  # flag off
+            return
+        assert page.status_code == 200, page.text[:200]
+        assert "Admin tools" in page.text
+        assert 'action="/tools/demo/reset"' in page.text or "DEMO_MODE" in page.text
+
+
+@_LIVE
+def test_tools_mint_magic_link():
+    """Minting a demo magic link (non-destructive) → 303 back to /tools with
+    the minted URL. Skips cleanly if admin-tools or magic-link is off."""
+    with httpx.Client(base_url=ADMIN_BASE_URL, timeout=8.0, follow_redirects=False) as c:
+        r = c.post("/login", data={"username": _ADMIN_USER, "password": _ADMIN_PASS, "next": "/tools"})
+        _complete_mfa_if_pending(c, r)
+        if c.get("/tools", follow_redirects=False).status_code == 404:
+            pytest.skip("admin tools disabled on this stack")
+        m = c.post("/tools/demo/mint-magic-link",
+                   data={"sub": "demo-gm@example.com"}, follow_redirects=False)
+        assert m.status_code == 303, m.text[:200]
+        loc = m.headers.get("location", "")
+        # Either a minted link or a clean error (e.g. magic-link disabled).
+        assert "minted=" in loc or "err=" in loc
+
+
+@_LIVE
+def test_tools_demo_reset_requires_auth():
+    """The DESTRUCTIVE demo-reset is auth-gated — an unauthenticated POST is
+    bounced to login and never fires the reseed. (We never POST it
+    authenticated in tests; that would wipe the demo data.)"""
+    r = httpx.post(f"{ADMIN_BASE_URL}/tools/demo/reset", timeout=5.0, follow_redirects=False)
+    assert r.status_code in (303, 307)
+    assert "/login" in r.headers.get("location", "")

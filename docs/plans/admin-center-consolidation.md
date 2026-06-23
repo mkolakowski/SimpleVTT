@@ -1,6 +1,6 @@
 # Consolidate site-admin into the Admin Center
 
-**Status:** ⚪ design only · all phases unstarted (plan authored v2.573.1).
+**Status:** 🟠 partial · **Phase 1 (demo tools) shipped v2.573.2** — an opt-in `/tools` page in the Center (demo magic-link mint + demo reset), gated by `ADMIN_CENTER_ADMIN_TOOLS` (default off). **Stubs is deferred** out of Phase 1: its miss-store (`local_features._misses`) is an **in-memory module global in the main-app process**, so a separate Center process would always show an empty list — it can't move until the miss-store is made shared (DB/file-backed). Phases 2 (user admin) + 3 (campaign admin) + 4 (retire in-app) unstarted.
 
 Move the scattered **site-admin** surfaces out of the main app's in-app
 `/admin` portal and into the standalone **Admin Center** (port 8015), so
@@ -88,11 +88,18 @@ NOT left as a live duplicate write-path.
 
 ## Phases
 
-1. **Phase 1 — stubs + demo tools (low-risk).** Move the stubs tracker +
-   demo reset/magic-link into the Center under `ADMIN_CENTER_ADMIN_TOOLS`.
-   These are content/demo operations (the demo tools are already
-   `DEMO_MODE`-gated), so they're the safe proof of the porting pattern +
-   the env-flag gate. No MFA-hard-requirement (non-destructive of user data).
+1. **Phase 1 — demo tools (low-risk). 🟠 Shipped v2.573.2; stubs deferred.**
+   A `/tools` page in the Center (`main.py` + `tools.html`, the `/tests`
+   pattern) gated by `ADMIN_CENTER_ADMIN_TOOLS` (default off), wiring the
+   **demo magic-link mint** (non-destructive) and **demo reset**
+   (destructive — double-gated by `DEMO_MODE`, behind a confirm, audit-logged
+   with the operator identity). The Center service gets the demo flags +
+   `APP_BASE_URL` to mirror the app. The in-app `/admin` demo tools stay live
+   for now (additive; retirement is Phase 4 to avoid breaking `/admin`
+   mid-migration). **Stubs did NOT move** — `local_features._misses` is an
+   in-memory main-app global the Center process can't see; moving it needs a
+   shared (DB/file) miss-store first. **Filed follow-up: share the
+   `_misses` store, then move the stubs tracker.**
 2. **Phase 2 — user admin (high-risk, MFA-gated).** Port user CRUD; the
    destructive routes (disable/delete/reset-password) refused unless MFA is
    on + verified. Audit each mutation. Redirect the in-app `/admin` users

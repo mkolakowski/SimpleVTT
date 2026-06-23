@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.573.2] - 2026-06-22 — "The Operator's Bench"
+
+**Schema version:** 75
+
+**Commit summary:** Phase 1 of `docs/plans/admin-center-consolidation.md` — move the demo operator tools (magic-link mint + demo reset) into the Admin Center behind an opt-in flag. Stubs deferred (verify-substrate finding).
+
+**Description:** New opt-in `/tools` page in the standalone Admin Center (8015) — the first surface moved in from the main app's `/admin` portal. Gated by **`ADMIN_CENTER_ADMIN_TOOLS` (default off)** so the Center stays read-only unless an operator explicitly enables write-admin. It wires two demo-operator tools (DB/signing-backed, so they work from the separate Center process against the shared DB): **demo magic-link mint** (non-destructive — `POST /tools/demo/mint-magic-link`, double-gated by the app's `magic_link_enabled()`), and **demo reset** (`POST /tools/demo/reset` — DESTRUCTIVE wipe+reseed, double-gated by `DEMO_MODE` so it can never fire in production, behind a confirm, audit-logged with the operator identity). Linked from the dashboard header when enabled; auto-gated by the Center's session auth. The in-app `/admin` demo tools stay live for now (additive — retiring them is Phase 4, to avoid breaking `/admin` mid-migration).
+
+**Verify-substrate finding — stubs deferred.** The plan grouped "stubs + demo tools" as Phase 1, but the stubs tracker reads `local_features._misses` — an **in-memory module global in the main-app process**, populated when the *main app* hits an Open5e fallback. The Admin Center is a separate process, so a ported stubs page would always show an empty list. Stubs can't move until its miss-store is shared (DB/file-backed) — filed as a follow-up. Phase 1 therefore ships the demo tools only.
+
+**Implementation:**
+
+- `app/admin_center/main.py`: `_ADMIN_TOOLS_ENABLED` flag + `_demo_mode()` + `GET /tools` + `POST /tools/demo/mint-magic-link` + `POST /tools/demo/reset` (lazy imports of `reset_and_reseed` / `mint_token` / `DEMO_EMAILS` from the shared image).
+- `app/admin_center/templates/tools.html` (new) + a conditional `🛠️ Tools` link in `dashboard.html`.
+- `docker-compose.yml`: `ADMIN_CENTER_ADMIN_TOOLS` (default false) + `DEMO_MODE` / `SIMPLEVTT_DEMO_MAGIC_LINK_ENABLED` / `APP_BASE_URL` on the admin-center service. `.env`: enabled locally.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py` (+4): `/tools` auth-gated (unauth → 303); renders when enabled; the magic-link mint round-trips (303 + minted URL); the destructive demo-reset is auth-gated — verified **without ever firing the reseed** (an authenticated reset would wipe the demo data).
+
+Total harness count → 4099 in `tests/harness/` + 101 in `tests/harness_ui/`.
+
+MINOR — new Admin Center surface (additive; opt-in, off by default).
+
+### Added
+- Admin Center **Tools** page (`/tools`, opt-in via `ADMIN_CENTER_ADMIN_TOOLS`): demo magic-link mint + demo reset, moved in from the in-app `/admin` portal (`docs/plans/admin-center-consolidation.md` Phase 1). Stubs deferred pending a shared miss-store.
+
 ## [2.573.1] - 2026-06-22 — "The Drafted Console"
 
 **Schema version:** 75
