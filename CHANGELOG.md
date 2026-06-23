@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.605.2] - 2026-06-23 — "The Cartographer's Brief"
+
+**Schema version:** 79
+
+**Commit summary:** Add the missing art-generation prompts for the new Demo L5 (Tide-Wracked Catacombs) to the demo-content guide.
+
+**Description:** Doc-only polish following the v2.605.0 demo reseed. The other leveled demo maps each carry a top-down map prompt + per-tier PC-portrait and NPC-token prompts in the wiki's Demo content guide; the freshly-added "Demo L5: The Tide-Wracked Catacombs" was missing its set. Added: the Catacombs battle-map prompt (flooded lighthouse crypt), the Level-5 PC-portrait line (Champion / Evoker / Tempest cleric / Assassin / Berserker), and the Tier-2 undead NPC-token line (brine skeleton / drowned zombie / tide ghoul / wight captain) — so an operator regenerating demo art has a brief for every Catacombs asset.
+
+**Implementation:**
+
+- `docs/wiki/demo-content.md` — three new generation-prompt entries for the Catacombs map, portraits, and tokens (already surfaced at `/wiki/demo-content`).
+
+No harness change (doc-only; `test_wiki_guide_serves_demo_content` already asserts the Catacombs is catalogued).
+
+### Added
+- Art-generation prompts for the Demo L5 Tide-Wracked Catacombs (map, PC portraits, NPC tokens) in the demo-content guide.
+
 ## [2.605.1] - 2026-06-23 — "The Tidy Drawer"
 
 **Schema version:** 79

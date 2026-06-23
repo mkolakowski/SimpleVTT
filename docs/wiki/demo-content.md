@@ -125,6 +125,7 @@ background, centred**.
 ### Battle maps (top-down, 70px-per-square grid friendly)
 
 - **The Goblin Warrens (entrance)** — top-down cave-mouth into a goblin tunnel warren: muddy entrance, crude wooden palisade, scattered bones and cookfires, tunnel openings, torchlight. ~20×14 squares.
+- **The Tide-Wracked Catacombs** — top-down flooded crypt beneath a ruined lighthouse: ankle-deep seawater pooling between barnacle-crusted sarcophagi, broken burial niches, kelp and bone debris, a collapsed lighthouse stair descending into the dark, faint phosphorescent glow at the water's edge. ~20×14 squares.
 - **The Sundered Tavern** *(art exists: `tavern.png`)* — top-down two-storey roadside tavern interior: bar to the east, door to the west, overturned tables, a brawl in progress.
 - **The Drowned Reef** — top-down storm-lashed coral reef at low tide: tide pools, jagged coral, a half-sunken shipwreck, sahuagin lair openings, churning surf at the edges. ~23×16 squares.
 - **The Shadowfell Spire (threshold)** — top-down obsidian plaza before a spire of black glass: cracked flagstones, drifting shadow-mist, guttering violet braziers, grasping dead hands at the margins. ~23×17 squares.
@@ -133,6 +134,7 @@ background, centred**.
 ### PC portraits (bust, fantasy character art)
 
 - *Level 3:* Mountain-dwarf Battle Master with a warhammer; wood-elf assassin in dark leathers; human Light-domain cleric haloed in dawn-light; forest-gnome evoker mid-spark; halfling Hunter ranger with a longbow.
+- *Level 5 (Catacombs):* storm-cloaked human Champion knight with a longsword; high-elf evoker cradling a forming fireball; half-elf Tempest cleric ringed in spectral wrath; wood-elf assassin rogue half in shadow; half-orc berserker mid-roar with a greataxe.
 - *Level 9:* tiefling storm-sorcerer wreathed in frost; half-elf lore bard with a rapier and lute; towering firbolg moon-druid; grim human Vengeance paladin in plate; serene water-genasi monk.
 - *Level 13:* ice-calm high-elf diviner; charismatic tiefling fiend-warlock with infernal sigils; mountainous goliath war-priest with a maul; scarred half-orc totem barbarian mid-roar; impish forest-gnome arcane trickster.
 - *Level 18:* poised high-elf archmage with meteor-light; proud dragonborn sorcerer breathing fire; radiant aasimar paladin with glowing wings and a holy sword; stoic goliath champion with a greatsword; ancient firbolg archdruid wreathed in storm.
@@ -140,6 +142,7 @@ background, centred**.
 ### NPC tokens (top-down or bust ring tokens)
 
 - *Tier 1:* goblin skirmisher, dire wolf/warg, human bandit, a brutish goblin warlord.
+- *Tier 2 (Catacombs):* a brine-crusted skeleton, a bloated drowned zombie, a gaunt tide ghoul, a barnacled wight "Captain of the Drowned" in rusted mail.
 - *Tier 2 (Saltmarsh):* sahuagin raider, sahuagin priestess, reef shark, a translucent water/tide elemental.
 - *Tier 3 (Spire):* a tattered wraith, a feral vampire spawn, an illithid mind flayer, a wispy specter.
 - *Tier 4 (Caldera):* a colossal ancient red dragon (Pyraxis), fire-giant honor guard, a robed cult archmage, a coiling salamander.
