@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.599.6] - 2026-06-23 — "The Wild Shape Ward"
+
+**Schema version:** 77
+
+**Commit summary:** Fix DOM XSS in the beast-picker CR-cap warning — a homebrew monster's `cr` was injected into `innerHTML` unescaped.
+
+**Description:** Last of four XSS fixes from the security review. In `app/static/beast_picker.js`, the Wild Shape / Polymorph beast picker's over-cap warning interpolated a monster's free-text `cr` (`challenge_rating`, authored by a GM via the Homebrew raw-JSON editor) directly into an `innerHTML` template string. A homebrew monster with `cr` set to `<img src=x onerror=…>` executed script in a player's browser when they opened the picker and hit the over-cap branch. The same value was already escaped 53 lines down (`_esc(m.cr || '0')`) — this branch was the omission. Now `_esc(m.cr)`.
+
+**Implementation:**
+
+- `app/static/beast_picker.js`: the CR-cap warning interpolates `${_esc(m.cr)}` instead of `${m.cr}`.
+
+**Harness changes:**
+
+- `tests/harness/test_js_xss_escaping.py` (+1): source guard — the CR-cap warning must escape `m.cr` (`${_esc(m.cr)} exceeds`) and the raw `${m.cr} exceeds` form must not return.
+
+Total harness count → 4192 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+This completes the four-finding XSS remediation arc from the whole-app security review (2.599.3–2.599.6). The remaining review items — no CSRF token / default `SameSite=Lax` with `https_only=False`, and the WS handler not re-checking `is_disabled` — are defense-in-depth and were left for a separate decision.
+
+### Fixed
+- DOM XSS: a homebrew monster's `cr` can no longer execute script via the beast-picker CR-cap warning — it is HTML-escaped before injection.
+
 ## [2.599.5] - 2026-06-23 — "The Named Aggressor"
 
 **Schema version:** 77

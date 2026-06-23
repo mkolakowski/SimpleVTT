@@ -23,3 +23,12 @@ def test_oa_modal_escapes_watcher_name():
     )
     # The pre-fix raw form must not return.
     assert ".map(t => t.watcher_name || 'a hostile')" not in src
+
+
+def test_beast_picker_escapes_cr_in_cap_warning():
+    """v2.599.6 — the beast picker's CR-cap warning injects a homebrew
+    monster's free-text `m.cr` into `innerHTML`. It must be escaped
+    (`_esc(m.cr)`); the raw `${m.cr} exceeds` form must not return."""
+    src = (_STATIC / "beast_picker.js").read_text()
+    assert "${_esc(m.cr)} exceeds" in src, "CR-cap warning must escape m.cr"
+    assert "${m.cr} exceeds" not in src

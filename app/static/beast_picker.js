@@ -412,7 +412,7 @@
         let warn = '';
         if (!free) {
             if (!typeOk) warn = `<div style="padding:8px 10px;margin-top:8px;background:var(--s-err-bg);border:1px solid var(--s-danger);color:var(--s-err-fg);border-radius:5px;font-size:11px;">⚠ Not a beast — enable Free pick to override.</div>`;
-            else if (!crOk) warn = `<div style="padding:8px 10px;margin-top:8px;background:var(--s-err-bg);border:1px solid var(--s-danger);color:var(--s-err-fg);border-radius:5px;font-size:11px;">⚠ CR ${m.cr} exceeds your cap of ${_crStr(_state.cap)} — enable Free pick to override.</div>`;
+            else if (!crOk) warn = `<div style="padding:8px 10px;margin-top:8px;background:var(--s-err-bg);border:1px solid var(--s-danger);color:var(--s-err-fg);border-radius:5px;font-size:11px;">⚠ CR ${_esc(m.cr)} exceeds your cap of ${_crStr(_state.cap)} — enable Free pick to override.</div>`;
         }
         const isPoly = _state?.opts?.source === 'polymorph';
         const abils = full?.abilities;
