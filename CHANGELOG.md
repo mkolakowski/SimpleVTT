@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.599.0] - 2026-06-23 — "Don't Ban the Doorman"
+
+**Schema version:** 77
+
+**Commit summary:** Allowlist Cloudflare's edge ranges in fail2ban so it can't ban the Cloudflare edge (it was self-banning `172.67.x`).
+
+**Description:** Investigated `172.67.137.205` "self-banning." It's a **Cloudflare edge IP** (172.64.0.0/13). The audit log showed a flood from it — 9202 `api.not_found` + 8500 `auth.login_ok`, UA `python-httpx`, with scanned paths that are unmistakably the **harness suite** (`/wiki/../passwd`, `/wiki/doc/../config`, `/api/test/dice/seed`, `/api/campaign/1/end_buff` ×8164). So the harness was being run **against the public demo through Cloudflare**; its error-path 404 tests trip the `simplevtt-scanner` jail. Crucially those requests reached the app **without a `CF-Connecting-IP` header**, so IP attribution fell through to X-Forwarded-For / peer — the **Cloudflare edge address** — and fail2ban banned it (and, with `FAIL2BAN_ACTION=cloudflare-bouncer`, pushed a Cloudflare block-rule for a Cloudflare IP, which self-DoSes every visitor behind that edge). Banning the edge is never desirable, so the published **Cloudflare ranges are now allowlisted in the jail `ignoreip` by default** (kept localhost + the `${FAIL2BAN_IGNOREIP}` operator placeholder). Real abusers remain bannable by their real IP (from `CF-Connecting-IP`), which isn't in these ranges; the allowlist is harmless on a non-CF deploy.
+
+**Follow-up (not in this commit):** the deeper cause is that harness/visitor traffic through Cloudflare is being attributed to the CF edge IP — i.e. `CF-Connecting-IP` isn't reaching the app (or X-Forwarded-For is overriding it) for that traffic. Worth verifying the cloudflared config forwards `CF-Connecting-IP` and that the app doesn't trust a forged `X-Forwarded-For` when CF attribution is expected, so per-visitor bans target real IPs.
+
+**Implementation:**
+
+- `docs/integrations/fail2ban/jail.d/simplevtt.conf`: prepend the published Cloudflare IPv4 + IPv6 ranges to the `[DEFAULT] ignoreip` (before `${FAIL2BAN_IGNOREIP}`).
+
+**Harness changes:**
+
+- `tests/harness/test_fail2ban_ignoreip_wiring.py` (+1): asserts the Cloudflare ranges (incl. `172.64.0.0/13` covering the banned `172.67.x`, plus an IPv6 range) are in the jail `ignoreip`.
+
+### Fixed
+- fail2ban no longer bans the Cloudflare edge: the published Cloudflare ranges are allowlisted in the jail `ignoreip` by default (fixes the self-banning `172.67.x` reported behind a Cloudflare Tunnel).
+
 ## [2.598.0] - 2026-06-23 — "The Honored Flag"
 
 **Schema version:** 77

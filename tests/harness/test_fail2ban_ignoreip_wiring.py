@@ -43,6 +43,20 @@ def test_jail_default_block_has_ignoreip_placeholder():
     )
 
 
+def test_jail_ignoreip_allowlists_cloudflare_ranges():
+    """v2.599.0 — the published Cloudflare edge ranges are baked into the
+    DEFAULT ignoreip so fail2ban never bans the Cloudflare edge (which,
+    behind a CF Tunnel, is what gets attributed when CF-Connecting-IP is
+    absent). 172.64.0.0/13 covers the 172.67.x edge that was self-banning."""
+    jail = _JAIL_CONFIG.read_text()
+    line = next(
+        ln for ln in jail.splitlines() if ln.strip().startswith("ignoreip")
+    )
+    # A representative IPv4 + IPv6 CF range, incl. the 172.67.x block.
+    for cidr in ("172.64.0.0/13", "104.16.0.0/13", "2400:cb00::/32", "2606:4700::/32"):
+        assert cidr in line, f"ignoreip must allowlist Cloudflare {cidr}; got {line!r}"
+
+
 def test_render_script_substitutes_ignoreip():
     """render-jail.sh's VARS allowlist includes FAIL2BAN_IGNOREIP so
     the placeholder is actually substituted at container start (an
