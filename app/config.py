@@ -50,6 +50,13 @@ class Settings(BaseModel):
     )
     default_theme: str = "sepia"
 
+    # App-wide role caps (v2.584.0). See docs/plans/app-wide-roles-and-storage.md.
+    # Players (non-GM, non-admin) may own at most ``player_character_limit``
+    # characters; GMs (non-admin) may own at most ``gm_campaign_limit``
+    # campaigns. Admins are uncapped. 0 = unlimited.
+    player_character_limit: int = 5
+    gm_campaign_limit: int = 10
+
     # Demo mode (v2.3.0). See docs/plans/demo-mode.md.
     # When ``demo_mode`` is true, the lifespan handler boots a background
     # task that resets a deterministic sample dataset on a fixed interval,
@@ -89,6 +96,8 @@ def get_settings() -> Settings:
             "CHARACTER_TEMPLATES", ["generic", "dnd5e"]
         ),
         default_theme=os.environ.get("APP_DEFAULT_THEME", "sepia"),
+        player_character_limit=max(0, int(os.environ.get("PLAYER_CHARACTER_LIMIT") or 5)),
+        gm_campaign_limit=max(0, int(os.environ.get("GM_CAMPAIGN_LIMIT") or 10)),
         demo_mode=_env_bool("DEMO_MODE", False),
         demo_reset_interval_minutes=max(5, min(1440, int(os.environ.get("DEMO_RESET_INTERVAL_MINUTES") or 60))),
         demo_reset_on_boot=_env_bool("DEMO_RESET_ON_BOOT", True),

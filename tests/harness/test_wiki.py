@@ -103,6 +103,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-homebrew-fork-srd" in resp.text
     # v2.573.1: admin-center-consolidation plan listed.
     assert "/wiki/doc/plan-admin-center-consolidation" in resp.text
+    # v2.584.0: app-wide-roles-and-storage plan listed.
+    assert "/wiki/doc/plan-app-wide-roles-and-storage" in resp.text
     assert "/wiki/doc/plan-movement-and-summons" in resp.text
     # v2.99.447: automation-coverage audit doc listed in the references table.
     assert "/wiki/doc/automation-coverage" in resp.text
@@ -484,6 +486,19 @@ async def test_wiki_doc_serves_admin_center_consolidation_plan():
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "admin center" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_app_wide_roles_plan():
+    """v2.584.0: GET /wiki/doc/plan-app-wide-roles-and-storage — 200 + body
+    contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/app-wide-roles-and-storage.md``.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-app-wide-roles-and-storage")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "roles" in resp.text.lower() and "storage" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

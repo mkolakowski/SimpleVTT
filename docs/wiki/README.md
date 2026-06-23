@@ -57,6 +57,7 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 | [Persistent-AoE enter-trigger](../plans/aoe-enter-trigger.md) | Markdown (design) | Contributors | ✅ Phases 1+3 shipped (v2.567.0–v2.568.0 · radius shapes; Phase 2 N/A) |
 | [Fork & tweak SRD mechanics as homebrew](../plans/homebrew-fork-srd.md) | Markdown (design) | Contributors | ✅ shipped (v2.569.0–v2.572.0 · fork/edit/search endpoints + Workshop UI w/ SRD browse) |
 | [Consolidate site-admin into the Admin Center](../plans/admin-center-consolidation.md) | Markdown (design) | Contributors | 🟠 Phase 1 shipped (v2.573.2 · demo tools; stubs deferred, user/campaign admin pending) |
+| [App-wide roles + GM/player caps + storage accounting & limits](../plans/app-wide-roles-and-storage.md) | Markdown (design) | Contributors | 🟠 Arc A1 shipped (v2.584.0 · is_gm role substrate) |
 | [Advantage & disadvantage](../plans/advantage-disadvantage.md) | Markdown (design) | Contributors | 🟠 Phases 1 + 2a–2f shipped (v2.2.0–v2.157.0); Phase 3 blocked on Maps 2.0; Phase 4a (Cloak of Displacement) shipped v2.252.0; Phase 4b (Cloak of Elvenkind) shipped v2.253.0 |
 | [Class / subclass / feat / race content](../plans/class-content-status.md) | Markdown (inventory) | Contributors | 🟢 / 🟠 / ⚪ living inventory |
 | [Full class-feature automation](../plans/full-feature-automation.md) | Markdown (design) | Contributors | 🟠 Phases 0–7 shipped; Phase 8 in progress (v2.158.x) |

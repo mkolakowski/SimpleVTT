@@ -62,6 +62,12 @@ class User(Base):
     password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     google_sub: Mapped[Optional[str]] = mapped_column(String(120), nullable=True, unique=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    # v2.584.0 — app-wide GM role: may create + run campaigns in the main
+    # app. Distinct from per-campaign GM (Campaign.gm_user_id /
+    # CampaignMembership.is_gm). Assigned via the Admin Center (console-only).
+    # Admins implicitly may create campaigns too. See
+    # docs/plans/app-wide-roles-and-storage.md.
+    is_gm: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     is_disabled: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     theme: Mapped[str] = mapped_column(String(20), default=_default_user_theme, server_default="dark")

@@ -116,6 +116,7 @@ _DOC_ALLOWLIST: dict[str, Path] = {
     "plan-aoe-enter-trigger": Path("docs") / "plans" / "aoe-enter-trigger.md",
     "plan-homebrew-fork-srd": Path("docs") / "plans" / "homebrew-fork-srd.md",
     "plan-admin-center-consolidation": Path("docs") / "plans" / "admin-center-consolidation.md",
+    "plan-app-wide-roles-and-storage": Path("docs") / "plans" / "app-wide-roles-and-storage.md",
 }
 
 

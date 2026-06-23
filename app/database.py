@@ -880,6 +880,18 @@ def _apply_inline_migrations() -> None:
                 "ADD COLUMN recovery_wrapped_key TEXT"
             ))
 
+    # ---- Schema v76 (2.584.0): users.is_gm ----
+    # App-wide GM role (may create + run campaigns). Distinct from the
+    # per-campaign GM (campaigns.gm_user_id / campaign_memberships.is_gm).
+    # Existing rows default to non-GM; the demo seed back-fills the demo GM.
+    # See docs/plans/app-wide-roles-and-storage.md.
+    user_cols = _column_names("users")
+    with engine.begin() as conn:
+        if user_cols and "is_gm" not in user_cols:
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN is_gm BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

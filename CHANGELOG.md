@@ -10,6 +10,42 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.584.0] - 2026-06-22 — "The Three Keys"
+
+**Schema version:** 76
+
+**Commit summary:** Arc A1 of `docs/plans/app-wide-roles-and-storage.md` — the app-wide role substrate: a new `User.is_gm` role, role caps config, the `require_gm` gate, and demo-seed roles.
+
+**Description:** Introduces the foundation for an app-wide **player / GM / admin** role model (roles are independently assignable — a user can be GM *and* admin). This commit lands the substrate; the gates that consume it follow in A2–A4.
+
+- **`User.is_gm`** (schema **v76**) — the app-wide GM role: "may create + run campaigns in the main VTT app." Distinct from per-campaign GM (`Campaign.gm_user_id` / `CampaignMembership.is_gm`). Default `False`; assigned via the Admin Center (console-only, no env list). `is_admin` keeps its existing `ADMINS`-config behavior, and admins implicitly may create campaigns (admin ⊇ GM).
+- **`require_gm`** (`app/auth.py`) — dependency gate: `is_gm or is_admin`, else 403. Mirrors `require_admin`.
+- **Config**: `PLAYER_CHARACTER_LIMIT` (default 5) + `GM_CAMPAIGN_LIMIT` (default 10) — caps players' owned characters and GMs' owned campaigns (admins uncapped; 0 = unlimited). Consumed in A2/A3.
+- **Demo**: the demo GM (`demo-gm@example.com`) now seeds `is_gm=True` so it can create campaigns under the new model; the two demo players are players (capped, can't create campaigns). The app is in dev with no real users, so only the demo seed is back-filled — the migration just adds the column with a default.
+
+**Implementation:**
+
+- `app/models.py`: `User.is_gm` bool (`server_default="false"`).
+- `app/database.py`: schema **v76** migration (idempotent `ALTER TABLE users ADD COLUMN is_gm`). `SCHEMA_VERSION` 75 → 76.
+- `app/config.py` + `.env.example`: `player_character_limit` / `gm_campaign_limit` (`PLAYER_CHARACTER_LIMIT` / `GM_CAMPAIGN_LIMIT`).
+- `app/auth.py`: `require_gm`.
+- `app/demo_seed.py`: demo GM `is_gm=True`; players explicit `is_gm=False`.
+- `docs/plans/app-wide-roles-and-storage.md` (new) + wiki surfacing (`_DOC_ALLOWLIST`, `wiki.html` Design-plans row, `docs/wiki/README.md` row).
+
+**Harness changes:**
+
+- `tests/harness/test_wiki.py` (+1): `/wiki/doc/plan-app-wide-roles-and-storage` serves the new plan (200 + H1 + nav), plus the landing-page assertion lists it. The `require_gm` gate gets behavioral tests in A2 where it's observable (campaign-create gating).
+
+Total harness count → 4133 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+MINOR — additive schema + role substrate (no behavior gated yet).
+
+### Added
+- App-wide `User.is_gm` role + `require_gm` gate + `PLAYER_CHARACTER_LIMIT`/`GM_CAMPAIGN_LIMIT` config (Arc A1 of `docs/plans/app-wide-roles-and-storage.md`). Demo GM seeds with the GM role.
+
+### Schema
+- **v76**: `users.is_gm BOOLEAN NOT NULL DEFAULT FALSE`.
+
 ## [2.583.0] - 2026-06-22 — "The Unstuck Map"
 
 **Schema version:** 75

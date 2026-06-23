@@ -119,3 +119,16 @@ def require_admin(
     if not user.is_admin:
         raise HTTPException(status_code=403, detail="Admin only")
     return user
+
+
+def require_gm(
+    request: Request, db: Session = Depends(get_db)
+) -> User:
+    """App-wide GM gate (v2.584.0): the user must hold the GM role or be an
+    admin (admins implicitly may create + run campaigns). Players are
+    refused with 403. Distinct from per-campaign GM checks. See
+    docs/plans/app-wide-roles-and-storage.md."""
+    user = require_user(request, db)
+    if not (user.is_gm or user.is_admin):
+        raise HTTPException(status_code=403, detail="GM access required")
+    return user

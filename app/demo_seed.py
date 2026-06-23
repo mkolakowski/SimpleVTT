@@ -243,6 +243,11 @@ def seed_users(db: Session) -> dict[str, User]:
         display_name="Demo GM",
         password_hash=pw,
         is_admin=_demo_gm_site_admin(),
+        # v2.584.0 — the demo GM holds the app-wide GM role so they can
+        # create campaigns under the new role model. The two players are
+        # players (is_gm defaults False) and so are capped + can't create
+        # campaigns. See docs/plans/app-wide-roles-and-storage.md.
+        is_gm=True,
         roll_log_position="left",
     )
     alice = User(
@@ -250,12 +255,14 @@ def seed_users(db: Session) -> dict[str, User]:
         display_name="Alice (Demo Rogue)",
         password_hash=pw,
         is_admin=False,
+        is_gm=False,
     )
     bob = User(
         email=DEMO_BOB_EMAIL,
         display_name="Bob (Demo Wizard)",
         password_hash=pw,
         is_admin=False,
+        is_gm=False,
     )
     db.add_all([gm, alice, bob])
     db.flush()
