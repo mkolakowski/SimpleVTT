@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.598.0] - 2026-06-23 — "The Honored Flag"
+
+**Schema version:** 77
+
+**Commit summary:** Pass `DEMO_GM_SITE_ADMIN` to the admin-center service so its demo-reset honors the flag (was: an operator reset always seeded the demo GM as site-admin).
+
+**Description:** Found while validating the demo rework with a re-seed through the Admin Center: the Center's **demo-reset** button runs the same `reset_and_reseed` as the app, but the admin-center service was **not** given the `DEMO_GM_SITE_ADMIN` env var — so `_demo_gm_site_admin()` fell back to its default `true` and reseeded `demo-gm` as a **site-admin** even on deploys that set `DEMO_GM_SITE_ADMIN=false`. On the public demo box (where the credentials are advertised) that silently re-opened the `/admin` portal to anyone after any operator reset. The admin-center service now receives `DEMO_GM_SITE_ADMIN` (same default + override as the app service), so the operator reset path matches the app's boot reseed.
+
+**Implementation:**
+
+- `docker-compose.yml`: add `DEMO_GM_SITE_ADMIN: ${DEMO_GM_SITE_ADMIN:-true}` to the admin-center service (it already had `DEMO_MODE` + the magic-link gate).
+
+**Harness changes:** none — config-only (the behavior is env-propagation, validated by reseeding through the Center and confirming the demo GM's `is_admin` follows the flag).
+
+### Fixed
+- The Admin Center demo-reset now honors `DEMO_GM_SITE_ADMIN`; previously an operator reset always granted the demo GM site-admin regardless of the deploy's setting.
+
 ## [2.597.0] - 2026-06-23 — "The Field Guide"
 
 **Schema version:** 77

@@ -142,6 +142,12 @@ services:
       ADMIN_CENTER_ADMIN_TOOLS: ${ADMIN_CENTER_ADMIN_TOOLS:-false}
       DEMO_MODE: ${DEMO_MODE:-false}
       SIMPLEVTT_DEMO_MAGIC_LINK_ENABLED: ${SIMPLEVTT_DEMO_MAGIC_LINK_ENABLED:-false}
+      # v2.598.0 — the Center's demo-reset button runs the SAME reset_and_reseed
+      # as the app, so it needs the same DEMO_GM_SITE_ADMIN value or an
+      # operator reset would seed the demo GM as site-admin (default true)
+      # even when the deploy set it false — silently granting the well-known
+      # demo credentials the /admin portal on a public box.
+      DEMO_GM_SITE_ADMIN: ${DEMO_GM_SITE_ADMIN:-true}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8013}
       ADMIN_CENTER_USER: ${ADMIN_CENTER_USER:-admin}
       ADMIN_CENTER_PASS: ${ADMIN_CENTER_PASS:-changeme}
