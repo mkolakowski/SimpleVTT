@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.599.8] - 2026-06-23 — "The Bouncer's List"
+
+**Schema version:** 77
+
+**Commit summary:** Add a CSRF origin-check to the Admin Center — `_auth_mw` rejects cross-origin state-changing requests.
+
+**Description:** Second of the two deferred defense-in-depth items from the security review. The Admin Center's ~22 destructive POST routes (user disable/delete/reset-password/role/storage-limit/scrub, campaign delete/members/system/characters/maps, demo reset, log clear, fail2ban unban) had no CSRF token. Rather than thread a per-session token through 22 forms + 22 handlers, `_auth_mw` now does a central origin check on every unsafe method (POST/PUT/PATCH/DELETE): if the request carries an `Origin` (or `Referer`) header, its host must match our `Host`, else the request is rejected with 403 before any handler runs. A browser always sends `Origin` on a state-changing request, so this blocks the cross-origin auto-submit a CSRF attack relies on; header-less callers (CLI / API / the harness) and same-origin browser forms are unaffected. Hosts are compared (not scheme) so it works behind a TLS-terminating proxy where the app sees `http` internally while the browser's Origin is `https`. This complements the v2.599.7 `SameSite=Lax` cookie — two independent layers on the highest-privilege surface. (The main app's destructive POSTs continue to rely on `SameSite=Lax`.)
+
+**Implementation:**
+
+- `app/admin_center/main.py`: `_csrf_origin_ok(request)` + `_UNSAFE_METHODS`; `_auth_mw` returns 403 JSON on a cross-origin unsafe request before the public/auth branch.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center_csrf.py` (new, +4): a source guard (always runs) + live tests — a cross-origin POST to `/users/create` → 403 CSRF; a header-less POST and a same-origin POST are not CSRF-rejected (fall through to the auth bounce). Uses the unauthenticated route so the login throttle isn't touched.
+
+Total harness count → 4199 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+This completes the security-review remediation arc (2.599.3–2.599.8): four XSS fixes plus the two deferred cookie/CSRF defense-in-depth items.
+
+### Added
+- CSRF protection on the Admin Center: cross-origin state-changing requests are rejected by an origin/referer check in the auth middleware.
+
 ## [2.599.7] - 2026-06-23 — "The Locked Tin"
 
 **Schema version:** 77

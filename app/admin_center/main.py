@@ -200,9 +200,37 @@ def _is_public(path: str) -> bool:
     )
 
 
+_UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _csrf_origin_ok(request: Request) -> bool:
+    """CSRF defense (v2.599.8): reject cross-origin browser state changes.
+
+    A browser always sends ``Origin`` (and/or ``Referer``) on a state-changing
+    request, so if one is present its host MUST match our ``Host``. Header-less
+    callers (CLI / API / the harness) are allowed — they aren't driven by a
+    victim's browser, so they can't be a CSRF vector. We compare hosts only
+    (not scheme): behind a TLS-terminating proxy the app sees ``http``
+    internally while the browser's Origin is ``https``. Complements the
+    SameSite=Lax cookie — defense-in-depth on the destructive operator routes.
+    """
+    host = request.headers.get("host", "")
+    for hdr in ("origin", "referer"):
+        val = request.headers.get(hdr)
+        if val:
+            from urllib.parse import urlsplit
+            return urlsplit(val).netloc == host
+    return True  # no Origin/Referer → non-browser client
+
+
 @app.middleware("http")
 async def _auth_mw(request: Request, call_next):
     path = request.url.path
+    if request.method in _UNSAFE_METHODS and not _csrf_origin_ok(request):
+        return JSONResponse(
+            {"detail": "CSRF check failed: cross-origin request rejected."},
+            status_code=403,
+        )
     if _is_public(path) or _is_authed(request):
         return await call_next(request)
     # Unauthenticated. API callers get a clean 401 JSON (no
