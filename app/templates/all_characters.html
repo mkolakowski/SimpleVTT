@@ -68,16 +68,20 @@
 
 {% block content %}
 <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:20px;">
-    <h1 style="margin:0;">My Characters</h1>
+    <h1 style="margin:0;">My Characters{% if not char_uncapped %} <span class="muted" style="font-size:13px;font-weight:400;">({{ char_used }} of {{ char_limit }})</span>{% endif %}</h1>
     {% if member_campaigns %}
-    <button type="button" id="create-char-toggle"
-            style="padding:6px 16px;font-size:13px;font-weight:600;background:#2f4868;border:1px solid #3a5780;border-radius:5px;cursor:pointer;color:var(--fg);">
-        + New Character
-    </button>
+        {% if char_at_limit %}
+        <span class="muted" style="font-size:13px;">Character limit reached ({{ char_used }} of {{ char_limit }}) — ask an admin for the GM role to create more.</span>
+        {% else %}
+        <button type="button" id="create-char-toggle"
+                style="padding:6px 16px;font-size:13px;font-weight:600;background:#2f4868;border:1px solid #3a5780;border-radius:5px;cursor:pointer;color:var(--fg);">
+            + New Character
+        </button>
+        {% endif %}
     {% endif %}
 </div>
 
-{% if member_campaigns %}
+{% if member_campaigns and not char_at_limit %}
 <div id="create-char-panel" style="display:none;background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:18px 20px;margin-bottom:24px;">
     <h3 style="margin:0 0 12px;">Create New Character</h3>
 

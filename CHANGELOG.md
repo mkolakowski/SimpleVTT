@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.586.0] - 2026-06-22 — "The Modest Stable"
+
+**Schema version:** 76
+
+**Commit summary:** Arc A3 of `docs/plans/app-wide-roles-and-storage.md` — cap player character creation at `PLAYER_CHARACTER_LIMIT`.
+
+**Description:** Players (non-GM, non-admin) may now own at most `PLAYER_CHARACTER_LIMIT` characters (default 5; 0 = unlimited); GMs and admins are uncapped. Both creation paths — `POST /characters/new` (in-campaign) and `POST /characters/new-standalone` — enforce the cap via a shared `_enforce_character_cap` helper before insert, returning 403 ("character limit reached (N of N) — ask an admin for the GM role") at the limit. The `/characters` page reflects the quota in the heading (`N of N`), hides the **+ New Character** control + create panel at the cap, and shows an at-limit note instead.
+
+**Implementation:**
+
+- `app/routes/user_routes.py`: `_enforce_character_cap(db, user)` (GM/admin exempt; counts `Character.owner_user_id == user.id`); called in `create_my_character` + `create_standalone_character`; `all_characters` passes `char_uncapped`/`char_limit`/`char_used`/`char_at_limit`.
+- `app/templates/all_characters.html`: quota heading + cap-gated create UI.
+
+**Harness changes:**
+
+- `tests/harness/test_campaign_roles.py` (+2): a player (demo-alice) creating standalone characters hits the cap → 403 with a "limit" message within a bounded number of creates; a GM (demo-gm) is uncapped (several creates all succeed).
+
+Total harness count → 4138 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+MINOR — player character creation is now capped (additive governance; GMs/admins unaffected).
+
+### Changed
+- Player character creation is capped at `PLAYER_CHARACTER_LIMIT` (default 5); GMs/admins uncapped — Arc A3 of `docs/plans/app-wide-roles-and-storage.md`. The `/characters` create UI is quota-gated.
+
 ## [2.585.0] - 2026-06-22 — "The Gatekeeper's Ledger"
 
 **Schema version:** 76

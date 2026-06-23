@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..audit_log import audit
 from ..auth import require_user
+from ..config import get_settings
 from ..database import get_db
 from ..models import (
     AUDIO_CATEGORIES,
@@ -83,6 +84,12 @@ def all_characters(
         .all()
     ) if all_member_campaign_ids else []
 
+    # v2.586.0 — player character cap. Players are capped at
+    # player_character_limit owned characters; GMs/admins are uncapped.
+    _limit = get_settings().player_character_limit
+    char_uncapped = bool(user.is_gm or user.is_admin) or not _limit or _limit <= 0
+    char_used = db.query(Character).filter(Character.owner_user_id == user.id).count()
+    char_at_limit = (not char_uncapped) and char_used >= _limit
     return templates.TemplateResponse(
         "all_characters.html",
         {
@@ -92,6 +99,10 @@ def all_characters(
             "standalone": standalone,
             "member_campaigns": member_campaigns,
             "presets": list_presets(),
+            "char_uncapped": char_uncapped,
+            "char_limit": _limit,
+            "char_used": char_used,
+            "char_at_limit": char_at_limit,
         },
     )
 
@@ -104,6 +115,25 @@ def _sheet_for_preset(preset_key: str, fallback_template: str) -> tuple[str, dic
         if built is not None:
             return preset_template(preset_key), built
     return fallback_template, get_template(fallback_template)
+
+
+def _enforce_character_cap(db: Session, user: User) -> None:
+    """v2.586.0 — players (non-GM, non-admin) may own at most
+    ``player_character_limit`` characters; GMs and admins are uncapped
+    (0 = unlimited). Raises 403 at the cap. See
+    docs/plans/app-wide-roles-and-storage.md."""
+    if user.is_gm or user.is_admin:
+        return
+    limit = get_settings().player_character_limit
+    if not limit or limit <= 0:
+        return
+    owned = db.query(Character).filter(Character.owner_user_id == user.id).count()
+    if owned >= limit:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Character limit reached ({owned} of {limit}). "
+                   "Ask an admin for the GM role to create more.",
+        )
 
 
 @router.post("/characters/new")
@@ -132,6 +162,7 @@ def create_my_character(
     )
     if not is_member:
         raise HTTPException(403, "Not a member of this campaign")
+    _enforce_character_cap(db, user)
     sys = get_system(campaign.game_system)
     # Resolve preset → sheet/template. Falls back to a blank sheet of the
     # campaign's default game system when no preset (or an unknown one).
@@ -159,6 +190,7 @@ def create_standalone_character(
     """Create a character not tied to any campaign. ``preset`` overrides
     ``template`` when both are supplied (the preset carries its own
     template choice)."""
+    _enforce_character_cap(db, user)
     from ..game_systems import SYSTEMS
     safe_template = template if template in {s.sheet_template for s in SYSTEMS.values()} else "generic"
     tmpl, sheet = _sheet_for_preset(preset, safe_template)

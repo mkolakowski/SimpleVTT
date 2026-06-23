@@ -68,3 +68,46 @@ async def test_create_campaign_requires_login():
         resp = await c.post("/campaigns", data={"name": "anon", "game_system": "generic"})
     assert resp.status_code in (303, 401, 403)
     assert not (200 <= resp.status_code < 303)
+
+
+# ---- A3: player character cap (v2.586.0) ----------------------------------
+
+@_LIVE
+async def test_player_character_cap_blocks_at_limit():
+    """A player (demo-alice) creating standalone characters eventually hits
+    the PLAYER_CHARACTER_LIMIT cap → 403 with a 'limit' message. (Standalone
+    chars need no campaign membership; they're cleared on the demo reseed.)"""
+    client = await login_client("demo-alice@example.com", "demopass")
+    try:
+        saw_403 = False
+        # Default cap is 5; alice already owns ≥1 PC, so a 403 must appear
+        # within a bounded number of attempts.
+        for i in range(8):
+            resp = await client.post(
+                "/characters/new-standalone",
+                data={"name": f"a3-cap-probe-{i}", "template": "generic"},
+            )
+            if resp.status_code == 403:
+                saw_403 = True
+                assert "limit" in resp.text.lower()
+                break
+            assert resp.status_code == 200, resp.text[:200]
+        assert saw_403, "player never hit the character cap within 8 creates"
+    finally:
+        await client.aclose()
+
+
+@_LIVE
+async def test_gm_characters_uncapped():
+    """A GM (demo-gm, is_gm=True) is uncapped — several standalone creates
+    all succeed (no 403), even though the GM already owns many PCs."""
+    client = await login_client("demo-gm@example.com", "demopass")
+    try:
+        for i in range(3):
+            resp = await client.post(
+                "/characters/new-standalone",
+                data={"name": f"a3-gm-uncapped-{i}", "template": "generic"},
+            )
+            assert resp.status_code == 200, f"GM create {i} refused: {resp.status_code} {resp.text[:200]}"
+    finally:
+        await client.aclose()
