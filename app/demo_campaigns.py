@@ -179,9 +179,158 @@ _GOBLIN_WARRENS = {
 }
 
 
+# ── Level 9 — Storm Over Saltmarsh (Tier 2→3), the second GM's game ──
+_STORM_SALTMARSH = {
+    "name": "Demo L9: Storm Over Saltmarsh",
+    "level": 9,
+    "gm": "gm2",
+    "gm_color": "#38bdf8",
+    "members": [("bob", "#a78bfa"), ("dave", "#f472b6"), ("erin", "#34d399")],
+    "desc": ("Tier-2/3 coastal adventure (party level 9), run by the demo's "
+             "second GM. Sahuagin raiders boil up from a storm-wracked reef. "
+             "Each PC shows off a feature gained around level 9 — most "
+             "notably full casters' first 5th-level spells. Demo campaign — "
+             "resets on a fixed interval."),
+    "map": {"name": "The Drowned Reef", "width": 1600, "height": 1100},
+    "party": [
+        {"owner": "dave", "name": "Vaelith Stormscale", "sheet": dict(
+            klass="Sorcerer", subclass="Draconic Bloodline", race="Tiefling", level=9,
+            abilities={"STR": 8, "DEX": 14, "CON": 16, "INT": 11, "WIS": 12, "CHA": 18},
+            ac=14, hp_max=66,
+            attacks=[
+                {"name": "Dagger", "attack_bonus": "+6", "damage": "1d4+2",
+                 "damage_type": "piercing", "range": "20/60 ft", "desc": "Finesse"},
+            ],
+            spells=[
+                _spell("Fire Bolt", 0, "fire-bolt"),
+                _spell("Frostbite", 0, "frostbite"),
+                _spell("Chromatic Orb", 1, "chromatic-orb"),
+                _spell("Scorching Ray", 2, "scorching-ray"),
+                _spell("Fireball", 3, "fireball"),
+                _spell("Ice Storm", 4, "ice-storm"),
+                _spell("Cone of Cold", 5, "cone-of-cold"),
+            ],
+            spell_slots=_slots("sorcerer", **{"1": 4, "2": 3, "3": 3, "4": 3, "5": 1}),
+            notes=_notes(
+                "Storm-born tiefling sorcerer with frost in her blood.",
+                "Imperious, treats the reef's storm as a rival rather than weather.",
+                "Level-9 showcase: her first 5th-level slot → Cone of Cold (8d8 "
+                "cold, 60-ft cone). Soften clusters with Fireball, finish with "
+                "the cone; 9 Sorcery Points for Quicken/Twin."),
+        )},
+        {"owner": "bob", "name": "Lirael Songhaven", "sheet": dict(
+            klass="Bard", subclass="College of Lore", race="Half-Elf", level=9,
+            abilities={"STR": 8, "DEX": 14, "CON": 14, "INT": 12, "WIS": 10, "CHA": 18},
+            ac=15, hp_max=58,
+            attacks=[
+                {"name": "Rapier", "attack_bonus": "+6", "damage": "1d8+2",
+                 "damage_type": "piercing", "range": "5 ft", "desc": "Finesse"},
+                {"name": "Hand Crossbow", "attack_bonus": "+6", "damage": "1d6+2",
+                 "damage_type": "piercing", "range": "30/120 ft"},
+            ],
+            spells=[
+                _spell("Vicious Mockery", 0, "vicious-mockery"),
+                _spell("Healing Word", 1, "healing-word"),
+                _spell("Hold Person", 2, "hold-person"),
+                _spell("Hypnotic Pattern", 3, "hypnotic-pattern"),
+                _spell("Dimension Door", 4, "dimension-door"),
+                _spell("Hold Monster", 5, "hold-monster"),
+            ],
+            spell_slots=_slots("bard", **{"1": 4, "2": 3, "3": 3, "4": 3, "5": 1}),
+            notes=_notes(
+                "Silver-tongued lore bard cataloguing the reef's drowned songs.",
+                "Never stops narrating; weaponizes a good rumor.",
+                "Level-9 showcase: first 5th-level slot → Hold Monster (lock "
+                "down a sahuagin baron) + Countercharm vs. siren-song. "
+                "Bardic Inspiration d8 keeps the front line swinging."),
+        )},
+        {"owner": "erin", "name": "Oakheart Mossbrook", "sheet": dict(
+            klass="Druid", subclass="Circle of the Moon", race="Firbolg", level=9,
+            abilities={"STR": 12, "DEX": 13, "CON": 16, "INT": 10, "WIS": 18, "CHA": 11},
+            ac=15, hp_max=70,
+            attacks=[
+                {"name": "Scimitar", "attack_bonus": "+5", "damage": "1d6+1",
+                 "damage_type": "slashing", "range": "5 ft"},
+            ],
+            spells=[
+                _spell("Produce Flame", 0, "produce-flame"),
+                _spell("Healing Word", 1, "healing-word"),
+                _spell("Moonbeam", 2, "moonbeam"),
+                _spell("Call Lightning", 3, "call-lightning"),
+                _spell("Ice Storm", 4, "ice-storm"),
+                _spell("Conjure Elemental", 5, "conjure-elemental"),
+            ],
+            spell_slots=_slots("druid", **{"1": 4, "2": 3, "3": 3, "4": 3, "5": 1}),
+            notes=_notes(
+                "Towering firbolg moon-druid who becomes the storm's beasts.",
+                "Speaks for the reef's wildlife; slow to anger, terrifying once roused.",
+                "Level-9 showcase: first 5th-level slot → Conjure Elemental "
+                "(summon a water elemental ally) and high-CR Wild Shape brawling "
+                "with Moonbeam up for sustained area control."),
+        )},
+        {"owner": "gm2", "name": "Ser Kadvan Tideward", "sheet": dict(
+            klass="Paladin", subclass="Oath of Vengeance", race="Human", level=9,
+            abilities={"STR": 18, "DEX": 10, "CON": 14, "INT": 10, "WIS": 12, "CHA": 16},
+            ac=20, hp_max=84,
+            attacks=[
+                {"name": "Longsword", "attack_bonus": "+8", "damage": "1d8+4",
+                 "damage_type": "slashing", "range": "5 ft",
+                 "desc": "Versatile (1d10); Extra Attack — 2 swings"},
+                {"name": "Javelin (thrown)", "attack_bonus": "+8", "damage": "1d6+4",
+                 "damage_type": "piercing", "range": "30/120 ft"},
+            ],
+            spells=[
+                _spell("Bless", 1, "bless"),
+                _spell("Hunter's Mark", 1, "hunters-mark"),
+                _spell("Misty Step", 2, "misty-step"),
+                _spell("Haste", 3, "haste"),
+            ],
+            spell_slots=_slots("paladin", **{"1": 4, "2": 3, "3": 2}),
+            notes=_notes(
+                "Grim oath-bound knight hunting the reef's raider-lord.",
+                "Quiet, relentless; marks one foe and does not stop.",
+                "Level-9 showcase: Aura of Courage (allies within 10 ft can't be "
+                "frightened) + 3rd-level slots for Divine Smite bursts and "
+                "Vow of Enmity advantage. Two attacks, then smite the hit."),
+        )},
+        {"owner": "gm2", "name": "Brother Tym", "sheet": dict(
+            klass="Monk", subclass="Way of the Open Hand", race="Water Genasi", level=9,
+            abilities={"STR": 12, "DEX": 18, "CON": 14, "INT": 10, "WIS": 16, "CHA": 9},
+            ac=17, hp_max=63,
+            attacks=[
+                {"name": "Unarmed Strike", "attack_bonus": "+7", "damage": "1d6+4",
+                 "damage_type": "bludgeoning", "range": "5 ft",
+                 "desc": "Martial Arts; Extra Attack + Flurry of Blows (Ki)"},
+                {"name": "Shortspear", "attack_bonus": "+7", "damage": "1d6+4",
+                 "damage_type": "piercing", "range": "5 ft"},
+            ],
+            notes=_notes(
+                "Water-genasi monk who runs across the waves to the fight.",
+                "Calm to the point of eerie; speaks in tide metaphors.",
+                "Level-9 showcase: Unarmored Movement now lets him run up "
+                "vertical surfaces and across liquid without falling (move 55 ft "
+                "over water), plus Stillness of Mind. 9 Ki: Flurry + Stunning Strike."),
+        )},
+    ],
+    "npcs": [
+        ("sahuagin", "Sahuagin"),
+        ("reef-shark", "Reef Shark"),
+        ("water-elemental", "Water Elemental"),
+        ("young-red-dragon", "Storm Drake (Young Dragon)", "dragon"),
+    ],
+    "npc_tokens": [
+        ("sahuagin", "Sahuagin Raider", "#0e7490"),
+        ("sahuagin", "Sahuagin Priestess", "#155e75"),
+        ("reef-shark", "Reef Shark", "#475569"),
+        ("water-elemental", "Tide Elemental", "#0891b2"),
+    ],
+}
+
+
 # Registry — appended to as each leveled campaign lands (D3–D6).
 CAMPAIGN_SPECS = [
     _GOBLIN_WARRENS,
+    _STORM_SALTMARSH,
 ]
 
 

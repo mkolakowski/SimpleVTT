@@ -57,3 +57,31 @@ async def test_goblin_warrens_present_for_gm_and_members(email):
         assert "Goblin Warrens" in resp.text, f"{email} lobby missing the L3 campaign"
     finally:
         await client.aclose()
+
+
+@_LIVE
+@pytest.mark.parametrize("email", ["demo-gm2@example.com", "demo-bob@example.com", "demo-dave@example.com", "demo-erin@example.com"])
+async def test_saltmarsh_present_for_second_gm_and_members(email):
+    """D4 — the level-9 'Storm Over Saltmarsh' campaign shows in the SECOND
+    GM's lobby (demo-gm2 owns it) and its members' lobbies (bob/dave/erin)."""
+    client = await login_client(email, "demopass")
+    try:
+        resp = await client.get("/")
+        assert resp.status_code == 200
+        assert "Saltmarsh" in resp.text, f"{email} lobby missing the L9 campaign"
+    finally:
+        await client.aclose()
+
+
+@_LIVE
+async def test_second_gm_owns_only_its_campaign():
+    """demo-gm2 owns exactly the L9 campaign — its lobby shows Saltmarsh but
+    not the demo-gm-owned campaigns (e.g. the Goblin Warrens)."""
+    client = await login_client("demo-gm2@example.com", "demopass")
+    try:
+        resp = await client.get("/")
+        assert resp.status_code == 200
+        assert "Saltmarsh" in resp.text
+        assert "Goblin Warrens" not in resp.text
+    finally:
+        await client.aclose()

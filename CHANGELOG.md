@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.593.0] - 2026-06-23 — "Storm Over Saltmarsh"
+
+**Schema version:** 77
+
+**Commit summary:** Demo rework phase D4 — the level-9 campaign **Storm Over Saltmarsh**, owned by the second GM (`demo-gm2`).
+
+**Description:** Adds the second leveled sample campaign (party level 9) via the D3 `demo_campaigns` seeder, and makes it the **second GM's** game — `demo-gm2` (GM role, not site-admin) owns it, demonstrating that a GM can run a campaign without admin-console access. Members are the shared players `demo-bob` / `demo-dave` / `demo-erin`. The 5-PC party each showcases a level-9 feature, headlined by full casters' **first 5th-level spells**: Sorcerer/Draconic (**Cone of Cold**), Bard/Lore (**Hold Monster + Countercharm**), Druid/Moon (**Conjure Elemental**), Paladin/Vengeance (**Aura of Courage** + Divine Smite), Monk/Open Hand (**Unarmored Movement over water/walls**) — each with the Description/Roleplay/How-to-play notes. NPCs are SRD slugs (sahuagin, reef-shark, water-elemental + a drag-spawn young dragon). Placeholder map (art pending the D8 catalog).
+
+**Implementation:**
+
+- `app/demo_campaigns.py`: append `_STORM_SALTMARSH` to `CAMPAIGN_SPECS` (`gm: gm2`).
+
+**Harness changes:**
+
+- `tests/harness/test_demo_campaigns.py` (+5): L9 shows in demo-gm2's lobby + members' lobbies; demo-gm2 owns *only* the L9 campaign (its lobby shows Saltmarsh, not the demo-gm-owned Goblin Warrens).
+
+Total harness count → 4170 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+### Added
+- Demo level-9 campaign **Storm Over Saltmarsh**, owned by the second GM `demo-gm2` (demo-rework phase D4). Party showcases level-9 features (first 5th-level spells, etc.).
+
 ## [2.592.0] - 2026-06-23 — "The Goblin Warrens"
 
 **Schema version:** 77
