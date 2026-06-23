@@ -31532,8 +31532,13 @@ async def use_reaction(
         # Barbarian Lv 3+ (TCE p.9). Pure reaction spend (no slot
         # cost). Rolls 1d8 server-side, computes the boosted AC, and
         # reports a concrete miss/hit verdict against the triggering
-        # attack. Retroactive damage undo is GM-adjudicated, matching
-        # the Shield / Defensive Duelist announce-only contract.
+        # attack.
+        # v2.602.0 — auto-negation: same retroactive-HP-restore recipe
+        # as v2.600.0 Shield / v2.601.0 Defensive Duelist, but the AC
+        # bump is the rolled 1d8. When the boosted AC turns the
+        # triggering hit into a non-crit miss, the full applied damage
+        # is healed back; a crit (RAW: always hits) or a still-hit
+        # leaves the damage standing (advisory verdict only).
         try:
             options = entry.get("options") or []
             matching = next(
@@ -31592,6 +31597,49 @@ async def use_reaction(
                     "verdict": verdict,
                 },
             })
+            # v2.602.0 — auto-negate when the rolled +1d8 AC turns the
+            # triggering hit into a non-crit miss.
+            _ctx = entry.get("context") or {}
+            _dmg_applied = int(_ctx.get("damage_applied") or 0)
+            _was_crit = bool(_ctx.get("is_crit"))
+            if verdict == "miss" and not _was_crit and _dmg_applied > 0:
+                _sheet = dict(watcher_char.sheet or {})
+                _hp = dict(_sheet.get("hp") or {})
+                _cur = int(_hp.get("current") or 0)
+                _max = int(_hp.get("max") or 0)
+                _new_hp = (
+                    min(_max, _cur + _dmg_applied)
+                    if _max else _cur + _dmg_applied
+                )
+                _hp_res = _apply_hp_change(watcher_char, _new_hp)
+                db.commit()
+                await hub.broadcast(campaign_id, {
+                    "type": "character_hp_update",
+                    "data": {
+                        "character_id": watcher_char.id,
+                        "hp": _hp_res["hp"],
+                        "delta": _dmg_applied,
+                        "source": "form-of-the-beast-tail-negate",
+                    },
+                })
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "character_id": int(watcher_char_id),
+                        "character_name": watcher_char.name,
+                        "user_color": watcher_char.color,
+                        "feature_name": "🦎 Tail Swat negated the hit",
+                        "feature_desc": (
+                            f"d20 {atk_total} now MISSES AC {new_ac}; "
+                            f"restored {_dmg_applied} HP."
+                        ),
+                        "source": "form-of-the-beast-tail-negate",
+                        "reaction_kind": "class_feature",
+                        "damage_applied": _dmg_applied,
+                        "heal_back": _dmg_applied,
+                        "attack_id": _ctx.get("attack_id"),
+                    },
+                })
         except HTTPException:
             raise
         except Exception:

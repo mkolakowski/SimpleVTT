@@ -43,6 +43,28 @@ def _fb_broadcasts(gm_ws, character_id):
     ]
 
 
+async def _set_auto_apply(gm_client, on: bool) -> None:
+    """Toggle the campaign's `auto_apply_damage` so attack hits deal
+    HP damage — the precondition for the v2.602.0 tail auto-negation
+    heal-back. The demo default is on; re-set it in case a prior test
+    on the shared container flipped it off."""
+    form = {
+        "name": "Demo Campaign", "description": "demo",
+        "game_system": "dnd5e", "gm_tab_color": "", "font_override": "",
+        "default_encounter_id": "",
+        "hp_threshold_1": "", "hp_threshold_2": "",
+        "hp_threshold_3": "", "hp_threshold_4": "",
+        "auto_play_playlist_id": "", "auto_play_mode": "order",
+        "auto_play_initial_volume": "0.7",
+    }
+    if on:
+        form["auto_apply_damage"] = "on"
+    await gm_client.post(
+        f"/campaign/{CAMPAIGN_ID}/settings", data=form,
+        follow_redirects=False,
+    )
+
+
 @pytest_asyncio.fixture
 async def krieger_beast(gm_client, roster):
     """PATCH Krieger to Path of the Beast; restore to Berserker."""
@@ -670,6 +692,126 @@ async def test_tail_reaction_prompt_and_resolve(
     assert econ and econ[-1]["data"]["used"] is True, (
         "expected Krieger's reaction economy to flip to used"
     )
+
+
+async def test_tail_reaction_auto_negates_exact_ac_hit(
+    gm_client, gm_ws, roster,
+):
+    """v2.602.0 — Form of the Beast (Tail) auto-negation. Same
+    retroactive-HP-restore recipe as v2.600.0 Shield / v2.601.0
+    Defensive Duelist, but the AC bump is the rolled 1d8. Uses Brakka
+    Wildmane (native Path of the Beast Barbarian — the v2.158.60 demo
+    fixture, no subclass PATCH needed). Garrik swings until a hit
+    lands EXACTLY at Brakka's AC (`attack_total == target_ac`), which
+    guarantees any 1d8 roll (>= 1) turns it into a miss — so the
+    negation is deterministic regardless of the random tail die.
+    Brakka's sheet HP is patched high so he survives the probe, then
+    restored.
+    """
+    brakka = roster["Brakka Wildmane"]
+    attacker = roster["Garrik Ironside"]
+    orig_hp = brakka.get("hp")
+    await _set_auto_apply(gm_client, True)
+    # Patch Brakka's sheet HP high so he survives the probe without
+    # dropping to 0 (auto-applied damage hits the sheet for a PC).
+    await _patch_sheet(
+        gm_client, brakka["id"], {"hp": {"current": 9999, "max": 9999}},
+    )
+    try:
+        kr_cid = await _seed_attacker_vs_tail_watcher(
+            gm_client, attacker, brakka, tok_prefix="tok_fb_tailneg",
+        )
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_form_of_the_beast",
+            json={"character_id": brakka["id"], "form": "tail"},
+        )
+        assert r.status_code == 200, r.text
+        await asyncio.sleep(0.15)
+        gm_ws.mark()
+
+        # Probe until a non-crit hit lands EXACTLY at AC (any d8 then
+        # negates).
+        in_band = None
+        for _ in range(150):
+            resp = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/attack",
+                json={
+                    "character_id": attacker["id"],
+                    "attack_index": 0,
+                    "target_combatant_id": kr_cid,
+                    "override": True,
+                    "override_range": True,
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            d = resp.json()
+            atk_total = d.get("attack_total")
+            target_ac = d.get("target_ac")
+            if (
+                d.get("hit")
+                and not d.get("is_crit")
+                and int(d.get("damage_applied") or 0) > 0
+                and isinstance(atk_total, int)
+                and isinstance(target_ac, int)
+                and atk_total == target_ac
+            ):
+                in_band = d
+                break
+        assert in_band is not None, (
+            "no exact-AC non-crit hit landed on Brakka in 150 swings"
+        )
+        dmg = int(in_band["damage_applied"])
+
+        await asyncio.sleep(0.2)
+        prompts = [
+            m for m in gm_ws.buffered("reaction_prompt")
+            if (m.get("data") or {}).get("watcher_char_id") == brakka["id"]
+            and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+        ]
+        assert prompts, "expected attack_targeted prompt for Brakka"
+        keys = [o.get("key") for o in prompts[-1]["data"].get("options", [])]
+        assert "use-form-of-the-beast-tail" in keys, (
+            f"expected use-form-of-the-beast-tail option; got {keys}"
+        )
+        prompt_id = prompts[-1]["data"]["prompt_id"]
+
+        gm_ws.mark()
+        rx = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+            json={
+                "prompt_id": prompt_id,
+                "reaction_key": "use-form-of-the-beast-tail",
+                "watcher_char_id": brakka["id"],
+            },
+        )
+        assert rx.status_code == 200, rx.text
+        await asyncio.sleep(0.2)
+
+        neg = [
+            m for m in gm_ws.buffered("feature_used")
+            if (m.get("data") or {}).get("source")
+            == "form-of-the-beast-tail-negate"
+            and (m.get("data") or {}).get("character_id") == brakka["id"]
+        ]
+        assert neg, (
+            f"expected feature_used(source=form-of-the-beast-tail-negate); "
+            f"got {[(m.get('data') or {}).get('source') for m in gm_ws.buffered('feature_used')]}"
+        )
+        assert int(neg[-1]["data"].get("heal_back") or 0) == dmg
+
+        hp_up = [
+            m for m in gm_ws.buffered("character_hp_update")
+            if (m.get("data") or {}).get("character_id") == brakka["id"]
+            and (m.get("data") or {}).get("source")
+            == "form-of-the-beast-tail-negate"
+        ]
+        assert hp_up, (
+            "expected character_hp_update(source=form-of-the-beast-tail-negate)"
+        )
+        assert int(hp_up[-1]["data"].get("delta") or 0) == dmg
+    finally:
+        if isinstance(orig_hp, dict):
+            await _patch_sheet(gm_client, brakka["id"], {"hp": orig_hp})
 
 
 async def test_tail_reaction_absent_with_claws_form(

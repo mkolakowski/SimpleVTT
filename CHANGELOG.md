@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.602.0] - 2026-06-23 — "The Lashing Tail"
+
+**Schema version:** 77
+
+**Commit summary:** Form of the Beast (Tail) now auto-negates the triggering hit — the same recipe as Shield / Defensive Duelist, with the rolled 1d8 as the AC bump.
+
+**Description:** Third slice of the reactions-automation **v3 auto-resolution** backlog. Path of the Beast Barbarian's Tail Swat reaction already rolled a 1d8 server-side and reported a concrete miss/hit verdict against the triggering attack, but the damage was left for manual undo. This wires the heal-back into the existing `verdict == "miss"` path: when the rolled +1d8 AC turns the triggering hit into a non-crit miss, the full applied damage is restored.
+
+**Behavior:** when `use-form-of-the-beast-tail` resolves to a miss verdict (`attack_total < base_ac + d8`) **and the attack was not a natural-20 crit** **and** auto-applied damage landed, the watcher's full applied damage is restored via `_apply_hp_change`, with a `character_hp_update(source="form-of-the-beast-tail-negate")` + a `feature_used(source="form-of-the-beast-tail-negate")` card. A crit or a still-hit leaves the damage standing (the existing advisory verdict). Reuses the `is_crit` / `damage_applied` prompt-context plumbing from v2.600.0.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py` — `/use_reaction` `use-form-of-the-beast-tail` dispatch: after the verdict broadcast, when the verdict is a non-crit miss with applied damage, heal back the full amount + broadcast the negation.
+
+**Harness:** `tests/harness/test_form_of_the_beast.py::test_tail_reaction_auto_negates_exact_ac_hit` — uses Brakka Wildmane (native Path of the Beast demo fixture); Garrik swings until a non-crit hit lands **exactly at AC** (`attack_total == target_ac`), which guarantees any 1d8 roll negates regardless of the random tail die; asserts a `feature_used(source="form-of-the-beast-tail-negate")` with `heal_back == damage_applied` + a matching `character_hp_update`. Brakka's sheet HP is patched high to survive the probe and restored in a `finally`.
+
+### Added
+- Form of the Beast (Tail) auto-negation: using Tail Swat via the reaction prompt now retroactively restores the triggering hit's damage when its rolled +1d8 AC turns a non-crit hit into a miss.
+
 ## [2.601.0] - 2026-06-23 — "The Finesse Parry"
 
 **Schema version:** 77
