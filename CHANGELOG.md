@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.599.12] - 2026-06-23 — "The Cleared Backlog"
+
+**Schema version:** 77
+
+**Commit summary:** Reconcile TODO.md against shipped reality — move the shipped security spine + Player Notes to TODONE, and retire the magic-item-content-tail "open P1 lever" framing (it closed at 100% in v2.404.0).
+
+**Description:** Doc-status reconciliation (no code change), from a review of the open to-dos against git/code/tests:
+- **Moved to TODONE.md:** the three-piece **security spine** (demo magic-link login v2.425.0/v2.430.0; fail2ban/CrowdSec integration v2.424.0–v2.429.0 + Phase 4 v2.468.0–v2.476.0; Cloudflare edge-banning v2.427.0/v2.431.0) — all shipped end-to-end and since hardened by the v2.599.3–v2.599.10 review — and **Player Notes**, shipped as the Notes & Handouts arc (v2.554.0–v2.561.0, end-to-end encrypted private notes). Their `## Security` topic section and `### Player Notes` item were removed from TODO.md per the "move shipped items, don't leave ✅ stubs" rule.
+- **Magic-item content tail:** the Design Plans Backlog still listed it as the **#1 open 🔴 P1 SRD-automation lever ("116 of 239 GM-narrated, ~8–10 commits to close")**, but it closed at **239/239 = 100% in v2.404.0**. Removed the stale P1 + P2 entries, corrected the "Shipped end-to-end" line, and fixed the v2.315.0 refresh banner. The forward-looking P1 list now correctly leads with spell upcast scaling + reactions-automation v3. (Older *dated* audit snapshots that retain the historical 116/239 figure as a point-in-time record are intentionally left unchanged.)
+
+**Implementation:**
+
+- `TODO.md`: removed the shipped `## Security` section + `### Player Notes`; removed the magic-item-tail P1/P2 backlog entries; corrected the shipped-line + audit-banner wording.
+- `TODONE.md`: added the security-spine and Player-Notes shipped entries (with version refs).
+
+No harness change (doc-only).
+
+### Changed
+- TODO.md / TODONE.md reconciled: shipped security spine + Player Notes moved to TODONE; the closed magic-item content tail no longer appears as open P1/P2 work.
+
 ## [2.599.11] - 2026-06-23 — "The Honest Headers"
 
 **Schema version:** 77

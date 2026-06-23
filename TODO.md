@@ -1036,9 +1036,6 @@ Show who is currently connected to the session in real time. All connected users
 
 Backend: presence state is ephemeral (in-memory in `realtime.py`, not persisted to the database) — it resets when the server restarts, which is acceptable.
 
-### Player Notes
-Per-player scratchpad (rich text or markdown) scoped to a campaign. Notes should be private to the player by default, with an optional "share with GM" toggle. Persisted server-side so they survive page refreshes.
-
 ---
 
 ## UI / Mobile
@@ -1081,34 +1078,6 @@ Systematic review of all content bundled in or served by SimpleVTT to ensure not
 - **Any AI-generated art** — confirm the generation tool's output licence (some tools claim copyright on outputs; others release CC0); document the tool and settings used for each asset
 
 Output: a `CREDITS.md` file at the repo root listing every third-party asset, its licence, and its source URL, plus a checklist of items that need further review or replacement.
-
----
-
-## Security
-
-The three-piece security spine planned across v2.423.3 → v2.423.5. Each ships independently, but designed to compose end-to-end: SimpleVTT emits canonical log lines → CrowdSec parses them → CrowdSec's native Cloudflare bouncer (or the in-app "Ban IP at edge" button) enforces at the Cloudflare edge → attacker never reaches the FastAPI layer again.
-
-### URL-based magic-link login (demo instance only)
-
-Single-use signed token in a `?login=<token>` query param that drops the visitor straight into a pre-seeded demo account — no password, no email round-trip. Friction-killer for "click here to try SimpleVTT" links shared on socials / the README / the wiki landing page. **Hard-gated to the demo instance via a deploy-time env var separate from `SIMPLEVTT_DEMO_MODE`** so a compromised admin account can't enable the magic-link surface against a production deploy. Tokens are HMAC-signed, ≤15 min TTL with ±60s skew, single-use enforced by an atomic `INSERT` into a new `demo_magic_links` table. Auth-success and verify-rejected paths emit canonical log lines for the fail2ban/CrowdSec sibling entry below so abuse of the demo link (mass enumeration, replay attempts) is visible to log-based banning. Explicitly **not** a production passwordless-login feature — email-delivered magic links for real accounts are a different threat model and out of scope.
-
-See [`docs/plans/demo-magic-link.md`](docs/plans/demo-magic-link.md) for the threat model, the double-env-var gate, the HMAC token shape, the `demo_magic_links` schema, the canonical log-line list, and the three-phase roadmap (mint+verify+admin UI → reference fail2ban/CrowdSec configs → anonymous public "Try the demo" endpoint hard-blocked on the Cloudflare plan shipping first).
-
-### fail2ban / CrowdSec log integration out of the box
-
-Canonical structured log-line format (`<subsystem.event> ip=… ua=… [key=value …]`) and reference configs shipped in-repo under `docs/integrations/fail2ban/` (3 filter files + 1 jail) and `docs/integrations/crowdsec/` (1 parser + 5 scenarios), so an operator running SimpleVTT on a public box can drop in either engine without authoring custom regex. Both engines target the same canonical log lines so picking one over the other is a deployment choice, not a SimpleVTT change. A new `app/audit_log.py` typed emission module owns the call shape + the `X-Forwarded-For` trust decision in one place (new `TRUSTED_PROXY_HOPS=N` env var, default 0 = never trust the header). Covers 9 canonical events (auth login/signup, demo magic-link mint/verify/reject, API 401/403, WS connect-rejected) across 7 attack-class threat-model rows (credential stuffing → magic-link enumeration → replay → mint abuse → API probing → signup abuse → WS storms). Phase 2 ships a compose-side smoke test that drives a real CrowdSec container against the canonical event stream and asserts scenarios fire.
-
-(Spelled "CrowdSec" intentionally — the open-source IP-reputation engine that reads logs the way fail2ban does. The original v2.423.2 TODO said "crowdstrike"; CrowdStrike Falcon is endpoint protection software and doesn't operate on application logs.)
-
-See [`docs/plans/fail2ban-crowdsec-integration.md`](docs/plans/fail2ban-crowdsec-integration.md) for the per-event table, the parser regex contract that both engines share, the threat-model class-by-class breakdown, non-goals, and the three-phase roadmap (emission + fail2ban → CrowdSec compose smoke test → optional JSON-line side-channel).
-
-### Cloudflare IP-banning integration (enforcement at the edge)
-
-Optional outbound API hook: when SimpleVTT decides to ban an IP (GM clicks "Ban IP at edge" in the campaign admin panel, future auto-ban hook fires from the in-app rate limit, or the CrowdSec → Cloudflare bouncer path translates a CrowdSec decision), call the Cloudflare IP Access Rules API to add the IP to a configured zone rule. Requests from that IP never reach SimpleVTT again until the operator unbans. **Two independent env-var gates**: `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ZONE_ID` configure the *client* (bouncer use case can drive it directly); `SIMPLEVTT_CLOUDFLARE_BANNING_ENABLED=true` gates the *GM-facing button* so operators who only want the CrowdSec → Cloudflare bouncer path can leave the in-app surface off.
-
-Per the [Third-party APIs must be Docker Compose services](CLAUDE.md#third-party-apis-must-be-docker-compose-services) rule, the Cloudflare API endpoint isn't a service we run — but a **wiremock** service in compose (dev profile) serves canned `/zones/<id>/firewall/access_rules/rules` responses from a `docs/integrations/cloudflare/mock/` fixture so the integration is testable without burning real quota. Every ban / unban call writes a row to a new generic `admin_audit_log` table (who banned what IP, when, against which scope) so admin-button abuse is reviewable + reversible. Schema bump filed: SCHEMA_VERSION 69 → 70 when Phase 1 ships.
-
-See [`docs/plans/cloudflare-edge-banning.md`](docs/plans/cloudflare-edge-banning.md) for the threat model (6 attack classes), the two-env-var gate design, the `admin_audit_log` schema, the three GM-only endpoints (`POST /ban_ip` / `POST /unban_ip` / `GET /edge_bans`), the GM panel UI surface, and the three-phase roadmap (manual ban + audit + wiremock dev → CrowdSec bouncer wiring docs + compose-side smoke → auto-ban hook hard-blocked on demo-magic-link Phase 3).
 
 ---
 
@@ -1177,7 +1146,7 @@ The remaining ~30 announce-only rows are **archetype J** (narration-only-by-desi
 
 Every design doc under [`docs/plans/`](docs/plans/) + the two repo-root planning docs (`docs/encounters-plan.md` + `docs/multi-system-refactor.md`). Priorities reflect the post-v2.159.30 / 2026-06-11 SRD-audit refresh — **🔥 IN PROGRESS** = a plan with ongoing commits this session; **🔴 P1** = next-up substantial work that closes a real SRD-implementable gap; **🟡 P2** = substantial deferred phases or proposed work; **🟢 P3** = lower-priority or living-doc style.
 
-> **v2.315.0 SRD-audit refresh (current).** Priorities re-shaped against the [SRD 5e Audit (v2.315.0 refresh)](#srd-5e-audit-v23150-refresh) at the top of this file — that section is now the authoritative re-prioritization. Since the 2026-06-11 list: legendary actions + lair actions + legendary resistance all ✅ shipped (v2.159.32–v2.167.0); the spell-validation suite is mostly ✅. The single biggest lever on overall SRD % is now the **magic-item content tail (116 of 239 items still GM-narrated)** — promoted to P1 below. Next is **spell upcast scaling** (~110 cast-and-broadcast-only spells), then the **class-feature ⚪ tail** (24 rows).
+> **v2.315.0 SRD-audit refresh (current).** Priorities re-shaped against the [SRD 5e Audit (v2.315.0 refresh)](#srd-5e-audit-v23150-refresh) at the top of this file — that section is now the authoritative re-prioritization. Since the 2026-06-11 list: legendary actions + lair actions + legendary resistance all ✅ shipped (v2.159.32–v2.167.0); the spell-validation suite is mostly ✅. The magic-item content tail this note once flagged as "the single biggest lever (116 of 239 GM-narrated)" **closed at 239/239 = 100% (v2.404.0)** — see the SRD audit at the top of this file. The remaining levers are **spell upcast scaling** (~110 cast-and-broadcast-only spells) and the **class-feature ⚪ tail** (24 rows).
 >
 > **2026-06-11 SRD-audit refresh (superseded).** Priorities re-shaped against the [SRD 5e Audit (2026-06-11 refresh)](#srd-5e-audit-2026-06-11-refresh) above. The prior 2026-06-10 P1 list closed end-to-end: magic-items-automation framework ✅, Exhaustion-level tracking ✅, Pact Boon ✅, Battle Master 16/16 maneuvers ✅, non-Devotion Paladin Lv 15/20 capstones ✅. (That pass's P1 — legendary/lair actions + spell-validation — has since shipped; see the v2.315.0 note above.)
 
@@ -1187,17 +1156,15 @@ Every design doc under [`docs/plans/`](docs/plans/) + the two repo-root planning
 
 ### ✅ Shipped end-to-end
 
-Now lives in [`TODONE.md`](TODONE.md#design-plans-backlog--shipped-end-to-end) — 12 plans (auras, death-saves, demo-mode, feature-saves, movement-and-summons, movement-oa-flow, on-hit-riders, ruler-and-range, spell-upcasting, temp-hp-and-bonuses, test-harness, wild-magic). Plus the 2026-06-11 refresh: [`carrying-capacity.md`](docs/plans/carrying-capacity.md) ✅, [`exhaustion-levels.md`](docs/plans/exhaustion-levels.md) ✅, [`magic-items-automation.md`](docs/plans/magic-items-automation.md) ✅ (framework — Phase 9 content tail still open under P2), [`battle-master.md`](docs/plans/battle-master.md) ✅ (16/16 maneuvers), [`warlock-pact-boon.md`](docs/plans/warlock-pact-boon.md) ✅.
+Now lives in [`TODONE.md`](TODONE.md#design-plans-backlog--shipped-end-to-end) — 12 plans (auras, death-saves, demo-mode, feature-saves, movement-and-summons, movement-oa-flow, on-hit-riders, ruler-and-range, spell-upcasting, temp-hp-and-bonuses, test-harness, wild-magic). Plus the 2026-06-11 refresh: [`carrying-capacity.md`](docs/plans/carrying-capacity.md) ✅, [`exhaustion-levels.md`](docs/plans/exhaustion-levels.md) ✅, [`magic-items-automation.md`](docs/plans/magic-items-automation.md) ✅ (framework + Phase 9 content tail both closed at 239/239 = 100%, v2.404.0), [`battle-master.md`](docs/plans/battle-master.md) ✅ (16/16 maneuvers), [`warlock-pact-boon.md`](docs/plans/warlock-pact-boon.md) ✅.
 
 ### 🔴 P1 — Next substantial work (v2.315.0 SRD-audit driven)
 
-- **Magic-item content tail (the #1 SRD-automation lever).** 116 of 239 SRD magic items still have no code-side wiring and are GM-narrated. The engine substrate (`_MAGIC_ITEM_ACTIONS` / `_MAGIC_ITEM_PASSIVES` / `_MAGIC_ITEM_ATTACK_RIDERS` / ability-override / buff / boolean derived flags) is **complete** — every remaining item is a content drop-in fitting an existing template (on-hit rider, charge-with-spell, passive buff, nat-20 hook, ability-override, boolean flag). Ship in ~10–15-item batches; each batch is its own MINOR commit + 3 harness tests + a coverage-doc total bump. ~8–10 commits to close. Framework plan: [`magic-items-automation.md`](docs/plans/magic-items-automation.md) (Phase 9 — content tail).
 - **Spell upcast scaling (~110 spells).** Add structured `upcast` / `damage_per_slot` scaling data to the cast-and-broadcast-only spells so higher-slot casts scale automatically. The resolver shipped in [`spell-upcasting.md`](docs/plans/spell-upcasting.md) Phase B (v2.110.0) — this is data-only content work that moves Spells from ~70% → ~90%+.
 - [`reactions-automation.md`](docs/plans/reactions-automation.md) — **Phases 1–6 all ✅**; v3 backlog (pending-damage state machine for auto-resolution) is the substantial remaining slice. Adjusted up from "Phase 7" framing in the prior P2 list — Phase 7 already shipped per v2.118.0–v2.122.0.
 
 ### 🟡 P2 — Substantial deferred phases
 
-- **Magic-item content tail — promoted to P1** (see the P1 list above; it's the single biggest SRD-automation lever). The stale "250 of 292 / Phase 9" framing is superseded by the v2.315.0 audit's corrected 116 / 239 count.
 - **NEW: Carrying-capacity Phase 4 (Encumbered variant, PHB p.176).** Optional rule — currently skipped per the v1 plan; speed -10 ft + disadvantage on STR/DEX/CON checks when load > STR × 5 lb. Small lift over the existing `_carry_weight` helper.
 - [`sorcery-points-and-metamagic.md`](docs/plans/sorcery-points-and-metamagic.md) — **7 of 8 PHB metamagics shipped end-to-end through the v2.99.x window** + Sorcerous Restoration ✅. Outstanding: Quickened Spell (action-economy override path) + AoE multi-target Empowered loop.
 - [`paladin-oaths.md`](docs/plans/paladin-oaths.md) — header refreshed 2026-06-11; Lv 15/20 capstones for Ancients / Vengeance / Conquest / Redemption / Glory all ✅ (v2.99.283–.292). Outstanding small follow-ups: Vengeance Phase 2 OA-flow gate; Conquest Lv 3 (Conquering Presence) + Lv 7 (Aura of Conquest); Redemption Lv 3 (Rebuke the Violent); Glory Lv 3 (Inspiring Smite). Down-ranked from prior P2 position because most scope has shipped.
