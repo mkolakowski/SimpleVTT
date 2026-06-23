@@ -627,51 +627,12 @@ def admin_stubs_clear(user: User = Depends(require_admin)):
     return RedirectResponse("/admin/stubs", status_code=303)
 
 
-@router.post("/demo/reset")
-def admin_demo_reset(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
-):
-    """Admin-only on-demand demo reset (v2.3.0). Force-runs
-    ``reset_and_reseed`` without waiting for the scheduler's next tick.
-    Returns to /admin with the per-section counts on the URL as a hint.
-    Returns 503 if DEMO_MODE is disabled."""
-    from ..config import get_settings
-    s = get_settings()
-    if not s.demo_mode:
-        raise HTTPException(503, "DEMO_MODE is not enabled on this deploy")
-    from ..demo_seed import reset_and_reseed
-    # v2.495.2: capture the actor's email BEFORE the reseed. When the
-    # admin triggering this is the demo GM (the usual case — the demo
-    # GM is the demo's only admin), reset_and_reseed wipes and
-    # re-creates that user with a NEW id, so the ``user`` ORM object is
-    # left pointing at a deleted row. Touching ``user.email`` /
-    # ``user.id`` afterward raises ObjectDeletedError, and auditing with
-    # the stale id writes a dangling ``actor_user_id`` (FK violation) —
-    # both 500 the response even though the reseed itself committed.
-    actor_email = user.email
-    counts = reset_and_reseed(db)
-    log.info("admin %s triggered demo reset: %s", actor_email, counts)
-    # v2.431.0 — audit the demo-reset action with the per-section
-    # delete counts as notes. Re-resolve the actor by email: a demo
-    # actor was just re-created with a fresh id; a non-demo actor
-    # resolves to the same (untouched) row. Skip the audit row if the
-    # actor no longer exists (a demo actor on a deploy where
-    # DEMO_GM_SITE_ADMIN is off can't reach here, but guard anyway).
-    actor = db.query(User).filter(User.email == actor_email).first()
-    if actor is not None:
-        record_admin_action(
-            db, actor=actor, request=request,
-            action="admin.demo_reset", target="demo_dataset",
-            notes=str(counts)[:500],
-        )
-    else:
-        log.warning(
-            "admin demo reset: actor %s gone post-reseed; skipping audit row",
-            actor_email,
-        )
-    return {"ok": True, "counts": counts}
+# v2.580.0 — the in-app on-demand demo reset (`POST /admin/demo/reset`) was
+# RETIRED and re-homed in the Admin Center (port 8015, /tools → demo reset),
+# per docs/plans/admin-center-consolidation.md Phase 4. The Center's version
+# is DEMO_MODE + ADMIN_CENTER_ADMIN_TOOLS double-gated and audited to the
+# operator identity. The scheduler's periodic reseed (DEMO_RESET_INTERVAL_MINUTES)
+# is unchanged.
 
 
 @router.get("/stubs.json")

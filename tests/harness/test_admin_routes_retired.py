@@ -1,12 +1,17 @@
-"""v2.579.0 — regression net for the retired in-app user-admin routes.
+"""Regression net for the in-app ``/admin`` routes retired during the
+Admin Center consolidation (``docs/plans/admin-center-consolidation.md``
+Phase 4).
 
-Phase 4 of ``docs/plans/admin-center-consolidation.md`` removed the in-app
-``/admin`` user write surface (create / disable / reset-password / delete /
-scrub-audit-log) — it now lives only in the standalone Admin Center (port
-8015, ``/users``). This file asserts the in-app routes are GONE (no live
-duplicate write-path), replacing the old ``test_admin_audit.py`` +
-``test_admin_user_audit_scrub.py`` suites (which exercised those routes and
-are superseded by the Admin Center coverage in ``test_admin_center.py``).
+Retired so far:
+  * v2.579.0 — user write surface (create / disable / reset-password /
+    delete / scrub-audit-log) → Admin Center ``/users``.
+  * v2.580.0 — on-demand demo reset (``POST /admin/demo/reset``) → Admin
+    Center ``/tools``.
+
+This file asserts those routes are GONE (no live duplicate write-path),
+replacing the old ``test_admin_audit.py`` / ``test_admin_user_audit_scrub.py``
+/ ``test_admin_demo_reset.py`` suites (superseded by the Admin Center
+coverage in ``test_admin_center.py``).
 
 The Center-side coverage for the moved behavior:
   * user create/disable/reset/delete → ``test_admin_center.py`` (the
@@ -41,6 +46,8 @@ _RETIRED = [
     ("POST", "/admin/users/1/reset_password"),
     ("POST", "/admin/users/1/delete"),
     ("POST", "/admin/users/1/scrub-audit-log"),
+    # v2.580.0 — demo on-demand reset moved to the Admin Center (/tools).
+    ("POST", "/admin/demo/reset"),
 ]
 
 

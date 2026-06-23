@@ -156,9 +156,15 @@ NOT left as a live duplicate write-path.
      section is now read-only with a pointer to the Center. Deleted the
      superseded `test_admin_audit.py` + `test_admin_user_audit_scrub.py`;
      added `test_admin_routes_retired.py` (routes-are-gone regression).
+   - **Phase 4 (route removal) — demo reset. ✅ Shipped v2.580.0.** Removed
+     the in-app `POST /admin/demo/reset` (Center `/tools` carries it); deleted
+     `test_admin_demo_reset.py`; extended the routes-gone regression. The
+     scheduler's periodic reseed is unchanged.
    - **Phase 4 (route removal) — remaining. ⚪ Per-surface, after parity.**
-     Campaign mgmt routes (needs uploads ported to the Center first), demo
-     tools, and stubs (needs the shared miss-store) still live in-app.
+     Demo magic-link **mint** (`/admin/demo/mint-magic-link` — entangled with
+     the public `/demo-login` redemption + token unit tests), campaign mgmt
+     routes (needs uploads ported first), and stubs (needs the shared
+     miss-store) still live in-app.
 
 ---
 

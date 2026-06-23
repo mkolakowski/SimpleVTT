@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.580.0] - 2026-06-22 — "The Last Call"
+
+**Schema version:** 75
+
+**Commit summary:** Phase 4 (route removal) of `docs/plans/admin-center-consolidation.md` — retire the in-app on-demand demo reset (`POST /admin/demo/reset`); it lives in the Admin Center.
+
+**Description:** Removes the in-app `POST /admin/demo/reset` route now that the Admin Center carries the equivalent (`/tools` → demo reset, DEMO_MODE + `ADMIN_CENTER_ADMIN_TOOLS` double-gated, audited to the operator identity, shipped v2.573.2). The route had no `admin_home` UI button (it was a pure JSON API), so no template change is needed. The **scheduler's periodic reseed** (`DEMO_RESET_INTERVAL_MINUTES`) is untouched — this only removes the manual admin trigger. The demo magic-link **mint** route stays in-app for now (it shares a module with the public `/demo-login` redemption + the token unit tests — a separate, more entangled removal).
+
+**Implementation:**
+
+- `app/routes/admin_routes.py`: deleted the `admin_demo_reset` handler (left a pointer comment). No import cleanup needed (the route used function-local imports).
+
+**Harness changes:**
+
+- **Removed** `tests/harness/test_admin_demo_reset.py` (2 tests) — exercised the now-deleted route; the Center's `/tools` demo-reset is covered (auth-gated, without firing the reseed) in `test_admin_center.py`.
+- **Extended** `tests/harness/test_admin_routes_retired.py` (+1): `POST /admin/demo/reset` now asserted gone (never 2xx/3xx).
+
+Total harness count → 4128 in `tests/harness/` + 101 in `tests/harness_ui/`.
+
+MINOR — relocates an internal admin surface (full Center parity; no capability lost).
+
+### Removed
+- In-app `POST /admin/demo/reset` — moved to the Admin Center `/tools` (`docs/plans/admin-center-consolidation.md` Phase 4). The periodic scheduler reseed is unchanged.
+
 ## [2.579.0] - 2026-06-22 — "The Vacated Office"
 
 **Schema version:** 75
