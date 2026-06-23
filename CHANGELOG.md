@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.579.0] - 2026-06-22 — "The Vacated Office"
+
+**Schema version:** 75
+
+**Commit summary:** Phase 4 (route removal) of `docs/plans/admin-center-consolidation.md` — retire the in-app `/admin` user write surface now that it has full Admin Center parity.
+
+**Description:** Removes the in-app user-administration write routes — `POST /admin/users`, `/admin/users/{id}/disable`, `/reset_password`, `/delete`, and `/scrub-audit-log` — now that every one has a parity equivalent in the Admin Center (user CRUD shipped v2.574.0–v2.575.0; audit-scrub v2.578.0). The in-app `/admin` **Users** section becomes a **read-only list** with a pointer to the Center (`8015 → /users`); the create form, per-row disable/reset/delete buttons, and the Scrub-log button + its JS are gone. This eliminates the duplicate write-path the consolidation plan set out to remove. The read-only `GET /admin` portal and the campaign routes stay (campaign uploads + stubs still have no Center equivalent — tracked in the plan).
+
+**Audit semantics.** In-app user mutations wrote BOTH an `admin_audit_log` DB row (via `record_admin_action`, keyed on the acting `User`) and the canonical audit-log stream. The Admin Center has no app `User` to key a row on, so its equivalents write the **stream only**, attributed `actor=admin-center:<operator>`. Net effect: user-action rows no longer accrue in `admin_audit_log` (the table is still written by in-app campaign-delete + Cloudflare actions); the stream remains the complete record and is what the dashboard + fail2ban/CrowdSec read.
+
+**Implementation:**
+
+- `app/routes/admin_routes.py`: deleted the five user write handlers (kept the read-only `admin_home` GET); dropped the now-unused `hash_password` / `scrub_user_from_audit_log` imports.
+- `app/templates/admin_home.html`: Users section reduced to a read-only table + "moved to the Admin Center" note; removed the create form, write buttons, and the `scrubUserLog` script. Updated the migration banner.
+
+**Harness changes:**
+
+- **Removed** `tests/harness/test_admin_audit.py` (5 tests) + `tests/harness/test_admin_user_audit_scrub.py` (5 tests) — both exercised the now-deleted in-app routes; the moved behavior is covered Center-side in `test_admin_center.py`.
+- **Added** `tests/harness/test_admin_routes_retired.py` (+5): asserts each retired in-app user route no longer succeeds (never 2xx/3xx — 404/405/401/403 only), i.e. no live duplicate write-path.
+
+Total harness count → 4129 in `tests/harness/` + 101 in `tests/harness_ui/`.
+
+MINOR — relocates an internal admin surface (full Center parity; no capability lost). Operators who used the in-app user forms now manage users in the Admin Center.
+
+### Removed
+- In-app `/admin` user write routes (create / disable / reset-password / delete / scrub-audit-log) — moved to the Admin Center (`docs/plans/admin-center-consolidation.md` Phase 4). The in-app Users section is now read-only.
+
 ## [2.578.0] - 2026-06-22 — "The Quiet Eraser"
 
 **Schema version:** 75

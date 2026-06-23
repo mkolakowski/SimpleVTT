@@ -1,6 +1,6 @@
 # Consolidate site-admin into the Admin Center
 
-**Status:** 🟠 partial · **Phase 1 (demo tools) shipped v2.573.2** — an opt-in `/tools` page in the Center (demo magic-link mint + demo reset), gated by `ADMIN_CENTER_ADMIN_TOOLS` (default off). **Stubs is deferred** out of Phase 1: its miss-store (`local_features._misses`) is an **in-memory module global in the main-app process**, so a separate Center process would always show an empty list — it can't move until the miss-store is made shared (DB/file-backed). **Phase 2a (user list + create) shipped v2.574.0** — an opt-in `/users` page (read-only list + non-destructive create), same flag, with operator-attributed audit via the new `operator_audit` helper (`actor=admin-center:<operator>`). **Phase 2b (destructive user ops — disable/reset-password/delete, MFA-gated) shipped v2.575.0** — refused unless the session is MFA-verified (403 to header-auth callers); per-row controls render only when verified. **Phase 3a (campaign browse + delete) shipped v2.576.0** — `/campaigns` list + read-only detail + MFA-gated delete. **Phase 3b (member/system/character management, no-upload subset) shipped v2.577.0** — MFA-gated member add/remove, system change, character create/assign/delete. **Map/thumbnail uploads (the upload remainder of 3b) + Phase 4 (retire in-app) unstarted.**
+**Status:** 🟠 partial · **Phase 1 (demo tools) shipped v2.573.2** — an opt-in `/tools` page in the Center (demo magic-link mint + demo reset), gated by `ADMIN_CENTER_ADMIN_TOOLS` (default off). **Stubs is deferred** out of Phase 1: its miss-store (`local_features._misses`) is an **in-memory module global in the main-app process**, so a separate Center process would always show an empty list — it can't move until the miss-store is made shared (DB/file-backed). **Phase 2a (user list + create) shipped v2.574.0** — an opt-in `/users` page (read-only list + non-destructive create), same flag, with operator-attributed audit via the new `operator_audit` helper (`actor=admin-center:<operator>`). **Phase 2b (destructive user ops — disable/reset-password/delete, MFA-gated) shipped v2.575.0** — refused unless the session is MFA-verified (403 to header-auth callers); per-row controls render only when verified. **Phase 3a (campaign browse + delete) shipped v2.576.0** — `/campaigns` list + read-only detail + MFA-gated delete. **Phase 3b (member/system/character management, no-upload subset) shipped v2.577.0** — MFA-gated member add/remove, system change, character create/assign/delete. **Audit-scrub ported to the Center (v2.578.0). Phase 4 (route removal) — user CRUD removed from the in-app portal (v2.579.0); in-app Users is now read-only.** Map/thumbnail uploads (the upload remainder of 3b) + Phase 4 removal of the campaign/demo/stubs in-app routes remain.
 
 Move the scattered **site-admin** surfaces out of the main app's in-app
 `/admin` portal and into the standalone **Admin Center** (port 8015), so
@@ -150,11 +150,15 @@ NOT left as a live duplicate write-path.
      now lives in the Center (MFA-gated, JSON-contract parity, per-row
      **Scrub log** button) — the last user-admin parity gap. In-app user
      CRUD is now fully duplicated and ready to retire.
-   - **Phase 4 (route removal). ⚪ Per-surface, after parity.** Remove each
-     in-app write route once its Center equivalent ships and its harness
-     coverage is migrated: **user CRUD — now unblocked (full parity);**
-     campaign mgmt (needs uploads ported), demo tools, stubs (needs shared
-     miss-store).
+   - **Phase 4 (route removal) — user CRUD. ✅ Shipped v2.579.0.** Removed the
+     five in-app user write routes (`POST /admin/users`, `/disable`,
+     `/reset_password`, `/delete`, `/scrub-audit-log`); the in-app Users
+     section is now read-only with a pointer to the Center. Deleted the
+     superseded `test_admin_audit.py` + `test_admin_user_audit_scrub.py`;
+     added `test_admin_routes_retired.py` (routes-are-gone regression).
+   - **Phase 4 (route removal) — remaining. ⚪ Per-surface, after parity.**
+     Campaign mgmt routes (needs uploads ported to the Center first), demo
+     tools, and stubs (needs the shared miss-store) still live in-app.
 
 ---
 

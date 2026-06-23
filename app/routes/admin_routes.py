@@ -20,8 +20,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from ..admin_audit import record_admin_action
-from ..audit_scrub import scrub_user_from_audit_log
-from ..auth import hash_password, require_admin
+from ..auth import require_admin
 from ..config import get_settings
 from ..database import get_db
 from ..game_systems import get_system, system_choices
@@ -115,152 +114,15 @@ def admin_home(
 
 
 # ---------- Users ----------
-
-@router.post("/users")
-def admin_create_user(
-    request: Request,
-    email: str = Form(...),
-    display_name: str = Form(...),
-    password: str = Form(...),
-    db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
-):
-    email_n = email.lower().strip()
-    if db.query(User).filter(User.email == email_n).first():
-        raise HTTPException(400, "Email already in use")
-    settings = get_settings()
-    u = User(
-        email=email_n,
-        display_name=display_name.strip() or email_n.split("@")[0],
-        password_hash=hash_password(password),
-        is_admin=settings.is_admin_email(email_n),
-    )
-    db.add(u)
-    db.commit()
-    # v2.431.0 — audit admin-initiated user creation.
-    record_admin_action(
-        db, actor=user, request=request,
-        action="admin.user_create", target=email_n,
-        notes=f"display_name={display_name.strip()[:60]}",
-    )
-    return RedirectResponse("/admin", status_code=303)
-
-
-@router.post("/users/{user_id}/disable")
-def admin_disable_user(
-    request: Request,
-    user_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
-):
-    u = db.query(User).filter(User.id == user_id).first()
-    if not u:
-        raise HTTPException(404)
-    u.is_disabled = not u.is_disabled
-    db.commit()
-    # v2.431.0 — audit. New disabled state encoded as the action
-    # suffix (user_disable / user_enable) so an operator filtering
-    # by action name can tell which direction was flipped.
-    action = "admin.user_disable" if u.is_disabled else "admin.user_enable"
-    record_admin_action(
-        db, actor=user, request=request,
-        action=action, target=u.email,
-    )
-    return RedirectResponse("/admin", status_code=303)
-
-
-@router.post("/users/{user_id}/reset_password")
-def admin_reset_password(
-    request: Request,
-    user_id: int,
-    new_password: str = Form(...),
-    db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
-):
-    u = db.query(User).filter(User.id == user_id).first()
-    if not u:
-        raise HTTPException(404)
-    if len(new_password) < 8:
-        raise HTTPException(400, "Password too short")
-    u.password_hash = hash_password(new_password)
-    db.commit()
-    # v2.431.0 — audit. The new password is NEVER logged; we only
-    # record that a reset happened to this user.
-    record_admin_action(
-        db, actor=user, request=request,
-        action="admin.user_password_reset", target=u.email,
-    )
-    return RedirectResponse("/admin", status_code=303)
-
-
-@router.post("/users/{user_id}/delete")
-def admin_delete_user(
-    request: Request,
-    user_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
-):
-    if user_id == user.id:
-        raise HTTPException(400, "Can't delete yourself")
-    u = db.query(User).filter(User.id == user_id).first()
-    if not u:
-        raise HTTPException(404)
-    # v2.431.0 — capture the target email BEFORE the delete so the
-    # audit row keeps a human-readable target even though the User
-    # row is gone.
-    target_email = u.email
-    db.delete(u)
-    db.commit()
-    record_admin_action(
-        db, actor=user, request=request,
-        action="admin.user_delete", target=target_email,
-    )
-    return RedirectResponse("/admin", status_code=303)
-
-
-@router.post("/users/{user_id}/scrub-audit-log")
-def admin_scrub_user_audit_log(
-    request: Request,
-    user_id: int,
-    email: Optional[str] = Form(None),
-    db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
-):
-    """GDPR Article 17 pseudonymization of a (usually already-deleted)
-    user's identifiers in the audit log.
-
-    Rewrites every line that names this user's ``user_id`` /
-    ``actor_id`` or ``email`` to a stable opaque ``<deleted-…>`` token,
-    in place — no line is deleted, and ``ip=`` / ``ua=`` / the event
-    tag (the fields fail2ban + CrowdSec read) are preserved. The user
-    row is normally gone by the time this runs, so the caller passes
-    the email captured at delete time as a form field rather than us
-    looking it up.
-
-    Returns a JSON summary; idempotent (a second call rewrites 0
-    lines). The action itself is recorded against the *pseudonym* — we
-    never write the real email back into the freshly-scrubbed log.
-    """
-    addr = (email or "").strip()
-    if not addr:
-        raise HTTPException(400, "email is required")
-    summary = scrub_user_from_audit_log(user_id=user_id, email=addr)
-    record_admin_action(
-        db, actor=user, request=request,
-        action="admin.user_audit_scrub",
-        target=summary["pseudonym"],
-        notes=(
-            f"audit-log scrub: {summary['lines_rewritten']} line(s) "
-            f"pseudonymized across {summary['files_scanned']} file(s)"
-        ),
-    )
-    return {
-        "ok": True,
-        "user_id": user_id,
-        "pseudonym": summary["pseudonym"],
-        "files_scanned": summary["files_scanned"],
-        "lines_rewritten": summary["lines_rewritten"],
-    }
+#
+# v2.579.0 — the in-app user write surface (create / disable /
+# reset-password / delete / scrub-audit-log) was RETIRED and re-homed in
+# the standalone Admin Center (port 8015, /users), per
+# docs/plans/admin-center-consolidation.md Phase 4. The Admin Center
+# attributes these mutations to an operator identity
+# (actor=admin-center:<operator>) rather than an app User. The in-app
+# /admin Users section is now a read-only list (see admin_home.html).
+# Only the read-only `admin_home` GET above remains for users.
 
 
 # ---------- Campaigns ----------
