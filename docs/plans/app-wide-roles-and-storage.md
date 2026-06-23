@@ -1,11 +1,14 @@
 # App-wide roles + GM/player caps + storage accounting & limits
 
-**Status:** 🟠 partial · **Arc A (roles + caps) shipped v2.584.0–v2.587.0** —
+**Status:** ✅ shipped (v2.584.0–v2.589.0) · **Arc A (roles + caps)** —
 A1 role substrate (`User.is_gm`, schema v76, `require_gm`, caps config, demo
 roles); A2 campaign creation gated on GM + `GM_CAMPAIGN_LIMIT` cap; A3 player
 character cap (`PLAYER_CHARACTER_LIMIT`); A4 Admin Center role assignment
-(`POST /users/{id}/role`, MFA-gated). **Arc B (storage accounting +
-per-user/per-campaign limits) is pending.**
+(`POST /users/{id}/role`, MFA-gated). **Arc B (storage)** — B1 accounting +
+Admin Center `/storage` views (on-demand scan, per-user + per-campaign); B2
+per-user/per-campaign storage limits (`storage_limit_bytes`, schema v77) set
+in the Admin Center + enforced at the upload paths via `check_quota` (fast
+no-op when unlimited; fails open).
 
 ## Context
 
@@ -64,13 +67,14 @@ scan** (cached briefly) — no per-file DB size tracking. Storage limits are
    (MFA-gated, audited) + role pills/toggles on the Center `/users` page.
 
 ### Arc B — storage accounting + limits
-1. **B1 — accounting + Admin Center storage views.** A storage module
-   (on-demand scan) + `/storage` page with per-user (drill into
-   per-campaign + per-type) and per-campaign breakdowns.
-2. **B2 — limits + enforcement.** `User.storage_limit_bytes` +
+1. **B1 — accounting + Admin Center storage views. ✅ v2.588.0.** `storage.py`
+   on-demand scan + `/storage` page + `GET /api/storage` (per-user drill into
+   per-campaign + per-type; per-campaign breakdowns; unattributed bucket).
+2. **B2 — limits + enforcement. ✅ v2.589.0.** `User.storage_limit_bytes` +
    `Campaign.storage_limit_bytes` (schema v77), Admin Center edit UI
-   (MFA-gated, audited), and a shared `check_quota` enforced before write in
-   the upload routes.
+   (`/users` + campaign detail, MFA-gated, audited), and `check_quota`
+   (`app/storage_quota.py`) enforced before write in the upload routes (fast
+   no-op when unlimited; fails open).
 
 ## Test contract
 

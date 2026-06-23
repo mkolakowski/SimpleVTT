@@ -892,6 +892,22 @@ def _apply_inline_migrations() -> None:
                 "ALTER TABLE users ADD COLUMN is_gm BOOLEAN NOT NULL DEFAULT FALSE"
             ))
 
+    # ---- Schema v77 (2.589.0): per-user + per-campaign storage limits ----
+    # Aggregate upload-storage caps in bytes (NULL = unlimited), set in the
+    # Admin Center + enforced at upload time. See
+    # docs/plans/app-wide-roles-and-storage.md.
+    user_cols = _column_names("users")
+    camp_cols = _column_names("campaigns")
+    with engine.begin() as conn:
+        if user_cols and "storage_limit_bytes" not in user_cols:
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN storage_limit_bytes BIGINT"
+            ))
+        if camp_cols and "storage_limit_bytes" not in camp_cols:
+            conn.execute(text(
+                "ALTER TABLE campaigns ADD COLUMN storage_limit_bytes BIGINT"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

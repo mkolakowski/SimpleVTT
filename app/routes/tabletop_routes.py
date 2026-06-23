@@ -20308,6 +20308,10 @@ async def upload_token_image(
     data = await image.read()
     if len(data) > 5 * 1024 * 1024:
         raise HTTPException(400, "Image too large (>5 MB)")
+    from ..storage_quota import check_quota
+    _q = check_quota(db, campaign_id, len(data))
+    if _q:
+        raise HTTPException(413, _q)
     token_dir = _Path(__file__).resolve().parent.parent / "static" / "uploads" / "tokens"
     token_dir.mkdir(parents=True, exist_ok=True)
     ext = _Path(image.filename or "img.png").suffix.lower() or ".png"
@@ -113733,6 +113737,10 @@ async def upload_portrait(
     data = await portrait.read()
     if len(data) > _MAX_PORTRAIT_BYTES:
         raise HTTPException(400, "Image exceeds 5 MB limit")
+    from ..storage_quota import check_quota
+    _q = check_quota(db, campaign_id, len(data), owner_user_id=char.owner_user_id)
+    if _q:
+        raise HTTPException(413, _q)
     if char.portrait_url and char.portrait_url.startswith("/static/uploads/portraits/"):
         old_path = Path(__file__).resolve().parent.parent / "static" / char.portrait_url.removeprefix("/static/")
         try:
@@ -115476,6 +115484,10 @@ async def upload_template_image(
     data = await image.read()
     if len(data) > 5 * 1024 * 1024:
         raise HTTPException(400, "Image exceeds 5 MB")
+    from ..storage_quota import check_quota
+    _q = check_quota(db, campaign_id, len(data))
+    if _q:
+        raise HTTPException(413, _q)
     if tmpl.image_url and tmpl.image_url.startswith("/static/uploads/token_templates/"):
         old = Path(__file__).resolve().parent.parent / "static" / tmpl.image_url.removeprefix("/static/")
         try:
@@ -117957,6 +117969,10 @@ async def settings_upload_map(
         data = await image.read()
         if len(data) > 80 * 1024 * 1024:
             raise HTTPException(400, "Map image too large (>80 MB)")
+        from ..storage_quota import check_quota
+        _q = check_quota(db, campaign_id, len(data))
+        if _q:
+            raise HTTPException(413, _q)
         _MAP_DIR.mkdir(parents=True, exist_ok=True)
         ext = Path(image.filename).suffix.lower() or ".png"
         stem = uuid.uuid4().hex
@@ -118172,16 +118188,23 @@ def settings_delete_map(
 _BG_DIR = _SETTINGS_UPLOAD_ROOT / "encounter_bg"
 
 
-async def _save_background_upload(image: UploadFile) -> str:
+async def _save_background_upload(image: UploadFile, db=None, campaign_id=None) -> str:
     """Persist an uploaded background asset and return its public URL.
 
-    Raises HTTPException on bad content type or oversized payload.
+    Raises HTTPException on bad content type, oversized payload, or an
+    exceeded per-campaign / per-user storage quota (when db+campaign_id
+    are supplied).
     """
     if image.content_type not in _ALLOWED_IMG:
         raise HTTPException(400, "Unsupported background type")
     data = await image.read()
     if len(data) > 80 * 1024 * 1024:
         raise HTTPException(400, "Background asset too large (>80 MB)")
+    if db is not None and campaign_id is not None:
+        from ..storage_quota import check_quota
+        _q = check_quota(db, campaign_id, len(data))
+        if _q:
+            raise HTTPException(413, _q)
     _BG_DIR.mkdir(parents=True, exist_ok=True)
     ext = Path(image.filename or "").suffix.lower() or ".png"
     fname = f"{uuid.uuid4().hex}{ext}"
@@ -118224,7 +118247,7 @@ async def upload_encounter_background(
     if clear:
         enc.background_url = None
     elif image and image.filename:
-        enc.background_url = await _save_background_upload(image)
+        enc.background_url = await _save_background_upload(image, db, campaign_id)
     else:
         raise HTTPException(400, "Provide an image upload or clear=true")
     db.commit()
@@ -118262,7 +118285,7 @@ async def set_campaign_background(
     if clear:
         new_url: Optional[str] = None
     elif image and image.filename:
-        new_url = await _save_background_upload(image)
+        new_url = await _save_background_upload(image, db, campaign_id)
     else:
         raise HTTPException(400, "Provide an image upload or clear=true")
     campaign.default_background_url = new_url

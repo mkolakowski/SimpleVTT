@@ -63,6 +63,13 @@
       </select>
       <button type="submit">Set</button>
     </form>
+    <form class="inline-form" method="post" action="/campaigns/{{ campaign.id }}/storage-limit"
+          title="Aggregate upload-storage limit in MB; blank/0 = unlimited">
+      <label class="muted">Storage limit (MB)</label>
+      <input type="number" name="limit_mb" min="0" step="1" placeholder="unlimited"
+             value="{{ (campaign.storage_limit_bytes // 1048576) if campaign.storage_limit_bytes else '' }}" style="width:7em">
+      <button type="submit">Set</button>
+    </form>
     {% endif %}
   </div>
 

@@ -109,6 +109,12 @@
                       data-uid="{{ u.id }}" data-email="{{ u.email }}"
                       onclick="scrubUserLog(this)"
                       title="GDPR Art. 17: pseudonymize this user's identifiers in the audit log (rewrites matching lines to an opaque token; never deletes)">Scrub log</button>
+              <form method="post" action="/users/{{ u.id }}/storage-limit" title="Aggregate upload-storage limit in MB; blank/0 = unlimited">
+                <input type="number" name="limit_mb" min="0" step="1" style="width:80px"
+                       placeholder="MB"
+                       value="{{ (u.storage_limit_bytes // 1048576) if u.storage_limit_bytes else '' }}">
+                <button type="submit">Set limit</button>
+              </form>
             </div>
           </td>
           {% endif %}

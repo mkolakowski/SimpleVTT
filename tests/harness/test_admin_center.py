@@ -786,6 +786,60 @@ def test_storage_aggregate_empty_tree(tmp_path):
     assert r["by_user"] == [] and r["by_campaign"] == []
 
 
+def test_storage_quota_check(monkeypatch):
+    """check_quota: fast no-op when unlimited; blocks over the campaign or
+    user limit; passes under; fails open when accounting is down."""
+    pytest.importorskip("sqlalchemy")
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app import storage_quota
+    from app.admin_center import storage as _storage
+    from app.models import Base, Campaign, User
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    try:
+        gm = User(email="gm@x", display_name="GM", password_hash="x")
+        db.add(gm)
+        db.commit()
+        c = Campaign(name="C", gm_user_id=gm.id, game_system="generic", description="")
+        db.add(c)
+        db.commit()
+
+        # No limits set → fast no-op (no scan needed).
+        assert storage_quota.check_quota(db, c.id, 1_000_000) is None
+
+        # Stub the accounting layer: campaign already uses 900, GM uses 900.
+        def _fake_report():
+            return {
+                "available": True,
+                "by_campaign": [{"campaign_id": c.id, "bytes": 900}],
+                "by_user": [{"user_id": gm.id, "bytes": 900}],
+            }
+        monkeypatch.setattr(_storage, "read_storage", _fake_report)
+
+        # Campaign limit 1000: +50 ok (950), +200 over (1100).
+        c.storage_limit_bytes = 1000
+        db.commit()
+        assert storage_quota.check_quota(db, c.id, 50) is None
+        assert "Campaign storage limit" in (storage_quota.check_quota(db, c.id, 200) or "")
+
+        # User limit 1000 (campaign cleared): same boundary via the GM.
+        c.storage_limit_bytes = None
+        gm.storage_limit_bytes = 1000
+        db.commit()
+        assert storage_quota.check_quota(db, c.id, 50) is None
+        assert "User storage limit" in (storage_quota.check_quota(db, c.id, 200) or "")
+
+        # Accounting down → fail open (allow).
+        monkeypatch.setattr(_storage, "read_storage", lambda: {"available": False})
+        assert storage_quota.check_quota(db, c.id, 10_000_000) is None
+    finally:
+        db.close()
+
+
 # ---- display timezone -----------------------------------------------
 
 def test_timefmt_log_ts_converts_utc_to_offset():
@@ -1745,3 +1799,65 @@ def test_storage_page_renders_authenticated():
         assert page.status_code == 200, page.text[:200]
         assert "Storage" in page.text
         assert "By user" in page.text and "By campaign" in page.text
+
+
+# ---- storage limits (Arc B2, v2.589.0) ------------------------------------
+@_LIVE
+@pytest.mark.parametrize("path", ["/users/1/storage-limit", "/campaigns/1/storage-limit"])
+def test_storage_limit_requires_auth(path):
+    r = httpx.post(f"{ADMIN_BASE_URL}{path}", data={"limit_mb": "100"}, timeout=5.0, follow_redirects=False)
+    assert r.status_code in (303, 307)
+    assert "/login" in r.headers.get("location", "")
+
+
+@_LIVE
+@pytest.mark.parametrize("path", ["/users/1/storage-limit", "/campaigns/1/storage-limit"])
+def test_storage_limit_refused_for_header_auth(path):
+    r = httpx.post(f"{ADMIN_BASE_URL}{path}", auth=_AUTH, data={"limit_mb": "100"},
+                   timeout=5.0, follow_redirects=False)
+    assert r.status_code in (403, 404), r.text[:200]
+
+
+@_LIVE
+@pytest.mark.skipif(not _MFA_ON, reason="storage-limit enforcement needs an MFA-verified session; stack has MFA off")
+def test_campaign_storage_limit_enforced_end_to_end():
+    """Set a tiny campaign storage limit, confirm an over-limit map upload is
+    rejected (413/err), then clear the limit and confirm the upload succeeds.
+    Cleans up (clears the limit) at the end."""
+    import re as _re
+    c = _logged_in_client()
+    try:
+        lst = c.get("/campaigns", follow_redirects=False)
+        if lst.status_code == 404:
+            pytest.skip("admin tools disabled on this stack")
+        m = _re.search(r'href="/campaigns/(\d+)"', lst.text)
+        if not m:
+            pytest.skip("no campaigns to manage")
+        cid = m.group(1)
+        try:
+            # Tiny limit (≈1 byte) → any upload exceeds it.
+            sl = c.post(f"/campaigns/{cid}/storage-limit",
+                        data={"limit_mb": "0.000001"}, follow_redirects=False)
+            assert sl.status_code == 303 and "done=" in sl.headers.get("location", "")
+            blocked = c.post(
+                f"/campaigns/{cid}/maps",
+                data={"name": "b2-overlimit", "grid_type": "square", "grid_size_px": "70"},
+                files={"image": ("tiny.png", _TINY_PNG, "image/png")},
+                follow_redirects=False,
+            )
+            # The Center map upload redirects with err= on quota refusal.
+            assert blocked.status_code == 303
+            assert "err=" in blocked.headers.get("location", ""), blocked.headers.get("location", "")
+        finally:
+            # Clear the limit so we don't strand the demo campaign capped.
+            c.post(f"/campaigns/{cid}/storage-limit", data={"limit_mb": ""}, follow_redirects=False)
+        # With the limit cleared, the same upload succeeds.
+        ok = c.post(
+            f"/campaigns/{cid}/maps",
+            data={"name": "b2-after-clear", "grid_type": "square", "grid_size_px": "70"},
+            files={"image": ("tiny.png", _TINY_PNG, "image/png")},
+            follow_redirects=False,
+        )
+        assert ok.status_code == 303 and "done=" in ok.headers.get("location", "")
+    finally:
+        c.close()

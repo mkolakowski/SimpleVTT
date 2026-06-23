@@ -218,6 +218,17 @@ def create_map(
     return m
 
 
+def set_storage_limit(db: Session, campaign_id: int, *, limit_bytes):
+    """Set a campaign's aggregate storage limit in bytes (v2.589.0). A
+    falsy / non-positive value clears it (NULL = unlimited)."""
+    c = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not c:
+        raise CampaignAdminError(f"No campaign with id {campaign_id}")
+    c.storage_limit_bytes = int(limit_bytes) if limit_bytes and int(limit_bytes) > 0 else None
+    db.commit()
+    return c
+
+
 def activate_map(db: Session, campaign_id: int, map_id: int):
     """Set the campaign's active map. Validates the map belongs to it."""
     c = db.query(Campaign).filter(Campaign.id == campaign_id).first()

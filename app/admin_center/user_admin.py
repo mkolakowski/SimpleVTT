@@ -99,6 +99,16 @@ def set_role(db: Session, user_id: int, *, role: str, value: bool) -> User:
     return u
 
 
+def set_storage_limit(db: Session, user_id: int, *, limit_bytes) -> User:
+    """Set a user's aggregate storage limit in bytes (v2.589.0). A falsy /
+    non-positive value clears it (NULL = unlimited). See
+    docs/plans/app-wide-roles-and-storage.md."""
+    u = get_user(db, user_id)
+    u.storage_limit_bytes = int(limit_bytes) if limit_bytes and int(limit_bytes) > 0 else None
+    db.commit()
+    return u
+
+
 def delete_user(db: Session, user_id: int) -> str:
     """Delete a user. Returns the email captured BEFORE the delete so the
     caller can audit a human-readable target after the row is gone."""

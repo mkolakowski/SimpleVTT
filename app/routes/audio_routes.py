@@ -402,6 +402,10 @@ async def upload_track(
         data = await file.read()
         if len(data) > MAX_AUDIO_BYTES:
             raise HTTPException(400, f"{file.filename} exceeds 30 MB limit")
+        from ..storage_quota import check_quota
+        _q = check_quota(db, campaign_id, len(data))
+        if _q:
+            raise HTTPException(413, _q)
         ext = Path(file.filename).suffix.lower() or ".mp3"
         fname = f"{uuid.uuid4().hex}{ext}"
         (AUDIO_DIR / fname).write_bytes(data)

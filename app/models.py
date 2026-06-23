@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
     Enum,
@@ -69,6 +70,11 @@ class User(Base):
     # docs/plans/app-wide-roles-and-storage.md.
     is_gm: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     is_disabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    # v2.589.0 — per-user aggregate upload-storage limit in bytes (sum over
+    # the campaigns this user GMs + their standalone portraits). NULL/0 =
+    # unlimited. Set in the Admin Center. See
+    # docs/plans/app-wide-roles-and-storage.md.
+    storage_limit_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     theme: Mapped[str] = mapped_column(String(20), default=_default_user_theme, server_default="dark")
     # Per-user fantasy font preference (None = system default sans-serif)
@@ -136,6 +142,10 @@ class Campaign(Base):
     gm_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     game_system: Mapped[str] = mapped_column(String(40), default="generic")
     thumbnail_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    # v2.589.0 — per-campaign aggregate upload-storage limit in bytes.
+    # NULL/0 = unlimited. Set in the Admin Center. See
+    # docs/plans/app-wide-roles-and-storage.md.
+    storage_limit_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     active_map_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("maps.id", use_alter=True, name="fk_campaign_active_map"), nullable=True
     )

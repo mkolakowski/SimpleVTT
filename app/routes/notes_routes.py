@@ -650,6 +650,10 @@ async def upload_handout_image(
     data = await image.read()
     if len(data) > _MAX_HANDOUT_IMG_BYTES:
         raise HTTPException(400, "Image exceeds 8 MB limit")
+    from ..storage_quota import check_quota
+    _q = check_quota(db, campaign_id, len(data))
+    if _q:
+        raise HTTPException(413, _q)
     fname = uuid.uuid4().hex + ext
     (_HANDOUT_IMG_DIR / fname).write_bytes(data)
     return {"ok": True, "image_url": "/static/uploads/handouts/" + fname}

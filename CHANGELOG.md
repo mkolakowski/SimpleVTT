@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.589.0] - 2026-06-23 — "The Watermark"
+
+**Schema version:** 77
+
+**Commit summary:** Arc B2 of `docs/plans/app-wide-roles-and-storage.md` — per-user / per-campaign storage **limits** (set in the Admin Center) + enforcement at the upload paths. Completes the arc.
+
+**Description:** Adds admin-settable aggregate storage caps and enforces them at upload time. `User.storage_limit_bytes` + `Campaign.storage_limit_bytes` (schema **v77**, both nullable — **NULL/0 = unlimited**, the default) are set from the Admin Center: a per-row **Set limit** field (MB) on `/users` and a **Storage limit (MB)** field on the campaign detail page, both MFA-gated + audited (`admin.user_storage_limit` / `admin.campaign_storage_limit`). A shared `app/storage_quota.py::check_quota(db, campaign_id, new_bytes)` is called **before writing** in the upload routes — map, token, character-portrait, token-template, encounter/campaign background, handout, audio, and the Admin Center map upload — and returns 413 (or, for the Center's form route, an `err=` redirect) when the file would push the campaign or its GM user over its limit. `check_quota` is a **fast no-op when no limit is set** (the default — no scan), reuses the B1 accounting for usage when a limit *is* set, and **fails open** if accounting is unavailable (an outage never blocks legitimate uploads).
+
+**Implementation:**
+
+- `app/models.py`: `User.storage_limit_bytes` + `Campaign.storage_limit_bytes` (BigInteger, nullable).
+- `app/database.py`: schema **v77** migration (two `ADD COLUMN … BIGINT`). `SCHEMA_VERSION` 76 → 77.
+- `app/storage_quota.py` (new): `check_quota` (fast path + B1-accounting-backed; fails open).
+- Upload routes: quota check before write in `tabletop_routes.py` (map / token / portrait / token-template / backgrounds via `_save_background_upload`), `notes_routes.py` (handout), `audio_routes.py` (audio), `admin_center/main.py` (Center map). _(The in-app `/admin` thumbnail helper — admin-only, 5 MB — is exempt.)_
+- `app/admin_center/{user_admin,campaign_admin}.py`: `set_storage_limit`. `main.py`: `POST /users/{id}/storage-limit` + `POST /campaigns/{id}/storage-limit` (MFA-gated, audited). `users.html` + `campaign_detail.html`: MB limit fields.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py` (+6): `check_quota` unit (fast no-op unlimited; blocks over the campaign + user limits; passes under; fails open when accounting down — host-side sqlite + monkeypatch); the storage-limit routes require auth (parametrized) + are refused for header-auth (parametrized); and an MFA-on end-to-end — set a tiny campaign limit → an over-limit Center map upload is rejected (`err=`) → clear the limit → the upload succeeds.
+
+Total harness count → 4153 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+MINOR — additive schema + governance (limits default unlimited; no existing upload is affected until an admin sets a cap).
+
+### Added
+- Per-user + per-campaign **storage limits** (`storage_limit_bytes`, schema v77) set in the Admin Center + enforced at the upload paths via `check_quota` — Arc B2 of `docs/plans/app-wide-roles-and-storage.md`. Completes the roles + storage arc.
+
+### Schema
+- **v77**: `users.storage_limit_bytes BIGINT` + `campaigns.storage_limit_bytes BIGINT` (nullable; NULL = unlimited).
+
 ## [2.588.0] - 2026-06-23 — "The Stocktake"
 
 **Schema version:** 76

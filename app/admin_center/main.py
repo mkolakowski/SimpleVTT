@@ -877,6 +877,37 @@ def admin_users_set_role(
         db.close()
 
 
+@app.post("/users/{user_id}/storage-limit")
+def admin_users_storage_limit(request: Request, user_id: int, limit_mb: str = Form("")):
+    """Set/clear a user's aggregate storage limit (MB; blank/0 = unlimited).
+    MFA-gated + audited. See docs/plans/app-wide-roles-and-storage.md."""
+    blocked = _destructive_gate(request)
+    if blocked is not None:
+        return blocked
+    try:
+        mb = float(limit_mb) if limit_mb.strip() else 0
+    except ValueError:
+        return RedirectResponse("/users?err=Invalid+limit", status_code=303)
+    limit_bytes = int(mb * 1024 * 1024) if mb > 0 else 0
+    from . import operator_audit, user_admin
+    from ..database import SessionLocal
+    operator = request.session.get("admin_user", "?")
+    db = SessionLocal()
+    try:
+        try:
+            u = user_admin.set_storage_limit(db, user_id, limit_bytes=limit_bytes)
+        except user_admin.UserAdminError as exc:
+            return RedirectResponse(f"/users?err={quote(str(exc))}", status_code=303)
+        operator_audit.record(
+            "admin.user_storage_limit", operator=operator, target=u.email,
+            request=request, notes=f"limit_bytes={limit_bytes or 'unlimited'}",
+        )
+        msg = f"storage limit {f'{mb:g} MB' if limit_bytes else 'cleared'} for {u.email}"
+        return RedirectResponse(f"/users?done={quote(msg)}", status_code=303)
+    finally:
+        db.close()
+
+
 @app.post("/users/{user_id}/scrub-audit-log")
 def admin_users_scrub_audit(request: Request, user_id: int, email: str = Form("")):
     """GDPR Art. 17 pseudonymization of a user's identifiers in the audit
@@ -1024,6 +1055,37 @@ def admin_campaign_delete(request: Request, campaign_id: int):
 def _campaign_redirect(campaign_id: int, *, done: str = "", err: str = "") -> RedirectResponse:
     q = f"?done={quote(done)}" if done else (f"?err={quote(err)}" if err else "")
     return RedirectResponse(f"/campaigns/{campaign_id}{q}", status_code=303)
+
+
+@app.post("/campaigns/{campaign_id}/storage-limit")
+def admin_campaign_storage_limit(request: Request, campaign_id: int, limit_mb: str = Form("")):
+    """Set/clear a campaign's aggregate storage limit (MB; blank/0 =
+    unlimited). MFA-gated + audited."""
+    blocked = _destructive_gate(request)
+    if blocked is not None:
+        return blocked
+    try:
+        mb = float(limit_mb) if limit_mb.strip() else 0
+    except ValueError:
+        return _campaign_redirect(campaign_id, err="Invalid limit")
+    limit_bytes = int(mb * 1024 * 1024) if mb > 0 else 0
+    from . import campaign_admin, operator_audit
+    from ..database import SessionLocal
+    operator = request.session.get("admin_user", "?")
+    db = SessionLocal()
+    try:
+        try:
+            c = campaign_admin.set_storage_limit(db, campaign_id, limit_bytes=limit_bytes)
+        except campaign_admin.CampaignAdminError as exc:
+            return _campaign_redirect(campaign_id, err=str(exc))
+        operator_audit.record(
+            "admin.campaign_storage_limit", operator=operator, target=c.name,
+            request=request, notes=f"campaign:{campaign_id} limit_bytes={limit_bytes or 'unlimited'}",
+        )
+        return _campaign_redirect(
+            campaign_id, done=f"storage limit {f'{mb:g} MB' if limit_bytes else 'cleared'}")
+    finally:
+        db.close()
 
 
 # Map uploads (Phase 3b). The Admin Center shares the app's uploads volume
@@ -1209,6 +1271,15 @@ async def admin_campaign_map_upload(
         data = await image.read()
         if len(data) > _MAX_MAP_BYTES:
             return _campaign_redirect(campaign_id, err="Map image too large (>80 MB)")
+        from ..storage_quota import check_quota
+        from ..database import SessionLocal as _SL
+        _qdb = _SL()
+        try:
+            _q = check_quota(_qdb, campaign_id, len(data))
+        finally:
+            _qdb.close()
+        if _q:
+            return _campaign_redirect(campaign_id, err=_q)
         ext = Path(image.filename).suffix.lower() or ".png"
         fname = f"{uuid.uuid4().hex}{ext}"
         try:
