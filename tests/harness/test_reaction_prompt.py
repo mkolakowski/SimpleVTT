@@ -71,6 +71,34 @@ async def _get_token_for_char(gm_client, char_id: int):
     return None
 
 
+async def _set_auto_apply(gm_client, on: bool) -> None:
+    """Toggle the campaign's `auto_apply_damage` so attack hits
+    actually deal HP damage (the precondition for damage-restore /
+    damage-taken reactions). The demo default is on, but a shared
+    dev container may have it flipped off by a prior test."""
+    form = {
+        "name": "Demo Campaign",
+        "description": "demo",
+        "game_system": "dnd5e",
+        "gm_tab_color": "",
+        "font_override": "",
+        "default_encounter_id": "",
+        "hp_threshold_1": "",
+        "hp_threshold_2": "",
+        "hp_threshold_3": "",
+        "hp_threshold_4": "",
+        "auto_play_playlist_id": "",
+        "auto_play_mode": "order",
+        "auto_play_initial_volume": "0.7",
+    }
+    if on:
+        form["auto_apply_damage"] = "on"
+    await gm_client.post(
+        f"/campaign/{CAMPAIGN_ID}/settings",
+        data=form, follow_redirects=False,
+    )
+
+
 def _prompt_broadcasts(gm_ws) -> list:
     return list(gm_ws.buffered("reaction_prompt"))
 
@@ -744,6 +772,133 @@ async def test_cast_shield_consumes_slot_and_installs_buff(
         f"expected shield-active buff installed for Thalindra; "
         f"buff_update payloads: {[m.get('data') for m in buffs]}"
     )
+
+
+# ── v2.600.0 — Shield auto-negation of the triggering hit ──
+
+
+async def test_cast_shield_auto_negates_in_band_hit(
+    gm_client, gm_ws, roster,
+):
+    """v2.600.0 — when the +5 AC from Shield turns the triggering
+    hit into a miss (target_ac <= attack_total < target_ac + 5, and
+    not a crit), casting Shield via the prompt retroactively restores
+    the full applied damage. Reuses the v2.80.0 Uncanny Dodge
+    heal-back recipe. Krieger swings on Thalindra until a hit lands
+    in the negation band, then Thalindra casts Shield and her HP is
+    healed back by exactly the applied damage.
+    """
+    krieger = roster["Krieger Stonefist"]
+    thalindra = roster["Thalindra Moonwhisper"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/rest",
+        json={"type": "long"},
+    )
+    # Auto-apply ON so the hit actually deals damage (damage_applied
+    # > 0 is the precondition for the negation heal-back).
+    await _set_auto_apply(gm_client, True)
+
+    thal_cid = f"tok_shield_negate_{thalindra['id']}"
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+        {
+            "id": thal_cid,
+            "char_id": thalindra["id"],
+            "name": thalindra["name"],
+            "initiative": 10,
+            "hp_current": 32, "hp_max": 32,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    # Probe until Krieger lands a hit in the Shield negation band:
+    # the d20 total beats AC (a hit) but would miss AC+5, and it's
+    # not a crit (RAW: a nat-20 always hits regardless of AC).
+    in_band = None
+    for _ in range(60):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": krieger["id"],
+                "attack_index": 0,
+                "target_combatant_id": thal_cid,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        d = resp.json()
+        atk_total = d.get("attack_total")
+        target_ac = d.get("target_ac")
+        if (
+            d.get("hit")
+            and not d.get("is_crit")
+            and int(d.get("damage_applied") or 0) > 0
+            and isinstance(atk_total, int)
+            and isinstance(target_ac, int)
+            and atk_total < target_ac + 5
+        ):
+            in_band = d
+            break
+        # Heal Thalindra back to full between probes so each swing
+        # starts from the same HP and we don't drop her to 0.
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/rest",
+            json={"type": "long"},
+        )
+    assert in_band is not None, (
+        "no in-band (negatable, non-crit) hit landed in 60 swings"
+    )
+    dmg = int(in_band["damage_applied"])
+
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == thalindra["id"]
+        and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+    ]
+    assert prompts, "expected attack_targeted prompt for Thalindra"
+    prompt_id = prompts[-1]["data"]["prompt_id"]
+
+    gm_ws.mark()
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "cast-shield",
+            "watcher_char_id": thalindra["id"],
+        },
+    )
+    assert cast.status_code == 200, cast.text
+    await asyncio.sleep(0.2)
+
+    # feature_used(source=shield-negate) announces the negation.
+    neg = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "shield-negate"
+        and (m.get("data") or {}).get("character_id") == thalindra["id"]
+    ]
+    assert neg, (
+        f"expected feature_used(source=shield-negate); "
+        f"got sources "
+        f"{[(m.get('data') or {}).get('source') for m in gm_ws.buffered('feature_used')]}"
+    )
+    assert int(neg[-1]["data"].get("heal_back") or 0) == dmg
+
+    # character_hp_update restores exactly the applied damage.
+    hp_up = [
+        m for m in gm_ws.buffered("character_hp_update")
+        if (m.get("data") or {}).get("character_id") == thalindra["id"]
+        and (m.get("data") or {}).get("source") == "shield-negate"
+    ]
+    assert hp_up, "expected character_hp_update(source=shield-negate)"
+    assert int(hp_up[-1]["data"].get("delta") or 0) == dmg
 
 
 # ── v2.70.0 — Phase 3b: Counterspell prompt + cast ──

@@ -30083,11 +30083,15 @@ async def use_reaction(
     elif reaction_key == "cast-shield" and watcher_char_id:
         # v2.69.0 Phase 3a — Shield spell. Consume 1× 1st+ slot, mark
         # reaction, install shield-active buff with +5 AC for 1
-        # round. v1 doesn't auto-undo the triggering attack's damage;
-        # the +5 AC takes effect for SUBSEQUENT attacks this turn,
-        # and the player / GM adjudicates whether the original attack
-        # is retroactively negated (chat-card shows the d20 + AC for
-        # comparison). Auto-undo + auto-recompute filed for v3.0.0.
+        # round. The +5 AC takes effect for SUBSEQUENT attacks this
+        # turn.
+        # v2.600.0 — auto-negation: if the triggering attack's d20
+        # total now falls below the Shield-boosted AC (target_ac + 5)
+        # and it wasn't a natural-20 crit, the hit retroactively
+        # MISSES and the full applied damage is healed back (the same
+        # retroactive-HP-restore recipe as v2.80.0 Uncanny Dodge). If
+        # it still hits — or it was a crit (RAW: a nat-20 always
+        # hits) — the damage stands and the chat card stays advisory.
         try:
             options = entry.get("options") or []
             matching = next(
@@ -30205,6 +30209,60 @@ async def use_reaction(
                     "cast_id": shield_cast_id,
                 },
             })
+            # v2.600.0 — auto-negate the triggering attack. The
+            # prompt context carries the attack's d20 total, the
+            # target's pre-Shield AC, the applied damage, and the
+            # crit flag (plumbed at the /attack emit site). If the
+            # +5 AC turns the hit into a miss and it wasn't a crit,
+            # restore the full applied damage via _apply_hp_change.
+            _ctx = entry.get("context") or {}
+            _atk_total = _ctx.get("attack_total")
+            _target_ac = _ctx.get("target_ac")
+            _dmg_applied = int(_ctx.get("damage_applied") or 0)
+            _was_crit = bool(_ctx.get("is_crit"))
+            if (
+                isinstance(_atk_total, int)
+                and isinstance(_target_ac, int)
+                and not _was_crit
+                and _dmg_applied > 0
+                and _atk_total < _target_ac + 5
+            ):
+                _hp = dict(sheet.get("hp") or {})
+                _cur = int(_hp.get("current") or 0)
+                _max = int(_hp.get("max") or 0)
+                _new_hp = (
+                    min(_max, _cur + _dmg_applied)
+                    if _max else _cur + _dmg_applied
+                )
+                _hp_res = _apply_hp_change(watcher_char, _new_hp)
+                db.commit()
+                await hub.broadcast(campaign_id, {
+                    "type": "character_hp_update",
+                    "data": {
+                        "character_id": watcher_char.id,
+                        "hp": _hp_res["hp"],
+                        "delta": _dmg_applied,
+                        "source": "shield-negate",
+                    },
+                })
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "character_id": int(watcher_char_id),
+                        "character_name": watcher_char.name,
+                        "user_color": watcher_char.color,
+                        "feature_name": "✨ Shield negated the hit",
+                        "feature_desc": (
+                            f"d20 {_atk_total} now MISSES AC "
+                            f"{_target_ac + 5}; restored {_dmg_applied} HP."
+                        ),
+                        "source": "shield-negate",
+                        "reaction_kind": "spell",
+                        "damage_applied": _dmg_applied,
+                        "heal_back": _dmg_applied,
+                        "attack_id": _ctx.get("attack_id"),
+                    },
+                })
         except HTTPException:
             raise
         except Exception:
@@ -109773,6 +109831,11 @@ async def use_attack(
                             # the cast-uncanny-dodge dispatch can
                             # heal back ceil(applied/2) HP.
                             "damage_applied": damage_applied,
+                            # v2.600.0 — plumb the crit flag so the
+                            # cast-shield dispatch can refuse to
+                            # auto-negate a natural-20 (RAW: a crit
+                            # always hits regardless of AC).
+                            "is_crit": is_crit,
                         },
                     )
     except Exception:

@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.600.0] - 2026-06-23 — "The Returned Blow"
+
+**Schema version:** 77
+
+**Commit summary:** Shield now auto-negates the triggering hit — when its +5 AC turns the attack into a miss, the full applied damage is restored.
+
+**Description:** First slice of the reactions-automation **v3 auto-resolution** backlog (the pending-damage state machine). Until now, casting **Shield** in response to an `attack_targeted` prompt consumed the slot + installed the +5 AC buff, but the triggering hit's damage was left for the GM/player to undo manually (`v1 doesn't auto-undo the triggering attack's damage` — advisory only). Shield's whole point is to retroactively turn a hit into a miss, so this was the highest-value advisory gap.
+
+The fix reuses the **exact retroactive-HP-restore recipe** already proven by Uncanny Dodge (v2.80.0, heals back half) and Hellish Rebuke auto-damage (v2.446.0): the `attack_targeted` prompt context already carries the attack's d20 total, the target's pre-Shield AC, and the applied damage. This commit additionally plumbs the **crit flag** into that context so the negation can respect RAW.
+
+**Behavior:** when `cast-shield` resolves and `target_ac <= attack_total < target_ac + 5` (the +5 AC turns the hit into a miss) **and the attack was not a natural-20 crit** (RAW: a crit always hits regardless of AC) **and** auto-applied damage actually landed, the watcher's full applied damage is restored via `_apply_hp_change`, with a `character_hp_update(source="shield-negate")` + a `feature_used(source="shield-negate")` card naming the negation. If the attack still hits at AC+5, or it was a crit, the damage stands and the card stays advisory (unchanged behavior). Auto-apply-off campaigns are unaffected (no damage to restore → the buff-install-only path runs as before).
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`:
+  - `use_attack` `attack_targeted` emit — plumb `is_crit` into the prompt context.
+  - `/use_reaction` `cast-shield` dispatch — after the buff install, read the triggering attack's `attack_total` / `target_ac` / `damage_applied` / `is_crit` from the prompt context and, when the hit is now a non-crit miss, heal back the full applied damage + broadcast the negation.
+
+**Harness:** `tests/harness/test_reaction_prompt.py::test_cast_shield_auto_negates_in_band_hit` — probes Krieger swings until a non-crit hit lands in the negation band (`target_ac <= total < target_ac + 5`), casts Shield via `/use_reaction`, and asserts a `feature_used(source="shield-negate")` with `heal_back == damage_applied` plus a `character_hp_update(source="shield-negate")` restoring exactly the applied damage.
+
+### Added
+- Shield auto-negation: casting Shield via the reaction prompt now retroactively restores the triggering hit's damage when the +5 AC turns it into a miss (non-crit hits only).
+
+### Changed
+- The `attack_targeted` reaction prompt context now carries the attacker's crit flag (`is_crit`) so reactions can respect the RAW "a natural 20 always hits" rule.
+
 ## [2.599.13] - 2026-06-23 — "The Phantom Backlog"
 
 **Schema version:** 77

@@ -27,7 +27,7 @@ The biggest single piece of future work is the **pending-damage state machine** 
 
 Filed across the partial phases (collected for v3 planning):
 
-- **Auto-resolution of advisory reactions:** Shield AC negation, HR damage-to-attacker, Mage Slayer melee attack, War Caster spell cast, Lucky d20 reroll, SB d20 reroll, NPC Parry AC bump, Cloak of Displacement disadvantage, Counterspell undo of the original cast.
+- **Auto-resolution of advisory reactions:** ~~Shield AC negation~~ (✅ v2.600.0), ~~HR damage-to-attacker~~ (✅ v2.446.0), Mage Slayer melee attack, War Caster spell cast, Lucky d20 reroll, SB d20 reroll, NPC Parry AC bump, Cloak of Displacement disadvantage, ~~Counterspell undo of the original cast~~ (✅ — `/undo_attack_damage` refund pipeline). The v3 auto-resolution backlog is being picked off one reaction at a time; the next candidates are the NPC Parry AC bump (Phase 6 effect resolution) and the Lucky / Silvery Barbs d20 reroll surfaces.
 - **New trigger events:** `attack_resolved` (own attack) + `check_resolved` (own check) for full Lucky / SB own-roll surfaces; `falling` for Feather Fall (depends on fall-damage model).
 - **Per-item / per-spell charge tracking:** parallel to Lucky's `sheet.resources["lucky"].current` mutation but extended to items (Pearl of Power, Wand of Lightning Bolts, etc.) keyed by item slug.
 - **GM Reactions Panel item-walk:** v2.68.0 panel doesn't yet read `sheet.inventory[*]._reactions[]` — quick extension.
@@ -358,7 +358,7 @@ Wire each via the Phase 1 prompt framework. Auto-fire features (Uncanny Dodge) g
 
 Each is a small commit using the prompt framework + the existing `/cast_spell` machinery:
 
-- **Phase 3a:** Shield (highest gameplay impact). ✅ partial — v2.69.0 wires prompt + slot consumption + buff install; retroactive AC negation of the triggering hit filed for v3 pending-damage state machine.
+- **Phase 3a:** Shield (highest gameplay impact). ✅ v2.69.0 wires prompt + slot consumption + buff install; **v2.600.0 ships the retroactive AC negation** — when the +5 AC turns the triggering hit into a non-crit miss (`target_ac <= attack_total < target_ac + 5`), the full applied damage is healed back (reuses the v2.80.0 Uncanny Dodge heal-back recipe; `is_crit` plumbed into the prompt context so a nat-20 is never negated). Auto-apply-off campaigns fall back to the advisory buff-install path.
 - **Phase 3b:** Counterspell (needs `spell_cast_near` event). ✅ partial — v2.70.0 wires prompt + slot consumption + outcome-hint advisory; arcana-check roll + auto-undo of countered cast filed for v3.
 - **Phase 3c:** Hellish Rebuke + Absorb Elements (both `damage_taken` listeners). ✅ partial — v2.71.0 wires both helpers + dispatch + HR live tests; auto-damage to rebuked attacker, AE resistance pipeline + next-melee bonus damage pipeline, and AE demo fixture all filed.
 - **Phase 3d:** Silvery Barbs (needs `save_resolved` event). ✅ partial — v2.72.0 wires the trigger (gated on pass) + helper + dispatch + Thalindra demo fixture + live tests; auto-reroll d20, advantage buff, 60-ft range gate, attack/check trigger extensions filed for v3.
