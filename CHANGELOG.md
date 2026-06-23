@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.575.0] - 2026-06-22 — "The Second Factor"
+
+**Schema version:** 75
+
+**Commit summary:** Phase 2b of `docs/plans/admin-center-consolidation.md` — wire the destructive user-admin ops (disable / reset-password / delete) into the Admin Center behind a hard MFA gate.
+
+**Description:** Completes the user-admin port: the `/users` page now offers per-row **disable / enable**, **reset password**, and **delete** controls. Each is refused unless the session is **MFA-verified** — `ADMIN_CENTER_MFA_ENABLED` is on **and** the login completed the second-factor step this session. A basic-auth *header* caller (scripts) has no session `admin_authed`, so it is never MFA-verified — destructive ops return **403** to header auth even though the read APIs accept it. The per-row controls render only on an MFA-verified session; otherwise the page shows a 🔒 nag explaining how to unlock them. Every mutation is audited to the operator identity (`admin.user_disable` / `admin.user_enable` / `admin.user_password_reset` / `admin.user_delete`, `actor=admin-center:<operator>`) via the `operator_audit` helper added in 2a; the new password is never logged. The in-app `/admin` user routes stay live for now (retiring them is Phase 4).
+
+**Security gate, made explicit.** The destructive routes share a `_destructive_gate(request)` helper: 404 when `ADMIN_CENTER_ADMIN_TOOLS` is off, 403 when the session isn't MFA-verified, else proceed. On a stack with MFA off (the default, incl. CI) the destructive routes are *always* refused — that's the intended fail-closed posture for a public box, so the happy-path harness test is skipped there and only the refusal gates run.
+
+**Implementation:**
+
+- `app/admin_center/main.py`: `_mfa_verified()` + `_MFA_REQUIRED` (403) + `_destructive_gate()`; `POST /users/{id}/disable`, `POST /users/{id}/reset-password`, `POST /users/{id}/delete` (the `user_admin` service functions shipped in 2a are now wired). `GET /users` passes `mfa_verified` / `mfa_enabled` to the template.
+- `app/admin_center/templates/users.html`: MFA-verified per-row Actions column (compact 32px dense-console controls, with confirms on reset/delete), the 🔒 not-verified nag, and a `done` success banner.
+
+**Harness changes:**
+
+- `tests/harness/test_admin_center.py` (+6): the destructive routes require auth (unauth → 303, parametrized over all three); they're refused for basic-auth header callers (403 gated / 404 when off, parametrized); and a full disable → re-enable → reset-password → delete → re-delete round-trip on an MFA-on stack using a throwaway account (skipped when the stack has MFA off, since destructive ops are then always refused).
+
+Total harness count → 4113 in `tests/harness/` + 101 in `tests/harness_ui/`.
+
+MINOR — new Admin Center surface (additive; opt-in, off by default).
+
+### Added
+- Admin Center **destructive user ops** (`/users/{id}/disable|reset-password|delete`, opt-in via `ADMIN_CENTER_ADMIN_TOOLS`): refused unless the session is MFA-verified, audited to the operator identity (`docs/plans/admin-center-consolidation.md` Phase 2b). Per-row controls render only on an MFA-verified session.
+
 ## [2.574.0] - 2026-06-22 — "The Roster Desk"
 
 **Schema version:** 75

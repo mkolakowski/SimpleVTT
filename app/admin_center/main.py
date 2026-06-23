@@ -625,16 +625,36 @@ def admin_tools_demo_reset(request: Request):
 
 
 # ── User admin (Phase 2 — opt-in, MFA-gated for destructive ops) ──────────────
-# Phase 2a (this surface): the read-only user list + non-destructive
-# create. Phase 2b adds the destructive ops (disable / reset-password /
-# delete), which are refused unless MFA is enabled + the session is
-# MFA-verified. All gated by ADMIN_CENTER_ADMIN_TOOLS (default off).
+# Phase 2a: the read-only user list + non-destructive create. Phase 2b
+# (this surface): the destructive ops (disable / reset-password / delete),
+# refused unless MFA is enabled + the session is MFA-verified. All gated
+# by ADMIN_CENTER_ADMIN_TOOLS (default off).
+
+
+def _mfa_verified(request: Request) -> bool:
+    """True iff this request carries an interactively MFA-verified login
+    session — MFA enabled AND the session reached ``admin_authed`` (which,
+    when MFA is on, only happens after the second-factor step). A
+    basic-auth *header* caller has no session ``admin_authed``, so it is
+    never MFA-verified — destructive ops require the interactive login."""
+    return mfa.mfa_enabled() and bool(request.session.get("admin_authed"))
+
+
+# 403 returned when a destructive user op is attempted without an
+# MFA-verified session (the Phase 2 security gate).
+_MFA_REQUIRED = HTMLResponse(
+    "<h1>MFA required</h1><p>Destructive user-admin actions are refused "
+    "unless <code>ADMIN_CENTER_MFA_ENABLED</code> is on and you have "
+    "completed the second-factor step this session.</p>",
+    status_code=403,
+)
 
 
 @app.get("/users", response_class=HTMLResponse)
-def admin_users(request: Request, created: str = "", err: str = ""):
+def admin_users(request: Request, created: str = "", err: str = "", done: str = ""):
     """User-admin list + create form. Opt-in via ADMIN_CENTER_ADMIN_TOOLS;
-    auto-gated by the auth middleware."""
+    auto-gated by the auth middleware. Destructive per-row controls render
+    only when the session is MFA-verified."""
     if not _ADMIN_TOOLS_ENABLED:
         return _TOOLS_DISABLED
     from . import user_admin
@@ -651,6 +671,9 @@ def admin_users(request: Request, created: str = "", err: str = ""):
                 "users": users,
                 "created": created,
                 "err": err,
+                "done": done,
+                "mfa_verified": _mfa_verified(request),
+                "mfa_enabled": mfa.mfa_enabled(),
             },
         )
     finally:
@@ -685,5 +708,92 @@ def admin_users_create(
         )
         log.warning("admin-center operator %r created user %s", operator, u.email)
         return RedirectResponse(f"/users?created={quote(u.email)}", status_code=303)
+    finally:
+        db.close()
+
+
+def _destructive_gate(request: Request):
+    """Shared gate for the destructive user ops. Returns a Response to
+    short-circuit (404 when admin-tools off, 403 when not MFA-verified), or
+    None when the action may proceed."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    if not _mfa_verified(request):
+        return _MFA_REQUIRED
+    return None
+
+
+@app.post("/users/{user_id}/disable")
+def admin_users_disable(request: Request, user_id: int):
+    """Toggle a user's disabled flag. MFA-gated + audited."""
+    blocked = _destructive_gate(request)
+    if blocked is not None:
+        return blocked
+    from . import operator_audit, user_admin
+    from ..database import SessionLocal
+    operator = request.session.get("admin_user", "?")
+    db = SessionLocal()
+    try:
+        try:
+            u, disabled = user_admin.set_user_disabled(db, user_id)
+        except user_admin.UserAdminError as exc:
+            return RedirectResponse(f"/users?err={quote(str(exc))}", status_code=303)
+        action = "admin.user_disable" if disabled else "admin.user_enable"
+        operator_audit.record(action, operator=operator, target=u.email, request=request)
+        log.warning("admin-center operator %r %s user %s", operator, action, u.email)
+        verb = "disabled" if disabled else "enabled"
+        return RedirectResponse(f"/users?done={quote(verb + ' ' + u.email)}", status_code=303)
+    finally:
+        db.close()
+
+
+@app.post("/users/{user_id}/reset-password")
+def admin_users_reset_password(
+    request: Request, user_id: int, new_password: str = Form(...),
+):
+    """Reset a user's password. MFA-gated + audited. The new password is
+    never logged — only that a reset happened to this user."""
+    blocked = _destructive_gate(request)
+    if blocked is not None:
+        return blocked
+    from . import operator_audit, user_admin
+    from ..database import SessionLocal
+    operator = request.session.get("admin_user", "?")
+    db = SessionLocal()
+    try:
+        try:
+            u = user_admin.reset_password(db, user_id, new_password=new_password)
+        except user_admin.UserAdminError as exc:
+            return RedirectResponse(f"/users?err={quote(str(exc))}", status_code=303)
+        operator_audit.record(
+            "admin.user_password_reset", operator=operator, target=u.email, request=request,
+        )
+        log.warning("admin-center operator %r reset password for %s", operator, u.email)
+        return RedirectResponse(f"/users?done={quote('password reset for ' + u.email)}", status_code=303)
+    finally:
+        db.close()
+
+
+@app.post("/users/{user_id}/delete")
+def admin_users_delete(request: Request, user_id: int):
+    """Delete a user. MFA-gated + audited (the email is captured before the
+    delete so the audit line keeps a human-readable target)."""
+    blocked = _destructive_gate(request)
+    if blocked is not None:
+        return blocked
+    from . import operator_audit, user_admin
+    from ..database import SessionLocal
+    operator = request.session.get("admin_user", "?")
+    db = SessionLocal()
+    try:
+        try:
+            target_email = user_admin.delete_user(db, user_id)
+        except user_admin.UserAdminError as exc:
+            return RedirectResponse(f"/users?err={quote(str(exc))}", status_code=303)
+        operator_audit.record(
+            "admin.user_delete", operator=operator, target=target_email, request=request,
+        )
+        log.warning("admin-center operator %r deleted user %s", operator, target_email)
+        return RedirectResponse(f"/users?done={quote('deleted ' + target_email)}", status_code=303)
     finally:
         db.close()

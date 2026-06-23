@@ -1149,3 +1149,67 @@ def test_users_create_requires_auth():
     )
     assert r.status_code in (303, 307)
     assert "/login" in r.headers.get("location", "")
+
+
+# ---- /users destructive ops (v2.575.0, Phase 2b — MFA-gated) --------------
+@_LIVE
+@pytest.mark.parametrize("path", ["/users/1/disable", "/users/1/delete", "/users/1/reset-password"])
+def test_users_destructive_requires_auth(path):
+    """Unauthenticated destructive POSTs are bounced to login, never run."""
+    r = httpx.post(f"{ADMIN_BASE_URL}{path}", timeout=5.0, follow_redirects=False)
+    assert r.status_code in (303, 307)
+    assert "/login" in r.headers.get("location", "")
+
+
+@_LIVE
+@pytest.mark.parametrize("path", ["/users/1/disable", "/users/1/delete"])
+def test_users_destructive_refused_for_header_auth(path):
+    """The MFA gate: a basic-auth *header* caller has no MFA-verified login
+    session, so destructive ops are refused — 403 (gated) when admin-tools
+    are on, or 404 when the surface is off. Either way the op never runs.
+    Deterministic regardless of whether the stack has MFA enabled."""
+    r = httpx.post(f"{ADMIN_BASE_URL}{path}", auth=_AUTH, timeout=5.0, follow_redirects=False)
+    assert r.status_code in (403, 404), r.text[:200]
+
+
+@_LIVE
+@pytest.mark.skipif(not _MFA_ON, reason="destructive ops need an MFA-verified session; stack has MFA off")
+def test_users_disable_reset_delete_roundtrip():
+    """Full destructive happy path on an MFA-on stack, using a throwaway
+    account so no real demo user is touched: create → disable → re-enable →
+    reset-password → delete → re-delete (error, already gone)."""
+    c = _logged_in_client()
+    try:
+        if not _tools_enabled(c):
+            pytest.skip("admin tools disabled on this stack")
+        import re as _re
+        email = "phase2b-throwaway@example.com"
+        # Clean any leftover from a prior aborted run, then create fresh.
+        page = c.get("/users", follow_redirects=False).text
+        m = _re.search(r"<td>(\d+)</td>\s*<td>" + _re.escape(email) + r"</td>", page)
+        if m:
+            c.post(f"/users/{m.group(1)}/delete", follow_redirects=False)
+        made = c.post("/users/create", data={
+            "email": email, "display_name": "Throwaway", "password": "hunter2!!",
+        }, follow_redirects=False)
+        assert made.status_code == 303 and "created=" in made.headers.get("location", "")
+        page = c.get("/users", follow_redirects=False).text
+        m = _re.search(r"<td>(\d+)</td>\s*<td>" + _re.escape(email) + r"</td>", page)
+        assert m, "throwaway user not listed after create"
+        uid = m.group(1)
+        # Disable → the row gains the 'disabled' pill.
+        d = c.post(f"/users/{uid}/disable", follow_redirects=False)
+        assert d.status_code == 303 and "done=" in d.headers.get("location", "")
+        # Re-enable.
+        c.post(f"/users/{uid}/disable", follow_redirects=False)
+        # Reset password (never logs the plaintext).
+        rp = c.post(f"/users/{uid}/reset-password",
+                    data={"new_password": "newpass99"}, follow_redirects=False)
+        assert rp.status_code == 303 and "done=" in rp.headers.get("location", "")
+        # Delete → done; deleting again errors (already gone).
+        de = c.post(f"/users/{uid}/delete", follow_redirects=False)
+        assert de.status_code == 303 and "done=" in de.headers.get("location", "")
+        again = c.post(f"/users/{uid}/delete", follow_redirects=False)
+        assert again.status_code == 303 and "err=" in again.headers.get("location", "")
+    finally:
+        c.close()

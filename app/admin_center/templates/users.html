@@ -30,6 +30,14 @@
   .pill.off { background:#3a1e1e; color:#ffb3b3; }
   .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   @media (max-width:640px){ .grid { grid-template-columns:1fr; } }
+  .banner.warn { background:#3a341e; color:#ffe9a8; }
+  /* Dense operator-console row controls: 32px min target (the standalone
+     Admin Center is a deliberately compact console, not the touch-first
+     main app — same exception the initiative tracker uses). */
+  .row-actions { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .row-actions button, .row-actions input { min-height:32px; padding:5px 8px; font-size:12px; }
+  .row-actions button.danger { background:#7a2e2e; }
+  .row-actions input[type=password] { width:120px; }
 </style>
 </head>
 <body>
@@ -41,12 +49,20 @@
 <main>
   {% if err %}<div class="banner err">⚠️ {{ err }}</div>{% endif %}
   {% if created %}<div class="banner ok">✅ Created user <code>{{ created }}</code></div>{% endif %}
+  {% if done %}<div class="banner ok">✅ {{ done }}</div>{% endif %}
+
+  {% if not mfa_verified %}
+  <div class="banner warn">🔒 Destructive actions (disable · reset password · delete) are hidden —
+    {% if not mfa_enabled %}enable <code>ADMIN_CENTER_MFA_ENABLED</code> and log in with your second factor.
+    {% else %}complete the second-factor step this session to unlock them.{% endif %}
+  </div>
+  {% endif %}
 
   <div class="card">
     <h2>Users ({{ users|length }})</h2>
     <table>
       <thead>
-        <tr><th>ID</th><th>Email</th><th>Display name</th><th>Roles</th><th>Created</th></tr>
+        <tr><th>ID</th><th>Email</th><th>Display name</th><th>Roles</th><th>Created</th>{% if mfa_verified %}<th>Actions</th>{% endif %}</tr>
       </thead>
       <tbody>
         {% for u in users %}
@@ -59,9 +75,27 @@
             {% if u.is_disabled %}<span class="pill off">disabled</span>{% endif %}
           </td>
           <td class="muted">{{ u.created_at }}</td>
+          {% if mfa_verified %}
+          <td>
+            <div class="row-actions">
+              <form method="post" action="/users/{{ u.id }}/disable">
+                <button type="submit">{{ "Enable" if u.is_disabled else "Disable" }}</button>
+              </form>
+              <form method="post" action="/users/{{ u.id }}/reset-password"
+                    onsubmit="return confirm('Reset the password for {{ u.email }}?');">
+                <input type="password" name="new_password" placeholder="new password" minlength="8" required>
+                <button type="submit">Reset pw</button>
+              </form>
+              <form method="post" action="/users/{{ u.id }}/delete"
+                    onsubmit="return confirm('Delete {{ u.email }}? This cannot be undone.');">
+                <button type="submit" class="danger">Delete</button>
+              </form>
+            </div>
+          </td>
+          {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="5" class="muted">No users.</td></tr>
+        <tr><td colspan="{{ 6 if mfa_verified else 5 }}" class="muted">No users.</td></tr>
         {% endfor %}
       </tbody>
     </table>
