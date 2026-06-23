@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.577.1] - 2026-06-22 — "The Empty Seat"
+
+**Schema version:** 75
+
+**Commit summary:** Fix a 422 on the Phase 3b character create/assign routes when the owner is left **unassigned** (empty `owner_user_id`).
+
+**Description:** The v2.577.0 `POST /campaigns/{id}/characters/create` and `/characters/{cid}/assign` routes typed `owner_user_id` as `int | None = Form(None)`, but the "— unassigned —" option submits an **empty string**, which FastAPI can't coerce to `int` → the request 422'd before reaching the handler. The fields now take `str = Form("")` and parse to int-or-None in the route (`int(v) if v.strip().isdigit() else None`), so leaving the owner blank creates/assigns an unowned character as intended. Caught by the Phase 3b harness round-trip (which creates a throwaway character with no owner).
+
+### Fixed
+- Admin Center campaign character create/assign no longer 422s when the owner is left unassigned (`docs/plans/admin-center-consolidation.md` Phase 3b).
+
 ## [2.577.0] - 2026-06-22 — "The Table Manager"
 
 **Schema version:** 75

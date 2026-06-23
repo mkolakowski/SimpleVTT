@@ -979,7 +979,7 @@ def admin_campaign_system(request: Request, campaign_id: int, game_system: str =
 @app.post("/campaigns/{campaign_id}/characters/create")
 def admin_campaign_character_create(
     request: Request, campaign_id: int,
-    name: str = Form(...), owner_user_id: "int | None" = Form(None),
+    name: str = Form(...), owner_user_id: str = Form(""),
 ):
     blocked = _destructive_gate(request)
     if blocked is not None:
@@ -987,11 +987,12 @@ def admin_campaign_character_create(
     from . import campaign_admin, operator_audit
     from ..database import SessionLocal
     operator = request.session.get("admin_user", "?")
+    owner = int(owner_user_id) if owner_user_id.strip().isdigit() else None
     db = SessionLocal()
     try:
         try:
             char = campaign_admin.create_character(
-                db, campaign_id, name=name, owner_user_id=owner_user_id,
+                db, campaign_id, name=name, owner_user_id=owner,
             )
         except campaign_admin.CampaignAdminError as exc:
             return _campaign_redirect(campaign_id, err=str(exc))
@@ -1007,7 +1008,7 @@ def admin_campaign_character_create(
 @app.post("/campaigns/{campaign_id}/characters/{char_id}/assign")
 def admin_campaign_character_assign(
     request: Request, campaign_id: int, char_id: int,
-    owner_user_id: "int | None" = Form(None),
+    owner_user_id: str = Form(""),
 ):
     blocked = _destructive_gate(request)
     if blocked is not None:
@@ -1015,11 +1016,12 @@ def admin_campaign_character_assign(
     from . import campaign_admin, operator_audit
     from ..database import SessionLocal
     operator = request.session.get("admin_user", "?")
+    owner = int(owner_user_id) if owner_user_id.strip().isdigit() else None
     db = SessionLocal()
     try:
         try:
             char = campaign_admin.assign_character(
-                db, campaign_id, char_id, owner_user_id=owner_user_id,
+                db, campaign_id, char_id, owner_user_id=owner,
             )
         except campaign_admin.CampaignAdminError as exc:
             return _campaign_redirect(campaign_id, err=str(exc))
