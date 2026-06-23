@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.597.0] - 2026-06-23 — "The Field Guide"
+
+**Schema version:** 77
+
+**Commit summary:** Demo rework phase D8 (final) — a wiki catalog of the demo: every campaign, PC, and NPC, plus a collapsed section of art-generation prompts.
+
+**Description:** Adds **`docs/wiki/demo-content.md`** (served at `/wiki/demo-content`) documenting the reworked demo: the seven accounts (incl. the second GM), and all five leveled campaigns (3/5/9/13/18) with each party's PCs (class/subclass · race · level · owner · **level-N showcase feature**) and NPCs. The bottom carries a **collapsed `<details>` "Generation prompts"** section with a prompt for every **battle map**, **PC portrait**, and **NPC token**, so the placeholder art can be generated later; each entry notes whether **art exists** (only the Sundered Vault's `tavern.png` + a few tokens do today — everything else is ❌ prompt-only, to be linked as it lands). Surfaced per the wiki rule (guides table in `wiki.html` + `docs/wiki/README.md`; no allowlist needed for `docs/wiki/` slugs).
+
+**Harness changes:**
+
+- `tests/harness/test_wiki.py` (+1): `/wiki/demo-content` serves the catalog (all five campaign names + the collapsed prompts section + the nav); the landing-page assertion lists it.
+
+Total harness count → 4179 in `tests/harness/` + 103 in `tests/harness_ui/`.
+
+This completes the demo-rework arc (D1–D8): five leveled sample campaigns (levels 3/5/9/13/18), seven accounts with a second GM and shared players, per-PC level-showcase builds with Description/Roleplay/How-to-play notes, and a documented art-prompt catalog.
+
+### Added
+- Wiki **Demo content** catalog (`/wiki/demo-content`): all demo campaigns/PCs/NPCs + a collapsed art-generation-prompts section (demo-rework phase D8, completing the arc).
+
 ## [2.596.0] - 2026-06-23 — "One of Five"
 
 **Schema version:** 77

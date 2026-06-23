@@ -23,6 +23,7 @@ How much of the SRD 5.1 ruleset SimpleVTT mechanically automates, by content cat
 
 | Guide | Format | Audience | Status |
 |-------|--------|----------|--------|
+| [Demo content — campaigns, PCs & NPCs](demo-content.md) | Markdown (reference) | Everyone | ✅ shipped (v2.597.0) — five leveled sample campaigns (3/5/9/13/18) + art prompts |
 | [Roll-log guide](roll-log-guide.html) | HTML (visual) | GMs + contributors | ✅ shipped (v2.43.1) |
 | [Toast notifications guide](toast-notifications-guide.html) | HTML (visual) | GMs + contributors | ✅ shipped (v2.43.8) |
 | [Realtime broadcasts catalog](realtime-broadcasts-catalog.md) | Markdown (reference) | Contributors | ✅ shipped (v2.43.14) |
