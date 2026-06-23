@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.604.0] - 2026-06-23 — "The Honored Retirement"
+
+**Schema version:** 79
+
+**Commit summary:** Characters can be retired — a reversible owner-only soft-state that shelves a character (sheet + history kept) without deleting it.
+
+**Description:** Phase 3 of the campaign-pc-archive arc, mirroring the v2.603.0 campaign archive for characters. A character's owner can **retire** it instead of deleting it: it drops out of the active `/characters` listing into a collapsed "Retired" section, keeps its full sheet + roll history, and unretires any time. Retired characters also **don't count against the player character cap** — retiring one frees a slot. Delete remains the permanent path.
+
+**Schema:** `characters.is_archived` (BOOLEAN NOT NULL DEFAULT FALSE) + `archived_at` (TIMESTAMP NULL), added in a v79 migration block.
+
+**Implementation:**
+
+- `app/models.py` — `Character.is_archived` + `archived_at`.
+- `app/database.py` — v79 migration block (idempotent ALTER TABLE add-column).
+- `app/version.py` — `SCHEMA_VERSION` 78 → 79.
+- `app/routes/user_routes.py`:
+  - `all_characters()` (`GET /characters`) — retired characters route into a separate `retired` bucket instead of the active grouped/standalone lists; the player-cap count (`char_used` + `_enforce_character_cap`) excludes archived characters.
+  - `POST /characters/{id}/retire` + `POST /characters/{id}/unretire` — owner-only (admins may act on any), set/clear `is_archived` + `archived_at`.
+- `app/templates/all_characters.html` — a "Retire" button alongside Delete on every active card, plus a collapsed "Retired Characters" section with Unretire controls.
+- `app/templates/character_page.html` — a Retire / Unretire control above the danger-zone Delete.
+
+**Harness:** `tests/harness/test_pc_retirement.py` (new, +3) — retiring Pip Quickfingers (owned by demo-alice) moves it out of the active listing into the Retired section + unretire restores it (round-trip, restored in a `finally`); a non-owner non-admin (demo-bob) gets 403; an unknown character 404s.
+
+### Added
+- PC retirement: owner-only reversible soft-retire (`/characters/{id}/retire` + `/unretire`), a collapsed "Retired" section in `/characters`, a retire control on the character page, and retired characters excluded from the player character cap.
+
+### Schema
+- v79: `characters.is_archived` + `characters.archived_at`.
+
 ## [2.603.0] - 2026-06-23 — "The Quiet Shelf"
 
 **Schema version:** 78

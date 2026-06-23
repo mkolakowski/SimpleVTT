@@ -375,6 +375,12 @@ class Character(Base):
     color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     ring_style: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    # v2.604.0 — soft retire. Retired characters drop out of the active
+    # /characters listing into a "Retired" section but keep their full
+    # sheet + history; reversible (unretire). Distinct from delete.
+    # See docs/plans/campaign-pc-archive.md.
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     campaign: Mapped[Optional[Campaign]] = relationship(back_populates="characters")
     owner: Mapped[Optional[User]] = relationship(

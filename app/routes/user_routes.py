@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -47,7 +48,12 @@ def all_characters(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """All characters owned by this user, grouped by campaign."""
+    """All characters owned by this user, grouped by campaign.
+
+    v2.604.0 — retired (soft-archived) characters drop out of the active
+    grouped/standalone lists into a separate ``retired`` bucket rendered
+    in its own collapsed section. See docs/plans/campaign-pc-archive.md.
+    """
     chars = (
         db.query(Character, Campaign)
         .outerjoin(Campaign, Campaign.id == Character.campaign_id)
@@ -55,11 +61,16 @@ def all_characters(
         .order_by(Campaign.name, Character.name)
         .all()
     )
-    # Group by campaign; None campaign_id goes into a standalone bucket
+    # Group active characters by campaign; None campaign_id goes into a
+    # standalone bucket. Retired characters go into their own bucket.
     grouped: list[dict] = []
     seen: dict[int | None, dict] = {}
     standalone: list[Character] = []
+    retired: list[Character] = []
     for char, campaign in chars:
+        if getattr(char, "is_archived", False):
+            retired.append(char)
+            continue
         if campaign is None:
             standalone.append(char)
         else:
@@ -88,7 +99,16 @@ def all_characters(
     # player_character_limit owned characters; GMs/admins are uncapped.
     _limit = get_settings().player_character_limit
     char_uncapped = bool(user.is_gm or user.is_admin) or not _limit or _limit <= 0
-    char_used = db.query(Character).filter(Character.owner_user_id == user.id).count()
+    # Retired (archived) characters don't count against the cap — retiring
+    # one frees a slot (v2.604.0).
+    char_used = (
+        db.query(Character)
+        .filter(
+            Character.owner_user_id == user.id,
+            Character.is_archived == False,  # noqa: E712
+        )
+        .count()
+    )
     char_at_limit = (not char_uncapped) and char_used >= _limit
     return templates.TemplateResponse(
         "all_characters.html",
@@ -97,6 +117,7 @@ def all_characters(
             "user": user,
             "grouped": grouped,
             "standalone": standalone,
+            "retired": retired,
             "member_campaigns": member_campaigns,
             "presets": list_presets(),
             "char_uncapped": char_uncapped,
@@ -127,7 +148,15 @@ def _enforce_character_cap(db: Session, user: User) -> None:
     limit = get_settings().player_character_limit
     if not limit or limit <= 0:
         return
-    owned = db.query(Character).filter(Character.owner_user_id == user.id).count()
+    # Retired (archived) characters don't count against the cap (v2.604.0).
+    owned = (
+        db.query(Character)
+        .filter(
+            Character.owner_user_id == user.id,
+            Character.is_archived == False,  # noqa: E712
+        )
+        .count()
+    )
     if owned >= limit:
         raise HTTPException(
             status_code=403,
@@ -223,6 +252,48 @@ def delete_my_character(
     if char.owner_user_id != user.id and not user.is_admin:
         raise HTTPException(403, "Not your character")
     db.delete(char)
+    db.commit()
+    return RedirectResponse("/characters", status_code=303)
+
+
+@router.post("/characters/{char_id}/retire")
+def retire_my_character(
+    char_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.604.0 — soft-retire a character (owner-only; admins may retire
+    any). Drops it out of the active /characters listing into the
+    "Retired" section; keeps the full sheet + history; reversible via
+    /unretire. Distinct from delete. See docs/plans/campaign-pc-archive.md.
+    """
+    char = db.query(Character).filter(Character.id == char_id).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if char.owner_user_id != user.id and not user.is_admin:
+        raise HTTPException(403, "Not your character")
+    char.is_archived = True
+    char.archived_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse("/characters", status_code=303)
+
+
+@router.post("/characters/{char_id}/unretire")
+def unretire_my_character(
+    char_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.604.0 — restore a retired character to the active listing
+    (owner-only; admins may restore any). Clears is_archived + archived_at.
+    """
+    char = db.query(Character).filter(Character.id == char_id).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if char.owner_user_id != user.id and not user.is_admin:
+        raise HTTPException(403, "Not your character")
+    char.is_archived = False
+    char.archived_at = None
     db.commit()
     return RedirectResponse("/characters", status_code=303)
 

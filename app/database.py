@@ -923,6 +923,21 @@ def _apply_inline_migrations() -> None:
                 "ALTER TABLE campaigns ADD COLUMN archived_at TIMESTAMP"
             ))
 
+    # ---- Schema v79 (2.604.0): characters.is_archived + archived_at ----
+    # Soft retire for characters — retired characters drop out of the
+    # active /characters listing but keep their full sheet + history.
+    # Reversible (unretire). See docs/plans/campaign-pc-archive.md.
+    char_cols_v79 = _column_names("characters")
+    with engine.begin() as conn:
+        if char_cols_v79 and "is_archived" not in char_cols_v79:
+            conn.execute(text(
+                "ALTER TABLE characters ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+        if char_cols_v79 and "archived_at" not in char_cols_v79:
+            conn.execute(text(
+                "ALTER TABLE characters ADD COLUMN archived_at TIMESTAMP"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

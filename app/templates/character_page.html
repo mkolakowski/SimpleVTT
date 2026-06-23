@@ -74,7 +74,25 @@
        it to the very bottom of the page reduces fat-finger risk on an
        irreversible action. Same confirm() flow + permissions gate. #}
     {% if _can_delete %}
-    <div class="sheet-danger-zone" style="margin-top:32px;padding:16px;border:1px solid var(--border, rgba(255,255,255,0.12));border-radius:8px;background:rgba(204,51,51,0.04);">
+    {# v2.604.0 — retire (soft-archive) is reversible and sits above the
+       permanent delete. Owner-gated by the same _can_delete check. #}
+    <div style="margin-top:32px;padding:16px;border:1px solid var(--border, rgba(255,255,255,0.12));border-radius:8px;">
+        {% if char.is_archived %}
+        <form method="post" action="/characters/{{ char.id }}/unretire"
+              style="margin:0;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+            <span style="font-size:13px;opacity:0.85;">This character is <strong>retired</strong> (hidden from your active list but kept). Restore it below.</span>
+            <button type="submit" title="Restore this character to your active list">♻ Unretire character</button>
+        </form>
+        {% else %}
+        <form method="post" action="/characters/{{ char.id }}/retire"
+              onsubmit="return confirm('Retire &quot;{{ char.name|e }}&quot;? It will be hidden from your active list but kept and reversible.');"
+              style="margin:0;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+            <span style="font-size:13px;opacity:0.85;">Retire (archive) this character — hidden from your active list but kept and reversible.</span>
+            <button type="submit" title="Retire this character — reversible">📦 Retire character</button>
+        </form>
+        {% endif %}
+    </div>
+    <div class="sheet-danger-zone" style="margin-top:16px;padding:16px;border:1px solid var(--border, rgba(255,255,255,0.12));border-radius:8px;background:rgba(204,51,51,0.04);">
         <div style="font-size:12px;opacity:0.7;margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Danger zone</div>
         <form method="post" action="/characters/{{ char.id }}/delete"
               onsubmit="return confirm('Permanently delete &quot;{{ char.name|e }}&quot;? This cannot be undone.');"
