@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.616.0] - 2026-06-24 — "The Returning Hero"
+
+**Schema version:** 80
+
+**Commit summary:** Phase 6 (6a) — character import (clone): `POST /api/campaign/{cid}/character/import` re-places a `simplevtt-export` (level=character) zip as a brand-new PC owned by the importing GM, with bundled media rewritten to fresh uuids. Adds the reader-side primitives in `app/import_bundle.py`.
+
+**Description:** [Backup/export-import overhaul](docs/plans/backup-export-overhaul.md) Phase 6 — the first importer, the mirror of the Phase 5 export. New `app/import_bundle.py` carries the reader-side mechanics every level will share:
+
+- `open_archive` / `read_manifest` (validate format + not-from-the-future version + expected level) / `read_json`.
+- `extract_media` — writes every bundled `media/*` entry to a **fresh uuid** under `uploads/<bucket>/` and returns the `{original_url: new_url}` map. Server-generated names mean no collision with existing files, no overwrite of unrelated media, and no path-traversal from a crafted archive (the archive's own filenames never touch disk).
+- `rewrite_urls` — threads that map through the data so re-created rows point at the freshly-written media. `cleanup_extracted` unlinks the new files if the DB transaction rolls back.
+
+The endpoint `POST /api/campaign/{campaign_id}/character/import` (GM-only) with `mode=clone` reads a character archive, extracts its media, and creates a new `Character` in the campaign owned by the importing GM (fresh id, the archive's old id/created_at ignored). On any DB error it rolls back and unlinks the extracted media. `mode=restore` (overwrite) and the whole-campaign importer land in Phase 7 / 6b.
+
+This commit covers the **character** importer; the campaign-clone importer (FK remapping across the full child tree) is the next slice (6b).
+
+### Added
+- `POST /api/campaign/{cid}/character/import` (`mode=clone`) — re-place a character archive as a new PC.
+- `app/import_bundle.py` — archive reader + media extractor (fresh-uuid) + url rewriter.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_import_character.py` (new, +4) — host-side unit tests for the reader (`read_manifest` rejects wrong format + level mismatch; `extract_media` writes a fresh-uuid file under a tmp uploads root and `rewrite_urls` threads the new url through the data); live endpoint tests (GM imports a synthetic character archive → a new roster entry, cleaned up via the settings delete afterward; non-zip → 400, wrong-level archive → 400, non-GM → 403). The endpoint tests build synthetic archives so they don't depend on the export endpoint's cooldown.
+
 ## [2.615.0] - 2026-06-24 — "The Adventurer's Folio"
 
 **Schema version:** 80

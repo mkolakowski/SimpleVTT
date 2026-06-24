@@ -15737,6 +15737,59 @@ def export_character(
     )
 
 
+@router.post("/api/campaign/{campaign_id}/character/import")
+async def import_character(
+    campaign_id: int,
+    file: UploadFile = File(...),
+    mode: str = Form("clone"),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Import a PC from a ``simplevtt-export`` (level=character) zip into this
+    campaign. GM only. ``mode=clone`` creates a brand-new character (fresh id,
+    fresh media uuids) owned by the importing GM — the safe default. Restore /
+    overwrite mode lands in Phase 7. Backup/export-import arc Phase 6."""
+    _require_gm_for_campaign(campaign_id, user, db)
+    if mode != "clone":
+        raise HTTPException(400, "Only mode=clone is supported (restore lands in Phase 7).")
+
+    from .. import import_bundle as ib
+
+    raw = await file.read()
+    try:
+        zf = ib.open_archive(raw)
+        manifest = ib.read_manifest(zf, expected_level="character")
+        char_data = ib.read_json(zf, "data/character.json")
+        url_map = ib.extract_media(zf, manifest)
+    except ib.BundleError as e:
+        raise HTTPException(400, str(e))
+
+    char_data = ib.rewrite_urls(char_data, url_map)
+    if not isinstance(char_data, dict):
+        ib.cleanup_extracted(url_map)
+        raise HTTPException(400, "character.json is not an object.")
+
+    try:
+        new_char = Character(
+            campaign_id=campaign_id,
+            owner_user_id=user.id,
+            name=(char_data.get("name") or "Imported Character")[:120],
+            template=char_data.get("template") or "generic",
+            sheet=char_data.get("sheet") or {},
+            portrait_url=char_data.get("portrait_url"),
+            color=char_data.get("color"),
+            ring_style=char_data.get("ring_style"),
+        )
+        db.add(new_char)
+        db.commit()
+    except Exception:
+        db.rollback()
+        ib.cleanup_extracted(url_map)
+        raise
+
+    return {"character_id": new_char.id, "name": new_char.name, "mode": "clone"}
+
+
 @router.get("/api/campaign/{campaign_id}/homebrew/template")
 def homebrew_template(
     campaign_id: int,
