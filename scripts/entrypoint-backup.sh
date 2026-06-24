@@ -66,7 +66,7 @@ effective_cron() {
 install_crontab() {
     CRON_EXPR="$(effective_cron)"
     cat > /etc/crontabs/root <<EOF
-${CRON_EXPR} POSTGRES_USER=${POSTGRES_USER} POSTGRES_PASSWORD=${POSTGRES_PASSWORD} POSTGRES_DB=${POSTGRES_DB} PGHOST=${PGHOST} BACKUP_DIR=${BACKUP_DIR} /bin/sh /usr/local/bin/backup.sh >> /var/log/backup.log 2>&1
+${CRON_EXPR} POSTGRES_USER=${POSTGRES_USER} POSTGRES_PASSWORD=${POSTGRES_PASSWORD} POSTGRES_DB=${POSTGRES_DB} PGHOST=${PGHOST} BACKUP_DIR=${BACKUP_DIR} BACKUP_TAG=scheduled /bin/sh /usr/local/bin/backup.sh >> /var/log/backup.log 2>&1
 EOF
     echo "[backup] cron schedule: ${CRON_EXPR}" | tee -a /var/log/backup.log
 }
@@ -121,7 +121,7 @@ do_restore() {
 
 install_crontab
 echo "[backup] running initial backup on startup..." | tee -a /var/log/backup.log
-POSTGRES_USER="${POSTGRES_USER}" POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" POSTGRES_DB="${POSTGRES_DB}" PGHOST="${PGHOST}" BACKUP_DIR="${BACKUP_DIR}" /bin/sh /usr/local/bin/backup.sh || true
+POSTGRES_USER="${POSTGRES_USER}" POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" POSTGRES_DB="${POSTGRES_DB}" PGHOST="${PGHOST}" BACKUP_DIR="${BACKUP_DIR}" BACKUP_TAG="startup" /bin/sh /usr/local/bin/backup.sh || true
 
 crond -L /var/log/cron.log
 
@@ -141,7 +141,7 @@ while true; do
     if [ -f "${RUN_TRIGGER}" ]; then
         rm -f "${RUN_TRIGGER}"
         echo "[backup] run-now trigger — taking an on-demand backup" | tee -a /var/log/backup.log
-        POSTGRES_USER="${POSTGRES_USER}" POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" POSTGRES_DB="${POSTGRES_DB}" PGHOST="${PGHOST}" BACKUP_DIR="${BACKUP_DIR}" /bin/sh /usr/local/bin/backup.sh >> /var/log/backup.log 2>&1 || true
+        POSTGRES_USER="${POSTGRES_USER}" POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" POSTGRES_DB="${POSTGRES_DB}" PGHOST="${PGHOST}" BACKUP_DIR="${BACKUP_DIR}" BACKUP_TAG="manual" /bin/sh /usr/local/bin/backup.sh >> /var/log/backup.log 2>&1 || true
     fi
     if [ -f "${RESTORE_TRIGGER}" ]; then
         do_restore

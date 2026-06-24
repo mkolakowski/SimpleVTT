@@ -85,11 +85,20 @@ else
     tar -czf "${DAILY_UP}" -T /dev/null
 fi
 
-# On Sundays also stash a weekly copy of all three artefacts
+# v2.630.8 — record how this run was triggered (scheduled / manual / startup /
+# pre-restore safety) as a sibling .tag file the Admin Center shows in the Tag
+# column. Written before the Sunday weekly copy so the weekly set gets it too.
+DAILY_TAG="${DAILY_DIR}/simplevtt-${TS}.tag"
+if [ -n "${BACKUP_TAG:-}" ]; then
+    printf '%s' "${BACKUP_TAG}" > "${DAILY_TAG}"
+fi
+
+# On Sundays also stash a weekly copy of all three artefacts (+ the tag)
 if [ "${DOW}" = "7" ]; then
     cp "${DAILY_SQL}" "${WEEKLY_DIR}/simplevtt-${TS}.sql.gz"
     cp "${DAILY_HB}"  "${WEEKLY_DIR}/simplevtt-${TS}.homebrew.tar.gz"
     cp "${DAILY_UP}"  "${WEEKLY_DIR}/simplevtt-${TS}.uploads.tar.gz"
+    [ -f "${DAILY_TAG}" ] && cp "${DAILY_TAG}" "${WEEKLY_DIR}/simplevtt-${TS}.tag"
     echo "[backup] copied to weekly"
 fi
 
@@ -100,11 +109,5 @@ WEEKLY_DAYS=$(( KEEP_WEEKLY * 7 ))
 find "${WEEKLY_DIR}" -type f \( -name '*.sql.gz' -o -name '*.homebrew.tar.gz' -o -name '*.uploads.tar.gz' -o -name '*.tag' \) \
     -mtime +"${WEEKLY_DAYS}" -print -delete || true
 find "${DAILY_DIR}" -type f -name '*.tag' -mtime +"${KEEP_DAILY}" -print -delete || true
-
-# v2.627.0 — an optional note for this run (e.g. the pre-restore safety backup),
-# written as a sibling .tag file the Admin Center surfaces next to the backup.
-if [ -n "${BACKUP_TAG:-}" ]; then
-    printf '%s' "${BACKUP_TAG}" > "${DAILY_DIR}/simplevtt-${TS}.tag"
-fi
 
 echo "[backup] done at $(date -u)"

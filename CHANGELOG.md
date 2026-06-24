@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.630.8] - 2026-06-24 — "The Labelled Runs"
+
+**Schema version:** 80
+
+**Commit summary:** Auto-tag backups by how they were triggered — `manual` for the "Back up now" button, `scheduled` for the cron runs (and `startup` for the boot backup); the Admin Center shows the tag in the Tag column.
+
+**Description:** The backup `.tag` mechanism existed (used for the pre-restore safety backup) but ordinary runs were untagged. Each invocation path now sets `BACKUP_TAG`:
+
+- **`manual`** — the run-now trigger the Admin Center "Back up now" button drops.
+- **`scheduled`** — the cron line in the sidecar crontab.
+- **`startup`** — the one-shot backup the sidecar takes on boot.
+- (**pre-restore safety backup** keeps its own descriptive tag, unchanged.)
+
+`scripts/backup.sh` now writes the `.tag` *before* the Sunday weekly copy and copies it into the weekly set too, so weekly artifacts carry the tag as well. The Admin Center `/backups` page surfaces it in the existing **Tag** column, so at a glance you can tell which backups were manual vs scheduled.
+
+Verified live: the boot backup tagged `startup`, a "Back up now" produced a `manual`-tagged backup, and the installed crontab carries `BACKUP_TAG=scheduled`.
+
+### Added
+- `manual` / `scheduled` / `startup` tags auto-applied to backups by trigger source; the weekly copy now includes the tag.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** none — shell-side tag wiring; the Tag-column surfacing (`backup_admin._tag_for` / `list_backups`) is already covered by `test_backup_admin.py`. Verified manually end-to-end.
+
 ## [2.630.7] - 2026-06-24 — "The Shared Inbox"
 
 **Schema version:** 80
