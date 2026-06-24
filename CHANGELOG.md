@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.630.3] - 2026-06-24 — "The Tidy Column"
+
+**Schema version:** 80
+
+**Commit summary:** Wiki landing page — collapse the doc-table Status columns to just their emoji (full text on hover) and stop the Format / Audience / Status columns wrapping, so the tables read cleanly with less word-wrap.
+
+**Description:** On the `/wiki` landing page the Available-guides / References / Repo-documentation tables had verbose Status cells ("✅ shipped (vX) — …") that wrapped and crowded the columns. Now:
+
+- **Status = emoji only.** Each status cell in those three tables shows just its emoji (`✅` / `🟠` / `⚪` / …); the full text moves to a `title=` hover tooltip, so nothing is lost. The SRD-coverage table at the top is left alone — its status text (e.g. "✅ ~100%") is the actual content.
+- **Less word-wrap.** Those tables get a `doc-table` class; the Format / Audience / Status columns are `white-space: nowrap` and the Status column shrinks to its (now tiny) content + centers, so the first column (the guide/doc name) takes the slack instead of every column wrapping.
+
+Presentation-only — no content or links removed (the status prose is in the tooltip + the changelog).
+
+### Changed
+- `app/templates/wiki.html`: doc-listing tables use emoji-only Status cells (full text in `title`) + the `doc-table` class; `_wiki_styles.html` adds the nowrap/centered column rules.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_wiki.py::test_wiki_home_renders` asserts the `doc-table` class renders and that a status span carries the hover `title` (emoji-only + tooltip).
+
 ## [2.630.2] - 2026-06-24 — "The Folded Map"
 
 **Schema version:** 80

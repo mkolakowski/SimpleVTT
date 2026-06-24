@@ -59,6 +59,10 @@ async def test_wiki_home_renders():
     assert 'id="srd-coverage"' in resp.text
     assert "Security spine" in resp.text                        # v2.423.7
     assert 'id="security-spine"' in resp.text
+    # v2.630.3: the doc-listing tables use the compact emoji-only Status column
+    # (full text moved to a hover title) + the doc-table layout class.
+    assert 'class="doc-table"' in resp.text
+    assert 'class="status-shipped" title="' in resp.text
 
 
 async def test_wiki_plans_page_renders():

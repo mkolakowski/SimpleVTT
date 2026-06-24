@@ -88,4 +88,20 @@
   .wiki-wrap .pointer-list a {
       color: var(--accent);
   }
+  /* v2.630.3: doc-listing tables (Guides / References / Repo docs). Keep the
+     Format / Audience / Status columns from wrapping so the first (name)
+     column gets the slack; the Status column is reduced to its emoji (full
+     text on hover) and centered. Cuts the word-wrap clutter. */
+  .wiki-wrap table.doc-table th,
+  .wiki-wrap table.doc-table td {
+      white-space: nowrap;
+  }
+  .wiki-wrap table.doc-table td:first-child {
+      white-space: normal;       /* the name/description may wrap if long */
+  }
+  .wiki-wrap table.doc-table th:last-child,
+  .wiki-wrap table.doc-table td:last-child {
+      text-align: center;        /* the emoji-only Status column */
+      width: 1%;                 /* shrink to its content */
+  }
 </style>
