@@ -143,12 +143,12 @@ def test_list_backups_groups_by_timestamp(tmp_path, monkeypatch):
     monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
     (tmp_path / "daily").mkdir()
     (tmp_path / "weekly").mkdir()
-    stem = "2026-06-24_0300_scheduled"     # v2.631.0 name: YYYY-MM-DD_mmss_tag
+    stem = "2026-06-24_030000_scheduled"     # v2.631.1 name: YYYY-MM-DD_HHmmss_tag
     (tmp_path / "daily" / f"{stem}.sql.gz").write_bytes(b"aa")
     (tmp_path / "daily" / f"{stem}.homebrew.tar.gz").write_bytes(b"bbb")
     (tmp_path / "daily" / f"{stem}.uploads.tar.gz").write_bytes(b"cccc")
     (tmp_path / "daily" / "notes.txt").write_bytes(b"x")          # ignored
-    (tmp_path / "weekly" / "2026-06-21_0300_scheduled.sql.gz").write_bytes(b"c")
+    (tmp_path / "weekly" / "2026-06-21_030000_scheduled.sql.gz").write_bytes(b"c")
 
     backups = backup_admin.list_backups()
     # The three daily files for one run group into a single backup.
@@ -163,7 +163,7 @@ def test_list_backups_groups_by_timestamp(tmp_path, monkeypatch):
 def test_backup_files_for_resolves_run_and_is_safe(tmp_path, monkeypatch):
     monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
     (tmp_path / "daily").mkdir()
-    stem = "2026-06-24_0306_manual"
+    stem = "2026-06-24_210306_manual"
     (tmp_path / "daily" / f"{stem}.sql.gz").write_bytes(b"a")
     (tmp_path / "daily" / f"{stem}.homebrew.tar.gz").write_bytes(b"b")
     (tmp_path / "daily" / f"{stem}.uploads.tar.gz").write_bytes(b"c")
@@ -182,7 +182,7 @@ def test_backup_files_for_resolves_run_and_is_safe(tmp_path, monkeypatch):
 def test_tags_surface_and_restore_request(tmp_path, monkeypatch):
     monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
     (tmp_path / "daily").mkdir()
-    stem = "2026-06-24_0306_manual"
+    stem = "2026-06-24_210306_manual"
     for suf in (".sql.gz", ".homebrew.tar.gz", ".uploads.tar.gz"):
         (tmp_path / "daily" / f"{stem}{suf}").write_bytes(b"x")
     (tmp_path / "daily" / f"{stem}.tag").write_text("manual", encoding="utf-8")

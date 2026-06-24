@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.631.1] - 2026-06-24 — "The Full Clock"
+
+**Schema version:** 80
+
+**Commit summary:** Include the hour in the backup filename — the stem is now `YYYY-MM-DD_HHmmss_<tag>` (e.g. `2026-06-24_210306_manual.sql.gz`), so same-tag backups in different hours no longer collide.
+
+**Description:** Follow-up to v2.631.0: the name stem dropped the hour (`mmss`), so two same-tag backups at the same minute:second of different hours could overwrite each other. `scripts/backup.sh` now uses `date -u +%Y-%m-%d_%H%M%S` (full UTC time). No parser change needed — the Admin Center stem allowlist already accepts the longer `[A-Za-z0-9_-]` name; download + restore are unaffected.
+
+### Changed
+- Backup filename stem now includes the hour: `YYYY-MM-DD_HHmmss[_<tag>]`.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_backup_admin.py` stems updated to the 6-digit `HHmmss` form (e.g. `2026-06-24_210306_manual`); grouping / resolution / tag tests unchanged otherwise.
+
 ## [2.631.0] - 2026-06-24 — "The Readable Name"
 
 **Schema version:** 80

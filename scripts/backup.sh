@@ -5,8 +5,8 @@
 # Weekly backups (Sundays): kept for KEEP_WEEKLY weeks (default 4)
 #
 # v2.626.0 — a complete fresh-install restore needs three things, so each run
-# produces THREE artefacts sharing one name stem (v2.631.0:
-# YYYY-MM-DD_mmss[_<tag>], e.g. 2026-06-24_0306_manual):
+# produces THREE artefacts sharing one name stem (v2.631.1:
+# YYYY-MM-DD_HHmmss[_<tag>] UTC, e.g. 2026-06-24_210306_manual):
 #   <stem>.sql.gz          — full Postgres dump (every user + campaign +
 #                            character + roll + setting; pg_dump of the whole DB)
 #   <stem>.homebrew.tar.gz — the file-based homebrew content volume
@@ -51,10 +51,10 @@ if [ -f "${SETTINGS_FILE}" ]; then
     _kw="$(json_num "${SETTINGS_FILE}" keep_weekly)"; [ -n "${_kw}" ] && KEEP_WEEKLY="${_kw}"
 fi
 
-# v2.631.0 — backup name stem: YYYY-MM-DD_mmss[_<tag>]. The trigger tag
+# v2.631.1 — backup name stem: YYYY-MM-DD_HHmmss[_<tag>] (UTC). The trigger tag
 # (manual / scheduled / startup) is slugified + length-capped for the filename;
 # the full tag still goes in the sibling .tag file for the Admin Center column.
-STEM="$(date -u +%Y-%m-%d_%M%S)"
+STEM="$(date -u +%Y-%m-%d_%H%M%S)"
 TAG_SLUG="$(printf '%s' "${BACKUP_TAG:-}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-' | sed -e 's/--*/-/g' -e 's/^-//' -e 's/-$//' | cut -c1-30 | sed 's/-$//')"
 [ -n "${TAG_SLUG}" ] && STEM="${STEM}_${TAG_SLUG}"
 

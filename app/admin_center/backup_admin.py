@@ -201,10 +201,10 @@ def list_artifacts() -> dict:
 
 
 # A backup run's stem — the name shared by its ``.sql.gz`` /
-# ``.homebrew.tar.gz`` / ``.uploads.tar.gz`` trio. v2.631.0 names are
-# ``YYYY-MM-DD_mmss[_tag]`` (e.g. ``2026-06-24_0306_manual``); older names were
-# ``simplevtt-<ts>``. Both use only ``[A-Za-z0-9_-]`` (no ``/`` or ``.``), so
-# the stem stays traversal-safe as a download / restore identifier.
+# ``.homebrew.tar.gz`` / ``.uploads.tar.gz`` trio. v2.631.1 names are
+# ``YYYY-MM-DD_HHmmss[_tag]`` (e.g. ``2026-06-24_210306_manual``); older names
+# were ``simplevtt-<ts>``. Both use only ``[A-Za-z0-9_-]`` (no ``/`` or ``.``),
+# so the stem stays traversal-safe as a download / restore identifier.
 _TS_RE = re.compile(r"\A[A-Za-z0-9_-]+\Z")
 
 
