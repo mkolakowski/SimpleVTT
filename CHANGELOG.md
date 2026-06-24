@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.630.9] - 2026-06-24 — "The Trimmed Row"
+
+**Schema version:** 80
+
+**Commit summary:** Admin Center `/backups` table — drop the "Contents" (file-count) column and turn the "⬇ Download .zip" link into a "⬇ Download" button.
+
+**Description:** Small tidy of the backups table: removed the **Contents** column (the "N files" count — redundant noise), and replaced the download link with an actual **⬇ Download** button (a GET `<form>`, so the response's `Content-Disposition` still triggers the zip download), matching the Restore button's styling. The bundled-zip note above the table is unchanged.
+
+### Changed
+- `app/admin_center/templates/backups.html`: removed the Contents column; the download is now a button.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** none — Admin Center template (port 8015, not the harness target); the `backup_admin` list/download helpers are unchanged + already covered.
+
 ## [2.630.8] - 2026-06-24 — "The Labelled Runs"
 
 **Schema version:** 80

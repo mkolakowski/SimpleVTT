@@ -69,17 +69,20 @@
       <h3 style="margin:12px 0 6px">{{ bucket|capitalize }}</h3>
       {% if backups[bucket] %}
         <table class="data">
-          <thead><tr><th>Backup</th><th>Tag</th><th>Contents</th><th>Size</th><th>Created</th><th></th></tr></thead>
+          <thead><tr><th>Backup</th><th>Tag</th><th>Size</th><th>Created</th><th></th></tr></thead>
           <tbody>
             {% for b in backups[bucket] %}
             <tr>
               <td><code>{{ b.ts }}</code></td>
               <td>{% if b.tag %}<span class="muted">{{ b.tag }}</span>{% else %}—{% endif %}</td>
-              <td>{{ b.files | length }} file{{ '' if b.files | length == 1 else 's' }}</td>
               <td>{{ b.size | bytes }}</td>
               <td>{{ b.mtime | epoch }}</td>
               <td style="white-space:nowrap;display:flex;gap:8px;align-items:center;">
-                <a class="link" href="/backups/download?bucket={{ bucket }}&amp;ts={{ b.ts | urlencode }}" download>⬇ Download .zip</a>
+                <form method="get" action="/backups/download" style="margin:0">
+                  <input type="hidden" name="bucket" value="{{ bucket }}">
+                  <input type="hidden" name="ts" value="{{ b.ts }}">
+                  <button type="submit">⬇ Download</button>
+                </form>
                 {% if restore_allowed %}
                 <form method="post" action="/backups/restore" style="margin:0"
                       onsubmit="return confirm('Restore backup {{ b.ts }}?\n\nThis OVERWRITES the entire database + homebrew + uploaded media with this backup. A safety backup is taken first, but the app will be briefly disrupted. This cannot be undone except by restoring the safety backup.');">
