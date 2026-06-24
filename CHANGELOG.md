@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.630.2] - 2026-06-24 — "The Folded Map"
+
+**Schema version:** 80
+
+**Commit summary:** Backups wiki guide — add an "inside the tarballs" layout breakdown (where each media bucket / homebrew type lives) and answer whether items extracted from an operator backup are restorable via the in-app import tools (they aren't — different formats).
+
+**Description:** Two additions to the `/wiki/backups` guide, prompted by "where do I look for X in the tarball?" and "can I restore individual items from it?":
+
+- **Inside the tarballs** — documents the on-disk layout of both tarballs so a reader knows where to find things: the **uploads** tarball's one-folder-per-bucket structure (`maps/`, `portraits/`, `tokens/`, `token_templates/`, `thumbnails/`, `encounter_bg/`, `handouts/`, `audio/`; files named by UUID) and the **homebrew** tarball's `dnd5e/<scope>/<type>/<slug>.json` scheme (campaign content under `campaign-<id>/`). Reiterates that campaigns / player sheets / notes / tokens are **not** in the tarballs — they're rows in the `.sql.gz` dump; the tarballs only carry homebrew JSON + media.
+- **Can I restore individual items with the in-app import tools?** — explicitly **no**: the operator backup (Postgres dump + raw volume tarballs) and the in-app exports (`simplevtt-export` / `simplevtt-homebrew` archives) are different formats and aren't interchangeable. Player sheets/campaigns live in the SQL dump (recover by restoring the whole DB); raw homebrew files are in the content-volume shape, not the import-pack shape; media is loose binaries. To get one campaign/PC/item in a re-importable form, use the in-app **exports** instead.
+
+### Changed
+- `docs/wiki/backups.md`: "Inside the tarballs" layout breakdown + a cross-format ("can I mix operator backups with the in-app import tools?") section.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_wiki.py::test_wiki_backups_guide_renders` extended to assert the new "Inside the tarballs" breakdown (a media-bucket folder name) + the cross-format ("in-app import tools") section render.
+
 ## [2.630.1] - 2026-06-24 — "The Full Inventory"
 
 **Schema version:** 80

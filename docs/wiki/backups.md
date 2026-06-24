@@ -70,6 +70,82 @@ three brings the PC back intact.
 > with the same per-campaign encryption passphrase — the backup can't (and
 > deliberately doesn't) capture that key.
 
+### Inside the tarballs — where to find things
+
+The two tarballs are plain `tar -czf` of their volumes, so you can `tar tzf` /
+`tar xzf` them with any tar tool. Their layout:
+
+**`simplevtt-<ts>.uploads.tar.gz`** — one folder per media bucket (files are
+named by UUID; a DB row references them as `/static/uploads/<bucket>/<file>`):
+
+```
+uploads.tar.gz
+├── maps/             # battle-map background images
+├── portraits/        # character portraits
+├── tokens/           # custom token art
+├── token_templates/  # NPC / template-token art
+├── thumbnails/       # cached map thumbnails (.webp)
+├── encounter_bg/     # encounter background images / video
+├── handouts/         # handout images
+└── audio/            # playlist track files
+```
+
+**`simplevtt-<ts>.homebrew.tar.gz`** — one JSON file per homebrew record,
+filed by game system → scope → content type. Campaign-authored content lives
+under `campaign-<id>/`:
+
+```
+homebrew.tar.gz
+└── dnd5e/
+    ├── global/                       # instance-wide homebrew (rare)
+    │   └── <type>/<slug>.json
+    └── campaign-<id>/                # one dir per campaign with homebrew
+        ├── monsters/<slug>.json
+        ├── feats/<slug>.json
+        ├── class_features/<slug>.json
+        ├── subclass_features/<slug>.json
+        ├── races/<slug>.json
+        ├── backgrounds/<slug>.json
+        └── items/<slug>.json
+```
+
+So to find, say, campaign 7's custom monsters: `dnd5e/campaign-7/monsters/` in
+the homebrew tarball. To find a character's portrait: `portraits/` in the
+uploads tarball (the filename is the UUID in the character's `portrait_url`).
+
+> **Note the split:** the *campaigns, player sheets, notes, encounters,
+> tokens* themselves are **not** in the tarballs — those are database rows in
+> the `.sql.gz` dump. The tarballs only carry homebrew JSON + uploaded media
+> (the files the rows point at).
+
+### Can I restore individual items with the in-app import tools?
+
+**No — the operator backup and the in-app exports use different formats and
+aren't interchangeable.** Pulling files out of the tarballs won't make them
+importable through the app's campaign / character / homebrew **Import**
+buttons, because:
+
+- **Campaigns & player sheets** aren't in the tarballs at all — they're rows in
+  the `.sql.gz` dump, and that's a PostgreSQL dump, not a `simplevtt-export`
+  zip. The in-app "Import" tools only read `simplevtt-export` / `simplevtt-
+  homebrew` archives, so there's nothing to hand them. Recover these by
+  restoring the whole database (Admin Center → **Restore**, or `psql`).
+- **Homebrew** files in the tarball are in the content-volume shape
+  (`{slug, name, …}`), not the `simplevtt-homebrew` *pack* shape the in-app
+  homebrew import expects — so a raw file isn't directly importable. (As an
+  operator you can drop it straight into the homebrew volume; or re-export it
+  from the app to get an importable pack.)
+- **Media** files are raw binaries; the in-app importers expect media bundled
+  *inside* an export zip, not loose.
+
+**If you want one campaign / PC / homebrew item in a portable, re-importable
+form, use the in-app exports instead** — campaign settings → *Import & export* →
+**Download full backup**, the character sheet's **Export sheet**, or the
+homebrew Workshop's per-row **Export**. Those produce the `simplevtt-export` /
+`simplevtt-homebrew` archives the in-app importers accept (see §2 below). The
+operator backup is for rebuilding the **whole** instance, not cherry-picking a
+single item.
+
 ### Schedule, retention, and demo mode
 
 - **Schedule + retention** are editable at runtime from **Admin Center →

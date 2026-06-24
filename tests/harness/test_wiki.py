@@ -163,6 +163,11 @@ async def test_wiki_backups_guide_renders():
     assert "what campaign content is captured" in body_lower
     assert "player character" in body_lower
     assert "notes &amp; handouts" in body_lower or "notes & handouts" in body_lower
+    # v2.630.2: the tarball-internals breakdown + the cross-format answer.
+    assert "inside the tarballs" in body_lower
+    assert "encounter_bg" in resp.text          # an uploads-bucket folder
+    assert "campaign-&lt;id&gt;" in resp.text or "campaign-<id>" in resp.text
+    assert "in-app import tools" in body_lower   # the cross-format Q&A
     assert "<h1" in resp.text
     assert 'class="wiki-nav"' in resp.text
 
