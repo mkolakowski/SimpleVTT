@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.623.0] - 2026-06-24 — "The Two Buttons"
+
+**Schema version:** 80
+
+**Commit summary:** Phase 9b — the last two export buttons: a "⬇ Export sheet (.zip)" link on the character page and a per-row "Export" button in the homebrew Workshop, making the PC-sheet (Phase 5) and item-level homebrew (Phase 3) export endpoints clickable.
+
+**Description:** [Backup/export-import overhaul](docs/plans/backup-export-overhaul.md) Phase 9b — the frontend tail that surfaces the two already-shipped export endpoints in their natural homes:
+
+- **PC sheet** — the character page (`/character/{id}/sheet`) gains an "⬇ Export sheet (.zip)" download link in the owner-gated actions area, pointing at `GET /api/character/{id}/export`. It's a plain `<a download>` (the endpoint sends a `Content-Disposition`), so the download just works; owner-or-GM is enforced server-side.
+- **Homebrew item** — the homebrew Workshop's custom-content list (`app/static/homebrew_workshop.js`) gains a per-row **Export** button alongside Edit/Revert. It fetches `GET /api/campaign/{cid}/homebrew/{type}/{slug}/export` and downloads the one-row `simplevtt-homebrew` pack as JSON (round-trips through Import).
+
+Frontend-only — no new endpoints (Phases 3 + 5 carry the contract tests). With this, every export/import surface the arc shipped is reachable from the UI.
+
+### Added
+- Character-page PC-sheet export link + homebrew Workshop per-row Export button.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_export_ui.py` (+2) — `test_character_page_has_export_link` (the owner's character page renders `/api/character/{id}/export` + "Export sheet"); `test_homebrew_workshop_has_export_button` (the served `homebrew_workshop.js` carries the `hbw-export` button wired to the item-export endpoint). Frontend-wiring regression guards; the endpoints are covered by `test_export_character.py` + `test_export_homebrew_item.py`.
+
 ## [2.622.0] - 2026-06-24 — "The Overwritten Page"
 
 **Schema version:** 80

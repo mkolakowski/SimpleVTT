@@ -46,6 +46,7 @@
         `<div class="hbw-row" style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid #eee">
            <span style="flex:1"><strong>${esc(x.name)}</strong>
              <span class="muted">${esc(x.type)} · ${esc(x.slug)}</span></span>
+           <button type="button" class="hbw-export" data-type="${esc(x.type)}" data-slug="${esc(x.slug)}">Export</button>
            <button type="button" class="hbw-edit" data-type="${esc(x.type)}" data-slug="${esc(x.slug)}">Edit</button>
            <button type="button" class="hbw-revert" data-type="${esc(x.type)}" data-slug="${esc(x.slug)}">Revert</button>
          </div>`).join('');
@@ -143,8 +144,27 @@
   });
 
   listEl.addEventListener('click', async (e) => {
+    const ex = e.target.closest('.hbw-export');
     const ed = e.target.closest('.hbw-edit');
     const rv = e.target.closest('.hbw-revert');
+    if (ex) {
+      // Download this single homebrew record as a one-row simplevtt-homebrew
+      // pack (round-trips through Import). v2.623.0 — backup arc Phase 9b.
+      try {
+        const r = await fetch(`/api/campaign/${cid}/homebrew/${ex.dataset.type}/${ex.dataset.slug}/export`);
+        if (!r.ok) { status('Export failed.', false); return; }
+        const data = await r.json();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        a.href = url;
+        a.download = `simplevtt-homebrew-${ex.dataset.type}-${ex.dataset.slug}.json`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        status('Exported.', true);
+      } catch (err) { status('Export error.', false); }
+      return;
+    }
     if (ed) { openEditor(ed.dataset.type, ed.dataset.slug); return; }
     if (rv) {
       if (!confirm(`Revert (delete) ${rv.dataset.type}/${rv.dataset.slug}?`)) return;
