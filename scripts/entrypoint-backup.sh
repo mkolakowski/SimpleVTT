@@ -36,8 +36,11 @@ mkdir -p "${BACKUP_DIR}" /var/log
 touch /var/log/backup.log
 
 # ── Demo mode: do nothing but idle ──────────────────────────────────────────
-if is_truthy "${DEMO_MODE:-}"; then
-    echo "[backup] DEMO_MODE — automated backups disabled" | tee -a /var/log/backup.log
+# DEMO_BACKUPS_ENABLED is a testing override — when truthy, backups run normally
+# even on a demo instance (so the backup/restore flow can be exercised). Default
+# off, so a plain demo still skips the churn.
+if is_truthy "${DEMO_MODE:-}" && ! is_truthy "${DEMO_BACKUPS_ENABLED:-}"; then
+    echo "[backup] DEMO_MODE — automated backups disabled (set DEMO_BACKUPS_ENABLED=true to override)" | tee -a /var/log/backup.log
     # Stay up (so the service stays "running") and tail the log.
     exec tail -F /var/log/backup.log
 fi

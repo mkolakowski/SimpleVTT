@@ -71,8 +71,14 @@ def test_retention_clamped(tmp_path, monkeypatch):
 
 
 def test_demo_mode_active(monkeypatch):
+    monkeypatch.delenv("DEMO_BACKUPS_ENABLED", raising=False)
     monkeypatch.setenv("DEMO_MODE", "true")
-    assert backup_admin.demo_mode_active() is True
+    assert backup_admin.demo_mode_active() is True     # demo, no override → disabled
+    # v2.629.0 — the testing override re-enables backups even in demo mode.
+    monkeypatch.setenv("DEMO_BACKUPS_ENABLED", "true")
+    assert backup_admin.backups_force_enabled() is True
+    assert backup_admin.demo_mode_active() is False     # override → not disabled
+    monkeypatch.delenv("DEMO_BACKUPS_ENABLED", raising=False)
     monkeypatch.setenv("DEMO_MODE", "false")
     assert backup_admin.demo_mode_active() is False
     monkeypatch.delenv("DEMO_MODE", raising=False)

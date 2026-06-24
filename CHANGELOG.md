@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.629.0] - 2026-06-24 — "The Test Switch"
+
+**Schema version:** 80
+
+**Commit summary:** Add a `DEMO_BACKUPS_ENABLED` testing override that makes the full backup + restore flow functional even on a demo instance; on for this deployment, shipped false in `.env.example`.
+
+**Description:** A demo instance (`DEMO_MODE=true`) normally takes **no** backups — the sidecar skips them, and the Admin Center `/backups` page is read-only — because the demo DB reseeds hourly. That made the backup/restore flow impossible to exercise on a demo. New `DEMO_BACKUPS_ENABLED` flag overrides that:
+
+- **`scripts/entrypoint-backup.sh`** + **`scripts/backup.sh`** skip backups only when `DEMO_MODE` is on **and** `DEMO_BACKUPS_ENABLED` is **off** — so the override re-enables the scheduled + run-now + restore paths in demo.
+- **`app/admin_center/backup_admin.py`** — `demo_mode_active()` (which gates the page's read-only state + the settings / run / restore actions) now means "demo **and not** overridden"; new `backups_force_enabled()` reads the flag.
+- **`docker-compose.yml`** threads `DEMO_BACKUPS_ENABLED` (default false) into the `backup` + `admin-center` services.
+- **`.env.example`** documents it and ships it **false** (leave it off on a real public demo). This deployment's `.env` sets it **true** so the flow can be tested here.
+
+No effect when `DEMO_MODE=false` (backups already run normally).
+
+### Added
+- `DEMO_BACKUPS_ENABLED` env flag (default false) — re-enables backups + restore on a demo instance for testing; `backup_admin.backups_force_enabled()`.
+
+### Changed
+- The demo backup-skip in the sidecar + `demo_mode_active()` now honor the override.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_backup_admin.py::test_demo_mode_active` extended — `DEMO_MODE=true` alone still disables backups, but `DEMO_MODE=true` + `DEMO_BACKUPS_ENABLED=true` reports not-disabled (and `backups_force_enabled()` is true).
+
 ## [2.628.0] - 2026-06-24 — "The Field Manual"
 
 **Schema version:** 80

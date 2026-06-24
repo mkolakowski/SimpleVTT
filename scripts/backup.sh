@@ -19,11 +19,16 @@ set -eu
 
 # v2.620.0 — belt-and-braces: even a manual "run now" is a no-op in demo mode
 # (the entrypoint already skips automated backups; this guards direct calls).
-case "$(printf '%s' "${DEMO_MODE:-}" | tr '[:upper:]' '[:lower:]')" in
-    1|true|yes|on)
-        echo "[backup] DEMO_MODE — skipping backup"
-        exit 0 ;;
-esac
+# v2.629.0 — DEMO_BACKUPS_ENABLED=true overrides the skip for testing.
+_truthy() {
+    case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
+        1|true|yes|on) return 0 ;; *) return 1 ;;
+    esac
+}
+if _truthy "${DEMO_MODE:-}" && ! _truthy "${DEMO_BACKUPS_ENABLED:-}"; then
+    echo "[backup] DEMO_MODE — skipping backup (set DEMO_BACKUPS_ENABLED=true to override)"
+    exit 0
+fi
 
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
 DAILY_DIR="${BACKUP_DIR}/daily"

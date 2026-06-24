@@ -151,6 +151,9 @@ services:
       # + base URL mirror the app service so the moved tools behave the same.
       ADMIN_CENTER_ADMIN_TOOLS: ${ADMIN_CENTER_ADMIN_TOOLS:-false}
       DEMO_MODE: ${DEMO_MODE:-false}
+      # v2.629.0 — testing override so the /backups page is fully functional
+      # (settings / run / restore) even on a demo instance. Default false.
+      DEMO_BACKUPS_ENABLED: ${DEMO_BACKUPS_ENABLED:-false}
       SIMPLEVTT_DEMO_MAGIC_LINK_ENABLED: ${SIMPLEVTT_DEMO_MAGIC_LINK_ENABLED:-false}
       # v2.598.0 — the Center's demo-reset button runs the SAME reset_and_reseed
       # as the app, so it needs the same DEMO_GM_SITE_ADMIN value or an
@@ -262,6 +265,9 @@ services:
       # demo DB reseeds hourly, so scheduled dumps are pure churn). The
       # Admin Center /backups page shows "Disabled — demo mode".
       DEMO_MODE: ${DEMO_MODE:-false}
+      # v2.629.0 — testing override: re-enable backups even on a demo
+      # instance so the backup/restore flow can be exercised. Default false.
+      DEMO_BACKUPS_ENABLED: ${DEMO_BACKUPS_ENABLED:-false}
     volumes:
       - backup_data:/backups
       # v2.626.0 — capture the homebrew + uploaded-media volumes too (a backup

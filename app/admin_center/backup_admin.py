@@ -46,10 +46,21 @@ def _settings_path() -> Path:
     return backups_dir() / "backup-settings.json"
 
 
+def _env_truthy(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def backups_force_enabled() -> bool:
+    """Testing override: re-enable backups on a demo instance. Default off."""
+    return _env_truthy("DEMO_BACKUPS_ENABLED")
+
+
 def demo_mode_active() -> bool:
-    """True when automated backups are disabled because the instance is a
-    demo (the sidecar skips them; the page renders read-only)."""
-    return os.environ.get("DEMO_MODE", "").strip().lower() in ("1", "true", "yes", "on")
+    """True when automated backups are *disabled because* this is a demo
+    instance — i.e. ``DEMO_MODE`` is on and the ``DEMO_BACKUPS_ENABLED`` testing
+    override is off. The page renders the backups surface read-only and the
+    settings / run / restore actions are refused when this is true."""
+    return _env_truthy("DEMO_MODE") and not backups_force_enabled()
 
 
 def validate_cron(expr: str) -> bool:
