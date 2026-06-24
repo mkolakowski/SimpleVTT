@@ -83,9 +83,9 @@ do_restore() {
     ts="$(json_field "${RESTORE_TRIGGER}" ts)"
     rm -f "${RESTORE_TRIGGER}"
     src="${BACKUP_DIR}/${bucket}"
-    sql="${src}/simplevtt-${ts}.sql.gz"
-    hb="${src}/simplevtt-${ts}.homebrew.tar.gz"
-    up="${src}/simplevtt-${ts}.uploads.tar.gz"
+    sql="${src}/${ts}.sql.gz"
+    hb="${src}/${ts}.homebrew.tar.gz"
+    up="${src}/${ts}.uploads.tar.gz"
     if [ -z "${bucket}" ] || [ -z "${ts}" ] || [ ! -f "${sql}" ]; then
         printf '{"ok":false,"ts":"%s","error":"backup not found"}' "${ts}" > "${RESTORE_RESULT}"
         echo "[backup] restore: backup ${bucket}/${ts} not found — aborting" | tee -a /var/log/backup.log

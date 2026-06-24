@@ -143,18 +143,18 @@ def test_list_backups_groups_by_timestamp(tmp_path, monkeypatch):
     monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
     (tmp_path / "daily").mkdir()
     (tmp_path / "weekly").mkdir()
-    ts = "20260624T030000Z"
-    (tmp_path / "daily" / f"simplevtt-{ts}.sql.gz").write_bytes(b"aa")
-    (tmp_path / "daily" / f"simplevtt-{ts}.homebrew.tar.gz").write_bytes(b"bbb")
-    (tmp_path / "daily" / f"simplevtt-{ts}.uploads.tar.gz").write_bytes(b"cccc")
+    stem = "2026-06-24_0300_scheduled"     # v2.631.0 name: YYYY-MM-DD_mmss_tag
+    (tmp_path / "daily" / f"{stem}.sql.gz").write_bytes(b"aa")
+    (tmp_path / "daily" / f"{stem}.homebrew.tar.gz").write_bytes(b"bbb")
+    (tmp_path / "daily" / f"{stem}.uploads.tar.gz").write_bytes(b"cccc")
     (tmp_path / "daily" / "notes.txt").write_bytes(b"x")          # ignored
-    (tmp_path / "weekly" / "simplevtt-20260623T030000Z.sql.gz").write_bytes(b"c")
+    (tmp_path / "weekly" / "2026-06-21_0300_scheduled.sql.gz").write_bytes(b"c")
 
     backups = backup_admin.list_backups()
     # The three daily files for one run group into a single backup.
     assert len(backups["daily"]) == 1
     g = backups["daily"][0]
-    assert g["ts"] == ts
+    assert g["ts"] == stem
     assert len(g["files"]) == 3            # sql + homebrew + uploads
     assert g["size"] == 9                  # 2 + 3 + 4 bytes
     assert len(backups["weekly"]) == 1     # the lone sql.gz still counts as a backup
@@ -163,45 +163,45 @@ def test_list_backups_groups_by_timestamp(tmp_path, monkeypatch):
 def test_backup_files_for_resolves_run_and_is_safe(tmp_path, monkeypatch):
     monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
     (tmp_path / "daily").mkdir()
-    ts = "20260624T030000Z"
-    (tmp_path / "daily" / f"simplevtt-{ts}.sql.gz").write_bytes(b"a")
-    (tmp_path / "daily" / f"simplevtt-{ts}.homebrew.tar.gz").write_bytes(b"b")
-    (tmp_path / "daily" / f"simplevtt-{ts}.uploads.tar.gz").write_bytes(b"c")
+    stem = "2026-06-24_0306_manual"
+    (tmp_path / "daily" / f"{stem}.sql.gz").write_bytes(b"a")
+    (tmp_path / "daily" / f"{stem}.homebrew.tar.gz").write_bytes(b"b")
+    (tmp_path / "daily" / f"{stem}.uploads.tar.gz").write_bytes(b"c")
 
-    paths = backup_admin.backup_files_for("daily", ts)
+    paths = backup_admin.backup_files_for("daily", stem)
     assert len(paths) == 3                 # sql + homebrew + uploads
     assert all(p.is_file() for p in paths)
 
-    # Bad timestamp / bucket / missing run → empty (traversal-proof).
+    # Bad stem / bucket / missing run → empty (traversal-proof — a "." or "/"
+    # in the stem fails the _TS_RE allowlist).
     assert backup_admin.backup_files_for("daily", "../../etc") == []
-    assert backup_admin.backup_files_for("evil", ts) == []
+    assert backup_admin.backup_files_for("evil", stem) == []
     assert backup_admin.backup_files_for("daily", "nonexistent") == []
 
 
 def test_tags_surface_and_restore_request(tmp_path, monkeypatch):
     monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
     (tmp_path / "daily").mkdir()
-    ts = "20260624T030000Z"
+    stem = "2026-06-24_0306_manual"
     for suf in (".sql.gz", ".homebrew.tar.gz", ".uploads.tar.gz"):
-        (tmp_path / "daily" / f"simplevtt-{ts}{suf}").write_bytes(b"x")
-    (tmp_path / "daily" / f"simplevtt-{ts}.tag").write_text(
-        "pre-restore safety backup (before restoring OTHER)", encoding="utf-8")
+        (tmp_path / "daily" / f"{stem}{suf}").write_bytes(b"x")
+    (tmp_path / "daily" / f"{stem}.tag").write_text("manual", encoding="utf-8")
 
     # The tag surfaces on the grouped backup.
     g = backup_admin.list_backups()["daily"][0]
-    assert g["ts"] == ts
-    assert "pre-restore safety" in g["tag"]
+    assert g["ts"] == stem
+    assert g["tag"] == "manual"
 
     # request_restore writes the trigger for a real backup.
     assert backup_admin.restore_pending() is False
     assert backup_admin.request_restore(
-        "daily", ts, requested_by="alice", now_iso="2026-06-24T00:00:00Z") is True
+        "daily", stem, requested_by="alice", now_iso="2026-06-24T00:00:00Z") is True
     assert backup_admin.restore_pending() is True
     req = json.loads((tmp_path / ".restore-request").read_text())
-    assert req["bucket"] == "daily" and req["ts"] == ts and req["requested_by"] == "alice"
+    assert req["bucket"] == "daily" and req["ts"] == stem and req["requested_by"] == "alice"
 
     # A second request is refused while one is pending.
-    assert backup_admin.request_restore("daily", ts, requested_by="x", now_iso="t") is False
+    assert backup_admin.request_restore("daily", stem, requested_by="x", now_iso="t") is False
 
 
 def test_request_restore_rejects_unknown_and_reads_result(tmp_path, monkeypatch):

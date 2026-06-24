@@ -200,19 +200,22 @@ def list_artifacts() -> dict:
     return out
 
 
-# A backup run's timestamp, e.g. ``20260624T030000Z`` — the stamp shared by the
-# run's ``simplevtt-<ts>.sql.gz`` + ``simplevtt-<ts>.homebrew.tar.gz`` pair.
-_TS_RE = re.compile(r"\A[A-Za-z0-9]+\Z")
+# A backup run's stem — the name shared by its ``.sql.gz`` /
+# ``.homebrew.tar.gz`` / ``.uploads.tar.gz`` trio. v2.631.0 names are
+# ``YYYY-MM-DD_mmss[_tag]`` (e.g. ``2026-06-24_0306_manual``); older names were
+# ``simplevtt-<ts>``. Both use only ``[A-Za-z0-9_-]`` (no ``/`` or ``.``), so
+# the stem stays traversal-safe as a download / restore identifier.
+_TS_RE = re.compile(r"\A[A-Za-z0-9_-]+\Z")
 
 
 def _ts_of(name: str) -> Optional[str]:
-    """Extract the run timestamp from an artifact filename, or None."""
-    if not name.startswith("simplevtt-"):
-        return None
-    base = name[len("simplevtt-"):]
+    """Extract the run stem (the filename minus its artifact suffix) from an
+    artifact filename, or None. Handles both the v2.631.0 stem and the older
+    ``simplevtt-<ts>`` names (the leading ``simplevtt-`` just stays part of the
+    stem for old files)."""
     for suf in _ARTIFACT_SUFFIXES:
-        if base.endswith(suf):
-            return base[: -len(suf)] or None
+        if name.endswith(suf):
+            return name[: -len(suf)] or None
     return None
 
 
@@ -298,7 +301,7 @@ def _tag_for(bucket: str, ts: str) -> Optional[str]:
     safety backup), or None. Stored as a sibling ``simplevtt-<ts>.tag`` file."""
     if bucket not in ("daily", "weekly") or not _TS_RE.match(ts or ""):
         return None
-    p = backups_dir() / bucket / f"simplevtt-{ts}.tag"
+    p = backups_dir() / bucket / f"{ts}.tag"
     if p.is_file():
         try:
             return p.read_text(encoding="utf-8").strip()[:300] or None
@@ -316,7 +319,7 @@ def backup_files_for(bucket: str, ts: str) -> list:
         return []
     paths = []
     for suf in _ARTIFACT_SUFFIXES:
-        p = artifact_path(bucket, f"simplevtt-{ts}{suf}")
+        p = artifact_path(bucket, f"{ts}{suf}")
         if p is not None:
             paths.append(p)
     return paths

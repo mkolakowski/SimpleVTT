@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.631.0] - 2026-06-24 — "The Readable Name"
+
+**Schema version:** 80
+
+**Commit summary:** Rename backup files to `YYYY-MM-DD_mmss_<tag>` (e.g. `2026-06-24_0306_manual.sql.gz`) — date + minute/second + the trigger tag — instead of the old `simplevtt-<compact-utc>` stem.
+
+**Description:** Backup artifacts are now named with a readable, tag-bearing stem: `scripts/backup.sh` builds `STEM = $(date -u +%Y-%m-%d_%M%S)` and appends `_<tag-slug>` when `BACKUP_TAG` is set (the trigger tag — `manual` / `scheduled` / `startup` — slugified + capped at 30 chars). The three artifacts + the `.tag` file share that stem (and the weekly copies keep it). So a manual run produces e.g. `2026-06-24_0306_manual.sql.gz` / `.homebrew.tar.gz` / `.uploads.tar.gz`.
+
+The Admin Center parsing follows: the run "stem" is now the filename minus its artifact suffix (no `simplevtt-` prefix), the stem allowlist widens to `[A-Za-z0-9_-]` (still no `/`/`.`, so download + restore stay traversal-proof), and the restore path reconstructs `<stem>.<suffix>`. Old `simplevtt-<ts>` backups still parse + download/restore (the `simplevtt-` just stays part of their stem), so existing artifacts aren't orphaned.
+
+> Note: the stem uses minute+second (`mmss`), not the hour — two backups *with the same tag* taken at the same minute:second of different hours would collide. In practice the daily cron and ad-hoc manual runs don't hit that; tell me if you'd rather include the hour (`HHmmss`).
+
+### Changed
+- Backup filenames are now `YYYY-MM-DD_mmss[_<tag>].{sql.gz,homebrew.tar.gz,uploads.tar.gz}`; the Admin Center stem parser + restore reconstruction follow (back-compatible with old names).
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_backup_admin.py` — the grouping / `backup_files_for` / tag+restore tests now build the new-style stems (`2026-06-24_0306_manual`) and assert `g["ts"]` is the stem; `test_artifact_path_safe_resolution` retains an old-style `simplevtt-…` name to prove back-compat resolution.
+
 ## [2.630.9] - 2026-06-24 — "The Trimmed Row"
 
 **Schema version:** 80

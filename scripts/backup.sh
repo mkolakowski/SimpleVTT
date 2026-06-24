@@ -5,16 +5,15 @@
 # Weekly backups (Sundays): kept for KEEP_WEEKLY weeks (default 4)
 #
 # v2.626.0 — a complete fresh-install restore needs three things, so each run
-# now produces THREE artefacts sharing one timestamp:
-#   simplevtt-<ts>.sql.gz          — full Postgres dump (every user + campaign +
-#                                     character + roll + setting; pg_dump of the
-#                                     whole database)
-#   simplevtt-<ts>.homebrew.tar.gz — the file-based homebrew content volume
-#   simplevtt-<ts>.uploads.tar.gz  — the uploaded media volume (maps, portraits,
-#                                     tokens, audio, handouts, thumbnails) that
-#                                     the DB rows reference by URL
+# produces THREE artefacts sharing one name stem (v2.631.0:
+# YYYY-MM-DD_mmss[_<tag>], e.g. 2026-06-24_0306_manual):
+#   <stem>.sql.gz          — full Postgres dump (every user + campaign +
+#                            character + roll + setting; pg_dump of the whole DB)
+#   <stem>.homebrew.tar.gz — the file-based homebrew content volume
+#   <stem>.uploads.tar.gz  — the uploaded media volume (maps, portraits, tokens,
+#                            audio, handouts, thumbnails) the DB rows reference
 # Restore = load the SQL dump, then unpack the homebrew + uploads tarballs into
-# their volumes. The shared timestamp pairs the three.
+# their volumes. The shared stem pairs the three.
 set -eu
 
 # v2.620.0 — belt-and-braces: even a manual "run now" is a no-op in demo mode
@@ -38,7 +37,6 @@ UPLOADS_DIR="${UPLOADS_DIR:-/uploads}"
 SETTINGS_FILE="${BACKUP_DIR}/backup-settings.json"
 mkdir -p "${DAILY_DIR}" "${WEEKLY_DIR}"
 
-TS=$(date -u +%Y%m%dT%H%M%SZ)
 DOW=$(date -u +%u)   # 1..7, 7 = Sunday
 
 # v2.620.0 — retention is operator-editable from the Admin Center, written to
@@ -53,9 +51,16 @@ if [ -f "${SETTINGS_FILE}" ]; then
     _kw="$(json_num "${SETTINGS_FILE}" keep_weekly)"; [ -n "${_kw}" ] && KEEP_WEEKLY="${_kw}"
 fi
 
-DAILY_SQL="${DAILY_DIR}/simplevtt-${TS}.sql.gz"
-DAILY_HB="${DAILY_DIR}/simplevtt-${TS}.homebrew.tar.gz"
-DAILY_UP="${DAILY_DIR}/simplevtt-${TS}.uploads.tar.gz"
+# v2.631.0 — backup name stem: YYYY-MM-DD_mmss[_<tag>]. The trigger tag
+# (manual / scheduled / startup) is slugified + length-capped for the filename;
+# the full tag still goes in the sibling .tag file for the Admin Center column.
+STEM="$(date -u +%Y-%m-%d_%M%S)"
+TAG_SLUG="$(printf '%s' "${BACKUP_TAG:-}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-' | sed -e 's/--*/-/g' -e 's/^-//' -e 's/-$//' | cut -c1-30 | sed 's/-$//')"
+[ -n "${TAG_SLUG}" ] && STEM="${STEM}_${TAG_SLUG}"
+
+DAILY_SQL="${DAILY_DIR}/${STEM}.sql.gz"
+DAILY_HB="${DAILY_DIR}/${STEM}.homebrew.tar.gz"
+DAILY_UP="${DAILY_DIR}/${STEM}.uploads.tar.gz"
 
 echo "[backup] writing ${DAILY_SQL}"
 # --clean --if-exists makes the dump self-restoring: it drops each object
@@ -88,17 +93,17 @@ fi
 # v2.630.8 — record how this run was triggered (scheduled / manual / startup /
 # pre-restore safety) as a sibling .tag file the Admin Center shows in the Tag
 # column. Written before the Sunday weekly copy so the weekly set gets it too.
-DAILY_TAG="${DAILY_DIR}/simplevtt-${TS}.tag"
+DAILY_TAG="${DAILY_DIR}/${STEM}.tag"
 if [ -n "${BACKUP_TAG:-}" ]; then
     printf '%s' "${BACKUP_TAG}" > "${DAILY_TAG}"
 fi
 
 # On Sundays also stash a weekly copy of all three artefacts (+ the tag)
 if [ "${DOW}" = "7" ]; then
-    cp "${DAILY_SQL}" "${WEEKLY_DIR}/simplevtt-${TS}.sql.gz"
-    cp "${DAILY_HB}"  "${WEEKLY_DIR}/simplevtt-${TS}.homebrew.tar.gz"
-    cp "${DAILY_UP}"  "${WEEKLY_DIR}/simplevtt-${TS}.uploads.tar.gz"
-    [ -f "${DAILY_TAG}" ] && cp "${DAILY_TAG}" "${WEEKLY_DIR}/simplevtt-${TS}.tag"
+    cp "${DAILY_SQL}" "${WEEKLY_DIR}/${STEM}.sql.gz"
+    cp "${DAILY_HB}"  "${WEEKLY_DIR}/${STEM}.homebrew.tar.gz"
+    cp "${DAILY_UP}"  "${WEEKLY_DIR}/${STEM}.uploads.tar.gz"
+    [ -f "${DAILY_TAG}" ] && cp "${DAILY_TAG}" "${WEEKLY_DIR}/${STEM}.tag"
     echo "[backup] copied to weekly"
 fi
 
