@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.615.0] - 2026-06-24 — "The Adventurer's Folio"
+
+**Schema version:** 80
+
+**Commit summary:** Phase 5 — single-PC export: `GET /api/character/{id}/export` returns a character-scoped `simplevtt-export` zip (sheet + that PC's dice rolls + its media), allowed for the character's owner or its campaign GM.
+
+**Description:** [Backup/export-import overhaul](docs/plans/backup-export-overhaul.md) Phase 5 — the per-character counterpart to the Phase 4 campaign archive, and the last export surface. `GET /api/character/{character_id}/export` builds a `level=character` archive: `data/character.json` (the row, whose `sheet` JSON carries stats + notes + the portrait reference), `data/dice_rolls.json` (only that character's rolls), and any `/static/uploads/...` media the sheet references (portrait). It deliberately carries **no** campaign-wide data — no maps, tokens, encounters, homebrew, or campaign row — so a player can hand off just their PC.
+
+A character bundle is tiny (a sheet + maybe a portrait), so unlike the campaign export it's built **synchronously** and returned inline — no job/poll/staging-file lifecycle. The shared `app/export_bundle.py` gains a `bundle_to_bytes` (in-memory zip) alongside the existing `write_bundle_zip` (both delegate to one `_write_into` core); `app/export_campaign.py` gains `build_character_bundle_bytes`.
+
+Authorization is **owner-or-GM**: the character's `owner_user_id`, or a GM of its campaign (via the existing `_user_is_gm`). Rate-limited per character (`EXPORT_COOLDOWN_CHARACTER_SECONDS`, default 60 s) through the Phase 1 limiter, bypassed under TEST_MODE.
+
+### Added
+- `GET /api/character/{id}/export` — synchronous character-scoped `simplevtt-export` zip.
+- `export_bundle.bundle_to_bytes` (in-memory zip) + `export_campaign.build_character_bundle_bytes`.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_export_character.py` (new, +3) — the owner exports their PC and the archive is character-scoped (asserts `level=character`, `data/character.json` matches the PC, and that `data/campaign.json` / `data/tokens.json` / `data/homebrew.json` / `data/maps/*` are **absent** — no campaign leak); the GM may export a different PC; a non-owner non-GM player is 403 and an unknown character 404. The two successful exports skip on a 429 so the live per-character cooldown doesn't flake off TEST_MODE.
+
 ## [2.614.0] - 2026-06-24 — "The Strongbox"
 
 **Schema version:** 80

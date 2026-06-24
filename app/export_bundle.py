@@ -24,6 +24,7 @@ the primitives are unit-testable host-side without the web stack.
 from __future__ import annotations
 
 import enum
+import io
 import json
 import zipfile
 from datetime import date, datetime
@@ -131,6 +132,23 @@ def build_manifest(
     }
 
 
+def _write_into(
+    zf: zipfile.ZipFile,
+    manifest: dict[str, Any],
+    data_files: dict[str, Any],
+    media_files: Iterable[tuple[str, Path]],
+) -> None:
+    """Shared core: write the manifest + data + media into an open ZipFile.
+    A media source that doesn't exist on disk is skipped (so a stale URL
+    never aborts the whole export)."""
+    zf.writestr("manifest.json", json.dumps(manifest, indent=2, sort_keys=True))
+    for arc_path, payload in data_files.items():
+        zf.writestr(arc_path, json.dumps(payload, indent=2, sort_keys=True))
+    for arc_path, src in media_files:
+        if src and Path(src).is_file():
+            zf.write(src, arc_path)
+
+
 def write_bundle_zip(
     zip_path: Path,
     *,
@@ -142,16 +160,24 @@ def write_bundle_zip(
 
     ``data_files`` maps an in-zip path (e.g. ``data/campaign.json``) to a
     JSON-serializable object. ``media_files`` is an iterable of
-    ``(archive_path, source_abs_path)`` — a source that doesn't exist on
-    disk is skipped (so a stale URL never aborts the whole export). The
-    ``manifest`` is written as ``manifest.json`` at the root.
+    ``(archive_path, source_abs_path)``.
     """
     zip_path.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("manifest.json", json.dumps(manifest, indent=2, sort_keys=True))
-        for arc_path, payload in data_files.items():
-            zf.writestr(arc_path, json.dumps(payload, indent=2, sort_keys=True))
-        for arc_path, src in media_files:
-            if src and Path(src).is_file():
-                zf.write(src, arc_path)
+        _write_into(zf, manifest, data_files, media_files)
     return zip_path
+
+
+def bundle_to_bytes(
+    *,
+    manifest: dict[str, Any],
+    data_files: dict[str, Any],
+    media_files: Iterable[tuple[str, Path]],
+) -> bytes:
+    """Build a ``simplevtt-export`` zip in memory and return its bytes. For
+    small archives (e.g. a single character) that don't warrant the
+    background-job + staging-file lifecycle the campaign export uses."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        _write_into(zf, manifest, data_files, media_files)
+    return buf.getvalue()

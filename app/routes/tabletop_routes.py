@@ -27,7 +27,7 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from .. import dice as dice_mod
@@ -15678,6 +15678,62 @@ def export_job_download(
         job.zip_path,
         media_type="application/zip",
         filename=job.filename or f"simplevtt-export-{job_id}.zip",
+    )
+
+
+@router.get("/api/character/{character_id}/export")
+def export_character(
+    character_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Export a single PC as a ``simplevtt-export`` zip (level=character):
+    the sheet (stats + notes + portrait ref), that character's own dice
+    rolls, and the portrait/sheet media — never any campaign-wide data.
+
+    Allowed for the character's **owner** or the **GM** of its campaign. A
+    character bundle is small, so it's built synchronously (no job). Rate-
+    limited per character (``EXPORT_COOLDOWN_CHARACTER_SECONDS``, default
+    60s), bypassed under TEST_MODE. Backup/export-import arc Phase 5."""
+    char = db.query(Character).filter(Character.id == character_id).first()
+    if not char:
+        raise HTTPException(404, "Character not found.")
+
+    is_owner = char.owner_user_id == user.id
+    is_gm = False
+    if char.campaign_id is not None:
+        camp = db.query(Campaign).filter(Campaign.id == char.campaign_id).first()
+        is_gm = camp is not None and _user_is_gm(user, camp, db)
+    if not (is_owner or is_gm):
+        raise HTTPException(403, "Not your character.")
+
+    from ..export_campaign import build_character_bundle_bytes
+    from ..export_limit import mark as _export_mark, remaining_for as _export_remaining
+    from ..version import APP_VERSION, SCHEMA_VERSION
+
+    _tm = os.environ.get("TEST_MODE", "").strip().lower() in ("1", "true", "yes", "on")
+    if not _tm:
+        remaining = _export_remaining("character", character_id, now=_time.monotonic())
+        if remaining > 0:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Export requested too recently. Try again in {remaining} seconds.",
+                headers={"Retry-After": str(remaining)},
+            )
+
+    exported_at = datetime.utcnow().isoformat() + "Z"
+    data, filename = build_character_bundle_bytes(
+        db, char,
+        app_version=APP_VERSION,
+        schema_version=SCHEMA_VERSION,
+        exported_at=exported_at,
+    )
+    if not _tm:
+        _export_mark("character", character_id, now=_time.monotonic())
+    return Response(
+        content=data,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

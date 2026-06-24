@@ -22,6 +22,7 @@ from .export_bundle import (
     abs_path_for_url,
     archive_path_for,
     build_manifest,
+    bundle_to_bytes,
     find_media_urls,
     row_to_dict,
     write_bundle_zip,
@@ -164,6 +165,57 @@ def build_campaign_bundle(
     zip_path = staging / f"campaign-{cid}-{job_id or 'sync'}.zip"
     write_bundle_zip(zip_path, manifest=manifest, data_files=data_files, media_files=media_files)
     return zip_path, counts
+
+
+def build_character_bundle_bytes(
+    db: Session,
+    character,
+    *,
+    app_version: str,
+    schema_version: int,
+    exported_at: str,
+) -> tuple[bytes, str]:
+    """Assemble a single character into an in-memory ``simplevtt-export`` zip
+    (level=character) and return ``(zip_bytes, filename)``.
+
+    Character-scoped only: the character row (sheet JSON carries stats +
+    notes + portrait ref), that character's own dice rolls, and the
+    portrait/sheet media — never any campaign-wide data. Small enough to
+    build synchronously, so no job/staging-file lifecycle."""
+    from .models import Campaign, DiceRoll
+
+    data_files: dict[str, object] = {"data/character.json": row_to_dict(character)}
+    rolls = db.query(DiceRoll).filter(DiceRoll.character_id == character.id).all()
+    data_files["data/dice_rolls.json"] = [row_to_dict(r) for r in rolls]
+
+    campaign_name = None
+    if character.campaign_id is not None:
+        camp = db.get(Campaign, character.campaign_id)
+        campaign_name = camp.name if camp else None
+
+    media_files: list[tuple[str, Path]] = []
+    media_manifest: list[dict] = []
+    for url in find_media_urls(data_files):
+        arc = archive_path_for(url)
+        src = abs_path_for_url(url)
+        if src is None:
+            continue
+        media_files.append((arc, src))
+        media_manifest.append({"archive_path": arc, "original_url": url})
+
+    manifest = build_manifest(
+        "character",
+        app_version=app_version,
+        schema_version=schema_version,
+        exported_at=exported_at,
+        source_campaign_id=character.campaign_id,
+        source_campaign_name=campaign_name,
+        counts={"dice_rolls": len(rolls)},
+        media_manifest=media_manifest,
+    )
+    data = bundle_to_bytes(manifest=manifest, data_files=data_files, media_files=media_files)
+    filename = f"simplevtt-character-{character.id}-{exported_at[:10]}.zip"
+    return data, filename
 
 
 def run_campaign_export_job(
