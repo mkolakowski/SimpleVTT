@@ -453,6 +453,17 @@ composition. Batch by class, same cadence as the breadth sweep.
   then-deferred-read shape as Devil's Sight (v2.158.14) and
   Mage Hand Legerdemain (v2.158.17). Every PHB class now has
   at least one Phase-8 buff-payload feature.
+- **v2.612.1 ("The Lit Cantrip") — Potent Spellcasting** (Light/
+  Knowledge/Grave/Peace Domain Cleric Lv 8+): the cleric/cantrip
+  twin of v2.158.19 Empowered Evocation. `use_potent_spellcasting`
+  was announce-only; the Phase 8 enhancement installs a permanent
+  `potent-spellcasting-active` buff with three `potent_spellcasting_*`
+  effect keys (active=True, wis_mod=<computed>, class="cleric"),
+  sheet-mirrored + idempotent. Phase 2 (deferred): `/cast_spell`
+  reads the buff and auto-adds the WIS mod to cleric-cantrip damage
+  — the same cantrip-detection read-site Empowered Evocation's
+  Phase 2 needs for evocation spells. Same install-then-deferred-read
+  shape; reuses the "+ability-mod to spell damage" flag substrate.
 
 The Lv-17 cleric subclass capstone batch is 5/6 shipped — Improved
 Reaper is the last (necromancy single-target → double-target spell

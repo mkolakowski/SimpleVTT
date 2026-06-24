@@ -76781,13 +76781,23 @@ async def use_potent_spellcasting(
     Body: ``{character_id, cantrip_name?, override?}``.
 
     Validates Light Domain Cleric Lv 8+. Computes WIS mod +
-    broadcasts. v1 ships announce-only — the actual `/cast_spell`
-    damage-roll hook that auto-adds the WIS mod to cleric
-    cantrips is filed for a follow-up commit (would need a
-    spell-class tag + cantrip detection at damage site).
+    broadcasts.
 
-    Same RAW shape applies to Knowledge Domain Lv 8 — when that
-    follow-up commit lands the helper will branch on subclass.
+    v2.612.1 — Phase 8 cleric passive-damage diversification (twin
+    of v2.158.19 Empowered Evocation). Install a permanent
+    `potent-spellcasting-active` buff carrying the parameter flags:
+      * `effects.potent_spellcasting_active: True`
+      * `effects.potent_spellcasting_wis_mod: <computed>`
+      * `effects.potent_spellcasting_class: "cleric"`
+    Phase 2 (deferred): `/cast_spell` reads the buff and auto-adds
+    the WIS mod to the damage roll of any cleric cantrip (a
+    spell-class tag + cantrip-level detection at the damage site —
+    the same read-site Empowered Evocation's Phase 2 needs for
+    evocation spells).
+
+    Same RAW shape applies to Knowledge / Grave / Peace Domain
+    Lv 8 — the buff is identical for all four (the gate below
+    already accepts any of them).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -76831,6 +76841,36 @@ async def use_potent_spellcasting(
     wis = int((sheet.get("abilities") or {}).get("WIS") or 10)
     wis_mod = (wis - 10) // 2
 
+    # v2.612.1 — install the parameter-flag buff. Permanent passive
+    # (idempotent on re-press via key dedupe). Phase 2 (deferred):
+    # `/cast_spell` reads `effects.potent_spellcasting_*` off the
+    # caster's `_buffs_active` for cleric cantrips. Sheet-mirrored
+    # so a sheet-reading damage site can consult it (same as
+    # Empowered Evocation).
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "potent-spellcasting-active",
+        "name": "📜 Potent Spellcasting",
+        "icon": "📜",
+        "duration_rounds": 100000,
+        "duration_max": 100000,
+        "permanent": True,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "potent_spellcasting_active": True,
+            "potent_spellcasting_wis_mod": wis_mod,
+            "potent_spellcasting_class": "cleric",
+        },
+        "desc": (
+            f"{char.name} adds WIS mod ({wis_mod:+}) to the damage "
+            f"of any cleric cantrip. (Light/Knowledge/Grave/Peace "
+            f"Domain Cleric Lv 8+ passive permanent. Phase 2: "
+            f"`/cast_spell` reads these flags.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -76862,6 +76902,7 @@ async def use_potent_spellcasting(
             "source": "potent-spellcasting",
             "wis_mod": wis_mod,
             "cantrip_name": cantrip_name,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -76870,6 +76911,7 @@ async def use_potent_spellcasting(
         "feature": "potent-spellcasting",
         "wis_mod": wis_mod,
         "cantrip_name": cantrip_name,
+        "buff_installed": buff_installed,
     }
 
 

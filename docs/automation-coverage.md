@@ -28,14 +28,20 @@ via a Phase-1 install + deferred read, so the endpoint body itself reads
 announce-only to the classifier), and a few `tracked`-tagged ones only spend a
 resource without a downstream effect.
 
-## Summary (as of v2.158.35)
+## Summary (counts regenerated v2.612.1)
 
 | Status | Count | Meaning |
 |---|---|---|
-| ✅ **tracked** | **210** | server-applies effect and/or spends resource |
-| ⚪ **announce-only** | **30** | validates + broadcasts; effect left to the GM |
-| 🔧 mechanical | **2** | helper endpoints (not `feature_used` features) |
-| **Total** | **242** | `use_*` / `cast_*` endpoints |
+| ✅ **tracked** | **288** | server-applies effect and/or spends resource |
+| ⚪ **announce-only** | **36** | validates + broadcasts; effect left to the GM |
+| 🔧 mechanical | **8** | helper endpoints (not `feature_used` features) |
+| **Total** | **332** | `use_*` / `cast_*` endpoints |
+
+> The per-slug table further down still pins the v2.158.35 snapshot in
+> places — it drifts behind the classifier between full reconciliations.
+> The summary row above is the freshly-regenerated truth
+> (`python3 scripts/classify_feature_endpoints.py`). v2.612.1 flipped
+> `potent_spellcasting` from announce-only to tracked (Phase 8 flag-buff).
 
 At the plan's baseline (v2.99.385) the split was **~60 tracked / ~156
 announce-only**. Phases 1–6 (feature-use registry, on-hit riders, feature
@@ -349,7 +355,7 @@ or passive damage-boosters that already ride other code paths
 | `use_mask_of_many_faces` | ⚪ announce-only | — |
 | `use_minor_alchemy` | ⚪ announce-only | — |
 | `use_mote_of_potential` | ⚪ announce-only | — |
-| `use_potent_spellcasting` | ⚪ announce-only | — |
+| `use_potent_spellcasting` | ✅ tracked | v2.612.1 — installs permanent `potent-spellcasting-active` flag-buff (`potent_spellcasting_*`: active/wis_mod/class); Phase 8 cleric/cantrip twin of Empowered Evocation |
 | `use_relentless_avenger` | ⚪ announce-only | — |
 | `use_scornful_rebuke` | ⚪ announce-only | — |
 | `use_sculpt_spells` | ⚪ announce-only | — |

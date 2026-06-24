@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.612.1] - 2026-06-23 — "The Lit Cantrip"
+
+**Schema version:** 80
+
+**Commit summary:** Phase 8 — Potent Spellcasting now installs a permanent flag-buff carrying its WIS-mod cantrip-damage parameters (Phase 1 of the install-then-deferred-read split; the cleric/cantrip twin of Empowered Evocation).
+
+**Description:** [Full-feature-automation](docs/plans/full-feature-automation.md) Phase 8. `use_potent_spellcasting` (Light/Knowledge/Grave/Peace Domain Cleric Lv 8+) was announce-only — it computed the WIS modifier and broadcast a card, leaving the cantrip-damage bump for the GM to apply. It now also installs a permanent `potent-spellcasting-active` buff carrying three `potent_spellcasting_*` effect keys (`active: True`, `wis_mod: <computed>`, `class: "cleric"`), mirroring the v2.158.19 Empowered Evocation recipe exactly (it's the cleric/cantrip twin of "+ability-mod to spell damage"). The buff is sheet-mirrored so a future sheet-reading damage site can consult it, idempotent on re-press via key dedupe.
+
+**Phase 2 (deferred):** `/cast_spell` reads the buff and auto-adds the WIS mod to the damage roll of any cleric cantrip — the same cantrip-detection read-site Empowered Evocation's Phase 2 needs for evocation spells. The endpoint's existing announce-only card is retained for the GM-narrated path until then.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py` — `use_potent_spellcasting` installs the `potent-spellcasting-active` flag-buff via `_install_buff` + `_mirror_buffs_to_sheet`, and surfaces `buff_installed` on the broadcast + response.
+
+**Harness:** `tests/harness/test_potent_spellcasting.py::test_ps_buff_payload_carries_wis_mod_and_class_flags` (+1) — pins the buff's flag shape (active/wis_mod=3 for Tavik's WIS 16/class=cleric, permanent, non-concentration) via the `/buffs` endpoint, pre-clearing the permanent buff so the assertion is order-independent. The existing happy/error-path tests (wrong subclass, level gate, Knowledge/Grave/Peace domains) are unchanged.
+
+### Added
+- Potent Spellcasting installs a permanent `potent-spellcasting-active` flag-buff (WIS-mod cantrip-damage parameters) for the deferred `/cast_spell` read site.
+
+### Changed
+- `use_potent_spellcasting` now returns/broadcasts `buff_installed`.
+
 ## [2.612.0] - 2026-06-23 — "The Withheld Half"
 
 **Schema version:** 80
