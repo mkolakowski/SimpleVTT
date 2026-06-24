@@ -117,6 +117,7 @@
     <button type="button" class="settings-tab" data-tab="people">People</button>
     <button type="button" class="settings-tab" data-tab="world">World</button>
     <button type="button" class="settings-tab" data-tab="homebrew">Homebrew</button>
+    <button type="button" class="settings-tab" data-tab="import-export">Import &amp; export</button>
     {% if user.is_admin %}
     <button type="button" class="settings-tab is-danger" data-tab="danger">Danger zone</button>
     {% endif %}
@@ -129,7 +130,6 @@
     <button type="button" class="settings-subtab" data-sub="backgrounds">Backgrounds</button>
     <button type="button" class="settings-subtab" data-sub="feats">Feats</button>
     <button type="button" class="settings-subtab" data-sub="workshop">Workshop</button>
-    <button type="button" class="settings-subtab" data-sub="io">Import &amp; export</button>
 </nav>
 
 <!-- ── Basic info ── -->
@@ -2740,7 +2740,7 @@
 </section>
 
 <!-- ── Homebrew import / export ── -->
-<section class="settings-section" id="custom-io" data-tab="homebrew" data-sub="io">
+<section class="settings-section" id="custom-io" data-tab="import-export">
     <h2>Import &amp; export</h2>
     <p class="muted">
         Move every homebrew row in this campaign to or from a single JSON
@@ -3833,7 +3833,7 @@ document.querySelectorAll('.tmpl-card[data-tmpl-id]').forEach(card => {
 
     function _resolveFromHash() {
         const h = (location.hash || '').replace(/^#/, '');
-        const known = {basic:1, people:1, world:1, homebrew:1, danger:1};
+        const known = {basic:1, people:1, world:1, homebrew:1, 'import-export':1, danger:1};
         // Direct tab name in the hash wins.
         if (known[h]) {
             return { tab: h, sub: h === 'homebrew' ? 'classes' : null };

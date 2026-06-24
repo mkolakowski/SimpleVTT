@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.625.1] - 2026-06-24 — "The Dedicated Drawer"
+
+**Schema version:** 80
+
+**Commit summary:** Campaign settings — promote "Import & export" from a Homebrew sub-tab to its own top-level tab (it holds the homebrew pack I/O *and* the full-campaign backup/clone-import controls, so it had outgrown the Homebrew tab).
+
+**Description:** The Import & export section lived as a sub-tab under **Homebrew** (`data-sub="io"`), but since v2.621.0 it also carries the whole-campaign backup export + clone-import — campaign-level controls that aren't homebrew. This promotes it to a top-level **Import & export** tab in the campaign-settings nav, removes the now-redundant Homebrew sub-tab, retargets the `#custom-io` section to the new tab, and registers `import-export` as a known tab in the hash-router (so `/campaign/{id}/settings#import-export` and `#custom-io` both land on it). No behavior change to the controls themselves.
+
+### Changed
+- "Import & export" is now a top-level campaign-settings tab (was a Homebrew sub-tab).
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_export_ui.py` — `test_campaign_settings_renders_backup_ui` now also asserts the top-level `data-tab="import-export"` tab button renders and that `#custom-io` is retargeted to it.
+
 ## [2.625.0] - 2026-06-24 — "The Bundled Snapshot"
 
 **Schema version:** 80

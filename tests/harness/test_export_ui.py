@@ -19,6 +19,10 @@ async def test_campaign_settings_renders_backup_ui(gm_client: httpx.AsyncClient)
     assert resp.status_code == 200, resp.text
     html = resp.text
 
+    # v2.625.1 — Import & export is now its own top-level settings tab.
+    assert 'data-tab="import-export"' in html
+    assert 'id="custom-io" data-tab="import-export"' in html
+
     # The two new controls are present.
     assert 'id="campaign-backup-btn"' in html
     assert 'id="campaign-import-btn"' in html
