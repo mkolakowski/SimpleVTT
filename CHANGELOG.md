@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.613.0] - 2026-06-24 — "The Single Specimen"
+
+**Schema version:** 80
+
+**Commit summary:** Phase 3 — item-level homebrew export: `GET /api/campaign/{cid}/homebrew/{type}/{slug}/export` returns one homebrew record (e.g. a single custom monster) as a one-row `simplevtt-homebrew` pack; the bulk export's per-type projections are extracted into shared helpers.
+
+**Description:** [Backup/export-import overhaul](docs/plans/backup-export-overhaul.md) Phase 3. The bulk `/homebrew/export` could only pull a campaign's *entire* homebrew pack; there was no way to hand someone just one custom monster. New endpoint:
+
+`GET /api/campaign/{campaign_id}/homebrew/{type}/{slug}/export` — GM-only (`_require_gm_for_campaign`), returns a `simplevtt-homebrew` envelope containing exactly the one requested record, projected to the same legacy row shape the bulk export uses, so it round-trips straight back through `/homebrew/import` into another campaign. `type` is one of the homebrew content types (`monsters`, `feats`, `class_features`, `subclass_features`, `races`, `backgrounds`). A homebrew record carries no bundled media, so the artifact is JSON (no zip wrapper needed). Only the campaign's *own* homebrew is exportable — a shipped SRD slug (or a miss) 404s, so the endpoint never leaks SRD content through the homebrew surface. Rate-limited per campaign via the Phase 1 limiter (`scope="homebrew"`, `EXPORT_COOLDOWN_HOMEBREW_SECONDS` default 10 s), bypassed under TEST_MODE.
+
+The six per-type projections (record dict → legacy export row) are extracted out of the inline `export_homebrew` comprehensions into named helpers (`_class_record_to_export`, `_subclass_record_to_export`, `_race_record_to_export`, `_monster_record_to_export` [pre-existing], `_background_record_to_export`, `_feat_record_to_export`) + a `_HOMEBREW_ITEM_EXPORT` type→(key, projector) registry, so the bulk pack and the single-item export share one shape. The bulk export's output is byte-for-byte unchanged.
+
+The per-row "Export" button in the homebrew manager UI is deferred to Phase 9 (frontend polish) alongside the campaign/character export buttons; this commit ships the endpoint + its contract test.
+
+### Added
+- `GET /api/campaign/{cid}/homebrew/{type}/{slug}/export` — single-record homebrew export (one-row `simplevtt-homebrew` pack).
+
+### Changed
+- `export_homebrew` (bulk) now reuses the extracted per-type projection helpers (no output change).
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_export_homebrew_item.py` (new, +2) — happy path exports the demo-seeded `monsters/goblin-captain` (200, `simplevtt-homebrew` envelope, exactly one row with `monster_slug=goblin-captain`); error paths cover a non-GM 403, an unknown type 404, an unknown slug 404, and a shipped-SRD slug 404 (only campaign homebrew is exportable). Error-path assertions are ordered before the one successful export so the live per-campaign cooldown never trips a 429 on a non-TEST_MODE stack.
+
 ## [2.612.6] - 2026-06-24 — "The Salvage Crew"
 
 **Schema version:** 80

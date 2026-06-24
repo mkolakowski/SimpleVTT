@@ -15392,6 +15392,90 @@ def _monster_record_to_export(r: dict) -> dict:
 # Phase C step lands.
 
 
+# v2.613.0 — the per-type projections (record dict → legacy export row) are
+# extracted into named helpers so both the bulk ``/homebrew/export`` pack and
+# the single-item ``/homebrew/{type}/{slug}/export`` endpoint share one shape.
+# (The monster projection already had ``_monster_record_to_export`` above.)
+def _class_record_to_export(r: dict) -> dict:
+    return {
+        "class_slug": r.get("slug"),
+        "name": r.get("name"),
+        "hit_die": r.get("hit_die") or 8,
+        "prof_armor": r.get("prof_armor") or "",
+        "prof_weapons": r.get("prof_weapons") or "",
+        "prof_tools": r.get("prof_tools") or "",
+        "prof_saving_throws": r.get("prof_saving_throws") or "",
+        "prof_skills": r.get("prof_skills") or "",
+        "spellcasting_ability": r.get("spellcasting_ability") or "",
+        "equipment": r.get("equipment") or "",
+        "features": r.get("features") or [],
+        "spell_list": r.get("spell_list") or [],
+        "multiclass_prereq_abilities": r.get("multiclass_prereq_abilities") or {},
+        "multiclass_prereq_mode": r.get("multiclass_prereq_mode") or "all",
+        "multiclass_proficiencies": r.get("multiclass_proficiencies") or "",
+        "resources": r.get("resources") or [],
+    }
+
+
+def _subclass_record_to_export(r: dict) -> dict:
+    return {
+        "class_slug": (r.get("slug") or "").partition("__")[0] or r.get("class_slug") or "",
+        "sub_slug": (r.get("slug") or "").partition("__")[2] or r.get("slug") or "",
+        "name": r.get("name"),
+        "flavor": r.get("subclass_flavor") or r.get("flavor") or "",
+        "features": r.get("features") or [],
+    }
+
+
+def _race_record_to_export(r: dict) -> dict:
+    return {
+        "race_slug": r.get("slug"),
+        "name": r.get("name"),
+        "ability_bonuses": r.get("ability_bonuses") or [],
+        "size": r.get("size") or "",
+        "speed": r.get("speed"),
+        "age": r.get("age") or "",
+        "alignment": r.get("alignment") or "",
+        "languages": r.get("languages") or "",
+        "traits": r.get("traits") or [],
+    }
+
+
+def _background_record_to_export(r: dict) -> dict:
+    return {
+        "background_slug": r.get("slug"),
+        "name": r.get("name"),
+        "description": r.get("description") or "",
+        "skill_proficiencies": r.get("skill_proficiencies") or "",
+        "tool_proficiencies": r.get("tool_proficiencies") or "",
+        "languages": r.get("languages") or "",
+        "equipment": r.get("equipment") or "",
+        "feature_name": r.get("feature_name") or "",
+        "feature_desc": r.get("feature_desc") or "",
+    }
+
+
+def _feat_record_to_export(r: dict) -> dict:
+    return {
+        "feat_slug": r.get("slug"),
+        "name": r.get("name"),
+        "prerequisite": r.get("prerequisite") or "",
+        "desc": r.get("desc") or "",
+    }
+
+
+# Maps a homebrew content type → (export-envelope key, projection helper).
+# Used by both the bulk export and the single-item export below.
+_HOMEBREW_ITEM_EXPORT: dict[str, tuple[str, "callable"]] = {
+    "class_features": ("classes", _class_record_to_export),
+    "subclass_features": ("subclasses", _subclass_record_to_export),
+    "races": ("races", _race_record_to_export),
+    "monsters": ("monsters", _monster_record_to_export),
+    "backgrounds": ("backgrounds", _background_record_to_export),
+    "feats": ("feats", _feat_record_to_export),
+}
+
+
 @router.get("/api/campaign/{campaign_id}/homebrew/export")
 def export_homebrew(
     campaign_id: int,
@@ -15409,55 +15493,21 @@ def export_homebrew(
         "version": HOMEBREW_EXPORT_VERSION,
         "campaign": campaign.name,
         "exported_at": _dt.utcnow().isoformat() + "Z",
-        # Classes: v2.0.0 — file-based homebrew tier, project to legacy `class_slug`.
+        # v2.613.0: each list reuses the shared per-type projection helper
+        # (see ``_HOMEBREW_ITEM_EXPORT``), filtered to the campaign's own
+        # homebrew records (shipped SRD is skipped).
         "classes": [
-            {
-                "class_slug": r.get("slug"),
-                "name": r.get("name"),
-                "hit_die": r.get("hit_die") or 8,
-                "prof_armor": r.get("prof_armor") or "",
-                "prof_weapons": r.get("prof_weapons") or "",
-                "prof_tools": r.get("prof_tools") or "",
-                "prof_saving_throws": r.get("prof_saving_throws") or "",
-                "prof_skills": r.get("prof_skills") or "",
-                "spellcasting_ability": r.get("spellcasting_ability") or "",
-                "equipment": r.get("equipment") or "",
-                "features": r.get("features") or [],
-                "spell_list": r.get("spell_list") or [],
-                "multiclass_prereq_abilities": r.get("multiclass_prereq_abilities") or {},
-                "multiclass_prereq_mode": r.get("multiclass_prereq_mode") or "all",
-                "multiclass_proficiencies": r.get("multiclass_proficiencies") or "",
-                "resources": r.get("resources") or [],
-            }
+            _class_record_to_export(r)
             for r in local_content.search(type="class_features", campaign_id=campaign_id, limit=500)[0]
             if r.get("_source") == "local-homebrew"
         ],
-        # Subclasses: v2.0.0 — file-based homebrew tier, project from combined
-        # `<class>__<sub>` slug back to split fields the importer accepts.
         "subclasses": [
-            {
-                "class_slug": (r.get("slug") or "").partition("__")[0] or r.get("class_slug") or "",
-                "sub_slug": (r.get("slug") or "").partition("__")[2] or r.get("slug") or "",
-                "name": r.get("name"),
-                "flavor": r.get("subclass_flavor") or r.get("flavor") or "",
-                "features": r.get("features") or [],
-            }
+            _subclass_record_to_export(r)
             for r in local_content.search(type="subclass_features", campaign_id=campaign_id, limit=500)[0]
             if r.get("_source") == "local-homebrew"
         ],
-        # Races: v2.0.0 — file-based homebrew tier, project to legacy `race_slug`.
         "races": [
-            {
-                "race_slug": r.get("slug"),
-                "name": r.get("name"),
-                "ability_bonuses": r.get("ability_bonuses") or [],
-                "size": r.get("size") or "",
-                "speed": r.get("speed"),
-                "age": r.get("age") or "",
-                "alignment": r.get("alignment") or "",
-                "languages": r.get("languages") or "",
-                "traits": r.get("traits") or [],
-            }
+            _race_record_to_export(r)
             for r in local_content.search(type="races", campaign_id=campaign_id, limit=500)[0]
             if r.get("_source") == "local-homebrew"
         ],
@@ -15466,37 +15516,73 @@ def export_homebrew(
             for r in local_content.search(type="monsters", campaign_id=campaign_id, limit=500)[0]
             if r.get("_source") == "local-homebrew"
         ],
-        # Backgrounds: v2.0.0 — file-based homebrew tier, projected back to
-        # the legacy `background_slug` field for round-tripping.
         "backgrounds": [
-            {
-                "background_slug": r.get("slug"),
-                "name": r.get("name"),
-                "description": r.get("description") or "",
-                "skill_proficiencies": r.get("skill_proficiencies") or "",
-                "tool_proficiencies": r.get("tool_proficiencies") or "",
-                "languages": r.get("languages") or "",
-                "equipment": r.get("equipment") or "",
-                "feature_name": r.get("feature_name") or "",
-                "feature_desc": r.get("feature_desc") or "",
-            }
+            _background_record_to_export(r)
             for r in local_content.search(type="backgrounds", campaign_id=campaign_id, limit=500)[0]
             if r.get("_source") == "local-homebrew"
         ],
-        # Feats: v2.0.0 — read from file-based homebrew tier and project back
-        # to the legacy `feat_slug` field name so existing exports round-trip
-        # cleanly when re-imported (the importer accepts either `feat_slug`
-        # or the new `slug` field).
         "feats": [
-            {
-                "feat_slug": r.get("slug"),
-                "name": r.get("name"),
-                "prerequisite": r.get("prerequisite") or "",
-                "desc": r.get("desc") or "",
-            }
+            _feat_record_to_export(r)
             for r in local_content.search(type="feats", campaign_id=campaign_id, limit=500)[0]
             if r.get("_source") == "local-homebrew"
         ],
+    }
+
+
+@router.get("/api/campaign/{campaign_id}/homebrew/{type}/{slug}/export")
+def export_homebrew_item(
+    campaign_id: int,
+    type: str,
+    slug: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Export a *single* homebrew record (e.g. one custom monster) as a
+    ``simplevtt-homebrew`` pack containing exactly that one row. GM only.
+
+    The pack is the same shape ``/homebrew/import`` accepts, so a single
+    record round-trips into another campaign without edits. A homebrew
+    record carries no bundled media, so this stays JSON (no zip wrapper).
+
+    Rate-limited per campaign (``EXPORT_COOLDOWN_HOMEBREW_SECONDS``,
+    default 10s) and bypassed under TEST_MODE, matching the GDPR export.
+    Backup/export-import arc Phase 3.
+    """
+    campaign = _require_gm_for_campaign(campaign_id, user, db)
+    if type not in _HOMEBREW_ITEM_EXPORT:
+        raise HTTPException(404, f"Unknown homebrew type {type!r}.")
+
+    from ..export_limit import mark as _export_mark, remaining_for as _export_remaining
+
+    _tm = os.environ.get("TEST_MODE", "").strip().lower() in ("1", "true", "yes", "on")
+    if not _tm:
+        remaining = _export_remaining("homebrew", campaign_id, now=_time.monotonic())
+        if remaining > 0:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Export requested too recently. Try again in {remaining} seconds.",
+                headers={"Retry-After": str(remaining)},
+            )
+
+    hit = local_content.resolve(slug, type=type, campaign_id=campaign_id)
+    # Only the campaign's own homebrew is exportable — a shipped SRD record
+    # (or a miss) 404s rather than leaking SRD content through the homebrew
+    # export surface.
+    if not hit or hit[1] != "local-homebrew":
+        raise HTTPException(404, f"No homebrew {type} {slug!r} in this campaign.")
+    rec, _src = hit
+    key, projector = _HOMEBREW_ITEM_EXPORT[type]
+
+    if not _tm:
+        _export_mark("homebrew", campaign_id, now=_time.monotonic())
+
+    from datetime import datetime as _dt
+    return {
+        "format": "simplevtt-homebrew",
+        "version": HOMEBREW_EXPORT_VERSION,
+        "campaign": campaign.name,
+        "exported_at": _dt.utcnow().isoformat() + "Z",
+        key: [projector(rec)],
     }
 
 
