@@ -212,8 +212,79 @@ def list_backups() -> dict:
             g["files"].append(a["name"])
             g["size"] += a["size"]
             g["mtime"] = max(g["mtime"], a["mtime"])
-        out[bucket] = sorted(groups.values(), key=lambda g: g["mtime"], reverse=True)
+        ordered = sorted(groups.values(), key=lambda g: g["mtime"], reverse=True)
+        for g in ordered:
+            g["tag"] = _tag_for(bucket, g["ts"])
+        out[bucket] = ordered
     return out
+
+
+# ── Restore (v2.627.0) — Admin Center → sidecar coordination ──────────────────
+# The Admin Center can't restore directly (the app image has no psql + the
+# homebrew/uploads volumes are the sidecar's to unpack), so a restore is
+# requested by dropping a JSON trigger the sidecar watch-loop processes.
+
+def _restore_request_path() -> Path:
+    return backups_dir() / ".restore-request"
+
+
+def _restore_result_path() -> Path:
+    return backups_dir() / ".restore-result"
+
+
+def restore_pending() -> bool:
+    """True while a restore request is queued / in flight (the sidecar removes
+    the trigger when it starts processing)."""
+    return _restore_request_path().is_file()
+
+
+def request_restore(bucket: str, ts: str, *, requested_by: str, now_iso: str) -> bool:
+    """Queue a restore of the ``(bucket, ts)`` backup by writing the trigger
+    file the sidecar picks up. Returns False if the backup doesn't exist or a
+    restore is already pending. The sidecar takes a tagged safety backup before
+    overwriting anything."""
+    if not backup_files_for(bucket, ts):
+        return False
+    if restore_pending():
+        return False
+    payload = {
+        "bucket": bucket,
+        "ts": ts,
+        "requested_by": requested_by or "admin",
+        "requested_at": now_iso,
+    }
+    path = _restore_request_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".request.tmp")
+    tmp.write_text(json.dumps(payload), encoding="utf-8")
+    tmp.replace(path)
+    return True
+
+
+def last_restore_result() -> Optional[dict]:
+    """The most recent restore outcome the sidecar reported, or None."""
+    p = _restore_result_path()
+    if not p.is_file():
+        return None
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else None
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _tag_for(bucket: str, ts: str) -> Optional[str]:
+    """The optional note written alongside a backup run (e.g. a pre-restore
+    safety backup), or None. Stored as a sibling ``simplevtt-<ts>.tag`` file."""
+    if bucket not in ("daily", "weekly") or not _TS_RE.match(ts or ""):
+        return None
+    p = backups_dir() / bucket / f"simplevtt-{ts}.tag"
+    if p.is_file():
+        try:
+            return p.read_text(encoding="utf-8").strip()[:300] or None
+        except OSError:
+            return None
+    return None
 
 
 def backup_files_for(bucket: str, ts: str) -> list:

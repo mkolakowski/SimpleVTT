@@ -706,10 +706,24 @@ def admin_tools_demo_reset(request: Request):
 # Opt-in via ADMIN_CENTER_ADMIN_TOOLS (operator infra). Edits a settings file on
 # the shared backup volume that the sidecar watch-loops; read-only in DEMO_MODE.
 
+def _restore_allowed(request: Request) -> bool:
+    """Restore is the most destructive operator action (it overwrites the whole
+    database + media), so it's gated harder than the rest of the page: tools on,
+    NOT a demo instance, and — when MFA is configured — an MFA-verified session.
+    """
+    from . import backup_admin
+    if not _ADMIN_TOOLS_ENABLED or backup_admin.demo_mode_active():
+        return False
+    if mfa.mfa_enabled() and not _mfa_verified(request):
+        return False
+    return True
+
+
 @app.get("/backups", response_class=HTMLResponse)
-def backups_page(request: Request, saved: str = "", ran: str = "", err: str = ""):
-    """Backup schedule + retention editor, artifact listing, and run-now.
-    Opt-in via ADMIN_CENTER_ADMIN_TOOLS; auto-gated by the auth middleware."""
+def backups_page(request: Request, saved: str = "", ran: str = "", err: str = "", restored: str = ""):
+    """Backup schedule + retention editor, backup listing (download + restore),
+    and run-now. Opt-in via ADMIN_CENTER_ADMIN_TOOLS; auto-gated by the auth
+    middleware."""
     if not _ADMIN_TOOLS_ENABLED:
         return _TOOLS_DISABLED
     from . import backup_admin
@@ -722,11 +736,38 @@ def backups_page(request: Request, saved: str = "", ran: str = "", err: str = ""
             "settings": backup_admin.read_settings(),
             "backups": backup_admin.list_backups(),
             "demo_mode": backup_admin.demo_mode_active(),
+            "restore_allowed": _restore_allowed(request),
+            "restore_pending": backup_admin.restore_pending(),
+            "last_restore": backup_admin.last_restore_result(),
             "saved": saved,
             "ran": ran,
             "err": err,
+            "restored": restored,
         },
     )
+
+
+@app.post("/backups/restore")
+def backups_restore(request: Request, bucket: str = Form(...), ts: str = Form(...)):
+    """Queue a DESTRUCTIVE restore of the selected backup. The sidecar takes a
+    tagged safety backup first, then overwrites the database + homebrew +
+    uploads. Refused in DEMO_MODE / without the restore gate."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    from datetime import datetime, timezone
+
+    from . import backup_admin
+    if not _restore_allowed(request):
+        return RedirectResponse("/backups?err=Restore+is+not+available+here", status_code=303)
+    operator = request.session.get("admin_user", "?")
+    ok = backup_admin.request_restore(
+        bucket, ts, requested_by=operator,
+        now_iso=datetime.now(timezone.utc).isoformat(),
+    )
+    if not ok:
+        return RedirectResponse("/backups?err=Could+not+queue+restore+(unknown+backup+or+one+already+pending)", status_code=303)
+    log.warning("admin-center operator %r queued a RESTORE of %s/%s", operator, bucket, ts)
+    return RedirectResponse(f"/backups?restored={quote(ts)}", status_code=303)
 
 
 @app.post("/backups/settings")

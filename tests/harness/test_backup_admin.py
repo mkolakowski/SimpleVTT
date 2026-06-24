@@ -8,6 +8,8 @@ so this covers the pure ``backup_admin`` helper host-side: settings read/write
 round-trip, cron validation, retention clamping, demo-mode detection, and
 artifact listing.
 """
+import json
+
 from app.admin_center import backup_admin
 
 
@@ -154,3 +156,45 @@ def test_backup_files_for_resolves_run_and_is_safe(tmp_path, monkeypatch):
     assert backup_admin.backup_files_for("daily", "../../etc") == []
     assert backup_admin.backup_files_for("evil", ts) == []
     assert backup_admin.backup_files_for("daily", "nonexistent") == []
+
+
+def test_tags_surface_and_restore_request(tmp_path, monkeypatch):
+    monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
+    (tmp_path / "daily").mkdir()
+    ts = "20260624T030000Z"
+    for suf in (".sql.gz", ".homebrew.tar.gz", ".uploads.tar.gz"):
+        (tmp_path / "daily" / f"simplevtt-{ts}{suf}").write_bytes(b"x")
+    (tmp_path / "daily" / f"simplevtt-{ts}.tag").write_text(
+        "pre-restore safety backup (before restoring OTHER)", encoding="utf-8")
+
+    # The tag surfaces on the grouped backup.
+    g = backup_admin.list_backups()["daily"][0]
+    assert g["ts"] == ts
+    assert "pre-restore safety" in g["tag"]
+
+    # request_restore writes the trigger for a real backup.
+    assert backup_admin.restore_pending() is False
+    assert backup_admin.request_restore(
+        "daily", ts, requested_by="alice", now_iso="2026-06-24T00:00:00Z") is True
+    assert backup_admin.restore_pending() is True
+    req = json.loads((tmp_path / ".restore-request").read_text())
+    assert req["bucket"] == "daily" and req["ts"] == ts and req["requested_by"] == "alice"
+
+    # A second request is refused while one is pending.
+    assert backup_admin.request_restore("daily", ts, requested_by="x", now_iso="t") is False
+
+
+def test_request_restore_rejects_unknown_and_reads_result(tmp_path, monkeypatch):
+    monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
+    (tmp_path / "daily").mkdir()
+    # No such backup → not queued, no trigger written.
+    assert backup_admin.request_restore(
+        "daily", "20260101T000000Z", requested_by="x", now_iso="t") is False
+    assert backup_admin.restore_pending() is False
+    assert backup_admin.last_restore_result() is None
+
+    # A result file written by the sidecar is read back.
+    (tmp_path / ".restore-result").write_text(
+        json.dumps({"ok": True, "ts": "20260624T030000Z", "db_ok": 1}), encoding="utf-8")
+    res = backup_admin.last_restore_result()
+    assert res["ok"] is True and res["ts"] == "20260624T030000Z"

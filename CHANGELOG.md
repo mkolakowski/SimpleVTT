@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.627.0] - 2026-06-24 — "The Undo Button"
+
+**Schema version:** 80
+
+**Commit summary:** Admin Center `/backups` — one-click operator **restore**: pick a backup, confirm, and the sidecar takes a tagged safety backup first, then overwrites the database + homebrew + uploads from that backup. Backups now show a tag column.
+
+**Description:** Adds a full-application restore to the operator backups page (these are the *operator* backups — whole DB + homebrew + uploads — distinct from the per-campaign `simplevtt-export` zip in campaign settings, which clones/restores a single campaign). Because the Admin Center image has no `psql` and the homebrew/uploads volumes are the sidecar's to unpack, the restore is **sidecar-driven** via a trigger file (the same pattern as "run now"):
+
+- **Admin Center** — each backup row gets a `♻ Restore` button (behind a strong confirm). `POST /backups/restore` validates the backup exists + no restore is pending, then writes a `.restore-request` JSON trigger. Gated harder than the rest of the page (`_restore_allowed`): tools on, **NOT** a demo instance, and — when MFA is configured — an MFA-verified session; the button only renders when allowed. Pending / last-result banners surface progress.
+- **Sidecar** (`entrypoint-backup.sh`) — the watch-loop picks up `.restore-request` and runs `do_restore`: it **always takes a fresh safety backup first**, tagged `pre-restore safety backup (before restoring <ts>)`, then loads the chosen SQL dump (`pg_dump` now uses `--clean --if-exists`, so it pipes straight into the live DB), and clears + unpacks the homebrew and uploads tarballs into their volumes. Result is written to `.restore-result` for the page. Never reached in DEMO_MODE (the entrypoint idles before the watch-loop there).
+- **Tags** — a backup run can carry a note (sibling `simplevtt-<ts>.tag` file, written via `BACKUP_TAG`); the page shows it in a new **Tag** column so the pre-restore safety backup is identifiable. `docker-compose.yml` mounts the homebrew + uploads volumes **read-write** on the backup service (needed to unpack on restore); `pg_dump --clean --if-exists` makes dumps self-restoring.
+
+**Caveat:** restore overwrites live data and briefly disrupts the running app (the safety backup mitigates data loss). It's demo-disabled and can't be exercised on the demo host, so the coordination + safety logic is unit-tested host-side and the restore mechanics are documented as production-only.
+
+### Added
+- `POST /backups/restore` + the sidecar `do_restore` flow (safety-backup-first, tagged); backup Tag column; `backup_admin` tag + restore-request/result helpers.
+
+### Changed
+- Backup `pg_dump` now uses `--clean --if-exists` (self-restoring); the backup service mounts homebrew + uploads read-write.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_backup_admin.py` (+2) — `test_tags_surface_and_restore_request` (a `.tag` surfaces on the grouped backup; `request_restore` writes the trigger for a real backup and refuses a second while one is pending) and `test_request_restore_rejects_unknown_and_reads_result` (an unknown backup isn't queued; `last_restore_result` reads the sidecar's result file). The destructive sidecar path is demo-disabled + production-only, so it isn't harness-exercised.
+
 ## [2.626.0] - 2026-06-24 — "The Whole Picture"
 
 **Schema version:** 80

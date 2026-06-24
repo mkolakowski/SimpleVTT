@@ -264,12 +264,11 @@ services:
       DEMO_MODE: ${DEMO_MODE:-false}
     volumes:
       - backup_data:/backups
-      - homebrew_data:/homebrew:ro
-      # v2.626.0 — read-only mount of the uploaded-media volume so a backup run
-      # also captures maps / portraits / tokens / audio / handouts. Without it a
-      # fresh-install restore has DB rows pointing at missing /static/uploads
-      # files. Same path the app mounts it under (its /app/app/static/uploads).
-      - uploads_data:/uploads:ro
+      # v2.626.0 — capture the homebrew + uploaded-media volumes too (a backup
+      # run tars them). v2.627.0 — read-WRITE so the operator restore flow can
+      # unpack them back into place (clear + untar). Same paths the app uses.
+      - homebrew_data:/homebrew
+      - uploads_data:/uploads
       - ./scripts/backup.sh:/usr/local/bin/backup.sh:ro
       - ./scripts/entrypoint-backup.sh:/usr/local/bin/entrypoint-backup.sh:ro
     entrypoint: ["/bin/sh", "/usr/local/bin/entrypoint-backup.sh"]

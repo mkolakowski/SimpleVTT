@@ -53,7 +53,11 @@ DAILY_HB="${DAILY_DIR}/simplevtt-${TS}.homebrew.tar.gz"
 DAILY_UP="${DAILY_DIR}/simplevtt-${TS}.uploads.tar.gz"
 
 echo "[backup] writing ${DAILY_SQL}"
-PGPASSWORD="${POSTGRES_PASSWORD}" pg_dump -h "${PGHOST:-db}" -U "${POSTGRES_USER}" "${POSTGRES_DB}" \
+# --clean --if-exists makes the dump self-restoring: it drops each object
+# (IF EXISTS) before recreating it, so a restore can pipe it straight into the
+# live database without a manual schema wipe (see entrypoint-backup.sh).
+PGPASSWORD="${POSTGRES_PASSWORD}" pg_dump --clean --if-exists \
+    -h "${PGHOST:-db}" -U "${POSTGRES_USER}" "${POSTGRES_DB}" \
     | gzip -9 > "${DAILY_SQL}"
 
 # Homebrew is file-based; tar the volume if it exists and has content. An
@@ -88,7 +92,14 @@ fi
 find "${DAILY_DIR}" -type f \( -name '*.sql.gz' -o -name '*.homebrew.tar.gz' -o -name '*.uploads.tar.gz' \) \
     -mtime +"${KEEP_DAILY}" -print -delete || true
 WEEKLY_DAYS=$(( KEEP_WEEKLY * 7 ))
-find "${WEEKLY_DIR}" -type f \( -name '*.sql.gz' -o -name '*.homebrew.tar.gz' -o -name '*.uploads.tar.gz' \) \
+find "${WEEKLY_DIR}" -type f \( -name '*.sql.gz' -o -name '*.homebrew.tar.gz' -o -name '*.uploads.tar.gz' -o -name '*.tag' \) \
     -mtime +"${WEEKLY_DAYS}" -print -delete || true
+find "${DAILY_DIR}" -type f -name '*.tag' -mtime +"${KEEP_DAILY}" -print -delete || true
+
+# v2.627.0 — an optional note for this run (e.g. the pre-restore safety backup),
+# written as a sibling .tag file the Admin Center surfaces next to the backup.
+if [ -n "${BACKUP_TAG:-}" ]; then
+    printf '%s' "${BACKUP_TAG}" > "${DAILY_DIR}/simplevtt-${TS}.tag"
+fi
 
 echo "[backup] done at $(date -u)"

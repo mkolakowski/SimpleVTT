@@ -12,7 +12,11 @@
 set -eu
 
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
+HOMEBREW_DIR="${HOMEBREW_DIR:-/homebrew}"
+UPLOADS_DIR="${UPLOADS_DIR:-/uploads}"
 SETTINGS_FILE="${BACKUP_DIR}/backup-settings.json"
+RESTORE_TRIGGER="${BACKUP_DIR}/.restore-request"
+RESTORE_RESULT="${BACKUP_DIR}/.restore-result"
 
 is_truthy() {
     case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
@@ -58,6 +62,54 @@ EOF
     echo "[backup] cron schedule: ${CRON_EXPR}" | tee -a /var/log/backup.log
 }
 
+# ── Restore (v2.627.0) ───────────────────────────────────────────────────────
+# Driven by a ``.restore-request`` JSON trigger the Admin Center drops on the
+# shared volume ({"bucket","ts"}). DESTRUCTIVE: it overwrites the live database
+# + homebrew + uploads with the selected backup — so it ALWAYS takes a fresh,
+# tagged safety backup first. Never reached in DEMO_MODE (the script execs into
+# the idle tail above before the watch loop). The result is written to
+# ``.restore-result`` for the page to surface.
+do_restore() {
+    bucket="$(json_field "${RESTORE_TRIGGER}" bucket)"
+    ts="$(json_field "${RESTORE_TRIGGER}" ts)"
+    rm -f "${RESTORE_TRIGGER}"
+    src="${BACKUP_DIR}/${bucket}"
+    sql="${src}/simplevtt-${ts}.sql.gz"
+    hb="${src}/simplevtt-${ts}.homebrew.tar.gz"
+    up="${src}/simplevtt-${ts}.uploads.tar.gz"
+    if [ -z "${bucket}" ] || [ -z "${ts}" ] || [ ! -f "${sql}" ]; then
+        printf '{"ok":false,"ts":"%s","error":"backup not found"}' "${ts}" > "${RESTORE_RESULT}"
+        echo "[backup] restore: backup ${bucket}/${ts} not found — aborting" | tee -a /var/log/backup.log
+        return
+    fi
+
+    echo "[backup] restore: taking a tagged safety backup before restoring ${ts}" | tee -a /var/log/backup.log
+    BACKUP_TAG="pre-restore safety backup (before restoring ${ts})" \
+    POSTGRES_USER="${POSTGRES_USER}" POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" POSTGRES_DB="${POSTGRES_DB}" PGHOST="${PGHOST}" BACKUP_DIR="${BACKUP_DIR}" \
+        /bin/sh /usr/local/bin/backup.sh >> /var/log/backup.log 2>&1 || true
+
+    echo "[backup] restore: loading database from ${ts}" | tee -a /var/log/backup.log
+    db_ok=1
+    gunzip -c "${sql}" | PGPASSWORD="${POSTGRES_PASSWORD}" psql -v ON_ERROR_STOP=0 \
+        -h "${PGHOST:-db}" -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" >> /var/log/backup.log 2>&1 || db_ok=0
+
+    # Homebrew + uploads volumes: clear then unpack (these mounts are RW).
+    if [ -f "${hb}" ] && [ -d "${HOMEBREW_DIR}" ]; then
+        echo "[backup] restore: unpacking homebrew volume" | tee -a /var/log/backup.log
+        find "${HOMEBREW_DIR}" -mindepth 1 -delete 2>/dev/null || true
+        tar -xzf "${hb}" -C "${HOMEBREW_DIR}" >> /var/log/backup.log 2>&1 || true
+    fi
+    if [ -f "${up}" ] && [ -d "${UPLOADS_DIR}" ]; then
+        echo "[backup] restore: unpacking uploads volume" | tee -a /var/log/backup.log
+        find "${UPLOADS_DIR}" -mindepth 1 -delete 2>/dev/null || true
+        tar -xzf "${up}" -C "${UPLOADS_DIR}" >> /var/log/backup.log 2>&1 || true
+    fi
+
+    printf '{"ok":true,"ts":"%s","db_ok":%s,"at":"%s"}' \
+        "${ts}" "${db_ok}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${RESTORE_RESULT}"
+    echo "[backup] restore: done (ts=${ts}, db_ok=${db_ok})" | tee -a /var/log/backup.log
+}
+
 install_crontab
 echo "[backup] running initial backup on startup..." | tee -a /var/log/backup.log
 POSTGRES_USER="${POSTGRES_USER}" POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" POSTGRES_DB="${POSTGRES_DB}" PGHOST="${PGHOST}" BACKUP_DIR="${BACKUP_DIR}" /bin/sh /usr/local/bin/backup.sh || true
@@ -81,6 +133,9 @@ while true; do
         rm -f "${RUN_TRIGGER}"
         echo "[backup] run-now trigger — taking an on-demand backup" | tee -a /var/log/backup.log
         POSTGRES_USER="${POSTGRES_USER}" POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" POSTGRES_DB="${POSTGRES_DB}" PGHOST="${PGHOST}" BACKUP_DIR="${BACKUP_DIR}" /bin/sh /usr/local/bin/backup.sh >> /var/log/backup.log 2>&1 || true
+    fi
+    if [ -f "${RESTORE_TRIGGER}" ]; then
+        do_restore
     fi
     sleep 30
 done
