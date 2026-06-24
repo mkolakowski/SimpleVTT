@@ -139,7 +139,7 @@ def _stat_artifact(p: Path) -> dict:
     return {"name": p.name, "size": st.st_size, "mtime": st.st_mtime}
 
 
-_ARTIFACT_SUFFIXES = (".sql.gz", ".homebrew.tar.gz")
+_ARTIFACT_SUFFIXES = (".sql.gz", ".homebrew.tar.gz", ".uploads.tar.gz")
 
 
 def artifact_path(bucket: str, name: str) -> Optional[Path]:

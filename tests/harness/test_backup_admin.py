@@ -124,16 +124,17 @@ def test_list_backups_groups_by_timestamp(tmp_path, monkeypatch):
     ts = "20260624T030000Z"
     (tmp_path / "daily" / f"simplevtt-{ts}.sql.gz").write_bytes(b"aa")
     (tmp_path / "daily" / f"simplevtt-{ts}.homebrew.tar.gz").write_bytes(b"bbb")
+    (tmp_path / "daily" / f"simplevtt-{ts}.uploads.tar.gz").write_bytes(b"cccc")
     (tmp_path / "daily" / "notes.txt").write_bytes(b"x")          # ignored
     (tmp_path / "weekly" / "simplevtt-20260623T030000Z.sql.gz").write_bytes(b"c")
 
     backups = backup_admin.list_backups()
-    # The two daily files for one run group into a single backup.
+    # The three daily files for one run group into a single backup.
     assert len(backups["daily"]) == 1
     g = backups["daily"][0]
     assert g["ts"] == ts
-    assert len(g["files"]) == 2
-    assert g["size"] == 5                  # 2 + 3 bytes
+    assert len(g["files"]) == 3            # sql + homebrew + uploads
+    assert g["size"] == 9                  # 2 + 3 + 4 bytes
     assert len(backups["weekly"]) == 1     # the lone sql.gz still counts as a backup
 
 
@@ -143,9 +144,10 @@ def test_backup_files_for_resolves_run_and_is_safe(tmp_path, monkeypatch):
     ts = "20260624T030000Z"
     (tmp_path / "daily" / f"simplevtt-{ts}.sql.gz").write_bytes(b"a")
     (tmp_path / "daily" / f"simplevtt-{ts}.homebrew.tar.gz").write_bytes(b"b")
+    (tmp_path / "daily" / f"simplevtt-{ts}.uploads.tar.gz").write_bytes(b"c")
 
     paths = backup_admin.backup_files_for("daily", ts)
-    assert len(paths) == 2
+    assert len(paths) == 3                 # sql + homebrew + uploads
     assert all(p.is_file() for p in paths)
 
     # Bad timestamp / bucket / missing run → empty (traversal-proof).

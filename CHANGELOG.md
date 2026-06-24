@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.626.0] - 2026-06-24 — "The Whole Picture"
+
+**Schema version:** 80
+
+**Commit summary:** Automated backups now also capture the uploaded-media volume, so a backup is everything needed to restore the app from a fresh install (DB + homebrew + uploads).
+
+**Description:** The sidecar backed up the full Postgres database (`pg_dump` → every user, campaign, character, roll, and setting) plus the file-based homebrew volume — but **not** the uploaded media (`/static/uploads/`: maps, portraits, tokens, audio, handouts, thumbnails). A restore from a fresh install would therefore have DB rows pointing at missing files. Now each backup run produces a **third** artifact:
+
+- `simplevtt-<ts>.sql.gz` — full Postgres dump (all campaign + user data)
+- `simplevtt-<ts>.homebrew.tar.gz` — file-based homebrew content
+- `simplevtt-<ts>.uploads.tar.gz` — **new** — the uploaded-media volume
+
+Together they're a complete restore set. Changes:
+
+- **`docker-compose.yml`** — the `backup` service mounts `uploads_data:/uploads:ro` (read-only), the same volume the app serves `/static/uploads` from.
+- **`scripts/backup.sh`** — tars `/uploads` into `simplevtt-<ts>.uploads.tar.gz` (empty-dir-still-valid, like the homebrew tarball), copies it into the Sunday weekly set, and prunes it under the same `KEEP_DAILY`/`KEEP_WEEKLY` retention.
+- **Admin Center** — `.uploads.tar.gz` is added to `backup_admin._ARTIFACT_SUFFIXES`, so the `/backups` page lists it as part of each run and the per-run **download `.zip`** (v2.625.0) now bundles all three files.
+
+Restore procedure: load the SQL dump, then unpack the homebrew + uploads tarballs into their volumes. (The DEMO_MODE skip still applies — demo instances take no backups.)
+
+### Added
+- `simplevtt-<ts>.uploads.tar.gz` artifact (uploaded media) in every backup run; `uploads_data` mounted read-only on the backup service.
+
+### Changed
+- The per-run backup `.zip` now bundles three artifacts (db + homebrew + uploads); retention covers the uploads tarball.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_backup_admin.py` — the grouping + run-resolver tests now include the `.uploads.tar.gz` artifact (a run groups into one backup of 3 files; `backup_files_for` resolves all three), so the listing + per-run zip cover the complete set.
+
 ## [2.625.1] - 2026-06-24 — "The Dedicated Drawer"
 
 **Schema version:** 80

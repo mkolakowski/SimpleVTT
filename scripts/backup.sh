@@ -1,12 +1,20 @@
 #!/bin/sh
-# pg_dump + homebrew-volume tar, with daily + weekly retention.
+# pg_dump + homebrew-volume tar + uploads-volume tar, with daily + weekly
+# retention.
 # Daily backups: kept for KEEP_DAILY days (default 7)
 # Weekly backups (Sundays): kept for KEEP_WEEKLY weeks (default 4)
 #
-# Two artefacts are produced each run:
-#   simplevtt-<ts>.sql.gz   — Postgres dump
-#   simplevtt-<ts>.homebrew.tar.gz — tarball of the file-based homebrew volume
-# Both share the same timestamp so a restore script can pair them.
+# v2.626.0 — a complete fresh-install restore needs three things, so each run
+# now produces THREE artefacts sharing one timestamp:
+#   simplevtt-<ts>.sql.gz          — full Postgres dump (every user + campaign +
+#                                     character + roll + setting; pg_dump of the
+#                                     whole database)
+#   simplevtt-<ts>.homebrew.tar.gz — the file-based homebrew content volume
+#   simplevtt-<ts>.uploads.tar.gz  — the uploaded media volume (maps, portraits,
+#                                     tokens, audio, handouts, thumbnails) that
+#                                     the DB rows reference by URL
+# Restore = load the SQL dump, then unpack the homebrew + uploads tarballs into
+# their volumes. The shared timestamp pairs the three.
 set -eu
 
 # v2.620.0 — belt-and-braces: even a manual "run now" is a no-op in demo mode
@@ -21,6 +29,7 @@ BACKUP_DIR="${BACKUP_DIR:-/backups}"
 DAILY_DIR="${BACKUP_DIR}/daily"
 WEEKLY_DIR="${BACKUP_DIR}/weekly"
 HOMEBREW_DIR="${HOMEBREW_DIR:-/homebrew}"
+UPLOADS_DIR="${UPLOADS_DIR:-/uploads}"
 SETTINGS_FILE="${BACKUP_DIR}/backup-settings.json"
 mkdir -p "${DAILY_DIR}" "${WEEKLY_DIR}"
 
@@ -41,6 +50,7 @@ fi
 
 DAILY_SQL="${DAILY_DIR}/simplevtt-${TS}.sql.gz"
 DAILY_HB="${DAILY_DIR}/simplevtt-${TS}.homebrew.tar.gz"
+DAILY_UP="${DAILY_DIR}/simplevtt-${TS}.uploads.tar.gz"
 
 echo "[backup] writing ${DAILY_SQL}"
 PGPASSWORD="${POSTGRES_PASSWORD}" pg_dump -h "${PGHOST:-db}" -U "${POSTGRES_USER}" "${POSTGRES_DB}" \
@@ -56,18 +66,29 @@ else
     tar -czf "${DAILY_HB}" -T /dev/null
 fi
 
-# On Sundays also stash a weekly copy of both artefacts
+# Uploaded media (maps / portraits / tokens / audio / handouts / thumbnails).
+# The DB rows reference these by /static/uploads/... URL, so a fresh-install
+# restore needs them too. Same empty-dir-still-valid-tarball rule.
+echo "[backup] writing ${DAILY_UP}"
+if [ -d "${UPLOADS_DIR}" ]; then
+    tar -czf "${DAILY_UP}" -C "${UPLOADS_DIR}" .
+else
+    tar -czf "${DAILY_UP}" -T /dev/null
+fi
+
+# On Sundays also stash a weekly copy of all three artefacts
 if [ "${DOW}" = "7" ]; then
     cp "${DAILY_SQL}" "${WEEKLY_DIR}/simplevtt-${TS}.sql.gz"
     cp "${DAILY_HB}"  "${WEEKLY_DIR}/simplevtt-${TS}.homebrew.tar.gz"
+    cp "${DAILY_UP}"  "${WEEKLY_DIR}/simplevtt-${TS}.uploads.tar.gz"
     echo "[backup] copied to weekly"
 fi
 
 # Retention: prune daily older than KEEP_DAILY, weekly older than KEEP_WEEKLY*7
-find "${DAILY_DIR}" -type f \( -name '*.sql.gz' -o -name '*.homebrew.tar.gz' \) \
+find "${DAILY_DIR}" -type f \( -name '*.sql.gz' -o -name '*.homebrew.tar.gz' -o -name '*.uploads.tar.gz' \) \
     -mtime +"${KEEP_DAILY}" -print -delete || true
 WEEKLY_DAYS=$(( KEEP_WEEKLY * 7 ))
-find "${WEEKLY_DIR}" -type f \( -name '*.sql.gz' -o -name '*.homebrew.tar.gz' \) \
+find "${WEEKLY_DIR}" -type f \( -name '*.sql.gz' -o -name '*.homebrew.tar.gz' -o -name '*.uploads.tar.gz' \) \
     -mtime +"${WEEKLY_DAYS}" -print -delete || true
 
 echo "[backup] done at $(date -u)"
