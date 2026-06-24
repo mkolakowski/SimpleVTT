@@ -18,139 +18,74 @@ from .helpers import BASE_URL
 
 
 async def test_wiki_home_renders():
-    """GET /wiki — 200 + HTML body contains the page title."""
+    """GET /wiki — 200 + the landing page's guides / references / repo-docs /
+    banners. v2.630.0: the (large) design-plans table moved to /wiki/plans, so
+    the landing page links out to it instead of listing every plan."""
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
         resp = await client.get("/wiki")
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "SimpleVTT wiki" in resp.text
-    # Available-guides table includes the roll-log guide link.
+    # Available-guides table.
     assert "/wiki/roll-log-guide" in resp.text
-    # v2.597.0: the demo-content catalog is surfaced in the guides table.
-    assert "/wiki/demo-content" in resp.text
-    # v2.483.0: the Admin Center guide is surfaced in the guides table.
-    assert "/wiki/admin-center" in resp.text
-    # v2.628.0: the backups & restore guide is surfaced in the guides table.
-    assert "/wiki/backups" in resp.text
+    assert "/wiki/demo-content" in resp.text       # v2.597.0
+    assert "/wiki/admin-center" in resp.text        # v2.483.0
+    assert "/wiki/backups" in resp.text             # v2.628.0
+    assert "/wiki/pc-vs-npc-systems" in resp.text   # v2.49.167
+    assert "/wiki/fail2ban-deployment" in resp.text # v2.476.0
+    assert "/wiki/privacy" in resp.text             # v2.478.0
+    assert "/wiki/targeting-system-guide" in resp.text
+    assert "/wiki/battle-character-sheets-guide" in resp.text
+    assert "/wiki/unified-mini-sheet-mockups" in resp.text
+    assert "/wiki/reactions" in resp.text
+    assert "/wiki/testing-checklist" in resp.text
+    assert "/wiki/lair-regional-catalog" in resp.text
+    assert "/wiki/srd-races-implementation" in resp.text
+    assert "/wiki/srd-conditions" in resp.text
     # v2.49.9: the wiki nav menu is rendered on the landing too.
     assert 'class="wiki-nav"' in resp.text
-    # v2.49.9: Plans + References + Repo docs sections all reachable.
-    assert "/wiki/doc/plan-test-harness" in resp.text
+    # v2.630.0: the design-plans index moved to its own page; the landing
+    # page links out to it rather than listing every plan inline.
+    assert "/wiki/plans" in resp.text
+    # References + Repo documentation sections stay on the landing page.
     assert "/wiki/doc/changelog" in resp.text
     assert "/wiki/doc/roll-log-card-layout" in resp.text
-    # v2.49.66: ruler/range plan listed in the design-plans table.
-    assert "/wiki/doc/plan-ruler-and-range" in resp.text
-    # v2.49.68: player simulacrum plan listed too.
-    assert "/wiki/doc/plan-player-simulacrum" in resp.text
-    # v2.49.103: spell-validation suite plan listed too.
-    assert "/wiki/doc/plan-spell-validation-suite" in resp.text
-    # v2.107.2: spell up-casting plan listed too.
-    assert "/wiki/doc/plan-spell-upcasting" in resp.text
-    # v2.404.10: spell utility-upcast arc closure retrospective listed.
-    assert "/wiki/doc/plan-spell-utility-upcast" in resp.text
-    # v2.49.118: Sorcery Points + Metamagic plan listed too.
-    assert "/wiki/doc/plan-sorcery-points-and-metamagic" in resp.text
-    # v2.49.119: Warlock Pact Boon plan listed too.
-    assert "/wiki/doc/plan-warlock-pact-boon" in resp.text
-    assert "/wiki/doc/plan-wild-magic" in resp.text
-    assert "/wiki/doc/plan-eldritch-knight" in resp.text
-    assert "/wiki/doc/plan-battle-master" in resp.text
-    assert "/wiki/doc/plan-paladin-oaths" in resp.text
-    # v2.158.71: magic-item automation plan listed (SRD audit P1).
-    assert "/wiki/doc/plan-magic-items-automation" in resp.text
-    # v2.158.72: exhaustion-levels plan listed (SRD audit P1).
-    assert "/wiki/doc/plan-exhaustion-levels" in resp.text
-    # v2.159.26: carrying-capacity plan listed (unblocks Bag of Holding).
-    assert "/wiki/doc/plan-carrying-capacity" in resp.text
-    # v2.159.32: legendary-actions plan listed (top P1 of 2026-06-11 SRD audit refresh).
-    assert "/wiki/doc/plan-legendary-actions" in resp.text
-    # v2.211.0: ability-score override plan listed (unblocks Belt of Giant Strength).
-    assert "/wiki/doc/plan-str-override" in resp.text
-    # v2.262.0: charged-items backlog plan listed.
-    assert "/wiki/doc/plan-charged-items" in resp.text
-    # v2.311.0: permanent ability-increase reconciliation plan listed.
-    assert "/wiki/doc/plan-permanent-ability-increase-reconciliation" in resp.text
-    # v2.49.167: PC vs NPC combat systems audit doc listed.
-    assert "/wiki/pc-vs-npc-systems" in resp.text
-    # v2.476.0: fail2ban deployment operator guide listed.
-    assert "/wiki/fail2ban-deployment" in resp.text
-    # v2.478.0: privacy reference listed.
-    assert "/wiki/privacy" in resp.text
-    # v2.49.168: targeting system visual guide listed.
-    assert "/wiki/targeting-system-guide" in resp.text
-    # v2.49.182: Battle & Characters tab sheets visual guide listed.
-    assert "/wiki/battle-character-sheets-guide" in resp.text
-    # v2.49.185: unified mini-sheet plan listed.
-    assert "/wiki/doc/plan-unified-mini-sheet" in resp.text
-    # v2.49.186: unified mini-sheet visual mockups companion.
-    assert "/wiki/unified-mini-sheet-mockups" in resp.text
-    # v2.66.7: reactions-automation plan listed in the design-plans table.
-    assert "/wiki/doc/plan-reactions-automation" in resp.text
-    # v2.99.50: movement-OA flow plan listed in the design-plans table.
-    assert "/wiki/doc/plan-movement-oa-flow" in resp.text
-    # v2.99.386: full class-feature automation plan listed.
-    assert "/wiki/doc/plan-full-feature-automation" in resp.text
-    # v2.99.394: on-hit riders (automation Phase 2) sub-plan listed.
-    assert "/wiki/doc/plan-on-hit-riders" in resp.text
-    assert "/wiki/doc/plan-feature-saves" in resp.text
-    assert "/wiki/doc/plan-temp-hp-and-bonuses" in resp.text
-    assert "/wiki/doc/plan-auras" in resp.text
-    # v2.515.0: aura & barrier geometry enforcement plan listed.
-    assert "/wiki/doc/plan-aura-geometry-enforcement" in resp.text
-    # v2.538.0: conjure-family summon-catalog plan listed.
-    assert "/wiki/doc/plan-conjure-family" in resp.text
-    # v2.553.2: notes & handouts (E2E-encrypted player notes) plan listed.
-    assert "/wiki/doc/plan-notes-and-handouts" in resp.text
-    # v2.566.2: persistent-AoE enter-trigger plan listed.
-    assert "/wiki/doc/plan-aoe-enter-trigger" in resp.text
-    # v2.568.4: fork-&-tweak-SRD-as-homebrew plan listed.
-    assert "/wiki/doc/plan-homebrew-fork-srd" in resp.text
-    # v2.573.1: admin-center-consolidation plan listed.
-    assert "/wiki/doc/plan-admin-center-consolidation" in resp.text
-    # v2.584.0: app-wide-roles-and-storage plan listed.
-    assert "/wiki/doc/plan-app-wide-roles-and-storage" in resp.text
-    # v2.602.1: campaign & PC archive plan listed.
-    assert "/wiki/doc/plan-campaign-pc-archive" in resp.text
-    # v2.610.1: pending-resolution state machine plan listed.
-    assert "/wiki/doc/plan-pending-resolution-state-machine" in resp.text
-    # v2.612.4: backup / export-import overhaul plan listed.
-    assert "/wiki/doc/plan-backup-export-overhaul" in resp.text
-    assert "/wiki/doc/plan-movement-and-summons" in resp.text
-    # v2.99.447: automation-coverage audit doc listed in the references table.
-    assert "/wiki/doc/automation-coverage" in resp.text
-    # v2.384.0: condition-enforcement audit doc listed in the references table.
-    assert "/wiki/doc/condition-enforcement-audit" in resp.text
-    # v2.82.0: reactions-automation GM how-to listed in the available-guides table.
-    assert "/wiki/reactions" in resp.text
-    # v2.99.8: testing-checklist per-version verification log listed.
-    assert "/wiki/testing-checklist" in resp.text
-    # v2.151.3: TODONE completed-to-do archive listed in Repo documentation.
-    assert "/wiki/doc/todone" in resp.text
-    # v2.181.1: lair-actions + regional-effects catalog listed in available guides.
-    assert "/wiki/lair-regional-catalog" in resp.text
-    # v2.316.0: SRD automation-coverage banner rendered at top of landing page.
-    assert "SRD 5e automation coverage" in resp.text
+    assert "/wiki/doc/automation-coverage" in resp.text         # v2.99.447
+    assert "/wiki/doc/condition-enforcement-audit" in resp.text # v2.384.0
+    assert "/wiki/doc/todone" in resp.text                      # v2.151.3
+    assert "/wiki/doc/bugs" in resp.text                        # v2.317.0
+    # Banners at the top of the landing page.
+    assert "SRD 5e automation coverage" in resp.text            # v2.316.0
     assert 'id="srd-coverage"' in resp.text
-    # v2.317.0 (assert tag): BUGS known-defect tracker listed in Repo documentation.
-    assert "/wiki/doc/bugs" in resp.text
-    # v2.393.0: race-features plan listed (closes the SRD Races row to ~100%).
-    assert "/wiki/doc/plan-race-features" in resp.text
-    # v2.423.3: demo magic-link login plan listed (URL-login for demo instance only).
-    assert "/wiki/doc/plan-demo-magic-link" in resp.text
-    # v2.423.4: fail2ban/CrowdSec log integration plan listed.
-    assert "/wiki/doc/plan-fail2ban-crowdsec-integration" in resp.text
-    # v2.423.5: Cloudflare edge-banning integration plan listed.
-    assert "/wiki/doc/plan-cloudflare-edge-banning" in resp.text
-    assert "/wiki/doc/plan-admin-center-mfa" in resp.text
-    # v2.436.0: cast-and-broadcast tail plan listed.
-    assert "/wiki/doc/plan-cast-and-broadcast-tail" in resp.text
-    # v2.423.7: Security spine banner rendered at the top of the landing page.
-    assert "Security spine" in resp.text
+    assert "Security spine" in resp.text                        # v2.423.7
     assert 'id="security-spine"' in resp.text
-    # v2.400.0: SRD race rules implementation guide listed in Available guides.
-    assert "/wiki/srd-races-implementation" in resp.text
-    # v2.402.0: SRD conditions implementation guide listed in Available guides.
-    assert "/wiki/srd-conditions" in resp.text
+
+
+async def test_wiki_plans_page_renders():
+    """v2.630.0: GET /wiki/plans — the design-plans index split off the landing
+    page to de-clutter it. 200 + the nav + a back-link + the plans table (a
+    representative spread of plan links, the shipped-status badge styling, and
+    many entries)."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/plans")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "Design plans" in resp.text
+    assert 'class="wiki-nav"' in resp.text
+    assert 'href="/wiki"' in resp.text          # back-link to the index
+    # A representative spread of plans now lives here (and not on /wiki).
+    for slug in (
+        "plan-test-harness", "plan-ruler-and-range", "plan-legendary-actions",
+        "plan-race-features", "plan-full-feature-automation",
+        "plan-notes-and-handouts", "plan-app-wide-roles-and-storage",
+        "plan-pending-resolution-state-machine", "plan-backup-export-overhaul",
+        "plan-spell-upcasting", "plan-reactions-automation",
+    ):
+        assert f"/wiki/doc/{slug}" in resp.text, f"plans page missing {slug}"
+    # The styled status badges render (the table carries status spans).
+    assert "status-shipped" in resp.text
+    # It's the full index, not a handful.
+    assert resp.text.count("/wiki/doc/plan-") >= 30
 
 
 async def test_wiki_guide_serves_roll_log():

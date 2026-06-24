@@ -1,0 +1,91 @@
+<style>
+  /* v2.43.10: documentation column is centered in the viewport via
+     max-width + margin: 0 auto so there's equal space to the left
+     and right. Everything inside (text, headings, lists, table) is
+     left-justified — the v2.43.9 ``text-align: center`` experiment
+     made centered prose hard to read; reverted to the natural
+     left-aligned flow. v2.49.9: nav menu via _wiki_nav.html include. */
+  .wiki-wrap {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 20px 36px 60px;
+  }
+  .wiki-wrap h1 {
+      font-size: 24px;
+      letter-spacing: 0.2px;
+      margin: 0 0 6px;
+  }
+  .wiki-wrap .lede {
+      color: var(--fg-mute);
+      font-size: 14px;
+      margin: 0 0 24px;
+      line-height: 1.55;
+  }
+  .wiki-wrap h2 {
+      font-size: 16px;
+      color: var(--accent);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+      margin: 36px 0 8px;
+  }
+  .wiki-wrap h3 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--fg);
+      margin: 22px 0 6px;
+  }
+  .wiki-wrap table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin: 10px 0 16px;
+  }
+  .wiki-wrap th, .wiki-wrap td {
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      text-align: left;
+      vertical-align: top;
+  }
+  .wiki-wrap th {
+      background: var(--bg-2);
+      font-weight: 600;
+      font-size: 12px;
+  }
+  .wiki-wrap td a { color: var(--accent); }
+  .wiki-wrap td a:hover { text-decoration: underline; }
+  .wiki-wrap ul { padding-left: 22px; }
+  .wiki-wrap ul li { margin: 3px 0; font-size: 14px; line-height: 1.5; }
+  .wiki-wrap code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+      color: var(--accent);
+      padding: 1px 6px;
+      border-radius: 3px;
+  }
+  .wiki-wrap .todo-checkbox {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 1.5px solid var(--fg-mute);
+      border-radius: 3px;
+      margin-right: 6px;
+      vertical-align: -2px;
+  }
+  .wiki-wrap .status-shipped {
+      color: var(--c-heal, #4ade80);
+      font-weight: 600;
+  }
+  .wiki-wrap .status-partial {
+      color: var(--c-crit, #fbbf24);
+      font-weight: 600;
+  }
+  .wiki-wrap .status-pending {
+      color: var(--fg-mute);
+      font-weight: 600;
+  }
+  .wiki-wrap .pointer-list a {
+      color: var(--accent);
+  }
+</style>

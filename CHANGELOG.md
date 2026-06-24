@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.630.0] - 2026-06-24 — "The Index Trimmed"
+
+**Schema version:** 80
+
+**Commit summary:** De-clutter the wiki landing page — move the large Design-plans table (dozens of rows, ~37% of the page) onto its own `/wiki/plans` page; the landing page links out to it.
+
+**Description:** The `/wiki` landing page had grown to ~850 lines, dominated by the **Design plans** table (50+ rows, some with very long status cells). Moved it to a dedicated page so the index stays scannable:
+
+- New **`/wiki/plans`** page (`app/templates/wiki_plans.html`) holds the full Design-plans table, with a back-link to the index. Its route is registered before `/wiki/{slug}` so the static path wins over the guide catch-all.
+- The wiki `<style>` block is extracted to a shared `_wiki_styles.html` partial, included by both the landing page and the new plans page (so the status-badge styling renders identically).
+- The landing page's Design-plans section is replaced by a short blurb + "Browse all design plans →" link. The Available-guides, References, and Repo-documentation sections stay on the landing page. Net: the landing page drops from ~848 to ~439 lines.
+
+### Added
+- `/wiki/plans` design-plans index page + `_wiki_styles.html` shared style partial.
+
+### Changed
+- The wiki landing page links out to `/wiki/plans` instead of inlining the full Design-plans table.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_wiki.py` — `test_wiki_home_renders` trimmed to the sections that remain on the landing page (guides / references / repo-docs / banners) + asserts the `/wiki/plans` link; new `test_wiki_plans_page_renders` (+1) asserts `/wiki/plans` renders with the nav, a back-link, a representative spread of plan links, the `status-shipped` badge styling, and ≥30 plan entries.
+
 ## [2.629.0] - 2026-06-24 — "The Test Switch"
 
 **Schema version:** 80

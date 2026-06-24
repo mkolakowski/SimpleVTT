@@ -184,6 +184,15 @@ def wiki_home(request: Request):
     return templates.TemplateResponse("wiki.html", {"request": request})
 
 
+@router.get("/wiki/plans", response_class=HTMLResponse)
+def wiki_plans(request: Request):
+    """v2.630.0: the design-plans index, split off the wiki landing page to
+    keep it scannable. Registered before ``/wiki/{slug}`` so the static path
+    wins over the guide catch-all. Same static-template pattern as the home
+    page."""
+    return templates.TemplateResponse("wiki_plans.html", {"request": request})
+
+
 @router.get("/wiki/doc/{slug}", response_class=HTMLResponse)
 def wiki_doc(slug: str, request: Request):
     """v2.49.9: serve a plan / reference / repo-root markdown doc
