@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.608.0] - 2026-06-23 — "The Captain's Parry"
+
+**Schema version:** 80
+
+**Commit summary:** NPC Parry now auto-negates the triggering hit — extending the AC-bump auto-negation recipe to monster reactions.
+
+**Description:** Reactions-automation **v3 auto-resolution** — the NPC analog of the PC AC-bump family (Shield / Defensive Duelist / Form of the Beast Tail / Combat Inspiration). When a PC hits an NPC whose stat block carries a **Parry**-style reaction ("adds N to its AC against one melee attack" — Bandit Captain, Knight, Gladiator, Veteran, …) and the GM uses that reaction, the +N AC is now applied retroactively: if it turns the triggering **non-crit** hit into a miss, the full applied damage is restored to the NPC.
+
+The key difference from the PC family: the watcher is an NPC, so its HP lives in the **battle-state combatant** (`hp_current`), not a Character sheet — so the heal-back routes through `_apply_heal_to_combatant` (which broadcasts `battle_update`) instead of `_apply_hp_change` / `character_hp_update`. The AC bonus is parsed generically from the reaction's description (`adds (\d+) to its AC`), so any Parry-style reaction benefits; other monster reactions stay GM-narrated.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py` — the `/use_reaction` `monster-*` dispatch: after marking the reaction + broadcasting the action card, parse the AC bonus from the desc and, when that +N AC turns the non-crit hit into a miss (read from the prompt context: `attack_total` / `target_ac` / `damage_applied` / `is_crit`), heal the NPC combatant back by the applied damage + broadcast a `feature_used(source="monster-parry-negate")`.
+
+**Harness:** `tests/harness/test_reaction_prompt.py::test_npc_parry_auto_negates_exact_ac_hit` (+1) — Krieger swings on a Bandit Captain until a non-crit hit lands exactly at its AC (any +2 then negates); using the monster Parry reaction asserts a `feature_used(source="monster-parry-negate")` with `heal_back == damage_applied` + a `battle_update` (the NPC HP path). The captain is seeded at high HP to survive the probe.
+
+### Added
+- NPC Parry auto-negation: a Parry-style monster reaction now retroactively restores the triggering hit's damage when its +N AC turns a non-crit hit into a miss (NPC-HP path via `_apply_heal_to_combatant`).
+
 ## [2.607.0] - 2026-06-23 — "The Trumpet's Reply"
 
 **Schema version:** 80

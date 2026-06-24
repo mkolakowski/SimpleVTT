@@ -3490,6 +3490,116 @@ async def test_use_npc_parry_marks_reaction(
     assert (last.get("monster_name") or "").lower().startswith("bandit captain")
 
 
+async def test_npc_parry_auto_negates_exact_ac_hit(
+    gm_client, gm_ws, roster,
+):
+    """v2.608.0 — NPC Parry auto-negation (the monster analog of the PC
+    AC-bump family). With auto-apply on, Krieger swings on a Bandit
+    Captain until a non-crit hit lands EXACTLY at its AC (so Parry's +2
+    always negates); using the monster Parry reaction via the prompt
+    restores the full applied damage to the NPC combatant (HP lives in
+    battle state → routed through _apply_heal_to_combatant). Asserts a
+    feature_used(source=monster-parry-negate) with heal_back ==
+    damage_applied + a battle_update (the NPC HP path)."""
+    krieger = roster["Krieger Stonefist"]
+    await _set_auto_apply(gm_client, True)
+
+    tmpl = (await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/templates",
+        json={
+            "name": "Bandit Captain (Parry negate test)",
+            "template": "dnd5e", "tags": ["npc", "harness"],
+            "sheet": {"monster_slug": "bandit-captain"},
+        },
+    )).json()
+    bc_tok = (await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/tokens",
+        json={
+            "token_template_id": tmpl["id"], "label": "Bandit Captain",
+            "x": 350.0, "y": 350.0, "color": "#822222", "size": 1,
+        },
+    )).json()
+
+    bc_cid = f"tok_npc_parryneg_{tmpl['id']}"
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+        {
+            "id": bc_cid, "char_id": None,
+            "source_token_id": bc_tok["id"],
+            "token_template_id": tmpl["id"], "name": "Bandit Captain",
+            "initiative": 9,
+            # High HP so the captain survives the exact-AC probe.
+            "hp_current": 9999, "hp_max": 9999, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0},
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    # Probe until a non-crit hit lands EXACTLY at the captain's AC.
+    in_band = None
+    for _ in range(150):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": krieger["id"], "attack_index": 0,
+                "target_combatant_id": bc_cid,
+                "override": True, "override_range": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        d = resp.json()
+        at, tac = d.get("attack_total"), d.get("target_ac")
+        if (
+            d.get("hit") and not d.get("is_crit")
+            and int(d.get("damage_applied") or 0) > 0
+            and isinstance(at, int) and isinstance(tac, int) and at == tac
+        ):
+            in_band = d
+            break
+    assert in_band is not None, (
+        "no exact-AC non-crit hit on the captain in 150 swings"
+    )
+    dmg = int(in_band["damage_applied"])
+
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_combatant_id") == bc_cid
+        and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+    ]
+    parry_prompt = None
+    for m in reversed(prompts):
+        if "monster-parry" in [o.get("key") for o in (m["data"].get("options") or [])]:
+            parry_prompt = m
+            break
+    assert parry_prompt, "expected a monster-parry option on the captain's prompt"
+    prompt_id = parry_prompt["data"]["prompt_id"]
+
+    gm_ws.mark()
+    use = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={"prompt_id": prompt_id, "reaction_key": "monster-parry"},
+    )
+    assert use.status_code == 200, use.text
+    await asyncio.sleep(0.2)
+
+    neg = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "monster-parry-negate"
+    ]
+    assert neg, (
+        f"expected feature_used(source=monster-parry-negate); got "
+        f"{[(m.get('data') or {}).get('source') for m in gm_ws.buffered('feature_used')]}"
+    )
+    assert int(neg[-1]["data"].get("heal_back") or 0) == dmg
+    # NPC HP restore goes out as a battle_update (no character_hp_update).
+    assert gm_ws.buffered("battle_update"), (
+        "expected a battle_update for the NPC Parry heal-back"
+    )
+
+
 # ── v2.72.0 — Phase 3d: Silvery Barbs ──
 
 

@@ -31879,11 +31879,16 @@ async def use_reaction(
         # combatant has no char_id; mark the reaction slot via
         # combatant_id and broadcast a feature_used naming the
         # action + monster + the description from the projected
-        # stat-block. The narrative effect (Parry's +2 AC against
-        # one melee attack) is GM-adjudicated — v1 captures the
-        # spend + the desc text; auto-recompute of AC against the
-        # triggering attack is filed for v3 alongside the pending-
-        # damage state machine.
+        # stat-block.
+        # v2.608.0 — Parry-style auto-negation. The NPC analog of the
+        # PC AC-bump family (Shield/DD/Tail/Combat Inspiration): when the
+        # reaction's desc carries an "adds N to its AC" clause (Parry on
+        # Bandit Captain / Knight / Gladiator / Veteran / …) and that +N
+        # AC turns the triggering non-crit hit into a miss, restore the
+        # full applied damage to the NPC combatant (HP lives in battle
+        # state, so the heal routes through _apply_heal_to_combatant
+        # rather than _apply_hp_change). Other monster reactions stay
+        # GM-narrated.
         try:
             options = entry.get("options") or []
             matching = next(
@@ -31918,6 +31923,59 @@ async def use_reaction(
                     "watcher_combatant_id": watcher_combatant_id,
                 },
             })
+            # v2.608.0 — auto-negate when a Parry-style "+N AC" reaction
+            # turns the triggering non-crit hit into a miss.
+            _ac_m = _re.search(
+                r"adds\s+(\d+)\s+to\s+its\s+AC", desc or "", _re.IGNORECASE,
+            )
+            if _ac_m:
+                _ac_bonus = int(_ac_m.group(1))
+                _ctx = entry.get("context") or {}
+                _atk_total = _ctx.get("attack_total")
+                _target_ac = _ctx.get("target_ac")
+                _dmg_applied = int(_ctx.get("damage_applied") or 0)
+                _was_crit = bool(_ctx.get("is_crit"))
+                if (
+                    _ac_bonus > 0
+                    and isinstance(_atk_total, int)
+                    and isinstance(_target_ac, int)
+                    and not _was_crit
+                    and _dmg_applied > 0
+                    and _atk_total < _target_ac + _ac_bonus
+                ):
+                    _npc_cb = _lookup_combatant(
+                        campaign_id, str(watcher_combatant_id),
+                    )
+                    if _npc_cb is not None:
+                        # Restores the NPC combatant's hp_current +
+                        # broadcasts battle_update (NPC HP path).
+                        await _apply_heal_to_combatant(
+                            db, campaign_id, _npc_cb, _dmg_applied,
+                        )
+                        await hub.broadcast(campaign_id, {
+                            "type": "feature_used",
+                            "data": {
+                                "character_id": None,
+                                "character_name": monster_name,
+                                "user_color": None,
+                                "feature_name": (
+                                    f"⚡ {action_name} negated the hit"
+                                ),
+                                "feature_desc": (
+                                    f"d20 {_atk_total} now MISSES AC "
+                                    f"{_target_ac + _ac_bonus}; restored "
+                                    f"{_dmg_applied} HP."
+                                ),
+                                "source": "monster-parry-negate",
+                                "reaction_kind": "monster_reaction",
+                                "monster_name": monster_name,
+                                "action_name": action_name,
+                                "damage_applied": _dmg_applied,
+                                "heal_back": _dmg_applied,
+                                "attack_id": _ctx.get("attack_id"),
+                                "watcher_combatant_id": watcher_combatant_id,
+                            },
+                        })
         except HTTPException:
             raise
         except Exception:
