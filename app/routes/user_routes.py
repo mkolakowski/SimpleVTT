@@ -26,11 +26,10 @@ from ..models import (
     UserAudioCategoryPref,
     VALID_THEMES,
 )
-from ..user_export import (
-    LAST_EXPORT_MONOTONIC,
-    export_cooldown_remaining,
-    export_cooldown_seconds,
+from ..export_limit import (
     iso as _iso,
+    mark as _export_mark,
+    remaining_for as _export_remaining,
 )
 from ..version import APP_VERSION
 from ..character_presets import build_sheet as build_preset_sheet
@@ -695,11 +694,7 @@ def export_my_data(
     ``app.user_export.export_cooldown_remaining``.
     """
     if not _test_mode():
-        remaining = export_cooldown_remaining(
-            now=time.monotonic(),
-            last_export_at=LAST_EXPORT_MONOTONIC.get(user.id),
-            cooldown_seconds=export_cooldown_seconds(),
-        )
+        remaining = _export_remaining("user", user.id, now=time.monotonic())
         if remaining > 0:
             # 429 + Retry-After so a client can back off politely.
             raise HTTPException(
@@ -816,7 +811,7 @@ def export_my_data(
     }
 
     if not _test_mode():
-        LAST_EXPORT_MONOTONIC[user.id] = time.monotonic()
+        _export_mark("user", user.id, now=time.monotonic())
 
     # Audit the access so a hijacked-session bulk-dump leaves a trace
     # (the export is a full PII pull; it belongs in the security log).

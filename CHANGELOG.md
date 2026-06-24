@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.612.5] - 2026-06-24 — "The Shared Hourglass"
+
+**Schema version:** 80
+
+**Commit summary:** Phase 1 — generalize the GDPR export cooldown into a per-(scope, id) export rate-limiter (`app/export_limit.py`); the GDPR endpoint is repointed to it and `app/user_export.py` becomes a back-compat shim.
+
+**Description:** [Backup/export-import overhaul](docs/plans/backup-export-overhaul.md) Phase 1. The GDPR Article 15/20 export cooldown lived in `app/user_export.py` as a per-*user* limiter. The later phases of this arc add three more rate-limited export surfaces (campaign / character / homebrew-item zips), so this commit generalizes the same cooldown shape into `app/export_limit.py` keyed by `(scope, id)` instead of bare user id — no copy-paste of the limiter per endpoint.
+
+- `cooldown_remaining(...)` keeps its pure, FastAPI-free contract (unit-testable without the web stack).
+- `cooldown_seconds(scope)` resolves the window per scope at call time: the GDPR `user` scope keeps its legacy `USER_DATA_EXPORT_COOLDOWN_SECONDS` env var (default 24h); every other scope reads `EXPORT_COOLDOWN_<SCOPE>_SECONDS` (defaults: campaign 300 s, character 60 s, homebrew 10 s; unknown scopes 60 s).
+- `remaining_for(scope, id, *, now)` / `mark(scope, id, *, now)` wrap a process-local `(scope, id) -> ts` registry (single container, fail-open on restart — the same rationale as before).
+
+The GDPR endpoint (`GET /api/users/me/export`) now calls `_export_remaining("user", …)` / `_export_mark("user", …)`; behavior is unchanged (still bypassed under `TEST_MODE`, still 429 + `Retry-After`). `app/user_export.py` is reduced to a thin shim re-exporting `export_cooldown_remaining` / `export_cooldown_seconds` / `iso` so the existing host-side unit test keeps resolving. No new endpoint, no schema change.
+
+### Changed
+- `app/export_limit.py` (new) is the canonical per-scope export limiter; `app/user_export.py` is now a back-compat shim; the GDPR export endpoint is repointed to the generalized helper.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_export_limit.py` (new, +8) covers the pure cooldown maths, per-scope window defaults + env overrides (incl. the legacy `user` env-var name and a non-integer fallback), the `(scope, id)`-keyed registry round-trip (separate buckets per id and per scope; allowed again once the window elapses), and that the `app/user_export.py` shim still re-exports the legacy names. The existing `tests/harness/test_user_data_export.py` (live endpoint + legacy pure-helper imports) stays green unchanged.
+
 ## [2.612.4] - 2026-06-24 — "The Blueprint Vault"
 
 **Schema version:** 80
