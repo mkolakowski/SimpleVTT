@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.622.0] - 2026-06-24 — "The Overwritten Page"
+
+**Schema version:** 80
+
+**Commit summary:** Phase 7 — campaign restore/overwrite import: `POST /api/campaign/import?mode=restore&target_campaign_id=N` replaces an existing campaign's content in place (wipe child tree + homebrew, keep the campaign row + memberships, repopulate from the archive).
+
+**Description:** [Backup/export-import overhaul](docs/plans/backup-export-overhaul.md) Phase 7 — the destructive counterpart to clone, and the import matrix's last cell. `app/import_campaign.py` is refactored so clone + restore share one `_populate_campaign` engine (the FK-remapping child-tree creation); the mode-specific wrappers are thin:
+
+- **clone** (`mode=clone`, GM role) — create a new campaign, populate it, homebrew add-only.
+- **restore** (`mode=restore` + `target_campaign_id`, GM **of that campaign**) — `wipe_campaign_children(target, delete_memberships=False)` (content replaced, the people in the campaign kept), repopulate from the archive, then clear the campaign's homebrew scope and re-write it from the pack. The campaign row + its memberships survive; everything else is replaced.
+
+The endpoint authorizes **before** reading the upload: clone needs the app-wide GM role; restore needs `target_campaign_id` (400 if missing) and per-campaign GM access (`_require_gm_for_campaign` → 403 non-GM / 404 unknown) — so a non-GM or a bad target is refused *before* any wipe touches the database. SQL inserts are one transaction (rollback + media-unlink on failure); homebrew is rewritten after commit.
+
+This completes the arc's import side: clone (new) + restore (in-place) for campaigns + characters, plus item-level homebrew.
+
+### Added
+- `mode=restore` on `POST /api/campaign/import` (+ `target_campaign_id`); `app/import_campaign.py::restore_campaign` + the shared `_populate_campaign` engine.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_import_campaign.py` (+2) — `test_campaign_restore_replaces_in_place` clones a throwaway target (never the demo campaign), restores a *different* archive into it, and asserts the roster reflects the restored content and the old content is **gone** (wipe+repopulate, not append); `test_campaign_restore_errors` asserts restore without a target → 400, unknown target → 404, and a non-GM of the target → 403 — all of which resolve before any wipe, so shared state is safe. The existing clone + FK-remap + error-path assertions are unchanged.
+
 ## [2.621.0] - 2026-06-24 — "The Download Bell"
 
 **Schema version:** 80

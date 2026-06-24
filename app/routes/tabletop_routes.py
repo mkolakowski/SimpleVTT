@@ -15794,29 +15794,48 @@ async def import_character(
 async def import_campaign(
     file: UploadFile = File(...),
     mode: str = Form("clone"),
+    target_campaign_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
-    user: User = Depends(require_gm),
+    user: User = Depends(require_user),
 ):
     """Import a whole-campaign ``simplevtt-export`` (level=campaign) zip.
-    Requires the GM role. ``mode=clone`` re-creates everything as a brand-new
-    campaign owned by the importer, with fresh ids + fresh media uuids and the
-    full child tree FK-remapped. Restore/overwrite mode lands in Phase 7.
-    Backup/export-import arc Phase 6b."""
-    if mode != "clone":
-        raise HTTPException(400, "Only mode=clone is supported (restore lands in Phase 7).")
+
+    ``mode=clone`` (GM role) re-creates everything as a brand-new campaign
+    owned by the importer — fresh ids + media uuids, the full child tree
+    FK-remapped (Phase 6b–6d). ``mode=restore`` (+ ``target_campaign_id``,
+    GM of that campaign) **replaces** the target campaign's content in place:
+    its child tree is wiped (memberships kept) and repopulated from the
+    archive, and its homebrew scope is cleared + re-written (Phase 7)."""
+    if mode not in ("clone", "restore"):
+        raise HTTPException(400, "mode must be 'clone' or 'restore'.")
 
     from .. import import_bundle as ib
-    from ..import_campaign import clone_campaign
+    from ..import_campaign import clone_campaign, restore_campaign
+
+    # Authorize per mode before reading the (potentially large) upload.
+    if mode == "clone":
+        if not (user.is_gm or user.is_admin):
+            raise HTTPException(403, "GM access required")
+    else:  # restore
+        if not target_campaign_id:
+            raise HTTPException(400, "target_campaign_id is required for mode=restore.")
+        _require_gm_for_campaign(target_campaign_id, user, db)  # 403 non-GM / 404 unknown
 
     raw = await file.read()
     try:
         zf = ib.open_archive(raw)
         manifest = ib.read_manifest(zf, expected_level="campaign")
-        result = clone_campaign(db, zf, manifest, owner_user_id=user.id)
+        if mode == "clone":
+            result = clone_campaign(db, zf, manifest, owner_user_id=user.id)
+        else:
+            result = restore_campaign(
+                db, zf, manifest,
+                target_campaign_id=target_campaign_id, owner_user_id=user.id,
+            )
     except ib.BundleError as e:
         raise HTTPException(400, str(e))
 
-    return {"mode": "clone", **result}
+    return {"mode": mode, **result}
 
 
 @router.get("/api/campaign/{campaign_id}/homebrew/template")

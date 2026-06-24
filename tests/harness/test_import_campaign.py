@@ -15,8 +15,10 @@ import zipfile
 
 import httpx
 
+from .conftest import CAMPAIGN_ID
 
-def _campaign_zip(level="campaign"):
+
+def _campaign_zip(level="campaign", char_name="Cloned Hero"):
     """A minimal cross-referencing campaign archive: 1 map, 1 character, 1
     NPC template, 1 token (→ all three), 1 playlist + track, 1 encounter
     (→ map + playlist + payload refs)."""
@@ -27,7 +29,7 @@ def _campaign_zip(level="campaign"):
         zf.writestr("data/campaign.json", json.dumps(
             {"id": 1, "name": "Clone Test Campaign", "description": "d", "game_system": "dnd5e"}))
         zf.writestr("data/characters/20.json", json.dumps(
-            {"id": 20, "name": "Cloned Hero", "template": "dnd5e", "sheet": {"abilities": {"str": 10}}}))
+            {"id": 20, "name": char_name, "template": "dnd5e", "sheet": {"abilities": {"str": 10}}}))
         zf.writestr("data/maps/10.json", json.dumps(
             {"id": 10, "name": "Clone Map", "grid_type": "square", "width_px": 1000, "height_px": 800}))
         zf.writestr("data/token_templates.json", json.dumps(
@@ -110,5 +112,69 @@ async def test_campaign_import_errors(
         "/api/campaign/import",
         files={"file": ("c.zip", _campaign_zip(), "application/zip")},
         data={"mode": "clone"},
+    )
+    assert r.status_code == 403, r.text
+
+
+async def test_campaign_restore_replaces_in_place(gm_client: httpx.AsyncClient):
+    """Restore wipes the target campaign's content and repopulates it from the
+    archive. Done against a throwaway clone (never the demo campaign) so the
+    destructive path can't harm shared state."""
+    # Clone first to get a disposable target campaign.
+    r = await gm_client.post(
+        "/api/campaign/import",
+        files={"file": ("a.zip", _campaign_zip(char_name="Clone Hero"), "application/zip")},
+        data={"mode": "clone"},
+    )
+    assert r.status_code == 200, r.text
+    nc = r.json()["campaign_id"]
+    try:
+        # Restore a DIFFERENT archive into it (different character name).
+        r2 = await gm_client.post(
+            "/api/campaign/import",
+            files={"file": ("b.zip", _campaign_zip(char_name="Restored Hero"), "application/zip")},
+            data={"mode": "restore", "target_campaign_id": str(nc)},
+        )
+        assert r2.status_code == 200, r2.text
+        body = r2.json()
+        assert body["mode"] == "restore"
+        assert body["campaign_id"] == nc
+        assert body["counts"]["characters"] == 1
+
+        # The roster now reflects the restored archive — old content wiped.
+        rr = await gm_client.get(f"/api/campaign/{nc}/roster")
+        names = {c["name"] for c in rr.json()["characters"]}
+        assert "Restored Hero" in names
+        assert "Clone Hero" not in names      # wiped, not appended
+    finally:
+        await gm_client.post(f"/campaign/{nc}/archive")
+
+
+async def test_campaign_restore_errors(
+    gm_client: httpx.AsyncClient, bob_client: httpx.AsyncClient,
+):
+    """restore without a target → 400; unknown target → 404; non-GM of the
+    target → 403. All resolve before any wipe (the demo campaign is safe)."""
+    # Missing target_campaign_id.
+    r = await gm_client.post(
+        "/api/campaign/import",
+        files={"file": ("a.zip", _campaign_zip(), "application/zip")},
+        data={"mode": "restore"},
+    )
+    assert r.status_code == 400, r.text
+
+    # Unknown target campaign.
+    r = await gm_client.post(
+        "/api/campaign/import",
+        files={"file": ("a.zip", _campaign_zip(), "application/zip")},
+        data={"mode": "restore", "target_campaign_id": "999999"},
+    )
+    assert r.status_code == 404, r.text
+
+    # A non-GM of the (demo) target campaign is refused before any wipe.
+    r = await bob_client.post(
+        "/api/campaign/import",
+        files={"file": ("a.zip", _campaign_zip(), "application/zip")},
+        data={"mode": "restore", "target_campaign_id": str(CAMPAIGN_ID)},
     )
     assert r.status_code == 403, r.text
