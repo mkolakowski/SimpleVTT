@@ -1,6 +1,14 @@
 # Backup / Export-Import Overhaul — Design Plan
 
-> **Status:** Phase 0 (this plan) shipped v2.612.4. Phases 1–9 queued.
+> **Status:** ✅ Complete (v2.612.4 → v2.623.0). All phases shipped:
+> 0 plan (2.612.4) · 1 rate-limiter (2.612.5) · 2 wipe + zip primitives (2.612.6) ·
+> 3 homebrew-item export (2.613.0) · 4 campaign export job (2.614.0) ·
+> 5 PC export (2.615.0) · 6a character clone import (2.616.0) ·
+> 6b campaign clone (2.617.0) · 6c handouts + notes (2.618.0) ·
+> 6d homebrew into clone (2.619.0) · 8 Admin Center backup settings + demo-skip (2.620.0) ·
+> 9 export/import UI + progress toast (2.621.0) · 7 restore/overwrite import (2.622.0) ·
+> 9b PC-sheet + homebrew-item export buttons (2.623.0).
+> Only dice-roll history is intentionally not re-placed by the importer.
 
 ## Context
 

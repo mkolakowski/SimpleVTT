@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.623.1] - 2026-06-24 — "The Closed Ledger"
+
+**Schema version:** 80
+
+**Commit summary:** Doc — mark the backup/export-import overhaul plan complete (all phases shipped v2.612.4 → v2.623.0) and list each phase's shipped version.
+
+**Description:** Housekeeping: the [backup/export-import overhaul](docs/plans/backup-export-overhaul.md) plan's status line still read "Phase 0 shipped; Phases 1–9 queued." The arc is now fully shipped — this updates the status header to ✅ Complete with the per-phase version map, so a reader scanning the plan sees what landed where. No code change.
+
+### Changed
+- `docs/plans/backup-export-overhaul.md` status header → ✅ Complete with the per-phase shipped-version list.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** none (doc-only; the plan is already wiki-surfaced + smoke-tested by `test_wiki.py::test_wiki_doc_serves_backup_export_overhaul_plan`).
+
 ## [2.623.0] - 2026-06-24 — "The Two Buttons"
 
 **Schema version:** 80
