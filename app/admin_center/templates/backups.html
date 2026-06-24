@@ -63,10 +63,15 @@
       <h3 style="margin:12px 0 6px">{{ bucket|capitalize }}</h3>
       {% if artifacts[bucket] %}
         <table class="data">
-          <thead><tr><th>File</th><th>Size</th><th>Modified (epoch)</th></tr></thead>
+          <thead><tr><th>File</th><th>Size</th><th>Modified</th><th></th></tr></thead>
           <tbody>
             {% for a in artifacts[bucket] %}
-            <tr><td><code>{{ a.name }}</code></td><td>{{ a.size | bytes }}</td><td>{{ a.mtime | int }}</td></tr>
+            <tr>
+              <td><code>{{ a.name }}</code></td>
+              <td>{{ a.size | bytes }}</td>
+              <td>{{ a.mtime | epoch }}</td>
+              <td><a class="link" href="/backups/download?bucket={{ bucket }}&amp;name={{ a.name | urlencode }}" download>⬇ Download</a></td>
+            </tr>
             {% endfor %}
           </tbody>
         </table>

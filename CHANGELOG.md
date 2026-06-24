@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.624.0] - 2026-06-24 — "The Local Hour"
+
+**Schema version:** 80
+
+**Commit summary:** Admin Center `/backups` — show artifact modified times in the operator's local timezone (not raw epoch), and add a per-artifact Download button backed by a path-validated download route.
+
+**Description:** Two operator-facing improvements to the Phase 8 backups page:
+
+- **Local time** — the artifacts table rendered the modified time as a raw epoch integer. It now runs through the admin-center's `epoch` filter (`timefmt.fmt_epoch` → `display_tz()`), so it reads e.g. `2026-06-24 03:00 UTC` / the operator's `ADMIN_CENTER_TZ`.
+- **Download** — each artifact row gets a `⬇ Download` link to a new `GET /backups/download?bucket=&name=` route. The path is resolved through `backup_admin.artifact_path`, which is **traversal-proof**: the bucket is allowlisted (`daily`/`weekly`), the name must be a bare filename (no separators / `..`) ending in a known backup suffix (`.sql.gz` / `.homebrew.tar.gz`), and the resolved path must still sit directly inside the bucket dir — otherwise 404. Served as `application/gzip` with the original filename. Gated by `ADMIN_CENTER_ADMIN_TOOLS` like the rest of the page.
+
+### Added
+- `GET /backups/download` (admin-center) + `backup_admin.artifact_path`; per-row Download link on the backups page.
+
+### Changed
+- Backups artifact table shows local-time modified timestamps (`| epoch`) instead of raw epoch.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_backup_admin.py` (+1) — `test_artifact_path_safe_resolution`: a real `daily/` artifact resolves; unknown bucket, `..` traversal in bucket or name, a sub-path name, a wrong suffix, a missing file, and a name that exists only in the other bucket all return `None`. The download route lives on the admin-center port (8015), so the resolver is unit-tested host-side.
+
 ## [2.623.1] - 2026-06-24 — "The Closed Ledger"
 
 **Schema version:** 80

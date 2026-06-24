@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
@@ -770,6 +770,21 @@ def backups_run(request: Request):
     log.info("admin-center operator %r triggered an on-demand backup",
              request.session.get("admin_user", "?"))
     return RedirectResponse("/backups?ran=1", status_code=303)
+
+
+@app.get("/backups/download")
+def backups_download(request: Request, bucket: str = "", name: str = ""):
+    """Download a backup artifact. The path is validated (allowlisted bucket +
+    bare filename + known suffix) so it can't traverse out of the backup dir."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    from . import backup_admin
+    path = backup_admin.artifact_path(bucket, name)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Backup artifact not found.")
+    log.info("admin-center operator %r downloaded backup %s/%s",
+             request.session.get("admin_user", "?"), bucket, name)
+    return FileResponse(str(path), media_type="application/gzip", filename=name)
 
 
 # ── User admin (Phase 2 — opt-in, MFA-gated for destructive ops) ──────────────

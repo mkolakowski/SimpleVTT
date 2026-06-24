@@ -97,3 +97,21 @@ def test_trigger_run_and_list_artifacts(tmp_path, monkeypatch):
     assert "simplevtt-20260624T030000Z.homebrew.tar.gz" in daily_names
     assert "notes.txt" not in daily_names      # only backup artifacts listed
     assert len(arts["weekly"]) == 1
+
+
+def test_artifact_path_safe_resolution(tmp_path, monkeypatch):
+    monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
+    (tmp_path / "daily").mkdir()
+    good = tmp_path / "daily" / "simplevtt-20260624T030000Z.sql.gz"
+    good.write_bytes(b"x")
+
+    # A real backup file under daily/ resolves.
+    assert backup_admin.artifact_path("daily", "simplevtt-20260624T030000Z.sql.gz") == good
+
+    # Unknown bucket / traversal / bad suffix / missing file all return None.
+    assert backup_admin.artifact_path("../etc", "simplevtt-x.sql.gz") is None
+    assert backup_admin.artifact_path("daily", "../../etc/passwd") is None
+    assert backup_admin.artifact_path("daily", "subdir/x.sql.gz") is None
+    assert backup_admin.artifact_path("daily", "notes.txt") is None       # wrong suffix
+    assert backup_admin.artifact_path("daily", "nonexistent.sql.gz") is None
+    assert backup_admin.artifact_path("weekly", "simplevtt-20260624T030000Z.sql.gz") is None  # not in weekly

@@ -138,6 +138,28 @@ def _stat_artifact(p: Path) -> dict:
     return {"name": p.name, "size": st.st_size, "mtime": st.st_mtime}
 
 
+_ARTIFACT_SUFFIXES = (".sql.gz", ".homebrew.tar.gz")
+
+
+def artifact_path(bucket: str, name: str) -> Optional[Path]:
+    """Resolve a backup artifact to its on-disk path, or ``None`` if it isn't a
+    real backup file under ``daily/``/``weekly/``. Traversal-proof: the bucket
+    is allowlisted, the name must be a bare filename (no separators / ``..``)
+    ending in a known backup suffix, and the resolved path must still sit
+    directly inside the bucket dir."""
+    if bucket not in ("daily", "weekly"):
+        return None
+    if not name or "/" in name or "\\" in name or ".." in name:
+        return None
+    if not name.endswith(_ARTIFACT_SUFFIXES):
+        return None
+    bucket_dir = (backups_dir() / bucket).resolve()
+    candidate = (bucket_dir / name).resolve()
+    if candidate.parent != bucket_dir or not candidate.is_file():
+        return None
+    return candidate
+
+
 def list_artifacts() -> dict:
     """List the backup artifacts under daily/ + weekly/, newest first."""
     out: dict[str, list] = {"daily": [], "weekly": []}
