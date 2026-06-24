@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.612.6] - 2026-06-24 — "The Salvage Crew"
+
+**Schema version:** 80
+
+**Commit summary:** Phase 2 — extract the FK-safe campaign child-wipe into `app/campaign_wipe.py` (reused by `demo_seed.wipe`) and land the `simplevtt-export` zip primitives in `app/export_bundle.py`. Foundational library work; no endpoint, no behavior change.
+
+**Description:** [Backup/export-import overhaul](docs/plans/backup-export-overhaul.md) Phase 2. Two reusable libraries the later export/import phases build on:
+
+- **`app/campaign_wipe.py::wipe_campaign_children(db, campaign_ids, *, delete_memberships=True)`** — the FK-safe per-campaign child-delete sequence (tokens → encounters → dice_rolls → token_templates → characters → null `active_map_id` → maps → memberships), extracted **verbatim** from the per-campaign block of `demo_seed.wipe()`. `demo_seed.wipe` now calls it, so the demo reseed and the importer's restore path (Phase 7) share one battle-tested ordering instead of two copies. The order matters because `campaigns.active_map_id` is a `use_alter` FK with no `ondelete`, so it must be nulled before maps drop. The helper deletes child rows only — never the `campaigns` row — and neither flushes nor commits (the caller owns the transaction boundary). `delete_memberships=False` lets the restore path keep the people in a campaign while replacing its content.
+- **`app/export_bundle.py`** — the mechanics every export level shares: `row_to_dict` (JSON-safe ORM-row projection via SQLAlchemy column inspection, so new columns export automatically), `find_media_urls` (recursively collect the `/static/uploads/...` references a self-contained archive must bundle), `archive_path_for` / `abs_path_for_url` (URL ↔ in-zip-path ↔ on-disk-source mapping), `build_manifest` (the `simplevtt-export` envelope), and `write_bundle_zip` (stream a manifest + `data/*.json` + bundled `media/` into a zip; a stale media source is skipped, never fatal). The per-level data-tree assembly + the export endpoints land in Phase 4.
+
+`demo_seed.wipe()` behavior is unchanged (the demo-reset state coverage in `tests/harness/test_demo_campaigns.py` still guards it); the orphaned `select` import is dropped.
+
+### Changed
+- `demo_seed.wipe()` delegates its per-campaign child deletes to the new `app/campaign_wipe.py` (behavior-identical).
+
+### Added
+- `app/campaign_wipe.py` (reusable campaign child-wipe) and `app/export_bundle.py` (`simplevtt-export` zip primitives).
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_campaign_wipe.py` (new, +4) exercises the wipe against in-memory sqlite — children deleted + campaign row + `active_map_id` nulled, memberships kept when the flag is false, id-scoping (a bystander campaign untouched), and the empty-list no-op. `tests/harness/test_export_bundle.py` (new, +5) covers the primitives — recursive/deduped media discovery, URL↔path mapping, JSON-safe `row_to_dict` on a transient ORM instance, the manifest envelope, and a zip write→read round-trip (incl. a missing media source being skipped). DB-dependent tests `importorskip` sqlalchemy so they run in the container / CI.
+
 ## [2.612.5] - 2026-06-24 — "The Shared Hourglass"
 
 **Schema version:** 80

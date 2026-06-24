@@ -37,10 +37,10 @@ import os
 import shutil
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .auth import hash_password
+from .campaign_wipe import wipe_campaign_children
 from .character_presets import _prof_bonus
 from .local_content import HOMEBREW_ROOT, write_homebrew
 from .sheet_templates import get_template
@@ -188,57 +188,11 @@ def wipe(db: Session) -> dict[str, int]:
     counts["campaigns_found"] = len(demo_campaigns)
 
     if demo_campaign_ids:
-        # Tokens (FK to maps in the campaign)
-        map_id_subq = select(Map.id).where(Map.campaign_id.in_(demo_campaign_ids))
-        counts["tokens"] = (
-            db.query(Token)
-            .filter(Token.map_id.in_(map_id_subq))
-            .delete(synchronize_session=False)
-        )
-        # Encounters
-        counts["encounters"] = (
-            db.query(Encounter)
-            .filter(Encounter.campaign_id.in_(demo_campaign_ids))
-            .delete(synchronize_session=False)
-        )
-        # DiceRolls
-        counts["dice_rolls"] = (
-            db.query(DiceRoll)
-            .filter(DiceRoll.campaign_id.in_(demo_campaign_ids))
-            .delete(synchronize_session=False)
-        )
-        # TokenTemplates
-        counts["token_templates"] = (
-            db.query(TokenTemplate)
-            .filter(TokenTemplate.campaign_id.in_(demo_campaign_ids))
-            .delete(synchronize_session=False)
-        )
-        # Characters
-        counts["characters"] = (
-            db.query(Character)
-            .filter(Character.campaign_id.in_(demo_campaign_ids))
-            .delete(synchronize_session=False)
-        )
-        # Null out campaigns.active_map_id before deleting maps —
-        # ``fk_campaign_active_map`` has no ondelete clause (and can't
-        # easily get one because the FK is declared with ``use_alter`` to
-        # break the campaigns↔maps cycle), so a DELETE on maps while a
-        # demo campaign still points at one raises ForeignKeyViolation.
-        db.query(Campaign).filter(
-            Campaign.id.in_(demo_campaign_ids)
-        ).update({Campaign.active_map_id: None}, synchronize_session=False)
-        # Maps
-        counts["maps"] = (
-            db.query(Map)
-            .filter(Map.campaign_id.in_(demo_campaign_ids))
-            .delete(synchronize_session=False)
-        )
-        # Memberships
-        counts["memberships"] = (
-            db.query(CampaignMembership)
-            .filter(CampaignMembership.campaign_id.in_(demo_campaign_ids))
-            .delete(synchronize_session=False)
-        )
+        # v2.612.6: the per-campaign child-delete sequence is extracted to
+        # ``campaign_wipe.wipe_campaign_children`` so the importer's restore
+        # path (backup/export-import arc Phase 7) reuses the exact ordering
+        # the demo reseed has relied on. Behavior here is unchanged.
+        counts.update(wipe_campaign_children(db, demo_campaign_ids))
         # The campaign itself. v2.49.173: use bulk delete (consistent
         # with the other tables above) instead of ``for c in ...:
         # db.delete(c)``. The per-row delete marks the rows for
