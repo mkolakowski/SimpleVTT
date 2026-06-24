@@ -33,6 +33,43 @@ Together these three are **everything needed to restore the application from a
 fresh install**: the database has the rows, the two tarballs have the files
 those rows reference.
 
+### What campaign content is captured
+
+The `.sql.gz` is a dump of the **entire PostgreSQL database**, so it contains
+**every piece of content needed to play a campaign** — not a curated subset.
+That includes:
+
+- **Accounts & membership** — all users (login + preferences) and who belongs
+  to which campaign (GM / player roles).
+- **Campaigns** — every campaign, its settings, game system, and archive state.
+- **Player characters** — each PC's full character sheet (abilities, HP, AC,
+  inventory, spells, features, portrait reference, colour/ring style), for
+  every campaign and every standalone PC.
+- **NPCs / monsters** — token templates (reusable stat blocks).
+- **Maps & tokens** — every map (grid + background reference) and the tokens
+  placed on them (positions, sizes, controllers, disguises, fog state).
+- **Encounters** — saved encounter snapshots (token layout, initiative seed,
+  bound playlist, background).
+- **Audio** — playlists and their track lists.
+- **Notes & handouts** — GM prep notes and player notes (including the
+  *ciphertext* of end-to-end-encrypted private notes), and handouts with their
+  reveal state.
+- **Dice-roll history**, **concentration / battle state**, and the rest of the
+  app's tables.
+
+The two tarballs complete the picture with the *files* those rows point at: the
+**homebrew** tarball carries campaign-authored custom content (classes,
+subclasses, races, monsters, backgrounds, feats), and the **uploads** tarball
+carries the binary media (map images, character portraits, token art, audio
+files, handout images, thumbnails). A character row, for example, lives in the
+SQL dump while its portrait image lives in the uploads tarball — restoring all
+three brings the PC back intact.
+
+> **One exception worth noting:** end-to-end-encrypted private notes are dumped
+> as ciphertext. They restore byte-for-byte, but they can only be *read* again
+> with the same per-campaign encryption passphrase — the backup can't (and
+> deliberately doesn't) capture that key.
+
 ### Schedule, retention, and demo mode
 
 - **Schedule + retention** are editable at runtime from **Admin Center →

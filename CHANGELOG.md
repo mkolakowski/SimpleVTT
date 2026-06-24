@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.630.1] - 2026-06-24 — "The Full Inventory"
+
+**Schema version:** 80
+
+**Commit summary:** Backups wiki guide — spell out exactly what campaign-play content the operator backup captures (player characters, campaigns, notes, NPCs, maps, encounters, audio, handouts, …) and where each piece lives across the DB dump + tarballs.
+
+**Description:** The `/wiki/backups` guide already noted the `.sql.gz` is "the whole database," but didn't make explicit that **everything needed to play a campaign** is in it. Added a **"What campaign content is captured"** section enumerating the campaign-play content in the database dump — accounts & membership, campaigns, player characters (full sheets), NPC/monster token templates, maps & tokens, encounters, audio playlists, notes & handouts (incl. encrypted-note ciphertext), dice history + battle state — and clarifying that the homebrew + uploads tarballs carry the *files* those rows reference (a PC's row is in the SQL dump; its portrait is in the uploads tarball). Calls out the one caveat: end-to-end-encrypted private notes restore as ciphertext but need the per-campaign passphrase to read again.
+
+### Changed
+- `docs/wiki/backups.md`: new "What campaign content is captured" section.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_wiki.py::test_wiki_backups_guide_renders` extended to assert the new section heading + that player characters and notes/handouts are called out.
+
 ## [2.630.0] - 2026-06-24 — "The Index Trimmed"
 
 **Schema version:** 80

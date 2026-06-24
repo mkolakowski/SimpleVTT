@@ -157,6 +157,12 @@ async def test_wiki_backups_guide_renders():
     assert ".sql.gz" in resp.text
     assert ".homebrew.tar.gz" in resp.text
     assert ".uploads.tar.gz" in resp.text
+    # v2.630.1: the guide spells out the campaign-play content captured in the
+    # DB dump (PCs / campaigns / notes / …).
+    body_lower = resp.text.lower()
+    assert "what campaign content is captured" in body_lower
+    assert "player character" in body_lower
+    assert "notes &amp; handouts" in body_lower or "notes & handouts" in body_lower
     assert "<h1" in resp.text
     assert 'class="wiki-nav"' in resp.text
 
