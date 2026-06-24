@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.607.0] - 2026-06-23 — "The Trumpet's Reply"
+
+**Schema version:** 80
+
+**Commit summary:** Combat Inspiration (Valor Bard) now auto-negates the triggering hit — completing the AC-bump auto-negation family.
+
+**Description:** Fourth and final AC-bump slice of the reactions-automation **v3 auto-resolution** backlog, following the same-shape recipe from Shield (v2.600.0), Defensive Duelist (v2.601.0), and Form of the Beast Tail (v2.602.0). When a watcher holding a Valor-Bard `bardic-inspiration-die` buff uses **Combat Inspiration** as an AC reaction and the rolled BI die turns the triggering hit into a non-crit miss, the full applied damage is now healed back (instead of only announcing the miss verdict).
+
+**Behavior:** the existing `use-combat-inspiration-ac` dispatch already rolled the BI die, boosted the AC, consumed the die, and broadcast a miss/hit verdict. This commit wires the heal-back into the `verdict == "miss"` path: when the attack was **not a natural-20 crit** and auto-applied damage landed, the watcher's full applied damage is restored via `_apply_hp_change`, with a `character_hp_update(source="combat-inspiration-negate")` + a `feature_used(source="combat-inspiration-negate")` card. A crit or a still-hit leaves the damage standing (advisory verdict only). Reuses the `is_crit` / `damage_applied` prompt-context plumbing from v2.600.0.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py` — `/use_reaction` `use-combat-inspiration-ac` dispatch: after the verdict broadcast, when the verdict is a non-crit miss with applied damage, heal back the full amount + broadcast the negation.
+
+**Harness:** `tests/harness/test_combat_inspiration.py::test_ci_ac_auto_negates_exact_ac_hit` (+1) — Lyra (PATCHed to Valor Lv 6) casts Bardic Inspiration on Garrik; Pip swings until a non-crit hit lands exactly at Garrik's AC (any 1d8 then negates deterministically); using Combat Inspiration via the reaction prompt asserts a `feature_used(source="combat-inspiration-negate")` with `heal_back == damage_applied` + a matching `character_hp_update`. Garrik's sheet HP is patched high for the probe + restored.
+
+### Added
+- Combat Inspiration auto-negation: the Valor Bard AC reaction now retroactively restores the triggering hit's damage when its rolled +BI-die AC turns a non-crit hit into a miss. Completes the AC-bump auto-negation family (Shield / Defensive Duelist / Form of the Beast Tail / Combat Inspiration).
+
 ## [2.606.2] - 2026-06-23 — "The Colon Separator"
 
 **Schema version:** 80

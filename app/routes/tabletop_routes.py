@@ -31707,6 +31707,12 @@ async def use_reaction(
         # and broadcast `feature_used(source=combat-inspiration)` with
         # the verdict + roll details. Mirrors the Form of the Beast
         # Tail dispatch shape so the chat card renders consistently.
+        # v2.607.0 — auto-negation: same retroactive-HP-restore recipe as
+        # v2.600.0 Shield / v2.601.0 Defensive Duelist / v2.602.0 Form of
+        # the Beast Tail, with the rolled BI die as the AC bump. When the
+        # boosted AC turns the triggering hit into a non-crit miss, the
+        # full applied damage is healed back; a crit or a still-hit leaves
+        # the damage standing (advisory verdict only).
         try:
             options = entry.get("options") or []
             matching = next(
@@ -31821,6 +31827,49 @@ async def use_reaction(
                     "die_expression": f"1d{die_size}",
                 },
             })
+            # v2.607.0 — auto-negate when the rolled +1dN AC turns the
+            # triggering hit into a non-crit miss.
+            _ctx = entry.get("context") or {}
+            _dmg_applied = int(_ctx.get("damage_applied") or 0)
+            _was_crit = bool(_ctx.get("is_crit"))
+            if verdict == "miss" and not _was_crit and _dmg_applied > 0:
+                _sheet = dict(watcher_char.sheet or {})
+                _hp = dict(_sheet.get("hp") or {})
+                _cur = int(_hp.get("current") or 0)
+                _max = int(_hp.get("max") or 0)
+                _new_hp = (
+                    min(_max, _cur + _dmg_applied)
+                    if _max else _cur + _dmg_applied
+                )
+                _hp_res = _apply_hp_change(watcher_char, _new_hp)
+                db.commit()
+                await hub.broadcast(campaign_id, {
+                    "type": "character_hp_update",
+                    "data": {
+                        "character_id": watcher_char.id,
+                        "hp": _hp_res["hp"],
+                        "delta": _dmg_applied,
+                        "source": "combat-inspiration-negate",
+                    },
+                })
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "character_id": int(watcher_char_id),
+                        "character_name": watcher_char.name,
+                        "user_color": watcher_char.color,
+                        "feature_name": "🎺 Combat Inspiration negated the hit",
+                        "feature_desc": (
+                            f"d20 {atk_total} now MISSES AC {new_ac}; "
+                            f"restored {_dmg_applied} HP."
+                        ),
+                        "source": "combat-inspiration-negate",
+                        "reaction_kind": "class_feature",
+                        "damage_applied": _dmg_applied,
+                        "heal_back": _dmg_applied,
+                        "attack_id": _ctx.get("attack_id"),
+                    },
+                })
         except HTTPException:
             raise
         except Exception:

@@ -71,6 +71,24 @@ def _pc(cid, c, hp=30):
                         "reaction": False, "movement": 0}}
 
 
+async def _set_auto_apply(gm_client, on: bool) -> None:
+    """Toggle the campaign's auto_apply_damage so attack hits deal HP
+    damage — the precondition for the v2.607.0 CI-AC negation heal-back."""
+    form = {
+        "name": "Demo Campaign", "description": "demo", "game_system": "dnd5e",
+        "gm_tab_color": "", "font_override": "", "default_encounter_id": "",
+        "hp_threshold_1": "", "hp_threshold_2": "",
+        "hp_threshold_3": "", "hp_threshold_4": "",
+        "auto_play_playlist_id": "", "auto_play_mode": "order",
+        "auto_play_initial_volume": "0.7",
+    }
+    if on:
+        form["auto_apply_damage"] = "on"
+    await gm_client.post(
+        f"/campaign/{CAMPAIGN_ID}/settings", data=form, follow_redirects=False,
+    )
+
+
 async def test_ci_damage_with_target_applies_bonus(
     gm_client, gm_ws, lyra_valor, roster,
 ):
@@ -754,3 +772,134 @@ async def test_ci_phase3b_ud_suppression_lets_rogue_see_the_prompt(
         f"UD-suppression should surface cast-uncanny-dodge as a manual "
         f"option alongside use-combat-inspiration-ac; got {keys}"
     )
+
+
+async def test_ci_ac_auto_negates_exact_ac_hit(
+    gm_client, gm_ws, lyra_valor, roster,
+):
+    """v2.607.0 — Combat Inspiration AC reaction auto-negation. Same
+    retroactive-HP-restore recipe as the Shield / Defensive Duelist /
+    Form of the Beast Tail negations, with the rolled BI die (1d8 for a
+    Lv 6 Valor Bard) as the AC bump. Lyra casts BI on Garrik; Pip swings
+    until a non-crit hit lands EXACTLY at Garrik's AC (so any 1d8 roll
+    negates deterministically); using Combat Inspiration via the prompt
+    then restores the full applied damage. Garrik's sheet HP is patched
+    high to survive the probe and restored in a finally.
+    """
+    lyra = lyra_valor
+    pip = roster["Pip Quickfingers"]
+    garrik = roster["Garrik Ironside"]
+    orig_hp = garrik.get("hp")
+    await _set_auto_apply(gm_client, True)
+    # Refill Lyra's BI counter so the cast doesn't 409 on depletion.
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{lyra['id']}/rest",
+        json={"type": "long"},
+    )
+    # Patch Garrik high so he survives the probe (auto-apply hits his sheet).
+    await _patch_sheet(
+        gm_client, garrik["id"], {"hp": {"current": 9999, "max": 9999}},
+    )
+    try:
+        lyra_tok = f"tok_cineg_l_{lyra['id']}"
+        pip_tok = f"tok_cineg_p_{pip['id']}"
+        garrik_tok = f"tok_cineg_g_{garrik['id']}"
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/battle",
+            json={"combatants": [
+                _pc(pip_tok, pip, hp=30),
+                _pc(lyra_tok, lyra, hp=30),
+                _pc(garrik_tok, garrik, hp=9999),
+            ], "turn_index": 0, "round": 1, "active": True},
+        )
+        # Lyra casts BI on Garrik → installs the bardic-inspiration-die buff.
+        bi = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_bardic_inspiration",
+            json={
+                "character_id": lyra["id"],
+                "target_character_id": garrik["id"],
+                "override": True,
+            },
+        )
+        assert bi.status_code == 200, bi.text
+        await asyncio.sleep(0.15)
+        gm_ws.mark()
+
+        # Probe until a non-crit hit lands EXACTLY at Garrik's AC.
+        in_band = None
+        for _ in range(150):
+            r = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/attack",
+                json={
+                    "character_id": pip["id"],
+                    "attack_index": 0,
+                    "target_combatant_id": garrik_tok,
+                    "override": True,
+                    "override_range": True,
+                },
+            )
+            assert r.status_code == 200, r.text
+            d = r.json()
+            at, tac = d.get("attack_total"), d.get("target_ac")
+            if (
+                d.get("hit")
+                and not d.get("is_crit")
+                and int(d.get("damage_applied") or 0) > 0
+                and isinstance(at, int) and isinstance(tac, int)
+                and at == tac
+            ):
+                in_band = d
+                break
+        assert in_band is not None, (
+            "no exact-AC non-crit hit on Garrik in 150 swings"
+        )
+        dmg = int(in_band["damage_applied"])
+
+        await asyncio.sleep(0.3)
+        prompts = [
+            m for m in gm_ws.buffered("reaction_prompt")
+            if (m.get("data") or {}).get("watcher_char_id") == garrik["id"]
+            and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+        ]
+        ci_prompt = None
+        for m in reversed(prompts):
+            keys = [o.get("key") for o in (m["data"].get("options") or [])]
+            if "use-combat-inspiration-ac" in keys:
+                ci_prompt = m
+                break
+        assert ci_prompt, "expected use-combat-inspiration-ac option for Garrik"
+        prompt_id = ci_prompt["data"]["prompt_id"]
+
+        gm_ws.mark()
+        use = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+            json={
+                "prompt_id": prompt_id,
+                "reaction_key": "use-combat-inspiration-ac",
+                "watcher_char_id": garrik["id"],
+            },
+        )
+        assert use.status_code == 200, use.text
+        await asyncio.sleep(0.2)
+
+        neg = [
+            m for m in gm_ws.buffered("feature_used")
+            if (m.get("data") or {}).get("source") == "combat-inspiration-negate"
+            and (m.get("data") or {}).get("character_id") == garrik["id"]
+        ]
+        assert neg, (
+            f"expected feature_used(source=combat-inspiration-negate); got "
+            f"{[(m.get('data') or {}).get('source') for m in gm_ws.buffered('feature_used')]}"
+        )
+        assert int(neg[-1]["data"].get("heal_back") or 0) == dmg
+
+        hp_up = [
+            m for m in gm_ws.buffered("character_hp_update")
+            if (m.get("data") or {}).get("character_id") == garrik["id"]
+            and (m.get("data") or {}).get("source") == "combat-inspiration-negate"
+        ]
+        assert hp_up, "expected character_hp_update(source=combat-inspiration-negate)"
+        assert int(hp_up[-1]["data"].get("delta") or 0) == dmg
+    finally:
+        if isinstance(orig_hp, dict):
+            await _patch_sheet(gm_client, garrik["id"], {"hp": orig_hp})
