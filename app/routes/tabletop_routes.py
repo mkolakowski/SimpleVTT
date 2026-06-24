@@ -15790,6 +15790,35 @@ async def import_character(
     return {"character_id": new_char.id, "name": new_char.name, "mode": "clone"}
 
 
+@router.post("/api/campaign/import")
+async def import_campaign(
+    file: UploadFile = File(...),
+    mode: str = Form("clone"),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_gm),
+):
+    """Import a whole-campaign ``simplevtt-export`` (level=campaign) zip.
+    Requires the GM role. ``mode=clone`` re-creates everything as a brand-new
+    campaign owned by the importer, with fresh ids + fresh media uuids and the
+    full child tree FK-remapped. Restore/overwrite mode lands in Phase 7.
+    Backup/export-import arc Phase 6b."""
+    if mode != "clone":
+        raise HTTPException(400, "Only mode=clone is supported (restore lands in Phase 7).")
+
+    from .. import import_bundle as ib
+    from ..import_campaign import clone_campaign
+
+    raw = await file.read()
+    try:
+        zf = ib.open_archive(raw)
+        manifest = ib.read_manifest(zf, expected_level="campaign")
+        result = clone_campaign(db, zf, manifest, owner_user_id=user.id)
+    except ib.BundleError as e:
+        raise HTTPException(400, str(e))
+
+    return {"mode": "clone", **result}
+
+
 @router.get("/api/campaign/{campaign_id}/homebrew/template")
 def homebrew_template(
     campaign_id: int,

@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.617.0] - 2026-06-24 — "The Mirror Realm"
+
+**Schema version:** 80
+
+**Commit summary:** Phase 6b — campaign-clone import: `POST /api/campaign/import?mode=clone` re-places a whole-campaign `simplevtt-export` archive as a brand-new campaign, FK-remapping the child tree (tokens, encounters, tracks) to fresh ids + fresh media uuids.
+
+**Description:** [Backup/export-import overhaul](docs/plans/backup-export-overhaul.md) Phase 6b — the campaign counterpart to the Phase 6a character importer, and the mirror of the Phase 4 campaign export. New `app/import_campaign.py::clone_campaign` reads the archive's data tree, extracts its media to fresh uuids (`import_bundle`), and re-creates the **FK-interconnected core** with new ids, building old→new id maps tier by tier and remapping every cross-reference:
+
+- **token_templates → maps → characters** created first (each records its old→new id);
+- **tokens** remap `map_id` / `character_id` / `token_template_id` (a token whose map didn't come across is dropped);
+- **playlists → tracks** (a track's `playlist_id` remapped);
+- **encounters** remap `map_id` + `auto_play_playlist_id` and best-effort remap their payload's per-token `character_id` / `template_id` (unmapped refs → null so a stale id never points at an unrelated row).
+
+The new campaign is owned by the importing GM (`require_gm` role gate). All inserts are one transaction; on any failure the extracted media is unlinked so a failed import leaves nothing behind. `mode=clone` only (restore/overwrite is Phase 7).
+
+**Scope (6b):** campaign, token_templates, maps, characters, tokens, playlists+tracks, encounters. **Deferred to Phase 6c:** the flat add-ons — handouts, notes (per-campaign encryption keys don't round-trip), dice-roll history, and writing the embedded homebrew pack into the new campaign's scope. The archive already *carries* those; the clone importer just doesn't re-place them yet.
+
+### Added
+- `POST /api/campaign/import` (`mode=clone`) — whole-campaign clone into a fresh campaign.
+- `app/import_campaign.py::clone_campaign` — the FK-remapping clone engine.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_import_campaign.py` (new, +2) — a cross-referencing synthetic campaign archive (map + character + NPC template + token → all three + playlist + track + encounter → map/playlist/payload refs) clones into a new campaign; asserts each child count is 1 (proving the token's map/char/template, the track's playlist, and the encounter's refs all remapped), then confirms the cloned character is in the new campaign's roster (cleaned up by archiving the clone). Error paths: non-zip → 400, wrong-level archive → 400, a non-GM-role player → 403. Synthetic archives keep it independent of the export job.
+
 ## [2.616.0] - 2026-06-24 — "The Returning Hero"
 
 **Schema version:** 80
