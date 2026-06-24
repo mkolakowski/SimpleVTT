@@ -21817,6 +21817,329 @@ async def create_roll_request(
     return {"ok": True, "id": req.id}
 
 
+async def _resolve_save_failure(db, campaign_id, roll_req, ctx) -> str:
+    """v2.610.2 — install the save-or-suck condition for a FAILED save.
+    Extracted VERBATIM from ``respond_roll_request`` (no behavior change)
+    so a reaction that flips a save pass->fail (Silvery Barbs, v3) can
+    re-invoke the same resolution — every immunity gate (Aura of
+    Devotion, Mindless Rage, PFE&G, Heroism), the buff install, the undo
+    snapshot, and the caster-side concentration anchor. The caller has
+    already confirmed the save FAILED + that ``ctx`` belongs to this
+    campaign + DC. Returns the installed condition name, or "" when an
+    immunity gate blocked it or there is no condition to install. See
+    docs/plans/pending-resolution-state-machine.md (Phase 1)."""
+    auto_buff_installed = ""
+    cond = ctx.get("condition_buff") or _SPELL_CONDITION_MAP.get(
+        ctx.get("spell_slug") or "")
+    tgt_char_id = ctx.get("target_character_id")
+    if cond and tgt_char_id:
+        # v2.55.0 — Aura of Devotion (Paladin Oath of
+        # Devotion, Lv 7+) blocks the install of a Charmed
+        # condition on an ally. RAW: "your allies are immune
+        # to being charmed while within 10 feet of you."
+        # Pre-install gate — the save still failed but the
+        # condition just doesn't land; broadcast surfaces the
+        # immunity trigger so the player isn't confused why
+        # their failed Wis save didn't apply Charmed.
+        _cond_key = (cond.get("key") or "").strip().lower()
+        if _cond_key == "charmed":
+            _aod_applies, _aod_paladin = _ally_has_aura_of_devotion(
+                db, campaign_id, int(tgt_char_id),
+            )
+            if _aod_applies and _aod_paladin is not None:
+                # Look up the target's Character row for the
+                # broadcast (the caller has the id, we need
+                # the name).
+                _tgt_char_for_aod = db.query(Character).filter(
+                    Character.id == int(tgt_char_id),
+                ).first()
+                await _broadcast_aura_of_devotion(
+                    campaign_id, _aod_paladin, _tgt_char_for_aod,
+                )
+                auto_buff_installed = ""  # explicit: immunity, no install
+                # Skip the install entirely — short-circuit
+                # past the buff dict + _install_buff call.
+                # The ``ctx`` cleanup still happens below.
+                _save_request_context.pop(roll_req.id, None)
+                return ""
+        # v2.57.0 — Mindless Rage (Path of the Berserker,
+        # Lv 6+) blocks the install of Charmed *or* Frightened
+        # on the rager themselves while their rage buff is
+        # active. Distinct from AoD in that the immunity is
+        # self-targeted (gate keys off the saver's own buff
+        # list, not an ally aura) AND covers both charm and
+        # fear. Same pre-install short-circuit pattern.
+        if _cond_key in ("charmed", "frightened"):
+            if _pc_has_rage_active_buff(campaign_id, int(tgt_char_id)):
+                _rager = db.query(Character).filter(
+                    Character.id == int(tgt_char_id),
+                ).first()
+                await _broadcast_mindless_rage(
+                    campaign_id, _rager, cond.get("name") or _cond_key,
+                )
+                auto_buff_installed = ""
+                _save_request_context.pop(roll_req.id, None)
+                return ""
+        # v2.97.49 — PFE&G type-aware condition immunity.
+        # Closes the second of three v2.97.46-filed PFE&G
+        # hooks. If the saver carries PFE&G AND the cast's
+        # source caster's creature type is in the buff's
+        # pfeag_protected_types list AND the install would
+        # land Charmed or Frightened, short-circuit. The
+        # caster's creature type is resolved via the
+        # v2.97.48 ``_attacker_creature_type`` helper using
+        # the caster's combatant from the active battle
+        # (which carries the test/GM override) plus sheet
+        # fallback.
+        if _cond_key in ("charmed", "frightened"):
+            _pfeag_caster_id = ctx.get("caster_char_id")
+            if _pfeag_caster_id:
+                _pfeag_caster_cb = None
+                _pfeag_state = hub.get_battle(campaign_id)
+                if _pfeag_state:
+                    for _pc in (_pfeag_state.get("combatants") or []):
+                        if _pc.get("char_id") == int(_pfeag_caster_id):
+                            _pfeag_caster_cb = _pc
+                            break
+                _pfeag_caster_type = _attacker_creature_type(
+                    db, int(_pfeag_caster_id), _pfeag_caster_cb,
+                )
+                if _pfeag_caster_type and _pc_has_pfeag_against_type(
+                    campaign_id, int(tgt_char_id), _pfeag_caster_type,
+                ):
+                    _pfeag_target = db.query(Character).filter(
+                        Character.id == int(tgt_char_id),
+                    ).first()
+                    await _broadcast_pfeag_condition_immunity(
+                        campaign_id, _pfeag_target,
+                        cond.get("name") or _cond_key,
+                        _pfeag_caster_type,
+                    )
+                    auto_buff_installed = ""
+                    _save_request_context.pop(roll_req.id, None)
+                    return ""
+        # v2.97.43 — Heroism (Bard L1) immunity to Frightened.
+        # Same pre-install short-circuit shape as Mindless
+        # Rage and AoD but reads a marker effect off the
+        # target's buff list (``condition_immunity_frightened``)
+        # so future buffs with the same immunity (Calm
+        # Emotions, etc.) opt in by carrying the marker.
+        if _cond_key == "frightened":
+            if _pc_has_heroism_frightened_immunity(
+                campaign_id, int(tgt_char_id),
+            ):
+                _hero_target = db.query(Character).filter(
+                    Character.id == int(tgt_char_id),
+                ).first()
+                await _broadcast_heroism_frightened_immunity(
+                    campaign_id, _hero_target,
+                )
+                auto_buff_installed = ""
+                _save_request_context.pop(roll_req.id, None)
+                return ""
+        # v2.97.60 — stamp the repeated-save context on the
+        # buff so the /use_repeated_save endpoint can resolve a
+        # fresh end-of-turn save without re-deriving the spell's
+        # ability + DC from the catalog. Also captures the
+        # source caster's creature type via the v2.97.48 helper
+        # so the v2.97.50 _saver_pfeag_save_advantage check
+        # has the type it needs at save time.
+        _caster_id_for_repeat = int(ctx.get("caster_char_id") or 0)
+        _caster_cb_for_repeat = None
+        _battle_for_repeat = hub.get_battle(campaign_id)
+        if _caster_id_for_repeat and _battle_for_repeat:
+            for _c in (_battle_for_repeat.get("combatants") or []):
+                if _c.get("char_id") == _caster_id_for_repeat:
+                    _caster_cb_for_repeat = _c
+                    break
+        # v2.98.2 — NPC caster path: look up the combatant by
+        # combatant id (threaded into ctx by v2.97.80
+        # /npc_cast_spell) so _attacker_creature_type can read
+        # the NPC's template type. Pre-v2.98.2 the caster type
+        # stayed "" for NPC casters and PFE&G save-advantage
+        # never fired against NPC-sourced Fear / Charm.
+        if not _caster_cb_for_repeat and _battle_for_repeat:
+            _npc_caster_id = ctx.get("caster_combatant_id") or ""
+            if _npc_caster_id:
+                for _c in (_battle_for_repeat.get("combatants") or []):
+                    if _c.get("id") == _npc_caster_id:
+                        _caster_cb_for_repeat = _c
+                        break
+        _caster_type_for_repeat = _attacker_creature_type(
+            db, _caster_id_for_repeat, _caster_cb_for_repeat,
+        ) if (_caster_id_for_repeat or _caster_cb_for_repeat) else ""
+        # v2.97.80 — NPC caster anchor plumbing. When the
+        # cast came from /npc_cast_spell (caster_char_id == 0
+        # sentinel + caster_combatant_id set), stamp
+        # ``source_combatant_id`` on the target buff so the
+        # NPC paired-cleanup helper at
+        # ``_drop_paired_concentration_buffs_npc`` can find
+        # it when the NPC's concentration drops. PC casts
+        # leave the field empty.
+        _npc_caster_cb_id = (
+            ctx.get("caster_combatant_id") or ""
+            if not _caster_id_for_repeat else ""
+        )
+        buff = {
+            "key": cond["key"],
+            "name": cond["name"],
+            "icon": cond.get("icon", "💫"),
+            "source_char_id": _caster_id_for_repeat,
+            "source_char_name": ctx.get("caster_char_name") or "",
+            "source_spell": ctx.get("spell_name") or "",
+            # v2.97.80 — NPC caster combatant id for paired cleanup.
+            "source_combatant_id": _npc_caster_cb_id,
+            "duration_rounds": int(cond.get("duration_rounds", 10)),
+            "duration_max": int(cond.get("duration_rounds", 10)),
+            # v2.97.67 — Target-side condition buffs (Frightened
+            # from Fear, Paralyzed from Hold Person, etc.) must
+            # NOT carry ``concentration: True``. The caster's
+            # concentration is tracked via a separate
+            # ``concentration-<spell>`` anchor on the CASTER
+            # (installed below); the paired-cleanup helper
+            # ``_drop_paired_concentration_buffs`` keys on
+            # ``source_char_id``, NOT on the target buff's
+            # concentration flag, so RAW concentration-ends-
+            # the-effect semantics stay intact. Pre-v2.97.67
+            # the target buff inherited cond.concentration,
+            # which made the damage-triggered Con-save check
+            # on the TARGET drop their own Frightened buff
+            # (treating them as if they were concentrating on
+            # being frightened). That broke v2.97.65's damage-
+            # trigger save by removing the buff before the
+            # hook could fire.
+            "concentration": False,
+            # v2.99.1 — marker for the paired-cleanup helper.
+            # Set only when the catalog entry is RAW
+            # concentration (the caster's anchor maintains it);
+            # cleared otherwise so the helper skips non-
+            # concentration installs like Bardic Inspiration.
+            "_dependent_on_caster_concentration": bool(cond.get("concentration")),
+            "effects": list(cond.get("effects", [])),
+            # v2.97.60 — repeated-save plumbing. v2.99.407: a
+            # feature save (ctx carries `condition_buff`) only
+            # stamps the repeated-save context when it opts in via
+            # `ctx["repeated_save"]` — Menacing Attack's Frightened
+            # has a fixed duration and must NOT re-save (it would
+            # let the target shrug it off at end of turn). Spell
+            # save-or-suck (no `condition_buff`) keeps stamping
+            # unconditionally — those conditions ARE repeated-save
+            # by RAW (Hold Person, Fear, …).
+            "repeated_save_ability": (
+                str(ctx.get("save_ability") or "").upper()[:3]
+                if (not ctx.get("condition_buff")
+                    or ctx.get("repeated_save"))
+                else ""
+            ),
+            "repeated_save_dc": (
+                int(ctx.get("dc") or 0)
+                if (not ctx.get("condition_buff")
+                    or ctx.get("repeated_save"))
+                else 0
+            ),
+            "source_caster_creature_type": _caster_type_for_repeat or "",
+            # v2.97.65 — damage-trigger save plumbing. Copies
+            # the catalog's top-level ``save_on_damage`` flag
+            # so the damage-application hook knows whether to
+            # fire a repeated save after damage lands. Fear
+            # and Hideous Laughter opt in via the catalog;
+            # other conditions leave the flag absent.
+            "save_on_damage": bool(cond.get("save_on_damage")),
+        }
+        # v2.65.0 Phase B — snapshot the target's pre-install
+        # buff list so the undo pipeline can restore it. The
+        # roll_req.id (the save's roll_request) is the natural
+        # cast_id for this log entry. Caster-side concentration
+        # buff (below) isn't logged separately because the
+        # cleanup helper drops it when the target's condition
+        # ends — but the target-side install is the one we
+        # need to undo for an Indomitable reroll path.
+        _target_combatant_for_snapshot = {
+            "char_id": int(tgt_char_id),
+        }
+        _buffs_before = _snapshot_target_buffs(
+            db, campaign_id, _target_combatant_for_snapshot,
+        )
+        installed = await _install_buff(
+            campaign_id, int(tgt_char_id), buff,
+        )
+        if installed:
+            # v2.97.26 — prefer ctx["cast_id"] when present so
+            # the buff_install entry rides under the same
+            # cast_id as the originating endpoint's resource
+            # leg (Stunning Strike's ki spend, today; future
+            # save-or-suck endpoints can opt in by populating
+            # ctx["cast_id"]). Falls back to the legacy
+            # str(roll_req.id) for backward compatibility with
+            # /cast_spell save-or-suck spells that don't
+            # currently thread cast_id through the context.
+            _buff_install_cast_id = (
+                ctx.get("cast_id") or str(roll_req.id)
+            )
+            _log_damage_entry(_buff_install_cast_id, {
+                "kind": "buff_install",
+                "campaign_id": campaign_id,
+                "target_char_id": int(tgt_char_id),
+                "buffs_before": _buffs_before,
+                "buff_installed_key": cond["key"],
+            })
+            auto_buff_installed = cond["name"]
+            _mirror_buffs_to_sheet(
+                db, int(tgt_char_id),
+                _get_buffs(campaign_id, int(tgt_char_id)),
+            )
+            # v2.38.0 Phase T.3e: install caster-side
+            # concentration so the cleanup helper can drop
+            # this PC's condition when the caster loses
+            # concentration. Mirror of the T.3c NPC path.
+            if bool(cond.get("concentration")):
+                caster_id = int(ctx.get("caster_char_id") or 0)
+                if caster_id:
+                    caster_buff = {
+                        "key": f"concentration-{ctx.get('spell_slug') or 'spell'}",
+                        "name": f"Concentrating: {ctx.get('spell_name') or 'Spell'}",
+                        "icon": "🌀",
+                        "source_char_id": caster_id,
+                        "source_char_name": ctx.get("caster_char_name") or "",
+                        "source_spell": ctx.get("spell_name") or "",
+                        "duration_rounds": int(cond.get("duration_rounds", 10)),
+                        "duration_max": int(cond.get("duration_rounds", 10)),
+                        "concentration": True,
+                        "effects": [
+                            f"Concentrating on {ctx.get('spell_name') or 'spell'}",
+                        ],
+                    }
+                    await _install_buff(campaign_id, caster_id, caster_buff)
+                else:
+                    # v2.97.80 — NPC caster anchor. caster_char_id
+                    # is 0 (the /npc_cast_spell sentinel) but the
+                    # combatant id was threaded into ctx by the
+                    # endpoint at line ~27557. Install via the
+                    # NPC-friendly buff installer so the v2.97.80
+                    # damage-triggered concentration-save hook
+                    # can find it.
+                    _npc_caster_cb = ctx.get("caster_combatant_id") or ""
+                    if _npc_caster_cb:
+                        npc_caster_buff = {
+                            "key": f"concentration-{ctx.get('spell_slug') or 'spell'}",
+                            "name": f"Concentrating: {ctx.get('spell_name') or 'Spell'}",
+                            "icon": "🌀",
+                            "source_combatant_id": _npc_caster_cb,
+                            "source_char_name": ctx.get("caster_char_name") or "",
+                            "source_spell": ctx.get("spell_name") or "",
+                            "duration_rounds": int(cond.get("duration_rounds", 10)),
+                            "duration_max": int(cond.get("duration_rounds", 10)),
+                            "concentration": True,
+                            "effects": [
+                                f"Concentrating on {ctx.get('spell_name') or 'spell'}",
+                            ],
+                        }
+                        await _install_buff_on_combatant_id(
+                            campaign_id, _npc_caster_cb, npc_caster_buff,
+                        )
+    return auto_buff_installed
+
+
 @router.post("/api/campaign/{campaign_id}/roll_request/{req_id}/respond")
 async def respond_roll_request(
     campaign_id: int,
@@ -22117,341 +22440,9 @@ async def respond_roll_request(
         # so the Phase 2e auto-fail still triggers save-or-suck
         # condition installs even when result.total >= dc.
         if not _save_passed_final:
-            # v2.99.407 — Phase 3.2: a class-feature save (Menacing
-            # Attack, …) stamps its own condition template into
-            # ``ctx["condition_buff"]`` (same shape as a
-            # ``_SPELL_CONDITION_MAP`` entry). Prefer it; fall back to the
-            # spell-slug map for /cast_spell + Stunning Strike casts. Every
-            # downstream gate/install reads the cond-shape, so feature
-            # saves inherit the immunity gates + undo plumbing for free.
-            cond = ctx.get("condition_buff") or _SPELL_CONDITION_MAP.get(
-                ctx.get("spell_slug") or "")
-            tgt_char_id = ctx.get("target_character_id")
-            if cond and tgt_char_id:
-                # v2.55.0 — Aura of Devotion (Paladin Oath of
-                # Devotion, Lv 7+) blocks the install of a Charmed
-                # condition on an ally. RAW: "your allies are immune
-                # to being charmed while within 10 feet of you."
-                # Pre-install gate — the save still failed but the
-                # condition just doesn't land; broadcast surfaces the
-                # immunity trigger so the player isn't confused why
-                # their failed Wis save didn't apply Charmed.
-                _cond_key = (cond.get("key") or "").strip().lower()
-                if _cond_key == "charmed":
-                    _aod_applies, _aod_paladin = _ally_has_aura_of_devotion(
-                        db, campaign_id, int(tgt_char_id),
-                    )
-                    if _aod_applies and _aod_paladin is not None:
-                        # Look up the target's Character row for the
-                        # broadcast (the caller has the id, we need
-                        # the name).
-                        _tgt_char_for_aod = db.query(Character).filter(
-                            Character.id == int(tgt_char_id),
-                        ).first()
-                        await _broadcast_aura_of_devotion(
-                            campaign_id, _aod_paladin, _tgt_char_for_aod,
-                        )
-                        auto_buff_installed = ""  # explicit: immunity, no install
-                        # Skip the install entirely — short-circuit
-                        # past the buff dict + _install_buff call.
-                        # The ``ctx`` cleanup still happens below.
-                        _save_request_context.pop(roll_req.id, None)
-                        return {
-                            "ok": True,
-                            "total": rec.total,
-                            "breakdown": rec.breakdown,
-                            "auto_buff_installed": auto_buff_installed,
-                        }
-                # v2.57.0 — Mindless Rage (Path of the Berserker,
-                # Lv 6+) blocks the install of Charmed *or* Frightened
-                # on the rager themselves while their rage buff is
-                # active. Distinct from AoD in that the immunity is
-                # self-targeted (gate keys off the saver's own buff
-                # list, not an ally aura) AND covers both charm and
-                # fear. Same pre-install short-circuit pattern.
-                if _cond_key in ("charmed", "frightened"):
-                    if _pc_has_rage_active_buff(campaign_id, int(tgt_char_id)):
-                        _rager = db.query(Character).filter(
-                            Character.id == int(tgt_char_id),
-                        ).first()
-                        await _broadcast_mindless_rage(
-                            campaign_id, _rager, cond.get("name") or _cond_key,
-                        )
-                        auto_buff_installed = ""
-                        _save_request_context.pop(roll_req.id, None)
-                        return {
-                            "ok": True,
-                            "total": rec.total,
-                            "breakdown": rec.breakdown,
-                            "auto_buff_installed": auto_buff_installed,
-                        }
-                # v2.97.49 — PFE&G type-aware condition immunity.
-                # Closes the second of three v2.97.46-filed PFE&G
-                # hooks. If the saver carries PFE&G AND the cast's
-                # source caster's creature type is in the buff's
-                # pfeag_protected_types list AND the install would
-                # land Charmed or Frightened, short-circuit. The
-                # caster's creature type is resolved via the
-                # v2.97.48 ``_attacker_creature_type`` helper using
-                # the caster's combatant from the active battle
-                # (which carries the test/GM override) plus sheet
-                # fallback.
-                if _cond_key in ("charmed", "frightened"):
-                    _pfeag_caster_id = ctx.get("caster_char_id")
-                    if _pfeag_caster_id:
-                        _pfeag_caster_cb = None
-                        _pfeag_state = hub.get_battle(campaign_id)
-                        if _pfeag_state:
-                            for _pc in (_pfeag_state.get("combatants") or []):
-                                if _pc.get("char_id") == int(_pfeag_caster_id):
-                                    _pfeag_caster_cb = _pc
-                                    break
-                        _pfeag_caster_type = _attacker_creature_type(
-                            db, int(_pfeag_caster_id), _pfeag_caster_cb,
-                        )
-                        if _pfeag_caster_type and _pc_has_pfeag_against_type(
-                            campaign_id, int(tgt_char_id), _pfeag_caster_type,
-                        ):
-                            _pfeag_target = db.query(Character).filter(
-                                Character.id == int(tgt_char_id),
-                            ).first()
-                            await _broadcast_pfeag_condition_immunity(
-                                campaign_id, _pfeag_target,
-                                cond.get("name") or _cond_key,
-                                _pfeag_caster_type,
-                            )
-                            auto_buff_installed = ""
-                            _save_request_context.pop(roll_req.id, None)
-                            return {
-                                "ok": True,
-                                "total": rec.total,
-                                "breakdown": rec.breakdown,
-                                "auto_buff_installed": auto_buff_installed,
-                            }
-                # v2.97.43 — Heroism (Bard L1) immunity to Frightened.
-                # Same pre-install short-circuit shape as Mindless
-                # Rage and AoD but reads a marker effect off the
-                # target's buff list (``condition_immunity_frightened``)
-                # so future buffs with the same immunity (Calm
-                # Emotions, etc.) opt in by carrying the marker.
-                if _cond_key == "frightened":
-                    if _pc_has_heroism_frightened_immunity(
-                        campaign_id, int(tgt_char_id),
-                    ):
-                        _hero_target = db.query(Character).filter(
-                            Character.id == int(tgt_char_id),
-                        ).first()
-                        await _broadcast_heroism_frightened_immunity(
-                            campaign_id, _hero_target,
-                        )
-                        auto_buff_installed = ""
-                        _save_request_context.pop(roll_req.id, None)
-                        return {
-                            "ok": True,
-                            "total": rec.total,
-                            "breakdown": rec.breakdown,
-                            "auto_buff_installed": auto_buff_installed,
-                        }
-                # v2.97.60 — stamp the repeated-save context on the
-                # buff so the /use_repeated_save endpoint can resolve a
-                # fresh end-of-turn save without re-deriving the spell's
-                # ability + DC from the catalog. Also captures the
-                # source caster's creature type via the v2.97.48 helper
-                # so the v2.97.50 _saver_pfeag_save_advantage check
-                # has the type it needs at save time.
-                _caster_id_for_repeat = int(ctx.get("caster_char_id") or 0)
-                _caster_cb_for_repeat = None
-                _battle_for_repeat = hub.get_battle(campaign_id)
-                if _caster_id_for_repeat and _battle_for_repeat:
-                    for _c in (_battle_for_repeat.get("combatants") or []):
-                        if _c.get("char_id") == _caster_id_for_repeat:
-                            _caster_cb_for_repeat = _c
-                            break
-                # v2.98.2 — NPC caster path: look up the combatant by
-                # combatant id (threaded into ctx by v2.97.80
-                # /npc_cast_spell) so _attacker_creature_type can read
-                # the NPC's template type. Pre-v2.98.2 the caster type
-                # stayed "" for NPC casters and PFE&G save-advantage
-                # never fired against NPC-sourced Fear / Charm.
-                if not _caster_cb_for_repeat and _battle_for_repeat:
-                    _npc_caster_id = ctx.get("caster_combatant_id") or ""
-                    if _npc_caster_id:
-                        for _c in (_battle_for_repeat.get("combatants") or []):
-                            if _c.get("id") == _npc_caster_id:
-                                _caster_cb_for_repeat = _c
-                                break
-                _caster_type_for_repeat = _attacker_creature_type(
-                    db, _caster_id_for_repeat, _caster_cb_for_repeat,
-                ) if (_caster_id_for_repeat or _caster_cb_for_repeat) else ""
-                # v2.97.80 — NPC caster anchor plumbing. When the
-                # cast came from /npc_cast_spell (caster_char_id == 0
-                # sentinel + caster_combatant_id set), stamp
-                # ``source_combatant_id`` on the target buff so the
-                # NPC paired-cleanup helper at
-                # ``_drop_paired_concentration_buffs_npc`` can find
-                # it when the NPC's concentration drops. PC casts
-                # leave the field empty.
-                _npc_caster_cb_id = (
-                    ctx.get("caster_combatant_id") or ""
-                    if not _caster_id_for_repeat else ""
-                )
-                buff = {
-                    "key": cond["key"],
-                    "name": cond["name"],
-                    "icon": cond.get("icon", "💫"),
-                    "source_char_id": _caster_id_for_repeat,
-                    "source_char_name": ctx.get("caster_char_name") or "",
-                    "source_spell": ctx.get("spell_name") or "",
-                    # v2.97.80 — NPC caster combatant id for paired cleanup.
-                    "source_combatant_id": _npc_caster_cb_id,
-                    "duration_rounds": int(cond.get("duration_rounds", 10)),
-                    "duration_max": int(cond.get("duration_rounds", 10)),
-                    # v2.97.67 — Target-side condition buffs (Frightened
-                    # from Fear, Paralyzed from Hold Person, etc.) must
-                    # NOT carry ``concentration: True``. The caster's
-                    # concentration is tracked via a separate
-                    # ``concentration-<spell>`` anchor on the CASTER
-                    # (installed below); the paired-cleanup helper
-                    # ``_drop_paired_concentration_buffs`` keys on
-                    # ``source_char_id``, NOT on the target buff's
-                    # concentration flag, so RAW concentration-ends-
-                    # the-effect semantics stay intact. Pre-v2.97.67
-                    # the target buff inherited cond.concentration,
-                    # which made the damage-triggered Con-save check
-                    # on the TARGET drop their own Frightened buff
-                    # (treating them as if they were concentrating on
-                    # being frightened). That broke v2.97.65's damage-
-                    # trigger save by removing the buff before the
-                    # hook could fire.
-                    "concentration": False,
-                    # v2.99.1 — marker for the paired-cleanup helper.
-                    # Set only when the catalog entry is RAW
-                    # concentration (the caster's anchor maintains it);
-                    # cleared otherwise so the helper skips non-
-                    # concentration installs like Bardic Inspiration.
-                    "_dependent_on_caster_concentration": bool(cond.get("concentration")),
-                    "effects": list(cond.get("effects", [])),
-                    # v2.97.60 — repeated-save plumbing. v2.99.407: a
-                    # feature save (ctx carries `condition_buff`) only
-                    # stamps the repeated-save context when it opts in via
-                    # `ctx["repeated_save"]` — Menacing Attack's Frightened
-                    # has a fixed duration and must NOT re-save (it would
-                    # let the target shrug it off at end of turn). Spell
-                    # save-or-suck (no `condition_buff`) keeps stamping
-                    # unconditionally — those conditions ARE repeated-save
-                    # by RAW (Hold Person, Fear, …).
-                    "repeated_save_ability": (
-                        str(ctx.get("save_ability") or "").upper()[:3]
-                        if (not ctx.get("condition_buff")
-                            or ctx.get("repeated_save"))
-                        else ""
-                    ),
-                    "repeated_save_dc": (
-                        int(ctx.get("dc") or 0)
-                        if (not ctx.get("condition_buff")
-                            or ctx.get("repeated_save"))
-                        else 0
-                    ),
-                    "source_caster_creature_type": _caster_type_for_repeat or "",
-                    # v2.97.65 — damage-trigger save plumbing. Copies
-                    # the catalog's top-level ``save_on_damage`` flag
-                    # so the damage-application hook knows whether to
-                    # fire a repeated save after damage lands. Fear
-                    # and Hideous Laughter opt in via the catalog;
-                    # other conditions leave the flag absent.
-                    "save_on_damage": bool(cond.get("save_on_damage")),
-                }
-                # v2.65.0 Phase B — snapshot the target's pre-install
-                # buff list so the undo pipeline can restore it. The
-                # roll_req.id (the save's roll_request) is the natural
-                # cast_id for this log entry. Caster-side concentration
-                # buff (below) isn't logged separately because the
-                # cleanup helper drops it when the target's condition
-                # ends — but the target-side install is the one we
-                # need to undo for an Indomitable reroll path.
-                _target_combatant_for_snapshot = {
-                    "char_id": int(tgt_char_id),
-                }
-                _buffs_before = _snapshot_target_buffs(
-                    db, campaign_id, _target_combatant_for_snapshot,
-                )
-                installed = await _install_buff(
-                    campaign_id, int(tgt_char_id), buff,
-                )
-                if installed:
-                    # v2.97.26 — prefer ctx["cast_id"] when present so
-                    # the buff_install entry rides under the same
-                    # cast_id as the originating endpoint's resource
-                    # leg (Stunning Strike's ki spend, today; future
-                    # save-or-suck endpoints can opt in by populating
-                    # ctx["cast_id"]). Falls back to the legacy
-                    # str(roll_req.id) for backward compatibility with
-                    # /cast_spell save-or-suck spells that don't
-                    # currently thread cast_id through the context.
-                    _buff_install_cast_id = (
-                        ctx.get("cast_id") or str(roll_req.id)
-                    )
-                    _log_damage_entry(_buff_install_cast_id, {
-                        "kind": "buff_install",
-                        "campaign_id": campaign_id,
-                        "target_char_id": int(tgt_char_id),
-                        "buffs_before": _buffs_before,
-                        "buff_installed_key": cond["key"],
-                    })
-                    auto_buff_installed = cond["name"]
-                    _mirror_buffs_to_sheet(
-                        db, int(tgt_char_id),
-                        _get_buffs(campaign_id, int(tgt_char_id)),
-                    )
-                    # v2.38.0 Phase T.3e: install caster-side
-                    # concentration so the cleanup helper can drop
-                    # this PC's condition when the caster loses
-                    # concentration. Mirror of the T.3c NPC path.
-                    if bool(cond.get("concentration")):
-                        caster_id = int(ctx.get("caster_char_id") or 0)
-                        if caster_id:
-                            caster_buff = {
-                                "key": f"concentration-{ctx.get('spell_slug') or 'spell'}",
-                                "name": f"Concentrating: {ctx.get('spell_name') or 'Spell'}",
-                                "icon": "🌀",
-                                "source_char_id": caster_id,
-                                "source_char_name": ctx.get("caster_char_name") or "",
-                                "source_spell": ctx.get("spell_name") or "",
-                                "duration_rounds": int(cond.get("duration_rounds", 10)),
-                                "duration_max": int(cond.get("duration_rounds", 10)),
-                                "concentration": True,
-                                "effects": [
-                                    f"Concentrating on {ctx.get('spell_name') or 'spell'}",
-                                ],
-                            }
-                            await _install_buff(campaign_id, caster_id, caster_buff)
-                        else:
-                            # v2.97.80 — NPC caster anchor. caster_char_id
-                            # is 0 (the /npc_cast_spell sentinel) but the
-                            # combatant id was threaded into ctx by the
-                            # endpoint at line ~27557. Install via the
-                            # NPC-friendly buff installer so the v2.97.80
-                            # damage-triggered concentration-save hook
-                            # can find it.
-                            _npc_caster_cb = ctx.get("caster_combatant_id") or ""
-                            if _npc_caster_cb:
-                                npc_caster_buff = {
-                                    "key": f"concentration-{ctx.get('spell_slug') or 'spell'}",
-                                    "name": f"Concentrating: {ctx.get('spell_name') or 'Spell'}",
-                                    "icon": "🌀",
-                                    "source_combatant_id": _npc_caster_cb,
-                                    "source_char_name": ctx.get("caster_char_name") or "",
-                                    "source_spell": ctx.get("spell_name") or "",
-                                    "duration_rounds": int(cond.get("duration_rounds", 10)),
-                                    "duration_max": int(cond.get("duration_rounds", 10)),
-                                    "concentration": True,
-                                    "effects": [
-                                        f"Concentrating on {ctx.get('spell_name') or 'spell'}",
-                                    ],
-                                }
-                                await _install_buff_on_combatant_id(
-                                    campaign_id, _npc_caster_cb, npc_caster_buff,
-                                )
+            auto_buff_installed = await _resolve_save_failure(
+                db, campaign_id, roll_req, ctx,
+            )
         # v2.47.0 Phase T.5d: AoE PC saves apply save-for-half damage
         # and broadcast a per-target update so the cast card's pill
         # row repaints. The condition-buff path above stays scoped to

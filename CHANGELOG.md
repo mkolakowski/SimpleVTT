@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.610.2] - 2026-06-23 — "The Extracted Verdict"
+
+**Schema version:** 80
+
+**Commit summary:** Phase 1 of the pending-resolution machine — extract the save-or-suck failure resolution into a reusable `_resolve_save_failure()` coroutine (pure refactor, no behavior change).
+
+**Description:** [Pending-resolution state machine](docs/plans/pending-resolution-state-machine.md) Phase 1. The save-or-suck **failure resolution** — install the matching condition on a failed PC save, run every immunity gate (Aura of Devotion, Mindless Rage, PFE&G, Heroism), snapshot for Undo, and install the caster-side concentration anchor — was a ~330-line inline block inside `respond_roll_request`, with four endpoint-style early `return`s for the immunity short-circuits. Nothing else could re-invoke it, which is why Silvery Barbs (a reaction that flips a save pass→fail) still GM-narrates the consequence.
+
+This commit lifts that block **verbatim** into a module-level coroutine:
+
+```
+async def _resolve_save_failure(db, campaign_id, roll_req, ctx) -> str
+```
+
+It returns the installed condition name (or `""` when an immunity gate blocked it or there's no condition to install). The four immunity early-returns become `return ""`; everything else — the gates, the buff install, the undo snapshot, the concentration anchor — is unchanged. `respond_roll_request` now calls it from the same `if not _save_passed_final:` guard. **No behavior change** — the existing heavy save-or-suck + immunity suite is the gate (`test_cast_hold_person`, `test_heroism_frightened_immunity`, `test_pfeag_condition_immunity`, `test_menacing_attack`, `test_cast_spell_save`, … all green, unchanged).
+
+This makes Phase 2 (Silvery Barbs calls `_resolve_save_failure` when its reroll flips pass→fail, so the condition actually installs) a small, focused commit.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py` — new `_resolve_save_failure()` coroutine (extracted from `respond_roll_request`); the endpoint calls it in place of the inline block.
+
+No new harness test (pure refactor; the existing save-or-suck + immunity tests guard it — see the Phase 1 note in the plan).
+
+### Changed
+- The save-or-suck failure resolution is now a reusable `_resolve_save_failure()` coroutine instead of an inline block in the roll-request respond handler (no behavior change).
+
 ## [2.610.1] - 2026-06-23 — "The Blueprint"
 
 **Schema version:** 80

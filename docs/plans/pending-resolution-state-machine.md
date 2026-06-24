@@ -1,7 +1,8 @@
 # Pending-Resolution State Machine — Design Plan
 
-**Status:** 🔥 IN PROGRESS — Phase 0 (this plan) shipping; Phase 1 (extract the
-save-failure resolver) next.
+**Status:** 🔥 IN PROGRESS — Phase 0 (plan) shipped v2.610.1; **Phase 1
+(extract `_resolve_save_failure`) shipped v2.610.2** (pure refactor, no
+behavior change); Phase 2 (Silvery Barbs re-resolution) next.
 
 This is the single biggest remaining item in the
 [reactions-automation](reactions-automation.md) v3 backlog. The AC-bump
