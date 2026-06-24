@@ -36,6 +36,7 @@ How much of the SRD 5.1 ruleset SimpleVTT mechanically automates, by content cat
 | [fail2ban deployment](fail2ban-deployment.md) | Markdown (how-to) | Operators | ✅ shipped (v2.476.0) |
 | [Privacy Policy (GDPR-compliant template)](privacy.md) | Markdown (policy) | Operators + Users | ✅ shipped (v2.479.0) |
 | [Admin Center](admin-center.md) | Markdown (how-to) | Operators | ✅ shipped (v2.483.0) |
+| [Backups & restore](backups.md) | Markdown (how-to) | Operators + GMs | ✅ shipped (v2.628.0) — operator full-app backups + restore; campaign / PC / homebrew exports |
 | [PC vs NPC combat systems](pc-vs-npc-systems.md) | Markdown (reference) | Contributors | ✅ shipped (v2.49.167) |
 | [Reactions automation](reactions.md) | Markdown (how-to) | GMs + players | ✅ shipped (v2.82.0) |
 | [Targeting system guide](targeting-system-guide.html) | HTML (visual) | GMs + contributors | ✅ shipped (v2.49.168) |
@@ -61,7 +62,7 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 | [App-wide roles + GM/player caps + storage accounting & limits](../plans/app-wide-roles-and-storage.md) | Markdown (design) | Contributors | ✅ shipped (v2.584.0–v2.589.0 · roles + caps + assignment + storage accounting & limits) |
 | [Campaign & PC retirement / archive](../plans/campaign-pc-archive.md) | Markdown (design) | Contributors | 🟠 Phase 1 (plan) shipped; campaign archive + PC retirement + demo reseed queued |
 | [Pending-resolution state machine](../plans/pending-resolution-state-machine.md) | Markdown (design) | Contributors | 🔥 Phase 0 (plan) shipped; extract save-failure resolver + Silvery Barbs re-resolution queued |
-| [Backup / export-import overhaul](../plans/backup-export-overhaul.md) | Markdown (design) | Contributors | 🟠 Phase 0 (plan) shipped; rate-limit helper + zip export/import (PC / campaign / homebrew-item) + Admin Center backup settings queued |
+| [Backup / export-import overhaul](../plans/backup-export-overhaul.md) | Markdown (design) | Contributors | ✅ shipped (v2.612.4–v2.627.0) — all phases; see the [backups guide](backups.md) |
 | [Advantage & disadvantage](../plans/advantage-disadvantage.md) | Markdown (design) | Contributors | 🟠 Phases 1 + 2a–2f shipped (v2.2.0–v2.157.0); Phase 3 blocked on Maps 2.0; Phase 4a (Cloak of Displacement) shipped v2.252.0; Phase 4b (Cloak of Elvenkind) shipped v2.253.0 |
 | [Class / subclass / feat / race content](../plans/class-content-status.md) | Markdown (inventory) | Contributors | 🟢 / 🟠 / ⚪ living inventory |
 | [Full class-feature automation](../plans/full-feature-automation.md) | Markdown (design) | Contributors | 🟠 Phases 0–7 shipped; Phase 8 in progress (v2.158.x) |

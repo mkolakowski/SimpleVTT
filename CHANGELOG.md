@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.628.0] - 2026-06-24 — "The Field Manual"
+
+**Schema version:** 80
+
+**Commit summary:** New wiki guide `/wiki/backups` — explains how backups work (the operator sidecar's three artifacts + the download-zip structure, schedule/retention, demo-mode skip, restore) and the in-app campaign/PC/homebrew export archive structures; clears the long-standing "Backups + restore" wiki TODO.
+
+**Description:** Adds `docs/wiki/backups.md`, surfaced at `/wiki/backups`. It documents the two distinct backup systems (which a couple of recent questions showed is easy to conflate):
+
+- **Operator backups** (the `simplevtt-backup` sidecar): the three artifacts a run produces (`*.sql.gz` full `pg_dump`, `*.homebrew.tar.gz`, `*.uploads.tar.gz`), what the **download zip** contains (the three bundled, STORED), schedule + retention, the `DEMO_MODE` skip, and the safety-backup-first restore flow + a manual CLI restore recipe.
+- **In-app exports**: the `simplevtt-export` zip layout for a **campaign** (`manifest.json` + `data/*.json` tree + bundled `media/`) and a **PC sheet** (`level:"character"`), and the single-record `simplevtt-homebrew` JSON for a **homebrew item** — plus clone-vs-restore import.
+
+Surfaced per the doc rule: added to the wiki landing-page "Available guides" table + `docs/wiki/README.md`, the stale "Backups + restore" landing-page TODO is marked shipped, and the design-plan row is updated to ✅ shipped (the arc is complete).
+
+### Added
+- `docs/wiki/backups.md` — operator + GM backups & restore guide (`/wiki/backups`).
+
+### Changed
+- Wiki landing page + `docs/wiki/README.md`: backups guide listed; "Backups + restore" TODO closed; backup/export-import design-plan row marked ✅ shipped.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_wiki.py` (+1) — `test_wiki_backups_guide_renders` (`/wiki/backups` returns 200 with the H1, nav, and the three artifact-suffix names from the download-structure section) + the `test_wiki_home_renders` landing-page assertion for `/wiki/backups`.
+
 ## [2.627.0] - 2026-06-24 — "The Undo Button"
 
 **Schema version:** 80

@@ -30,6 +30,8 @@ async def test_wiki_home_renders():
     assert "/wiki/demo-content" in resp.text
     # v2.483.0: the Admin Center guide is surfaced in the guides table.
     assert "/wiki/admin-center" in resp.text
+    # v2.628.0: the backups & restore guide is surfaced in the guides table.
+    assert "/wiki/backups" in resp.text
     # v2.49.9: the wiki nav menu is rendered on the landing too.
     assert 'class="wiki-nav"' in resp.text
     # v2.49.9: Plans + References + Repo docs sections all reachable.
@@ -203,6 +205,24 @@ async def test_wiki_markdown_guide_renders():
     assert "Realtime broadcasts catalog" in resp.text
     assert "<h1" in resp.text
     assert "<table" in resp.text
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_backups_guide_renders():
+    """v2.628.0: GET /wiki/backups — markdown how-to under docs/wiki/ rendered
+    + wrapped + nav-injected. Describes the operator backup sidecar (the three
+    artifacts + download zip structure) and the in-app campaign/PC/homebrew
+    exports."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/backups")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "backups" in resp.text.lower() and "restore" in resp.text.lower()
+    # The download-structure section names the three operator artifacts.
+    assert ".sql.gz" in resp.text
+    assert ".homebrew.tar.gz" in resp.text
+    assert ".uploads.tar.gz" in resp.text
+    assert "<h1" in resp.text
     assert 'class="wiki-nav"' in resp.text
 
 

@@ -1,0 +1,164 @@
+# Backups & restore
+
+SimpleVTT has **two different backup systems** for two different jobs. Knowing
+which is which saves a lot of confusion:
+
+| System | Scope | Where | Use it to… |
+|---|---|---|---|
+| **Operator backups** | The **whole application** (every campaign + user) | Admin Center → **Backups** | Recover the whole instance — disaster recovery, server migration, restore from a fresh install. |
+| **Campaign / character / homebrew exports** | **One** campaign, PC, or homebrew record | In the app (campaign settings, character sheet, homebrew Workshop) | Share, clone, or move a single piece of content between campaigns or instances. |
+
+They produce **different files with different structures** — covered separately
+below.
+
+---
+
+## 1. Operator backups (the `simplevtt-backup` sidecar)
+
+A dedicated `postgres:16-alpine` sidecar container (`simplevtt-backup`) takes
+scheduled, full-application backups on the internal Docker network.
+
+### What a backup run produces
+
+Each run writes **three artifacts** that share one UTC timestamp, into
+`daily/` (and, on Sundays, also `weekly/`) on the `backup_data` volume:
+
+| Artifact | What it is |
+|---|---|
+| `simplevtt-<ts>.sql.gz` | Gzipped `pg_dump --clean --if-exists` of the **whole database** — every user, campaign, character, dice roll, note, handout, setting. |
+| `simplevtt-<ts>.homebrew.tar.gz` | The file-based homebrew content volume (custom classes / monsters / feats / …). |
+| `simplevtt-<ts>.uploads.tar.gz` | Uploaded media — maps, portraits, tokens, audio, handouts, thumbnails (everything under `/static/uploads`). |
+
+Together these three are **everything needed to restore the application from a
+fresh install**: the database has the rows, the two tarballs have the files
+those rows reference.
+
+### Schedule, retention, and demo mode
+
+- **Schedule + retention** are editable at runtime from **Admin Center →
+  Backups** (a cron expression + how many `daily` days / `weekly` weeks to
+  keep). The page writes `backup-settings.json` onto the shared volume and the
+  sidecar regenerates its cron within ~60 s. First-boot defaults come from the
+  `BACKUP_CRON` / `KEEP_DAILY` / `KEEP_WEEKLY` env vars.
+- **Run now** takes an immediate backup.
+- **Demo mode** (`DEMO_MODE=true`) **disables automated backups entirely** — a
+  demo database reseeds hourly, so scheduled dumps would be pure churn. The
+  Backups page shows "Disabled — demo mode" and the schedule controls are
+  hidden.
+
+> The Backups page only appears when the operator write-surface is enabled
+> (`ADMIN_CENTER_ADMIN_TOOLS=true`).
+
+### Structure of an operator backup **download**
+
+The Backups page lists **one row per backup run** (the three artifacts grouped
+by timestamp). The **⬇ Download .zip** button bundles that run into a single
+zip:
+
+```
+simplevtt-backup-<ts>.zip
+├── simplevtt-<ts>.sql.gz            # gzipped pg_dump (psql-restorable)
+├── simplevtt-<ts>.homebrew.tar.gz   # tar.gz of the homebrew volume
+└── simplevtt-<ts>.uploads.tar.gz    # tar.gz of the uploads volume
+```
+
+The zip uses **STORED** (no compression) because the three members are already
+gzip-compressed — unzipping gives you the originals untouched.
+
+### Restoring (operator)
+
+From **Admin Center → Backups**, click **♻ Restore** on a backup row and
+confirm. The sidecar then:
+
+1. **Takes a fresh safety backup first**, tagged `pre-restore safety backup
+   (before restoring <ts>)` — visible in the **Tag** column, so your pre-restore
+   state is one click away if you need to roll the restore back.
+2. Loads the chosen `.sql.gz` into the live database (`--clean --if-exists`, so
+   it drops + recreates each object).
+3. Clears and unpacks the homebrew and uploads tarballs back into their volumes.
+
+**Gating + caveats.** Restore is the most destructive operator action, so it is
+refused unless the write-surface is on, the instance is **not** in demo mode,
+and — when MFA is configured — your session is MFA-verified. It **overwrites
+live data and briefly disrupts the running app**; the automatic safety backup
+is your undo. Treat it as a maintenance-window operation.
+
+**Manual / CLI restore** (e.g. onto a fresh install) is just the inverse of the
+three artifacts:
+
+```sh
+# database
+gunzip -c simplevtt-<ts>.sql.gz | psql -h db -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+# homebrew volume  (into the homebrew_data mount)
+tar -xzf simplevtt-<ts>.homebrew.tar.gz -C /path/to/homebrew_data
+# uploaded media   (into the uploads_data mount)
+tar -xzf simplevtt-<ts>.uploads.tar.gz -C /path/to/uploads_data
+```
+
+---
+
+## 2. Campaign / character / homebrew exports (portable archives)
+
+These are produced **in the app** and are scoped to a single piece of content.
+They're for sharing and cloning, not whole-instance recovery.
+
+### Campaign export — `simplevtt-export` zip
+
+Campaign settings → **Import & export** → **Download full backup (.zip)**. A
+background job builds it (a progress toast shows each stage), then it downloads:
+
+```
+manifest.json                 # {format:"simplevtt-export", version, level:"campaign",
+                              #  source_campaign_id/name, counts{}, media_manifest[]}
+data/
+  campaign.json               # the campaign row
+  characters/<id>.json        # one file per PC
+  maps/<id>.json              # one file per map
+  tokens.json
+  token_templates.json        # NPC stat blocks
+  encounters/<id>.json
+  playlists.json              # playlists + tracks
+  notes.json                  # non-encrypted notes
+  handouts.json
+  dice_rolls.json
+  homebrew.json               # a simplevtt-homebrew pack (round-trips into /homebrew/import)
+media/<bucket>/<file>         # every uploaded file the data references, bundled in
+```
+
+The `media_manifest` in `manifest.json` maps each bundled file back to its
+original `/static/uploads/...` URL, so an importer can rewrite the references.
+
+### PC sheet export — `simplevtt-export` zip (`level:"character"`)
+
+Character page → **⬇ Export sheet (.zip)**. A character-scoped archive:
+`manifest.json` (`level:"character"`), `data/character.json` (the sheet — stats,
+notes, portrait reference), `data/dice_rolls.json` (that PC's rolls), and any
+`media/` the sheet references. **No** campaign-wide data is included.
+
+### Homebrew item export — `simplevtt-homebrew` JSON
+
+Homebrew Workshop → **Export** on a custom row. A single-record JSON pack (no
+zip — a homebrew record has no media) in the same shape `/homebrew/import`
+accepts, so one custom monster/feat/class round-trips into another campaign.
+
+### Importing exports
+
+- **Campaign import** (campaign settings → Import & export → Import backup):
+  **clone** creates a brand-new campaign (fresh ids + fresh media uuids), or
+  **restore** overwrites an existing campaign's content in place (its people
+  stay; the rest is replaced).
+- **Character import** clones a PC archive into a campaign.
+- **Homebrew import** is add-only — rows whose slug already exists are skipped.
+
+---
+
+## Which one do I want?
+
+- **"I need to be able to rebuild the whole server."** → Operator backups
+  (Admin Center → Backups). Keep the zips somewhere off-box.
+- **"I want to copy/share one campaign (or PC, or monster)."** → The in-app
+  exports above.
+
+See also: [First-run setup](/wiki/first-run-setup) (operator deployment),
+[Admin Center](/wiki/admin-center), and the
+[backup / export-import design plan](/wiki/doc/plan-backup-export-overhaul).
