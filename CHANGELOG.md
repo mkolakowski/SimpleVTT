@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.630.7] - 2026-06-24 — "The Shared Inbox"
+
+**Schema version:** 80
+
+**Commit summary:** Fix the 500 on the Admin Center "Back up now" (and Save settings / Restore) button — the backup sidecar created `/backups` as `root:root 0755`, but the Admin Center process runs as `appuser` and couldn't write the control files. The sidecar now makes the dir sticky world-writable.
+
+**Description:** Clicking **Back up now** (or Save settings, or Restore) raised `PermissionError: [Errno 13] Permission denied: '/backups/.run-now'` → HTTP 500. The Admin Center coordinates with the backup sidecar by dropping small control files on the shared `backup_data` volume (`.run-now`, `.restore-request`, `backup-settings.json`), but that volume is created by the `simplevtt-backup` sidecar (root) as mode `0755`, while the Admin Center runs as the non-root `appuser` (uid 999) — so those writes were denied.
+
+`scripts/entrypoint-backup.sh` now `chmod 1777 ${BACKUP_DIR}` on startup (sticky, world-writable, like `/tmp`): `appuser` can create + replace its own control files, while the sidecar (root) still owns and prunes the backup artifacts under `daily/` + `weekly/`. Verified end-to-end: `appuser` writes `.run-now`, the sidecar's watch-loop consumes it, and a full backup (`.sql.gz` + `.homebrew.tar.gz` + `.uploads.tar.gz`) is produced.
+
+### Fixed
+- "Back up now" / "Save settings" / "Restore" 500'd because the Admin Center (appuser) couldn't write control files into the root-owned `/backups` volume; the sidecar now makes the dir sticky world-writable.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** none — the bug was a container volume permission (the route + `trigger_run` logic, already unit-tested via a writable tmp dir, were correct); fix verified manually end-to-end (trigger written by appuser → consumed by the sidecar → backup produced).
+
 ## [2.630.6] - 2026-06-24 — "The Live Demo Switch"
 
 **Schema version:** 80

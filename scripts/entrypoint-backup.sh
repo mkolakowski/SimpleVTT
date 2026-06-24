@@ -33,6 +33,12 @@ json_field() {
 }
 
 mkdir -p "${BACKUP_DIR}" /var/log
+# v2.630.7: the Admin Center process (runs as appuser) drops control files into
+# ${BACKUP_DIR} — the run-now / restore-request triggers + backup-settings.json.
+# This sidecar created the dir as root, so make it sticky world-writable (like
+# /tmp) so those writes don't fail with EACCES; root still owns + prunes the
+# artifacts under daily/ + weekly/. Without this, "Back up now" 500s.
+chmod 1777 "${BACKUP_DIR}" 2>/dev/null || true
 touch /var/log/backup.log
 
 # ── Demo mode: do nothing but idle ──────────────────────────────────────────
