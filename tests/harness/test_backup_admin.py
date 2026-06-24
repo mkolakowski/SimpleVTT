@@ -115,3 +115,40 @@ def test_artifact_path_safe_resolution(tmp_path, monkeypatch):
     assert backup_admin.artifact_path("daily", "notes.txt") is None       # wrong suffix
     assert backup_admin.artifact_path("daily", "nonexistent.sql.gz") is None
     assert backup_admin.artifact_path("weekly", "simplevtt-20260624T030000Z.sql.gz") is None  # not in weekly
+
+
+def test_list_backups_groups_by_timestamp(tmp_path, monkeypatch):
+    monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
+    (tmp_path / "daily").mkdir()
+    (tmp_path / "weekly").mkdir()
+    ts = "20260624T030000Z"
+    (tmp_path / "daily" / f"simplevtt-{ts}.sql.gz").write_bytes(b"aa")
+    (tmp_path / "daily" / f"simplevtt-{ts}.homebrew.tar.gz").write_bytes(b"bbb")
+    (tmp_path / "daily" / "notes.txt").write_bytes(b"x")          # ignored
+    (tmp_path / "weekly" / "simplevtt-20260623T030000Z.sql.gz").write_bytes(b"c")
+
+    backups = backup_admin.list_backups()
+    # The two daily files for one run group into a single backup.
+    assert len(backups["daily"]) == 1
+    g = backups["daily"][0]
+    assert g["ts"] == ts
+    assert len(g["files"]) == 2
+    assert g["size"] == 5                  # 2 + 3 bytes
+    assert len(backups["weekly"]) == 1     # the lone sql.gz still counts as a backup
+
+
+def test_backup_files_for_resolves_run_and_is_safe(tmp_path, monkeypatch):
+    monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
+    (tmp_path / "daily").mkdir()
+    ts = "20260624T030000Z"
+    (tmp_path / "daily" / f"simplevtt-{ts}.sql.gz").write_bytes(b"a")
+    (tmp_path / "daily" / f"simplevtt-{ts}.homebrew.tar.gz").write_bytes(b"b")
+
+    paths = backup_admin.backup_files_for("daily", ts)
+    assert len(paths) == 2
+    assert all(p.is_file() for p in paths)
+
+    # Bad timestamp / bucket / missing run → empty (traversal-proof).
+    assert backup_admin.backup_files_for("daily", "../../etc") == []
+    assert backup_admin.backup_files_for("evil", ts) == []
+    assert backup_admin.backup_files_for("daily", "nonexistent") == []

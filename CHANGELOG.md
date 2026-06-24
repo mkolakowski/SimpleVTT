@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.625.0] - 2026-06-24 — "The Bundled Snapshot"
+
+**Schema version:** 80
+
+**Commit summary:** Admin Center `/backups` — download a whole backup run as a single `.zip` (its SQL dump + homebrew tarball bundled) instead of two separate `.gz` files; the table now lists one row per backup run.
+
+**Description:** A backup run produces a *pair* of artifacts sharing a timestamp (`simplevtt-<ts>.sql.gz` + `simplevtt-<ts>.homebrew.tar.gz`), so the natural "download" is the whole run as one file. The backups page now:
+
+- **Groups by run** — `backup_admin.list_backups` collapses the two files of a run into one backup entry (timestamp, file count, total size, newest mtime), newest first; the table shows one row per backup instead of one per file.
+- **Downloads a zip** — `GET /backups/download?bucket=&ts=` bundles the run's artifacts into a single `simplevtt-backup-<ts>.zip` (`backup_admin.backup_files_for` resolves the run's paths; the route streams an in-memory zip). The artifacts are already gzip-compressed, so the zip uses `ZIP_STORED` — no pointless re-compression. The query param changed from the per-file `name=` (v2.624.0) to the per-run `ts=`; both the timestamp (alnum-only) and each resolved filename are validated, so it stays traversal-proof.
+
+### Changed
+- `GET /backups/download` now serves a per-run `.zip` (param `ts=`) instead of a single `.gz` file (param `name=`); the backups table lists grouped runs.
+
+### Added
+- `backup_admin.list_backups` (group artifacts into runs) + `backup_admin.backup_files_for` (resolve a run's files safely).
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_backup_admin.py` (+2) — `test_list_backups_groups_by_timestamp` (a run's two files collapse into one backup with summed size; a stray non-artifact is ignored) and `test_backup_files_for_resolves_run_and_is_safe` (a run resolves to its paths; bad timestamp / bucket / missing run → empty, traversal-proof). The `artifact_path` safety test is retained (still the per-filename validator the run resolver builds on).
+
 ## [2.624.0] - 2026-06-24 — "The Local Hour"
 
 **Schema version:** 80

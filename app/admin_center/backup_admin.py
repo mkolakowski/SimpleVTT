@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -161,7 +162,9 @@ def artifact_path(bucket: str, name: str) -> Optional[Path]:
 
 
 def list_artifacts() -> dict:
-    """List the backup artifacts under daily/ + weekly/, newest first."""
+    """List the individual backup artifacts under daily/ + weekly/, newest
+    first. (Used internally; the page lists grouped *backups* — see
+    ``list_backups``.)"""
     out: dict[str, list] = {"daily": [], "weekly": []}
     for bucket in ("daily", "weekly"):
         d = backups_dir() / bucket
@@ -170,8 +173,59 @@ def list_artifacts() -> dict:
         items = [
             _stat_artifact(p)
             for p in d.iterdir()
-            if p.is_file() and (p.name.endswith(".sql.gz") or p.name.endswith(".homebrew.tar.gz"))
+            if p.is_file() and p.name.endswith(_ARTIFACT_SUFFIXES)
         ]
         items.sort(key=lambda a: a["mtime"], reverse=True)
         out[bucket] = items
     return out
+
+
+# A backup run's timestamp, e.g. ``20260624T030000Z`` — the stamp shared by the
+# run's ``simplevtt-<ts>.sql.gz`` + ``simplevtt-<ts>.homebrew.tar.gz`` pair.
+_TS_RE = re.compile(r"\A[A-Za-z0-9]+\Z")
+
+
+def _ts_of(name: str) -> Optional[str]:
+    """Extract the run timestamp from an artifact filename, or None."""
+    if not name.startswith("simplevtt-"):
+        return None
+    base = name[len("simplevtt-"):]
+    for suf in _ARTIFACT_SUFFIXES:
+        if base.endswith(suf):
+            return base[: -len(suf)] or None
+    return None
+
+
+def list_backups() -> dict:
+    """Group artifacts into *backups* keyed by run timestamp (the SQL dump +
+    homebrew tarball produced together), newest first. Each entry carries its
+    file names, total size, and newest mtime so the page can offer one
+    download-as-zip per backup."""
+    out: dict[str, list] = {"daily": [], "weekly": []}
+    for bucket, items in list_artifacts().items():
+        groups: dict[str, dict] = {}
+        for a in items:
+            ts = _ts_of(a["name"])
+            if ts is None:
+                continue
+            g = groups.setdefault(ts, {"ts": ts, "files": [], "size": 0, "mtime": 0.0})
+            g["files"].append(a["name"])
+            g["size"] += a["size"]
+            g["mtime"] = max(g["mtime"], a["mtime"])
+        out[bucket] = sorted(groups.values(), key=lambda g: g["mtime"], reverse=True)
+    return out
+
+
+def backup_files_for(bucket: str, ts: str) -> list:
+    """The on-disk paths for a backup run's artifacts (SQL dump + homebrew
+    tarball, whichever exist), validated through ``artifact_path``. Empty list
+    on a bad bucket / timestamp / missing run — traversal-proof (``ts`` is
+    alnum-only and each filename is re-validated)."""
+    if not ts or not _TS_RE.match(ts):
+        return []
+    paths = []
+    for suf in _ARTIFACT_SUFFIXES:
+        p = artifact_path(bucket, f"simplevtt-{ts}{suf}")
+        if p is not None:
+            paths.append(p)
+    return paths

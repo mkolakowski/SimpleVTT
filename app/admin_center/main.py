@@ -720,7 +720,7 @@ def backups_page(request: Request, saved: str = "", ran: str = "", err: str = ""
             "app_version": APP_VERSION,
             "admin_user": request.session.get("admin_user", ""),
             "settings": backup_admin.read_settings(),
-            "artifacts": backup_admin.list_artifacts(),
+            "backups": backup_admin.list_backups(),
             "demo_mode": backup_admin.demo_mode_active(),
             "saved": saved,
             "ran": ran,
@@ -773,18 +773,32 @@ def backups_run(request: Request):
 
 
 @app.get("/backups/download")
-def backups_download(request: Request, bucket: str = "", name: str = ""):
-    """Download a backup artifact. The path is validated (allowlisted bucket +
-    bare filename + known suffix) so it can't traverse out of the backup dir."""
+def backups_download(request: Request, bucket: str = "", ts: str = ""):
+    """Download a whole backup run as a single ``.zip`` bundling its SQL dump +
+    homebrew tarball. The bucket + timestamp are validated (allowlisted bucket,
+    alnum timestamp, each filename re-checked) so the path can't traverse out of
+    the backup dir. The artifacts are already gzip-compressed, so the zip is
+    STORED (no pointless re-compression)."""
     if not _ADMIN_TOOLS_ENABLED:
         return _TOOLS_DISABLED
+    import io
+    import zipfile
+
     from . import backup_admin
-    path = backup_admin.artifact_path(bucket, name)
-    if path is None:
-        raise HTTPException(status_code=404, detail="Backup artifact not found.")
-    log.info("admin-center operator %r downloaded backup %s/%s",
-             request.session.get("admin_user", "?"), bucket, name)
-    return FileResponse(str(path), media_type="application/gzip", filename=name)
+    paths = backup_admin.backup_files_for(bucket, ts)
+    if not paths:
+        raise HTTPException(status_code=404, detail="Backup not found.")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:
+        for p in paths:
+            zf.write(str(p), p.name)
+    log.info("admin-center operator %r downloaded backup %s/%s (%d files)",
+             request.session.get("admin_user", "?"), bucket, ts, len(paths))
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="simplevtt-backup-{ts}.zip"'},
+    )
 
 
 # ── User admin (Phase 2 — opt-in, MFA-gated for destructive ops) ──────────────

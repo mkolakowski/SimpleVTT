@@ -58,19 +58,22 @@
   {% endif %}
 
   <div class="card">
-    <h2>Artifacts</h2>
+    <h2>Backups</h2>
+    <p class="muted">Each backup downloads as a single <code>.zip</code> bundling
+      its database dump + homebrew archive.</p>
     {% for bucket in ["daily", "weekly"] %}
       <h3 style="margin:12px 0 6px">{{ bucket|capitalize }}</h3>
-      {% if artifacts[bucket] %}
+      {% if backups[bucket] %}
         <table class="data">
-          <thead><tr><th>File</th><th>Size</th><th>Modified</th><th></th></tr></thead>
+          <thead><tr><th>Backup</th><th>Contents</th><th>Size</th><th>Created</th><th></th></tr></thead>
           <tbody>
-            {% for a in artifacts[bucket] %}
+            {% for b in backups[bucket] %}
             <tr>
-              <td><code>{{ a.name }}</code></td>
-              <td>{{ a.size | bytes }}</td>
-              <td>{{ a.mtime | epoch }}</td>
-              <td><a class="link" href="/backups/download?bucket={{ bucket }}&amp;name={{ a.name | urlencode }}" download>⬇ Download</a></td>
+              <td><code>{{ b.ts }}</code></td>
+              <td>{{ b.files | length }} file{{ '' if b.files | length == 1 else 's' }}</td>
+              <td>{{ b.size | bytes }}</td>
+              <td>{{ b.mtime | epoch }}</td>
+              <td><a class="link" href="/backups/download?bucket={{ bucket }}&amp;ts={{ b.ts | urlencode }}" download>⬇ Download .zip</a></td>
             </tr>
             {% endfor %}
           </tbody>
