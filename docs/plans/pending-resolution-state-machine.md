@@ -1,10 +1,12 @@
 # Pending-Resolution State Machine — Design Plan
 
 **Status:** 🔥 IN PROGRESS — Phase 0 (plan) v2.610.1; Phase 1 (extract
-`_resolve_save_failure`) v2.610.2; **Phase 2 (Silvery Barbs re-resolves the
-save-or-suck condition on a reroll pass→fail flip) shipped v2.611.0.** Phase 3
-(save-for-half damage flips + attack re-resolution) is the remaining future
-work.
+`_resolve_save_failure`) v2.610.2; Phase 2 (Silvery Barbs re-resolves the
+save-or-suck condition on a reroll pass→fail flip) v2.611.0; **Phase 3a
+(Silvery Barbs applies the *withheld half* of a save-for-half AoE damage spell
+on a reroll pass→fail flip, via `_resolve_save_for_half_flip`) shipped
+v2.612.0.** The remaining Phase 3 work is attack hit↔miss re-resolution beyond
+the Lucky heal-back + an optional true held "pending" window.
 
 This is the single biggest remaining item in the
 [reactions-automation](reactions-automation.md) v3 backlog. The AC-bump
@@ -93,10 +95,18 @@ async def _resolve_save_failure(db, campaign_id, roll_req, ctx, *, saver_total)
 - Harness: extend the SB test so a deterministic pass→fail flip (high DC, a
   forced-low reroll fixture) installs the condition on the target.
 
+### Phase 3a — Save-for-half damage flips ✅ (v2.612.0)
+
+A reroll-fail on an AoE save-for-half **damage** save now applies the withheld
+half. On a *passed* AoE save the `/respond` handler stashes the rolled total +
+applied half + `evasion_used` on `_save_request_context` (rather than popping
+it); the `cast-silvery-barbs` dispatch calls `_resolve_save_for_half_flip`,
+which applies the difference between the full-on-fail amount (rolled, or
+rolled//2 with Evasion) and what already landed. Harness:
+`test_silvery_barbs_applies_withheld_half_on_damage_flip`.
+
 ### Phase 3 — Generalize (future)
 
-- **Save-for-half damage flips** — a reroll-fail on a damage save applies the
-  withheld half (needs the cast's damage stashed alongside the condition ctx).
 - **Attack hit↔miss re-resolution beyond the heal-back** — recompute riders /
   on-hit effects, not just restore HP.
 - **A true "pending" window** — hold the resolution un-committed for a short

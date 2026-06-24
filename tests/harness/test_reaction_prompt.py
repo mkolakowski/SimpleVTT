@@ -4164,6 +4164,217 @@ async def test_silvery_barbs_reresolves_save_or_suck_on_flip(
     )
 
 
+async def _set_auto_apply_damage(gm_client, on: bool) -> None:
+    """Flip the campaign's auto_apply_damage toggle (drives the AoE
+    PC save-for-half damage application path). Mirrors the form post in
+    test_use_save_evasion.py."""
+    form = {
+        "name": "Demo Campaign",
+        "description": "demo",
+        "game_system": "dnd5e",
+        "gm_tab_color": "",
+        "font_override": "",
+        "default_encounter_id": "",
+        "hp_threshold_1": "",
+        "hp_threshold_2": "",
+        "hp_threshold_3": "",
+        "hp_threshold_4": "",
+        "auto_play_playlist_id": "",
+        "auto_play_mode": "order",
+        "auto_play_initial_volume": "0.7",
+    }
+    if on:
+        form["auto_apply_damage"] = "on"
+    await gm_client.post(
+        f"/campaign/{CAMPAIGN_ID}/settings", data=form,
+        follow_redirects=False,
+    )
+
+
+# Fireball (8d6) in Thalindra's stored sheet — same index the Evasion
+# AoE save-for-half tests use (test_use_save_evasion.py).
+_FIREBALL_INDEX = 10
+
+
+async def test_silvery_barbs_applies_withheld_half_on_damage_flip(
+    gm_client, gm_ws, roster,
+):
+    """v2.612.0 — pending-resolution Phase 3a. When Silvery Barbs' reroll
+    flips an AoE save-for-half DAMAGE save pass->fail, the *withheld half*
+    of the spell's damage is now applied to the target (the damage twin of
+    Phase 2's condition re-resolve), instead of being GM-narrated.
+
+    Setup: Thalindra casts Fireball via the AoE path at [bandit, Caelan]
+    with auto_apply_damage ON. Caelan (no Evasion) must PASS (taking half),
+    which offers Thalindra — the caster, who is not the save-roller — her
+    Silvery Barbs reaction. She casts SB; when the auto-rolled reroll flips
+    to a FAIL, Caelan takes the withheld half: a `spell_cast_target_updated`
+    with `silvery_barbs_flip: True` + a `silvery-barbs-reresolve`
+    feature_used carrying `withheld_damage`, and Caelan's HP drops further.
+    Both the original pass and the reroll fail are server-random, so the
+    loop retries the whole scenario until a damage fail-flip lands.
+    """
+    await _set_auto_apply_damage(gm_client, on=True)
+    caelan = roster["Sir Caelan Lightbringer"]
+    thalindra = roster["Thalindra Moonwhisper"]
+    tmpls = (await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")).json()
+    bandit = next((t for t in tmpls if "bandit" in (t.get("name") or "").lower()), tmpls[0])
+
+    bandit_tok = "tok_sbdmg_bandit"
+    cae_tok = f"tok_sbdmg_cae_{caelan['id']}"
+    thal_tok = f"tok_sbdmg_thal_{thalindra['id']}"
+
+    flipped_ok = False
+    try:
+        for _ in range(60):
+            # Fresh slots + reactions + full HP each attempt. Long-rest BOTH
+            # PCs: the damage lands on Caelan's character-sheet HP (the PC HP
+            # path), which persists across retries — without the rest his HP
+            # would drift into the death-save zone over many attempts.
+            await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/rest",
+                json={"type": "long"},
+            )
+            await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/character/{caelan['id']}/rest",
+                json={"type": "long"},
+            )
+            await gm_client.put(
+                f"/api/campaign/{CAMPAIGN_ID}/battle",
+                json={"combatants": [
+                    {"id": bandit_tok, "char_id": None,
+                     "token_template_id": bandit["id"], "name": "Bandit",
+                     "initiative": 7, "hp_current": 50, "hp_max": 50, "buffs": [],
+                     "economy": {"action": False, "bonus": False,
+                                 "reaction": False, "movement": 0}},
+                    {"id": cae_tok, "char_id": caelan["id"], "name": caelan["name"],
+                     "initiative": 8, "hp_current": 60, "hp_max": 60, "buffs": [],
+                     "economy": {"action": False, "bonus": False,
+                                 "reaction": False, "movement": 0}},
+                    {"id": thal_tok, "char_id": thalindra["id"], "name": thalindra["name"],
+                     "initiative": 10, "hp_current": 32, "hp_max": 32, "buffs": [],
+                     "economy": {"action": False, "bonus": False,
+                                 "reaction": False, "movement": 0}},
+                ], "turn_index": 0, "round": 1, "active": True},
+            )
+            await asyncio.sleep(0.05)
+            gm_ws.mark()
+            cast = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+                json={
+                    "character_id": thalindra["id"],
+                    "spell_index": _FIREBALL_INDEX,
+                    "slot_level": 3,
+                    "class_slug": "wizard",
+                    "target_combatant_ids": [bandit_tok, cae_tok],
+                    "override": True,
+                },
+            )
+            assert cast.status_code == 200, cast.text
+            targets = cast.json().get("auto_save_targets") or []
+            pc_entry = next(
+                (t for t in targets if t.get("combatant_id") == cae_tok), None,
+            )
+            if not pc_entry or not pc_entry.get("pending_request_id"):
+                continue
+            pending_id = pc_entry["pending_request_id"]
+            resp = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/roll_request/{pending_id}/respond",
+                json={"character_id": caelan["id"]},
+            )
+            assert resp.status_code == 200, resp.text
+            await asyncio.sleep(0.15)
+            # The original AoE save must have PASSED (half applied) for SB
+            # to be offered — find that spell_cast_target_updated.
+            orig = [
+                m["data"] for m in gm_ws.buffered("spell_cast_target_updated")
+                if (m.get("data") or {}).get("combatant_id") == cae_tok
+                and not (m.get("data") or {}).get("silvery_barbs_flip")
+            ]
+            if not orig or not orig[-1].get("passed"):
+                continue  # Caelan failed the original — SB needs a pass; retry.
+            # Locate Thalindra's Silvery Barbs prompt on Caelan's save.
+            sb_prompts = [
+                m for m in _prompt_broadcasts(gm_ws)
+                if (m.get("data") or {}).get("watcher_char_id") == thalindra["id"]
+                and (m.get("data") or {}).get("trigger_event") == "save_resolved"
+            ]
+            sbp = None
+            for m in reversed(sb_prompts):
+                if "cast-silvery-barbs" in [
+                    o.get("key") for o in (m["data"].get("options") or [])
+                ]:
+                    sbp = m
+                    break
+            if not sbp:
+                continue
+
+            async def _caelan_hp() -> int:
+                snap = await gm_client.get(
+                    f"/api/campaign/{CAMPAIGN_ID}/character/{caelan['id']}/sheet-json"
+                )
+                hp = ((snap.json() or {}).get("sheet") or {}).get("hp") or {}
+                return int(hp.get("current") or 0)
+
+            # The original passed save already applied the half to Caelan's
+            # sheet HP; snapshot it so we can prove the flip removes more.
+            hp_before_flip = await _caelan_hp()
+            gm_ws.mark()
+            sbc = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+                json={
+                    "prompt_id": sbp["data"]["prompt_id"],
+                    "reaction_key": "cast-silvery-barbs",
+                    "watcher_char_id": thalindra["id"],
+                },
+            )
+            assert sbc.status_code == 200, sbc.text
+            await asyncio.sleep(0.15)
+            sb_card = [
+                m["data"] for m in gm_ws.buffered("feature_used")
+                if (m.get("data") or {}).get("source") == "silvery-barbs-cast"
+            ]
+            if not sb_card or sb_card[-1].get("new_save_verdict") != "fail":
+                continue  # reroll still passed — retry for a fail-flip.
+            # Fail-flip → the withheld half must have applied as damage.
+            flip_upd = [
+                m["data"] for m in gm_ws.buffered("spell_cast_target_updated")
+                if (m.get("data") or {}).get("silvery_barbs_flip")
+            ]
+            assert flip_upd, (
+                "damage fail-flip should emit spell_cast_target_updated"
+                "(silvery_barbs_flip=True)"
+            )
+            withheld = int(flip_upd[-1].get("damage_applied") or 0)
+            assert withheld > 0, "withheld-half damage must be positive"
+            # 8d6 Fireball at L3 → 8-48 total; the withheld half is the
+            # complement of the already-applied half, so both sit in 4-24.
+            assert 1 <= withheld <= 24, (
+                f"withheld half should be ~half of 8d6 (1-24); got {withheld}"
+            )
+            rr = [
+                m["data"] for m in gm_ws.buffered("feature_used")
+                if (m.get("data") or {}).get("source") == "silvery-barbs-reresolve"
+                and (m.get("data") or {}).get("withheld_damage")
+            ]
+            assert rr, "fail-flip should emit a silvery-barbs-reresolve feature_used"
+            assert int(rr[-1]["withheld_damage"]) == withheld
+            # The withheld half must have landed on Caelan's actual sheet HP:
+            # his HP drops further after the flip (or is floored at 0). Proves
+            # the damage was applied through the real PC HP path, not just
+            # broadcast. (Use before-vs-after rather than an absolute total to
+            # stay floor-safe regardless of Caelan's max HP.)
+            hp_after_flip = await _caelan_hp()
+            assert hp_after_flip < hp_before_flip or hp_after_flip == 0, (
+                f"the withheld half ({withheld}) must reduce Caelan's HP "
+                f"further; before={hp_before_flip} after={hp_after_flip}"
+            )
+            flipped_ok = True
+            break
+        assert flipped_ok, "no SB damage fail-flip in 60 attempts"
+    finally:
+        await _set_auto_apply_damage(gm_client, on=False)
+
 async def test_indomitable_emits_reaction_prompt(
     gm_client, gm_ws, roster,
 ):

@@ -22140,6 +22140,46 @@ async def _resolve_save_failure(db, campaign_id, roll_req, ctx) -> str:
     return auto_buff_installed
 
 
+async def _resolve_save_for_half_flip(db, campaign_id, ctx) -> int:
+    """v2.612.0 — pending-resolution Phase 3a. The damage twin of
+    ``_resolve_save_failure``: when a reaction (Silvery Barbs) flips an
+    AoE save-for-half DAMAGE save pass->fail, apply the *withheld half*
+    that the originally-passed save spared.
+
+    The original ``/respond`` resolution applied half damage (or 0 with
+    Evasion on a Dex save) and stashed ``damage_rolled`` (the full roll),
+    ``damage_applied`` (what landed on the pass), and ``evasion_used`` on
+    ``ctx``. On a flip to FAIL the target should instead take the
+    full-on-fail amount (rolled, or rolled//2 with Evasion), so we apply
+    the delta between that and what already landed. Returns the
+    additional damage applied (0 when there's nothing to do — e.g. a
+    condition-only ctx, or a flip that doesn't increase the total)."""
+    try:
+        rolled = int(ctx.get("damage_rolled") or 0)
+        already = int(ctx.get("damage_applied") or 0)
+    except (TypeError, ValueError):
+        return 0
+    if rolled <= 0:
+        return 0
+    # Full-on-fail mirrors _apply_evasion_to_dex_save_damage's failed-save
+    # branch: rolled//2 when Evasion fired (Dex save), else the full roll.
+    fail_damage = rolled // 2 if bool(ctx.get("evasion_used")) else rolled
+    delta = fail_damage - already
+    if delta <= 0:
+        return 0
+    _pc_combatant = {
+        "char_id": int(ctx.get("target_character_id") or 0),
+        "id": ctx.get("combatant_id") or "",
+        "name": ctx.get("target_name") or "",
+    }
+    _dr_result = await _apply_damage_to_combatant(
+        db, campaign_id, _pc_combatant, delta,
+        damage_type=ctx.get("damage_type") or "",
+        attack_id=ctx.get("cast_id") or "", is_spell=True,
+    )
+    return int(_dr_result.get("applied") or 0)
+
+
 @router.post("/api/campaign/{campaign_id}/roll_request/{req_id}/respond")
 async def respond_roll_request(
     campaign_id: int,
@@ -22459,6 +22499,8 @@ async def respond_roll_request(
             # auto-fail flips the AoE damage-applied math too.
             _passed = bool(_save_passed_final)
             _dmg_applied = 0
+            _dmg_rolled = 0
+            _ev_used = False
             _dmg_type = ctx.get("damage_type") or ""
             _cast_id = ctx.get("cast_id") or ""
             _combatant_id = ctx.get("combatant_id") or ""
@@ -22504,7 +22546,21 @@ async def respond_roll_request(
                     "damage_type": _dmg_type,
                 },
             })
-            _save_request_context.pop(roll_req.id, None)
+            # v2.612.0 — pending-resolution Phase 3a: on a PASSED AoE
+            # save-for-half DAMAGE save, stash the rolled total + applied
+            # half + whether Evasion fired, and DON'T pop the ctx — a
+            # Silvery Barbs reroll that flips the save pass->fail can then
+            # apply the *withheld half* via _resolve_save_for_half_flip
+            # (the damage twin of Phase 2's condition re-resolve). The
+            # ctx is TTL-purged if no reaction claims it. A FAILED save
+            # already took full damage and can't be flipped to the
+            # caster's benefit, so pop it as before.
+            if _passed and _dmg_rolled > 0:
+                ctx["damage_rolled"] = _dmg_rolled
+                ctx["damage_applied"] = _dmg_applied
+                ctx["evasion_used"] = bool(_ev_used)
+            else:
+                _save_request_context.pop(roll_req.id, None)
 
     return {
         "ok": True,
@@ -32253,6 +32309,57 @@ async def use_reaction(
                                     "rerolled_target_name": target_name,
                                 },
                             })
+                        # v2.612.0 — pending-resolution Phase 3a: if the
+                        # flipped save was an AoE save-for-half DAMAGE save
+                        # (no condition to install), apply the withheld
+                        # half now so SB also converts a survived blast
+                        # into full damage. Harmless on a condition-only
+                        # ctx (_resolve_save_for_half_flip returns 0).
+                        _sb_extra_dmg = await _resolve_save_for_half_flip(
+                            db, campaign_id, _sb_save_ctx,
+                        )
+                        if _sb_extra_dmg > 0:
+                            await hub.broadcast(campaign_id, {
+                                "type": "spell_cast_target_updated",
+                                "data": {
+                                    "cast_id": _sb_save_ctx.get("cast_id") or "",
+                                    "combatant_id": (
+                                        _sb_save_ctx.get("combatant_id") or ""
+                                    ),
+                                    "target_name": target_name,
+                                    "passed": False,
+                                    "damage_applied": _sb_extra_dmg,
+                                    "damage_type": (
+                                        _sb_save_ctx.get("damage_type") or ""
+                                    ),
+                                    "silvery_barbs_flip": True,
+                                },
+                            })
+                            await hub.broadcast(campaign_id, {
+                                "type": "feature_used",
+                                "data": {
+                                    "character_id": int(watcher_char_id),
+                                    "character_name": watcher_char.name,
+                                    "user_color": watcher_char.color,
+                                    "feature_name": (
+                                        "🌟 Silvery Barbs → full damage"
+                                    ),
+                                    "feature_desc": (
+                                        f"The reroll flipped the save to a "
+                                        f"FAIL — {target_name} takes "
+                                        f"{_sb_extra_dmg} more damage (the "
+                                        f"withheld half)."
+                                    ),
+                                    "source": "silvery-barbs-reresolve",
+                                    "reaction_kind": "spell",
+                                    "withheld_damage": _sb_extra_dmg,
+                                    "rerolled_target_name": target_name,
+                                },
+                            })
+                        # The flip is fully resolved — drop the stashed ctx
+                        # so a later, unrelated reaction can't replay it.
+                        if _sb_req_id:
+                            _save_request_context.pop(int(_sb_req_id), None)
         except HTTPException:
             raise
         except Exception:

@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.612.0] - 2026-06-23 — "The Withheld Half"
+
+**Schema version:** 80
+
+**Commit summary:** Phase 3a — Silvery Barbs' reroll now applies the *withheld half* of a save-for-half damage spell when it flips an AoE save pass→fail (the damage twin of the v2.611.0 condition re-resolve).
+
+**Description:** [Pending-resolution state machine](docs/plans/pending-resolution-state-machine.md) Phase 3a. v2.611.0 made a Silvery Barbs reroll-fail install the originating spell's *condition*; this commit closes the matching **damage** case. When an AoE save-for-half spell (Fireball, etc.) prompts a PC's save and the PC **passes**, the `/respond` handler applies half (or 0 with Evasion) and now **stashes the rolled total + the applied half + whether Evasion fired** on `_save_request_context` instead of popping it. If Silvery Barbs then forces a reroll that flips the save to a **fail**, the dispatch calls the new **`_resolve_save_for_half_flip`** helper, which applies the *withheld half* — the difference between the full-on-fail amount (rolled, or rolled//2 with Evasion) and what already landed. So Silvery Barbs now converts a survived blast into full damage, instead of leaving that consequence GM-narrated.
+
+A failed original save already took full damage and can't be flipped to the caster's benefit, so its ctx is popped as before; a passed save's ctx is TTL-purged if no reaction claims it (the same lifecycle the Phase 2 condition path relies on). The flip handler drops the ctx once it resolves so a later, unrelated reaction can't replay it.
+
+**Scope:** AoE save-for-half **damage** flips. Attack hit↔miss re-resolution beyond the Lucky heal-back, and a true held "pending" window, remain Phase 3 (future).
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`:
+  - New `_resolve_save_for_half_flip(db, campaign_id, ctx)` helper — applies the withheld half from the stashed `damage_rolled` / `damage_applied` / `evasion_used` fields; returns the additional damage applied (0 for a condition-only ctx or a non-increasing flip).
+  - The AoE damage block in `respond_roll_request` now stashes the damage fields and leaves the ctx in place on a **passed** save (pops only on fail).
+  - The `/use_reaction` `cast-silvery-barbs` dispatch calls the helper after the condition re-resolve; on positive withheld damage it broadcasts a `spell_cast_target_updated(silvery_barbs_flip=True)` + a `feature_used(source="silvery-barbs-reresolve")` carrying `withheld_damage`, then pops the ctx.
+
+**Harness:** `tests/harness/test_reaction_prompt.py::test_silvery_barbs_applies_withheld_half_on_damage_flip` (+1) — Thalindra casts Fireball via the AoE path at [bandit, Caelan] with `auto_apply_damage` on; the scenario loops (original pass + reroll fail are both server-random) until a damage fail-flip lands, then asserts the `silvery_barbs_flip` update + the `withheld_damage` broadcast + that Caelan's HP reflects **both** halves (full Fireball).
+
+### Added
+- Silvery Barbs save-for-half damage re-resolution: a reroll that flips an AoE damage save pass→fail now applies the withheld half to the target (`_resolve_save_for_half_flip`).
+
+### Changed
+- The AoE save-for-half resolution in `respond_roll_request` stashes the rolled/applied damage on a passed save (leaving the ctx for a potential reaction replay) instead of unconditionally popping it.
+
 ## [2.611.0] - 2026-06-23 — "The Word Made Real"
 
 **Schema version:** 80
