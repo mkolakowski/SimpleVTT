@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.612.3] - 2026-06-23 — "The Seeded Battle"
+
+**Schema version:** 80
+
+**Commit summary:** Test-harness flakiness fix — the v2.612.1 Potent Spellcasting buff-payload test now seeds a battle (`_install_buff` requires one) instead of relying on a leftover active battle.
+
+**Description:** Bug fix for the v2.612.1 test `test_ps_buff_payload_carries_wis_mod_and_class_flags`. `_install_buff` returns False (no install) when there's no active battle, so the test's `assert buff_installed is True` only passed when a prior test happened to leave a battle active — flaky under different pytest orderings (it failed when run alongside `test_form_of_the_beast`, which clears battle state). The fix seeds a one-combatant battle with Tavik before invoking the endpoint, matching the established pattern in `test_form_of_the_beast.py` (`_seed_krieger_in_battle`) and the v2.612.2 totem test. No production code change — the endpoint already required an active battle for the install (the same constraint Empowered Evocation / Form of the Beast share); only the test's setup was incomplete.
+
+### Fixed
+- `test_ps_buff_payload_carries_wis_mod_and_class_flags` seeds a battle so the `_install_buff` assertion is deterministic regardless of test ordering.
+
 ## [2.612.2] - 2026-06-23 — "The Three Totems"
 
 **Schema version:** 80

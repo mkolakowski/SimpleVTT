@@ -208,8 +208,25 @@ async def test_ps_buff_payload_carries_wis_mod_and_class_flags(
     `/cast_spell` read these off the caster's `_buffs_active` and auto-add
     the WIS mod to cleric-cantrip damage; this pins the flag shape so that
     future read site has a stable contract. Pre-clears the permanent buff
-    so the assertion is independent of test ordering (the buff persists)."""
+    so the assertion is independent of test ordering (the buff persists).
+    Seeds a battle with Tavik in it because `_install_buff` requires an
+    active battle (returns False otherwise — without the seed this test is
+    flaky, passing only when a prior test left a battle active)."""
     tavik = tavik_light_lv8
+    # `_install_buff` requires an active battle — seed one with Tavik.
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [{
+                "id": f"tok_ps_{tavik['id']}", "char_id": tavik["id"],
+                "name": tavik["name"], "initiative": 10,
+                "hp_current": 50, "hp_max": 50, "buffs": [],
+                "economy": {"action": False, "bonus": False,
+                            "reaction": False, "movement": 0},
+            }],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
     # The buff is permanent — clear any prior install so we assert a fresh one.
     await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/end_buff",
