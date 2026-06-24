@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.618.0] - 2026-06-24 — "The Sealed Letters"
+
+**Schema version:** 80
+
+**Commit summary:** Phase 6c — the campaign-clone importer now also re-places handouts and (non-encrypted) notes into the cloned campaign, authored by the importing GM.
+
+**Description:** [Backup/export-import overhaul](docs/plans/backup-export-overhaul.md) Phase 6c — extends `clone_campaign` (the `POST /api/campaign/import?mode=clone` engine) to the flat add-ons that don't need FK remapping:
+
+- **Handouts** — re-created from `data/handouts.json`, authored by the importing GM, with `image_url` rewritten to the freshly-extracted media and `revealed=False` (the GM re-prepares reveals on the clone rather than inheriting a stale reveal list).
+- **Notes** — only **non-encrypted** notes clone (a private note's E2E key is per-campaign and isn't exported, so encrypted ciphertext can't be re-keyed into a new campaign). Encrypted notes are skipped and counted (`notes_skipped_encrypted`); the rest are re-authored under the importer.
+
+Still deferred to **Phase 6d**: writing the embedded `simplevtt-homebrew` pack into the cloned campaign's scope (needs the route's homebrew-import logic factored into a reusable function) and dice-roll history (low-value, user-FK ambiguity).
+
+### Changed
+- `clone_campaign` re-creates handouts + non-encrypted notes in the cloned campaign (the archive already carried them; the clone now re-places them).
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_import_campaign.py` — the synthetic campaign archive now also carries a handout + two notes (one encrypted, one not); the round-trip asserts `counts.handouts == 1`, `counts.notes == 1` (the plaintext note), and `counts.notes_skipped_encrypted == 1` (the encrypted note skipped, not re-keyed). Existing FK-remap + error-path assertions unchanged.
+
 ## [2.617.0] - 2026-06-24 — "The Mirror Realm"
 
 **Schema version:** 80

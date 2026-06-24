@@ -40,6 +40,12 @@ def _campaign_zip(level="campaign"):
         zf.writestr("data/encounters/70.json", json.dumps(
             {"id": 70, "name": "Clone Fight", "map_id": 10, "auto_play_playlist_id": 40,
              "payload": {"tokens": [{"character_id": 20, "template_id": 30, "x": 1, "y": 1}]}}))
+        zf.writestr("data/handouts.json", json.dumps(
+            [{"id": 80, "title": "Clone Letter", "body": "Dear hero", "revealed": True}]))
+        zf.writestr("data/notes.json", json.dumps([
+            {"id": 90, "kind": "gm_note", "visibility": "gm_only", "title": "Prep", "body": "plan", "is_encrypted": False},
+            {"id": 91, "is_encrypted": True, "enc_title": "opaque", "enc_body": "opaque"},
+        ]))
     return buf.getvalue()
 
 
@@ -62,6 +68,9 @@ async def test_campaign_import_clone_round_trip(gm_client: httpx.AsyncClient):
     assert counts["playlists"] == 1
     assert counts["playlist_tracks"] == 1   # track's playlist remapped
     assert counts["encounters"] == 1        # encounter's map/playlist remapped
+    assert counts["handouts"] == 1
+    assert counts["notes"] == 1                       # the non-encrypted note
+    assert counts["notes_skipped_encrypted"] == 1     # the encrypted one skipped
     try:
         # The cloned character lives in the NEW campaign's roster.
         r = await gm_client.get(f"/api/campaign/{nc}/roster")

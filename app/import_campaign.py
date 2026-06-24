@@ -9,11 +9,12 @@ with **new** ids — remapping every cross-reference (a token's map / character
 / template, an encounter's map / playlist + its payload token refs, a track's
 playlist) through old→new id maps built as each tier is created.
 
-Scope (Phase 6b): campaign, token_templates, maps, characters, tokens,
-playlists + tracks, encounters. Flat add-ons — handouts, notes, dice_rolls,
-and the homebrew pack — are deferred to Phase 6c. All inserts are one
-transaction; on failure the extracted media is unlinked so a failed import
-leaves nothing behind.
+Scope: campaign, token_templates, maps, characters, tokens, playlists +
+tracks, encounters (Phase 6b); handouts + non-encrypted notes (Phase 6c).
+Still deferred: dice-roll history and writing the embedded homebrew pack into
+the new campaign's scope (Phase 6d — needs the homebrew-import logic factored
+out of the route). All inserts are one transaction; on failure the extracted
+media is unlinked so a failed import leaves nothing behind.
 """
 from __future__ import annotations
 
@@ -90,7 +91,7 @@ def clone_campaign(
     Returns ``{campaign_id, counts}``. Raises ``ib.BundleError`` on a
     malformed archive (the route maps that to 400)."""
     from .models import (
-        Campaign, Character, Encounter, GridType, Map,
+        Campaign, CampaignNote, Character, Encounter, GridType, Handout, Map,
         Playlist, PlaylistTrack, Token, TokenTemplate,
     )
 
@@ -251,6 +252,46 @@ def clone_campaign(
                 stop_audio_on_load=bool(e.get("stop_audio_on_load", False)),
             ))
         counts["encounters"] = len(encs)
+
+        # Handouts — GM-authored, never encrypted. Re-created unrevealed
+        # (revealed=False default) so the importing GM re-prepares reveals;
+        # authored by the importer.
+        handouts = ib.rewrite_urls(
+            ib.read_json(zf, "data/handouts.json"), url_map,
+        ) if _has(zf, "data/handouts.json") else []
+        for h in handouts:
+            if not isinstance(h, dict):
+                continue
+            db.add(Handout(
+                campaign_id=nc, author_user_id=owner_user_id,
+                title=(h.get("title") or "Handout")[:200], body=h.get("body") or "",
+                image_url=h.get("image_url"), folder=h.get("folder") or "",
+                revealed=False,
+            ))
+        counts["handouts"] = len(handouts)
+
+        # Notes — only NON-encrypted notes clone (per-campaign E2E keys don't
+        # round-trip, so encrypted private notes are skipped). Authored by the
+        # importer.
+        notes = ib.read_json(zf, "data/notes.json") if _has(zf, "data/notes.json") else []
+        note_n = 0
+        note_skipped = 0
+        for n in notes:
+            if not isinstance(n, dict):
+                continue
+            if n.get("is_encrypted"):
+                note_skipped += 1
+                continue
+            db.add(CampaignNote(
+                campaign_id=nc, author_user_id=owner_user_id,
+                kind=n.get("kind") or "gm_note",
+                visibility=n.get("visibility") or "gm_only",
+                title=n.get("title"), body=n.get("body") or "",
+                folder=n.get("folder") or "", pinned=bool(n.get("pinned", False)),
+            ))
+            note_n += 1
+        counts["notes"] = note_n
+        counts["notes_skipped_encrypted"] = note_skipped
 
         db.commit()
         return {"campaign_id": nc, "counts": counts}
