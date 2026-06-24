@@ -102,8 +102,8 @@
             {% if not u.is_admin and not u.is_gm %}<span class="pill player">player</span>{% endif %}
             {% if u.is_disabled %}<span class="pill off">disabled</span>{% endif %}
           </td>
-          <td class="muted">{{ u.created_at.strftime('%Y-%m-%d %H:%M:%S') if u.created_at else '—' }}</td>
-          <td class="muted">{{ u.last_login_at.strftime('%Y-%m-%d %H:%M:%S') if u.last_login_at else 'never' }}</td>
+          <td class="muted">{{ u.created_at.strftime('%Y-%m-%d : %H:%M:%S') if u.created_at else '—' }}</td>
+          <td class="muted">{{ u.last_login_at.strftime('%Y-%m-%d : %H:%M:%S') if u.last_login_at else 'never' }}</td>
           {% if mfa_verified %}
           <td>
             <details class="manage-menu">

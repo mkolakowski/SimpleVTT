@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.606.2] - 2026-06-23 — "The Colon Separator"
+
+**Schema version:** 80
+
+**Commit summary:** Use the requested `YYYY-MM-DD : HH:MM:SS` separator for the Created / Last login timestamps.
+
+**Description:** Follow-up to v2.606.0. The Admin Center user table's Created and Last-login timestamps now render with a ` : ` separator between the date and the time (`2026-06-23 : 22:18:36`) per the requested format, instead of a plain space.
+
+**Implementation:**
+
+- `app/admin_center/templates/users.html` — both date cells use `strftime('%Y-%m-%d : %H:%M:%S')`.
+- `tests/harness/test_admin_center.py` — the `test_users_page_shows_last_login` timestamp regex updated to match the ` : ` separator.
+
+No new harness test (format tweak; existing test updated).
+
+### Changed
+- Admin Center user table: Created / Last login render as `YYYY-MM-DD : HH:MM:SS`.
+
 ## [2.606.1] - 2026-06-23 — "The One-Line Welcome"
 
 **Schema version:** 80

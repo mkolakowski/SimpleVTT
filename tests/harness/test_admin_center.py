@@ -1383,8 +1383,8 @@ def test_users_page_shows_last_login():
         assert row, "demo-alice row not found in the user table"
         row_html = row.group(0)
         assert ">never<" not in row_html, "alice has logged in — last login != 'never'"
-        assert _re.search(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", row_html), \
-            "expected a YYYY-MM-DD HH:MM:SS timestamp in alice's row"
+        assert _re.search(r"\d{4}-\d{2}-\d{2} : \d{2}:\d{2}:\d{2}", row_html), \
+            "expected a 'YYYY-MM-DD : HH:MM:SS' timestamp in alice's row"
 
 
 @_LIVE
