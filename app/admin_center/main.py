@@ -832,6 +832,16 @@ def backups_run(request: Request):
     return RedirectResponse("/backups?ran=1", status_code=303)
 
 
+@app.get("/backups/run-status")
+def backups_run_status(request: Request):
+    """The sidecar's progress for the current/last backup run — polled by the
+    'Back up now' progress toast. JSON; opt-in via ADMIN_CENTER_ADMIN_TOOLS."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return JSONResponse({"state": "idle"})
+    from . import backup_admin
+    return JSONResponse(backup_admin.run_status())
+
+
 @app.get("/backups/download")
 def backups_download(request: Request, bucket: str = "", ts: str = ""):
     """Download a whole backup run as a single ``.zip`` bundling its SQL dump +

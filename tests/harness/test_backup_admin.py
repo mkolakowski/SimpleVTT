@@ -204,6 +204,21 @@ def test_tags_surface_and_restore_request(tmp_path, monkeypatch):
     assert backup_admin.request_restore("daily", stem, requested_by="x", now_iso="t") is False
 
 
+def test_run_status(tmp_path, monkeypatch):
+    monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
+    # No status file → idle.
+    assert backup_admin.run_status() == {"state": "idle"}
+    # A sidecar-written status is read back (drives the progress toast).
+    (tmp_path / ".run-status").write_text(
+        json.dumps({"state": "running", "stage": "database", "pct": 20, "started": 123, "ts": ""}),
+        encoding="utf-8")
+    s = backup_admin.run_status()
+    assert s["state"] == "running" and s["pct"] == 20 and s["stage"] == "database"
+    # Malformed status never raises — falls back to idle.
+    (tmp_path / ".run-status").write_text("not json", encoding="utf-8")
+    assert backup_admin.run_status() == {"state": "idle"}
+
+
 def test_delete_backup(tmp_path, monkeypatch):
     monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
     (tmp_path / "daily").mkdir()

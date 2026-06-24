@@ -149,5 +149,7 @@ while true; do
     if [ -f "${RESTORE_TRIGGER}" ]; then
         do_restore
     fi
-    sleep 30
+    # v2.633.0 — short poll so "Back up now" / restore triggers fire promptly
+    # (the progress toast on the page tracks the run live).
+    sleep 2
 done

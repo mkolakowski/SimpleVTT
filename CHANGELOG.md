@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.633.0] - 2026-06-24 — "The Progress Bar"
+
+**Schema version:** 80
+
+**Commit summary:** "Back up now" now shows a progress toast with a live progress bar — the sidecar reports per-stage progress and the page polls it until the backup completes, then refreshes.
+
+**Description:** The Admin Center "Back up now" button used to just flash a "triggered" banner; the actual backup happened asynchronously with no feedback. Now:
+
+- **The sidecar reports progress.** `scripts/backup.sh` writes a coarse `.run-status` JSON (`{state, stage, pct, started, ts}`) at each phase — `starting` (5%) → `database` (20%) → `homebrew` (60%) → `uploads` (80%) → `done` (100%). Only the sidecar (root) writes it, so there's no owner conflict with the appuser admin-center.
+- **The page tracks it.** `GET /backups/run-status` (`backup_admin.run_status()`) exposes it. The "Back up now" form is intercepted by JS: it POSTs the run-now trigger, then polls the status and fills a self-contained bottom-center **toast with a progress bar** (Queuing → Waiting to start → Backing up… <stage> → ✓ Complete), then reloads to show the new backup. The `started` epoch lets the page detect *its* run vs a stale status. Falls back to the plain form POST if JS is off.
+- **Snappier triggers.** the sidecar watch-loop poll drops from 30 s → 2 s so the run starts within ~2 s of the click (the bar isn't stuck on "waiting").
+
+### Added
+- `GET /backups/run-status` + `backup_admin.run_status()`; the sidecar's `.run-status` progress file; the "Back up now" progress toast.
+
+### Changed
+- The backup sidecar watch-loop polls every 2 s (was 30 s).
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_backup_admin.py::test_run_status` (+1) — no file → `idle`; a written status reads back (`running` / `database` / 20%); malformed → `idle` (never raises).
+
 ## [2.632.0] - 2026-06-24 — "The Recycle Bin"
 
 **Schema version:** 80

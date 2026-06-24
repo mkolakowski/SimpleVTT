@@ -37,6 +37,18 @@ UPLOADS_DIR="${UPLOADS_DIR:-/uploads}"
 SETTINGS_FILE="${BACKUP_DIR}/backup-settings.json"
 mkdir -p "${DAILY_DIR}" "${WEEKLY_DIR}"
 
+# v2.633.0 — coarse progress for the Admin Center "Back up now" toast: the
+# sidecar writes a status file the page polls (GET /backups/run-status). Only
+# the sidecar (root) writes it, so there's no owner conflict with the appuser
+# admin-center. ``started`` (epoch) lets the page detect a fresh run.
+RUN_STATUS="${BACKUP_DIR}/.run-status"
+STARTED="$(date +%s)"
+status() {  # state stage pct [ts]
+    printf '{"state":"%s","stage":"%s","pct":%s,"started":%s,"ts":"%s"}\n' \
+        "$1" "$2" "$3" "${STARTED}" "${4:-}" > "${RUN_STATUS}" 2>/dev/null || true
+}
+status running starting 5
+
 DOW=$(date -u +%u)   # 1..7, 7 = Sunday
 
 # v2.620.0 — retention is operator-editable from the Admin Center, written to
@@ -62,6 +74,7 @@ DAILY_SQL="${DAILY_DIR}/${STEM}.sql.gz"
 DAILY_HB="${DAILY_DIR}/${STEM}.homebrew.tar.gz"
 DAILY_UP="${DAILY_DIR}/${STEM}.uploads.tar.gz"
 
+status running database 20
 echo "[backup] writing ${DAILY_SQL}"
 # --clean --if-exists makes the dump self-restoring: it drops each object
 # (IF EXISTS) before recreating it, so a restore can pipe it straight into the
@@ -73,6 +86,7 @@ PGPASSWORD="${POSTGRES_PASSWORD}" pg_dump --clean --if-exists \
 # Homebrew is file-based; tar the volume if it exists and has content. An
 # empty or missing directory still produces a valid (tiny) tarball so the
 # restore story stays uniform.
+status running homebrew 60
 echo "[backup] writing ${DAILY_HB}"
 if [ -d "${HOMEBREW_DIR}" ]; then
     tar -czf "${DAILY_HB}" -C "${HOMEBREW_DIR}" .
@@ -83,6 +97,7 @@ fi
 # Uploaded media (maps / portraits / tokens / audio / handouts / thumbnails).
 # The DB rows reference these by /static/uploads/... URL, so a fresh-install
 # restore needs them too. Same empty-dir-still-valid-tarball rule.
+status running uploads 80
 echo "[backup] writing ${DAILY_UP}"
 if [ -d "${UPLOADS_DIR}" ]; then
     tar -czf "${DAILY_UP}" -C "${UPLOADS_DIR}" .
@@ -115,4 +130,5 @@ find "${WEEKLY_DIR}" -type f \( -name '*.sql.gz' -o -name '*.homebrew.tar.gz' -o
     -mtime +"${WEEKLY_DAYS}" -print -delete || true
 find "${DAILY_DIR}" -type f -name '*.tag' -mtime +"${KEEP_DAILY}" -print -delete || true
 
+status done done 100 "${STEM}"
 echo "[backup] done at $(date -u)"

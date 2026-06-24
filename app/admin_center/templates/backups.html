@@ -56,7 +56,7 @@
   <div class="card">
     <h2>Run now</h2>
     <p class="muted">Take an on-demand backup immediately (daily artifacts).</p>
-    <form method="post" action="/backups/run">
+    <form method="post" action="/backups/run" id="run-now-form">
       <button type="submit">Back up now</button>
     </form>
   </div>
@@ -109,5 +109,80 @@
     {% endfor %}
   </div>
 </main>
+<script>
+/* v2.633.0 — "Back up now" progress toast. Intercept the form, POST the run-now
+   trigger, then poll /backups/run-status (written live by the sidecar) and fill
+   a progress bar until the run completes; then reload to show the new backup. */
+(function () {
+  var form = document.getElementById('run-now-form');
+  if (!form) return;
+  var toast, bar, label;
+  function ensureToast() {
+    if (toast) return;
+    toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);'
+      + 'background:#1d2128;color:#e6e9ef;border:1px solid #2e3540;border-left:4px solid #6ea8fe;'
+      + 'border-radius:8px;padding:12px 16px;min-width:300px;max-width:90vw;'
+      + 'box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:9999;font:14px system-ui,-apple-system,sans-serif';
+    label = document.createElement('div');
+    label.style.cssText = 'margin-bottom:8px;font-weight:600';
+    var track = document.createElement('div');
+    track.style.cssText = 'height:8px;background:#2e3540;border-radius:4px;overflow:hidden';
+    bar = document.createElement('div');
+    bar.style.cssText = 'height:100%;width:0%;background:#6ea8fe;transition:width .3s ease';
+    track.appendChild(bar); toast.appendChild(label); toast.appendChild(track);
+    document.body.appendChild(toast);
+  }
+  function set(pct, text, color) {
+    ensureToast();
+    bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+    if (color) { bar.style.background = color; toast.style.borderLeftColor = color; }
+    label.textContent = text;
+  }
+  function getStatus() {
+    return fetch('/backups/run-status').then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; });
+  }
+  function wait(ms) { return new Promise(function (res) { setTimeout(res, ms); }); }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var btn = form.querySelector('button');
+    btn.disabled = true;
+    set(5, '⏳ Queuing backup…');
+    var baseStarted = 0;
+    getStatus().then(function (s) {
+      baseStarted = (s && s.started) || 0;
+      return fetch('/backups/run', { method: 'POST', redirect: 'manual' });
+    }).then(function () {
+      var done = false, tries = 0;
+      function poll() {
+        if (done || tries++ > 150) {
+          if (!done) set(100, '⚠️ Timed out — check the backups list below', '#e06c75');
+          return;
+        }
+        getStatus().then(function (s) {
+          if (s && (s.started || 0) > baseStarted) {
+            if (s.state === 'done') {
+              done = true;
+              set(100, '✓ Backup complete', '#7cb87c');
+              setTimeout(function () { location.reload(); }, 1500);
+              return;
+            }
+            set(s.pct || 10, '⏳ Backing up… ' + (s.stage || ''));
+          } else {
+            set(8, '⏳ Waiting for the backup to start…');
+          }
+          wait(1000).then(poll);
+        });
+      }
+      poll();
+    }).catch(function (err) {
+      set(100, '✕ ' + (err && err.message || 'failed'), '#e06c75');
+      btn.disabled = false;
+    });
+  });
+})();
+</script>
 </body>
 </html>

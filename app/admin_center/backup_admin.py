@@ -154,6 +154,20 @@ def trigger_run() -> None:
     (d / ".run-now").write_text("", encoding="utf-8")
 
 
+def run_status() -> dict:
+    """The sidecar's coarse progress for the current/last backup run — drives
+    the "Back up now" progress toast. Shape: ``{state, stage, pct, started, ts}``
+    (``state`` ∈ running / done); ``{"state": "idle"}`` when no status file."""
+    p = backups_dir() / ".run-status"
+    if not p.is_file():
+        return {"state": "idle"}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {"state": "idle"}
+    except (OSError, json.JSONDecodeError):
+        return {"state": "idle"}
+
+
 def _stat_artifact(p: Path) -> dict:
     st = p.stat()
     return {"name": p.name, "size": st.st_size, "mtime": st.st_mtime}
