@@ -104,4 +104,25 @@
       text-align: center;        /* the emoji-only Status column */
       width: 1%;                 /* shrink to its content */
   }
+  /* v2.630.4: collapse the SRD automation breakdown behind a click. The
+     <summary> is styled like the other <h2> section headings, with a
+     disclosure caret; the table + prose expand below it. */
+  .wiki-wrap details.srd-coverage > summary {
+      font-size: 16px;
+      color: var(--accent);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+      margin: 36px 0 8px;
+      cursor: pointer;
+      font-weight: 600;
+      list-style: none;
+  }
+  .wiki-wrap details.srd-coverage > summary::-webkit-details-marker { display: none; }
+  .wiki-wrap details.srd-coverage > summary::before { content: "\25B8  "; }
+  .wiki-wrap details.srd-coverage[open] > summary::before { content: "\25BE  "; }
+  .wiki-wrap details.srd-coverage .srd-summary-meta {
+      color: var(--fg-mute);
+      font-size: 13px;
+      font-weight: 400;
+  }
 </style>

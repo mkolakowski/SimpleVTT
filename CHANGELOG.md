@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.630.4] - 2026-06-24 — "The Folded Coverage"
+
+**Schema version:** 80
+
+**Commit summary:** Wiki landing page — collapse the SRD automation-coverage breakdown (the per-category table + the long explainer) behind a click; the heading stays visible as a clickable disclosure.
+
+**Description:** The SRD 5e automation-coverage section opened the `/wiki` landing page with a category table + a long (~30-line) explanatory paragraph that pushed everything else down. It's now a collapsed `<details>`: the heading **SRD 5e automation coverage — overall ~97% · click to expand the per-category breakdown** is the `<summary>` (styled like the page's other section headings, with a ▸/▾ caret), and the table + prose expand below it on click. Default is collapsed, so the page leads with the guides instead.
+
+### Changed
+- `app/templates/wiki.html`: the SRD-coverage breakdown is wrapped in a `<details class="srd-coverage">`; `_wiki_styles.html` styles the `<summary>` as a heading + disclosure caret.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_wiki.py::test_wiki_home_renders` asserts the SRD section now renders as a `<details class="srd-coverage">` with a `<summary>` (heading text + `id="srd-coverage"` preserved for the anchor).
+
 ## [2.630.3] - 2026-06-24 — "The Tidy Column"
 
 **Schema version:** 80

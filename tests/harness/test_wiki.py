@@ -57,6 +57,9 @@ async def test_wiki_home_renders():
     # Banners at the top of the landing page.
     assert "SRD 5e automation coverage" in resp.text            # v2.316.0
     assert 'id="srd-coverage"' in resp.text
+    # v2.630.4: the SRD automation breakdown is collapsed behind a click.
+    assert '<details class="srd-coverage"' in resp.text
+    assert "<summary" in resp.text
     assert "Security spine" in resp.text                        # v2.423.7
     assert 'id="security-spine"' in resp.text
     # v2.630.3: the doc-listing tables use the compact emoji-only Status column
