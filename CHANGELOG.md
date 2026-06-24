@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.611.0] - 2026-06-23 — "The Word Made Real"
+
+**Schema version:** 80
+
+**Commit summary:** Phase 2 — Silvery Barbs' reroll now actually installs the spell's condition when it flips a save pass→fail (the first real pending-resolution payoff).
+
+**Description:** [Pending-resolution state machine](docs/plans/pending-resolution-state-machine.md) Phase 2, building on the v2.610.2 extraction. Until now, Silvery Barbs auto-rolled the forced reroll and *reported* a pass→fail flip, but applying the consequence (installing the originating save-or-suck spell's condition) was GM-narrated. Now, when the reroll flips the save to a **fail**, the handler looks up the originating cast's `_save_request_context[req_id]` and re-invokes the extracted **`_resolve_save_failure`** — so the condition (Paralyzed from Hold Person, Frightened from Fear, …) **actually installs on the target**, with every immunity gate (Aura of Devotion, Mindless Rage, PFE&G, Heroism) intact, exactly as if the original save had failed.
+
+This is the first reaction to retroactively re-resolve a committed outcome through the shared resolver — the payoff the whole pending-resolution arc was built toward. (A passed save doesn't pop its `_save_request_context`, so the ctx is still there when Silvery Barbs fires immediately after.)
+
+**Scope:** condition save-or-suck flips re-resolve. Save-for-half **damage** flips (apply the withheld half) remain Phase 3 — they need the cast's damage stashed alongside the condition ctx.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`:
+  - The `save_resolved` reaction-prompt context now carries the originating `req_id`.
+  - The `/use_reaction` `cast-silvery-barbs` dispatch — when the reroll verdict is `fail`, look up `_save_request_context[req_id]`, fetch the `RollRequest`, and call `_resolve_save_failure(...)`; broadcast a `feature_used(source="silvery-barbs-reresolve")` naming the installed condition.
+
+**Harness:** `tests/harness/test_reaction_prompt.py::test_silvery_barbs_reresolves_save_or_suck_on_flip` (+1) — an Archmage casts Hold Person at Caelan; the scenario loops (both the original pass and the reroll fail are server-random) until Silvery Barbs' reroll flips the save to a fail, then asserts the `silvery-barbs-reresolve` broadcast names Paralyzed **and** that Paralyzed is actually on Caelan's buff list. Verified reliable (5/5 runs).
+
+### Added
+- Silvery Barbs re-resolution: a reroll that flips a save-or-suck save pass→fail now installs the spell's condition on the target (via the shared `_resolve_save_failure`), with all immunity gates.
+
+### Changed
+- The `save_resolved` reaction-prompt context now carries the originating roll-request id (`req_id`).
+
 ## [2.610.2] - 2026-06-23 — "The Extracted Verdict"
 
 **Schema version:** 80

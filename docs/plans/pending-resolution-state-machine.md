@@ -1,8 +1,10 @@
 # Pending-Resolution State Machine — Design Plan
 
-**Status:** 🔥 IN PROGRESS — Phase 0 (plan) shipped v2.610.1; **Phase 1
-(extract `_resolve_save_failure`) shipped v2.610.2** (pure refactor, no
-behavior change); Phase 2 (Silvery Barbs re-resolution) next.
+**Status:** 🔥 IN PROGRESS — Phase 0 (plan) v2.610.1; Phase 1 (extract
+`_resolve_save_failure`) v2.610.2; **Phase 2 (Silvery Barbs re-resolves the
+save-or-suck condition on a reroll pass→fail flip) shipped v2.611.0.** Phase 3
+(save-for-half damage flips + attack re-resolution) is the remaining future
+work.
 
 This is the single biggest remaining item in the
 [reactions-automation](reactions-automation.md) v3 backlog. The AC-bump

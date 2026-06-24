@@ -22421,6 +22421,11 @@ async def respond_roll_request(
                                 int(result.total) - _sb_save_natural
                                 if _sb_save_natural is not None else None
                             ),
+                            # v2.610.3 — the originating roll_request id, so a
+                            # Silvery Barbs reroll that flips pass->fail can
+                            # look up _save_request_context[req_id] and
+                            # re-invoke _resolve_save_failure (Phase 2).
+                            "req_id": int(roll_req.id),
                         },
                     )
         except Exception:
@@ -32205,6 +32210,49 @@ async def use_reaction(
                     "new_save_verdict": _sb_verdict,
                 },
             })
+            # v2.610.3 — pending-resolution Phase 2: when the reroll flips
+            # the save pass->fail, re-invoke the extracted save-failure
+            # resolver so the originating save-or-suck spell's condition
+            # actually installs on the target (with every immunity gate),
+            # instead of leaving it GM-narrated. Only fires when the
+            # original save was prompted by a save-or-suck cast (its ctx is
+            # still in _save_request_context — a passed save doesn't pop it).
+            if _sb_verdict == "fail":
+                _sb_req_id = _ctx.get("req_id")
+                _purge_save_request_context()
+                _sb_save_ctx = (
+                    _save_request_context.get(int(_sb_req_id))
+                    if _sb_req_id else None
+                )
+                if _sb_save_ctx and _sb_save_ctx.get("campaign_id") == campaign_id:
+                    _sb_roll_req = db.query(RollRequest).filter(
+                        RollRequest.id == int(_sb_req_id),
+                    ).first()
+                    if _sb_roll_req is not None:
+                        _sb_installed = await _resolve_save_failure(
+                            db, campaign_id, _sb_roll_req, _sb_save_ctx,
+                        )
+                        if _sb_installed:
+                            await hub.broadcast(campaign_id, {
+                                "type": "feature_used",
+                                "data": {
+                                    "character_id": int(watcher_char_id),
+                                    "character_name": watcher_char.name,
+                                    "user_color": watcher_char.color,
+                                    "feature_name": (
+                                        f"🌟 Silvery Barbs → {_sb_installed}"
+                                    ),
+                                    "feature_desc": (
+                                        f"The reroll flipped the save to a "
+                                        f"FAIL — {target_name} is now "
+                                        f"{_sb_installed}."
+                                    ),
+                                    "source": "silvery-barbs-reresolve",
+                                    "reaction_kind": "spell",
+                                    "condition_installed": _sb_installed,
+                                    "rerolled_target_name": target_name,
+                                },
+                            })
         except HTTPException:
             raise
         except Exception:

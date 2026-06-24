@@ -4029,6 +4029,141 @@ async def test_cast_silvery_barbs_auto_rolls_reroll(
     assert verdict == ("fail" if new_total < dc else "pass")
 
 
+async def test_silvery_barbs_reresolves_save_or_suck_on_flip(
+    gm_client, gm_ws, roster,
+):
+    """v2.610.3 — pending-resolution Phase 2. When Silvery Barbs' reroll
+    flips a save-or-suck save pass->fail, the spell's condition now
+    actually installs on the target (via the extracted _resolve_save_
+    failure), instead of being GM-narrated.
+
+    Setup: an Archmage NPC casts Hold Person at Caelan; Caelan must
+    PASS (so Thalindra's Silvery Barbs is offered); Thalindra casts SB;
+    when the auto-rolled reroll flips to a FAIL, Caelan is Paralyzed.
+    Both the original pass and the reroll fail are server-random
+    (TEST_MODE/dice-seed is off locally), so the loop retries the whole
+    scenario until a fail-flip lands, then asserts the re-resolution.
+    """
+    caelan = roster["Sir Caelan Lightbringer"]
+    thalindra = roster["Thalindra Moonwhisper"]
+    tmpls = (await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")).json()
+    archmage = next(
+        (t for t in tmpls if (t.get("name") or "").lower() == "archmage"), None,
+    )
+    assert archmage is not None, "archmage template missing from demo"
+
+    arch_tok = "tok_sbrr_archmage"
+    cae_tok = f"tok_sbrr_cae_{caelan['id']}"
+    thal_tok = f"tok_sbrr_thal_{thalindra['id']}"
+
+    installed_ok = False
+    for _ in range(50):
+        # Fresh slots + reactions + no leftover Paralyzed each attempt.
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/rest",
+            json={"type": "long"},
+        )
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{caelan['id']}/rest",
+            json={"type": "long"},
+        )
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+            json={"character_id": caelan["id"], "key": "paralyzed"},
+        )
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/battle",
+            json={"combatants": [
+                {"id": arch_tok, "char_id": None,
+                 "token_template_id": archmage["id"], "name": archmage["name"],
+                 "initiative": 14, "hp_current": 99, "hp_max": 99, "buffs": [],
+                 "economy": {"action": False, "bonus": False,
+                             "reaction": False, "movement": 0}},
+                {"id": cae_tok, "char_id": caelan["id"], "name": caelan["name"],
+                 "initiative": 8, "hp_current": 60, "hp_max": 60, "buffs": [],
+                 "economy": {"action": False, "bonus": False,
+                             "reaction": False, "movement": 0}},
+                {"id": thal_tok, "char_id": thalindra["id"], "name": thalindra["name"],
+                 "initiative": 10, "hp_current": 32, "hp_max": 32, "buffs": [],
+                 "economy": {"action": False, "bonus": False,
+                             "reaction": False, "movement": 0}},
+            ], "turn_index": 0, "round": 1, "active": True},
+        )
+        await asyncio.sleep(0.05)
+        gm_ws.mark()
+        cast = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/npc_cast_spell",
+            json={
+                "combatant_id": arch_tok, "spell_name": "Hold Person",
+                "spell_slug": "hold-person", "spell_level": 2,
+                "spell_range": "60 feet", "save_ability": "WIS",
+                "save_dc": 17, "target_combatant_id": cae_tok,
+            },
+        )
+        assert cast.status_code == 200, cast.text
+        prompt_id = cast.json().get("auto_save_prompt_id") or 0
+        if not prompt_id:
+            continue
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/roll_request/{prompt_id}/respond",
+            json={"character_id": caelan["id"]},
+        )
+        assert resp.status_code == 200, resp.text
+        if resp.json().get("auto_buff_installed"):
+            continue  # Caelan FAILED the original — SB needs a pass; retry.
+        await asyncio.sleep(0.15)
+        sb_prompts = [
+            m for m in _prompt_broadcasts(gm_ws)
+            if (m.get("data") or {}).get("watcher_char_id") == thalindra["id"]
+            and (m.get("data") or {}).get("trigger_event") == "save_resolved"
+        ]
+        sbp = None
+        for m in reversed(sb_prompts):
+            if "cast-silvery-barbs" in [o.get("key") for o in (m["data"].get("options") or [])]:
+                sbp = m
+                break
+        if not sbp:
+            continue
+        gm_ws.mark()
+        sbc = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+            json={
+                "prompt_id": sbp["data"]["prompt_id"],
+                "reaction_key": "cast-silvery-barbs",
+                "watcher_char_id": thalindra["id"],
+            },
+        )
+        assert sbc.status_code == 200, sbc.text
+        await asyncio.sleep(0.15)
+        sb_card = [
+            m["data"] for m in gm_ws.buffered("feature_used")
+            if (m.get("data") or {}).get("source") == "silvery-barbs-cast"
+        ]
+        if not sb_card or sb_card[-1].get("new_save_verdict") != "fail":
+            continue  # reroll still passed — retry for a fail-flip.
+        # Fail-flip → the condition must have re-resolved onto Caelan.
+        rr = [
+            m["data"] for m in gm_ws.buffered("feature_used")
+            if (m.get("data") or {}).get("source") == "silvery-barbs-reresolve"
+        ]
+        assert rr, "fail-flip should re-resolve the save-or-suck condition"
+        assert (rr[-1].get("condition_installed") or "").lower() == "paralyzed"
+        cae_buffs = (await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{caelan['id']}/buffs"
+        )).json().get("buffs", [])
+        assert any((b or {}).get("key") == "paralyzed" for b in cae_buffs), (
+            f"Silvery Barbs reroll-fail must install Paralyzed; got {cae_buffs}"
+        )
+        installed_ok = True
+        break
+    assert installed_ok, "no SB reroll fail-flip in 50 attempts"
+    # Cleanup: drop the re-resolved Paralyzed.
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+        json={"character_id": caelan["id"], "key": "paralyzed"},
+    )
+
+
 async def test_indomitable_emits_reaction_prompt(
     gm_client, gm_ws, roster,
 ):
