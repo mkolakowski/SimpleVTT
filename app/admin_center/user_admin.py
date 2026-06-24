@@ -41,11 +41,21 @@ def get_user(db: Session, user_id: int) -> User:
     return u
 
 
-def create_user(db: Session, *, email: str, display_name: str, password: str) -> User:
+def create_user(
+    db: Session, *, email: str, display_name: str, password: str,
+    is_gm: bool = False, is_admin: "bool | None" = None,
+) -> User:
     """Create a user. Mirrors ``admin_routes.admin_create_user`` —
     lowercases/strips the email, rejects duplicates, derives is_admin from
     the operator's configured admin-email list. Non-destructive (additive)
-    so it doesn't sit behind the MFA gate."""
+    so it doesn't sit behind the MFA gate.
+
+    v2.606.1 — optional ``is_gm`` / ``is_admin`` pre-grants. ``is_admin`` is
+    a *union* with the configured admin-email list (an explicit True forces
+    admin; None falls back to the email-list derivation, so configured admin
+    emails still auto-grant). The create route only passes these as True
+    when the session is MFA-verified, so a non-MFA create still makes a
+    plain account."""
     email_n = (email or "").lower().strip()
     if not email_n:
         raise UserAdminError("Email is required")
@@ -54,11 +64,15 @@ def create_user(db: Session, *, email: str, display_name: str, password: str) ->
     if db.query(User).filter(User.email == email_n).first():
         raise UserAdminError("Email already in use")
     settings = get_settings()
+    admin_flag = bool(settings.is_admin_email(email_n))
+    if is_admin:
+        admin_flag = True
     u = User(
         email=email_n,
         display_name=(display_name or "").strip() or email_n.split("@")[0],
         password_hash=hash_password(password),
-        is_admin=settings.is_admin_email(email_n),
+        is_admin=admin_flag,
+        is_gm=bool(is_gm),
     )
     db.add(u)
     db.commit()

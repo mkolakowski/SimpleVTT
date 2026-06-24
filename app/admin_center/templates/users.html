@@ -39,6 +39,14 @@
   /* v2.605.6 — colour the account toggle by its action: red to disable,
      green to (re-)enable. Mirrors the theme's button.danger red. */
   .menu-panel button.btn-enable { background:#2d4a2e; border-color:#3c6b3e; color:#bfe9c2; }
+  /* v2.606.1 — condensed single-line create-user form. */
+  form.create-user-row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  form.create-user-row > input[type=email],
+  form.create-user-row > input[type=text],
+  form.create-user-row > input[type=password] { flex:1 1 150px; min-width:120px; min-height:36px; }
+  form.create-user-row .role-check { display:inline-flex; align-items:center; gap:5px; white-space:nowrap; font-size:13px; padding:0 4px; }
+  form.create-user-row .role-check input { width:16px; height:16px; min-height:0; flex:0 0 auto; }
+  form.create-user-row > button { flex:0 0 auto; min-height:36px; }
   /* v2.605.7 — make the irreversible Delete-user action look extra
      dangerous: brighter red, bold uppercase, a warning glow, and a
      subtle pulse so it can't be confused with the reversible actions. */
@@ -165,21 +173,16 @@
 
   <div class="card">
     <h2>Create user</h2>
-    <p class="muted">Adds a local password account. Admin status is derived
-      from the operator's configured admin-email list. Minimum 8-char
-      password.</p>
-    <form method="post" action="/users/create">
-      <div class="grid">
-        <label>Email
-          <input type="email" name="email" required autocomplete="off" style="width:100%">
-        </label>
-        <label>Display name
-          <input type="text" name="display_name" autocomplete="off" style="width:100%">
-        </label>
-        <label>Password
-          <input type="password" name="password" required minlength="8" autocomplete="new-password" style="width:100%">
-        </label>
-      </div>
+    <p class="muted">Adds a local password account (min 8-char password).
+      {% if mfa_verified %}Tick <strong>GM</strong> / <strong>Admin</strong> to pre-grant those roles.{% else %}New accounts are plain players; grant GM/Admin from the row menu (requires the second-factor step). Admin is also auto-derived from the configured admin-email list.{% endif %}</p>
+    <form method="post" action="/users/create" class="create-user-row">
+      <input type="email" name="email" required autocomplete="off" placeholder="email" aria-label="Email">
+      <input type="text" name="display_name" autocomplete="off" placeholder="display name" aria-label="Display name">
+      <input type="password" name="password" required minlength="8" autocomplete="new-password" placeholder="password (min 8)" aria-label="Password">
+      {% if mfa_verified %}
+      <label class="role-check"><input type="checkbox" name="is_gm" value="1"> GM</label>
+      <label class="role-check"><input type="checkbox" name="is_admin" value="1"> Admin</label>
+      {% endif %}
       <button type="submit">Create user</button>
     </form>
   </div>

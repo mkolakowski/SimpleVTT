@@ -1604,6 +1604,43 @@ def test_users_role_grant_revoke_roundtrip():
         c.close()
 
 
+@_LIVE
+@pytest.mark.skipif(not _MFA_ON, reason="GM/admin pre-grant at create needs an MFA-verified session")
+def test_users_create_with_gm_pregrant():
+    """v2.606.1 — on an MFA-verified session, creating a user with is_gm=1 in
+    the same POST gives the new account the GM role immediately (no separate
+    role step). Net-zero (deletes the throwaway)."""
+    import re as _re
+    c = _logged_in_client()
+    email = "create-gm-pregrant-throwaway@example.com"
+    try:
+        if not _tools_enabled(c):
+            pytest.skip("admin tools disabled on this stack")
+        # Clear any leftover from a prior aborted run.
+        page = c.get("/users", follow_redirects=False).text
+        m = _re.search(r"<td>(\d+)</td>\s*<td>" + _re.escape(email) + r"</td>", page)
+        if m:
+            c.post(f"/users/{m.group(1)}/delete", follow_redirects=False)
+        # Create WITH the GM pre-grant in the same POST.
+        made = c.post("/users/create", data={
+            "email": email, "display_name": "PreGM", "password": "hunter2!!",
+            "is_gm": "1",
+        }, follow_redirects=False)
+        assert made.status_code == 303 and "created=" in made.headers.get("location", "")
+        page = c.get("/users", follow_redirects=False).text
+        um = _re.search(r"<td>(\d+)</td>\s*<td>" + _re.escape(email) + r"</td>", page)
+        assert um, "throwaway not listed after create"
+        uid = um.group(1)
+        row = _re.search(r"<td>" + uid + r"</td>.*?</tr>", c.get("/users").text, _re.S).group(0)
+        assert "GM</span>" in row, "is_gm=1 at create should show the GM pill on the new row"
+    finally:
+        page = c.get("/users", follow_redirects=False).text
+        m = _re.search(r"<td>(\d+)</td>\s*<td>" + _re.escape(email) + r"</td>", page)
+        if m:
+            c.post(f"/users/{m.group(1)}/delete", follow_redirects=False)
+        c.close()
+
+
 # ---- /campaigns campaign-admin page (v2.576.0, Phase 3a) ------------------
 @_LIVE
 def test_campaigns_page_redirects_when_unauthenticated():

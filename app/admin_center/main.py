@@ -764,19 +764,28 @@ def admin_users_create(
     email: str = Form(...),
     display_name: str = Form(""),
     password: str = Form(...),
+    is_gm: str = Form(None),
+    is_admin: str = Form(None),
 ):
     """Create a local user account (non-destructive — no MFA gate). Audited
-    to the operator identity."""
+    to the operator identity. v2.606.1 — optional GM/admin pre-grants are
+    honored ONLY when the session is MFA-verified (mirrors the per-row role
+    toggles, which are MFA-gated); a non-MFA create ignores them and makes a
+    plain account."""
     if not _ADMIN_TOOLS_ENABLED:
         return _TOOLS_DISABLED
     from . import operator_audit, user_admin
     from ..database import SessionLocal
     operator = request.session.get("admin_user", "?")
+    _mfa = _mfa_verified(request)
+    _want_gm = bool(is_gm) and _mfa
+    _want_admin = True if (bool(is_admin) and _mfa) else None
     db = SessionLocal()
     try:
         try:
             u = user_admin.create_user(
                 db, email=email, display_name=display_name, password=password,
+                is_gm=_want_gm, is_admin=_want_admin,
             )
         except user_admin.UserAdminError as exc:
             return RedirectResponse(f"/users?err={quote(str(exc))}", status_code=303)

@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.606.1] - 2026-06-23 — "The One-Line Welcome"
+
+**Schema version:** 80
+
+**Commit summary:** Condense the Admin Center "Create user" form to a single line with inline GM / Admin pre-grant toggles.
+
+**Description:** The Create-user form's three stacked fields collapse to a single horizontal row (email · display name · password · [GM] · [Admin] · Create), and — when the session is **MFA-verified** — the operator can tick **GM** and/or **Admin** to grant those roles as part of the create, instead of creating a plain account and then opening the row menu to toggle roles. The role pre-grants are honored **only** on an MFA-verified session (mirroring the per-row role toggles, which are MFA-gated); a non-MFA create ignores the flags and makes a plain player, and `is_admin` remains a *union* with the configured admin-email list so configured admins still auto-grant.
+
+No schema change (uses the v80 column from v2.606.0).
+
+**Implementation:**
+
+- `app/admin_center/user_admin.py` — `create_user(..., is_gm=False, is_admin=None)`; `is_admin=True` forces admin, `None` falls back to the admin-email-list derivation.
+- `app/admin_center/main.py` — `/users/create` accepts `is_gm` / `is_admin` form fields and only passes them through when `_mfa_verified(request)`.
+- `app/admin_center/templates/users.html` — single-line `.create-user-row` form with MFA-gated GM/Admin checkboxes + scoped flex CSS.
+
+**Harness:** `tests/harness/test_admin_center.py::test_users_create_with_gm_pregrant` (+1, MFA-only) — on an MFA-verified session, creating a user with `is_gm=1` in the same POST shows the GM pill on the new row without a separate role step (net-zero, deletes the throwaway).
+
+### Added
+- GM / Admin pre-grant toggles on the Admin Center create-user form (MFA-gated).
+
+### Changed
+- The create-user form is now a single line.
+
 ## [2.606.0] - 2026-06-23 — "The Last Seen"
 
 **Schema version:** 80
