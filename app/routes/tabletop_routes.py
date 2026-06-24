@@ -31459,6 +31459,41 @@ async def use_reaction(
             await _mark_battle_economy(
                 campaign_id, int(watcher_char_id), "reaction",
             )
+            # v2.609.0 — auto-roll the Lucky reroll server-side instead of
+            # telling the player to roll by hand. RAW (PHB p.167, "attacked
+            # by a creature"): roll a d20, then choose whether the attack
+            # uses the attacker's roll or yours — you pick the LOWER for the
+            # attacker. So the attack's new natural = min(attacker_natural,
+            # your_d20), new total = attack_bonus + that. If the new total
+            # misses (and the original hit + applied damage), restore the
+            # full applied damage (same heal-back recipe as the AC-bump
+            # family). Unlike Shield/DD, Lucky CAN negate a crit — picking a
+            # lower natural drops the nat-20, so the gate is purely
+            # new_total < target_ac, not is_crit.
+            _ctx = entry.get("context") or {}
+            _nat = _ctx.get("attack_natural")
+            _bonus = _ctx.get("attack_bonus")
+            _target_ac = _ctx.get("target_ac")
+            _dmg_applied = int(_ctx.get("damage_applied") or 0)
+            _new_d20 = max(1, int(dice_mod.roll("1d20").total))
+            _verdict = None
+            _chosen = None
+            _new_total = None
+            if _nat is not None and _bonus is not None:
+                _chosen = min(int(_nat), _new_d20)
+                _new_total = int(_bonus) + _chosen
+                if isinstance(_target_ac, int):
+                    _verdict = "miss" if _new_total < _target_ac else "hit"
+            if _verdict == "miss":
+                _verdict_txt = (
+                    f" New attack total {_new_total} now MISSES AC {_target_ac}."
+                )
+            elif _verdict == "hit":
+                _verdict_txt = (
+                    f" New attack total {_new_total} still HITS AC {_target_ac}."
+                )
+            else:
+                _verdict_txt = ""
             await hub.broadcast(campaign_id, {
                 "type": "feature_used",
                 "data": {
@@ -31467,16 +31502,60 @@ async def use_reaction(
                     "user_color": watcher_char.color,
                     "feature_name": f"🍀 Lucky ({charges_after} charges left)",
                     "feature_desc": (
-                        f"Reaction. Roll a new d20 against the attack "
-                        f"(original total: {attack_total}) and have the "
-                        f"attacker take the LOWER of the two."
+                        f"Reaction. Rolled a new d20 ({_new_d20}); the "
+                        f"attacker takes the LOWER natural "
+                        f"({_nat} → {_chosen}).{_verdict_txt}"
                     ),
                     "source": "lucky",
                     "reaction_kind": "feat",
                     "charges_after": charges_after,
                     "attack_total": attack_total,
+                    "new_d20": _new_d20,
+                    "original_natural": _nat,
+                    "chosen_natural": _chosen,
+                    "new_attack_total": _new_total,
+                    "target_ac": _target_ac,
+                    "verdict": _verdict,
                 },
             })
+            # Heal back the triggering hit when the reroll makes it miss.
+            if _verdict == "miss" and _dmg_applied > 0:
+                _hp = dict(sheet.get("hp") or {})
+                _cur = int(_hp.get("current") or 0)
+                _max = int(_hp.get("max") or 0)
+                _new_hp = (
+                    min(_max, _cur + _dmg_applied)
+                    if _max else _cur + _dmg_applied
+                )
+                _hp_res = _apply_hp_change(watcher_char, _new_hp)
+                db.commit()
+                await hub.broadcast(campaign_id, {
+                    "type": "character_hp_update",
+                    "data": {
+                        "character_id": watcher_char.id,
+                        "hp": _hp_res["hp"],
+                        "delta": _dmg_applied,
+                        "source": "lucky-negate",
+                    },
+                })
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "character_id": int(watcher_char_id),
+                        "character_name": watcher_char.name,
+                        "user_color": watcher_char.color,
+                        "feature_name": "🍀 Lucky negated the hit",
+                        "feature_desc": (
+                            f"New attack total {_new_total} MISSES AC "
+                            f"{_target_ac}; restored {_dmg_applied} HP."
+                        ),
+                        "source": "lucky-negate",
+                        "reaction_kind": "feat",
+                        "damage_applied": _dmg_applied,
+                        "heal_back": _dmg_applied,
+                        "attack_id": _ctx.get("attack_id"),
+                    },
+                })
         except HTTPException:
             raise
         except Exception:
@@ -108982,12 +109061,14 @@ async def use_attack(
     # threshold to 19 via _attacker_crit_threshold(sheet); other classes
     # keep the natural-20 default.
     is_crit = False
+    attack_natural = None  # v2.609.0 — the d20 face, for Lucky's reroll-pick
     if not is_save and attack_breakdown:
         import re as _re_crit
         _crit_m = _re_crit.search(
             r"\d*d20[^d=+ ]*=(\d+)", attack_breakdown, _re_crit.IGNORECASE,
         )
         if _crit_m:
+            attack_natural = int(_crit_m.group(1))
             _crit_threshold = _attacker_crit_threshold(sheet)
             # v2.99.399 — Phase 2.3: an on-hit rider buff (Hexblade's
             # Curse) can lower the crit range vs its target.
@@ -110096,6 +110177,17 @@ async def use_attack(
                             # auto-negate a natural-20 (RAW: a crit
                             # always hits regardless of AC).
                             "is_crit": is_crit,
+                            # v2.609.0 — the attacker's d20 face + the
+                            # flat attack bonus, so use-lucky can pick
+                            # the lower of the two naturals and recompute
+                            # the new attack total server-side.
+                            "attack_natural": attack_natural,
+                            "attack_bonus": (
+                                (int(attack_total) - int(attack_natural))
+                                if (isinstance(attack_total, int)
+                                    and attack_natural is not None)
+                                else None
+                            ),
                         },
                     )
     except Exception:

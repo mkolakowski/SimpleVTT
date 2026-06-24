@@ -2701,6 +2701,140 @@ async def test_use_lucky_decrements_charge(
     assert fu[-1]["data"].get("charges_after") == 2
 
 
+async def test_use_lucky_auto_rolls_reroll_and_negates_on_miss(
+    gm_client, gm_ws, roster,
+):
+    """v2.609.0 — Lucky now auto-rolls the replacement d20 server-side
+    (instead of advising a manual roll): the attacker takes the LOWER of
+    the two naturals, the new attack total is recomputed, and if it now
+    misses the triggering hit's full damage is healed back.
+
+    The reroll is server-random, so the deterministic part — the
+    consistency of the reported roll (chosen == min(natural, new_d20),
+    new_total == bonus + chosen, verdict vs AC) — is asserted every run;
+    the heal-back is asserted in whichever branch (miss/hit) the roll
+    produced, so the test is never flaky. Garrik (Lucky feat, 3/long
+    rest) is the watcher; his sheet HP is patched high for the probe.
+    """
+    garrik = roster["Garrik Ironside"]
+    krieger = roster["Krieger Stonefist"]
+    orig_hp = garrik.get("hp")
+    await _set_auto_apply(gm_client, True)
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/rest",
+        json={"type": "long"},
+    )
+    # Patch Garrik's sheet HP high — auto-apply hits the sheet, and we
+    # want him to survive the probe + see the heal-back delta cleanly.
+    await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/sheet-fields",
+        json={"hp": {"current": 9999, "max": 9999}},
+    )
+    try:
+        garrik_cid = f"tok_lkneg_{garrik['id']}"
+        await _seed_battle(gm_client, [
+            _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+            {
+                "id": garrik_cid, "char_id": garrik["id"],
+                "name": garrik["name"], "initiative": 10,
+                "hp_current": 9999, "hp_max": 9999, "buffs": [],
+                "economy": {"action": False, "bonus": False,
+                            "reaction": False, "movement": 0},
+            },
+        ])
+        await asyncio.sleep(0.15)
+        gm_ws.mark()
+
+        # Probe until Krieger lands a damaging hit on Garrik.
+        hit = None
+        for _ in range(20):
+            resp = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/attack",
+                json={
+                    "character_id": krieger["id"], "attack_index": 0,
+                    "target_combatant_id": garrik_cid,
+                    "override": True, "override_range": True,
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            d = resp.json()
+            if d.get("hit") and int(d.get("damage_applied") or 0) > 0:
+                hit = d
+                break
+        assert hit is not None, "no damaging hit on Garrik in 20 swings"
+        dmg = int(hit["damage_applied"])
+        target_ac = hit["target_ac"]
+
+        await asyncio.sleep(0.2)
+        prompts = [
+            m for m in _prompt_broadcasts(gm_ws)
+            if (m.get("data") or {}).get("watcher_char_id") == garrik["id"]
+            and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+        ]
+        lk_prompt = None
+        for m in reversed(prompts):
+            if "use-lucky" in [o.get("key") for o in (m["data"].get("options") or [])]:
+                lk_prompt = m
+                break
+        assert lk_prompt, "expected a use-lucky option on Garrik's prompt"
+        prompt_id = lk_prompt["data"]["prompt_id"]
+
+        gm_ws.mark()
+        use = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+            json={
+                "prompt_id": prompt_id, "reaction_key": "use-lucky",
+                "watcher_char_id": garrik["id"],
+            },
+        )
+        assert use.status_code == 200, use.text
+        await asyncio.sleep(0.2)
+
+        fu = [
+            m["data"] for m in gm_ws.buffered("feature_used")
+            if (m.get("data") or {}).get("source") == "lucky"
+            and (m.get("data") or {}).get("character_id") == garrik["id"]
+        ]
+        assert fu, "expected feature_used(source=lucky)"
+        card = fu[-1]
+        nd = card["new_d20"]
+        nat = card["original_natural"]
+        chosen = card["chosen_natural"]
+        new_total = card["new_attack_total"]
+        verdict = card["verdict"]
+        # Deterministic consistency of the auto-rolled reroll.
+        assert 1 <= int(nd) <= 20
+        assert chosen == min(int(nat), int(nd)), (
+            f"chosen should be min(nat={nat}, new_d20={nd}); got {chosen}"
+        )
+        # bonus = original attack total − original natural.
+        assert new_total == int(hit["attack_total"]) - int(nat) + int(chosen)
+        assert verdict == ("miss" if new_total < target_ac else "hit")
+
+        neg = [
+            m for m in gm_ws.buffered("feature_used")
+            if (m.get("data") or {}).get("source") == "lucky-negate"
+            and (m.get("data") or {}).get("character_id") == garrik["id"]
+        ]
+        if verdict == "miss":
+            assert neg, "verdict=miss → expected a lucky-negate heal-back"
+            assert int(neg[-1]["data"].get("heal_back") or 0) == dmg
+            hp_up = [
+                m for m in gm_ws.buffered("character_hp_update")
+                if (m.get("data") or {}).get("character_id") == garrik["id"]
+                and (m.get("data") or {}).get("source") == "lucky-negate"
+            ]
+            assert hp_up and int(hp_up[-1]["data"].get("delta") or 0) == dmg
+        else:
+            assert not neg, "verdict=hit → no negate; the damage stands"
+    finally:
+        if isinstance(orig_hp, dict):
+            await gm_client.patch(
+                f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/sheet-fields",
+                json={"hp": orig_hp},
+            )
+
+
 # ── v2.76.0 — Phase 4c: War Caster feat ──
 
 

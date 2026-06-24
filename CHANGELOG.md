@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.609.0] - 2026-06-23 — "The Borrowed Luck"
+
+**Schema version:** 80
+
+**Commit summary:** The Lucky feat now auto-rolls the reroll server-side and negates the hit when the lower roll misses — the first d20-reroll slice of v3.
+
+**Description:** Reactions-automation **v3 auto-resolution**, moving past the AC-bump family to the d20-**reroll** mechanic. When a watcher with the **Lucky** feat reacts to being attacked, the server now **rolls the replacement d20 itself** (instead of telling the player to roll by hand): per RAW (PHB p.167), the attacker takes the **lower** of the two naturals — `chosen = min(attacker_natural, new_d20)` — and the new attack total (`attack_bonus + chosen`) is recomputed. If that new total now misses, the triggering hit's full applied damage is healed back. Unlike the AC-bump family, **Lucky can negate a crit** — picking a lower natural drops the nat-20 — so the gate is purely `new_total < target_ac`, not `is_crit`.
+
+To make this possible, the `attack_targeted` reaction-prompt context now also carries the attacker's **natural d20** (`attack_natural`) and **flat attack bonus** (`attack_bonus`), captured from the attack-roll breakdown.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`:
+  - `use_attack` — capture the attacker's `attack_natural` (parsed from the roll breakdown) and plumb it + the derived `attack_bonus` into the `attack_targeted` prompt context.
+  - `/use_reaction` `use-lucky` dispatch — roll the replacement d20, compute `chosen`/`new_attack_total`/verdict, broadcast them on the `feature_used` card, and heal back the full applied damage (via `_apply_hp_change`) + a `feature_used(source="lucky-negate")` when the reroll makes the attack miss.
+
+**Harness:** `tests/harness/test_reaction_prompt.py::test_use_lucky_auto_rolls_reroll_and_negates_on_miss` (+1) — asserts the reported reroll is internally consistent every run (`chosen == min(natural, new_d20)`, `new_total == bonus + chosen`, verdict vs AC), and asserts the heal-back in whichever branch the server roll produced (negate present iff verdict is miss), so the test is deterministic and never flaky.
+
+### Added
+- Lucky feat auto-reroll: the server rolls the replacement d20, applies the lower natural, and heals back the triggering hit when the reroll makes it miss (can negate a crit).
+
+### Changed
+- The `attack_targeted` reaction-prompt context now carries the attacker's natural d20 + flat attack bonus.
+
 ## [2.608.0] - 2026-06-23 — "The Captain's Parry"
 
 **Schema version:** 80
