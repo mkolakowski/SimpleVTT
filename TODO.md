@@ -1153,7 +1153,8 @@ Every design doc under [`docs/plans/`](docs/plans/) + the two repo-root planning
 ### 🔥 IN PROGRESS
 
 - [`campaign-pc-archive.md`](docs/plans/campaign-pc-archive.md) — ✅ **shipped end-to-end** (v2.602.1–v2.605.0): plan doc → campaign archive (v2.603.0, schema v78) → PC retirement (v2.604.0, schema v79) → demo reseed (v2.605.0: Sundered Vault archived, fresh `Demo L5: The Tide-Wracked Catacombs` added). Reversible soft-state alongside delete, dogfooded in the demo.
-- [`reactions-automation.md`](docs/plans/reactions-automation.md) — v3 auto-resolution arc: AC-bump negations shipping one reaction at a time (Shield v2.600.0, Defensive Duelist v2.601.0, Form of the Beast Tail v2.602.0). Next same-recipe slice: Combat Inspiration; then NPC Parry / d20-reroll surfaces.
+- [`pending-resolution-state-machine.md`](docs/plans/pending-resolution-state-machine.md) — the biggest remaining reactions-v3 item: make the save-or-suck failure resolution reusable so a reaction that flips an outcome (Silvery Barbs pass→fail) re-resolves the effect. Phase 0 (plan) shipped v2.610.1; Phase 1 (extract `_resolve_save_failure`) next.
+- [`reactions-automation.md`](docs/plans/reactions-automation.md) — v3 auto-resolution arc: AC-bump negation family **complete** for PCs + NPCs (Shield v2.600.0 / Defensive Duelist v2.601.0 / Form of the Beast Tail v2.602.0 / Combat Inspiration v2.607.0 / NPC Parry v2.608.0); d20-reroll *display* family done (Lucky v2.609.0 auto-rolls + heals back; Silvery Barbs v2.610.0 auto-rolls + reports the flip). The remaining work is the pending-resolution state machine (above).
 - [`full-feature-automation.md`](docs/plans/full-feature-automation.md) — see the section above; Phase 8 is the next slice.
 
 ### ✅ Shipped end-to-end

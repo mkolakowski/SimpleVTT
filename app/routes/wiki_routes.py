@@ -118,6 +118,7 @@ _DOC_ALLOWLIST: dict[str, Path] = {
     "plan-admin-center-consolidation": Path("docs") / "plans" / "admin-center-consolidation.md",
     "plan-app-wide-roles-and-storage": Path("docs") / "plans" / "app-wide-roles-and-storage.md",
     "plan-campaign-pc-archive": Path("docs") / "plans" / "campaign-pc-archive.md",
+    "plan-pending-resolution-state-machine": Path("docs") / "plans" / "pending-resolution-state-machine.md",
 }
 
 

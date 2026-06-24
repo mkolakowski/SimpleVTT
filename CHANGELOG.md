@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.610.1] - 2026-06-23 — "The Blueprint"
+
+**Schema version:** 80
+
+**Commit summary:** Design plan for the pending-resolution state machine (the biggest remaining reactions-v3 item), surfaced through the wiki.
+
+**Description:** Phase 0 (plan) of the largest remaining piece of the reactions-automation v3 backlog. The AC-bump auto-negation family (PC + NPC) and the d20-reroll display family (Lucky, Silvery Barbs) all ship, but two reactions still **GM-narrate the consequence** — most notably Silvery Barbs, which auto-rolls the forced reroll + reports a pass→fail flip but doesn't yet **apply** the now-failed save's effect.
+
+The plan ([`docs/plans/pending-resolution-state-machine.md`](docs/plans/pending-resolution-state-machine.md)) records the verified substrate (`_save_request_context` + the ~200-line inline save-failure block in `/respond`, which isn't reusable) and a phased path: **Phase 1** extracts a reusable `_resolve_save_failure(...)` coroutine from that block (pure refactor, guarded by the existing heavy save-or-suck + immunity test coverage); **Phase 2** has Silvery Barbs re-invoke it when its reroll flips pass→fail (the condition actually installs); **Phase 3** generalizes (save-for-half damage flips, attack re-resolution).
+
+**Implementation:**
+
+- `docs/plans/pending-resolution-state-machine.md` — new design plan.
+- Surfaced through `/wiki`: `_DOC_ALLOWLIST` row (`plan-pending-resolution-state-machine`), the wiki landing-page "Design plans" table, and `docs/wiki/README.md`.
+- `TODO.md` — IN-PROGRESS entry; the reactions-automation entry updated to reflect the completed AC-bump + reroll-display families.
+
+**Harness:** `tests/harness/test_wiki.py::test_wiki_doc_serves_pending_resolution_plan` (slug 200 + H1 + nav) + the `test_wiki_home_renders` landing-page assertion.
+
+### Added
+- Design plan for the pending-resolution state machine, surfaced through the wiki.
+
 ## [2.610.0] - 2026-06-23 — "The Reproachful Word"
 
 **Schema version:** 80
