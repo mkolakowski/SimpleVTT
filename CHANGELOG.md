@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.620.0] - 2026-06-24 — "The Operator's Dial"
+
+**Schema version:** 80
+
+**Commit summary:** Phase 8 — move automated-backup settings into the Admin Center: a `/backups` page edits the schedule + retention (written to a settings file the sidecar watch-loops), lists artifacts, and triggers an on-demand run; automated backups are disabled in `DEMO_MODE`.
+
+**Description:** [Backup/export-import overhaul](docs/plans/backup-export-overhaul.md) Phase 8 — the operator surface, and the arc's opening goal ("move automated backup settings to the dedicated admin console"). The schedule + retention were env-only (`BACKUP_CRON` / `KEEP_DAILY` / `KEEP_WEEKLY` baked into the sidecar at compose time, requiring a recreate to change). Now they're editable at runtime from the Admin Center:
+
+- **`app/admin_center/backup_admin.py`** (dependency-light, unit-testable) — `read_settings` (the on-disk `backup-settings.json` if present, else the env defaults), `write_settings` (validates the 5-field cron, clamps retention to 1–365, writes atomically), `validate_cron`, `list_artifacts` (the `daily/` + `weekly/` `.sql.gz` / `.homebrew.tar.gz` files), `trigger_run` (drops a `.run-now` file), `demo_mode_active`.
+- **Admin Center routes** (`/backups` GET + `/backups/settings` POST + `/backups/run` POST), opt-in via `ADMIN_CENTER_ADMIN_TOOLS`, with a `_nav.html` link + `backups.html` page. Writes/run are refused in `DEMO_MODE`; the page renders a read-only "Disabled — demo mode" panel there.
+- **Runtime plumbing across the sidecar boundary** — the Admin Center service now mounts `backup_data` (rw); `scripts/entrypoint-backup.sh` is a watch-loop that reads `backup-settings.json` (falling back to env on first boot), regenerates `/etc/crontabs/root` whenever the file changes, and picks up the `.run-now` trigger; `scripts/backup.sh` reads `KEEP_DAILY` / `KEEP_WEEKLY` from the file on each run. Both honor `DEMO_MODE` (the entrypoint skips installing cron + the initial backup; `backup.sh` bails early as a belt-and-braces guard). `docker-compose.yml` adds `DEMO_MODE` to the `backup` service. No app→sidecar RPC, no new ports — coordination is a JSON file on the shared volume.
+
+### Added
+- Admin Center `/backups` page + `app/admin_center/backup_admin.py`; `DEMO_MODE`-aware backup sidecar (watch-loop + runtime retention + run-now trigger).
+
+### Changed
+- `docker-compose.yml`: admin-center mounts `backup_data` (rw); `backup` service gets `DEMO_MODE`.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_backup_admin.py` (new, +7) covers the `backup_admin` helper host-side (the routes live on the Admin Center's port 8015, not the 8013 harness target): env-default vs file-backed `read_settings`, the write→read round-trip, `validate_cron` (5-field), bad-cron rejection, retention clamping (0→1, 9999→365), `demo_mode_active`, and `trigger_run` + `list_artifacts` (only backup artifacts listed). The operator surface is documented as Admin-Center-only.
+
 ## [2.619.0] - 2026-06-24 — "The Grimoire Copied"
 
 **Schema version:** 80

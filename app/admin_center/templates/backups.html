@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Backups — SimpleVTT Admin Center</title>
+<link rel="icon" href="/favicon.svg">
+{% include "_theme.html" %}
+</head>
+<body>
+{% set nav_active = "backups" %}{% include "_nav.html" %}
+<main>
+  <h1 style="font-size:18px;margin:0 0 14px">💿 Automated backups</h1>
+  {% if err %}<div class="banner err">⚠️ {{ err }}</div>{% endif %}
+  {% if saved %}<div class="banner ok">✓ Backup settings saved. The sidecar picks them up within ~60s.</div>{% endif %}
+  {% if ran %}<div class="banner ok">✓ On-demand backup triggered.</div>{% endif %}
+
+  {% if demo_mode %}
+  <div class="card">
+    <h2>Disabled — demo mode</h2>
+    <p class="muted">This instance runs with <code>DEMO_MODE=true</code>. The demo
+      database reseeds hourly, so automated backups are disabled — scheduled
+      <code>pg_dump</code>s would be pure churn. Schedule + retention controls
+      are hidden until demo mode is turned off.</p>
+  </div>
+  {% else %}
+  <div class="card">
+    <h2>Schedule &amp; retention</h2>
+    <p class="muted">Edit the daily backup cron + how long daily / weekly
+      copies are kept. Saved to <code>backup-settings.json</code> on the shared
+      backup volume; the sidecar regenerates its crontab when the file changes
+      (current source: <code>{{ settings.source }}</code>).</p>
+    <form method="post" action="/backups/settings">
+      <label>Cron schedule (5 fields)
+        <input type="text" name="cron" value="{{ settings.cron }}" required
+               pattern="\S+\s+\S+\s+\S+\s+\S+\s+\S+">
+      </label>
+      <label>Keep daily (days)
+        <input type="number" name="keep_daily" value="{{ settings.keep_daily }}" min="1" max="365" required>
+      </label>
+      <label>Keep weekly (weeks)
+        <input type="number" name="keep_weekly" value="{{ settings.keep_weekly }}" min="1" max="365" required>
+      </label>
+      <button type="submit">Save settings</button>
+    </form>
+    {% if settings.updated_at %}
+      <p class="muted">Last updated {{ settings.updated_at }} by {{ settings.updated_by }}.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Run now</h2>
+    <p class="muted">Take an on-demand backup immediately (daily artifacts).</p>
+    <form method="post" action="/backups/run">
+      <button type="submit">Back up now</button>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h2>Artifacts</h2>
+    {% for bucket in ["daily", "weekly"] %}
+      <h3 style="margin:12px 0 6px">{{ bucket|capitalize }}</h3>
+      {% if artifacts[bucket] %}
+        <table class="data">
+          <thead><tr><th>File</th><th>Size</th><th>Modified (epoch)</th></tr></thead>
+          <tbody>
+            {% for a in artifacts[bucket] %}
+            <tr><td><code>{{ a.name }}</code></td><td>{{ a.size | bytes }}</td><td>{{ a.mtime | int }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted">No {{ bucket }} backups yet.</p>
+      {% endif %}
+    {% endfor %}
+  </div>
+</main>
+</body>
+</html>

@@ -702,6 +702,76 @@ def admin_tools_demo_reset(request: Request):
     return RedirectResponse(f"/tools?reset={quote(str(counts))}", status_code=303)
 
 
+# ── Backups (Phase 8 — operator backup schedule/retention) ────────────────────
+# Opt-in via ADMIN_CENTER_ADMIN_TOOLS (operator infra). Edits a settings file on
+# the shared backup volume that the sidecar watch-loops; read-only in DEMO_MODE.
+
+@app.get("/backups", response_class=HTMLResponse)
+def backups_page(request: Request, saved: str = "", ran: str = "", err: str = ""):
+    """Backup schedule + retention editor, artifact listing, and run-now.
+    Opt-in via ADMIN_CENTER_ADMIN_TOOLS; auto-gated by the auth middleware."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    from . import backup_admin
+    return templates.TemplateResponse(
+        "backups.html",
+        {
+            "request": request,
+            "app_version": APP_VERSION,
+            "admin_user": request.session.get("admin_user", ""),
+            "settings": backup_admin.read_settings(),
+            "artifacts": backup_admin.list_artifacts(),
+            "demo_mode": backup_admin.demo_mode_active(),
+            "saved": saved,
+            "ran": ran,
+            "err": err,
+        },
+    )
+
+
+@app.post("/backups/settings")
+def backups_save(
+    request: Request,
+    cron: str = Form(...),
+    keep_daily: str = Form(...),
+    keep_weekly: str = Form(...),
+):
+    """Persist the schedule + retention to the shared settings file. Refused in
+    DEMO_MODE (backups are disabled there)."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    from datetime import datetime, timezone
+
+    from . import backup_admin
+    if backup_admin.demo_mode_active():
+        return RedirectResponse("/backups?err=Backups+are+disabled+in+demo+mode", status_code=303)
+    operator = request.session.get("admin_user", "?")
+    try:
+        backup_admin.write_settings(
+            cron=cron, keep_daily=keep_daily, keep_weekly=keep_weekly,
+            updated_by=operator, now_iso=datetime.now(timezone.utc).isoformat(),
+        )
+    except ValueError as exc:
+        return RedirectResponse(f"/backups?err={quote(str(exc))}", status_code=303)
+    log.info("admin-center operator %r updated backup settings", operator)
+    return RedirectResponse("/backups?saved=1", status_code=303)
+
+
+@app.post("/backups/run")
+def backups_run(request: Request):
+    """Drop the run-now trigger the sidecar watch-loop picks up. Refused in
+    DEMO_MODE."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    from . import backup_admin
+    if backup_admin.demo_mode_active():
+        return RedirectResponse("/backups?err=Backups+are+disabled+in+demo+mode", status_code=303)
+    backup_admin.trigger_run()
+    log.info("admin-center operator %r triggered an on-demand backup",
+             request.session.get("admin_user", "?"))
+    return RedirectResponse("/backups?ran=1", status_code=303)
+
+
 # ── User admin (Phase 2 — opt-in, MFA-gated for destructive ops) ──────────────
 # Phase 2a: the read-only user list + non-destructive create. Phase 2b
 # (this surface): the destructive ops (disable / reset-password / delete),

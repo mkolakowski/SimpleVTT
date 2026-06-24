@@ -9,16 +9,35 @@
 # Both share the same timestamp so a restore script can pair them.
 set -eu
 
+# v2.620.0 — belt-and-braces: even a manual "run now" is a no-op in demo mode
+# (the entrypoint already skips automated backups; this guards direct calls).
+case "$(printf '%s' "${DEMO_MODE:-}" | tr '[:upper:]' '[:lower:]')" in
+    1|true|yes|on)
+        echo "[backup] DEMO_MODE — skipping backup"
+        exit 0 ;;
+esac
+
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
 DAILY_DIR="${BACKUP_DIR}/daily"
 WEEKLY_DIR="${BACKUP_DIR}/weekly"
 HOMEBREW_DIR="${HOMEBREW_DIR:-/homebrew}"
+SETTINGS_FILE="${BACKUP_DIR}/backup-settings.json"
 mkdir -p "${DAILY_DIR}" "${WEEKLY_DIR}"
 
 TS=$(date -u +%Y%m%dT%H%M%SZ)
 DOW=$(date -u +%u)   # 1..7, 7 = Sunday
+
+# v2.620.0 — retention is operator-editable from the Admin Center, written to
+# backup-settings.json. Prefer the file's values; fall back to the env.
+json_num() {
+    sed -n "s/.*\"$2\"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p" "$1" 2>/dev/null | head -n1
+}
 KEEP_DAILY="${KEEP_DAILY:-7}"
 KEEP_WEEKLY="${KEEP_WEEKLY:-4}"
+if [ -f "${SETTINGS_FILE}" ]; then
+    _kd="$(json_num "${SETTINGS_FILE}" keep_daily)"; [ -n "${_kd}" ] && KEEP_DAILY="${_kd}"
+    _kw="$(json_num "${SETTINGS_FILE}" keep_weekly)"; [ -n "${_kw}" ] && KEEP_WEEKLY="${_kw}"
+fi
 
 DAILY_SQL="${DAILY_DIR}/simplevtt-${TS}.sql.gz"
 DAILY_HB="${DAILY_DIR}/simplevtt-${TS}.homebrew.tar.gz"

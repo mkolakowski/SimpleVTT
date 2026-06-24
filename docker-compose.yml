@@ -225,6 +225,12 @@ services:
       # (the Center has no /static mount of its own). Same path the app
       # mounts it at, so the in-image UPLOAD_ROOT resolves identically.
       - uploads_data:/app/app/static/uploads
+      # v2.620.0 — read-WRITE share of the backup sidecar's volume so the
+      # Admin Center's /backups page can edit the schedule/retention
+      # (writes backup-settings.json the sidecar watch-loops) + list the
+      # backup artifacts + drop a "run now" trigger file. Same path the
+      # sidecar mounts it at (/backups).
+      - backup_data:/backups
     ports:
       - "${ADMIN_CENTER_PORT:-8015}:${ADMIN_CENTER_PORT:-8015}"
     command:
@@ -249,9 +255,13 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-simplevtt}
       POSTGRES_DB: ${POSTGRES_DB:-simplevtt}
       PGHOST: db
-      BACKUP_CRON: ${BACKUP_CRON:-0 3 * * *}        # daily at 3am UTC
+      BACKUP_CRON: ${BACKUP_CRON:-0 3 * * *}        # daily at 3am UTC (initial; overridden by /backups settings file)
       KEEP_DAILY: ${KEEP_DAILY:-7}
       KEEP_WEEKLY: ${KEEP_WEEKLY:-4}
+      # v2.620.0 — when true the sidecar takes NO automated backups (the
+      # demo DB reseeds hourly, so scheduled dumps are pure churn). The
+      # Admin Center /backups page shows "Disabled — demo mode".
+      DEMO_MODE: ${DEMO_MODE:-false}
     volumes:
       - backup_data:/backups
       - homebrew_data:/homebrew:ro
