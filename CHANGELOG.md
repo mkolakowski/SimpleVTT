@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.612.2] - 2026-06-23 — "The Three Totems"
+
+**Schema version:** 80
+
+**Commit summary:** Phase 8 — Totem Spirit now installs a permanent flag-buff carrying the chosen totem's rage-gated parameter payload (Bear/Eagle/Wolf), Phase 1 of the install-then-deferred-read split.
+
+**Description:** [Full-feature-automation](docs/plans/full-feature-automation.md) Phase 8. `use_totem_spirit` (Path of the Totem Warrior Barbarian Lv 3+) was announce-only — it echoed the chosen totem's benefit text and left the resistance / OA-disadvantage / ally-advantage effects to the GM. It now installs a permanent `totem-spirit-active` buff carrying the chosen totem's parameter payload from the new `_TOTEM_SPIRIT_EFFECTS` map, all gated on `totem_spirit_requires_rage: True`:
+
+- **Bear** — `totem_spirit_resistance_except: ["psychic"]` (resistance to all damage except psychic while raging).
+- **Eagle** — `totem_spirit_oa_disadvantage` + `totem_spirit_dash_bonus_action` + `totem_spirit_requires_no_heavy_armor`.
+- **Wolf** — `totem_spirit_ally_melee_advantage_within_ft: 5`.
+
+A barbarian has exactly one Totem Spirit, so a re-press with a different totem overwrites the params (`_install_buff` refresh semantics). The buff is sheet-mirrored + permanent. Same install-then-deferred-read shape as Empowered Evocation (v2.158.19) and Potent Spellcasting (v2.612.1).
+
+**Phase 2 (deferred):** the rage read sites consult the flags — Bear's resistance-to-all-except-psychic needs a new "all except" matcher shape in `_resistance_halve`; Eagle's OA-disadvantage + bonus-action Dash; Wolf's ally-melee-advantage aura. The announce-only card is retained for the GM-narrated path until then.
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py` — new `_TOTEM_SPIRIT_EFFECTS` per-totem payload map; `use_totem_spirit` installs the `totem-spirit-active` flag-buff via `_install_buff` + `_mirror_buffs_to_sheet`, and surfaces `buff_installed` on the broadcast + response.
+
+**Harness:** `tests/harness/test_totem_spirit.py::test_ts_buff_payload_carries_totem_params` (+1) — seeds Krieger (PATCHed to Totem Warrior) in a battle (`_install_buff` requires one), installs Bear and pins its rage-gated resistance-except-psychic flags via `/buffs`, then switches to Eagle and asserts the params overwrite (Bear's flag gone). Existing happy/error-path tests (bear/wolf echo, wrong subclass, invalid totem) unchanged.
+
+### Added
+- Totem Spirit installs a permanent `totem-spirit-active` flag-buff carrying the chosen totem's rage-gated parameters for the deferred read sites.
+
+### Changed
+- `use_totem_spirit` now returns/broadcasts `buff_installed`.
+
 ## [2.612.1] - 2026-06-23 — "The Lit Cantrip"
 
 **Schema version:** 80

@@ -87672,6 +87672,37 @@ _TOTEM_SPIRIT_BENEFITS = {
     ),
 }
 
+# v2.612.2 — Phase 8 flag-buff parameter payloads, one per totem. Each
+# carries `totem_spirit_requires_rage: True` because all three Totem
+# Spirit benefits are gated on the rager actively raging — the Phase 2
+# read sites (resistance halving / OA-disadvantage / ally-advantage)
+# AND the rage gate together. Captured here so the deferred reads have a
+# stable contract; same install-then-deferred-read shape as Empowered
+# Evocation (v2.158.19) / Potent Spellcasting (v2.612.1).
+_TOTEM_SPIRIT_EFFECTS = {
+    "bear": {
+        "totem_spirit_active": True,
+        "totem_spirit_totem": "bear",
+        "totem_spirit_requires_rage": True,
+        # Resistance to ALL damage except these types while raging.
+        "totem_spirit_resistance_except": ["psychic"],
+    },
+    "eagle": {
+        "totem_spirit_active": True,
+        "totem_spirit_totem": "eagle",
+        "totem_spirit_requires_rage": True,
+        "totem_spirit_requires_no_heavy_armor": True,
+        "totem_spirit_oa_disadvantage": True,
+        "totem_spirit_dash_bonus_action": True,
+    },
+    "wolf": {
+        "totem_spirit_active": True,
+        "totem_spirit_totem": "wolf",
+        "totem_spirit_requires_rage": True,
+        "totem_spirit_ally_melee_advantage_within_ft": 5,
+    },
+}
+
 
 @router.post("/api/campaign/{campaign_id}/use_totem_spirit")
 async def use_totem_spirit(
@@ -87693,8 +87724,17 @@ async def use_totem_spirit(
 
     Body: ``{character_id, totem?}``. ``totem`` is bear (default),
     eagle, or wolf. No action cost — declares the chosen totem's
-    passive rage benefit. v1 announce-only — the resistance /
-    OA-disadvantage / ally-advantage effects are GM-tracked.
+    passive rage benefit.
+
+    v2.612.2 — Phase 8 Barbarian flag-buff. Installs a permanent
+    `totem-spirit-active` buff carrying the chosen totem's parameter
+    payload (`_TOTEM_SPIRIT_EFFECTS[totem]`), all gated on
+    `totem_spirit_requires_rage`. Phase 2 (deferred): the read sites
+    apply the benefit while the rager is raging — Bear's resistance-
+    to-all-except-psychic in `_resistance_halve` (a new "all except"
+    matcher shape), Eagle's OA-disadvantage + bonus-action Dash, and
+    Wolf's ally-melee-advantage aura. v1 keeps the announce-only card
+    for the GM-narrated path until those reads land.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -87729,6 +87769,30 @@ async def use_totem_spirit(
     benefit = _TOTEM_SPIRIT_BENEFITS[totem]
     totem_icon = {"bear": "🐻", "eagle": "🦅", "wolf": "🐺"}[totem]
 
+    # v2.612.2 — install the chosen totem's flag-buff. `_install_buff`
+    # overwrites a same-key buff (refresh semantics), so a re-press with
+    # a different totem cleanly replaces the params — a barbarian has
+    # exactly one Totem Spirit.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "totem-spirit-active",
+        "name": f"{totem_icon} Totem Spirit ({totem.title()})",
+        "icon": totem_icon,
+        "duration_rounds": 100000,
+        "duration_max": 100000,
+        "permanent": True,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": dict(_TOTEM_SPIRIT_EFFECTS[totem]),
+        "desc": (
+            f"{char.name}'s {totem.title()} totem rage benefit: "
+            f"{benefit} (Totem Warrior Barbarian Lv 3+ passive "
+            f"permanent, applies while raging. Phase 2: the rage "
+            f"read sites consult these flags.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -87758,6 +87822,7 @@ async def use_totem_spirit(
             "totem": totem,
             "benefit": benefit,
             "barbarian_level": barb_lv,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -87767,6 +87832,7 @@ async def use_totem_spirit(
         "totem": totem,
         "benefit": benefit,
         "barbarian_level": barb_lv,
+        "buff_installed": buff_installed,
     }
 
 

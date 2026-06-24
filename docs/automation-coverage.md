@@ -28,20 +28,21 @@ via a Phase-1 install + deferred read, so the endpoint body itself reads
 announce-only to the classifier), and a few `tracked`-tagged ones only spend a
 resource without a downstream effect.
 
-## Summary (counts regenerated v2.612.1)
+## Summary (counts regenerated v2.612.2)
 
 | Status | Count | Meaning |
 |---|---|---|
-| ✅ **tracked** | **288** | server-applies effect and/or spends resource |
-| ⚪ **announce-only** | **36** | validates + broadcasts; effect left to the GM |
+| ✅ **tracked** | **289** | server-applies effect and/or spends resource |
+| ⚪ **announce-only** | **35** | validates + broadcasts; effect left to the GM |
 | 🔧 mechanical | **8** | helper endpoints (not `feature_used` features) |
 | **Total** | **332** | `use_*` / `cast_*` endpoints |
 
 > The per-slug table further down still pins the v2.158.35 snapshot in
 > places — it drifts behind the classifier between full reconciliations.
 > The summary row above is the freshly-regenerated truth
-> (`python3 scripts/classify_feature_endpoints.py`). v2.612.1 flipped
-> `potent_spellcasting` from announce-only to tracked (Phase 8 flag-buff).
+> (`python3 scripts/classify_feature_endpoints.py`). Recent Phase-8
+> flag-buff flips: `potent_spellcasting` (v2.612.1), `totem_spirit`
+> (v2.612.2) — both announce-only → tracked.
 
 At the plan's baseline (v2.99.385) the split was **~60 tracked / ~156
 announce-only**. Phases 1–6 (feature-use registry, on-hit riders, feature
@@ -360,7 +361,7 @@ or passive damage-boosters that already ride other code paths
 | `use_scornful_rebuke` | ⚪ announce-only | — |
 | `use_sculpt_spells` | ⚪ announce-only | — |
 | `use_supreme_healing` | ⚪ announce-only | — |
-| `use_totem_spirit` | ⚪ announce-only | — |
+| `use_totem_spirit` | ✅ tracked | v2.612.2 — installs permanent `totem-spirit-active` flag-buff (per-totem `totem_spirit_*` rage-gated params: Bear resistance-except-psychic / Eagle OA-dis + Dash / Wolf ally-advantage); Phase 8 |
 | `use_unwavering_mark` | ⚪ announce-only | — |
 | `use_visions_of_distant_realms` | ⚪ announce-only | — |
 | `use_whispers_of_the_dead` | ⚪ announce-only | — |

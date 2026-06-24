@@ -123,3 +123,77 @@ async def test_use_ts_invalid_totem(
         json={"character_id": krieger["id"], "totem": "tiger"},
     )
     assert r.status_code == 400, r.text
+
+
+async def _seed_krieger_in_battle(gm_client, krieger):
+    """v2.612.2 — `_install_buff` requires an active battle."""
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [{
+                "id": f"tok_ts_kr_{krieger['id']}", "char_id": krieger["id"],
+                "name": krieger["name"], "initiative": 12,
+                "hp_current": 80, "hp_max": 80, "buffs": [],
+                "economy": {"action": False, "bonus": False,
+                            "reaction": False, "movement": 0},
+            }],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+
+async def _krieger_buff(gm_client, char_id, key):
+    buffs = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/buffs"
+    )).json().get("buffs", [])
+    return next((b for b in buffs if b.get("key") == key), None)
+
+
+async def test_ts_buff_payload_carries_totem_params(
+    gm_client, krieger_totem,
+):
+    """v2.612.2 — Phase 8 state contract: using Totem Spirit installs a
+    permanent `totem-spirit-active` buff carrying the chosen totem's
+    parameter payload, all rage-gated (`totem_spirit_requires_rage`).
+    Bear carries the resistance-except-psychic shape; a re-press with a
+    different totem (eagle) overwrites the params (`_install_buff` refresh
+    semantics) since a barbarian has exactly one Totem Spirit. Phase 2
+    (deferred) reads these flags at the rage read sites. Seeds a battle
+    because `_install_buff` requires one."""
+    krieger = krieger_totem
+    await _seed_krieger_in_battle(gm_client, krieger)
+
+    # Bear → resistance-to-all-except-psychic while raging.
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_totem_spirit",
+        json={"character_id": krieger["id"], "totem": "bear"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json().get("buff_installed") is True
+    buff = await _krieger_buff(gm_client, krieger["id"], "totem-spirit-active")
+    assert buff is not None, "totem-spirit-active buff missing after bear install"
+    effects = buff.get("effects") or {}
+    assert effects.get("totem_spirit_active") is True
+    assert effects.get("totem_spirit_totem") == "bear"
+    assert effects.get("totem_spirit_requires_rage") is True
+    assert effects.get("totem_spirit_resistance_except") == ["psychic"]
+    # Permanent passive — no concentration, very long duration.
+    assert buff.get("concentration") in (False, None)
+    assert int(buff.get("duration_rounds") or 0) >= 1000
+
+    # Switch to Eagle → the buff's params must overwrite (one totem only).
+    r2 = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_totem_spirit",
+        json={"character_id": krieger["id"], "totem": "eagle"},
+    )
+    assert r2.status_code == 200, r2.text
+    buff2 = await _krieger_buff(gm_client, krieger["id"], "totem-spirit-active")
+    assert buff2 is not None
+    effects2 = buff2.get("effects") or {}
+    assert effects2.get("totem_spirit_totem") == "eagle"
+    assert effects2.get("totem_spirit_oa_disadvantage") is True
+    assert effects2.get("totem_spirit_dash_bonus_action") is True
+    # Bear-only flag must be gone after the overwrite.
+    assert "totem_spirit_resistance_except" not in effects2, (
+        f"eagle install should overwrite bear params; got {effects2}"
+    )

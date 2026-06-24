@@ -464,6 +464,19 @@ composition. Batch by class, same cadence as the breadth sweep.
   — the same cantrip-detection read-site Empowered Evocation's
   Phase 2 needs for evocation spells. Same install-then-deferred-read
   shape; reuses the "+ability-mod to spell damage" flag substrate.
+- **v2.612.2 ("The Three Totems") — Totem Spirit** (Path of the
+  Totem Warrior Barbarian Lv 3+): `use_totem_spirit` was
+  announce-only; the Phase 8 enhancement installs a permanent
+  `totem-spirit-active` buff carrying the chosen totem's parameter
+  payload (new `_TOTEM_SPIRIT_EFFECTS` map), all gated on
+  `totem_spirit_requires_rage`: Bear → `resistance_except: ["psychic"]`,
+  Eagle → OA-disadvantage + bonus-action Dash + no-heavy-armor, Wolf →
+  ally-melee-advantage-within-5ft. A re-press with a different totem
+  overwrites the params (`_install_buff` refresh semantics — a barbarian
+  has one totem). Phase 2 (deferred): the rage read sites apply each
+  benefit (Bear needs a new "all except" matcher in `_resistance_halve`).
+  First multi-variant Phase-8 flag-buff (three parameter payloads behind
+  one endpoint).
 
 The Lv-17 cleric subclass capstone batch is 5/6 shipped — Improved
 Reaper is the last (necromancy single-target → double-target spell
