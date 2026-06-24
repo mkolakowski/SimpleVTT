@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.630.6] - 2026-06-24 — "The Live Demo Switch"
+
+**Schema version:** 80
+
+**Commit summary:** Admin Center `/backups` — when `DEMO_BACKUPS_ENABLED` is on, surface a clear "demo mode — backups enabled for testing" banner so it's obvious the Back-up-now / schedule / download / restore controls are live (they already were; this makes the demo-override state visible).
+
+**Description:** With the `DEMO_BACKUPS_ENABLED` testing override on, the `/backups` page already shows the full live controls — the **Back up now** button, schedule editor, downloads, and restore all work (the override makes `demo_mode_active()` false). But the page gave no hint it was a demo with backups force-enabled, which read as confusing. Added `backup_admin.demo_override_active()` (`DEMO_MODE` **and** `DEMO_BACKUPS_ENABLED`) and a banner that calls it out: "🧪 Demo mode — backups enabled for testing … the Back up now / download / restore controls below are live," plus a heads-up that the demo reseeds hourly so an edited schedule or a restore won't survive the next reset.
+
+(Also recreated the deployment's admin-center container, which had drifted to a stale image — the most likely reason the controls looked unavailable.)
+
+### Added
+- `backup_admin.demo_override_active()` + a demo-backups-enabled banner on the `/backups` page.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_backup_admin.py::test_demo_override_active` (+1) — true only when both `DEMO_MODE` and `DEMO_BACKUPS_ENABLED` are on (and `demo_mode_active()` is then false — backups not disabled); false for demo-without-override and for non-demo.
+
 ## [2.630.5] - 2026-06-24 — "The Visible Numbers"
 
 **Schema version:** 80

@@ -63,6 +63,15 @@ def demo_mode_active() -> bool:
     return _env_truthy("DEMO_MODE") and not backups_force_enabled()
 
 
+def demo_override_active() -> bool:
+    """True when this is a demo instance with backups force-enabled for testing
+    (``DEMO_MODE`` *and* ``DEMO_BACKUPS_ENABLED``). The backups surface is fully
+    live (schedule / run-now / download / restore), but the page surfaces a
+    note so the operator knows it's a demo — which reseeds hourly, so a restored
+    or edited state won't survive the next reset."""
+    return _env_truthy("DEMO_MODE") and backups_force_enabled()
+
+
 def validate_cron(expr: str) -> bool:
     """A crontab line is exactly five whitespace-separated fields. We don't
     fully parse the fields (crond does) — just guard the shape so a blank /

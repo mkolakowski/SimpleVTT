@@ -736,6 +736,7 @@ def backups_page(request: Request, saved: str = "", ran: str = "", err: str = ""
             "settings": backup_admin.read_settings(),
             "backups": backup_admin.list_backups(),
             "demo_mode": backup_admin.demo_mode_active(),
+            "demo_override": backup_admin.demo_override_active(),
             "restore_allowed": _restore_allowed(request),
             "restore_pending": backup_admin.restore_pending(),
             "last_restore": backup_admin.last_restore_result(),

@@ -85,6 +85,20 @@ def test_demo_mode_active(monkeypatch):
     assert backup_admin.demo_mode_active() is False
 
 
+def test_demo_override_active(monkeypatch):
+    # Only true when BOTH DEMO_MODE and the override are on (a demo with backups
+    # force-enabled for testing — surface is live, but flagged as a demo).
+    monkeypatch.setenv("DEMO_MODE", "true")
+    monkeypatch.setenv("DEMO_BACKUPS_ENABLED", "true")
+    assert backup_admin.demo_override_active() is True
+    assert backup_admin.demo_mode_active() is False        # backups NOT disabled
+    monkeypatch.delenv("DEMO_BACKUPS_ENABLED", raising=False)
+    assert backup_admin.demo_override_active() is False     # demo, override off
+    monkeypatch.setenv("DEMO_MODE", "false")
+    monkeypatch.setenv("DEMO_BACKUPS_ENABLED", "true")
+    assert backup_admin.demo_override_active() is False     # not a demo
+
+
 def test_trigger_run_and_list_artifacts(tmp_path, monkeypatch):
     monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
     # run-now trigger file is dropped.
