@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.621.0] - 2026-06-24 — "The Download Bell"
+
+**Schema version:** 80
+
+**Commit summary:** Phase 9 — campaign backup export/import UI: the settings Import/Export tab gains a full-campaign `.zip` export button driven by a background-job progress toast, plus a clone-import upload. Delivers the arc's "show toast with progress" goal.
+
+**Description:** [Backup/export-import overhaul](docs/plans/backup-export-overhaul.md) Phase 9 — the frontend that makes the shipped endpoints reachable, and the last of the original asks ("show toast with progress of creating backup"). A new **Full campaign backup** section in the campaign settings *Import & export* tab:
+
+- **Export** — `⬇ Download full backup (.zip)` POSTs `/api/campaign/{cid}/export`, polls `/api/export-jobs/{id}` once a second, and surfaces each stage + percent in a self-contained bottom-center **progress toast** (the tabletop's `showToast` isn't loaded on the settings page, so the toast is inline + reused across updates), then fetches the finished zip as a blob and triggers the download. A 429 / error surfaces in the toast.
+- **Import (clone)** — upload a campaign `.zip` to `POST /api/campaign/import` (`mode=clone`); on success the status links straight to the new campaign.
+
+Frontend-only — no new endpoints (those landed in Phases 4 + 6b and carry their own contract tests). The PC-sheet export button and the per-row homebrew-item export button are a follow-up (9b).
+
+### Added
+- Campaign full-backup export (job + progress toast) + clone-import controls in the settings Import/Export tab (`app/templates/campaign_settings.html`).
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_export_ui.py` (new, +1) — fetches the settings page as the GM and asserts the new controls render and are wired (`campaign-backup-btn` / `campaign-import-btn` / `campaign-import-file` present; the JS references `/api/export-jobs/` + `/api/campaign/import` + the "Building backup" progress copy). Guards the template/JS wiring against a silent regression; the endpoint behavior is covered by `test_export_campaign.py` + `test_import_campaign.py`.
+
 ## [2.620.0] - 2026-06-24 — "The Operator's Dial"
 
 **Schema version:** 80

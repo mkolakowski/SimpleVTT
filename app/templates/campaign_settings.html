@@ -2789,6 +2789,38 @@
             <div id="homebrew-import-status" style="margin-top:10px;font-size:12px;"></div>
         </div>
     </div>
+
+    <!-- ── Full campaign backup (zip) ── -->
+    <h2 style="margin-top:24px;">Full campaign backup</h2>
+    <p class="muted">
+        A complete <code>.zip</code> archive of this campaign — characters,
+        maps, tokens, encounters, playlists, handouts, notes, homebrew, and
+        every uploaded media file. Re-import it to create a brand-new copy on
+        this or another instance.
+    </p>
+    <div class="playlist-card" style="margin-top:14px;">
+        <div class="playlist-body">
+            <h3 style="margin-top:0;font-size:14px;">Export backup</h3>
+            <p class="muted" style="font-size:12px;margin:0 0 10px;">
+                Builds the archive in the background; a progress toast shows
+                each stage, then the download starts automatically.
+            </p>
+            <button type="button" id="campaign-backup-btn">⬇ Download full backup (.zip)</button>
+            <div id="campaign-backup-status" style="margin-top:10px;font-size:12px;"></div>
+        </div>
+    </div>
+    <div class="playlist-card" style="margin-top:14px;">
+        <div class="playlist-body">
+            <h3 style="margin-top:0;font-size:14px;">Import backup (clone)</h3>
+            <p class="muted" style="font-size:12px;margin:0 0 10px;">
+                Upload a campaign <code>.zip</code> to create a brand-new copy
+                (fresh ids + media). Needs the GM role.
+            </p>
+            <input type="file" id="campaign-import-file" accept="application/zip,.zip">
+            <button type="button" id="campaign-import-btn" style="margin-left:8px;">↑ Import as new campaign</button>
+            <div id="campaign-import-status" style="margin-top:10px;font-size:12px;"></div>
+        </div>
+    </div>
 </section>
 
 <!-- ── Danger zone (admin only) ── -->
@@ -3635,6 +3667,119 @@ document.querySelectorAll('.tmpl-card[data-tmpl-id]').forEach(card => {
         } catch (e) {
             statusEl.style.color = 'var(--danger)';
             statusEl.textContent = '✕ ' + e.message;
+        } finally {
+            impBtn.disabled = false;
+        }
+    });
+})();
+</script>
+
+<script>
+/* ── Full campaign backup: export (job + progress toast) + import (clone) ──
+   The campaign export is a background job: POST kicks it off, we poll the
+   job-status endpoint and surface stage/progress in a self-contained toast
+   (action_buttons.js's showToast isn't loaded on this page), then fetch the
+   finished zip as a blob and trigger the download. Import (clone) uploads a
+   campaign .zip to /api/campaign/import and links to the new campaign. */
+(function () {
+    const _cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
+    if (!_cid) return;
+
+    // Self-contained progress toast (bottom-center), reused across updates.
+    let _toast = null;
+    function toast(msg, kind) {
+        if (!_toast) {
+            _toast = document.createElement('div');
+            _toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);'
+                + 'background:#1d2128;color:#e6e9ef;border-left:4px solid #6ea8fe;border-radius:8px;'
+                + 'padding:12px 16px;font:14px system-ui,-apple-system,sans-serif;'
+                + 'box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:9999;max-width:90vw;';
+            document.body.appendChild(_toast);
+        }
+        _toast.style.borderLeftColor = kind === 'error' ? '#e06c75' : (kind === 'success' ? '#7cb87c' : '#6ea8fe');
+        _toast.textContent = msg;
+        _toast.style.display = 'block';
+    }
+    function dismissToastSoon() {
+        if (_toast) setTimeout(() => { if (_toast) _toast.style.display = 'none'; }, 4000);
+    }
+
+    async function pollJob(jobId) {
+        for (let i = 0; i < 600; i++) {
+            const r = await fetch('/api/export-jobs/' + jobId);
+            if (!r.ok) throw new Error('status HTTP ' + r.status);
+            const s = await r.json();
+            toast(`Building backup… ${s.stage || ''} ${s.progress || 0}%`, 'info');
+            if (s.status === 'done') return s;
+            if (s.status === 'error') throw new Error(s.error || 'export failed');
+            await new Promise(res => setTimeout(res, 1000));
+        }
+        throw new Error('export timed out');
+    }
+
+    const backupBtn = document.getElementById('campaign-backup-btn');
+    if (backupBtn) backupBtn.addEventListener('click', async () => {
+        backupBtn.disabled = true;
+        const orig = backupBtn.textContent;
+        backupBtn.textContent = '⏳ Starting…';
+        try {
+            toast('Starting campaign backup…', 'info');
+            const r = await fetch('/api/campaign/' + _cid + '/export', { method: 'POST' });
+            if (!r.ok) {
+                let detail = '';
+                try { detail = (await r.json()).detail || ''; } catch {}
+                throw new Error(detail || ('HTTP ' + r.status));
+            }
+            const { job_id } = await r.json();
+            const done = await pollJob(job_id);
+            toast('Downloading…', 'info');
+            const dl = await fetch(done.download_url);
+            if (!dl.ok) throw new Error('download HTTP ' + dl.status);
+            const blob = await dl.blob();
+            const cd = dl.headers.get('content-disposition') || '';
+            const m = cd.match(/filename="?([^"]+)"?/);
+            const a = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            a.href = url;
+            a.download = (m && m[1]) || ('simplevtt-campaign-' + _cid + '.zip');
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            toast('✓ Backup downloaded', 'success');
+            dismissToastSoon();
+        } catch (e) {
+            toast('✕ Backup failed: ' + e.message, 'error');
+            dismissToastSoon();
+        } finally {
+            backupBtn.disabled = false; backupBtn.textContent = orig;
+        }
+    });
+
+    const impBtn = document.getElementById('campaign-import-btn');
+    const impFile = document.getElementById('campaign-import-file');
+    const impStatus = document.getElementById('campaign-import-status');
+    if (impBtn) impBtn.addEventListener('click', async () => {
+        const file = impFile && impFile.files && impFile.files[0];
+        if (!file) { impStatus.textContent = 'Pick a .zip file first.'; impStatus.style.color = 'var(--danger)'; return; }
+        impBtn.disabled = true;
+        impStatus.style.color = 'var(--fg-mute)';
+        impStatus.textContent = 'Uploading + importing…';
+        try {
+            const fd = new FormData();
+            fd.append('file', file);
+            fd.append('mode', 'clone');
+            const r = await fetch('/api/campaign/import', { method: 'POST', body: fd });
+            if (!r.ok) {
+                let detail = '';
+                try { detail = (await r.json()).detail || ''; } catch {}
+                throw new Error(detail || ('HTTP ' + r.status));
+            }
+            const res = await r.json();
+            impStatus.style.color = '#7cb87c';
+            impStatus.innerHTML = `✓ Imported as new campaign #${res.campaign_id}. `
+                + `<a href="/campaign/${res.campaign_id}" style="color:#6cb;">Open it →</a>`;
+        } catch (e) {
+            impStatus.style.color = 'var(--danger)';
+            impStatus.textContent = '✕ ' + e.message;
         } finally {
             impBtn.disabled = false;
         }
