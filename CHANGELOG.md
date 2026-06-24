@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.630.5] - 2026-06-24 — "The Visible Numbers"
+
+**Schema version:** 80
+
+**Commit summary:** Wiki landing page — keep the SRD automation-coverage *table* always visible; collapse only the long explainer prose below it behind a click.
+
+**Description:** Refines v2.630.4: instead of collapsing the whole SRD-coverage section, the heading + the per-category coverage **table** are now always shown, and only the ~30-line explanatory paragraph beneath the table is wrapped in a `<details>` ("Detailed breakdown & notes — overall ~97% · click to expand"). So the at-a-glance numbers are visible on load, with the prose one click away.
+
+### Changed
+- `app/templates/wiki.html`: the SRD-coverage heading + table render normally; the explainer paragraph below the table is the collapsed `<details class="srd-coverage">`.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_wiki.py::test_wiki_home_renders` (unchanged assertions still hold) — the SRD heading + `id="srd-coverage"`, and the `<details class="srd-coverage">` + `<summary>` (now wrapping the explainer) all render.
+
 ## [2.630.4] - 2026-06-24 — "The Folded Coverage"
 
 **Schema version:** 80
