@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.614.0] - 2026-06-24 — "The Strongbox"
+
+**Schema version:** 80
+
+**Commit summary:** Phase 4 — whole-campaign zip export as a background job: `POST /api/campaign/{cid}/export` → poll `GET /api/export-jobs/{id}` → download a `simplevtt-export` archive (manifest + `data/*.json` tree + bundled `media/`). Wires the Phase 2 primitives to assemble the full campaign tree.
+
+**Description:** [Backup/export-import overhaul](docs/plans/backup-export-overhaul.md) Phase 4 — the first whole-campaign archive. A campaign zip can bundle tens of MB of media, so the build runs as a background job rather than a blocking response:
+
+- `POST /api/campaign/{campaign_id}/export` — GM only; registers a job and returns `{job_id, status}`, kicking the build off as a FastAPI `BackgroundTask`. Rate-limited per campaign (`EXPORT_COOLDOWN_CAMPAIGN_SECONDS`, default 300 s) via the Phase 1 limiter, bypassed under TEST_MODE.
+- `GET /api/export-jobs/{job_id}` — poll `{status, progress, stage, error, download_url}`. 404 unknown, 403 if it isn't the caller's job (job ids are random tokens, but ownership is enforced anyway). Sweeps expired jobs on each poll.
+- `GET /api/export-jobs/{job_id}/download` — streams the finished zip (`FileResponse`, `application/zip`); 409 until done, 403 for non-owners.
+
+New modules:
+- **`app/export_jobs.py`** — in-memory job registry (single-container module-level dict + lock, the same rationale as `export_limit`): `new_job` / `get` / `update` / `finish` / `fail` / `sweep`. Finished jobs (and their staged zips) are reclaimed after `EXPORT_JOB_TTL_SECONDS` (default 30 min). The public poll view never leaks the on-disk staging path or owner id.
+- **`app/export_campaign.py`** — the campaign data-tree assembly (deferred from Phase 2): walks campaign → characters / maps / tokens / token_templates / encounters / playlists+tracks / notes / handouts / dice_rolls (each via `export_bundle.row_to_dict`) + embeds the `simplevtt-homebrew` pack (so the archive's homebrew round-trips through `/homebrew/import`), collects the referenced `/static/uploads/...` media via `find_media_urls`, and writes the zip with `write_bundle_zip`. `run_campaign_export_job` is the background entry point — it opens its own DB session (the request's is closed once the POST responds), drives the job's progress/stage, and reports failures through the registry instead of crashing the worker.
+
+The archive layout matches the Phase 0 manifest spec (`manifest.level = "campaign"`, `source_campaign_id`, `counts`, `media_manifest`). Demo-asset references under `/static/demo/...` are intentionally left as references (they exist on every instance); only true `/static/uploads/...` user media is bundled. The importer that re-places these archives lands in Phases 6–7.
+
+### Added
+- `POST /api/campaign/{cid}/export`, `GET /api/export-jobs/{id}`, `GET /api/export-jobs/{id}/download` — job-based whole-campaign zip export.
+- `app/export_jobs.py` (job registry) and `app/export_campaign.py` (campaign bundle assembly + background build).
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_export_campaign.py` (new, +2) — `test_export_job_unknown_404` (always runs, no POST); `test_campaign_export_round_trip_and_auth` starts an export, asserts a non-owner is 403 on both poll + download, polls to `done`, downloads the zip and inspects it (`manifest.json` with `level=campaign` + `source_campaign_id` + `counts.characters ≥ 1`, `data/campaign.json` is the campaign row, `data/homebrew.json` present). The POST-driven test skips on a 429 so the live per-campaign cooldown doesn't flake a non-TEST_MODE stack.
+
 ## [2.613.0] - 2026-06-24 — "The Single Specimen"
 
 **Schema version:** 80

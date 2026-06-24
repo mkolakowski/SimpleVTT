@@ -16,6 +16,7 @@ from typing import Optional
 
 from fastapi import (
     APIRouter,
+    BackgroundTasks,
     Depends,
     File,
     Form,
@@ -26,7 +27,7 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from .. import dice as dice_mod
@@ -15584,6 +15585,100 @@ def export_homebrew_item(
         "exported_at": _dt.utcnow().isoformat() + "Z",
         key: [projector(rec)],
     }
+
+
+# ── Campaign-level zip export (job-based) ───────────────────────────────────
+# Backup/export-import arc Phase 4. A whole-campaign archive bundles tens of MB
+# of media, so it runs as a background job: POST starts it + returns a job id,
+# the client polls the status endpoint, then downloads the finished zip.
+
+@router.post("/api/campaign/{campaign_id}/export")
+def start_campaign_export(
+    campaign_id: int,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Kick off a full-campaign ``simplevtt-export`` zip build. GM only.
+    Returns ``{job_id, status}``; poll ``GET /api/export-jobs/{job_id}``.
+
+    Rate-limited per campaign (``EXPORT_COOLDOWN_CAMPAIGN_SECONDS``, default
+    300s) and bypassed under TEST_MODE."""
+    _require_gm_for_campaign(campaign_id, user, db)
+
+    from .. import export_jobs
+    from ..export_campaign import run_campaign_export_job
+    from ..export_limit import mark as _export_mark, remaining_for as _export_remaining
+    from ..version import APP_VERSION, SCHEMA_VERSION
+
+    _tm = os.environ.get("TEST_MODE", "").strip().lower() in ("1", "true", "yes", "on")
+    if not _tm:
+        remaining = _export_remaining("campaign", campaign_id, now=_time.monotonic())
+        if remaining > 0:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Export requested too recently. Try again in {remaining} seconds.",
+                headers={"Retry-After": str(remaining)},
+            )
+
+    job = export_jobs.new_job(user.id, now=_time.monotonic())
+    exported_at = datetime.utcnow().isoformat() + "Z"
+    background.add_task(
+        run_campaign_export_job,
+        job.job_id,
+        campaign_id,
+        app_version=APP_VERSION,
+        schema_version=SCHEMA_VERSION,
+        exported_at=exported_at,
+    )
+    if not _tm:
+        _export_mark("campaign", campaign_id, now=_time.monotonic())
+    return {"job_id": job.job_id, "status": job.status}
+
+
+@router.get("/api/export-jobs/{job_id}")
+def export_job_status(
+    job_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Poll an export job. 404 if unknown, 403 if it isn't the caller's job
+    (the job id is a random token, but ownership is still enforced)."""
+    from .. import export_jobs
+
+    export_jobs.sweep(now=_time.monotonic())
+    job = export_jobs.get(job_id)
+    if job is None:
+        raise HTTPException(404, "Unknown export job.")
+    if job.owner_user_id != user.id:
+        raise HTTPException(403, "Not your export job.")
+    return job.public()
+
+
+@router.get("/api/export-jobs/{job_id}/download")
+def export_job_download(
+    job_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Stream a finished export zip. 404 unknown, 403 not-owner, 409 if the
+    job isn't done yet (or its staged file is gone)."""
+    from .. import export_jobs
+
+    job = export_jobs.get(job_id)
+    if job is None:
+        raise HTTPException(404, "Unknown export job.")
+    if job.owner_user_id != user.id:
+        raise HTTPException(403, "Not your export job.")
+    if job.status != "done" or not job.zip_path:
+        raise HTTPException(409, f"Export not ready (status: {job.status}).")
+    if not os.path.isfile(job.zip_path):
+        raise HTTPException(409, "Export file is no longer available; re-run the export.")
+    return FileResponse(
+        job.zip_path,
+        media_type="application/zip",
+        filename=job.filename or f"simplevtt-export-{job_id}.zip",
+    )
 
 
 @router.get("/api/campaign/{campaign_id}/homebrew/template")
