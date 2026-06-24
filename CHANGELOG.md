@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.612.4] - 2026-06-24 — "The Blueprint Vault"
+
+**Schema version:** 80
+
+**Commit summary:** Phase 0 — design plan for the backup / export-import overhaul (zip exports at PC / campaign / homebrew-item levels, clone-or-restore importer, export rate-limit, progress toast, Admin Center backup settings, demo-mode backup skip), surfaced through the wiki.
+
+**Description:** Opens the [backup/export-import overhaul](docs/plans/backup-export-overhaul.md) arc. SimpleVTT currently has two disconnected backup stories — an operator `pg_dump` sidecar configured purely by env (no UI), and a thin user-facing export surface (GDPR JSON + homebrew pack, no whole-campaign or per-character archive, no media bundled, no importer). This Phase 0 commit lands the design plan only: no behavior change. The plan specifies a `simplevtt-export` zip envelope (`manifest.json` + `data/` + bundled `media/`) at three levels, a clone-vs-restore importer that refactors the demo-loader's wipe/seed helpers (`app/campaign_wipe.py`, reused by `demo_seed.wipe()`), a generalized per-scope export rate-limiter (extracted from `app/user_export.py`), an in-memory export-job registry driving a progress toast, item-level homebrew export, and operator backup settings in the Admin Center via a `backup-settings.json` file on the shared `backup_data` volume that the sidecar watch-loops. Automated backups are disabled when `DEMO_MODE=true` (the demo reseeds hourly, so scheduled dumps are pure churn). Per the doc-surfacing rule the plan is reachable at `/wiki/doc/plan-backup-export-overhaul`.
+
+### Added
+- `docs/plans/backup-export-overhaul.md` design plan (Phase 0); surfaced through the wiki (`_DOC_ALLOWLIST` + landing-page table + `docs/wiki/README.md`).
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_wiki.py::test_wiki_doc_serves_backup_export_overhaul_plan` (+1) asserts `/wiki/doc/plan-backup-export-overhaul` returns 200 with the plan H1 + nav menu, plus the `test_wiki_home_renders` landing-page assertion for the new design-plans row.
+
 ## [2.612.3] - 2026-06-23 — "The Seeded Battle"
 
 **Schema version:** 80

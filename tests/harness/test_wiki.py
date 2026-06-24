@@ -111,6 +111,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-campaign-pc-archive" in resp.text
     # v2.610.1: pending-resolution state machine plan listed.
     assert "/wiki/doc/plan-pending-resolution-state-machine" in resp.text
+    # v2.612.4: backup / export-import overhaul plan listed.
+    assert "/wiki/doc/plan-backup-export-overhaul" in resp.text
     assert "/wiki/doc/plan-movement-and-summons" in resp.text
     # v2.99.447: automation-coverage audit doc listed in the references table.
     assert "/wiki/doc/automation-coverage" in resp.text
@@ -549,6 +551,22 @@ async def test_wiki_doc_serves_campaign_pc_archive_plan():
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "archive" in resp.text.lower() and "retire" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_backup_export_overhaul_plan():
+    """v2.612.4: GET /wiki/doc/plan-backup-export-overhaul — 200 + body
+    contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/backup-export-overhaul.md``. Phase 0
+    of the backup/export-import arc: zip exports at PC / campaign /
+    homebrew-item levels, a clone-or-restore importer, export rate-limit,
+    a progress toast, and operator backup settings in the Admin Center.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-backup-export-overhaul")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "backup" in resp.text.lower() and "export-import" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 
