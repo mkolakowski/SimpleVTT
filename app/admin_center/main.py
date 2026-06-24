@@ -720,7 +720,7 @@ def _restore_allowed(request: Request) -> bool:
 
 
 @app.get("/backups", response_class=HTMLResponse)
-def backups_page(request: Request, saved: str = "", ran: str = "", err: str = "", restored: str = ""):
+def backups_page(request: Request, saved: str = "", ran: str = "", err: str = "", restored: str = "", deleted: str = ""):
     """Backup schedule + retention editor, backup listing (download + restore),
     and run-now. Opt-in via ADMIN_CENTER_ADMIN_TOOLS; auto-gated by the auth
     middleware."""
@@ -744,8 +744,26 @@ def backups_page(request: Request, saved: str = "", ran: str = "", err: str = ""
             "ran": ran,
             "err": err,
             "restored": restored,
+            "deleted": deleted,
         },
     )
+
+
+@app.post("/backups/delete")
+def backups_delete(request: Request, bucket: str = Form(...), ts: str = Form(...)):
+    """Delete a backup run's artifacts (the dump + tarballs + tag). Opt-in via
+    ADMIN_CENTER_ADMIN_TOOLS; confirmed client-side before posting. Operates on
+    existing files, so it's allowed regardless of demo mode (unlike taking a new
+    backup)."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    from . import backup_admin
+    n = backup_admin.delete_backup(bucket, ts)
+    if not n:
+        return RedirectResponse("/backups?err=Backup+not+found", status_code=303)
+    log.warning("admin-center operator %r deleted backup %s/%s (%d files)",
+                request.session.get("admin_user", "?"), bucket, ts, n)
+    return RedirectResponse(f"/backups?deleted={quote(ts)}", status_code=303)
 
 
 @app.post("/backups/restore")

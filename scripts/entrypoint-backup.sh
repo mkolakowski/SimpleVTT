@@ -32,13 +32,16 @@ json_field() {
     sed -n "s/.*\"$2\"[[:space:]]*:[[:space:]]*\"\{0,1\}\([^\",}]*\)\"\{0,1\}.*/\1/p" "$1" 2>/dev/null | head -n1
 }
 
-mkdir -p "${BACKUP_DIR}" /var/log
+mkdir -p "${BACKUP_DIR}/daily" "${BACKUP_DIR}/weekly" /var/log
 # v2.630.7: the Admin Center process (runs as appuser) drops control files into
 # ${BACKUP_DIR} — the run-now / restore-request triggers + backup-settings.json.
 # This sidecar created the dir as root, so make it sticky world-writable (like
-# /tmp) so those writes don't fail with EACCES; root still owns + prunes the
-# artifacts under daily/ + weekly/. Without this, "Back up now" 500s.
+# /tmp) so those writes don't fail with EACCES. Without this, "Back up now" 500s.
+# v2.632.0: the artifact dirs are world-writable (no sticky) so the Admin Center
+# (appuser) can also DELETE backups the sidecar wrote as root. Internal volume,
+# operator-gated — same trust boundary as the restore trigger.
 chmod 1777 "${BACKUP_DIR}" 2>/dev/null || true
+chmod 0777 "${BACKUP_DIR}/daily" "${BACKUP_DIR}/weekly" 2>/dev/null || true
 touch /var/log/backup.log
 
 # ── Demo mode: do nothing but idle ──────────────────────────────────────────

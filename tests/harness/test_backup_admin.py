@@ -204,6 +204,24 @@ def test_tags_surface_and_restore_request(tmp_path, monkeypatch):
     assert backup_admin.request_restore("daily", stem, requested_by="x", now_iso="t") is False
 
 
+def test_delete_backup(tmp_path, monkeypatch):
+    monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
+    (tmp_path / "daily").mkdir()
+    stem = "2026-06-24_210306_manual"
+    for suf in (".sql.gz", ".homebrew.tar.gz", ".uploads.tar.gz"):
+        (tmp_path / "daily" / f"{stem}{suf}").write_bytes(b"x")
+    (tmp_path / "daily" / f"{stem}.tag").write_text("manual", encoding="utf-8")
+
+    # Removes the three artifacts + the tag.
+    assert backup_admin.delete_backup("daily", stem) == 4
+    assert list((tmp_path / "daily").glob(f"{stem}*")) == []
+    # Deleting an already-gone run removes nothing.
+    assert backup_admin.delete_backup("daily", stem) == 0
+    # Bad bucket / traversal stem → nothing removed.
+    assert backup_admin.delete_backup("evil", stem) == 0
+    assert backup_admin.delete_backup("daily", "../../etc") == 0
+
+
 def test_request_restore_rejects_unknown_and_reads_result(tmp_path, monkeypatch):
     monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
     (tmp_path / "daily").mkdir()

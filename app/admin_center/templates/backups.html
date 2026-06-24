@@ -15,6 +15,7 @@
   {% if saved %}<div class="banner ok">✓ Backup settings saved. The sidecar picks them up within ~60s.</div>{% endif %}
   {% if ran %}<div class="banner ok">✓ On-demand backup triggered.</div>{% endif %}
   {% if demo_override %}<div class="banner ok">🧪 <strong>Demo mode — backups enabled for testing</strong> (<code>DEMO_BACKUPS_ENABLED=true</code>). The schedule, <strong>Back up now</strong>, download, and restore controls below are live. Heads-up: this is a demo instance that reseeds hourly, so an edited schedule or a restore won't survive the next reset.</div>{% endif %}
+  {% if deleted %}<div class="banner ok">🗑 Backup <code>{{ deleted }}</code> deleted.</div>{% endif %}
   {% if restored %}<div class="banner ok">♻️ Restore of <code>{{ restored }}</code> queued. The sidecar takes a safety backup first, then overwrites the database + media — this can take a minute and briefly disrupts the app.</div>{% endif %}
   {% if restore_pending %}<div class="banner err">⏳ A restore is in progress — the app may be briefly disrupted. Refresh in a moment.</div>{% endif %}
   {% if last_restore %}<div class="banner {{ 'ok' if last_restore.ok else 'err' }}">{% if last_restore.ok %}✓ Last restore: <code>{{ last_restore.ts }}</code> at {{ last_restore.at }} (db_ok={{ last_restore.db_ok }}).{% else %}⚠️ Last restore failed: {{ last_restore.error }} (<code>{{ last_restore.ts }}</code>).{% endif %}</div>{% endif %}
@@ -91,6 +92,12 @@
                   <button type="submit" {{ 'disabled' if restore_pending else '' }}>♻ Restore</button>
                 </form>
                 {% endif %}
+                <form method="post" action="/backups/delete" style="margin:0"
+                      onsubmit="return confirm('Delete backup {{ b.ts }}?\n\nThis permanently removes its database dump + homebrew + uploads files. This cannot be undone.');">
+                  <input type="hidden" name="bucket" value="{{ bucket }}">
+                  <input type="hidden" name="ts" value="{{ b.ts }}">
+                  <button type="submit" class="danger">🗑 Delete</button>
+                </form>
               </td>
             </tr>
             {% endfor %}

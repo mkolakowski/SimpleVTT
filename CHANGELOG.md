@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.632.0] - 2026-06-24 — "The Recycle Bin"
+
+**Schema version:** 80
+
+**Commit summary:** Add a per-backup **🗑 Delete** button on the Admin Center `/backups` page (with a confirm dialog) that removes a backup run's artifacts.
+
+**Description:** Each backup row gets a **🗑 Delete** button next to Download / Restore. Clicking it pops a `confirm()` ("Delete backup <ts>? This permanently removes its database dump + homebrew + uploads files. This cannot be undone.") before posting to the new `POST /backups/delete`, which removes the run's three artifacts + its `.tag`.
+
+`backup_admin.delete_backup(bucket, ts)` resolves the run's files through the existing `backup_files_for` (allowlisted bucket + `_TS_RE` stem + must-exist) and unlinks them — traversal-proof. Allowed regardless of demo mode (it only touches existing files; a new backup is the demo-gated action).
+
+**Permissions:** the artifacts are written by the sidecar as root, but the Admin Center runs as `appuser`, which couldn't delete them in the `0755 root` artifact dirs. `scripts/entrypoint-backup.sh` now `chmod 0777` the `daily/`/`weekly/` dirs on startup so `appuser` can delete root-owned backups (the internal backup volume, operator-gated — the same trust boundary as the restore trigger).
+
+### Added
+- `POST /backups/delete` + `backup_admin.delete_backup`; the per-row 🗑 Delete button (confirmed).
+- The sidecar makes `daily/`/`weekly/` world-writable so the Admin Center can delete artifacts.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_backup_admin.py::test_delete_backup` (+1) — deletes a run's three artifacts + tag (returns 4), a second delete removes nothing, and a bad bucket / traversal stem removes nothing.
+
 ## [2.631.1] - 2026-06-24 — "The Full Clock"
 
 **Schema version:** 80

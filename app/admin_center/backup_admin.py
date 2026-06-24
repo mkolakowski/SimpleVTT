@@ -296,6 +296,29 @@ def last_restore_result() -> Optional[dict]:
         return None
 
 
+def delete_backup(bucket: str, ts: str) -> int:
+    """Delete a backup run's artifacts (the three tarballs/dump + its ``.tag``)
+    for ``(bucket, ts)``. Returns the number of files removed. Traversal-safe:
+    the artifact paths come through ``backup_files_for`` (allowlisted bucket +
+    ``_TS_RE`` stem + must-exist), and the ``.tag`` sibling is name-validated."""
+    removed = 0
+    for p in backup_files_for(bucket, ts):
+        try:
+            p.unlink()
+            removed += 1
+        except OSError:
+            pass
+    if bucket in ("daily", "weekly") and _TS_RE.match(ts or ""):
+        tag = backups_dir() / bucket / f"{ts}.tag"
+        try:
+            if tag.is_file():
+                tag.unlink()
+                removed += 1
+        except OSError:
+            pass
+    return removed
+
+
 def _tag_for(bucket: str, ts: str) -> Optional[str]:
     """The optional note written alongside a backup run (e.g. a pre-restore
     safety backup), or None. Stored as a sibling ``simplevtt-<ts>.tag`` file."""
