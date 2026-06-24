@@ -46,6 +46,9 @@ def _campaign_zip(level="campaign"):
             {"id": 90, "kind": "gm_note", "visibility": "gm_only", "title": "Prep", "body": "plan", "is_encrypted": False},
             {"id": 91, "is_encrypted": True, "enc_title": "opaque", "enc_body": "opaque"},
         ]))
+        zf.writestr("data/homebrew.json", json.dumps(
+            {"format": "simplevtt-homebrew", "version": 1,
+             "feats": [{"feat_slug": "clone-feat", "name": "Clone Feat", "prerequisite": "", "desc": "Test feat."}]}))
     return buf.getvalue()
 
 
@@ -71,6 +74,7 @@ async def test_campaign_import_clone_round_trip(gm_client: httpx.AsyncClient):
     assert counts["handouts"] == 1
     assert counts["notes"] == 1                       # the non-encrypted note
     assert counts["notes_skipped_encrypted"] == 1     # the encrypted one skipped
+    assert counts["homebrew_created"] == 1            # the embedded homebrew feat
     try:
         # The cloned character lives in the NEW campaign's roster.
         r = await gm_client.get(f"/api/campaign/{nc}/roster")

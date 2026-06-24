@@ -10,11 +10,11 @@ with **new** ids — remapping every cross-reference (a token's map / character
 playlist) through old→new id maps built as each tier is created.
 
 Scope: campaign, token_templates, maps, characters, tokens, playlists +
-tracks, encounters (Phase 6b); handouts + non-encrypted notes (Phase 6c).
-Still deferred: dice-roll history and writing the embedded homebrew pack into
-the new campaign's scope (Phase 6d — needs the homebrew-import logic factored
-out of the route). All inserts are one transaction; on failure the extracted
-media is unlinked so a failed import leaves nothing behind.
+tracks, encounters (Phase 6b); handouts + non-encrypted notes (Phase 6c); the
+embedded homebrew pack (Phase 6d, written after commit via the route's shared
+``apply_homebrew_pack``). Only dice-roll history is intentionally not cloned
+(low-value, user-FK ambiguity). The DB inserts are one transaction; on failure
+the extracted media is unlinked so a failed import leaves nothing behind.
 """
 from __future__ import annotations
 
@@ -294,8 +294,24 @@ def clone_campaign(
         counts["notes_skipped_encrypted"] = note_skipped
 
         db.commit()
-        return {"campaign_id": nc, "counts": counts}
     except Exception:
         db.rollback()
         ib.cleanup_extracted(url_map, uploads_root=uploads_root)
         raise
+
+    # Homebrew pack — written to the filesystem AFTER the DB commit (mirrors
+    # reset_and_reseed), reusing the route's apply logic via a lazy import to
+    # avoid an import cycle. Isolated in its own try so a homebrew hiccup never
+    # triggers the media-cleanup path above (the rows are already committed).
+    counts["homebrew_created"] = 0
+    try:
+        if _has(zf, "data/homebrew.json"):
+            pack = ib.read_json(zf, "data/homebrew.json")
+            if isinstance(pack, dict):
+                from .routes.tabletop_routes import apply_homebrew_pack
+                hb = apply_homebrew_pack(nc, pack, owner_user_id=owner_user_id)
+                counts["homebrew_created"] = hb.get("totals", {}).get("created", 0)
+    except Exception:
+        log.exception("clone campaign %s: homebrew apply failed", nc)
+
+    return {"campaign_id": nc, "counts": counts}

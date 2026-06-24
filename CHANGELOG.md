@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.619.0] - 2026-06-24 — "The Grimoire Copied"
+
+**Schema version:** 80
+
+**Commit summary:** Phase 6d — the campaign-clone importer now re-creates the embedded homebrew pack in the cloned campaign; the route's homebrew-import logic is factored into a shared `apply_homebrew_pack` reused by both the endpoint and the clone. Completes the campaign clone.
+
+**Description:** [Backup/export-import overhaul](docs/plans/backup-export-overhaul.md) Phase 6d — the last campaign-clone slice. The `import_homebrew` endpoint's ~300-line per-type apply (classes / subclasses / races / monsters / backgrounds / feats → `local_content.write_homebrew`) is extracted **verbatim** into a module-level `apply_homebrew_pack(campaign_id, body, *, owner_user_id) -> stats` (no DB — pure filesystem writes); the endpoint is now a thin wrapper that does auth + format/version validation and delegates. Behavior is unchanged (add-only, slug-dedup, per-type error isolation, same `{ok, stats, totals}` return).
+
+`clone_campaign` calls `apply_homebrew_pack(new_campaign_id, pack, owner_user_id=importer)` for the archive's `data/homebrew.json`, **after** the DB commit (mirrors `reset_and_reseed`, which writes homebrew files post-commit) and isolated in its own try so a homebrew hiccup can never trigger the media-cleanup-on-rollback path for already-committed rows. With this, a cloned campaign carries its custom classes/monsters/feats too.
+
+Only **dice-roll history** is now intentionally not cloned (low-value, user-FK ambiguity); everything else in a campaign archive round-trips.
+
+### Added
+- `apply_homebrew_pack` — reusable homebrew-pack applier; `clone_campaign` writes the cloned campaign's homebrew via it.
+
+### Changed
+- `import_homebrew` (the `/homebrew/import` endpoint) is now a thin wrapper over `apply_homebrew_pack` (no behavior change).
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_import_campaign.py` — the synthetic campaign archive now embeds a `simplevtt-homebrew` pack (one feat); the round-trip asserts `counts.homebrew_created == 1`. The existing `/homebrew/import` endpoint tests (`test_export_homebrew_item.py` round-trips, etc.) still pass against the refactored wrapper. FK-remap + handout/note + error-path assertions unchanged.
+
 ## [2.618.0] - 2026-06-24 — "The Sealed Letters"
 
 **Schema version:** 80

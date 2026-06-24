@@ -15920,31 +15920,15 @@ def _safe_str(v, max_len: int = 500) -> str:
     return s[:max_len]
 
 
-@router.post("/api/campaign/{campaign_id}/homebrew/import")
-async def import_homebrew(
-    campaign_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_user),
-):
-    """Bulk-import homebrew rows from a JSON pack (matching the
-    ``/homebrew/export`` shape).
+def apply_homebrew_pack(campaign_id: int, body: dict, *, owner_user_id: int) -> dict:
+    """Apply a ``simplevtt-homebrew`` pack to a campaign's homebrew scope.
 
-    Rows whose slug already exists in this campaign are silently skipped
-    so re-importing a pack you've already pulled in is a no-op. Each
-    content type is processed independently — a malformed entry in one
-    list doesn't kill the rest of the import. Returns per-type counts of
-    ``created`` / ``skipped`` / ``errors`` so the GM can see what landed.
+    Shared by the ``/homebrew/import`` endpoint and the campaign-clone importer
+    (backup/export-import arc Phase 6d). Add-only: a row whose slug already
+    exists in the campaign is skipped. Each content type is processed
+    independently — a malformed entry doesn't kill the rest. Pure filesystem
+    writes (no DB); returns per-type + total created/skipped/errors counts.
     """
-    _require_gm_for_campaign(campaign_id, user, db)
-    body = await request.json()
-    if not isinstance(body, dict):
-        raise HTTPException(400, "Expected a JSON object — the export format root.")
-    if body.get("format") and body["format"] != "simplevtt-homebrew":
-        raise HTTPException(400, "Wrong format — expected ``simplevtt-homebrew``.")
-    if body.get("version") and int(body.get("version", 0)) > HOMEBREW_EXPORT_VERSION:
-        raise HTTPException(400, f"Pack version {body.get('version')} is newer than this server supports ({HOMEBREW_EXPORT_VERSION}). Upgrade first.")
-
     stats: dict[str, dict] = {
         k: {"created": 0, "skipped": 0, "errors": 0}
         for k in ("classes", "subclasses", "races", "monsters", "backgrounds", "feats")
@@ -16014,7 +15998,7 @@ async def import_homebrew(
                     "system": "dnd5e",
                     "scope": f"campaign-{campaign_id}",
                     "source": "homebrew",
-                    "owner": user.id,
+                    "owner": owner_user_id,
                 },
                 type="class_features",
                 scope=f"campaign-{campaign_id}",
@@ -16049,7 +16033,7 @@ async def import_homebrew(
                     "system": "dnd5e",
                     "scope": f"campaign-{campaign_id}",
                     "source": "homebrew",
-                    "owner": user.id,
+                    "owner": owner_user_id,
                 },
                 type="subclass_features",
                 scope=f"campaign-{campaign_id}",
@@ -16086,7 +16070,7 @@ async def import_homebrew(
                     "system": "dnd5e",
                     "scope": f"campaign-{campaign_id}",
                     "source": "homebrew",
-                    "owner": user.id,
+                    "owner": owner_user_id,
                 },
                 type="races",
                 scope=f"campaign-{campaign_id}",
@@ -16162,7 +16146,7 @@ async def import_homebrew(
                     "system": "dnd5e",
                     "scope": f"campaign-{campaign_id}",
                     "source": "homebrew",
-                    "owner": user.id,
+                    "owner": owner_user_id,
                 },
                 type="monsters",
                 scope=f"campaign-{campaign_id}",
@@ -16199,7 +16183,7 @@ async def import_homebrew(
                     "system": "dnd5e",
                     "scope": f"campaign-{campaign_id}",
                     "source": "homebrew",
-                    "owner": user.id,
+                    "owner": owner_user_id,
                 },
                 type="backgrounds",
                 scope=f"campaign-{campaign_id}",
@@ -16232,7 +16216,7 @@ async def import_homebrew(
                     "system": "dnd5e",
                     "scope": f"campaign-{campaign_id}",
                     "source": "homebrew",
-                    "owner": user.id,
+                    "owner": owner_user_id,
                 },
                 type="feats",
                 scope=f"campaign-{campaign_id}",
@@ -16241,13 +16225,37 @@ async def import_homebrew(
         except Exception:
             stats["feats"]["errors"] += 1
 
-    db.commit()
     totals = {
         "created": sum(s["created"] for s in stats.values()),
         "skipped": sum(s["skipped"] for s in stats.values()),
         "errors":  sum(s["errors"]  for s in stats.values()),
     }
     return {"ok": True, "stats": stats, "totals": totals}
+
+
+@router.post("/api/campaign/{campaign_id}/homebrew/import")
+async def import_homebrew(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Bulk-import homebrew rows from a JSON pack (matching the
+    ``/homebrew/export`` shape). GM only.
+
+    Rows whose slug already exists in this campaign are silently skipped so
+    re-importing a pack you've already pulled in is a no-op. Delegates to the
+    shared ``apply_homebrew_pack`` (also used by the campaign-clone importer).
+    """
+    _require_gm_for_campaign(campaign_id, user, db)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Expected a JSON object — the export format root.")
+    if body.get("format") and body["format"] != "simplevtt-homebrew":
+        raise HTTPException(400, "Wrong format — expected ``simplevtt-homebrew``.")
+    if body.get("version") and int(body.get("version", 0)) > HOMEBREW_EXPORT_VERSION:
+        raise HTTPException(400, f"Pack version {body.get('version')} is newer than this server supports ({HOMEBREW_EXPORT_VERSION}). Upgrade first.")
+    return apply_homebrew_pack(campaign_id, body, owner_user_id=user.id)
 
 
 @router.post("/campaign/{campaign_id}/members/{membership_id}/set_gm")
