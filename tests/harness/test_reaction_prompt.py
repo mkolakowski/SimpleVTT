@@ -3946,6 +3946,89 @@ async def test_cast_silvery_barbs_consumes_slot(
     assert (last.get("rerolled_target_name") or "").lower() == krieger["name"].lower()
 
 
+async def test_cast_silvery_barbs_auto_rolls_reroll(
+    gm_client, gm_ws, roster,
+):
+    """v2.610.0 — Silvery Barbs now auto-rolls the forced reroll
+    server-side (instead of telling the table to roll). The save's d20
+    face + flat bonus are plumbed into the save_resolved context; the
+    handler rolls a new d20, recomputes new_total = save_bonus + new_d20,
+    and reports whether the save now passes or fails. (Applying a
+    now-FAILED save's downstream effect stays GM-narrated.) Asserts the
+    reported reroll is internally consistent: new_total == bonus + new_d20
+    and the verdict matches new_total vs the DC.
+    """
+    thalindra = roster["Thalindra Moonwhisper"]
+    krieger = roster["Krieger Stonefist"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/rest",
+        json={"type": "long"},
+    )
+    thal_cid = f"tok_sbauto_{thalindra['id']}"
+    krieg_cid = f"tok_sbauto_kr_{krieger['id']}"
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+        _make_combatant(thalindra["name"], thalindra["id"], init=10, hp=32),
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    rr = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll_request",
+        json={
+            "label": "STR save", "base_expression": "1d20",
+            "stat_key": "str_save", "dc": 5, "visibility": "public",
+        },
+    )
+    req_id = rr.json()["id"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll_request/{req_id}/respond",
+        json={"character_id": krieger["id"]},
+    )
+    assert resp.status_code == 200, resp.text
+    await asyncio.sleep(0.2)
+
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == thalindra["id"]
+        and (m.get("data") or {}).get("trigger_event") == "save_resolved"
+    ]
+    assert prompts, "expected save_resolved prompt for Thalindra"
+    prompt_id = prompts[-1]["data"]["prompt_id"]
+
+    gm_ws.mark()
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id, "reaction_key": "cast-silvery-barbs",
+            "watcher_char_id": thalindra["id"],
+        },
+    )
+    assert cast.status_code == 200, cast.text
+    await asyncio.sleep(0.2)
+
+    fu = [
+        m["data"] for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "silvery-barbs-cast"
+        and (m.get("data") or {}).get("character_id") == thalindra["id"]
+    ]
+    assert fu, "expected feature_used(source=silvery-barbs-cast)"
+    card = fu[-1]
+    nd = card["new_d20"]
+    nat = card["save_natural"]
+    new_total = card["new_save_total"]
+    verdict = card["new_save_verdict"]
+    dc = card["original_dc"]
+    rolled = card["original_rolled"]
+    assert 1 <= int(nd) <= 20
+    assert nat is not None, "save_natural should be plumbed into the context"
+    # save_bonus = original total − original natural; new_total = bonus + new_d20.
+    assert new_total == int(rolled) - int(nat) + int(nd), (
+        f"new_total {new_total} != bonus({rolled}-{nat}) + new_d20({nd})"
+    )
+    assert verdict == ("fail" if new_total < dc else "pass")
+
+
 async def test_indomitable_emits_reaction_prompt(
     gm_client, gm_ws, roster,
 ):

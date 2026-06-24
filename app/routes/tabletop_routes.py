@@ -22022,6 +22022,19 @@ async def respond_roll_request(
         # Phase 2e auto-fail flips Silvery-Barbs / Chronal-Shift
         # eligibility too.
         _save_passed = bool(_save_passed_final)
+        # v2.610.0 — parse the save's d20 face from the breakdown so the
+        # Silvery Barbs reroll can recompute the new total server-side.
+        _sb_save_natural = None
+        try:
+            _sb_m = _re.search(
+                r"\d*d20[^d=+ ]*=(\d+)",
+                getattr(result, "breakdown", "") or "",
+                _re.IGNORECASE,
+            )
+            if _sb_m:
+                _sb_save_natural = int(_sb_m.group(1))
+        except Exception:
+            _sb_save_natural = None
         try:
             state = hub.get_battle(campaign_id)
             if state:
@@ -22077,6 +22090,14 @@ async def respond_roll_request(
                             "roller_char_id": roller_char_id,
                             "roller_name": roller_name,
                             "roller_combatant_id": roller_combatant_id,
+                            # v2.610.0 — the save's d20 face + flat bonus,
+                            # so cast-silvery-barbs can re-roll the save
+                            # server-side and recompute the new total.
+                            "save_natural": _sb_save_natural,
+                            "save_bonus": (
+                                int(result.total) - _sb_save_natural
+                                if _sb_save_natural is not None else None
+                            ),
                         },
                     )
         except Exception:
@@ -32120,11 +32141,6 @@ async def use_reaction(
             await _mark_battle_economy(
                 campaign_id, int(watcher_char_id), "reaction",
             )
-            roll_hint = ""
-            if isinstance(rolled, int) and isinstance(dc, int):
-                roll_hint = (
-                    f" Original roll: d20 total {rolled} vs DC {dc}."
-                )
             await hub.broadcast(campaign_id, {
                 "type": "spell_slot_update",
                 "data": {
@@ -32135,6 +32151,42 @@ async def use_reaction(
                     "total": total,
                 },
             })
+            # v2.610.0 — auto-roll the Silvery Barbs reroll server-side.
+            # RAW (SCAG/XGE): the target must reroll the d20 and use the
+            # NEW roll (not the lower). Recompute new_total =
+            # save_bonus + new_d20 and report whether the save now passes
+            # or fails. Applying the consequence of a now-FAILED save (the
+            # spell's condition / lost save-for-half) stays GM-narrated —
+            # that spell-specific re-resolution is the pending-state-
+            # machine piece filed for a later slice.
+            _ctx = entry.get("context") or {}
+            _sb_nat = _ctx.get("save_natural")
+            _sb_bonus = _ctx.get("save_bonus")
+            _sb_new_d20 = max(1, int(dice_mod.roll("1d20").total))
+            _sb_new_total = None
+            _sb_verdict = None
+            if _sb_nat is not None and _sb_bonus is not None:
+                _sb_new_total = int(_sb_bonus) + _sb_new_d20
+                if isinstance(dc, int):
+                    _sb_verdict = (
+                        "fail" if _sb_new_total < dc else "pass"
+                    )
+            if _sb_verdict == "fail":
+                _sb_txt = (
+                    f" Rerolled d20 {_sb_new_d20} → new total "
+                    f"{_sb_new_total} vs DC {dc}: the save now FAILS "
+                    f"(GM applies the spell's effect)."
+                )
+            elif _sb_verdict == "pass":
+                _sb_txt = (
+                    f" Rerolled d20 {_sb_new_d20} → new total "
+                    f"{_sb_new_total} vs DC {dc}: the save still PASSES."
+                )
+            else:
+                _sb_txt = (
+                    f" {target_name} must reroll the d20 and use the new "
+                    f"result."
+                )
             await hub.broadcast(campaign_id, {
                 "type": "feature_used",
                 "data": {
@@ -32143,9 +32195,9 @@ async def use_reaction(
                     "user_color": watcher_char.color,
                     "feature_name": "🌟 Silvery Barbs cast",
                     "feature_desc": (
-                        f"Reaction. {target_name} must reroll the d20 and "
-                        f"use the lower of the two rolls.{roll_hint} "
-                        f"Consumed 1× L{slot_level} slot."
+                        f"Reaction. Silvery Barbs forces {target_name} to "
+                        f"reroll the save.{_sb_txt} Consumed 1× L{slot_level} "
+                        f"slot."
                     ),
                     "source": "silvery-barbs-cast",
                     "reaction_kind": "spell",
@@ -32156,6 +32208,10 @@ async def use_reaction(
                     "rerolled_target_combatant_id": params.get("target_combatant_id"),
                     "original_rolled": rolled,
                     "original_dc": dc,
+                    "new_d20": _sb_new_d20,
+                    "save_natural": _sb_nat,
+                    "new_save_total": _sb_new_total,
+                    "new_save_verdict": _sb_verdict,
                 },
             })
         except HTTPException:

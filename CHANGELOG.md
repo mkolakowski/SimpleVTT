@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.610.0] - 2026-06-23 — "The Reproachful Word"
+
+**Schema version:** 80
+
+**Commit summary:** Silvery Barbs now auto-rolls the forced reroll server-side and reports whether the save now passes or fails.
+
+**Description:** Reactions-automation **v3 auto-resolution** — the second d20-reroll surface, following Lucky (v2.609.0). When a watcher casts **Silvery Barbs** in reaction to a creature passing a save, the server now **rolls the forced reroll itself** (instead of telling the table to roll): per RAW the target must use the **new** roll (not the lower, which the old advisory text wrongly said), so the new save total (`save_bonus + new_d20`) is recomputed and the card reports whether the save now **passes or fails**.
+
+**Scope (honest boundary):** this auto-rolls the reroll + reports the new verdict. **Applying the consequence of a now-FAILED save** — installing the spell's condition, or converting a save-for-half to full damage — stays **GM-narrated**, because that re-resolution is spell-specific and tightly coupled to the originating roll-request; it's the larger "pending-resolution" piece filed for a dedicated slice. (Contrast Lucky, whose consequence — restoring the attacker's damage — was self-contained.)
+
+**Implementation:**
+
+- `app/routes/tabletop_routes.py`:
+  - The `save_resolved` reaction-prompt emit now plumbs the save's **natural d20** (`save_natural`, parsed from the roll breakdown) + the derived **flat bonus** (`save_bonus`) into the context.
+  - `/use_reaction` `cast-silvery-barbs` dispatch — roll the replacement d20, recompute `new_save_total` + the pass/fail verdict, and broadcast them on the `feature_used` card (corrected the RAW text from "lower of the two" to "use the new result").
+
+**Harness:** `tests/harness/test_reaction_prompt.py::test_cast_silvery_barbs_auto_rolls_reroll` (+1) — Krieger passes a save, Thalindra casts Silvery Barbs, and the card's reported reroll is asserted internally consistent (`new_total == save_bonus + new_d20`, verdict matches `new_total` vs the DC).
+
+### Added
+- Silvery Barbs auto-reroll: the server rolls the forced reroll and reports the new pass/fail verdict (downstream save-effect re-application stays GM-narrated).
+
+### Changed
+- The `save_resolved` reaction-prompt context now carries the save's natural d20 + flat bonus; the Silvery Barbs card text corrected to RAW ("use the new result").
+
 ## [2.609.0] - 2026-06-23 — "The Borrowed Luck"
 
 **Schema version:** 80
