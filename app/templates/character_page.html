@@ -43,6 +43,7 @@
         const CAMPAIGN_ID = {{ campaign.id if campaign else 'null' }};
         const CHAR_ID     = {{ char.id }};
         const ME = { id: {{ user.id }} };
+        window.ME = ME;  // roll_toast.js reads window.ME (lexical const doesn't attach to window)
         window.closeSheet = function () {
             {% if campaign %}
             window.location.href = '/campaign/{{ campaign.id }}/characters';

@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.640.1] - 2026-06-24 — "The Missing Identity"
+
+**Schema version:** 80
+
+**Commit summary:** Fix `window.ME` never being exposed — the lexical `const ME` in the page templates was invisible to `reaction_prompt.js` / `roll_toast.js`, which suppressed **every** reaction popup (most visibly: a GM moving a player's PC got no opportunity-attack prompt).
+
+**Description:** Reported as "when a GM moves another player's PC on the PC's turn, the opportunity attack isn't prompted to the GM." Root cause traced to the client:
+
+- The templates declared the user identity as a top-level `const ME = {...}`. A top-level `const` is **lexical** — it does **not** attach a property to `window`. But `reaction_prompt.js` reads `window.ME.id` / `window.ME.reactionPromptMode`, and `roll_toast.js` reads `window.ME.id` / `window.ME.isGm`. With `window.ME` undefined, `reaction_prompt.js` computed `meId = null` and bailed at the `targets.includes(meId)` guard — so the reaction popup never rendered for **anyone**.
+- Server-side was correct all along: the OA `reaction_prompt` was broadcast with the right `target_user_ids` ([GM] for an NPC watcher) regardless of who moved the token. The bug was purely that the GM's browser dropped the popup. (It "looked" player-specific only because when a player moves their own PC the OA routes to the GM, who isn't watching for it — the same defect, less visible.)
+- Fix: `window.ME = ME;` right after the declaration in `tabletop.html`, `character_page.html`, and `monster_page.html` (the sheet pages load `roll_toast.js`, which has the same `window.ME` dependency). Also un-breaks the tabletop GM-panel guard at `tabletop.html:~2587` (`if (!window.ME ...)`) and `roll_toast.js` user/GM identity.
+
+### Fixed
+- Reaction popups (opportunity attacks, Shield, Counterspell, …) now render again — `window.ME` is exposed, so `reaction_prompt.js` can match the recipient. Most visible repro: GM moving a player's PC now gets the OA prompt.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness_ui/test_window_me_exposed.py` (new, +3) — asserts `window.ME` is defined (id + isGm + reactionPromptMode) on the tabletop for the GM + a player, and on the character sheet. Verified red→green: all 3 fail against the pre-fix build, pass after. (A browser-JS defect the HTTP/WS harness structurally can't catch — server-side OA coverage in `test_opportunity_attack.py` was already green.)
+
 ## [2.640.0] - 2026-06-24 — "The Square Deal"
 
 **Schema version:** 80
