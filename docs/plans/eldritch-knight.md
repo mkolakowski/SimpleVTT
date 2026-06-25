@@ -88,16 +88,21 @@ player's weapon attack. Harness:
 `test_war_magic.py::test_war_magic_advisory_on_ek_cantrip` (+ a non-EK
 negative test).
 
-**Phase 2b — economy-route (filed).** The cleaner model: stamp a per-turn
-flag `sheet.war_magic_bonus_attack_available = True` on the cantrip cast,
-and have `/attack` accept an `as_war_magic_bonus: true` body field that
-marks only the **bonus** chip (reusing the `attack_slot` plumbing from
-v2.644.0 / v2.648.x) and clears the flag — so the bonus attack rides
-`/attack` directly instead of the separate `/use_war_magic` chip-mark.
+**Phase 2b — economy-route ✅ shipped v2.648.8.** `/attack` now accepts
+`as_war_magic_bonus: true`, which — gated to an EK Lv 7+ — retargets the
+over-budget gate + `_mark_battle_economy` to the **bonus** slot (reusing
+the `attack_slot` plumbing from v2.644.0's `as_reaction`). So the
+bonus-action weapon attack rides `/attack` directly (one call, marks the
+bonus chip) instead of `/use_war_magic` + a separate override attack. A
+non-EK caller falls through to a normal action attack. Harness:
+`test_war_magic.py::test_war_magic_bonus_attack_marks_bonus_slot` (+ a
+non-EK negative test). The cantrip-cast precondition stays GM-tracked
+(matching `/use_war_magic`); a per-turn flag + round-stamp enforcement
+(the cloak-suppression pattern) is filed as optional follow-up.
 
 **Test:** Eldritch Knight Lv 7 casts Fire Bolt cantrip → advisory fires
-(2a, shipped); (2b filed) flag set → `/attack as_war_magic_bonus` →
-bonus chip marked + flag cleared.
+(2a, shipped); `/attack as_war_magic_bonus` → bonus chip marked (2b,
+shipped).
 
 ### Phase 3 — Eldritch Strike (✅ PC-target path shipped)
 

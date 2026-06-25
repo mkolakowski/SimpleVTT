@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.648.8] - 2026-06-25 — "The Bonus Swing"
+
+**Schema version:** 80
+
+**Commit summary:** Eldritch Knight War Magic 2b — `/attack` accepts `as_war_magic_bonus: true`, marking the **bonus** economy slot instead of the action, so an EK Lv 7+'s War Magic bonus-action weapon attack rides `/attack` directly.
+
+**Description:** RAW (PHB p.74): after an EK Lv 7+ casts a cantrip with their action, they may make one weapon attack as a bonus action. The advisory (v2.648.6) surfaces the option; `/use_war_magic` (v2.99.267) marks the bonus chip separately. This adds the cleaner economy route (the EK plan's filed Phase 2b): `/attack` now accepts `as_war_magic_bonus: true`, which — gated to an Eldritch Knight Lv 7+ (`_pc_has_eldritch_knight(sheet, 7)`) — retargets the over-budget gate + the post-attack `_mark_battle_economy` to the **bonus** slot (reusing the `attack_slot` plumbing from v2.644.0's `as_reaction`). So the bonus-action weapon attack rides `/attack` directly (one call, marks the bonus chip) instead of `/use_war_magic` + a separate override attack. A non-EK caller falls through to a normal action attack. The cantrip-cast precondition stays GM-tracked (matching `/use_war_magic`'s existing stance); the per-turn flag + round-stamp enforcement is filed as an optional follow-up. Completes the EK plan's War Magic phase.
+
+### Added
+- `app/routes/tabletop_routes.py` — `/attack` honours `as_war_magic_bonus: true` (EK Lv 7+ → marks the `bonus` economy slot via the existing `attack_slot` retarget).
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_war_magic.py` (+2) — `test_war_magic_bonus_attack_marks_bonus_slot` (an EK Lv 7+ attacking with `as_war_magic_bonus` → an `economy_update` for the **bonus** slot, and **not** the action) and `test_war_magic_bonus_attack_ignored_for_non_ek` (a Champion's `as_war_magic_bonus` does not mark the bonus slot — the gate holds).
+
 ## [2.648.7] - 2026-06-25 — "The Monster's Misfortune"
 
 **Schema version:** 80

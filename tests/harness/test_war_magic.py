@@ -293,3 +293,89 @@ async def test_war_magic_advisory_skips_non_ek(gm_client, gm_ws, roster):
             {"subclass": orig_sub or "Champion", "spells": orig_spells or []},
             class_slug="fighter",
         )
+
+
+async def test_war_magic_bonus_attack_marks_bonus_slot(
+    gm_client, gm_ws, garrik_eldritch_knight,
+):
+    """v2.648.8 — an EK Lv 7+ attacking with `as_war_magic_bonus: true`
+    marks the BONUS economy slot (not the action), so the War Magic
+    bonus-action weapon attack rides /attack directly.
+    """
+    garrik = garrik_eldritch_knight
+    await asyncio.sleep(0.1)
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={
+            "character_id": garrik["id"],
+            "attack_index": 0,
+            "as_war_magic_bonus": True,
+            "override": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    await asyncio.sleep(0.15)
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == garrik["id"]
+    ]
+    bonus = [
+        m for m in econ
+        if (m.get("data") or {}).get("slot") == "bonus"
+        and (m.get("data") or {}).get("used") is True
+    ]
+    action = [
+        m for m in econ
+        if (m.get("data") or {}).get("slot") == "action"
+        and (m.get("data") or {}).get("used") is True
+    ]
+    assert bonus, (
+        f"expected the bonus slot marked; "
+        f"got {[(m.get('data') or {}).get('slot') for m in econ]}"
+    )
+    assert not action, "as_war_magic_bonus must not mark the action slot"
+
+
+async def test_war_magic_bonus_attack_ignored_for_non_ek(
+    gm_client, gm_ws, roster,
+):
+    """A non-EK fighter sending `as_war_magic_bonus` falls through to a
+    normal action attack (the bonus retarget is EK Lv 7+ gated)."""
+    garrik = roster["Garrik Ironside"]
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": f"tok_gkc_{garrik['id']}",
+             "char_id": garrik["id"], "name": garrik["name"],
+             "initiative": 12, "hp_current": 85, "hp_max": 85,
+             "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    await asyncio.sleep(0.1)
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={
+            "character_id": garrik["id"],
+            "attack_index": 0,
+            "as_war_magic_bonus": True,
+            "override": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    await asyncio.sleep(0.15)
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == garrik["id"]
+    ]
+    bonus = [
+        m for m in econ
+        if (m.get("data") or {}).get("slot") == "bonus"
+        and (m.get("data") or {}).get("used") is True
+    ]
+    assert not bonus, (
+        "a non-EK fighter's as_war_magic_bonus must not mark the bonus slot"
+    )

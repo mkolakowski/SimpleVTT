@@ -109668,7 +109668,21 @@ async def use_attack(
     # strike) pass `as_reaction: true`; like cast_spell's flag, this
     # retargets the economy slot to `reaction` so the gate + the mark
     # below consume the reaction instead of the turn action.
-    attack_slot = "reaction" if bool(body.get("as_reaction")) else "action"
+    # v2.648.8 — EK War Magic (Lv 7+, PHB p.74) bonus-action weapon
+    # attack: after an action-cast cantrip, the EK may make one weapon
+    # attack as a bonus action. `as_war_magic_bonus: true` retargets the
+    # economy slot to `bonus` (the attack rides /attack directly instead
+    # of /use_war_magic's separate chip-mark). Gated to EK Lv 7+; a
+    # non-EK caller falls through to a normal action attack. The
+    # cantrip-cast precondition stays GM-tracked (matching /use_war_magic).
+    if bool(body.get("as_reaction")):
+        attack_slot = "reaction"
+    elif bool(body.get("as_war_magic_bonus")) and _pc_has_eldritch_knight(
+        sheet, 7
+    ):
+        attack_slot = "bonus"
+    else:
+        attack_slot = "action"
     was_used = _is_slot_used(campaign_id, char.id, attack_slot)
     user_is_gm = _user_is_gm(user, campaign, db)
     strict = bool(campaign.strict_action_economy)
