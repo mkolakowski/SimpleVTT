@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.638.1] - 2026-06-24 — "The Card Catalog"
+
+**Schema version:** 80
+
+**Commit summary:** Sort the wiki landing page's "Available guides" table **alphabetically** by guide title, and add a harness assertion that keeps it that way.
+
+**Description:** Follow-up to the audience filter (v2.638.0). The guides table had grown in roughly chronological/shipped order; it's now sorted alphabetically by title (case-insensitive, a leading "The " ignored — so *The character sheet* files under **C**) so the list is scannable. The reorder is a pure row move in `app/templates/wiki.html` (no content change). `test_wiki_home_renders` now parses the guides-table titles and asserts they equal `sorted(...)`, so a future guide added out of order trips the harness instead of silently breaking the order.
+
+### Changed
+- The `/wiki` "Available guides" table rows are now in alphabetical order.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_wiki.py::test_wiki_home_renders` — added an alphabetical-order assertion over the `id="guides-table"` link titles.
+
 ## [2.638.0] - 2026-06-24 — "The Sorting Hat"
 
 **Schema version:** 80

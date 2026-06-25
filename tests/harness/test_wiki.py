@@ -12,9 +12,18 @@ roll-log guide, the H1 for an allowlisted doc). Error-path: an unknown
 slug 404s, a slug with directory-traversal characters 404s, and a slug
 that isn't in the doc allowlist also 404s.
 """
+import re
+
 import httpx
 
 from .helpers import BASE_URL
+
+
+def _guide_sort_key(title: str) -> str:
+    """Same ordering the wiki guides table is kept in: case-insensitive,
+    a leading 'The ' ignored."""
+    t = title.strip().lower()
+    return t[4:] if t.startswith("the ") else t
 
 
 async def test_wiki_home_renders():
@@ -53,6 +62,13 @@ async def test_wiki_home_renders():
     assert 'data-aud-filter="gms"' in resp.text
     assert 'id="guides-table"' in resp.text
     assert "<th>Format</th>" not in resp.text
+    # v2.638.1: the guides table is kept in alphabetical order.
+    m = re.search(r'id="guides-table".*?</table>', resp.text, re.S)
+    assert m, "guides table not found"
+    import html as _html
+    titles = [_html.unescape(t) for t in re.findall(r'<a href="/wiki/[^"]+">([^<]+)</a>', m.group(0))]
+    assert len(titles) >= 20
+    assert titles == sorted(titles, key=_guide_sort_key), f"guides not alphabetical: {titles}"
     # v2.49.9: the wiki nav menu is rendered on the landing too.
     assert 'class="wiki-nav"' in resp.text
     # v2.630.0: the design-plans index moved to its own page; the landing
