@@ -595,12 +595,13 @@ regen is the placeholder battle map.
 > 256-pixel circular token. Human, any non-good. Mood: imposing
 > brute, enjoys his work.
 
-#### Bandits — three variants (Alpha / Beta / Gamma)
+The three bandits are identical-stat mooks sharing one loadout — a curved
+scimitar + light crossbow over battered dark-brown leather — so give each a
+different face and the GM can tell them apart at a glance. Each is its own
+token (`bandit-alpha.jpg` / `bandit-beta.jpg` / `bandit-gamma.jpg`); keep the
+loadout + pose identical across all three so the trio reads as a unit.
 
-The encounter places three identical-stat bandits as mooks; give each a
-slightly different look so the GM can tell them apart at a glance.
-
-**Bandit Alpha** (`bandit-alpha.jpg`):
+#### Bandit Alpha
 
 > A human bandit, male, late twenties, lean and unkempt. Chin-
 > length brown hair and a short scruffy beard, sun-browned skin,
@@ -613,13 +614,33 @@ slightly different look so the GM can tell them apart at a glance.
 > for a 256-pixel circular token. Mood: opportunistic, jumpy,
 > looking for an opening.
 
-**Bandit Beta** (`bandit-beta.jpg`) — *re-roll Alpha with: wheat-blond hair
-tied back in a stubby ponytail, no beard, a missing front tooth visible when
-his lip pulls back. Keep everything else so the trio feels like a unit.*
+#### Bandit Beta
 
-**Bandit Gamma** (`bandit-gamma.jpg`) — *re-roll Alpha with: short-cropped
-black hair, a thick black beard streaked with grey, a leather eyepatch over
-the left eye.*
+> A human bandit, male, late twenties, lean and unkempt. Wheat-blond
+> hair tied back in a stubby ponytail, clean-shaven, a missing front
+> tooth that shows when his lip pulls back, sun-browned skin. Wearing
+> battered dark-brown leather armor over rough commoner clothes, a
+> curved scimitar at the hip, a light crossbow slung over the
+> shoulder. Standing in a wary half-crouch ready to spring forward.
+> Dim tavern firelight. Painterly fantasy character portrait, three-
+> quarter view, isolated against a transparent background, suitable
+> for a 256-pixel circular token. Mood: opportunistic, jumpy,
+> looking for an opening. Same loadout + pose as the other two
+> bandits so the trio reads as a unit.
+
+#### Bandit Gamma
+
+> A human bandit, male, late twenties, lean and unkempt. Short-
+> cropped black hair and a thick black beard streaked with grey,
+> sun-browned skin, a worn leather eyepatch over the left eye.
+> Wearing battered dark-brown leather armor over rough commoner
+> clothes, a curved scimitar at the hip, a light crossbow slung over
+> the shoulder. Standing in a wary half-crouch ready to spring
+> forward. Dim tavern firelight. Painterly fantasy character
+> portrait, three-quarter view, isolated against a transparent
+> background, suitable for a 256-pixel circular token. Mood:
+> opportunistic, jumpy, looking for an opening. Same loadout + pose
+> as the other two bandits so the trio reads as a unit.
 
 ### 🗺️ Battle map — The Sundered Tavern
 

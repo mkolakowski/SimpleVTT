@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.640.8] - 2026-06-25 — "The Three Mooks"
+
+**Schema version:** 80
+
+**Commit summary:** Demo image-prompts page (`/wiki/doc/image-prompts`) — show all three Sundered Vault bandit variations (Alpha / Beta / Gamma) as their own entries in the Archive tab.
+
+**Description:** In the Archive (Sundered Vault) tab, only Bandit Alpha was a full prompt entry; Beta and Gamma were terse italic "re-roll Alpha with…" notes under a single umbrella heading (`Bandits — three variants`). Because the page attaches each token's art-preview thumbnail to a `####` heading that matches a checklist-table row, none of the three bandits rendered as a proper thumbnail-bearing entry. Split them into three `#### Bandit Alpha` / `#### Bandit Beta` / `#### Bandit Gamma` headings, each with a full self-contained prompt (Beta = wheat-blond ponytail + missing tooth; Gamma = cropped black hair, grey-streaked beard, eyepatch; all sharing Alpha's loadout + pose). Now each variation shows with its own `bandit-{alpha,beta,gamma}.jpg` preview, matching every other NPC entry.
+
+### Changed
+- `docs/demo/image-prompts.md` — the Archive tab now lists Bandit Alpha / Beta / Gamma as three distinct prompt entries (each rendering its own token thumbnail) instead of one entry + two re-roll notes.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** none — doc-only content edit to an already-surfaced wiki doc; no endpoint or WS change.
+
 ## [2.640.7] - 2026-06-25 — "The Left Margin"
 
 **Schema version:** 80
