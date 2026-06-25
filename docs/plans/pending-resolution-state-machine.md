@@ -8,27 +8,33 @@ on a reroll pass→fail flip, via `_resolve_save_for_half_flip`) shipped
 v2.612.0.** The remaining Phase 3 work is attack hit↔miss re-resolution beyond
 the Lucky heal-back + an optional true held "pending" window.
 
-This is the single biggest remaining item in the
-[reactions-automation](reactions-automation.md) v3 backlog. The AC-bump
-auto-negation family (Shield / Defensive Duelist / Form of the Beast Tail /
-Combat Inspiration / NPC Parry) and the d20-reroll *display* family (Lucky,
-Silvery Barbs) all ship — but two of them still **GM-narrate the
-consequence**:
+This was the single biggest remaining item in the
+[reactions-automation](reactions-automation.md) v3 backlog — **and the save
+path is now closed.** The AC-bump auto-negation family (Shield / Defensive
+Duelist / Form of the Beast Tail / Combat Inspiration / NPC Parry) and the
+d20-reroll family (Lucky, Silvery Barbs) all ship, and the save **consequence**
+is now re-resolved mechanically rather than GM-narrated:
 
 - **Lucky** auto-heals the attacker's damage on a reroll-miss (self-contained
   — done).
-- **Silvery Barbs** (v2.610.0) auto-rolls the forced reroll and reports a
-  pass→fail flip, but **applying** the now-failed save's effect (install the
-  spell's condition, or convert save-for-half to full damage) is GM-narrated.
+- **Silvery Barbs** (v2.610.0 reroll display; **v2.611.0 + v2.612.0
+  consequence**) auto-rolls the forced reroll AND, when it flips a save
+  pass→fail, **applies the now-failed save's effect** — installs the spell's
+  condition (`_resolve_save_failure`, Phase 2) or converts save-for-half to
+  full damage (`_resolve_save_for_half_flip`, Phase 3a) — with every immunity
+  gate intact.
 
-The reason is structural: when a save is resolved through
+The reason this needed a plan was structural: when a save is resolved through
 `POST /api/campaign/{cid}/roll_request/{id}/respond`, the **save-or-suck
 failure resolution** (install the matching condition + run every immunity
 gate — Aura of Devotion, Mindless Rage, PFE&G, Heroism, legendary-resistance
-deferral) is a **~200-line inline block with multiple early HTTP returns**, not
-a reusable function. Nothing else can re-invoke it. The pending-resolution
-machine makes that resolution **callable and replayable** so a reaction that
-flips an outcome can re-run it.
+deferral) *was* a ~200-line inline block with multiple early HTTP returns, not
+a reusable function. Phase 1 (v2.610.2) **extracted it into the reusable
+`_resolve_save_failure` coroutine** so a reaction that flips an outcome can
+re-run it — which Phases 2 + 3a then did. **What remains is only the attack
+hit↔miss re-resolution** (a reroll flipping an attack hit↔miss beyond the
+Lucky heal-back) plus an optional true held "pending" window before the
+outcome commits.
 
 ## Goal
 

@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.645.1] - 2026-06-25 — "The Settled Ledger"
+
+**Schema version:** 80
+
+**Commit summary:** Doc — reconcile the pending-resolution state-machine plan: its body + wiki status lines claimed the Silvery Barbs consequence was "GM-narrated / queued," but Phases 1–3a shipped (v2.610.2–v2.612.0). Only attack hit↔miss re-resolution remains.
+
+**Description:** Companion to v2.641.1's reactions-automation reconciliation. The [pending-resolution-state-machine plan](docs/plans/pending-resolution-state-machine.md)'s `Status:` line correctly listed Phases 1–3a as shipped, but the prose immediately below it still claimed Silvery Barbs "GM-narrates the consequence" (installing the spell's condition / converting save-for-half to full) — the exact behavior Phase 2 (v2.611.0) and Phase 3a (v2.612.0) mechanized. The wiki index status lines (`docs/wiki/README.md` + `app/templates/wiki_plans.html`) likewise still read "🔥 Phase 0 (plan) shipped; … re-resolution queued." This updates all three to reflect that the save path is closed (the resolver was extracted in Phase 1 and re-invoked by Phases 2 + 3a) and that only the attack hit↔miss re-resolution + an optional held "pending" window remain. No code change — documentation accuracy only.
+
+### Changed
+- `docs/plans/pending-resolution-state-machine.md` — the prose under the Status line now states the save consequence is mechanized (not GM-narrated) and scopes the remainder to attack hit↔miss re-resolution.
+- `docs/wiki/README.md` + `app/templates/wiki_plans.html` — the plan's status cell flipped from "🔥 Phase 0 … queued" to "🟠 Phases 0–3a shipped … only attack hit↔miss re-resolution remains."
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** none — doc + wiki-status reconciliation of an already-surfaced plan (`/wiki/doc/plan-pending-resolution-state-machine`); the existing `test_wiki.py::test_wiki_doc_serves_pending_resolution_plan` smoke (200 + nav + "resolution" substring) is unaffected. No new endpoint, allowlist entry, or WS broadcast-shape change.
+
 ## [2.645.0] - 2026-06-25 — "The Broken Mirage"
 
 **Schema version:** 80
