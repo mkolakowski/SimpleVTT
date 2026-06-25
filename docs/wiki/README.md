@@ -33,6 +33,7 @@ How much of the SRD 5.1 ruleset SimpleVTT mechanically automates, by content cat
 | [Running a session as GM](running-a-session-as-gm.md) | Markdown (how-to) | GMs | ✅ shipped (v2.43.18) |
 | [The character sheet](the-character-sheet.md) | Markdown (how-to) | Players + GMs | ✅ shipped (v2.43.19) |
 | [Player onboarding — your first session](player-onboarding.md) | Markdown (how-to · screenshots) | Players | ✅ shipped (v2.634.0) — illustrated first-session walkthrough, 11 screenshots |
+| [Inviting players to your campaign](inviting-players.md) | Markdown (how-to · screenshots) | GMs + Operators | ✅ shipped (v2.635.0) — account → add-member → roll colors → co-GM → portraits, 4 screenshots |
 | [Demo mode](demo-mode.md) | Markdown (how-to) | Operators | ✅ shipped (v2.43.21) |
 | [fail2ban deployment](fail2ban-deployment.md) | Markdown (how-to) | Operators | ✅ shipped (v2.476.0) |
 | [Privacy Policy (GDPR-compliant template)](privacy.md) | Markdown (policy) | Operators + Users | ✅ shipped (v2.479.0) |
@@ -143,7 +144,7 @@ This wiki is a stub. The list below is what we want it to grow into.
 ### How-to guides (operator + GM-facing)
 
 - [x] **First-run setup.** Stand up a fresh `docker compose up`, register the first user, create a campaign, invite players, and run a first session. Where the seed data goes; how to disable demo mode; how to reset the database. → [first-run-setup.md](first-run-setup.md).
-- [ ] **Inviting players.** The two membership flows (open registration vs invite-only), GM colors, per-player portrait, the demo-user accounts.
+- [x] **Inviting players.** The two membership flows (open registration vs invite-only), GM colors, per-player portrait, the demo-user accounts. → [inviting-players.md](inviting-players.md) (illustrated, 4 screenshots).
 - [x] **Running a session as GM.** Initiative tracker, action-economy chips, target picker, the GM Tools drawer, encounter snapshots. → [running-a-session-as-gm.md](running-a-session-as-gm.md).
 - [ ] **Building an encounter.** Encounters panel CRUD, token templates, monsters from the SRD bestiary vs homebrew, spawn-point layout, default-encounter wiring on a campaign.
 - [ ] **Maps + grids + tokens.** Uploading maps, scaling, grid overlay (`show_grid`), placing PC and monster tokens, the token-tracker side panel.

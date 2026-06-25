@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.635.0] - 2026-06-24 — "The Open Door"
+
+**Schema version:** 80
+
+**Commit summary:** Add an illustrated **Inviting players** GM/operator wiki guide (`docs/wiki/inviting-players.md`) — how a player goes from "no account" to "in your campaign with a color and a character" — served at `/wiki/inviting-players`, plus the Playwright script + 4 screenshots it embeds.
+
+**Description:** The wiki had a player-facing onboarding guide but nothing for the GM/operator side of getting players *into* a campaign. This documents the real (deliberately explicit) membership model — there's no public join-by-link/code; accounts are created (self-registration or operator), then a **site admin** adds them to the campaign, then the GM does in-campaign setup:
+
+- **Steps covered:** account creation → admin-only **+ Add member** → per-player **roll color** → **Make GM** co-GM promotion → **Preview Tabletop as Player** → the character roster → **📷 portrait upload** → the demo accounts to rehearse with. Honest about the admin boundary (adding/removing members is `is_admin`-gated; the GM controls colors/co-GM/preview).
+- **Screenshots (4):** `tests/harness_ui/capture_inviting_players.py` drives the demo GM through the People tab (members + roll colors + add-member form), the campaign roster, and a sheet's portrait button, writing PNGs to `app/static/docs/inviting-players/`. The add-member form is `is_admin`-gated, so the capture run briefly toggles the demo GM's `users.is_admin` and reverts it (the box's `DEMO_GM_SITE_ADMIN=false` otherwise hides it).
+- Wired into the wiki: `wiki.html` + `docs/wiki/README.md` "Available guides" rows + the checked-off "Inviting players" wiki-TODO. Directly-served wiki guide (`/wiki/<slug>`), so no `_DOC_ALLOWLIST` entry.
+
+### Added
+- `docs/wiki/inviting-players.md` — the illustrated inviting-players guide.
+- `tests/harness_ui/capture_inviting_players.py` + `app/static/docs/inviting-players/*.png` — 4 GM-facing screenshots.
+
+### Changed
+- `app/templates/wiki.html` + `docs/wiki/README.md` — surface the new guide; marked the "Inviting players" wiki-TODO done.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_wiki.py::test_wiki_home_renders` — added `/wiki/inviting-players` to the landing-page assertion list. (Directly-served wiki guide — no per-slug `/wiki/doc/...` test required.)
+
 ## [2.634.0] - 2026-06-24 — "The Guided Tour"
 
 **Schema version:** 80
