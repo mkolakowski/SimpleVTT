@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.646.0] - 2026-06-25 — "The Spell at Hand"
+
+**Schema version:** 80
+
+**Commit summary:** Reactions v3 — the reaction popup now shows a real spell / weapon picker for War Caster and Mage Slayer, so a player gets the v2.643.0/v2.644.0 auto-cast / auto-attack from one click-through instead of only via the harness `params` path.
+
+**Description:** v2.643.0 (War Caster auto-cast) and v2.644.0 (Mage Slayer auto-attack) wired the server to run the real cast/attack pipeline when `/use_reaction` carries a `params.spell_index` / `params.attack_index` — but only the harness sent those params; the live `reaction_prompt.js` popup just sent the reaction key, so a player clicking the option still got the click-to-resolve advisory. This adds the missing UI. Clicking **War Caster — cast a 1-action spell** now opens a back-able sub-picker inside the popup card: it fetches the watcher's sheet (`/sheet-json`, authorized for the watcher's owner / the GM), lists each 1-action spell (mirroring the server's casting-time gate), and on pick re-POSTs `/use_reaction` with `params.spell_index` so the spell is cast at the provoker. **Mage Slayer — melee attack** works the same with the watcher's `attacks` and `params.attack_index`. Each picker keeps a **"Cast / Strike manually instead"** fallback (resolves with no choice → the legacy advisory, for off-menu spells) and a **← Back** button. `_spendReaction` gained an optional `params` argument threaded into the request body. Purely client-side wiring onto the already-shipped, already-tested server endpoints.
+
+### Added
+- `app/static/reaction_prompt.js` — `_fetchWatcherSheet`, `_showSubPicker`, `_showWarCasterPicker`, `_showMageSlayerPicker`; the option click handler routes `take-war-caster-cast` / `take-mage-slayer-strike` to their pickers; `_spendReaction` accepts optional `params`.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** none — client-side enhancement to the already-shipped `/use_reaction` `params` contract, which is covered server-side by `tests/harness/test_reaction_prompt.py::test_war_caster_auto_casts_at_provoker` (v2.643.0) and `::test_mage_slayer_auto_attacks_caster` (v2.644.0). No new HTTP endpoint or WS broadcast-shape change; the popup is browser-JS (the HTTP/WS harness can't drive it).
+
 ## [2.645.1] - 2026-06-25 — "The Settled Ledger"
 
 **Schema version:** 80

@@ -174,21 +174,31 @@
         _popups.delete(promptId);
     }
 
-    async function _spendReaction(promptId, reactionKey, watcherCharId, node) {
+    async function _spendReaction(
+        promptId, reactionKey, watcherCharId, node, extraParams,
+    ) {
         const cid = _campaignId();
         if (cid == null) return false;
         // Disable all buttons during the fetch to prevent double-clicks.
         node.querySelectorAll('button').forEach(b => { b.disabled = true; });
         try {
+            // v2.646.0 — optional `params` carry a per-reaction choice
+            // (War Caster's spell_index, Mage Slayer's attack_index) so
+            // the server runs the real cast/attack pipeline instead of
+            // the click-to-resolve advisory.
+            const reqBody = {
+                prompt_id: promptId,
+                reaction_key: reactionKey,
+                watcher_char_id: watcherCharId,
+            };
+            if (extraParams && typeof extraParams === 'object') {
+                reqBody.params = extraParams;
+            }
             const resp = await fetch(`/api/campaign/${cid}/use_reaction`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'same-origin',
-                body: JSON.stringify({
-                    prompt_id: promptId,
-                    reaction_key: reactionKey,
-                    watcher_char_id: watcherCharId,
-                }),
+                body: JSON.stringify(reqBody),
             });
             if (!resp.ok) {
                 // 409 already_resolved (cross-tab race) or 400 (bad
@@ -317,6 +327,130 @@
         }
     }
 
+    // v2.646.0 — fetch the watcher's sheet so the War Caster / Mage
+    // Slayer reaction options can offer a real spell / weapon picker.
+    // The popup only renders for the watcher's owner (or the GM for
+    // NPCs), both of whom are authorized to read the sheet-json.
+    async function _fetchWatcherSheet(watcherCharId) {
+        const cid = _campaignId();
+        if (cid == null || !watcherCharId) return null;
+        try {
+            const resp = await fetch(
+                `/api/campaign/${cid}/character/${watcherCharId}/sheet-json`,
+                { credentials: 'same-origin' },
+            );
+            if (!resp.ok) return null;
+            const data = await resp.json();
+            return (data && data.sheet) || null;
+        } catch (err) {
+            console.warn('[reaction] sheet fetch failed', err);
+            return null;
+        }
+    }
+
+    // v2.646.0 — replace the card's option buttons with a back-able
+    // sub-picker: one button per `items` entry (calls onPick(item)),
+    // plus a "Cast/Strike manually instead" fallback (resolves the
+    // reaction with no choice → the server's advisory path) and a Back
+    // button that restores the original options. `items` entries are
+    // {label, index}.
+    function _showSubPicker(card, data, opt, items, manualLabel, title) {
+        const optBtns = Array.from(card.querySelectorAll('.rp-opt-btn'));
+        const dismissBtn = card.querySelector('.rp-dismiss');
+        optBtns.forEach(b => { b.style.display = 'none'; });
+        if (dismissBtn) dismissBtn.style.display = 'none';
+
+        const panel = document.createElement('div');
+        panel.className = 'rp-subpicker';
+
+        const titleEl = document.createElement('p');
+        titleEl.className = 'rp-summary';
+        titleEl.textContent = title || 'Choose:';
+        panel.appendChild(titleEl);
+
+        const restore = () => {
+            panel.remove();
+            optBtns.forEach(b => { b.style.display = ''; });
+            if (dismissBtn) dismissBtn.style.display = '';
+        };
+
+        items.forEach(item => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'rp-opt-btn';
+            b.textContent = item.label;
+            b.addEventListener('click', async () => {
+                const extra = {};
+                extra[opt.paramKey] = item.index;
+                await _spendReaction(
+                    data.prompt_id, opt.key, data.watcher_char_id, card, extra,
+                );
+            });
+            panel.appendChild(b);
+        });
+
+        const manual = document.createElement('button');
+        manual.type = 'button';
+        manual.className = 'rp-opt-btn';
+        manual.textContent = manualLabel;
+        manual.addEventListener('click', async () => {
+            // No choice → server falls back to the advisory broadcast.
+            await _spendReaction(
+                data.prompt_id, opt.key, data.watcher_char_id, card,
+            );
+        });
+        panel.appendChild(manual);
+
+        const back = document.createElement('button');
+        back.type = 'button';
+        back.className = 'rp-dismiss';
+        back.textContent = '← Back';
+        back.addEventListener('click', restore);
+        panel.appendChild(back);
+
+        card.appendChild(panel);
+    }
+
+    // War Caster: pick a 1-action spell to cast at the provoker.
+    async function _showWarCasterPicker(data, card, opt) {
+        const sheet = await _fetchWatcherSheet(data.watcher_char_id);
+        const spells = (sheet && sheet.spells) || [];
+        const items = [];
+        spells.forEach((sp, i) => {
+            const ct = String((sp && sp.casting_time) || '').toLowerCase();
+            // RAW: 1-action casting time only (mirror the server gate).
+            if (ct.indexOf('action') === -1
+                || ct.indexOf('bonus') !== -1
+                || ct.indexOf('reaction') !== -1) return;
+            const lvl = (sp && sp.level) || 0;
+            items.push({
+                label: '✨ ' + ((sp && sp.name) || 'Spell')
+                    + (lvl ? ' (L' + lvl + ')' : ' (cantrip)'),
+                index: i,
+            });
+        });
+        const o = Object.assign({ paramKey: 'spell_index' }, opt);
+        const title = items.length
+            ? 'Cast which 1-action spell at the provoker?'
+            : 'No 1-action spell found on your sheet — cast manually.';
+        _showSubPicker(card, data, o, items, 'Cast manually instead', title);
+    }
+
+    // Mage Slayer: pick a melee weapon to strike the caster.
+    async function _showMageSlayerPicker(data, card, opt) {
+        const sheet = await _fetchWatcherSheet(data.watcher_char_id);
+        const attacks = (sheet && sheet.attacks) || [];
+        const items = attacks.map((atk, i) => ({
+            label: '⚔ ' + ((atk && atk.name) || 'Weapon'),
+            index: i,
+        }));
+        const o = Object.assign({ paramKey: 'attack_index' }, opt);
+        const title = items.length
+            ? 'Strike the caster with which weapon?'
+            : 'No weapon found on your sheet — strike manually.';
+        _showSubPicker(card, data, o, items, 'Strike manually instead', title);
+    }
+
     function _renderPopup(data) {
         // Build the DOM. data shape per v2.67.0 reactions plan:
         //   prompt_id, watcher_combatant_id, watcher_char_id,
@@ -359,6 +493,19 @@
                 }
             } else {
                 btn.addEventListener('click', async () => {
+                    // v2.646.0 — War Caster / Mage Slayer open a real
+                    // spell / weapon sub-picker; the choice rides
+                    // /use_reaction's `params` so the server runs the
+                    // cast/attack pipeline (v2.643.0 / v2.644.0) instead
+                    // of the click-to-resolve advisory.
+                    if (opt.key === 'take-war-caster-cast') {
+                        await _showWarCasterPicker(data, card, opt);
+                        return;
+                    }
+                    if (opt.key === 'take-mage-slayer-strike') {
+                        await _showMageSlayerPicker(data, card, opt);
+                        return;
+                    }
                     const ok = await _spendReaction(
                         data.prompt_id, opt.key, data.watcher_char_id, card,
                     );
