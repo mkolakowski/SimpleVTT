@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.640.6] - 2026-06-25 — "The Contact Sheet"
+
+**Schema version:** 80
+
+**Commit summary:** Auto-thumbnails on the demo image-prompt page — each checklist row and prompt shows a small preview of the art derived from its documented path, appearing automatically once the file exists.
+
+**Description:** Follow-up to v2.640.4. Readers had no way to see whether a token/map had been generated without opening the static folder. The tab script now derives a web path from each checklist row's `app/static/…` cell (→ `/static/…`), drops a small thumbnail into the row, and injects a larger preview next to the matching entity prompt (map = `###`, characters/NPCs = `####`, fuzzy name-matched). Each thumbnail hides itself via `img.onerror` until the file resolves, so missing art is invisible and generated art appears on the next load with **no edits to the page** — just save it at the path the page already documents. The archived Sundered Vault's shipped tokens preview immediately as a live example. Thumbnail decoration is lazy (only the viewed tab fetches), so switching tabs doesn't fire ~58 image requests up front.
+
+### Added
+- Auto-thumbnails on `/wiki/doc/image-prompts`: inline `.demo-thumb` in each checklist row + a floated `.demo-thumb-side` preview beside each prompt, both convention-derived from the listed path and self-hiding when the file is absent. Added an intro callout explaining the auto-populate behavior.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** Doc-only edit to the already-allowlisted `image-prompts` wiki reference — no endpoint or broadcast surface changed. Verified the new `<script>`/`<style>` survive python-markdown rendering, the 6 checklist tables expose the 62 path cells the script reads, and the static mount serves shipped tokens (`rogue.jpg`/`tavern.png` → 200) while missing art 404s (→ `onerror` hides it).
+
 ## [2.640.5] - 2026-06-25 — "The Ghost Battle"
 
 **Schema version:** 80

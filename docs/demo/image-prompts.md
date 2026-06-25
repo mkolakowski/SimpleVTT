@@ -11,6 +11,14 @@ The flagship **Sundered Vault** demo already ships its tokens; the five
 leveled demos (L3 / L5 / L9 / L13 / L18) currently render every token as a
 plain coloured ring (`image_url=None`) and are waiting on art.
 
+> **Thumbnails appear automatically.** Each checklist row and each prompt
+> derives its thumbnail from the path shown for that entity (e.g.
+> `app/static/demo/tokens/l3-thorin.jpg` → `/static/demo/tokens/l3-thorin.jpg`).
+> Save your generated art at exactly that path and rebuild the container — the
+> thumbnail shows up next to the prompt and in the row on the next load, no
+> edits to this page needed. (The archived Sundered Vault's shipped tokens
+> already preview this way.)
+
 ## Overall progress — 10 / 58 images
 
 | Demo | Map | Tokens | Done |
@@ -36,7 +44,16 @@ plain coloured ring (`image_url=None`) and are waiting on art.
 .demo-tab:hover{border-color:var(--accent);}
 .demo-tab.active{background:var(--accent);color:var(--bg);border-color:var(--accent);}
 .demo-panel{animation:demofade .15s ease;}
+.demo-panel h3,.demo-panel h4{clear:both;}
 @keyframes demofade{from{opacity:0}to{opacity:1}}
+/* Auto-thumbnails: derived from each checklist row's path. Hidden until the
+   file exists at that path (img.onerror), so they appear automatically once
+   art is dropped in. Small inline thumb in the table, larger preview by the prompt. */
+.demo-thumb{width:34px;height:34px;object-fit:cover;border-radius:6px;
+  border:1px solid var(--border);vertical-align:middle;margin-right:8px;}
+.demo-thumb-side{float:right;width:104px;height:104px;object-fit:cover;
+  border-radius:10px;border:1px solid var(--border);margin:0 0 8px 14px;
+  box-shadow:0 1px 4px rgba(0,0,0,.25);}
 </style>
 
 <div class="demo-tabbar" id="demo-tabbar" role="tablist" aria-label="Demo selector"></div>
@@ -62,12 +79,41 @@ plain coloured ring (`image_url=None`) and are waiting on art.
       if(current){ current.nodes.push(n); }
     });
     if(!tabs.length) return;
+    // Derive a web path ("app/static/…" → "/static/…") from a checklist cell.
+    function webPath(s){ var t=(s||'').trim(); var i=t.indexOf('static/'); return i<0?null:'/'+t.slice(i); }
+    // Normalize a label to letters/digits for fuzzy heading↔row matching.
+    function normName(s){ return (s||'').replace(/\([^)]*\)/g,'').replace(/[^A-Za-z0-9' -]/g,'').replace(/\s+/g,' ').trim().toLowerCase(); }
+    // Thumbnail that hides itself if the file 404s — so it only shows once art exists.
+    function thumb(src,cls,alt){ var im=document.createElement('img'); im.className=cls; im.src=src; im.loading='lazy'; im.alt=alt||''; im.onerror=function(){ im.style.display='none'; }; return im; }
+    function decorate(panel){
+      var nameToPath={};
+      var table=panel.querySelector('table');
+      if(table){
+        Array.prototype.forEach.call(table.querySelectorAll('tbody tr'),function(tr){
+          var c=tr.querySelectorAll('td'); if(c.length<2) return;
+          var code=c[1].querySelector('code'); if(!code) return;
+          var path=webPath(code.textContent); if(!path) return;
+          nameToPath[normName(c[0].textContent)]=path;
+          c[0].insertBefore(thumb(path,'demo-thumb',''),c[0].firstChild); // inline thumb in the row
+        });
+      }
+      // Larger preview beside each entity prompt (map = h3, characters/NPCs = h4).
+      Array.prototype.forEach.call(panel.querySelectorAll('h3, h4'),function(h){
+        if(h.getAttribute('data-thumbed')) return;
+        var hn=normName(h.textContent), best=null;
+        for(var k in nameToPath){ if(k && hn.indexOf(k)!==-1 && (!best||k.length>best.length)) best=k; }
+        if(!best) return;
+        h.setAttribute('data-thumbed','1');
+        h.parentNode.insertBefore(thumb(nameToPath[best],'demo-thumb-side','art preview'),h.nextSibling);
+      });
+    }
     function select(i,push){
       tabs.forEach(function(t,j){
         t.panel.style.display=(j===i)?'':'none';
         t.btn.classList.toggle('active',j===i);
         t.btn.setAttribute('aria-selected',j===i?'true':'false');
       });
+      if(!tabs[i].decorated){ decorate(tabs[i].panel); tabs[i].decorated=true; } // lazy: only the viewed tab fetches
       if(push){ try{ history.replaceState(null,'','#demo-'+i); }catch(e){} }
     }
     tabs.forEach(function(t,i){
