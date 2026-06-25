@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.633.1] - 2026-06-24 — "The Contact Sheet"
+
+**Schema version:** 80
+
+**Commit summary:** Add a manually-run Playwright capture script (`tests/harness_ui/capture_onboarding.py`) and the 11 player-facing screenshots it produces under `app/static/docs/onboarding/`, ready for the player-onboarding guide to embed.
+
+**Description:** Groundwork for an illustrated new-player onboarding guide. The capture script drives the running demo app with Chromium and writes one PNG per player-facing screen to `app/static/docs/onboarding/` (served at `/static/docs/onboarding/<name>.png`):
+
+- **Screens captured (11):** register, login, lobby, my-characters hub, per-campaign character launchpad, the 5e character sheet, a live dice roll (the roll-toast on Pip Quickfingers' sheet), the roll log, the tabletop battle map, the Adult Red Dragon monster stat block, and user settings.
+- **Reproducible, not hand-pasted.** It reuses the existing `tests/harness_ui/conftest.py` cookie-login helpers (`_login_get_cookie`, `disable_animations`) and the demo accounts (`demo-alice` as the player, `demo-gm` for the GM-only monster sheet). Re-run it after a UI change to refresh the shots. Like the rest of `tests/harness_ui/`, it's a local-developer tool (the `capture_` prefix keeps it out of CI collection) — not wired into the CI visual-regression suite.
+- Each screen is captured independently: one flaky screen logs a warning and the run continues; the script exits non-zero if any failed.
+
+### Added
+- `tests/harness_ui/capture_onboarding.py` — the onboarding-screenshot capture script.
+- `app/static/docs/onboarding/*.png` — 11 generated player-facing screenshots, baked into the image via `COPY app /app/app`.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** none — tooling + static-asset commit, no new endpoint or WS shape (the screenshots serve through the existing `/static` mount). The guide that embeds them lands next, with the wiki landing-page assertion.
+
 ## [2.633.0] - 2026-06-24 — "The Progress Bar"
 
 **Schema version:** 80
