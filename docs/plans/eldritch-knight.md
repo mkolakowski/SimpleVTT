@@ -9,14 +9,26 @@ Path: Fighter Martial Archetype: Eldritch Knight (PHB p.74).
 > buff with `teleport_max_ft=30` + `requires_action_surge=True`
 > effect keys). **Improved War Magic Lv 18+ Phase 1 ✅** (v2.158.12:
 > `improved-war-magic-active` flag buff with `min_spell_level=1`).
-> **Outstanding:** Lv 7 War Magic (bonus-action weapon attack after
-> cantrip cast — `/cast_spell` post-cast bonus-attack rider);
-> Lv 10 Eldritch Strike (target disadvantage on next save vs an EK
-> spell — install per-target buff after weapon hit, consume in the
-> save resolver); Arcane Charge Phase 2 (`/use_action_surge` reads
-> the buff + surfaces a teleport budget); Improved War Magic Phase 2
-> (`/cast_spell` reads the buff + allows the bonus-action weapon
-> attack when `spell_level >= 1`).
+> **Lv 10 Eldritch Strike — ✅ shipped (PC-target path; reconciled
+> v2.648.4).** Both halves are live and harness-tested: the install
+> endpoint `POST /use_eldritch_strike` (v2.99.268 — gated on EK Lv 10+,
+> installs the `eldritch-strike-target` buff carrying
+> `effects.save_disadvantage_against_caster_id`, `test_eldritch_strike.py`)
+> AND the save-resolver read (v2.158.54 — the PC-target save site swaps
+> the saver's d20 → `2d20kl1` when the saver carries the buff naming
+> THIS caster, consume-on-first-save, RAW adv/dis cancellation,
+> `test_eldritch_strike_resolver.py`). Two genuine enhancements remain,
+> filed as Phase 3b/3c below: **auto-install on a weapon hit** (today the
+> marker needs a manual `/use_eldritch_strike` call; RAW it's automatic
+> on hit) and the **NPC-target path** (the endpoint only installs the
+> buff for PC targets, and the resolver read is in the PC-save branch —
+> the common "EK hits a monster then casts at it" case isn't wired).
+> **Outstanding (other features):** Lv 7 War Magic (bonus-action weapon
+> attack after cantrip cast — `/cast_spell` post-cast bonus-attack
+> rider); Arcane Charge Phase 2 (`/use_action_surge` reads the buff +
+> surfaces a teleport budget); Improved War Magic Phase 2 (`/cast_spell`
+> reads the buff + allows the bonus-action weapon attack when
+> `spell_level >= 1`).
 
 ## Why a plan doc
 
@@ -75,18 +87,36 @@ marking only the bonus chip.
 set → /attack with `as_war_magic_bonus: true` → bonus chip
 marked + flag cleared.
 
-### Phase 3 — Eldritch Strike (⚪ deferred)
+### Phase 3 — Eldritch Strike (✅ PC-target path shipped)
 
-**Hook site:** `/attack` post-resolution. When attacker is
-Eldritch Knight Lv 10+ AND the attack hit AND the attacker has
-an "active spell" tracked from the next-turn buffer, install a
-`eldritch-strike-target` buff on the target with
-`effects.save_disadvantage_against_caster_id` matching the
-attacker. The v2.99.X save resolver checks for this buff against
-the casting char's id + drops it on consume.
+**Shipped (reconciled v2.648.4):**
+- **Install:** `POST /use_eldritch_strike` (v2.99.268) — validates EK
+  Lv 10+ via `_pc_has_eldritch_knight(sheet, 10)`, installs the
+  `eldritch-strike-target` buff on the target with
+  `effects.save_disadvantage_against_caster_id: <ek_id>` +
+  `consume_on_first_save: True` (10-round duration). Harness:
+  `test_eldritch_strike.py`.
+- **Read:** the per-cast PC-target save site (v2.158.54) calls
+  `_saver_has_eldritch_strike_vs_caster(campaign_id, saver_id, caster_id)`;
+  when the saver carries the buff naming this caster it swaps the
+  saver's d20 → `2d20kl1` (with RAW PHB p.173 adv/dis cancellation) and
+  drops the buff. Mirrors the Heightened Spell metamagic idiom at the
+  same site. Harness: `test_eldritch_strike_resolver.py`.
 
-**Test:** Lv 10 Eldritch Knight hits → target buff present →
-next save vs caster's spell rolls at disadvantage.
+**Filed enhancements (genuinely unbuilt):**
+- **3b — auto-install on a weapon hit.** Today the marker needs a manual
+  `/use_eldritch_strike` call; RAW Eldritch Strike fires automatically
+  "when you hit a creature with a weapon attack." Hook the install into
+  `/attack` post-resolution (near the Sentinel walker) when the attacker
+  is EK Lv 10+ and `hit`. Extract a shared `_install_eldritch_strike(...)`
+  helper from the endpoint so both paths share it. Purely beneficial to
+  the EK (disadvantage on the *target*), so no opt-in prompt needed.
+- **3c — NPC-target path.** The endpoint only installs the buff for PC
+  targets (`if target_char_id is not None`), and the resolver read lives
+  in the PC-save branch — so the common case (EK hits a monster, then
+  casts a spell at it) isn't wired. Needs an NPC-combatant buff install
+  (`_install_buff_on_combatant_id`) + an Eldritch-Strike read at the
+  NPC-save resolution site.
 
 ### Phase 4 — Arcane Charge + Improved War Magic (⚪ deferred)
 

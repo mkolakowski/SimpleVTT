@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.648.4] - 2026-06-25 — "The Knight Already Armed"
+
+**Schema version:** 80
+
+**Commit summary:** Doc — reconcile the Eldritch Knight plan's "Lv 10 Eldritch Strike (⚪ deferred)": the PC-target path is in fact shipped end-to-end (install endpoint v2.99.268 + save-resolver read v2.158.54 + two harness tests). File the two genuine remainders (auto-install on hit, NPC-target path).
+
+**Description:** Picked up "build Eldritch Knight Lv 10 Eldritch Strike" and a substrate check found it already shipped — the fourth more-done-than-documented item this session. Both halves are live and harness-tested: `POST /use_eldritch_strike` (v2.99.268) validates EK Lv 10+ and installs the `eldritch-strike-target` buff with `effects.save_disadvantage_against_caster_id`, and the per-cast PC-target save site (v2.158.54) reads it via `_saver_has_eldritch_strike_vs_caster`, swaps the saver's d20 → `2d20kl1` (with RAW adv/dis cancellation), and consumes it on first save — mirroring the Heightened Spell metamagic idiom at the same site. Covered by `test_eldritch_strike.py` + `test_eldritch_strike_resolver.py`. The EK plan still listed it under "Outstanding" / "Phase 3 ⚪ deferred." This reconciles the header + Phase 3 section to ✅ shipped (PC-target) and files the two genuinely-unbuilt enhancements: **3b** — auto-install on a weapon hit (today the marker needs a manual endpoint call; RAW it fires automatically on hit — hook `/attack` post-resolution, extract a shared `_install_eldritch_strike` helper), and **3c** — the NPC-target path (the endpoint only installs the buff for PC targets and the resolver read is in the PC-save branch, so the common "EK hits a monster then casts at it" case isn't wired). No code change — documentation accuracy only.
+
+### Changed
+- `docs/plans/eldritch-knight.md` — Lv 10 Eldritch Strike moved from "Outstanding / Phase 3 ⚪ deferred" to ✅ shipped (PC-target path, with the endpoint + resolver + test citations); the two real remainders filed as Phase 3b (auto-install on hit) and 3c (NPC-target path).
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** none — doc reconciliation of an already-wiki-surfaced plan; the underlying feature is already covered by `test_eldritch_strike.py` + `test_eldritch_strike_resolver.py`. No new endpoint, allowlist entry, or WS broadcast-shape change.
+
 ## [2.648.3] - 2026-06-25 — "The Drawn Blueprint"
 
 **Schema version:** 80
