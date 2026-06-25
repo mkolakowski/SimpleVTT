@@ -3256,6 +3256,138 @@ async def test_use_mage_slayer_strike_marks_reaction(
     assert (last.get("spell_name") or "").lower() == "burning hands"
 
 
+async def test_mage_slayer_auto_attacks_caster(
+    gm_client, gm_ws, roster,
+):
+    """v2.644.0 — taking the Mage Slayer reaction WITH a chosen weapon
+    auto-attacks the caster through the real /attack pipeline (a
+    weapon_attack card + a REACTION-slot spend), instead of the legacy
+    click-to-resolve advisory. Magnus casts within 5 ft of Krieger
+    (Mage Slayer) → resolving with Krieger's melee `attack_index` fires
+    the strike at Magnus and marks the reaction (not the action).
+    """
+    magnus = roster["Magnus Hexbinder"]
+    krieger = roster["Krieger Stonefist"]
+
+    # Discover a melee weapon index on Krieger's sheet (don't hardcode).
+    sheet_resp = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/sheet-json",
+    )
+    assert sheet_resp.status_code == 200, sheet_resp.text
+    attacks = (sheet_resp.json().get("sheet") or {}).get("attacks") or []
+    assert attacks, "expected Krieger to have at least one weapon attack"
+    weapon_index = 0
+
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/rest",
+        json={"type": "long"},
+    )
+    await _place_token(gm_client, magnus["id"], 300.0, 300.0)
+    await _place_token(gm_client, krieger["id"], 370.0, 300.0)
+
+    krieg_cid = f"tok_ms3_kr_{krieger['id']}"
+    magnus_cid = f"tok_ms3_mg_{magnus['id']}"
+    await _seed_battle(gm_client, [
+        {
+            "id": magnus_cid,
+            "char_id": magnus["id"],
+            "name": magnus["name"],
+            "initiative": 14,
+            "hp_current": 50, "hp_max": 50,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+        {
+            "id": krieg_cid,
+            "char_id": krieger["id"],
+            "name": krieger["name"],
+            "initiative": 10,
+            "hp_current": 75, "hp_max": 75,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": magnus["id"],
+            "spell_index": 5,
+            "slot_level": 3,
+            "class_slug": "warlock",
+            "target_combatant_ids": [krieg_cid],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == krieger["id"]
+        and (m.get("data") or {}).get("trigger_event") == "spell_cast_near"
+    ]
+    assert prompts, "expected spell_cast_near prompt for Krieger"
+    prompt_id = prompts[0]["data"]["prompt_id"]
+
+    gm_ws.mark()
+    use = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "take-mage-slayer-strike",
+            "watcher_char_id": krieger["id"],
+            "params": {"attack_index": weapon_index},
+        },
+    )
+    assert use.status_code == 200, use.text
+
+    await asyncio.sleep(0.25)
+    # The real /attack pipeline fired a weapon_attack card from Krieger.
+    strikes = [
+        m for m in gm_ws.buffered("weapon_attack")
+        if (m.get("data") or {}).get("caster_char_id") == krieger["id"]
+    ]
+    assert strikes, "expected a weapon_attack broadcast for Krieger's strike"
+
+    # The autostrike feature_used trail fired (distinguishes the
+    # auto-attack path from the legacy `mage-slayer` advisory).
+    fu = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "mage-slayer-autostrike"
+        and (m.get("data") or {}).get("character_id") == krieger["id"]
+    ]
+    assert fu, "expected feature_used(source=mage-slayer-autostrike)"
+
+    # Krieger's REACTION slot flipped — NOT his action.
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == krieger["id"]
+        and (m.get("data") or {}).get("slot") == "reaction"
+    ]
+    assert econ and econ[-1]["data"]["used"] is True, (
+        "expected Krieger's reaction slot to flip used=True"
+    )
+    action_used = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == krieger["id"]
+        and (m.get("data") or {}).get("slot") == "action"
+        and (m.get("data") or {}).get("used") is True
+    ]
+    assert not action_used, (
+        "Mage Slayer strike must not consume Krieger's action slot"
+    )
+
+
 # ── v2.74.0 — Phase 4a: Defensive Duelist feat ──
 
 

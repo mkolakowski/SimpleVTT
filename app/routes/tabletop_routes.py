@@ -31776,13 +31776,17 @@ async def use_reaction(
         except Exception:
             pass
     elif reaction_key == "take-mage-slayer-strike" and watcher_char_id:
-        # v2.75.0 Phase 4d — Mage Slayer feat. Pure reaction spend
-        # (no slot cost). Marks reaction + broadcasts feature_used
-        # naming the caster being attacked. v1 doesn't auto-roll the
-        # melee attack against the caster — chat-card surfaces the
-        # trigger and the player rolls the attack manually (mirrors
-        # the v2.66.0 OA pattern where the legacy `feature_used`
-        # advisory tells the player to click their Attack button).
+        # v2.75.0 Phase 4d — Mage Slayer feat. RAW (PHB p.168): when a
+        # creature within 5 ft casts a spell, use the reaction to make a
+        # melee weapon attack against it.
+        #
+        # v2.644.0 — auto-attack. When the resolving client passes a
+        # weapon choice in the request body's `params` (`attack_index`),
+        # run that melee attack at the caster through the real `/attack`
+        # pipeline — attack roll + damage + card — marking the REACTION
+        # slot (via /attack's `as_reaction` flag) rather than the action.
+        # Falls back to the legacy click-to-resolve advisory when no
+        # weapon is chosen (or no caster combatant id is available).
         try:
             options = entry.get("options") or []
             matching = next(
@@ -31792,34 +31796,93 @@ async def use_reaction(
             params = (matching or {}).get("params") or {}
             caster_name = str(params.get("caster_name") or "the caster")
             spell_name = str(params.get("spell_name") or "a spell")
+            caster_combatant_id = params.get("caster_combatant_id")
             watcher_char = db.query(Character).filter(
                 Character.id == int(watcher_char_id),
             ).first()
             if not watcher_char or not watcher_char.sheet:
                 raise HTTPException(404, "watcher character not found")
-            await _mark_battle_economy(
-                campaign_id, int(watcher_char_id), "reaction",
-            )
-            await hub.broadcast(campaign_id, {
-                "type": "feature_used",
-                "data": {
+
+            req_params = body.get("params") or {}
+            attack_index_raw = req_params.get("attack_index")
+            sheet_attacks = watcher_char.sheet.get("attacks") or []
+            auto_attack = False
+            chosen_attack = None
+            attack_index = -1
+            if attack_index_raw is not None and caster_combatant_id:
+                try:
+                    attack_index = int(attack_index_raw)
+                except (TypeError, ValueError):
+                    attack_index = -1
+                if 0 <= attack_index < len(sheet_attacks):
+                    chosen_attack = sheet_attacks[attack_index] or {}
+                    # RAW requires a melee weapon attack. (Whether the
+                    # chosen weapon is melee is the player's call — the
+                    # sheet carries no reliable melee flag — so we trust
+                    # the choice the same way /attack does.)
+                    auto_attack = True
+
+            if auto_attack:
+                attack_body = {
                     "character_id": int(watcher_char_id),
-                    "character_name": watcher_char.name,
-                    "user_color": watcher_char.color,
-                    "feature_name": "⚔ Mage Slayer reaction",
-                    "feature_desc": (
-                        f"Reaction. Make a melee weapon attack against "
-                        f"{caster_name} (who cast {spell_name}). Click "
-                        f"your Attack button to resolve."
-                    ),
-                    "source": "mage-slayer",
-                    "reaction_kind": "feat",
-                    "caster_name": caster_name,
-                    "caster_combatant_id": params.get("caster_combatant_id"),
-                    "caster_char_id": params.get("caster_char_id"),
-                    "spell_name": spell_name,
-                },
-            })
+                    "attack_index": attack_index,
+                    "target_combatant_id": caster_combatant_id,
+                    # /attack marks the reaction slot (not the action)
+                    # and gates the over-budget check on the reaction.
+                    "as_reaction": True,
+                }
+                await use_attack(
+                    campaign_id,
+                    _JsonRequestShim(attack_body),
+                    db=db,
+                    user=user,
+                )
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "character_id": int(watcher_char_id),
+                        "character_name": watcher_char.name,
+                        "user_color": watcher_char.color,
+                        "feature_name": "⚔ Mage Slayer reaction (strike)",
+                        "feature_desc": (
+                            f"Made a melee attack "
+                            f"({chosen_attack.get('name') or 'weapon'}) "
+                            f"against {caster_name} (who cast {spell_name}) "
+                            f"as a reaction."
+                        ),
+                        "source": "mage-slayer-autostrike",
+                        "reaction_kind": "feat",
+                        "caster_name": caster_name,
+                        "caster_combatant_id": caster_combatant_id,
+                        "caster_char_id": params.get("caster_char_id"),
+                        "spell_name": spell_name,
+                        "weapon_name": chosen_attack.get("name") or "",
+                    },
+                })
+            else:
+                await _mark_battle_economy(
+                    campaign_id, int(watcher_char_id), "reaction",
+                )
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "character_id": int(watcher_char_id),
+                        "character_name": watcher_char.name,
+                        "user_color": watcher_char.color,
+                        "feature_name": "⚔ Mage Slayer reaction",
+                        "feature_desc": (
+                            f"Reaction. Make a melee weapon attack against "
+                            f"{caster_name} (who cast {spell_name}). Click "
+                            f"your Attack button to resolve."
+                        ),
+                        "source": "mage-slayer",
+                        "reaction_kind": "feat",
+                        "caster_name": caster_name,
+                        "caster_combatant_id": caster_combatant_id,
+                        "caster_char_id": params.get("caster_char_id"),
+                        "spell_name": spell_name,
+                    },
+                })
         except HTTPException:
             raise
         except Exception:
@@ -109196,14 +109259,19 @@ async def use_attack(
     # action slot (bonus-action attacks are filed under feature/Class
     # abilities, not /attack). See cast_spell for the matching pattern.
     # v2.8.0: strict-mode honours the same override-suppression rule.
-    was_used = _is_slot_used(campaign_id, char.id, "action")
+    # v2.644.0 — reaction attacks (Mage Slayer's cast-provoked melee
+    # strike) pass `as_reaction: true`; like cast_spell's flag, this
+    # retargets the economy slot to `reaction` so the gate + the mark
+    # below consume the reaction instead of the turn action.
+    attack_slot = "reaction" if bool(body.get("as_reaction")) else "action"
+    was_used = _is_slot_used(campaign_id, char.id, attack_slot)
     user_is_gm = _user_is_gm(user, campaign, db)
     strict = bool(campaign.strict_action_economy)
     override = bool(body.get("override")) and not strict
     if was_used and not user_is_gm and not override:
         return JSONResponse(status_code=409, content={
             "error": "over_budget",
-            "slot": "action",
+            "slot": attack_slot,
             "char_name": char.name,
             "source": "attack",
             "label": name,
@@ -109455,7 +109523,7 @@ async def use_attack(
             # the early return so the economy state matches a normal
             # attack (UI shows action chip used, prevents the player
             # from spamming retries against the warded target).
-            await _mark_battle_economy(campaign_id, char.id, "action")
+            await _mark_battle_economy(campaign_id, char.id, attack_slot)
             await hub.broadcast(campaign_id, {
                 "type": "feature_used",
                 "data": {
@@ -110822,7 +110890,7 @@ async def use_attack(
         "roll_state_applied": attack_roll_state_applied or None,
         "mirror_image": _mi_deflect,  # v2.543.0 — deflection outcome (or None)
         "over_budget": was_used,
-        "over_budget_slot": "action" if was_used else "",
+        "over_budget_slot": attack_slot if was_used else "",
         # v2.49.85 — per-target outcomes for multi-target attacks.
         # Empty list for single-target attacks (the legacy fields above
         # carry the only target's outcome). For 2+ targets, the first
@@ -110910,7 +110978,7 @@ async def use_attack(
             await _install_buff(campaign_id, char.id, _new_buff)
         _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
     else:
-        await _mark_battle_economy(campaign_id, char.id, "action")
+        await _mark_battle_economy(campaign_id, char.id, attack_slot)
     # v2.66.5 — Sentinel feat advisory. Walk for any Sentinel watcher
     # within 5 ft of the attacker who isn't the target. Emits one
     # `feature_used(source="sentinel-attack-trigger")` per qualifier

@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.644.0] - 2026-06-25 — "The Counter-Swing"
+
+**Schema version:** 80
+
+**Commit summary:** Reactions v3 — Mage Slayer auto-attack: taking the Mage Slayer reaction with a chosen weapon now actually rolls that melee attack at the provoking caster through the real `/attack` pipeline (spending the **reaction**, not the action), instead of a click-to-resolve advisory.
+
+**Description:** RAW (PHB p.168), Mage Slayer lets a PC within 5 ft of a creature that casts a spell use their reaction to make a melee weapon attack against that caster. Since v2.75.0 the `spell_cast_near` prompt offered the `take-mage-slayer-strike` option but only **marked the reaction + broadcast an advisory** ("click your Attack button to resolve") — the strike was manual. This wires the auto-attack, mirroring the v2.643.0 War Caster auto-cast: when the resolving client passes a weapon choice in the `/use_reaction` body's `params` (`attack_index`), the dispatch validates the index against the watcher's `sheet.attacks` and delegates to the real `use_attack` coroutine against the caster — attack roll, damage, and the weapon-attack card all run as a normal strike. `cast_spell`'s v2.643.0 `as_reaction` flag is mirrored onto `/attack`: an `attack_slot` local retargets the Phase-4 over-budget gate and the post-attack `_mark_battle_economy` to the `reaction` slot, so a Mage Slayer strike doesn't burn the caster's turn action and is correctly blocked once the reaction is spent. The same `_JsonRequestShim` (v2.643.0) lets the reaction handler invoke the monolithic `use_attack` endpoint as a plain coroutine. When no weapon is chosen (or no caster combatant id is available), the handler falls back to the legacy advisory. Closes the "Mage Slayer melee attack" auto-resolution line in the reactions-automation v3 backlog.
+
+### Added
+- `app/routes/tabletop_routes.py` — `use_attack` accepts `as_reaction: true` (marks the reaction economy slot + gates on it instead of the action, via a new `attack_slot` local threaded through the gate, the over-budget payload, and both `_mark_battle_economy` sites); the `take-mage-slayer-strike` dispatch auto-attacks the provoking caster with the chosen weapon via the attack pipeline, with the advisory as fallback.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_reaction_prompt.py::test_mage_slayer_auto_attacks_caster` (+1) — Magnus casts Burning Hands within 5 ft of Krieger (Mage Slayer); resolving `take-mage-slayer-strike` with Krieger's discovered melee `attack_index` asserts a `weapon_attack` card from Krieger fires, a `feature_used(source=mage-slayer-autostrike)` trail fires, Krieger's **reaction** slot flips used=True, and his **action** slot is NOT consumed.
+
 ## [2.643.0] - 2026-06-25 — "The Reaction Cantrip"
 
 **Schema version:** 80
