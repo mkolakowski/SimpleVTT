@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.652.0] - 2026-06-25 — "The Scoreboard"
+
+**Schema version:** 81
+
+**Commit summary:** Statistics logging Phase 3 — the `/campaign/{id}/stats` page + a `📊 Stats` nav pill. Completes the feature end-to-end: damage/healing/attacks/spells are now visible in the app.
+
+**Description:** Final slice of the [stats plan](docs/plans/campaign-stats.md). Adds `GET /campaign/{id}/stats` (gated by `_user_can_view_campaign`) rendering `campaign_stats.html` — a shell that fetches the Phase-2 API (`GET /api/campaign/{id}/stats`, which owns the own-vs-GM visibility gate) and renders per-character cards: damage dealt/taken, healing done/received, attacks + hit-rate, crits, KOs, spells cast, biggest hit, a most-used-spells table, and a per-session breakdown. The GM gets a roster `<select>` to switch between players (and an "All characters" default); a player sees only their own card(s). A `📊 Stats` quick-link pill in the tabletop nav (visible to all members) links to it. The page client-side JS is vanilla + HTML-escapes all values. With this the statistics feature is complete end-to-end: capture (Phase 1) → API + visibility (Phase 2) → page (Phase 3).
+
+### Added
+- `app/templates/campaign_stats.html` — the stats page.
+- `app/routes/tabletop_routes.py` — `GET /campaign/{id}/stats` page route.
+- `app/templates/tabletop.html` — the `📊 Stats` quick-link pill.
+
+### Schema
+- No schema change (still v81).
+
+**Harness:** `tests/harness/test_stats_page.py` (new, +3) — the page renders 200 with a roster `<select>` for the GM, 200 without the switcher for a player (Alice), and 404 for an unknown campaign.
+
 ## [2.651.0] - 2026-06-25 — "The Tally Sheet"
 
 **Schema version:** 81

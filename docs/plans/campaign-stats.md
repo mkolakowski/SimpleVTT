@@ -1,10 +1,13 @@
 # Per-Campaign Statistics Logging — Design Plan
 
-**Status:** 🟠 Phases 1–2 shipped. Phase 1 (v2.650.0): the `campaign_stat_events`
-table (schema v81) + the damage capture Hook A + reseed wiring. Phase 2
-(v2.651.0): the read API `GET /api/campaign/{id}/stats` (own-vs-GM gated) +
-`stats_service.py` + the heal/cast/attack capture hooks (B/C/D). **Phase 3 (the
-page + nav) is the remaining slice.** A player-facing stats page
+**Status:** ✅ shipped end-to-end (v2.650.0–v2.652.0). Phase 1 (v2.650.0): the
+`campaign_stat_events` table (schema v81) + the damage capture Hook A + reseed
+wiring. Phase 2 (v2.651.0): the read API `GET /api/campaign/{id}/stats`
+(own-vs-GM gated) + `stats_service.py` + the heal/cast/attack capture hooks
+(B/C/D). Phase 3 (v2.652.0): the `/campaign/{id}/stats` page + the `📊 Stats`
+nav pill. Optional follow-ups (filed below): Lay-on-Hands + other heal-endpoint
+capture, NPC-cast tracking, charts/leaderboard, and a retention rollup. A
+player-facing stats page
 showing damage dealt/taken, healing, attacks + hit-rate, crits, KOs, biggest
 hit, and most-used spells — per campaign, with a per-session breakdown.
 

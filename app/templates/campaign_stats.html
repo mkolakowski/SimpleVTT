@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}{{ campaign.name }} — Statistics{% endblock %}
+{% block content %}
+<div style="max-width:1000px;margin:0 auto;padding:0 28px;">
+<style>
+  .stats-head { display:flex; align-items:baseline; justify-content:space-between;
+    flex-wrap:wrap; gap:12px; margin:18px 0 14px; }
+  .stats-head h1 { margin:0; font-size:22px; }
+  .stats-head a { font-size:13px; }
+  .stats-controls { display:flex; align-items:center; gap:8px; margin-bottom:16px; }
+  .stats-controls select { min-height:36px; }
+  .stat-card { border:1px solid var(--border); border-radius:8px; background:var(--bg-2);
+    padding:16px 18px; margin-bottom:18px; }
+  .stat-card h2 { margin:0 0 12px; font-size:17px; }
+  .stat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:10px 18px; }
+  .stat-tile { background:var(--bg); border:1px solid var(--border); border-radius:6px;
+    padding:8px 10px; }
+  .stat-tile .v { font-size:20px; font-weight:600; }
+  .stat-tile .k { font-size:11px; color:var(--fg-mute); text-transform:uppercase;
+    letter-spacing:.04em; }
+  .stat-sub { margin-top:14px; }
+  .stat-sub h3 { font-size:13px; margin:0 0 6px; color:var(--fg-mute);
+    text-transform:uppercase; letter-spacing:.04em; }
+  .stat-sub table { width:100%; border-collapse:collapse; font-size:13px; }
+  .stat-sub th, .stat-sub td { text-align:left; padding:4px 8px;
+    border-bottom:1px solid var(--border); }
+  .stat-sub td.num, .stat-sub th.num { text-align:right; }
+  .stats-empty { color:var(--fg-mute); font-style:italic; padding:24px 0; }
+</style>
+
+<div class="stats-head">
+  <div>
+    <h1>📊 {{ campaign.name }} — Statistics</h1>
+    <p style="margin:2px 0 0;"><a href="/campaign/{{ campaign.id }}">← back to tabletop</a></p>
+  </div>
+</div>
+
+{% if is_gm %}
+<div class="stats-controls">
+  <label for="stats-pc">Show:</label>
+  <select id="stats-pc">
+    <option value="">All characters</option>
+    {% for c in roster %}
+    <option value="{{ c.id }}">{{ c.name }}</option>
+    {% endfor %}
+  </select>
+</div>
+{% endif %}
+
+<div id="stats-body"><p class="stats-empty">Loading…</p></div>
+
+<script>
+(function () {
+  const CID = {{ campaign.id }};
+  const body = document.getElementById('stats-body');
+  const sel = document.getElementById('stats-pc');
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+  }
+  function tile(k, v) {
+    return `<div class="stat-tile"><div class="v">${esc(v)}</div>` +
+           `<div class="k">${esc(k)}</div></div>`;
+  }
+  function card(ch) {
+    const t = ch.totals || {};
+    const hr = (t.hit_rate == null) ? '—'
+      : (Math.round(t.hit_rate * 1000) / 10) + '%';
+    let h = `<div class="stat-card"><h2>${esc(ch.name)}</h2><div class="stat-grid">`;
+    h += tile('Damage dealt', t.damage_dealt || 0);
+    h += tile('Damage taken', t.damage_taken || 0);
+    h += tile('Healing done', t.heal_done || 0);
+    h += tile('Healing received', t.heal_received || 0);
+    h += tile('Attacks', t.attacks || 0);
+    h += tile('Hit rate', hr);
+    h += tile('Crits', t.crits || 0);
+    h += tile('KOs', t.kos || 0);
+    h += tile('Spells cast', t.spells_cast || 0);
+    h += tile('Biggest hit', t.biggest_hit || 0);
+    h += `</div>`;
+    const spells = ch.top_spells || [];
+    if (spells.length) {
+      h += `<div class="stat-sub"><h3>Most-used spells</h3><table>` +
+           `<tr><th>Spell</th><th class="num">Casts</th></tr>`;
+      for (const s of spells) {
+        h += `<tr><td>${esc(s.spell_name || s.spell_slug)}</td>` +
+             `<td class="num">${esc(s.count)}</td></tr>`;
+      }
+      h += `</table></div>`;
+    }
+    const sess = ch.by_session || [];
+    if (sess.length) {
+      h += `<div class="stat-sub"><h3>By session</h3><table>` +
+           `<tr><th>Session</th><th class="num">Dmg dealt</th>` +
+           `<th class="num">Dmg taken</th><th class="num">Healing</th></tr>`;
+      for (const s of sess) {
+        h += `<tr><td>${esc(s.session_key)}</td>` +
+             `<td class="num">${esc(s.damage_dealt)}</td>` +
+             `<td class="num">${esc(s.damage_taken)}</td>` +
+             `<td class="num">${esc(s.heal_done)}</td></tr>`;
+      }
+      h += `</table></div>`;
+    }
+    h += `</div>`;
+    return h;
+  }
+
+  async function load(charId) {
+    body.innerHTML = '<p class="stats-empty">Loading…</p>';
+    let url = `/api/campaign/${CID}/stats`;
+    if (charId) url += `?character_id=${encodeURIComponent(charId)}`;
+    try {
+      const resp = await fetch(url, { credentials: 'same-origin' });
+      if (!resp.ok) { body.innerHTML = '<p class="stats-empty">Could not load stats.</p>'; return; }
+      const data = await resp.json();
+      const chars = data.characters || [];
+      if (!chars.length) {
+        body.innerHTML = '<p class="stats-empty">No statistics recorded yet — ' +
+          'play a session and they\'ll appear here.</p>';
+        return;
+      }
+      body.innerHTML = chars.map(card).join('');
+    } catch (e) {
+      body.innerHTML = '<p class="stats-empty">Could not load stats.</p>';
+    }
+  }
+
+  if (sel) sel.addEventListener('change', () => load(sel.value));
+  load(sel ? sel.value : null);
+})();
+</script>
+</div>
+{% endblock %}

@@ -16743,6 +16743,45 @@ def rolls_popout(
     )
 
 
+@router.get("/campaign/{campaign_id}/stats", response_class=HTMLResponse)
+def campaign_stats_page(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.652.0 — the per-campaign statistics page (Phase 3). Renders the
+    shell + nav; the numbers are fetched client-side from
+    `GET /api/campaign/{id}/stats` (which owns the own-vs-GM visibility
+    gate). A GM gets a roster `<select>` to switch players; a player sees
+    only their own card(s). See docs/plans/campaign-stats.md."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(404, "Not found")
+    is_gm = _user_is_gm(user, campaign, db)
+    roster = []
+    if is_gm:
+        roster = [
+            {"id": c.id, "name": c.name}
+            for c in (
+                db.query(Character)
+                .filter(Character.campaign_id == campaign_id)
+                .order_by(Character.name)
+                .all()
+            )
+        ]
+    return templates.TemplateResponse(
+        "campaign_stats.html",
+        {
+            "request": request,
+            "user": user,
+            "campaign": campaign,
+            "is_gm": is_gm,
+            "roster": roster,
+        },
+    )
+
+
 # ----------- API: tokens -----------
 
 # v2.102.0 — movement-lock per-token grants. When the GM approves a
