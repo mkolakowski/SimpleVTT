@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.636.0] - 2026-06-24 — "The Wardrobe"
+
+**Schema version:** 80
+
+**Commit summary:** Add an illustrated **Theming & display preferences** wiki guide (`docs/wiki/theming.md`) — the 14 built-in themes, display fonts, scale/readability knobs, and an honest accessibility note — served at `/wiki/theming`, plus the Playwright script + 5 screenshots it embeds.
+
+**Description:** Closes the "Theming" wiki-TODO with a player+GM-facing guide to SimpleVTT's personal display layer (everything here is per-account and never touches the shared table):
+
+- **Covered:** the 14 themes (8 classic — Dark/Midnight/Dim/Light/Forest/Bubblegum/Fire/OLED — + 6 fantasy — Hobbiton/Hearthstone/Mosswood/Inkwell/Forge/Sepia), the four display fonts, UI/font scale + glass-alpha + sepia texture, the roll-log-position / reaction-prompt / animate-GIFs / tab-color toggles, and **how it persists** (`users.theme` → a `data-theme` attribute on the page root, server-side at render).
+- **Accessibility — honest, not overclaimed:** points to Light/OLED for contrast and Font scale for text size, and explicitly flags that SimpleVTT does **not** yet honor `prefers-reduced-motion` (a tracked gap, not a setting) rather than implying it does.
+- **Screenshots (5):** `tests/harness_ui/capture_theming.py` shoots the settings theme picker plus the *same* character sheet under Dark / Light / Fire / Hobbiton. Themes are set **client-side** (`document.documentElement.setAttribute('data-theme', …)`), so the capture writes no `users.theme` state — safe on the public demo.
+- Wired into the wiki: `wiki.html` + `docs/wiki/README.md` "Available guides" rows + the checked-off "Theming" wiki-TODO. Directly-served wiki guide, so no `_DOC_ALLOWLIST` entry.
+
+### Added
+- `docs/wiki/theming.md` — the illustrated theming guide.
+- `tests/harness_ui/capture_theming.py` + `app/static/docs/theming/*.png` — 5 screenshots (picker + 4 themed sheets).
+
+### Changed
+- `app/templates/wiki.html` + `docs/wiki/README.md` — surface the new guide; marked the "Theming" wiki-TODO done.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_wiki.py::test_wiki_home_renders` — added `/wiki/theming` to the landing-page assertion list. (Directly-served wiki guide — no per-slug `/wiki/doc/...` test required.)
+
 ## [2.635.0] - 2026-06-24 — "The Open Door"
 
 **Schema version:** 80

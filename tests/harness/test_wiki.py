@@ -44,6 +44,7 @@ async def test_wiki_home_renders():
     assert "/wiki/srd-conditions" in resp.text
     assert "/wiki/player-onboarding" in resp.text   # v2.634.0
     assert "/wiki/inviting-players" in resp.text     # v2.635.0
+    assert "/wiki/theming" in resp.text              # v2.636.0
     # v2.49.9: the wiki nav menu is rendered on the landing too.
     assert 'class="wiki-nav"' in resp.text
     # v2.630.0: the design-plans index moved to its own page; the landing
