@@ -4,10 +4,16 @@ The original demo (`app/demo_seed.py`) seeds one campaign — "Demo: The
 Sundered Vault" (level ~5). This module adds the OTHER leveled showcase
 campaigns (levels 3, 9, 13, 18). Each is a small party (≤6 PCs) whose
 members each demonstrate a **class feature gained at that level**, plus
-level-appropriate NPC templates and a placeholder battle map (art is added
-later — see the generation prompts in `docs/wiki/demo-content.md`). Every PC
+level-appropriate NPC templates and a placeholder battle map. Every PC
 carries a `notes` block: a one-line description, a roleplay hook, and how to
 play (leaning on the showcase feature).
+
+Token / map **art** is wired by adding an optional ``image`` web-path to the
+relevant spec entry — ``map["image"]``, a PC dict's ``"image"``, or a 4th
+element on an ``npc_tokens`` tuple ``(slug, label, color, image)``. Absent →
+``image_url=None`` (the token renders as a plain coloured ring). Generate the
+art from the ready-to-paste prompts at ``/wiki/doc/image-prompts``
+(`docs/demo/image-prompts.md`).
 
 Imported **lazily** by `demo_seed.reset_and_reseed` (and `wipe`) to avoid an
 import cycle — this module imports `build_dnd5e_sheet` + `_npc_sheet` from
@@ -812,8 +818,11 @@ def _seed_one(db: Session, spec: dict, users: dict[str, User]) -> Campaign:
             campaign_id=camp.id, user_id=users[mkey].id, is_gm=False, color=color))
     db.flush()
     mp = spec["map"]
+    # Optional ``image`` web-path (e.g. "/static/demo/maps/goblin-warrens.png")
+    # on the map dict / party PCs / npc_tokens wires demo art generated from the
+    # prompts at /wiki/doc/image-prompts. Absent → None (plain coloured ring).
     m = Map(
-        campaign_id=camp.id, name=mp["name"], image_url=None,
+        campaign_id=camp.id, name=mp["name"], image_url=mp.get("image"),
         grid_size_px=70, width_px=mp.get("width", 1400),
         height_px=mp.get("height", 1000), show_grid=True,
     )
@@ -850,17 +859,20 @@ def _seed_one(db: Session, spec: dict, users: dict[str, User]) -> Campaign:
     for i, ch in enumerate(chars):
         tk = Token(
             map_id=m.id, character_id=ch.id, controller_user_id=ch.owner_user_id,
-            label=ch.name, color="#6cb4ff", image_url=None,
+            label=ch.name, color="#6cb4ff", image_url=spec["party"][i].get("image"),
             x=140 + i * 140, y=280, size=1, team="hero")
         db.add(tk)
         enc_tokens.append(tk)
-    for i, (slug, label, color) in enumerate(spec.get("npc_tokens", [])):
+    for i, entry in enumerate(spec.get("npc_tokens", [])):
+        # entry is (slug, label, color) or (slug, label, color, image_web_path).
+        slug, label, color, *rest = entry
+        image = rest[0] if rest else None
         tt = tmpls.get(slug)
         if tt is None:
             continue
         tk = Token(
             map_id=m.id, character_id=None, token_template_id=tt.id,
-            label=label, color=color, image_url=None,
+            label=label, color=color, image_url=image,
             x=140 + i * 140, y=630, size=1, team="villain")
         db.add(tk)
         enc_tokens.append(tk)

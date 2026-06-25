@@ -633,12 +633,12 @@ listed in each tab.
    `app/static/demo/tokens/`, maps under `app/static/demo/maps/`).
 5. **Wire it in.** The flagship Sundered Vault tokens are set in
    `app/demo_seed.py seed_tokens()`. The five leveled demos build their
-   tokens/maps in `app/demo_campaigns.py::_seed_one()`, which currently sets
-   `image_url=None` on every `Map(...)` and `Token(...)`. To show your art,
-   set `image_url="/static/demo/tokens/<file>"` (or `.../maps/<file>`) on the
-   matching row — for the leveled demos that means threading an image field
-   through each campaign spec's `party` / `npc_tokens` lists and the map dict,
-   then passing it into the `Token` / `Map` constructors in `_seed_one()`.
+   tokens/maps in `app/demo_campaigns.py::_seed_one()`, which reads an optional
+   `image` web-path off each spec entry (default `None` → plain coloured ring).
+   To show your art, add that path to the matching spec in `app/demo_campaigns.py`:
+   - **Map:** add `"image": "/static/demo/maps/<file>.png"` to the demo's `map` dict.
+   - **Player character:** add `"image": "/static/demo/tokens/<file>.jpg"` to the PC's dict in `party`.
+   - **NPC token:** add a 4th element to the `npc_tokens` tuple — `(slug, label, color, "/static/demo/tokens/<file>.jpg")`.
 6. Bump the version, add a CHANGELOG entry, rebuild the app container. The
    demo's hourly reseed picks up the new images automatically. Then flip the
    matching row in the progress table above from ⬜ to ✅.

@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.640.3] - 2026-06-25 — "The Open Slot"
+
+**Schema version:** 80
+
+**Commit summary:** Wire optional `image` art paths through the leveled-demo seed (`app/demo_campaigns.py`) so demo token/map art generated from `/wiki/doc/image-prompts` can be dropped in by editing one spec entry.
+
+**Description:** Follow-up to v2.640.2. The five leveled demos (L3/L5/L9/L13/L18) hardcoded `image_url=None` on every `Map(...)` and `Token(...)` in `_seed_one()`, so generated art had nowhere to attach. `_seed_one()` now reads an optional `image` web-path off each spec entry; absent → `None` (unchanged: plain coloured ring), so this is fully backward-compatible and every demo still seeds exactly as before until art paths are added.
+
+### Changed
+- `app/demo_campaigns.py::_seed_one()` now applies `mp.get("image")` to the campaign `Map`, `party[i].get("image")` to each PC token, and an optional 4th `npc_tokens` tuple element to each NPC token. The encounter snapshot already copies `image_url`, so wired art survives the per-campaign ready-to-load encounter.
+- Fixed a stale doc pointer in the module docstring (was `docs/wiki/demo-content.md`; the prompts live at `/wiki/doc/image-prompts` / `docs/demo/image-prompts.md`) and documented the new `image` plumbing there and in the image-prompts "After generation" steps.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** No HTTP endpoint or WS broadcast shape changed — this is internal seed plumbing exercised at container boot. Verified the module parses and the demo campaigns still seed cleanly on a fresh container start (`/version` + `/healthz` green post-rebuild). The `image=None` default preserves the existing demo-seed harness behavior.
+
 ## [2.640.2] - 2026-06-25 — "The Casting Call"
 
 **Schema version:** 80
