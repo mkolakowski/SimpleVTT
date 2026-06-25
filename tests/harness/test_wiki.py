@@ -55,6 +55,7 @@ async def test_wiki_home_renders():
     assert "/wiki/inviting-players" in resp.text     # v2.635.0
     assert "/wiki/theming" in resp.text              # v2.636.0
     assert "/wiki/maps-grids-tokens" in resp.text     # v2.637.0
+    assert "/wiki/building-an-encounter" in resp.text # v2.639.0
     # v2.638.0: audience filter buttons on the guides table + the Format
     # column was dropped from the landing-page doc-tables.
     assert 'class="aud-filter"' in resp.text

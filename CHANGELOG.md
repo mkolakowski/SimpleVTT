@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.639.0] - 2026-06-24 — "The Set Piece"
+
+**Schema version:** 80
+
+**Commit summary:** Add an illustrated **Building an encounter** GM wiki guide (`docs/wiki/building-an-encounter.md`) — the encounter library, token templates, importing SRD monsters, spawn points, and session-start auto-load — served at `/wiki/building-an-encounter`, plus the Playwright script + 4 screenshots it embeds.
+
+**Description:** Closes the "Building an encounter" wiki-TODO with a GM walkthrough of prepping and loading combats:
+
+- **Covered:** what an encounter bundles (map + GM tokens + initiative seed + spawn points + playlist); the **encounter library** (*Settings → World → Encounters* — folders, search, tags, Duplicate/Edit/Delete, + New Encounter); **token templates** as the reusable monster roster; **importing from the SRD/Open5e bestiary** (search → Import → new template, homebrew shares the flow); the **stage-then-snapshot** build workflow (place tokens → roll initiative → Save current state in the Battle drawer); **spawn points**; and **auto-load on session start** (the `default_encounter_id` picker).
+- **Screenshots (4):** `tests/harness_ui/capture_encounters.py` shoots the encounter library (the demo's Tavern Brawl card expanded), the token-template roster, the bestiary search ("goblin" → Import), and the session-start default-encounter picker — all static navigates against the pre-seeded demo campaign.
+- Wired into the wiki in **alphabetical position** (between *Battle & Characters tab sheets* and *The character sheet*): `wiki.html` + `docs/wiki/README.md` "Available guides" rows + the checked-off "Building an encounter" wiki-TODO.
+
+### Added
+- `docs/wiki/building-an-encounter.md` — the illustrated encounter-building guide.
+- `tests/harness_ui/capture_encounters.py` + `app/static/docs/encounters/*.png` — 4 GM-facing screenshots.
+
+### Changed
+- `app/templates/wiki.html` + `docs/wiki/README.md` — surface the new guide (alphabetically placed); marked the "Building an encounter" wiki-TODO done.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_wiki.py::test_wiki_home_renders` — added `/wiki/building-an-encounter` to the landing-page assertion list (and the existing alphabetical-order assertion checks its placement). Directly-served wiki guide — no per-slug `/wiki/doc/...` test required.
+
 ## [2.638.1] - 2026-06-24 — "The Card Catalog"
 
 **Schema version:** 80
