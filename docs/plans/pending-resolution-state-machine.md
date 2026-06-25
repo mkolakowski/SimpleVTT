@@ -5,8 +5,15 @@
 save-or-suck condition on a reroll pass→fail flip) v2.611.0; **Phase 3a
 (Silvery Barbs applies the *withheld half* of a save-for-half AoE damage spell
 on a reroll pass→fail flip, via `_resolve_save_for_half_flip`) shipped
-v2.612.0.** The remaining Phase 3 work is attack hit↔miss re-resolution beyond
-the Lucky heal-back + an optional true held "pending" window.
+v2.612.0.** The remaining Phase 3 work is attack hit↔miss re-resolution. A
+v2.648.1 substrate analysis (see the Phase 3 section) splits it: the **damage
+half is already done** (the Lucky / AC-bump hit→miss heal-back reverses Sneak
+Attack / Hunter's Mark / Hex / Smite, since those fold into `damage_applied`),
+and the **condition half is a dedicated arc** — weapon on-hit conditions ride a
+deferred `weapon_hit_save` flow keyed on the save's cast_id (not the attack's
+`attack_id`), so reverting them on a flip needs either logging that chain under
+`attack_id` (Phase 3c, incremental) or the true held "pending" window (the
+architectural lift). Not a quick slice — scope as its own arc.
 
 This was the single biggest remaining item in the
 [reactions-automation](reactions-automation.md) v3 backlog — **and the save
@@ -111,13 +118,56 @@ which applies the difference between the full-on-fail amount (rolled, or
 rolled//2 with Evasion) and what already landed. Harness:
 `test_silvery_barbs_applies_withheld_half_on_damage_flip`.
 
-### Phase 3 — Generalize (future)
+### Phase 3 — Attack hit↔miss re-resolution
 
-- **Attack hit↔miss re-resolution beyond the heal-back** — recompute riders /
-  on-hit effects, not just restore HP.
+**Substrate analysis (v2.648.1) — the work splits into a done half and a hard
+half, so this is a dedicated arc, not a quick slice:**
+
+- **Damage half — already done.** When a Lucky reroll (v2.609.0) or any
+  AC-bump reaction (Shield / Defensive Duelist / Form of the Beast Tail /
+  Combat Inspiration / NPC Parry, v2.600.0–v2.608.0) flips an attack
+  **hit→miss**, the full `damage_applied` is healed back. Sneak Attack,
+  Hunter's Mark, Hex, and Divine Smite are all folded into the attack's damage
+  *total*, so healing `damage_applied` already reverses those riders — there's
+  no separate "recompute the damage riders" work left. The `attack_targeted`
+  prompt context already carries everything a downstream re-resolution needs:
+  `attack_id`, `damage_applied`, `attack_natural`, `attack_bonus`, `target_ac`,
+  `is_crit`.
+- **Condition half — structurally harder (the real Phase 3 work).** Weapon
+  **on-hit condition installs** don't ride the attack's `attack_id`: they go
+  through the `weapon_hit_save` rider path (`_fire_weapon_hit_saves`,
+  v2.99.408), which prompts the *target's* save via a RollRequest and installs
+  the condition on a fail — a **deferred, separate flow keyed on the save's own
+  cast_id**. By the time a defender's Lucky reroll flips the attack to a miss,
+  that on-hit save may already have been prompted or resolved. The attack-undo
+  infra (`_snapshot_target_buffs` / `_restore_target_buffs` +
+  `/undo_attack_damage`, which reverts `buff_install` entries) *can* walk back
+  condition installs, but the on-hit-save install isn't logged under the
+  attack's `attack_id`, so the reaction can't currently find it.
+- **miss→hit — no trigger today.** Every attack-flipping reaction is
+  defender-side (it can only make an attacker's hit *worse*). A reroll turning
+  a miss into a hit needs an attacker-side own-roll Lucky, which depends on the
+  filed `attack_resolved` event.
+
+**Recommended phasing:**
+
+- **3b (small):** on a Lucky/AC-bump hit→miss flip, also restore any *direct*
+  on-hit `buff_install` logged under `attack_id` (reuse `_restore_target_buffs`).
+  Covers weapons that install a buff directly on hit with no save. Needs a
+  direct-on-hit-buff demo fixture.
+- **3c (the hard part):** revert weapon on-hit-*save* condition installs on a
+  flip — either log the on-hit-save → install chain under the attack's
+  `attack_id` so the reaction can walk it back, **or** build the true **pending
+  window** (hold the on-hit save until the reaction window closes). The pending
+  window is the cleaner model but is the architectural lift flagged below; the
+  log-and-replay variant is incremental and fits the rest of this machine.
+
 - **A true "pending" window** — hold the resolution un-committed for a short
   reaction window instead of resolve-then-replay. Only pursue if replay proves
-  insufficient; replay is simpler and covers the reaction cases we have.
+  insufficient; replay (re-invoke the resolver with a new result) is simpler and
+  covers every reaction case shipped so far. Phase 3c is the first case where
+  replay strains (the deferred on-hit save), so the window becomes worth
+  weighing there.
 
 ## Out of scope
 

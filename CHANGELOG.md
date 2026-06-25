@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.648.1] - 2026-06-25 — "The Surveyed Ground"
+
+**Schema version:** 80
+
+**Commit summary:** Doc — substrate analysis of pending-resolution Phase 3 (attack hit↔miss re-resolution): the damage half is already done; the condition half is a dedicated arc, not a quick slice. Turn the vague "(future)" bullet into a substrate-grounded design.
+
+**Description:** Investigated the last open pending-resolution item — attack hit↔miss re-resolution — before building, and the substrate splits it cleanly. **The damage half is already shipped:** when a Lucky reroll (v2.609.0) or any AC-bump reaction (Shield / Defensive Duelist / Form of the Beast Tail / Combat Inspiration / NPC Parry) flips an attack hit→miss, the full `damage_applied` is healed back, and because Sneak Attack / Hunter's Mark / Hex / Divine Smite all fold into the attack's damage *total*, that heal-back already reverses those riders — no separate "recompute damage riders" work remains. The `attack_targeted` prompt context already carries `attack_id` / `damage_applied` / `attack_natural` / `attack_bonus` / `target_ac` / `is_crit`. **The condition half is structurally harder:** weapon on-hit condition installs don't ride the attack's `attack_id` — they go through the deferred `weapon_hit_save` flow (`_fire_weapon_hit_saves`), which prompts the target's save and installs on a fail, keyed on the save's own cast_id; by the time a defender's reroll flips the attack to a miss, that save may already be resolved. Reverting it needs either logging the on-hit-save→install chain under `attack_id` (Phase 3c, incremental) or the true held "pending" window (the architectural lift the plan flagged as last-resort). The plan's Phase 3 section + Status line are rewritten to record this analysis + a recommended phasing (3b: restore direct on-hit `buff_install` entries; 3c: the deferred-save chain / pending window), so the next contributor scopes it as a dedicated arc rather than a quick commit. No code change — design accuracy only.
+
+### Changed
+- `docs/plans/pending-resolution-state-machine.md` — Phase 3 section rewritten from a two-line "(future)" stub into a substrate-grounded analysis (damage half done, condition half hard, miss→hit needs `attack_resolved`) + a 3b/3c phasing; Status line updated to match.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** none — doc/design reconciliation of an already-wiki-surfaced plan; no new endpoint, allowlist entry, or WS broadcast-shape change.
+
 ## [2.648.0] - 2026-06-25 — "The Cancelled Luck"
 
 **Schema version:** 80
