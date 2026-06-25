@@ -13,7 +13,11 @@ and the **condition half is a dedicated arc** — weapon on-hit conditions ride 
 deferred `weapon_hit_save` flow keyed on the save's cast_id (not the attack's
 `attack_id`), so reverting them on a flip needs either logging that chain under
 `attack_id` (Phase 3c, incremental) or the true held "pending" window (the
-architectural lift). Not a quick slice — scope as its own arc.
+architectural lift). **Phase 3c is now designed (v2.648.3) — see the
+implementation arc in the Phase 3 section:** NPC-defender flips are synchronous
+(log-and-replay, 3c-1/3c-2 — small, shippable now) and PC-defender flips are
+async (the held pending window, 3c-3 — its own arc). 3c-1 (log NPC on-hit-save
+installs under `attack_id`) is the smallest first commit. Unstarted.
 
 This was the single biggest remaining item in the
 [reactions-automation](reactions-automation.md) v3 backlog — **and the save
@@ -163,12 +167,72 @@ half, so this is a dedicated arc, not a quick slice:**
   damage marker), and then the revert is a one-liner (`_restore_target_buffs`
   over the `buff_install` entries). **Net: the entire genuine Phase 3 remainder
   is 3c.**
-- **3c (the hard part):** revert weapon on-hit-*save* condition installs on a
-  flip — either log the on-hit-save → install chain under the attack's
-  `attack_id` so the reaction can walk it back, **or** build the true **pending
-  window** (hold the on-hit save until the reaction window closes). The pending
-  window is the cleaner model but is the architectural lift flagged below; the
-  log-and-replay variant is incremental and fits the rest of this machine.
+- **3c (the real remainder):** revert weapon on-hit-*save* condition installs
+  on a hit→miss flip. See the implementation arc below — a v2.648.2 design pass
+  found the work splits by whether the flipping defender is an NPC (synchronous,
+  log-and-replay) or a PC (async, needs the pending window).
+
+### Phase 3c — implementation arc (designed; unstarted)
+
+**The decisive insight: the flip is always defender-side, and the on-hit-save
+timing splits by defender type.**
+
+- **NPC defender** (flips via NPC Parry): `_fire_weapon_hit_saves` resolved the
+  on-hit save **synchronously** (`_resolve_feature_save` → `_install_buff_on_combatant_id`)
+  *before* the Parry prompt fired, so the condition **is already installed** at
+  flip time — but it was installed with **zero logging**, so there's nothing to
+  walk back. Pure log-gap; **replay works perfectly once we log it.**
+- **PC defender** (flips via Lucky / Shield / Defensive Duelist / Form-of-Beast
+  / Combat Inspiration): the on-hit save was only **prompted** (a RollRequest
+  the player answers later). The condition is **not installed yet** at flip
+  time. Replay can't revert a buff that doesn't exist; the only correct model is
+  to **hold the save** until the reaction window closes (the true pending
+  window). The PC case *is* the pending-window case.
+
+**Per-commit breakdown (NPC-first; each its own version bump + CHANGELOG + push):**
+
+- **3c-1 (smallest shippable first commit) — log NPC on-hit-save installs under
+  `attack_id`.** Thread an `attack_id` param through `_fire_weapon_hit_saves`
+  (`~38575`) → `_resolve_feature_save` (`~38321`) from the `/attack` (`~110503`)
+  + `/npc_attack` call sites. In the NPC-target branch, snapshot-before +
+  `_log_damage_entry(attack_id, {"kind": "buff_install", target_combatant_id,
+  buffs_before, buff_installed_key})` (mirroring the PC path's `/respond` log at
+  `~22535`). The PC branch gets `cast_id = attack_id` for free (it already
+  stashes `_save_request_context[req.id]["cast_id"]`, currently `None`). Ships
+  standalone value: the NPC on-hit condition becomes undoable via the existing
+  `/undo_attack_damage`. No flip logic. Test: a new
+  `tests/harness/test_weapon_hit_save_undo.py` using the `garrik_battle_master`
+  PATCH recipe (`test_menacing_attack.py`) — Garrik arms Menacing Attack, hits
+  an NPC bandit until the WIS save fails (Frightened installs), then
+  `/undo_attack_damage` reverts it.
+- **3c-2 — auto-revert the NPC condition on a flip.** New shared helper
+  `_revert_attack_buff_installs(db, campaign_id, attack_id)` that walks
+  `_attack_damage_log[attack_id]`, restores each `buff_install` via
+  `_restore_target_buffs`, and prunes the reverted entries (double-undo guard).
+  Call it from all **six** flip-producer heal-back blocks (Shield `~30864`,
+  Lucky `~32359`, Defensive Duelist `~32456`, Form-of-Beast `~32573`, Combat
+  Inspiration `~32752`, NPC Parry `~32857`) right after the HP heal-back, and
+  add a `conditions_reverted` field to each negate broadcast. Only **NPC Parry**
+  fires for an NPC defender, so it's the only one 3c-2's test exercises (the
+  other five are PC-defender → exercised in 3c-3). Test: Garrik (Battle Master,
+  Frightened rider) hits a Bandit-Captain in the Parry negation band until
+  Frightened installs, the NPC Parries → HP healed **and** Frightened removed.
+- **3c-3 — true pending window for the async PC-defender case** (own follow-up
+  arc; may sub-phase). When a PC target with a live flip-producing reaction
+  would take an on-hit save, **defer** firing it: stash the save spec on a new
+  `_pending_on_hit_saves[attack_id]` instead of building the RollRequest inline.
+  A flip drains + **discards** the held saves (attack missed → no effect); a
+  decline/timeout fires them (window-close trigger via the existing
+  `reaction_prompt_resolved` / decline path + a TTL purge fallback). This
+  reorders the attack pipeline for PC targets, hence its own arc.
+
+**Risks (full analysis in the design pass):** double-revert (3c-2 prunes the log
+entries it reverts); the PC-async ordering (quarantined to 3c-3's held window so
+it never rides an under-tested commit); NPC-vs-PC restore branch (`_restore_target_buffs`
+already forks on `target_char_id` presence); once-per-turn rider / superiority-die
+refund on a flip is **out of scope** (file separately — don't couple the pending
+window to resource accounting); avoid legendary-resistance NPCs in the 3c-2 test
+(LR defers the install, making the assertion non-deterministic).
 
 - **A true "pending" window** — hold the resolution un-committed for a short
   reaction window instead of resolve-then-replay. Only pursue if replay proves

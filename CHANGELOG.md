@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.648.3] - 2026-06-25 — "The Drawn Blueprint"
+
+**Schema version:** 80
+
+**Commit summary:** Doc — record the designed Phase 3c implementation arc (revert weapon on-hit-save conditions on a hit→miss flip), split NPC-synchronous vs PC-async, with a per-commit breakdown.
+
+**Description:** Design pass for the one genuine remainder of the pending-resolution machine — reverting weapon on-hit-*save* conditions when a defender's reaction flips an attack hit→miss. The decisive finding: the flip is always defender-side, and the on-hit-save timing splits by defender type. **NPC defenders** (flip via NPC Parry) resolved the on-hit save *synchronously* before the Parry prompt, so the condition is already installed — but with zero logging, so it's a pure log-gap that log-and-replay fixes. **PC defenders** (flip via Lucky / Shield / Defensive Duelist / Form-of-Beast / Combat Inspiration) only had the save *prompted* (a deferred RollRequest), so the condition isn't installed yet at flip time — replay can't revert a future install, so the only correct model is the true held "pending" window. This records the arc in the plan: **3c-1** (log NPC on-hit-save installs under `attack_id` — the smallest shippable first commit, value standalone via the existing `/undo_attack_damage`), **3c-2** (a shared `_revert_attack_buff_installs` hook called from all six flip producers to auto-revert the NPC condition on a flip), and **3c-3** (the held pending window for the async PC case — its own arc). Includes the file/function sites (`_fire_weapon_hit_saves` ~38575, `_resolve_feature_save` ~38321, the six negate blocks), the demo-fixture + probe-loop test recipes, and the risk analysis (double-revert, PC-async ordering quarantined to 3c-3, NPC/PC restore fork, superiority-die refund out of scope, LR-NPC non-determinism). No code change — design only.
+
+### Changed
+- `docs/plans/pending-resolution-state-machine.md` — Phase 3 section gains the full 3c implementation arc (NPC-synchronous vs PC-async split, 3c-1/3c-2/3c-3 per-commit breakdown, risk analysis); Status line updated to "3c designed, unstarted, 3c-1 is the first commit."
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** none — design/doc work on an already-wiki-surfaced plan; no new endpoint, allowlist entry, or WS broadcast-shape change. (The 3c-1 commit will land `tests/harness/test_weapon_hit_save_undo.py`.)
+
 ## [2.648.2] - 2026-06-25 — "The Empty Quarry"
 
 **Schema version:** 80
