@@ -8020,12 +8020,16 @@ def _eligible_reactions(
                 "kind": "feat",
                 "resource_cost": "Reaction + spell slot (when cast)",
                 "params": {
-                    "provoker_combatant_id": context.get("provoker_combatant_id"),
+                    # v2.66.0 OA emit uses ``mover_*`` keys as the
+                    # provoker identity; accept either spelling so this
+                    # branch works without changing the OA emit context.
+                    # v2.643.0 — the combatant-id fallback is what the
+                    # War Caster auto-cast targets, so it must resolve.
+                    "provoker_combatant_id": (
+                        context.get("provoker_combatant_id")
+                        or context.get("mover_combatant_id")
+                    ),
                     "provoker_char_id": context.get("provoker_char_id"),
-                    # v2.66.0 OA emit uses ``mover_name`` /
-                    # ``mover_token_id`` as the provoker identity;
-                    # accept either spelling so this branch works
-                    # without changing the OA emit context.
                     "provoker_name": (
                         context.get("provoker_name")
                         or context.get("mover_name")
@@ -8135,12 +8139,16 @@ def _eligible_reactions(
                 "kind": "feat",
                 "resource_cost": "Reaction + spell slot (when cast)",
                 "params": {
-                    "provoker_combatant_id": context.get("provoker_combatant_id"),
+                    # v2.66.0 OA emit uses ``mover_*`` keys as the
+                    # provoker identity; accept either spelling so this
+                    # branch works without changing the OA emit context.
+                    # v2.643.0 — the combatant-id fallback is what the
+                    # War Caster auto-cast targets, so it must resolve.
+                    "provoker_combatant_id": (
+                        context.get("provoker_combatant_id")
+                        or context.get("mover_combatant_id")
+                    ),
                     "provoker_char_id": context.get("provoker_char_id"),
-                    # v2.66.0 OA emit uses ``mover_name`` /
-                    # ``mover_token_id`` as the provoker identity;
-                    # accept either spelling so this branch works
-                    # without changing the OA emit context.
                     "provoker_name": (
                         context.get("provoker_name")
                         or context.get("mover_name")
@@ -23688,6 +23696,15 @@ async def cast_spell(
     # override flag is ignored for non-GM users — the 409 carries
     # ``strict: true`` so the modal hides its Confirm button.
     slot_for_economy = _casting_time_to_economy(spell.get("casting_time", ""))
+    # v2.643.0 — War Caster (and future reaction-cast feats) cast a
+    # 1-action spell using the REACTION slot instead of the action slot.
+    # The caller passes `as_reaction: true`; retargeting the economy slot
+    # here makes BOTH the Phase-4 over-budget gate (just below) and the
+    # post-cast `_mark_battle_economy` consume the reaction, not the
+    # action — so a War Caster cast doesn't burn the caster's turn action
+    # and is correctly blocked once the reaction is already spent.
+    if bool(body.get("as_reaction")):
+        slot_for_economy = "reaction"
     was_used = _is_slot_used(campaign_id, char.id, slot_for_economy)
     user_is_gm = _user_is_gm(user, campaign, db)
     strict = bool(campaign.strict_action_economy)
@@ -30402,6 +30419,19 @@ async def set_regional_fade(
 
 # ----------- API: Cutting Words (Lore Bard Lv 3) -----------
 
+# v2.643.0 — minimal Request shim so reaction handlers can invoke the
+# monolithic `cast_spell` endpoint as a plain coroutine (it only ever
+# reads `await request.json()`). Lets War Caster delegate to the real
+# cast pipeline — slot spend, attack/save, damage, roll-log card — with
+# a server-built body, instead of asking the player to click Cast Spell.
+class _JsonRequestShim:
+    def __init__(self, payload: dict):
+        self._payload = payload
+
+    async def json(self):
+        return self._payload
+
+
 # v2.67.0 Phase 1 — Reactions automation foundation.
 @router.post("/api/campaign/{campaign_id}/use_reaction")
 async def use_reaction(
@@ -31624,12 +31654,18 @@ async def use_reaction(
         except Exception:
             pass
     elif reaction_key == "take-war-caster-cast" and watcher_char_id:
-        # v2.76.0 Phase 4c — War Caster cast-instead-of-OA. Pure
-        # reaction spend; the spell slot is consumed when the player
-        # actually casts via /cast_spell. v1 broadcasts an advisory
-        # naming the provoking creature + tells the player to click
-        # Cast Spell to resolve (1-action spells only, single-target).
-        # Auto-cast resolution + spell-list filtering filed.
+        # v2.76.0 Phase 4c — War Caster cast-instead-of-OA. RAW: cast a
+        # 1-action spell that targets only the provoking creature, using
+        # the reaction instead of the OA swing.
+        #
+        # v2.643.0 — auto-cast. When the resolving client passes a spell
+        # choice in the request body's `params` (`spell_index`, optional
+        # `slot_level`), actually run that spell through the real
+        # `/cast_spell` pipeline against the provoker — slot spend +
+        # attack/save + damage + roll-log card — marking the REACTION
+        # slot (via cast_spell's `as_reaction` flag) rather than the
+        # action. Falls back to the legacy click-to-resolve advisory when
+        # no spell is chosen (e.g. the player wants an off-menu spell).
         try:
             options = entry.get("options") or []
             matching = next(
@@ -31638,33 +31674,103 @@ async def use_reaction(
             )
             params = (matching or {}).get("params") or {}
             provoker_name = str(params.get("provoker_name") or "the creature")
+            provoker_combatant_id = params.get("provoker_combatant_id")
             watcher_char = db.query(Character).filter(
                 Character.id == int(watcher_char_id),
             ).first()
             if not watcher_char or not watcher_char.sheet:
                 raise HTTPException(404, "watcher character not found")
-            await _mark_battle_economy(
-                campaign_id, int(watcher_char_id), "reaction",
-            )
-            await hub.broadcast(campaign_id, {
-                "type": "feature_used",
-                "data": {
+
+            req_params = body.get("params") or {}
+            spell_index_raw = req_params.get("spell_index")
+            sheet_spells = watcher_char.sheet.get("spells") or []
+            auto_cast = False
+            chosen_spell = None
+            if spell_index_raw is not None and provoker_combatant_id:
+                try:
+                    spell_index = int(spell_index_raw)
+                except (TypeError, ValueError):
+                    spell_index = -1
+                if 0 <= spell_index < len(sheet_spells):
+                    chosen_spell = sheet_spells[spell_index] or {}
+                    ct = chosen_spell.get("casting_time", "")
+                    # RAW gate: the spell must have a 1-action casting
+                    # time. (Single-target is the player's call — the
+                    # sheet carries no reliable single-vs-AoE flag — so
+                    # we trust the cast the same way the rest of the
+                    # cast surface does.)
+                    if _casting_time_to_economy(ct) == "action":
+                        auto_cast = True
+
+            if auto_cast:
+                cast_body = {
                     "character_id": int(watcher_char_id),
-                    "character_name": watcher_char.name,
-                    "user_color": watcher_char.color,
-                    "feature_name": "✨ War Caster reaction",
-                    "feature_desc": (
-                        f"Reaction. Cast a 1-action single-target spell "
-                        f"at {provoker_name} (who provoked the OA). Click "
-                        f"your Cast Spell button to resolve."
-                    ),
-                    "source": "war-caster",
-                    "reaction_kind": "feat",
-                    "provoker_name": provoker_name,
-                    "provoker_combatant_id": params.get("provoker_combatant_id"),
-                    "provoker_char_id": params.get("provoker_char_id"),
-                },
-            })
+                    "spell_index": spell_index,
+                    "target_combatant_id": provoker_combatant_id,
+                    # cast_spell marks the reaction slot (not the action)
+                    # and gates the over-budget check on the reaction.
+                    "as_reaction": True,
+                }
+                if req_params.get("slot_level") is not None:
+                    try:
+                        cast_body["spell_level"] = int(req_params["slot_level"])
+                    except (TypeError, ValueError):
+                        pass
+                # Delegate to the real cast pipeline. cast_spell owns the
+                # reaction-slot mark via `as_reaction`, so we don't mark
+                # it here (double-marking would 409 the over-budget gate).
+                await cast_spell(
+                    campaign_id,
+                    _JsonRequestShim(cast_body),
+                    db=db,
+                    user=user,
+                )
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "character_id": int(watcher_char_id),
+                        "character_name": watcher_char.name,
+                        "user_color": watcher_char.color,
+                        "feature_name": "✨ War Caster reaction (cast)",
+                        "feature_desc": (
+                            f"Cast {chosen_spell.get('name') or 'a spell'} "
+                            f"at {provoker_name} as a reaction instead of "
+                            f"the opportunity attack."
+                        ),
+                        "source": "war-caster-autocast",
+                        "reaction_kind": "feat",
+                        "spell_name": chosen_spell.get("name") or "",
+                        "provoker_name": provoker_name,
+                        "provoker_combatant_id": provoker_combatant_id,
+                        "provoker_char_id": params.get("provoker_char_id"),
+                    },
+                })
+            else:
+                # Advisory fallback — mark the reaction + tell the player
+                # to resolve the cast manually (off-menu spell, or no
+                # provoker target id available).
+                await _mark_battle_economy(
+                    campaign_id, int(watcher_char_id), "reaction",
+                )
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "character_id": int(watcher_char_id),
+                        "character_name": watcher_char.name,
+                        "user_color": watcher_char.color,
+                        "feature_name": "✨ War Caster reaction",
+                        "feature_desc": (
+                            f"Reaction. Cast a 1-action single-target spell "
+                            f"at {provoker_name} (who provoked the OA). Click "
+                            f"your Cast Spell button to resolve."
+                        ),
+                        "source": "war-caster",
+                        "reaction_kind": "feat",
+                        "provoker_name": provoker_name,
+                        "provoker_combatant_id": provoker_combatant_id,
+                        "provoker_char_id": params.get("provoker_char_id"),
+                    },
+                })
         except HTTPException:
             raise
         except Exception:

@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.643.0] - 2026-06-25 — "The Reaction Cantrip"
+
+**Schema version:** 80
+
+**Commit summary:** Reactions v3 — War Caster auto-cast: taking the War Caster OA reaction with a chosen spell now actually casts that 1-action spell at the provoker through the real `/cast_spell` pipeline (spending the **reaction**, not the action), instead of a click-to-resolve advisory.
+
+**Description:** RAW (PHB p.170), War Caster lets a PC whose opportunity attack is provoked cast a 1-action single-target spell at the provoker using their reaction instead of the weapon swing. Since v2.76.0 the reaction prompt offered the `take-war-caster-cast` option but only **marked the reaction + broadcast an advisory** ("click your Cast Spell button to resolve") — the actual cast was manual. This wires the auto-cast: when the resolving client passes a spell choice in the `/use_reaction` body's `params` (`spell_index`, optional `slot_level`), the dispatch validates the chosen spell is a known 1-action spell on the watcher's sheet, then delegates to the real `cast_spell` coroutine against the provoker — slot spend, attack/save resolution, damage, and the roll-log card all run exactly as a normal cast. Two supporting pieces make the delegation correct: (1) a new `as_reaction` flag on `cast_spell` retargets the action-economy slot to `reaction`, so both the Phase-4 over-budget gate and the post-cast `_mark_battle_economy` consume the **reaction** (a War Caster cast must not burn the caster's turn action, and must be blocked once the reaction is spent); (2) a minimal `_JsonRequestShim` lets the reaction handler invoke the monolithic `cast_spell` endpoint as a plain coroutine (it only ever reads `await request.json()`). When no spell is chosen (an off-menu spell, or no provoker target id), the handler falls back to the legacy advisory. Closes the "War Caster spell cast" auto-resolution line in the reactions-automation v3 backlog.
+
+### Added
+- `app/routes/tabletop_routes.py` — `cast_spell` accepts `as_reaction: true` (marks the reaction economy slot + gates on it instead of the action); `_JsonRequestShim` helper; the `take-war-caster-cast` dispatch auto-casts the chosen 1-action spell at the provoker via the cast pipeline, with the advisory as fallback.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_reaction_prompt.py::test_war_caster_auto_casts_at_provoker` (+1) — Tavik (War Caster) watches Krieger leave his reach, then resolves `take-war-caster-cast` with Sacred Flame's discovered `spell_index`; asserts a `spell_cast` card for Sacred Flame fires, a `feature_used(source=war-caster-autocast)` trail fires, Tavik's **reaction** slot flips used=True, and his **action** slot is NOT consumed.
+
 ## [2.642.0] - 2026-06-25 — "The Worn Cloak"
 
 **Schema version:** 80

@@ -264,6 +264,122 @@ async def test_use_reaction_marks_economy_and_resolves_prompt(
     assert econ_msgs[-1]["data"]["used"] is True
 
 
+async def test_war_caster_auto_casts_at_provoker(
+    gm_client, gm_ws, roster,
+):
+    """v2.643.0 — taking the War Caster reaction WITH a chosen spell
+    auto-casts that 1-action spell at the provoker through the real
+    /cast_spell pipeline (a spell_cast card + a REACTION-slot spend),
+    instead of the legacy click-to-resolve advisory.
+
+    Tavik (War Caster) watches Krieger leave his reach → the prompt
+    offers `take-war-caster-cast`; resolving it with `spell_index` for
+    Sacred Flame (a 1-action DEX-save cantrip) fires the cast and marks
+    the reaction (not the action).
+    """
+    krieger = roster["Krieger Stonefist"]
+    tavik = roster["Brother Tavik Stonebrow"]
+
+    # Discover Sacred Flame's index on Tavik's sheet (don't hardcode).
+    sheet_resp = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/sheet-json",
+    )
+    assert sheet_resp.status_code == 200, sheet_resp.text
+    spells = (sheet_resp.json().get("sheet") or {}).get("spells") or []
+    sf_index = next(
+        (
+            i for i, s in enumerate(spells)
+            if (s.get("_slug") or "").lower() == "sacred-flame"
+        ),
+        None,
+    )
+    assert sf_index is not None, (
+        f"expected Sacred Flame on Tavik; got "
+        f"{[s.get('_slug') for s in spells]}"
+    )
+
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        _make_combatant(tavik["name"], tavik["id"], init=8),
+    ])
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    await _place_token(gm_client, tavik["id"], 420.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
+    )
+    await asyncio.sleep(0.2)
+
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == tavik["id"]
+    ]
+    assert prompts
+    data = prompts[0]["data"]
+    prompt_id = data["prompt_id"]
+    keys = [o.get("key") for o in (data.get("options") or [])]
+    assert "take-war-caster-cast" in keys, (
+        f"expected War Caster option in prompt; got {keys}"
+    )
+
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "take-war-caster-cast",
+            "watcher_char_id": tavik["id"],
+            "params": {"spell_index": sf_index},
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    await asyncio.sleep(0.25)
+    # The real cast pipeline fired a spell_cast card for Sacred Flame.
+    casts = [
+        m for m in gm_ws.buffered("spell_cast")
+        if (m.get("data") or {}).get("caster_char_id") == tavik["id"]
+        and "sacred flame" in (
+            (m.get("data") or {}).get("spell_name") or ""
+        ).lower()
+    ]
+    assert casts, "expected a spell_cast broadcast for Tavik's Sacred Flame"
+
+    # The autocast feature_used trail fired (distinguishes the auto-cast
+    # path from the legacy `war-caster` advisory).
+    fu = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "war-caster-autocast"
+        and (m.get("data") or {}).get("character_id") == tavik["id"]
+    ]
+    assert fu, "expected feature_used(source=war-caster-autocast)"
+
+    # Tavik's REACTION slot flipped — NOT his action (the as_reaction
+    # flag retargets cast_spell's economy mark).
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == tavik["id"]
+        and (m.get("data") or {}).get("slot") == "reaction"
+    ]
+    assert econ and econ[-1]["data"]["used"] is True, (
+        "expected Tavik's reaction slot to flip used=True"
+    )
+    # And the action slot was NOT consumed by the cast.
+    action_used = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == tavik["id"]
+        and (m.get("data") or {}).get("slot") == "action"
+        and (m.get("data") or {}).get("used") is True
+    ]
+    assert not action_used, (
+        "War Caster cast must not consume Tavik's action slot"
+    )
+
+
 async def test_use_reaction_replay_guard(
     gm_client, gm_ws, roster,
 ):
