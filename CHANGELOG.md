@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.647.2] - 2026-06-25 — "The Common Grid"
+
+**Schema version:** 80
+
+**Commit summary:** Refactor — extract `_battle_grid_context` (the active-map / grid-size / grid-type setup block) and adopt it + `_combatant_token_on_map` across all three distance-gated reaction walkers (Counterspell, Protective Field, Sentinel). No behavior change.
+
+**Description:** Follow-up to v2.647.1's `_combatant_token_on_map`. The other half of the range-gate boilerplate — fetching the campaign's active `Map`, bailing if there's no grid, and deriving `grid_size_px` + `grid_type` — was still copy-pasted at the top of every distance-gated reaction walker. This extracts it into `_battle_grid_context(db, campaign) → (map_row, grid_size_px, grid_type) | None` and routes the Counterspell walker (`_emit_counterspell_prompts`), the Protective Field ally walker (`_emit_protective_field_ally_prompts`), and the Sentinel walker (`_check_sentinel_attack_triggers`) through it; the Sentinel walker also adopts `_combatant_token_on_map` for its two token lookups (the v2.647.1 pass only reached the first two walkers). All three now share the same three primitives — `_battle_grid_context` (grid) + `_combatant_token_on_map` (token) + `_distance_ft_between_points` (math) — instead of inlining each. Behavior-preserving: identical queries, fallback order, and early-return conditions. A pairwise `distance_between_combatants(c1, c2)` wrapper was evaluated and **deferred** — every current walker caches its anchor token across the loop or needs the watcher `Token` object for the prompt payload, so a pure pairwise function (re-resolving both tokens per call) fits no existing caller; deferred until one appears, rather than land an unused helper.
+
+### Changed
+- `app/routes/tabletop_routes.py` — new `_battle_grid_context` helper; `_emit_counterspell_prompts`, `_emit_protective_field_ally_prompts`, and `_check_sentinel_attack_triggers` now use it (+ `_combatant_token_on_map` in the Sentinel walker) instead of inlining the active-map / grid / token-lookup boilerplate.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** none — behavior-preserving refactor with no endpoint or WS broadcast-shape change. Covered by the existing walker tests: `test_cast_counterspell.py`, `test_protective_field.py`, `test_caelan_sentinel.py`, `test_undying_sentinel.py`, and the Mage Slayer / OA cases in `test_reaction_prompt.py` (all green post-refactor).
+
 ## [2.647.1] - 2026-06-25 — "The Shared Yardstick"
 
 **Schema version:** 80

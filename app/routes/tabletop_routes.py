@@ -6100,15 +6100,12 @@ def _check_sentinel_attack_triggers(
     if not combatants:
         return []
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
-    if not campaign or not campaign.active_map_id:
+    if not campaign:
         return []
-    map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
-    if not map_row or not map_row.grid_size_px:
+    _grid = _battle_grid_context(db, campaign)
+    if _grid is None:
         return []
-    grid_type = (
-        map_row.grid_type.value if map_row.grid_type else "square"
-    ).lower()
-    grid_size_px = int(map_row.grid_size_px)
+    map_row, grid_size_px, grid_type = _grid
 
     # Locate the attacker's combatant + token position.
     attacker_combatant = None
@@ -6123,17 +6120,9 @@ def _check_sentinel_attack_triggers(
             break
     if attacker_combatant is None:
         return []
-    attacker_token = None
-    src_id = attacker_combatant.get("source_token_id")
-    if src_id:
-        attacker_token = db.query(Token).filter(
-            Token.id == int(src_id), Token.map_id == map_row.id,
-        ).first()
-    if attacker_token is None and attacker_combatant.get("char_id"):
-        attacker_token = db.query(Token).filter(
-            Token.character_id == int(attacker_combatant["char_id"]),
-            Token.map_id == map_row.id,
-        ).first()
+    attacker_token = _combatant_token_on_map(
+        db, attacker_combatant, map_row.id,
+    )
     if attacker_token is None:
         return []
     ax = float(attacker_token.x or 0)
@@ -6164,17 +6153,7 @@ def _check_sentinel_attack_triggers(
         if not _combatant_has_sentinel(db, c):
             continue
         # Locate watcher's token.
-        watcher_token = None
-        wsrc = c.get("source_token_id")
-        if wsrc:
-            watcher_token = db.query(Token).filter(
-                Token.id == int(wsrc), Token.map_id == map_row.id,
-            ).first()
-        if watcher_token is None and c.get("char_id"):
-            watcher_token = db.query(Token).filter(
-                Token.character_id == int(c["char_id"]),
-                Token.map_id == map_row.id,
-            ).first()
+        watcher_token = _combatant_token_on_map(db, c, map_row.id)
         if watcher_token is None:
             continue
         wx = float(watcher_token.x or 0)
@@ -9194,6 +9173,25 @@ def _combatant_token_on_map(db: Session, combatant: dict, map_id: int):
     return None
 
 
+# v2.647.2 — the grid half of the shared range gate. Returns
+# ``(map_row, grid_size_px, grid_type)`` for the campaign's active map,
+# or None when there's no measurable grid (off-grid scene). Consolidates
+# the active-map / grid-size / grid-type setup block every distance-gated
+# reaction walker (Counterspell, Sentinel, Protective Field) repeated
+# inline before looping. Pairs with `_combatant_token_on_map` (the token
+# half) + `_distance_ft_between_points` (the math).
+def _battle_grid_context(db: Session, campaign: "Campaign"):
+    if not campaign or not getattr(campaign, "active_map_id", None):
+        return None
+    map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
+    if not map_row or not map_row.grid_size_px:
+        return None
+    grid_type = (
+        map_row.grid_type.value if map_row.grid_type else "square"
+    ).lower()
+    return (map_row, int(map_row.grid_size_px), grid_type)
+
+
 # v2.70.0 Phase 3b — Counterspell trigger walker. After a spell is
 # cast, walk every other PC combatant in the battle whose token is
 # within 60 ft of the caster's token AND who has Counterspell
@@ -9235,15 +9233,10 @@ async def _emit_counterspell_prompts(
     combatants = state.get("combatants") or []
     if not combatants:
         return 0
-    if not campaign.active_map_id:
+    _grid = _battle_grid_context(db, campaign)
+    if _grid is None:
         return 0
-    map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
-    if not map_row or not map_row.grid_size_px:
-        return 0
-    grid_type = (
-        map_row.grid_type.value if map_row.grid_type else "square"
-    ).lower()
-    grid_size_px = int(map_row.grid_size_px)
+    map_row, grid_size_px, grid_type = _grid
     # Locate caster's token.
     caster_combatant = None
     for c in combatants:
@@ -9346,15 +9339,10 @@ async def _emit_protective_field_ally_prompts(
     combatants = state.get("combatants") or []
     if not combatants:
         return 0
-    if not campaign.active_map_id:
+    _grid = _battle_grid_context(db, campaign)
+    if _grid is None:
         return 0
-    map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
-    if not map_row or not map_row.grid_size_px:
-        return 0
-    grid_type = (
-        map_row.grid_type.value if map_row.grid_type else "square"
-    ).lower()
-    grid_size_px = int(map_row.grid_size_px)
+    map_row, grid_size_px, grid_type = _grid
     # Locate the damaged creature's token.
     dmg_token = _combatant_token_on_map(db, damaged_combatant, map_row.id)
     if dmg_token is None:
