@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.648.0] - 2026-06-25 — "The Cancelled Luck"
+
+**Schema version:** 80
+
+**Commit summary:** Reactions v3 — Lucky vs Lucky cancel (PHB p.167): when the attacker also spends a luck point in response to a defender's Lucky reroll, the points cancel — no extra die is rolled and the original roll stands.
+
+**Description:** RAW (PHB p.167): "If more than one creature spends a luck point to influence the outcome of a roll, the points cancel each other out; no additional dice are rolled." SimpleVTT auto-rolls the defender's Lucky reroll (v2.609.0); this adds the cancel. When the resolving client sets `params.cancel: true` on the `use-lucky` reaction, the **attacker** (resolved from the `attack_targeted` prompt's `context.attacker_char_id`) must also have Lucky available — validated **before** any point is spent so a failed cancel never burns luck. On success both creatures' luck points are spent (through a new shared `_spend_lucky_charge` helper, extracted from the existing watcher decrement so both sides go through one path), the reroll is **voided** (the original attack roll stands, no auto-roll + no heal-back), and a `feature_used(source=lucky-cancel)` broadcasts naming both creatures + their remaining charges. The cancel path also fires `reaction_prompt_resolved` so the popup clears. When the attacker has no Lucky, `cancel: true` returns `409 attacker_no_lucky` (before spending). The normal (non-cancel) reroll path is unchanged.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_spend_lucky_charge(db, char)` helper (shared by the watcher spend + the attacker cancel spend); the `use-lucky` dispatch honours `params.cancel` for the Lucky-vs-Lucky cancel.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_reaction_prompt.py::test_lucky_vs_lucky_cancel` (+1) — Garrik (native Lucky) is attacked by Krieger (PATCHed to also have the Lucky feat + 3 points); resolving Garrik's `use-lucky` with `params.cancel=true` → `lucky_cancel=true`, both `charges_after` and `attacker_charges_after` = 2 (3→2 each), a `feature_used(source=lucky-cancel)` broadcast, and a `reaction_prompt_resolved`. Krieger's feats/resources are restored on teardown.
+
 ## [2.647.2] - 2026-06-25 — "The Common Grid"
 
 **Schema version:** 80

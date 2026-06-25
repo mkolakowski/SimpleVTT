@@ -2951,6 +2951,136 @@ async def test_use_lucky_auto_rolls_reroll_and_negates_on_miss(
             )
 
 
+async def test_lucky_vs_lucky_cancel(gm_client, gm_ws, roster):
+    """v2.648.0 — Lucky vs Lucky (PHB p.167): "If more than one creature
+    spends a luck point to influence the outcome of a roll, the points
+    cancel each other out; no additional dice are rolled." Garrik (native
+    Lucky) is attacked by Krieger (patched to also have Lucky); resolving
+    Garrik's `use-lucky` with `params.cancel=true` spends BOTH luck
+    points, voids the reroll, and fires `feature_used(source=lucky-cancel)`.
+    """
+    garrik = roster["Garrik Ironside"]
+    krieger = roster["Krieger Stonefist"]
+
+    # Garrik (the watcher) → 3/3 luck.
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/rest",
+        json={"type": "long"},
+    )
+
+    # Snapshot + patch Krieger (the attacker) to also have the Lucky feat
+    # + 3 luck points, so his point is available to spend on the cancel.
+    ks = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/sheet-json",
+    )
+    ksheet = ks.json().get("sheet") or {}
+    orig_feats = ksheet.get("feats")
+    orig_resources = ksheet.get("resources")
+    pr = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/sheet-fields",
+        json={
+            "feats": [{"slug": "lucky", "name": "Lucky"}],
+            "resources": [{"key": "lucky", "current": 3, "max": 3}],
+        },
+    )
+    assert pr.status_code == 200, pr.text
+    try:
+        garrik_cid = f"tok_lkvl_g_{garrik['id']}"
+        kr_cid = f"tok_lkvl_k_{krieger['id']}"
+        await _seed_battle(gm_client, [
+            {
+                "id": kr_cid, "char_id": krieger["id"],
+                "name": krieger["name"], "initiative": 12,
+                "hp_current": 75, "hp_max": 75, "buffs": [],
+                "economy": {
+                    "action": False, "bonus": False,
+                    "reaction": False, "movement": 0,
+                },
+            },
+            {
+                "id": garrik_cid, "char_id": garrik["id"],
+                "name": garrik["name"], "initiative": 10,
+                "hp_current": 85, "hp_max": 85, "buffs": [],
+                "economy": {
+                    "action": False, "bonus": False,
+                    "reaction": False, "movement": 0,
+                },
+            },
+        ])
+        await asyncio.sleep(0.15)
+        gm_ws.mark()
+
+        # Krieger attacks Garrik until a hit → Garrik's use-lucky prompt.
+        for _ in range(20):
+            r = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/attack",
+                json={
+                    "character_id": krieger["id"],
+                    "attack_index": 0,
+                    "target_combatant_id": garrik_cid,
+                    "override": True,
+                    "override_range": True,
+                },
+            )
+            assert r.status_code == 200, r.text
+            if r.json().get("hit"):
+                break
+        else:
+            raise AssertionError("no hit landed in 20 swings")
+
+        await asyncio.sleep(0.2)
+        lucky_prompts = [
+            m for m in _prompt_broadcasts(gm_ws)
+            if (m.get("data") or {}).get("watcher_char_id") == garrik["id"]
+            and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+            and any(
+                o.get("key") == "use-lucky"
+                for o in ((m.get("data") or {}).get("options") or [])
+            )
+        ]
+        assert lucky_prompts, "expected a use-lucky prompt for Garrik"
+        prompt_id = lucky_prompts[-1]["data"]["prompt_id"]
+
+        gm_ws.mark()
+        use = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+            json={
+                "prompt_id": prompt_id,
+                "reaction_key": "use-lucky",
+                "watcher_char_id": garrik["id"],
+                "params": {"cancel": True},
+            },
+        )
+        assert use.status_code == 200, use.text
+        b = use.json()
+        assert b.get("lucky_cancel") is True, b
+        assert b.get("charges_after") == 2, b           # Garrik 3→2
+        assert b.get("attacker_charges_after") == 2, b  # Krieger 3→2
+
+        await asyncio.sleep(0.15)
+        fu = [
+            m for m in gm_ws.buffered("feature_used")
+            if (m.get("data") or {}).get("source") == "lucky-cancel"
+            and (m.get("data") or {}).get("character_id") == garrik["id"]
+        ]
+        assert fu, "expected feature_used(source=lucky-cancel)"
+
+        # The prompt resolved → popup clears on every client.
+        resolved = [
+            m for m in _resolved_broadcasts(gm_ws)
+            if (m.get("data") or {}).get("prompt_id") == prompt_id
+        ]
+        assert resolved, "expected reaction_prompt_resolved for the cancel"
+    finally:
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/sheet-fields",
+            json={
+                "feats": orig_feats or [],
+                "resources": orig_resources or [],
+            },
+        )
+
+
 # ── v2.76.0 — Phase 4c: War Caster feat ──
 
 

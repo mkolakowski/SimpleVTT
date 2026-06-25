@@ -7133,6 +7133,45 @@ def _pc_has_lucky_available(char) -> "tuple[bool, int]":
     return False, 0
 
 
+# v2.648.0 — spend one of a PC's Lucky charges. Decrements the `lucky`
+# resource by 1 and persists the sheet. Returns ``(ok, charges_after)``;
+# ``ok`` is False (no change) when the char has no `lucky` resource or 0
+# charges remaining. Shared by the watcher's `use-lucky` spend and the
+# attacker's Lucky-vs-Lucky cancel spend so both go through one path.
+def _spend_lucky_charge(db: Session, char) -> "tuple[bool, int]":
+    if not char or not char.sheet:
+        return (False, 0)
+    sheet = dict(char.sheet or {})
+    resources = list(sheet.get("resources") or [])
+    out = []
+    ok = False
+    charges_after = 0
+    for r in resources:
+        if (
+            isinstance(r, dict)
+            and (r.get("key") or "").strip().lower() == "lucky"
+        ):
+            try:
+                cur = int(r.get("current") or 0)
+            except (TypeError, ValueError):
+                cur = 0
+            if cur <= 0:
+                return (False, 0)
+            r = dict(r)
+            r["current"] = cur - 1
+            charges_after = cur - 1
+            ok = True
+        out.append(r)
+    if not ok:
+        return (False, 0)
+    sheet["resources"] = out
+    char.sheet = sheet
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(char, "sheet")
+    db.commit()
+    return (True, charges_after)
+
+
 # v2.105.0 — reroll framework. A registry of "spend a resource to
 # reroll a d20" features, surfaced as button(s) on the roll-log card
 # and resolved by the generic POST /use_reroll endpoint. Each entry:
@@ -32135,35 +32174,95 @@ async def use_reaction(
             ).first()
             if not watcher_char or not watcher_char.sheet:
                 raise HTTPException(404, "watcher character not found")
+
+            _ctx = entry.get("context") or {}
+            _req_params = body.get("params") or {}
+            # v2.648.0 — Lucky vs Lucky (PHB p.167): "If more than one
+            # creature spends a luck point to influence the outcome of a
+            # roll, the points cancel each other out; no additional dice
+            # are rolled." When the resolving client sets `cancel: true`
+            # (the attacker chooses to spend their own Lucky in response),
+            # the attacker must ALSO have Lucky available — validate it
+            # BEFORE spending the watcher's point so a failed cancel
+            # doesn't burn anyone's luck. On success both points are
+            # spent, the reroll is voided (original roll stands), and no
+            # heal-back fires.
+            _cancel = bool(_req_params.get("cancel"))
+            _atk_char = None
+            if _cancel:
+                _atk_id = _ctx.get("attacker_char_id")
+                _atk_char = (
+                    db.query(Character).filter(
+                        Character.id == int(_atk_id),
+                    ).first() if _atk_id else None
+                )
+                _atk_ok = (
+                    _pc_has_lucky_available(_atk_char)[0]
+                    if _atk_char else False
+                )
+                if not _atk_ok:
+                    return JSONResponse(status_code=409, content={
+                        "error": "attacker_no_lucky",
+                    })
+
+            _w_ok, charges_after = _spend_lucky_charge(db, watcher_char)
+            if not _w_ok:
+                return JSONResponse(status_code=409, content={
+                    "error": "no_charges",
+                    "resource": "lucky",
+                })
             sheet = dict(watcher_char.sheet or {})
-            resources = list(sheet.get("resources") or [])
-            updated_resources = []
-            charges_after = 0
-            found = False
-            for r in resources:
-                if not isinstance(r, dict):
-                    updated_resources.append(r)
-                    continue
-                if (r.get("key") or "").strip().lower() == "lucky":
-                    cur = int(r.get("current") or 0)
-                    if cur <= 0:
-                        return JSONResponse(status_code=409, content={
-                            "error": "no_charges",
-                            "resource": "lucky",
-                        })
-                    r = dict(r)
-                    r["current"] = cur - 1
-                    charges_after = cur - 1
-                    found = True
-                updated_resources.append(r)
-            if not found:
-                raise HTTPException(404, "lucky resource not found")
-            sheet["resources"] = updated_resources
-            watcher_char.sheet = sheet
-            db.commit()
             await _mark_battle_economy(
                 campaign_id, int(watcher_char_id), "reaction",
             )
+
+            if _cancel:
+                # Both creatures spent a luck point — they cancel. Spend
+                # the attacker's point too, void the reroll, broadcast the
+                # cancel, and return without rolling or healing back.
+                _atk_spent, _atk_after = _spend_lucky_charge(db, _atk_char)
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "character_id": int(watcher_char_id),
+                        "character_name": watcher_char.name,
+                        "user_color": watcher_char.color,
+                        "feature_name": "🍀 Lucky vs Lucky — points cancel",
+                        "feature_desc": (
+                            f"{watcher_char.name} and {_atk_char.name} both "
+                            f"spent a luck point — they cancel; no extra "
+                            f"die is rolled and the original roll stands."
+                        ),
+                        "source": "lucky-cancel",
+                        "reaction_kind": "feat",
+                        "charges_after": charges_after,
+                        "attacker_name": _atk_char.name,
+                        "attacker_charges_after": _atk_after,
+                    },
+                })
+                # The reaction is spent + resolved — clear the popup on
+                # every client (the early return below skips the common
+                # tail that normally fires this).
+                await hub.broadcast(campaign_id, {
+                    "type": "reaction_prompt_resolved",
+                    "data": {
+                        "prompt_id": prompt_id,
+                        "campaign_id": campaign_id,
+                        "reaction_key": reaction_key,
+                        "watcher_char_id": watcher_char_id,
+                        "watcher_combatant_id": entry.get(
+                            "watcher_combatant_id"
+                        ),
+                        "resolved_by_user_id": int(user.id),
+                    },
+                })
+                return {
+                    "ok": True,
+                    "reaction_key": "use-lucky",
+                    "lucky_cancel": True,
+                    "charges_after": charges_after,
+                    "attacker_charges_after": _atk_after,
+                }
             # v2.609.0 — auto-roll the Lucky reroll server-side instead of
             # telling the player to roll by hand. RAW (PHB p.167, "attacked
             # by a creature"): roll a d20, then choose whether the attack
