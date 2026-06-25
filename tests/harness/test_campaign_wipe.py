@@ -29,6 +29,8 @@ def _seed_campaign_with_children(db, Models, *, name):
     db.add(camp)
     db.commit()
 
+    from app.models import Battle
+
     m = Map(campaign_id=camp.id, name="M1", image_url="/static/uploads/maps/m.png")
     db.add(m)
     db.commit()
@@ -39,6 +41,7 @@ def _seed_campaign_with_children(db, Models, *, name):
         DiceRoll(campaign_id=camp.id, user_id=gm.id, expression="1d20"),
         TokenTemplate(campaign_id=camp.id, name="NPC"),
         CampaignMembership(campaign_id=camp.id, user_id=player.id),
+        Battle(campaign_id=camp.id, state={"combatants": [], "active": False}),
     ])
     # Campaign points at the map — the wipe must null this before maps drop.
     camp.active_map_id = m.id
@@ -77,7 +80,7 @@ def test_wipe_removes_children_keeps_campaign_row():
         db.commit()
 
         # Every child table reported one delete.
-        for key in ("tokens", "encounters", "dice_rolls", "token_templates", "characters", "maps", "memberships"):
+        for key in ("tokens", "encounters", "battles", "dice_rolls", "token_templates", "characters", "maps", "memberships"):
             assert counts.get(key) == 1, f"{key}: expected 1 delete, got {counts.get(key)}"
 
         # The campaign row survives, with active_map_id nulled.
@@ -91,8 +94,31 @@ def test_wipe_removes_children_keeps_campaign_row():
         assert db.query(DiceRoll).filter(DiceRoll.campaign_id == camp.id).count() == 0
         assert db.query(TokenTemplate).filter(TokenTemplate.campaign_id == camp.id).count() == 0
         assert db.query(CampaignMembership).filter(CampaignMembership.campaign_id == camp.id).count() == 0
+        # v2.640.4 — the persisted battle row is wiped too (else a restored
+        # / reseeded campaign inherits stale combatants → OA + Dash bugs).
+        from app.models import Battle
+        assert db.query(Battle).filter(Battle.campaign_id == camp.id).count() == 0
     finally:
         db.close()
+
+
+def test_evict_battle_clears_hub_cache():
+    """v2.640.4 — hub.evict_battle drops the in-memory battle cache so the
+    next get_battle re-reads the DB. The demo *scheduler* reseed (no process
+    restart) relies on this: the persisted row is gone but the RAM cache
+    would otherwise keep serving the previous cycle's stale combatants."""
+    from app.realtime import CampaignHub
+
+    hub = CampaignHub()
+    hub._battle[5] = {"combatants": [{"id": 1}], "active": True}
+    hub._db_hydrated.add(5)
+
+    hub.evict_battle(5)
+
+    assert 5 not in hub._battle
+    assert 5 not in hub._db_hydrated
+    # Idempotent — evicting an absent campaign is a no-op, never raises.
+    hub.evict_battle(5)
 
 
 def test_wipe_keeps_memberships_when_flag_false():

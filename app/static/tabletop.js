@@ -4367,11 +4367,22 @@
             const _active = window._getActiveCombatant();
             if (_active) {
                 _anyActive = _active;
+                // Match the active combatant to the dragged token across
+                // the SAME three tiers the canonical token↔combatant lookup
+                // uses (see ~:957). NPC combatants carry neither a stable
+                // source_token_id (it goes stale after an encounter
+                // load / reseed — fresh token ids) nor a char_id, so the
+                // token_template_id + label fallback is what lets an NPC
+                // mover (e.g. a Vampire Spawn) match — without it
+                // _activeForDash stays null and the Dash gate never fires.
                 const _matches = (
                     (_active.source_token_id != null
                      && _active.source_token_id === tokenId)
                     || (_active.char_id != null
                         && _active.char_id === token.character_id)
+                    || (_active.token_template_id != null
+                        && _active.token_template_id === token.token_template_id
+                        && _active.name === token.label)
                 );
                 if (_matches) {
                     _activeForDash = _active;

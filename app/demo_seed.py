@@ -193,6 +193,16 @@ def wipe(db: Session) -> dict[str, int]:
         # path (backup/export-import arc Phase 7) reuses the exact ordering
         # the demo reseed has relied on. Behavior here is unchanged.
         counts.update(wipe_campaign_children(db, demo_campaign_ids))
+        # Evict the in-memory battle cache for every wiped campaign. The
+        # `battles` rows are gone (cascade on the campaign delete below +
+        # the explicit delete in wipe_campaign_children), but on a
+        # *scheduler* reseed the process never restarts, so the hub's RAM
+        # cache would keep serving the previous cycle's combatants (stale
+        # token ids + spent reactions) — the root cause of OAs not firing
+        # and the Dash gate not prompting on reseeded demo campaigns.
+        from .realtime import hub as _hub
+        for _cid in demo_campaign_ids:
+            _hub.evict_battle(_cid)
         # The campaign itself. v2.49.173: use bulk delete (consistent
         # with the other tables above) instead of ``for c in ...:
         # db.delete(c)``. The per-row delete marks the rows for

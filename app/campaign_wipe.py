@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .models import (
+    Battle,
     Campaign,
     CampaignMembership,
     Character,
@@ -62,6 +63,19 @@ def wipe_campaign_children(
     counts["encounters"] = (
         db.query(Encounter)
         .filter(Encounter.campaign_id.in_(campaign_ids))
+        .delete(synchronize_session=False)
+    )
+    # Battle (one row per campaign — the persisted initiative tracker).
+    # The demo reseed deletes the campaign row afterwards, which would
+    # cascade this anyway, but the importer's restore path KEEPS the
+    # campaign row — without this delete a restored campaign inherits the
+    # OLD battle's combatants (stale token ids + spent reactions), which
+    # breaks opportunity-attack detection + the Dash gate. Callers that
+    # keep the process alive across this (the demo scheduler reseed) must
+    # ALSO evict the in-memory hub cache via ``hub.evict_battle``.
+    counts["battles"] = (
+        db.query(Battle)
+        .filter(Battle.campaign_id.in_(campaign_ids))
         .delete(synchronize_session=False)
     )
     # DiceRolls.

@@ -64,6 +64,23 @@ class CampaignHub:
                 return loaded
         return self._battle.get(campaign_id)
 
+    def evict_battle(self, campaign_id: int) -> None:
+        """Drop the in-memory battle cache for a campaign so the next
+        ``get_battle`` re-reads the authoritative DB row (or finds none).
+
+        The demo *scheduler* reseed wipes + recreates a campaign's tokens
+        WITHOUT a process restart, so the persisted ``battles`` row is
+        cascade-deleted with the old campaign but this RAM cache survives
+        — and would keep serving the previous cycle's combatants, whose
+        ``source_token_id``s point at deleted tokens and whose economy
+        still shows spent reactions. That stale state silently breaks
+        opportunity-attack detection (watcher reaction reads as spent) and
+        the client Dash gate (active-combatant match fails on the dangling
+        token id). Evicting here forces a clean rehydrate.
+        """
+        self._battle.pop(campaign_id, None)
+        self._db_hydrated.discard(campaign_id)
+
     def set_battle(self, campaign_id: int, state: dict) -> None:
         """Update the in-memory cache and write through to the DB.
 

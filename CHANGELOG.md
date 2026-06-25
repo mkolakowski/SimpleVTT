@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.640.5] - 2026-06-25 — "The Ghost Battle"
+
+**Schema version:** 80
+
+**Commit summary:** Fix opportunity attacks + the Dash prompt silently breaking on reseeded demo campaigns — the demo reseed left a **stale battle** in the realtime hub's RAM cache.
+
+**Description:** Reported on demo L13 (Shadowfell Spire): as the GM, moving a Vampire Spawn away from some PCs (Maelen, Cassius) gave no opportunity-attack prompt while another (High Cleric Doran) worked, and moving the Vampire Spawn never offered the Dash action. A reproduction agent traced **both** symptoms to one root cause — a stale `Battle` surviving the demo reseed:
+
+- **Root cause.** The demo *scheduler* reseed (hourly, no process restart) wipes + recreates a campaign's tokens with fresh ids, but the realtime hub's in-memory battle cache (`CampaignHub._battle`) survived — so `hub.get_battle` kept serving the **previous cycle's** combatants. Those carried `source_token_id`s pointing at deleted tokens and economy showing **spent reactions**. So `_check_opportunity_attack_triggers` skipped watchers whose cached reaction read as spent (the "Maelen/Cassius vs Doran" split was just which combatants had a spent-reaction flag — not owner-related), and the client Dash gate's active-combatant match failed on the dangling token id.
+- **Fixes.**
+  - `app/demo_seed.py::wipe` now calls a new `CampaignHub.evict_battle(cid)` for every wiped campaign, dropping the RAM cache so the next read rehydrates clean.
+  - `app/campaign_wipe.py::wipe_campaign_children` now also deletes the `Battle` row — the demo path cascade-deletes it via the campaign delete anyway, but the **importer's restore path keeps the campaign row**, so without this a restored campaign inherited the old battle's combatants (the same class of bug).
+  - Defense-in-depth (`app/static/tabletop.js`): the client active-combatant ↔ dragged-token match gains the `token_template_id + label` fallback tier the canonical token lookup already uses, so an **NPC mover** still matches (and gets the Dash prompt) even if its combatant's `source_token_id` is stale (e.g. after an encounter load).
+
+(No server-side OA *routing* bug: `_resolve_watcher_user_ids` correctly targets the GM for an offline player's PC — verified live, a clean battle fires all OAs to the GM.)
+
+### Fixed
+- Opportunity attacks + the Dash prompt work again on demo campaigns after a reseed (stale hub battle cache is evicted).
+- Importer restore no longer inherits the previous battle's combatants.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_campaign_wipe.py` — the `wipe_campaign_children` test now seeds + asserts the `Battle` row is deleted (`counts["battles"] == 1`), plus a new `test_evict_battle_clears_hub_cache` asserting `CampaignHub.evict_battle` drops `_battle` + `_db_hydrated` (idempotent). The cross-reseed RAM-cache scenario itself is integration-level; these lock the two mechanisms it composes.
+
 ## [2.640.4] - 2026-06-25 — "The Roll Call"
 
 **Schema version:** 80
