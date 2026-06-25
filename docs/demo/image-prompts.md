@@ -13,7 +13,7 @@ plain coloured ring (`image_url=None`) and are waiting on art.
 
 > **Thumbnails appear automatically.** Each checklist row and each prompt
 > derives its thumbnail from the path shown for that entity (e.g.
-> `app/static/demo/tokens/l3-thorin.jpg` → `/static/demo/tokens/l3-thorin.jpg`).
+> `app/static/demo/tokens/l3-thorin.png` → `/static/demo/tokens/l3-thorin.png`).
 > Save your generated art at exactly that path and rebuild the container — the
 > thumbnail shows up next to the prompt and in the row on the next load, no
 > edits to this page needed. (The archived Sundered Vault's shipped tokens
@@ -25,11 +25,11 @@ plain coloured ring (`image_url=None`) and are waiting on art.
 > misalign. Each map prompt below already says "no grid lines"; if your model
 > adds one anyway, put `grid, grid lines, grid overlay` in the negative prompt.
 
-## Overall progress — 10 / 58 images
+## Overall progress — 14 / 58 images
 
 | Demo | Map | Tokens | Done |
 |---|---|---|---|
-| Level 3 : The Goblin Warrens | ⬜ | ⬜ 0 / 9 | **0 / 10** |
+| Level 3 : The Goblin Warrens | ✅ | 🟠 3 / 9 | **4 / 10** |
 | Level 5 : The Tide-Wracked Catacombs | ⬜ | ⬜ 0 / 9 | **0 / 10** |
 | Level 9 : Storm Over Saltmarsh | ⬜ | ⬜ 0 / 9 | **0 / 10** |
 | Level 13 : The Shadowfell Spire | ⬜ | ⬜ 0 / 8 | **0 / 9** |
@@ -164,14 +164,14 @@ plain coloured ring (`image_url=None`) and are waiting on art.
 
 Tier-1 starter dungeon. A goblin warband raids the trade road from a warren of tunnels.
 
-**Progress: 1 / 10 images generated** — every token below still renders as a plain coloured ring (`image_url=None`). Generate the art, drop it at the listed path, then wire it in `app/demo_campaigns.py`.
+**Progress: 4 / 10 images generated** — remaining tokens render as a plain coloured ring (`image_url=None`). Generate the art, drop it at the listed path, then wire it in `app/demo_campaigns.py`.
 
 | Entity | Drop file at | Status |
 |---|---|---|
 | 🗺️ The Goblin Warrens (map) | `app/static/demo/maps/goblin-warrens.png` | ✅ wired |
-| 🛡️ Thorin Battlehammer | `app/static/demo/tokens/l3-thorin.jpg` | ⬜ needs art |
-| 🗡️ Nyx Shadowstep | `app/static/demo/tokens/l3-nyx.jpg` | ⬜ needs art |
-| ✨ Sister Elsbeth | `app/static/demo/tokens/l3-elsbeth.jpg` | ⬜ needs art |
+| 🛡️ Thorin Battlehammer | `app/static/demo/tokens/l3-thorin.png` | ✅ wired |
+| 🗡️ Nyx Shadowstep | `app/static/demo/tokens/l3-nyx.png` | ✅ wired |
+| ✨ Sister Elsbeth | `app/static/demo/tokens/l3-elsbeth.png` | ✅ wired |
 | 🔥 Aldric the Sudden | `app/static/demo/tokens/l3-aldric.jpg` | ⬜ needs art |
 | 🏹 Brisa Quickarrow | `app/static/demo/tokens/l3-brisa.jpg` | ⬜ needs art |
 | 👹 Grukk the Warlord | `app/static/demo/tokens/l3-grukk.jpg` | ⬜ needs art |
@@ -191,19 +191,19 @@ Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
 #### Thorin Battlehammer — Mountain Dwarf Fighter 3 (Battle Master)
 
-`app/static/demo/tokens/l3-thorin.jpg`
+`app/static/demo/tokens/l3-thorin.png`
 
 > Painterly digital fantasy character portrait, three-quarter view from the chest up, neutral expression unless noted, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle warm rim-lighting, no frame, no text. A stout, broad-shouldered mountain dwarf front-liner with a gruff, clan-proud bearing and braided iron-grey beard clasped with clan rings. He wears battered, well-fitted plate armor (AC 18) etched with hammer-and-anvil clan heraldry, and stands in a poised duelist's stance rather than a wall's brace. He grips a rune-stamped warhammer in one fist with a pair of handaxes tucked at his belt. Deep-set determined eyes, dwarven craftsmanship in every buckle, warm forge-light glinting off the steel. Recommended 1:1 square, 1024×1024.
 
 #### Nyx Shadowstep — Wood Elf Rogue 3 (Assassin)
 
-`app/static/demo/tokens/l3-nyx.jpg`
+`app/static/demo/tokens/l3-nyx.png`
 
 > Painterly digital fantasy character portrait, three-quarter view from the chest up, neutral expression unless noted, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle warm rim-lighting, no frame, no text. A lithe, silent wood-elf scout and assassin, half-lost in shadow, with sharp angular features, leaf-green eyes, and dark hair bound back for the hunt. She wears supple muted-green and grey leather armor over a hooded cloak, half-drawn so shadow pools in the cowl. A slim rapier rides at her hip and a shortbow is slung over one shoulder; one gloved hand rests near the blade as if to open a fight from the dark. Cool low-key lighting with a single warm rim-light along her cheek and shoulder. Recommended 1:1 square, 1024×1024.
 
 #### Sister Elsbeth — Human Cleric 3 (Light Domain)
 
-`app/static/demo/tokens/l3-elsbeth.jpg`
+`app/static/demo/tokens/l3-elsbeth.png`
 
 > Painterly digital fantasy character portrait, three-quarter view from the chest up, neutral expression unless noted, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle warm rim-lighting, no frame, no text. A human radiant battle-priestess of the Light Domain, warm but unyielding, with a steady compassionate gaze and short practical hair. She wears polished chain mail draped with a white-and-gold tabard, and holds aloft a sunburst holy symbol that sheds golden radiant light across her face and armor. A flanged mace hangs ready at her side. The glow burns away surrounding shadow with halo-bright, sun-warm light. Recommended 1:1 square, 1024×1024.
 

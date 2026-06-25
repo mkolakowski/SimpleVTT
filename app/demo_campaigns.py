@@ -66,7 +66,8 @@ _GOBLIN_WARRENS = {
     "map": {"name": "The Goblin Warrens (entrance)", "width": 1400, "height": 1000,
             "image": "/static/demo/maps/goblin-warrens.png"},
     "party": [
-        {"owner": "gm", "name": "Thorin Battlehammer", "sheet": dict(
+        {"owner": "gm", "name": "Thorin Battlehammer",
+         "image": "/static/demo/tokens/l3-thorin.png", "sheet": dict(
             klass="Fighter", subclass="Battle Master", race="Mountain Dwarf", level=3,
             abilities={"STR": 16, "DEX": 12, "CON": 16, "INT": 10, "WIS": 12, "CHA": 8},
             ac=18, hp_max=28,
@@ -83,7 +84,8 @@ _GOBLIN_WARRENS = {
                 "Attack to knock a goblin prone (melee allies get advantage), "
                 "Riposte when one misses you, Menacing Attack to frighten the boss."),
         )},
-        {"owner": "alice", "name": "Nyx Shadowstep", "sheet": dict(
+        {"owner": "alice", "name": "Nyx Shadowstep",
+         "image": "/static/demo/tokens/l3-nyx.png", "sheet": dict(
             klass="Rogue", subclass="Assassin", race="Wood Elf", level=3,
             abilities={"STR": 10, "DEX": 17, "CON": 14, "INT": 12, "WIS": 13, "CHA": 10},
             ac=15, hp_max=24,
@@ -101,7 +103,8 @@ _GOBLIN_WARRENS = {
                 "Open from stealth: Sneak Attack 2d6 + crit doubling = a huge "
                 "first-round burst."),
         )},
-        {"owner": "carol", "name": "Sister Elsbeth", "sheet": dict(
+        {"owner": "carol", "name": "Sister Elsbeth",
+         "image": "/static/demo/tokens/l3-elsbeth.png", "sheet": dict(
             klass="Cleric", subclass="Light Domain", race="Human", level=3,
             abilities={"STR": 12, "DEX": 10, "CON": 14, "INT": 10, "WIS": 16, "CHA": 13},
             ac=18, hp_max=24,

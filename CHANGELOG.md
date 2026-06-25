@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.640.13] - 2026-06-25 — "The Warband's Faces"
+
+**Schema version:** 80
+
+**Commit summary:** Wire the first three L3 player-character tokens — Thorin Battlehammer, Nyx Shadowstep, Sister Elsbeth — into the Goblin Warrens demo so they render real portrait art instead of plain coloured rings.
+
+**Description:** Drops three generated 1024×1024 RGBA token portraits at `app/static/demo/tokens/l3-{thorin,nyx,elsbeth}.png` and wires each via the `image` key on its PC dict in the L3 `party` spec, so the demo seed sets `Token.image_url` to the art instead of `None`. Kept as PNG (not the checklist's placeholder `.jpg`) to preserve the alpha channel for clean circular-token cropping; the demo seed reads whatever path the spec names, so the extension is free. The L3 checklist rows, per-heading drop-paths, and progress counts are updated to match (`.jpg`→`.png`, ⬜→✅ wired, L3 4/10, overall 14/58 — the latter also catches up the map row that 2.640.11 left unticked in the top table).
+
+### Added
+- `app/static/demo/tokens/l3-thorin.png`, `l3-nyx.png`, `l3-elsbeth.png` — generated L3 player-character token portraits (1024×1024, transparent background).
+
+### Changed
+- `app/demo_campaigns.py` — Thorin / Nyx / Elsbeth PC dicts in the L3 `party` spec now carry `"image": "/static/demo/tokens/l3-<name>.png"`.
+- `docs/demo/image-prompts.md` — L3 checklist + per-heading drop-paths for the three PCs updated to `.png` and ✅ wired; L3 progress 1/10 → 4/10; overall 10/58 → 14/58; top-table L3 row map ✅ / tokens 3/9.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** none — demo-seed content + static assets; no new HTTP endpoint or WS broadcast-shape change. The demo seed is exercised end-to-end by the existing harness fixtures on every run.
+
 ## [2.640.12] - 2026-06-25 — "The Drop Path"
 
 **Schema version:** 80
