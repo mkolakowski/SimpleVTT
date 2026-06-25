@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.640.10] - 2026-06-25 — "The Clean Sweep"
+
+**Schema version:** 80
+
+**Commit summary:** Fix the fail2ban cloudflare-bouncer `actionunban` leaving Cloudflare edge bans behind — it parsed the access-rules response with a compact-only sed that never matched Cloudflare's pretty-printed JSON.
+
+**Description:** Reported as a "cleanup issue in Cloudflare during unbanning." The `cloudflare-bouncer` action bans by POSTing an IP Access Rule (`mode=block`) and is supposed to unban by looking the rule up by IP and `DELETE`-ing it. The lookup extracted the rule id with `sed -n 's/.*"id":"\([^"]*\)".*/\1/p'`, which requires **compact** JSON (`"id":"…"`, no space). The real Cloudflare API returns **pretty-printed** JSON (`"id": "…"`, space after the colon, one field per line), so the sed matched nothing → `rule_id` came back empty → the `if [ -n "$rule_id" ]` guard was false → the `DELETE` never ran. fail2ban cleared its own state but the block rule lived on at the Cloudflare edge, so unbanned IPs stayed blocked. Two latent traps sat behind it: the greedy `.*` would have grabbed the trailing `scope.id` rather than the rule id, and "delete the first match regardless of mode" could have nuked a legitimate whitelist/allow rule for the same IP.
+
+### Fixed
+- `docs/integrations/fail2ban/action.d/cloudflare-bouncer.conf` `actionunban` now parses the access-rules response with `python3` (present in the `crazymax/fail2ban` image; no `jq`) and `DELETE`s **every** matching `mode == "block"` rule. This is whitespace-tolerant (handles compact *and* pretty JSON), targets the rule id (not the nested `scope.id`), and never deletes a whitelist/allow rule. No `block` rule found → silent no-op (already gone / expired).
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_fail2ban_cloudflare_unban_parsing.py` (new, +4) extracts the shipped `actionunban` `python3 -c` program from the action file and runs it against a pretty-printed Cloudflare response containing a block rule, a whitelist rule, and nested `scope.id`s — asserting it emits **only** the block rule's id, is empty when there's no block rule, and that the old compact-only sed fragment is gone. Verified red against the pre-fix sed (empty output on pretty JSON), green after. The in-app admin-center unban (`app/integrations/cloudflare.py`) was already correct — it parses with `resp.json()`, so only the fail2ban shell action was affected.
+
 ## [2.640.9] - 2026-06-25 — "The Blank Floor"
 
 **Schema version:** 80
