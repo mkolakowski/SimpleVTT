@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.647.0] - 2026-06-25 — "The Spent Ring"
+
+**Schema version:** 80
+
+**Commit summary:** Reactions v3 — reaction-item charge tracking: an item reaction that declares `cost_charges` now decrements the item's `charges` when spent (both the `/use_reaction` item-* path and the GM-panel manual spend), refuses once depleted, and surfaces `charges_remaining`. Ships a Ring of Spell Turning demo fixture to exercise it.
+
+**Description:** The v2.78.0 item-reaction framework (`_pc_item_reactions_for_trigger`) surfaced item reactions but treated their charge cost as informational — spending one never decremented anything, the one filed gap left in the reactions-v3 backlog after v2.646.1's reconciliation (the named magic items — Pearl of Power, Wand of Lightning Bolts — already track charges via the separate `use_item_action` arc; only the *reaction* layer didn't). This wires it: a new `_decrement_item_reaction_charge(sheet, reaction_key)` helper finds the equipped item whose `_reactions[*].key` matches and, when that entry declares a positive `cost_charges`, spends it from the item's `charges` field (returns `spent` / `free` / `depleted` / `none`). Both reaction-spend paths call it — the live-prompt `/use_reaction` `item-*` dispatch and the GM-panel `/spend_reaction_manual` — persisting the decremented sheet, surfacing `charges_remaining` on the response + the `feature_used` broadcast (with a "(N charges left)" label suffix), and refusing with `409 out_of_charges` (no reaction-slot burn) once the item is empty. Charge-less item reactions (the informational Cloak of Displacement shape) pass through unchanged. To exercise the path, the demo seed gives Lyra Sunstrider a **Ring of Spell Turning** (DMG p.193, legendary, attunement) with 3 charges and a `spell_cast_near` reaction whose reflect outcome stays GM-narrated — the charge spend is the mechanical half.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_decrement_item_reaction_charge` helper; charge spend + depletion refusal wired into the `/use_reaction` `item-*` dispatch and `/spend_reaction_manual`, both surfacing `charges_remaining`.
+- `app/demo_seed.py` — Ring of Spell Turning on Lyra Sunstrider (3 charges, `cost_charges: 1` reaction) as the charged-reaction-item fixture.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_gm_reactions_panel.py::test_item_reaction_charge_decrement` (+1) — pins the ring to 2 charges, then spends it via `/spend_reaction_manual` (re-seeding the battle between spends to reset the reaction slot): asserts `charges_remaining` 2→1→0 on the response + a `feature_used(charges_remaining=1)` broadcast, and a 4th spend → `409 out_of_charges`. Restores the charge count on teardown.
+
 ## [2.646.1] - 2026-06-25 — "The Counted Charges"
 
 **Schema version:** 80

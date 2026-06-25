@@ -7061,6 +7061,50 @@ def _pc_item_reactions_for_trigger(char, trigger: str) -> list[dict]:
     return out
 
 
+# v2.647.0 — reaction-item charge tracking. Finds the inventory item
+# whose `_reactions[*].key` matches ``reaction_key`` and, when that
+# reaction entry declares a positive ``cost_charges``, spends it from
+# the item's ``charges`` field. Mutates ``sheet["inventory"]`` in place;
+# the caller persists (`char.sheet = sheet` + `flag_modified` + commit)
+# and broadcasts. Returns ``(status, remaining, item_name)``:
+#   "spent"    — charges decremented; ``remaining`` is the new count.
+#   "free"     — matching item-reaction with no `cost_charges` (the
+#                v2.78.0 informational shape, e.g. Cloak of Displacement)
+#                — nothing to track, treat as a normal spend.
+#   "depleted" — the reaction costs more charges than remain; the caller
+#                should refuse the spend (don't mark the reaction).
+#   "none"     — no matching item-reaction on any inventory item.
+def _decrement_item_reaction_charge(sheet, reaction_key):
+    """Spend a reaction-item charge for ``reaction_key`` if it carries
+    a cost. See the block comment above for the return contract."""
+    if not isinstance(sheet, dict):
+        return ("none", 0, "")
+    for it in (sheet.get("inventory") or []):
+        if not isinstance(it, dict):
+            continue
+        for rx in (it.get("_reactions") or []):
+            if not isinstance(rx, dict):
+                continue
+            if (rx.get("key") or "") != reaction_key:
+                continue
+            item_name = it.get("name") or "Item"
+            try:
+                cost = int(rx.get("cost_charges") or 0)
+            except (TypeError, ValueError):
+                cost = 0
+            if cost <= 0:
+                return ("free", 0, item_name)
+            try:
+                cur = int(it.get("charges") or 0)
+            except (TypeError, ValueError):
+                cur = 0
+            if cur < cost:
+                return ("depleted", cur, item_name)
+            it["charges"] = cur - cost
+            return ("spent", cur - cost, item_name)
+    return ("none", 0, "")
+
+
 # v2.77.0 Phase 4b — Lucky feat. RAW (PHB p.167): "You have 3 luck
 # points. Whenever you make an attack roll, an ability check, or a
 # saving throw, you can spend one luck point to roll an additional
@@ -31936,9 +31980,15 @@ async def use_reaction(
         # v2.78.0 Phase 5 — Item reactions. Generic dispatch reads
         # the option's params (item_name, item_slug, desc) from the
         # stored entry, marks reaction, broadcasts feature_used with
-        # source=item-reaction + the item identity. Per-item state
-        # mutation (charge decrement, etc.) is filed for individual
-        # items that need it.
+        # source=item-reaction + the item identity.
+        #
+        # v2.647.0 — charge tracking. When the item-reaction entry
+        # declares `cost_charges`, `_decrement_item_reaction_charge`
+        # spends it from the item's `charges` field: a depleted item
+        # refuses the spend (no reaction mark, a `feature_used` notice),
+        # and a successful spend persists the sheet + surfaces
+        # `charges_remaining` on the broadcast. Charge-less item
+        # reactions (the informational Cloak shape) are unchanged.
         try:
             options = entry.get("options") or []
             matching = next(
@@ -31954,8 +32004,52 @@ async def use_reaction(
             ).first()
             if not watcher_char or not watcher_char.sheet:
                 raise HTTPException(404, "watcher character not found")
+
+            _sheet = dict(watcher_char.sheet or {})
+            _charge_status, _charges_left, _ci_name = (
+                _decrement_item_reaction_charge(_sheet, reaction_key)
+            )
+            if _charge_status == "depleted":
+                # Out of charges — refuse the spend (don't burn the
+                # reaction slot) and tell the player.
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "character_id": int(watcher_char_id),
+                        "character_name": watcher_char.name,
+                        "user_color": watcher_char.color,
+                        "feature_name": f"💍 {_ci_name or item_name} — no charges",
+                        "feature_desc": (
+                            f"{_ci_name or item_name} has no charges left; "
+                            f"the reaction can't be used."
+                        ),
+                        "source": "item-reaction-no-charge",
+                        "reaction_kind": "item",
+                        "item_name": _ci_name or item_name,
+                        "item_slug": item_slug,
+                        "reaction_key": reaction_key,
+                        "charges_remaining": _charges_left,
+                    },
+                })
+                return JSONResponse(status_code=409, content={
+                    "error": "out_of_charges",
+                    "reaction_key": reaction_key,
+                    "charges_remaining": _charges_left,
+                })
+            if _charge_status == "spent":
+                # Persist the decremented charge count.
+                watcher_char.sheet = _sheet
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(watcher_char, "sheet")
+                db.commit()
+
             await _mark_battle_economy(
                 campaign_id, int(watcher_char_id), "reaction",
+            )
+            _charge_suffix = (
+                f" ({_charges_left} charge"
+                f"{'' if _charges_left == 1 else 's'} left)"
+                if _charge_status == "spent" else ""
             )
             await hub.broadcast(campaign_id, {
                 "type": "feature_used",
@@ -31963,7 +32057,7 @@ async def use_reaction(
                     "character_id": int(watcher_char_id),
                     "character_name": watcher_char.name,
                     "user_color": watcher_char.color,
-                    "feature_name": f"💍 {item_name}",
+                    "feature_name": f"💍 {item_name}{_charge_suffix}",
                     "feature_desc": desc or (
                         f"Item reaction. Effect adjudicated by GM."
                     ),
@@ -31972,6 +32066,10 @@ async def use_reaction(
                     "item_name": item_name,
                     "item_slug": item_slug,
                     "reaction_key": reaction_key,
+                    # None when the reaction carries no charge cost.
+                    "charges_remaining": (
+                        _charges_left if _charge_status == "spent" else None
+                    ),
                 },
             })
         except HTTPException:
@@ -33519,8 +33617,34 @@ async def spend_reaction_manual(
             "error": "reaction_already_used",
             "combatant_id": combatant_id,
         })
-    # Flip the slot — PC vs NPC path.
     char_id = target.get("char_id")
+    # v2.647.0 — reaction-item charge tracking (GM-panel manual spend).
+    # For a PC item reaction that declares `cost_charges`, spend it
+    # before flipping the slot; a depleted item refuses the spend (409,
+    # no flip). Charge-less item reactions + non-item reactions pass
+    # through unchanged.
+    _ci_status, _ci_left = ("none", 0)
+    if char_id and isinstance(reaction_key, str) and reaction_key.startswith("item-"):
+        _ci_char = db.query(Character).filter(
+            Character.id == int(char_id),
+        ).first()
+        if _ci_char and _ci_char.sheet:
+            _ci_sheet = dict(_ci_char.sheet or {})
+            _ci_status, _ci_left, _ci_name = (
+                _decrement_item_reaction_charge(_ci_sheet, reaction_key)
+            )
+            if _ci_status == "depleted":
+                return JSONResponse(status_code=409, content={
+                    "error": "out_of_charges",
+                    "reaction_key": reaction_key,
+                    "charges_remaining": _ci_left,
+                })
+            if _ci_status == "spent":
+                _ci_char.sheet = _ci_sheet
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(_ci_char, "sheet")
+                db.commit()
+    # Flip the slot — PC vs NPC path.
     if char_id:
         await _mark_battle_economy(
             campaign_id, int(char_id), "reaction",
@@ -33531,6 +33655,11 @@ async def spend_reaction_manual(
         )
     # Broadcast a feature_used card so the chat reflects the spend.
     label = reaction_label_override or matching.get("label") or reaction_key
+    if _ci_status == "spent":
+        label = (
+            f"{label} ({_ci_left} charge"
+            f"{'' if _ci_left == 1 else 's'} left)"
+        )
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
         "data": {
@@ -33546,6 +33675,8 @@ async def spend_reaction_manual(
             "reaction_kind": matching.get("kind"),
             "reaction_source": matching.get("source"),
             "combatant_id": combatant_id,
+            # None when the reaction carries no charge cost.
+            "charges_remaining": _ci_left if _ci_status == "spent" else None,
         },
     })
     return {
@@ -33553,6 +33684,7 @@ async def spend_reaction_manual(
         "combatant_id": combatant_id,
         "reaction_key": reaction_key,
         "label": label,
+        "charges_remaining": _ci_left if _ci_status == "spent" else None,
     }
 
 

@@ -2958,6 +2958,34 @@ def _bard_sheet(name: str) -> dict:
                  },
              ],
              "desc": "Wondrous item, rare (requires attunement). Attackers have disadvantage against you. Property suppressed for 1 round after you take damage."},
+            # v2.647.0 — Ring of Spell Turning demo fixture for the
+            # reaction-item CHARGE-tracking path. RAW DMG p.193 (legendary,
+            # attunement): "While wearing this ring, you have advantage on
+            # saving throws against any spell that targets only you ... if
+            # you roll a 20 ... the spell has no effect on you and ...
+            # turns back on its caster," with the deflection limited by the
+            # ring's charges. SimpleVTT models the reaction's CHARGE SPEND
+            # mechanically (3 charges, 1 per use, decremented in the
+            # `/use_reaction` item-* dispatch + the GM-panel manual spend);
+            # the reflect outcome itself stays GM-narrated. A 4th attuned
+            # item — fine at seed-load (the 3/3 cap lives only on /attune;
+            # Cloak-of-Displacement precedent above).
+            {"name": "Ring of Spell Turning", "type": "ring", "qty": 1,
+             "equippable": True, "equipped": True, "attunement": True,
+             "attuned": True, "charges": 3, "max_charges": 3,
+             "_slug": "ring-of-spell-turning",
+             "_reactions": [
+                 {
+                     "key": "item-ring-spell-turning-reflect",
+                     "trigger": "spell_cast_near",
+                     "label": "💍 Ring of Spell Turning — reflect the spell (1 charge)",
+                     "desc": "Spend 1 charge to turn a spell that targets only you back on its caster (GM adjudicates the reflect). 3 charges, regained at dawn.",
+                     "kind": "item",
+                     "cost_charges": 1,
+                     "cost": "Reaction + 1 ring charge",
+                 },
+             ],
+             "desc": "Ring, legendary (requires attunement). Advantage on saves vs. single-target spells; spend charges to reflect a spell back on its caster. 3 charges, regained at dawn."},
             {"name": "Lute", "type": "gear", "qty": 1, "weight_lb": 2,
              "desc": "Lyra's instrument — a polished six-string serving as her bardic focus. Lets her cast spells with material components without a separate component pouch."},
             {"name": "Entertainer's pack", "type": "gear", "qty": 1,

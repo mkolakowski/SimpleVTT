@@ -393,6 +393,90 @@ async def test_interception_via_patch(gm_client, roster):
         )
 
 
+async def test_item_reaction_charge_decrement(gm_client, gm_ws, roster):
+    """v2.647.0 — reaction-item charge tracking. Lyra's Ring of Spell
+    Turning carries a `_reactions` entry with `cost_charges: 1`. Spending
+    it via the GM panel's `/spend_reaction_manual` decrements the item's
+    `charges`, surfaces `charges_remaining` on the response + broadcast,
+    and refuses (409 `out_of_charges`) once depleted. Re-seeds the battle
+    between spends so the reaction slot is fresh each time.
+    """
+    lyra = roster["Lyra Sunstrider"]
+    key = "item-ring-spell-turning-reflect"
+    cid = f"tok_gmrxn_{lyra['id']}"
+
+    # Pin the ring's charges to a known 2 for a deterministic countdown.
+    sresp = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{lyra['id']}/sheet-json",
+    )
+    assert sresp.status_code == 200, sresp.text
+    inv = list((sresp.json().get("sheet") or {}).get("inventory") or [])
+    ring_idx = next(
+        (i for i, it in enumerate(inv)
+         if it.get("_slug") == "ring-of-spell-turning"),
+        None,
+    )
+    assert ring_idx is not None, (
+        f"Ring of Spell Turning not on Lyra; got "
+        f"{[it.get('_slug') for it in inv]}"
+    )
+    orig_charges = inv[ring_idx].get("charges")
+    inv[ring_idx] = {**inv[ring_idx], "charges": 2}
+    await _patch_sheet_field(gm_client, lyra["id"], inventory=inv)
+
+    async def _spend():
+        # Fresh battle → reaction slot reset; charges persist on the sheet.
+        await _seed_battle(gm_client, [
+            _make_combatant(lyra["name"], lyra["id"], init=10),
+        ])
+        return await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/spend_reaction_manual",
+            json={"combatant_id": cid, "reaction_key": key},
+        )
+
+    try:
+        await asyncio.sleep(0.1)
+        gm_ws.mark()
+
+        r1 = await _spend()
+        assert r1.status_code == 200, r1.text
+        assert r1.json().get("charges_remaining") == 1, r1.json()
+
+        await asyncio.sleep(0.15)
+        fu = [
+            m for m in gm_ws.buffered("feature_used")
+            if (m.get("data") or {}).get("source") == "manual-reaction"
+            and (m.get("data") or {}).get("charges_remaining") == 1
+        ]
+        assert fu, "expected feature_used carrying charges_remaining=1"
+
+        r2 = await _spend()
+        assert r2.status_code == 200, r2.text
+        assert r2.json().get("charges_remaining") == 0, r2.json()
+
+        # Depleted → refuse.
+        r3 = await _spend()
+        assert r3.status_code == 409, r3.text
+        assert r3.json().get("error") == "out_of_charges", r3.json()
+    finally:
+        # Restore the seeded charge count.
+        sresp2 = await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{lyra['id']}/sheet-json",
+        )
+        inv2 = list((sresp2.json().get("sheet") or {}).get("inventory") or [])
+        ridx2 = next(
+            (i for i, it in enumerate(inv2)
+             if it.get("_slug") == "ring-of-spell-turning"),
+            None,
+        )
+        if ridx2 is not None:
+            inv2[ridx2] = {
+                **inv2[ridx2],
+                "charges": orig_charges if orig_charges is not None else 3,
+            }
+            await _patch_sheet_field(gm_client, lyra["id"], inventory=inv2)
+
+
 async def test_cleric_light_via_patch(gm_client, roster):
     """v2.68.8 catalog gap closer: PATCH Tavik subclass to
     "Light Domain" → catalog includes warding-flare. Restored.
