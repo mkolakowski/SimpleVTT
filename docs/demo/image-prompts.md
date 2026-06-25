@@ -164,11 +164,11 @@ plain coloured ring (`image_url=None`) and are waiting on art.
 
 Tier-1 starter dungeon. A goblin warband raids the trade road from a warren of tunnels.
 
-**Progress: 0 / 10 images generated** — every token below still renders as a plain coloured ring (`image_url=None`). Generate the art, drop it at the listed path, then wire it in `app/demo_campaigns.py`.
+**Progress: 1 / 10 images generated** — every token below still renders as a plain coloured ring (`image_url=None`). Generate the art, drop it at the listed path, then wire it in `app/demo_campaigns.py`.
 
 | Entity | Drop file at | Status |
 |---|---|---|
-| 🗺️ The Goblin Warrens (map) | `app/static/demo/maps/goblin-warrens.png` | ⬜ needs art |
+| 🗺️ The Goblin Warrens (map) | `app/static/demo/maps/goblin-warrens.png` | ✅ wired |
 | 🛡️ Thorin Battlehammer | `app/static/demo/tokens/l3-thorin.jpg` | ⬜ needs art |
 | 🗡️ Nyx Shadowstep | `app/static/demo/tokens/l3-nyx.jpg` | ⬜ needs art |
 | ✨ Sister Elsbeth | `app/static/demo/tokens/l3-elsbeth.jpg` | ⬜ needs art |

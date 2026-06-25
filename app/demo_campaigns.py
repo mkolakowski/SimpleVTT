@@ -63,7 +63,8 @@ _GOBLIN_WARRENS = {
              "been raiding the trade road from a warren of tunnels. Each PC "
              "shows off a feature their class gains around level 3. Demo "
              "campaign — resets on a fixed interval."),
-    "map": {"name": "The Goblin Warrens (entrance)", "width": 1400, "height": 1000},
+    "map": {"name": "The Goblin Warrens (entrance)", "width": 1400, "height": 1000,
+            "image": "/static/demo/maps/goblin-warrens.png"},
     "party": [
         {"owner": "gm", "name": "Thorin Battlehammer", "sheet": dict(
             klass="Fighter", subclass="Battle Master", race="Mountain Dwarf", level=3,

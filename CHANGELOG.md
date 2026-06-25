@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.640.11] - 2026-06-25 — "The Warband's Den"
+
+**Schema version:** 80
+
+**Commit summary:** Demo L3 — drop the generated Goblin Warrens battle-map art at `app/static/demo/maps/goblin-warrens.png` and wire it into the demo seed so the map renders real art instead of a blank canvas.
+
+**Description:** The L3 "Goblin Warrens" demo campaign shipped with no map image — `spec["map"]` had no `image` key, so the `Map.image_url` seeded to `None` and the table rendered as an empty grid. This lands the first piece of the L3 art set (the image-prompts checklist was 0/10): a 1484×1060 top-down battle map of a goblin warband's cave-mouth encampment — twin tunnel throats, a stake palisade with skull totems and tattered banners, a central fire pit, scattered crates and bones. Aspect ratio (1.4) matches the map's 1400×1000 dimensions. Wired via the `image` key on the L3 map spec so the seed sets `Map.image_url` to `/static/demo/maps/goblin-warrens.png`.
+
+### Added
+- `app/static/demo/maps/goblin-warrens.png` — generated Goblin Warrens battle map (1484×1060, grid-line-less; SimpleVTT draws its own grid).
+
+### Changed
+- `app/demo_campaigns.py` — the L3 map spec now carries `"image": "/static/demo/maps/goblin-warrens.png"` so the demo seed wires the art.
+- `docs/demo/image-prompts.md` — Goblin Warrens map status ⬜ needs art → ✅ wired; L3 progress 0/10 → 1/10.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** none — demo-seed content + static asset; no new HTTP endpoint or WS broadcast-shape change. The demo seed is exercised end-to-end by the existing harness fixtures on every run.
+
 ## [2.640.10] - 2026-06-25 — "The Clean Sweep"
 
 **Schema version:** 80
