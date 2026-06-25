@@ -35,6 +35,7 @@ How much of the SRD 5.1 ruleset SimpleVTT mechanically automates, by content cat
 | [Player onboarding — your first session](player-onboarding.md) | Markdown (how-to · screenshots) | Players | ✅ shipped (v2.634.0) — illustrated first-session walkthrough, 11 screenshots |
 | [Inviting players to your campaign](inviting-players.md) | Markdown (how-to · screenshots) | GMs + Operators | ✅ shipped (v2.635.0) — account → add-member → roll colors → co-GM → portraits, 4 screenshots |
 | [Theming & display preferences](theming.md) | Markdown (how-to · screenshots) | Everyone | ✅ shipped (v2.636.0) — 14 themes + fonts + scale + accessibility notes, 5 screenshots |
+| [Maps, grids & tokens](maps-grids-tokens.md) | Markdown (how-to · screenshots) | GMs | ✅ shipped (v2.637.0) — upload maps, grid overlay, the board, placing tokens, the token tracker, 4 screenshots |
 | [Demo mode](demo-mode.md) | Markdown (how-to) | Operators | ✅ shipped (v2.43.21) |
 | [fail2ban deployment](fail2ban-deployment.md) | Markdown (how-to) | Operators | ✅ shipped (v2.476.0) |
 | [Privacy Policy (GDPR-compliant template)](privacy.md) | Markdown (policy) | Operators + Users | ✅ shipped (v2.479.0) |
@@ -148,7 +149,7 @@ This wiki is a stub. The list below is what we want it to grow into.
 - [x] **Inviting players.** The two membership flows (open registration vs invite-only), GM colors, per-player portrait, the demo-user accounts. → [inviting-players.md](inviting-players.md) (illustrated, 4 screenshots).
 - [x] **Running a session as GM.** Initiative tracker, action-economy chips, target picker, the GM Tools drawer, encounter snapshots. → [running-a-session-as-gm.md](running-a-session-as-gm.md).
 - [ ] **Building an encounter.** Encounters panel CRUD, token templates, monsters from the SRD bestiary vs homebrew, spawn-point layout, default-encounter wiring on a campaign.
-- [ ] **Maps + grids + tokens.** Uploading maps, scaling, grid overlay (`show_grid`), placing PC and monster tokens, the token-tracker side panel.
+- [x] **Maps + grids + tokens.** Uploading maps, scaling, grid overlay (`show_grid`), placing PC and monster tokens, the token-tracker side panel. → [maps-grids-tokens.md](maps-grids-tokens.md) (illustrated, 4 screenshots).
 - [ ] **Homebrew content authoring.** Custom monsters (template editor), custom items, custom spells, the homebrew JSON contract.
 - [x] **Player onboarding.** What players see vs. what the GM sees, the character sheet, the roll log, the dice toast, the per-character action economy chips. → [player-onboarding.md](player-onboarding.md) (illustrated, 11 screenshots).
 - [ ] **Backups + restore.** The `simplevtt-backup` container, daily `pg_dump` cycle, restoring from a backup, exporting / importing a campaign.

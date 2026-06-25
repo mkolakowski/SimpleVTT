@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.637.0] - 2026-06-24 — "The Cartographer's Table"
+
+**Schema version:** 80
+
+**Commit summary:** Add an illustrated **Maps, grids & tokens** GM wiki guide (`docs/wiki/maps-grids-tokens.md`) — uploading maps, the grid overlay, the tabletop board, placing tokens, and the token tracker — served at `/wiki/maps-grids-tokens`, plus the Playwright script + 4 screenshots it embeds.
+
+**Description:** Closes the "Maps + grids + tokens" wiki-TODO with a GM-facing walkthrough of the battle-map loop:
+
+- **Covered:** the **Maps** table in *Settings → World* (upload form — name/folder/tags, grid type square·hex·none, grid size px, dimensions, PNG/JPG/WebP/GIF or MP4/WebM image; activate); the **grid overlay** toggle (with the gotcha that hiding the lines does **not** disable snapping — snapping follows the grid *type*); the **tabletop board** + canvas tools (ruler, GM movement-lock); **placing tokens** via the Add Token modal's four tabs (Library templates / Players / Blank / Open5e); and the **token tracker** (owner, Hero/Villain team, HP, edit mode).
+- **Screenshots (4):** `tests/harness_ui/capture_maps_tokens.py` shoots the Maps settings table, the demo tavern board (grid + 12 placed tokens), the token-management tracker, and the Add Token modal's Library tab. The demo "Sundered Vault" ships the populated board, so these are static navigations rather than multi-step placement.
+- Wired into the wiki: `wiki.html` + `docs/wiki/README.md` "Available guides" rows + the checked-off "Maps + grids + tokens" wiki-TODO. Directly-served wiki guide, so no `_DOC_ALLOWLIST` entry.
+
+### Added
+- `docs/wiki/maps-grids-tokens.md` — the illustrated maps/grids/tokens guide.
+- `tests/harness_ui/capture_maps_tokens.py` + `app/static/docs/maps-tokens/*.png` — 4 GM-facing screenshots.
+
+### Changed
+- `app/templates/wiki.html` + `docs/wiki/README.md` — surface the new guide; marked the "Maps + grids + tokens" wiki-TODO done.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_wiki.py::test_wiki_home_renders` — added `/wiki/maps-grids-tokens` to the landing-page assertion list. (Directly-served wiki guide — no per-slug `/wiki/doc/...` test required.)
+
 ## [2.636.0] - 2026-06-24 — "The Wardrobe"
 
 **Schema version:** 80
