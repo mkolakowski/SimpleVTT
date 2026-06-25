@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.649.0] - 2026-06-25 — "The Quickened Word"
+
+**Schema version:** 80
+
+**Commit summary:** Sorcerer Metamagic — Quickened Spell (the 8th + final PHB metamagic): spend 2 sorcery points to cast a 1-action spell as a bonus action. The arm endpoint + the `/cast_spell` economy-slot retarget both land, completing the PHB metamagic set.
+
+**Description:** RAW (PHB p.102): "When you cast a spell that has a casting time of 1 action, you can spend 2 sorcery points to change the casting time to 1 bonus action for this casting." Seven of the eight PHB metamagics shipped in the v2.99.x window; Quickened was the last, blocked on a `/cast_spell` action-economy override path — which the v2.643.0/v2.644.0/v2.648.8 economy-slot retarget work (`as_reaction` / `as_war_magic_bonus`) makes a clean fit. Two halves, mirroring the other arm-then-consume metamagics: (1) **`POST /use_metamagic_quickened_spell`** validates Sorcerer Lv 3+ + ≥2 SP, spends 2 SP, and installs a one-round `metamagic-quickened-pending` buff (resource-spend + buff-install logged for undo); (2) **`/cast_spell`** reads the buff via the new `_caster_has_quickened_pending` helper and, when the spell's natural casting time is 1 action, retargets `slot_for_economy` to `bonus` (so both the Phase-4 over-budget gate and the post-cast `_mark_battle_economy` consume the bonus slot, not the action), drops the one-use buff, and broadcasts a `metamagic-quickened-spell-consumed` card. The "can't pair two leveled spells in one turn" edge stays GM-tracked, consistent with the rest of the metamagic suite.
+
+### Added
+- `app/routes/tabletop_routes.py` — `POST /api/campaign/{cid}/use_metamagic_quickened_spell` (arm: 2 SP + `metamagic-quickened-pending` buff); `_caster_has_quickened_pending` helper; `/cast_spell` reads it to retarget a 1-action cast to the bonus slot + consume.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_use_metamagic_quickened.py` (new, +3) — `test_quickened_arms_buff_and_decrements_sp` (2 SP decrement + armed broadcast + buff installed), `test_quickened_cast_uses_bonus_slot_and_consumes` (Zara arms Quickened then casts Hold Person → an `economy_update` for the **bonus** slot, **not** the action, + a consumed broadcast + the buff dropped), and `test_quickened_wrong_class` (a Rogue → 409 `wrong_class`).
+
 ## [2.648.8] - 2026-06-25 — "The Bonus Swing"
 
 **Schema version:** 80

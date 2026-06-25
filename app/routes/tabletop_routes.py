@@ -23840,6 +23840,35 @@ async def cast_spell(
     # and is correctly blocked once the reaction is already spent.
     if bool(body.get("as_reaction")):
         slot_for_economy = "reaction"
+    # v2.649.0 — Quickened Spell metamagic (Sorcerer, PHB p.102): "When
+    # you cast a spell that has a casting time of 1 action, you can spend
+    # 2 sorcery points to change the casting time to 1 bonus action." When
+    # the caster carries a `metamagic-quickened-pending` buff (armed by
+    # `/use_metamagic_quickened_spell`) AND the spell's natural casting
+    # time is 1 action, retarget the economy slot to `bonus` and consume
+    # the one-use buff. Skipped when the cast is already a reaction.
+    elif (
+        slot_for_economy == "action"
+        and _caster_has_quickened_pending(campaign_id, char.id)
+    ):
+        slot_for_economy = "bonus"
+        await _remove_buff(
+            campaign_id, char.id, "metamagic-quickened-pending",
+        )
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "character_name": char.name,
+                "feature_name": "⚡ Metamagic — Quickened Spell",
+                "feature_desc": (
+                    f"{char.name} cast "
+                    f"{spell.get('name') or 'the spell'} as a bonus action "
+                    f"(Quickened Spell)."
+                ),
+                "source": "metamagic-quickened-spell-consumed",
+            },
+        })
     was_used = _is_slot_used(campaign_id, char.id, slot_for_economy)
     user_is_gm = _user_is_gm(user, campaign, db)
     strict = bool(campaign.strict_action_economy)
@@ -53237,6 +53266,33 @@ def _caster_has_heightened_pending(
     return False
 
 
+def _caster_has_quickened_pending(
+    campaign_id: int, caster_char_id: "int | None",
+) -> bool:
+    """v2.649.0 — return True when the caster's combatant carries a
+    `metamagic-quickened-pending` buff (armed by `/use_metamagic_quickened_spell`).
+    Read by `/cast_spell`'s economy-slot computation to retarget a
+    1-action spell to the BONUS slot (Quickened Spell, PHB p.102).
+    Mirrors `_caster_has_heightened_pending`.
+    """
+    if not caster_char_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != caster_char_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            if (b.get("key") or "").strip().lower() \
+                    == "metamagic-quickened-pending":
+                return True
+        return False
+    return False
+
+
 def _saver_has_eldritch_strike_vs_caster(
     campaign_id: int,
     saver_char_id: "int | None",
@@ -53449,6 +53505,152 @@ async def use_metamagic_heightened_spell(
         "sp_remaining": new_sp,
         "sp_max": sp_max,
         "cast_id": ht_cast_id,
+    }
+
+
+# ----------- API: Metamagic Quickened Spell (Sorcerer Lv 3+) ----------
+# v2.649.0 — the 8th + final PHB metamagic. RAW (PHB p.102): "When you
+# cast a spell that has a casting time of 1 action, you can spend 2
+# sorcery points to change the casting time to 1 bonus action for this
+# casting." Mirrors the other arm-then-consume metamagics: this endpoint
+# spends 2 SP + installs a `metamagic-quickened-pending` buff; the next
+# `/cast_spell` of a 1-action spell reads it (`_caster_has_quickened_pending`),
+# retargets the economy slot to `bonus`, and consumes the buff.
+@router.post("/api/campaign/{campaign_id}/use_metamagic_quickened_spell")
+async def use_metamagic_quickened_spell(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Spend 2 SP to arm Quickened Spell on the caster's next 1-action
+    spell cast (it becomes a bonus-action cast). Installs a
+    `metamagic-quickened-pending` buff consumed by the next `/cast_spell`.
+
+    Body: ``{character_id}``. Validates Sorcerer Lv 3+ and at least 2 SP.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Sorcerer character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "sorcerer":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "sorcerer", "got": cls or "",
+        })
+    level = int(sheet.get("level") or 1)
+    if level < 3:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 3, "got": level,
+        })
+
+    sp_cost = 2
+    resources = list(sheet.get("resources") or [])
+    sp_row = None
+    sp_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "sorcery-points":
+            sp_row = dict(r); sp_idx = i; break
+    if sp_row is None:
+        raise HTTPException(404, "No Sorcery Points resource on this sheet")
+    sp_cur = int(sp_row.get("current") or 0)
+    sp_max = int(sp_row.get("max") or 0)
+    if sp_cur < sp_cost:
+        return JSONResponse(status_code=409, content={
+            "error": "not_enough_points", "required": sp_cost, "have": sp_cur,
+        })
+
+    new_sp = sp_cur - sp_cost
+    sp_row["current"] = new_sp
+    resources[sp_idx] = sp_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    qk_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(qk_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "sorcery-points",
+        "amount": sp_cost,
+        "source_label": "Metamagic — Quickened Spell",
+    })
+
+    buff = {
+        "key": "metamagic-quickened-pending",
+        "name": "Quickened Spell (pending)",
+        "icon": "⚡",
+        "source_char_id": char.id,
+        "duration_rounds": 1,
+        "duration_max": 1,
+        "concentration": False,
+        "effects": {
+            "metamagic_option": "quickened-spell",
+            "cast_id": qk_cast_id,
+        },
+        "desc": (
+            "Next 1-action spell is cast as a BONUS action. One use; "
+            "consumed by the next /cast_spell economy computation."
+        ),
+    }
+    _caster_buffs_before = _snapshot_target_buffs(
+        db, campaign_id, {"char_id": char.id},
+    )
+    await _install_buff(campaign_id, char.id, buff)
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+    _log_damage_entry(qk_cast_id, {
+        "kind": "buff_install",
+        "campaign_id": campaign_id,
+        "target_char_id": char.id,
+        "buffs_before": _caster_buffs_before,
+        "buff_installed_key": "metamagic-quickened-pending",
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id, "key": "sorcery-points",
+            "current": new_sp, "max": sp_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id, "character_name": char.name,
+            "feature_name": "⚡ Metamagic — Quickened Spell (2 SP, armed)",
+            "feature_desc": (
+                "Quickened Spell armed. The next 1-action spell is cast "
+                "as a bonus action. Auto-consumed on the next /cast_spell."
+            ),
+            "source": "metamagic-quickened-spell-armed",
+            "cast_id": qk_cast_id,
+            "remaining": new_sp, "max": sp_max,
+        },
+    })
+
+    return {
+        "ok": True,
+        "sp_cost": sp_cost,
+        "sp_remaining": new_sp,
+        "sp_max": sp_max,
+        "cast_id": qk_cast_id,
     }
 
 
