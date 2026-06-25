@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.647.1] - 2026-06-25 — "The Shared Yardstick"
+
+**Schema version:** 80
+
+**Commit summary:** Refactor — extract `_combatant_token_on_map`, a shared range-gate primitive that consolidates the `source_token_id`→`char_id` token-resolution the reaction distance walkers each repeated inline. No behavior change.
+
+**Description:** The reactions-v3 backlog flagged that the per-trigger distance gates (Counterspell's 60-ft walker, the Mage Slayer 5-ft gate riding the same walker, Protective Field's 30-ft ally walker) each re-implemented the same boilerplate before measuring distance: resolve a battle combatant to its `Token` on the active map by preferring `source_token_id`, then falling back to a lookup by `char_id`. That exact dance appeared four times across two walkers (caster + watcher in `_emit_counterspell_prompts`; damaged + watcher in `_emit_protective_field_ally_prompts`). This extracts it into one `_combatant_token_on_map(db, combatant, map_id)` helper and routes all four sites through it — a behavior-preserving refactor (identical queries + fallback order) that establishes the shared primitive future distance-gated walkers can reuse instead of copy-pasting the lookup. The actual grid math stays in `_distance_ft_between_points`; this just unifies the combatant→token half.
+
+### Changed
+- `app/routes/tabletop_routes.py` — new `_combatant_token_on_map` helper; `_emit_counterspell_prompts` (caster + watcher) and `_emit_protective_field_ally_prompts` (damaged + watcher) now call it instead of inlining the `source_token_id`→`char_id` token lookup.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** none — behavior-preserving refactor with no endpoint or WS broadcast-shape change. Covered by the existing walker tests: `test_cast_counterspell.py`, `test_counterspell_subtle_immune.py`, `test_protective_field.py`, and the Mage Slayer / Counterspell cases in `test_reaction_prompt.py` (all green post-refactor).
+
 ## [2.647.0] - 2026-06-25 — "The Spent Ring"
 
 **Schema version:** 80

@@ -9168,6 +9168,32 @@ async def _emit_reaction_prompt(
     return prompt_id
 
 
+# v2.647.1 — shared range-gate primitive for the reaction walkers.
+# Resolve a battle combatant to its Token on the given map: prefer the
+# combatant's `source_token_id`, fall back to a lookup by `char_id` (PC
+# combatants). Returns the Token row or None. Consolidates the
+# source_token_id→char_id token-resolution dance that the Counterspell /
+# Mage Slayer range gate, Protective Field, and other distance-gated
+# walkers each repeated inline before measuring distance with
+# `_distance_ft_between_points`.
+def _combatant_token_on_map(db: Session, combatant: dict, map_id: int):
+    if not isinstance(combatant, dict):
+        return None
+    src = combatant.get("source_token_id")
+    if src:
+        tok = db.query(Token).filter(
+            Token.id == int(src), Token.map_id == map_id,
+        ).first()
+        if tok is not None:
+            return tok
+    char_id = combatant.get("char_id")
+    if char_id:
+        return db.query(Token).filter(
+            Token.character_id == int(char_id), Token.map_id == map_id,
+        ).first()
+    return None
+
+
 # v2.70.0 Phase 3b — Counterspell trigger walker. After a spell is
 # cast, walk every other PC combatant in the battle whose token is
 # within 60 ft of the caster's token AND who has Counterspell
@@ -9231,17 +9257,7 @@ async def _emit_counterspell_prompts(
             break
     if caster_combatant is None:
         return 0
-    caster_token = None
-    src_id = caster_combatant.get("source_token_id")
-    if src_id:
-        caster_token = db.query(Token).filter(
-            Token.id == int(src_id), Token.map_id == map_row.id,
-        ).first()
-    if caster_token is None and caster_combatant.get("char_id"):
-        caster_token = db.query(Token).filter(
-            Token.character_id == int(caster_combatant["char_id"]),
-            Token.map_id == map_row.id,
-        ).first()
+    caster_token = _combatant_token_on_map(db, caster_combatant, map_row.id)
     if caster_token is None:
         return 0
     cx = float(caster_token.x or 0)
@@ -9278,17 +9294,7 @@ async def _emit_counterspell_prompts(
         if not cs_eligible and not ms_eligible:
             continue
         # Locate watcher's token + measure distance.
-        watcher_token = None
-        wsrc = c.get("source_token_id")
-        if wsrc:
-            watcher_token = db.query(Token).filter(
-                Token.id == int(wsrc), Token.map_id == map_row.id,
-            ).first()
-        if watcher_token is None:
-            watcher_token = db.query(Token).filter(
-                Token.character_id == int(watcher_char_id),
-                Token.map_id == map_row.id,
-            ).first()
+        watcher_token = _combatant_token_on_map(db, c, map_row.id)
         if watcher_token is None:
             continue
         wx = float(watcher_token.x or 0)
@@ -9350,17 +9356,7 @@ async def _emit_protective_field_ally_prompts(
     ).lower()
     grid_size_px = int(map_row.grid_size_px)
     # Locate the damaged creature's token.
-    dmg_token = None
-    dsrc = damaged_combatant.get("source_token_id")
-    if dsrc:
-        dmg_token = db.query(Token).filter(
-            Token.id == int(dsrc), Token.map_id == map_row.id,
-        ).first()
-    if dmg_token is None and damaged_combatant.get("char_id"):
-        dmg_token = db.query(Token).filter(
-            Token.character_id == int(damaged_combatant["char_id"]),
-            Token.map_id == map_row.id,
-        ).first()
+    dmg_token = _combatant_token_on_map(db, damaged_combatant, map_row.id)
     if dmg_token is None:
         return 0
     dx, dy = float(dmg_token.x or 0), float(dmg_token.y or 0)
@@ -9386,17 +9382,7 @@ async def _emit_protective_field_ally_prompts(
             continue
         if not _pc_has_psi_warrior(watcher.sheet, 3):
             continue
-        wtok = None
-        wsrc = c.get("source_token_id")
-        if wsrc:
-            wtok = db.query(Token).filter(
-                Token.id == int(wsrc), Token.map_id == map_row.id,
-            ).first()
-        if wtok is None:
-            wtok = db.query(Token).filter(
-                Token.character_id == int(wchar_id),
-                Token.map_id == map_row.id,
-            ).first()
+        wtok = _combatant_token_on_map(db, c, map_row.id)
         if wtok is None:
             continue
         dist = _distance_ft_between_points(
