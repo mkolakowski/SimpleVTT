@@ -28340,6 +28340,26 @@ async def use_lay_on_hands(
 
     db.commit()
 
+    # v2.652.1 — stats capture (Hook B): Lay on Hands healing. Both the
+    # paladin and the target are PCs, so log the paired heal_done /
+    # heal_received rows. Best-effort. See docs/plans/campaign-stats.md.
+    try:
+        if actual_healed > 0:
+            _log_stat_event(
+                campaign_id, event_type="heal_done",
+                actor_char_id=int(char.id),
+                target_char_id=int(target.id), target_name=target.name,
+                amount=int(actual_healed),
+            )
+            _log_stat_event(
+                campaign_id, event_type="heal_received",
+                actor_char_id=int(target.id), actor_name=target.name,
+                target_char_id=int(char.id),
+                amount=int(actual_healed),
+            )
+    except Exception:
+        logging.exception("stats Hook B (lay on hands) failed")
+
     # v2.97.0 — log the pool spend so /undo_attack_damage can refund
     # the N HP back to the pool via the ``resource_spend`` branch
     # (clamped to pool_max).

@@ -5,8 +5,9 @@
 wiring. Phase 2 (v2.651.0): the read API `GET /api/campaign/{id}/stats`
 (own-vs-GM gated) + `stats_service.py` + the heal/cast/attack capture hooks
 (B/C/D). Phase 3 (v2.652.0): the `/campaign/{id}/stats` page + the `📊 Stats`
-nav pill. Optional follow-ups (filed below): Lay-on-Hands + other heal-endpoint
-capture, NPC-cast tracking, charts/leaderboard, and a retention rollup. A
+nav pill. Lay on Hands heal capture added v2.652.1. Optional follow-ups (filed
+below): other heal-endpoint capture (Healing Word, etc.), NPC-cast tracking,
+charts/leaderboard, and a retention rollup. A
 player-facing stats page
 showing damage dealt/taken, healing, attacks + hit-rate, crits, KOs, biggest
 hit, and most-used spells — per campaign, with a per-session breakdown.

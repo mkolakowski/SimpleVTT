@@ -115,3 +115,53 @@ async def test_stats_player_sees_only_own(alice_client, gm_client, roster):
 async def test_stats_unknown_campaign_404(gm_client):
     r = await gm_client.get("/api/campaign/99999999/stats")
     assert r.status_code == 404, r.text
+
+
+async def test_stats_captures_lay_on_hands_healing(gm_client, roster):
+    """v2.652.1 — Lay on Hands healing now feeds heal_done. Caelan
+    long-rests (full pool), Pip is damaged so the heal lands, and the
+    paladin's heal_done total increases."""
+    caelan = roster["Sir Caelan Lightbringer"]
+    pip = roster["Pip Quickfingers"]
+
+    # Full pool.
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{caelan['id']}/rest",
+        json={"type": "long"},
+    )
+    c0 = _char(
+        (await _stats(gm_client, character_id=caelan["id"]))["characters"],
+        caelan["id"],
+    )
+    c0_heal = (c0 or {}).get("totals", {}).get("heal_done", 0)
+
+    # Damage Pip below max so the heal applies (restore after).
+    sj = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-json"
+    )).json().get("sheet") or {}
+    orig_hp = sj.get("hp")
+    _max = (orig_hp or {}).get("max") or 47
+    await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-fields",
+        json={"hp": {"current": 1, "max": _max}},
+    )
+    try:
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_lay_on_hands",
+            json={"character_id": caelan["id"],
+                  "target_character_id": pip["id"],
+                  "amount": 10, "override": True},
+        )
+        assert r.status_code == 200, r.text
+        c1 = _char(
+            (await _stats(gm_client, character_id=caelan["id"]))["characters"],
+            caelan["id"],
+        )
+        assert c1 is not None
+        assert c1["totals"]["heal_done"] > c0_heal, c1["totals"]
+    finally:
+        if orig_hp:
+            await gm_client.patch(
+                f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-fields",
+                json={"hp": orig_hp},
+            )

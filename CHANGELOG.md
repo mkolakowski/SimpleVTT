@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.652.1] - 2026-06-25 — "The Healer's Ledger"
+
+**Schema version:** 81
+
+**Commit summary:** Stats follow-up — Lay on Hands healing now feeds the stats log (`heal_done`/`heal_received`), closing the filed gap where only cast-spell heals were captured.
+
+**Description:** The stats heal capture (Hook B) shipped against the cast-spell auto-heal site, but Paladins do a lot of healing through `/use_lay_on_hands`, which wasn't logged — so a Paladin's "healing done" undercounted. This adds the same best-effort `heal_done` (actor = paladin) + `heal_received` (actor = target) capture to the Lay on Hands endpoint, using the `actual_healed` amount (capped at the target's max HP) the endpoint already computes. Both are PCs, so both rows are PC-anchored. Other heal endpoints (Healing Word as a bonus action, etc.) remain filed follow-ups, but Lay on Hands is the high-volume one.
+
+### Added
+- `app/routes/tabletop_routes.py` — Hook B capture in `use_lay_on_hands`.
+
+### Schema
+- No schema change (still v81).
+
+**Harness:** `tests/harness/test_stats_api.py::test_stats_captures_lay_on_hands_healing` (+1) — Caelan long-rests (full pool), Pip is damaged below max, Caelan Lay-on-Hands-heals Pip, and the GM-scoped stats show Caelan's `heal_done` increased (baseline-delta); Pip's HP is restored on teardown.
+
 ## [2.652.0] - 2026-06-25 — "The Scoreboard"
 
 **Schema version:** 81
