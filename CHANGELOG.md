@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.640.9] - 2026-06-25 — "The Blank Floor"
+
+**Schema version:** 80
+
+**Commit summary:** Demo image-prompts page — make every battle-map prompt **grid-line-less** so generated maps don't double up on SimpleVTT's own grid overlay.
+
+**Description:** All six demo battle-map prompts (Goblin Warrens, Tide-Wracked Catacombs, Drowned Reef, Shadowfell Spire, Caldera Throne, Sundered Tavern) previously *requested* a baked-in "5-foot square grid overlay." But SimpleVTT draws its own grid on top of the map at render time (per-map `grid_type` / `grid_size_px`), so a grid in the art doubles up and misaligns. Each map prompt now explicitly says **"no grid lines and no grid overlay (SimpleVTT draws its own grid)"** instead, a global grid-line-less rule is called out in the page intro, and the Tavern map's negative prompt gains `grid, grid lines, grid overlay`.
+
+### Changed
+- `docs/demo/image-prompts.md` — all six battle-map prompts now instruct grid-line-less art (was: each requested a grid overlay); + an intro note + negative-prompt grid terms.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** none — doc-only content edit to an already-surfaced wiki doc; no endpoint or WS change.
+
 ## [2.640.8] - 2026-06-25 — "The Three Mooks"
 
 **Schema version:** 80

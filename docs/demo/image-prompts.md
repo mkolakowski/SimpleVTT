@@ -19,6 +19,12 @@ plain coloured ring (`image_url=None`) and are waiting on art.
 > edits to this page needed. (The archived Sundered Vault's shipped tokens
 > already preview this way.)
 
+> **Generate every battle map grid-line-less.** SimpleVTT draws its own grid
+> overlay on top of the map at render time (the per-map `grid_type` /
+> `grid_size_px`), so a grid baked into the map art would double up and
+> misalign. Each map prompt below already says "no grid lines"; if your model
+> adds one anyway, put `grid, grid lines, grid overlay` in the negative prompt.
+
 ## Overall progress — 10 / 58 images
 
 | Demo | Map | Tokens | Done |
@@ -175,7 +181,7 @@ Tier-1 starter dungeon. A goblin warband raids the trade road from a warren of t
 
 ### 🗺️ Battle map — The Goblin Warrens (1400×1000)
 
-> Top-down tabletop battle map of a goblin warren entrance carved into a rocky hillside. A jagged cave mouth opens into branching tunnels of packed earth and stone; a crude wooden palisade of lashed, sharpened stakes guards the approach, hung with bone totems and tattered goblin banners. Scattered animal bones, a cold fire-pit ringed with cooking spits, gnawed crates from raided trade caravans, and muddy worg tracks litter the ground. Painterly fantasy cartography, muted earth tones with cold green shadow in the tunnel mouths, slight three-quarter overhead angle, crisp 5-foot square grid overlay across the whole map, no characters, no tokens. 1400×1000.
+> Top-down tabletop battle map of a goblin warren entrance carved into a rocky hillside. A jagged cave mouth opens into branching tunnels of packed earth and stone; a crude wooden palisade of lashed, sharpened stakes guards the approach, hung with bone totems and tattered goblin banners. Scattered animal bones, a cold fire-pit ringed with cooking spits, gnawed crates from raided trade caravans, and muddy worg tracks litter the ground. Painterly fantasy cartography, muted earth tones with cold green shadow in the tunnel mouths, slight three-quarter overhead angle, **no grid lines and no grid overlay** (SimpleVTT draws its own grid on top — a baked-in grid would double up), no characters, no tokens. 1400×1000.
 
 Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
@@ -241,7 +247,7 @@ The Tier-2 power-spike tier. A drowned crypt beneath a ruined lighthouse spills 
 
 ### 🗺️ Battle map — The Tide-Wracked Catacombs (1400×1000)
 
-> Top-down fantasy battle map, slight overhead three-quarter tilt, of a drowned crypt beneath a ruined seaside lighthouse. Seawater floods the lower halls in murky teal pools, lapping through cracked stone corridors and spilling between toppled, barnacle-crusted sarcophagi. Seaweed and kelp drape the broken pillars, mussels and brine-crust cling to the walls, and a wide central stone stair rises out of the water to a sealed crypt door — the last dry ground holding back the tide. Shafts of cold storm-grey light fall through a collapsed ceiling onto a tide-line of foam and bone. Crumbled funerary niches, rusted iron grates, scattered ribcages and waterlogged coffins fill the flanking chambers. Clean 5-foot square grid overlay across the whole map, muted cold sea-storm palette of teal, slate, bone-white and rust. Painterly digital fantasy cartography, high detail, no characters.
+> Top-down fantasy battle map, slight overhead three-quarter tilt, of a drowned crypt beneath a ruined seaside lighthouse. Seawater floods the lower halls in murky teal pools, lapping through cracked stone corridors and spilling between toppled, barnacle-crusted sarcophagi. Seaweed and kelp drape the broken pillars, mussels and brine-crust cling to the walls, and a wide central stone stair rises out of the water to a sealed crypt door — the last dry ground holding back the tide. Shafts of cold storm-grey light fall through a collapsed ceiling onto a tide-line of foam and bone. Crumbled funerary niches, rusted iron grates, scattered ribcages and waterlogged coffins fill the flanking chambers. **No grid lines and no grid overlay** (SimpleVTT draws its own grid on top — a baked-in grid would double up), muted cold sea-storm palette of teal, slate, bone-white and rust. Painterly digital fantasy cartography, high detail, no characters.
 
 Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
@@ -307,7 +313,7 @@ A Tier-2/3 coastal adventure run by the demo's second GM. Sahuagin raiders boil 
 
 ### 🗺️ Battle map — The Drowned Reef (1600×1100)
 
-> Top-down tactical battle map of a storm-wracked tidal reef at low tide, painterly digital fantasy style, slight overhead three-quarter pitch. Exposed coral shelves and slick black rock spurs ring scattered glassy tide pools; a half-sunken, barnacle-crusted shipwreck lists across the center with its broken mast bridging two reef plates. Foaming surf and churning grey-green storm swells crash inward at every edge, sea-foam streaking across wet stone. Bioluminescent kelp and anemones glow faint blue-green in the pools, rain-streaked light from a bruised thunderhead sky, lightning glow on the horizon. Crisp 5-foot square grid overlay across the whole playable surface, even lighting for tabletop readability, no characters, no tokens.
+> Top-down tactical battle map of a storm-wracked tidal reef at low tide, painterly digital fantasy style, slight overhead three-quarter pitch. Exposed coral shelves and slick black rock spurs ring scattered glassy tide pools; a half-sunken, barnacle-crusted shipwreck lists across the center with its broken mast bridging two reef plates. Foaming surf and churning grey-green storm swells crash inward at every edge, sea-foam streaking across wet stone. Bioluminescent kelp and anemones glow faint blue-green in the pools, rain-streaked light from a bruised thunderhead sky, lightning glow on the horizon. **No grid lines and no grid overlay** (SimpleVTT draws its own grid on top — a baked-in grid would double up), even lighting for tabletop readability, no characters, no tokens.
 
 Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
@@ -372,7 +378,7 @@ A Tier-3 dark-fantasy siege. A spire of black glass bleeds the Shadowfell into t
 
 ### 🗺️ Battle map — The Shadowfell Spire (1600×1200)
 
-> Top-down tabletop battle map, 1600×1200 px, slight overhead angle: the cracked threshold plaza at the foot of a colossal spire of black volcanic glass that rears up off the top edge of the frame, its obsidian flanks fractured and bleeding ribbons of violet shadow-mist. Floor of shattered obsidian flagstones streaked with frost-grey ash; jagged shadow-rifts split the ground, glowing cold violet and venting smoke. Withered grey thorn-vegetation and leafless skeletal trees cling to the edges; scattered bleached bones, broken weapons, and a toppled funerary statue litter the stone. A faint 5-foot square grid overlay across the whole map. Muted desaturated palette — black, slate, bone-white, bruised violet. Painterly dark-fantasy cartography, even top-down lighting, no characters, no tokens.
+> Top-down tabletop battle map, 1600×1200 px, slight overhead angle: the cracked threshold plaza at the foot of a colossal spire of black volcanic glass that rears up off the top edge of the frame, its obsidian flanks fractured and bleeding ribbons of violet shadow-mist. Floor of shattered obsidian flagstones streaked with frost-grey ash; jagged shadow-rifts split the ground, glowing cold violet and venting smoke. Withered grey thorn-vegetation and leafless skeletal trees cling to the edges; scattered bleached bones, broken weapons, and a toppled funerary statue litter the stone. **No grid lines and no grid overlay** (SimpleVTT draws its own grid on top — a baked-in grid would double up). Muted desaturated palette — black, slate, bone-white, bruised violet. Painterly dark-fantasy cartography, even top-down lighting, no characters, no tokens.
 
 Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
@@ -433,7 +439,7 @@ A Tier-4 capstone. An ancient red wyrm is ascending to godhood atop a volcano; t
 
 ### 🗺️ Battle map — The Caldera Throne (1800×1300)
 
-> Top-down tactical battle map of a volcanic caldera throne, 1800×1300. A massive rune-carved obsidian dais sits dead-centre, its black glass surface etched with glowing draconic sigils that pulse molten-orange. Rivers and channels of bright magma snake outward from the dais, splitting a cracked basalt floor into jagged islands of stone that glow orange along every fissure. Rising heat-shimmer and drifting ash haze soften the edges; pools of liquid fire cast warm light upward across the rock. Faint sulfur-yellow vents and cooling lava crusts add texture at the rim. Painterly digital fantasy cartography, slight overhead three-quarter tilt, crisp readable terrain, a subtle 5-foot square grid overlay aligned to the floor, no characters, no tokens, no UI.
+> Top-down tactical battle map of a volcanic caldera throne, 1800×1300. A massive rune-carved obsidian dais sits dead-centre, its black glass surface etched with glowing draconic sigils that pulse molten-orange. Rivers and channels of bright magma snake outward from the dais, splitting a cracked basalt floor into jagged islands of stone that glow orange along every fissure. Rising heat-shimmer and drifting ash haze soften the edges; pools of liquid fire cast warm light upward across the rock. Faint sulfur-yellow vents and cooling lava crusts add texture at the rim. Painterly digital fantasy cartography, slight overhead three-quarter tilt, crisp readable terrain, **no grid lines and no grid overlay** (SimpleVTT draws its own grid on top — a baked-in grid would double up), no characters, no tokens, no UI.
 
 Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
@@ -653,15 +659,16 @@ loadout + pose identical across all three so the trio reads as a unit.
 > double-door on the west wall (currently closed), a stone fireplace
 > with low burning logs on the north wall, a small staircase
 > banking left to right in the southeast leading to upstairs rooms.
-> Wooden plank floor with subtle 5-foot grid overlay (faint dark
-> lines, not intrusive). Atmosphere: spilled mug on the floor near
+> Wooden plank floor, **no grid lines and no grid overlay**
+> (SimpleVTT draws its own grid on top — a baked-in grid would
+> double up). Atmosphere: spilled mug on the floor near
 > the bar, a few playing cards scattered near one table, smoke
 > rising from the fireplace. Painterly fantasy battle-map style,
 > suitable for a virtual tabletop, 1400×900 pixels, slight overhead
 > camera angle (≈80° from horizontal) so the GM can see floor
 > details. No characters, no tokens, no UI overlay.
 
-Negative prompt: `text, signage, character figures, modern objects, electric
+Negative prompt: `grid, grid lines, grid overlay, text, signage, character figures, modern objects, electric
 lights, glowing portals, fantasy ruins, exterior shots, top-down photo realism`.
 
 <!--ENDTABS-->
