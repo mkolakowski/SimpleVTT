@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.646.1] - 2026-06-25 — "The Counted Charges"
+
+**Schema version:** 80
+
+**Commit summary:** Doc — reconcile the reactions-v3 backlog after this session: mark the items shipped (War Caster / Mage Slayer auto-resolution + pickers, GM-panel item-walk, Cloak suppression) and correct the stale "per-item charge tracking" line — the items it named (Pearl of Power, Wand of Lightning Bolts) are already charge-tracked elsewhere.
+
+**Description:** Companion reconciliation closing out the session's reactions-automation v3 work in the plan's own backlog. A substrate check on the "Per-item / per-spell charge tracking" line found it stale in the same way the SRD-audit lines drift: the items it named are already charge-tracked — **Pearl of Power** via `_use_item_action_pearl` and **Wand of Lightning Bolts** (+ Magic Missiles / Fireballs / Web / Polymorph / Binding) via `_use_item_action_charge_wand`, both behind `POST .../use_item_action` from the separate [magic-items-automation](docs/plans/magic-items-automation.md) arc, and the Lucky feat tracks `sheet.resources["lucky"].current`. The genuinely-remaining piece is narrower: charge decrement in the **reaction `item-*` dispatch** of `/use_reaction` (still informational per the v2.78.0 framework), which is **blocked on a charged reaction-item fixture** — the only demo reaction-item, the Cloak of Displacement, is a passive with no charges. The same pass strikes the other now-shipped backlog lines: War Caster spell cast (v2.643.0) + live picker (v2.646.0), Mage Slayer melee attack (v2.644.0), GM Reactions Panel item-walk (v2.642.0), and the Cloak suppressed-on-damage clause (v2.645.0). No code change — documentation accuracy only.
+
+### Changed
+- `docs/plans/reactions-automation.md` — v3-backlog "Auto-resolution" / "Per-item charge tracking" / "GM Reactions Panel item-walk" / "Passive feat effects" lines updated to mark this session's shipped work and to correct the charge-tracking line (named items already tracked; only the reaction `item-*` decrement remains, fixture-blocked).
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** none — doc reconciliation of an already-wiki-surfaced plan; no new endpoint, allowlist entry, or WS broadcast-shape change.
+
 ## [2.646.0] - 2026-06-25 — "The Spell at Hand"
 
 **Schema version:** 80
