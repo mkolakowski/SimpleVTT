@@ -104,13 +104,15 @@ marked + flag cleared.
   same site. Harness: `test_eldritch_strike_resolver.py`.
 
 **Filed enhancements (genuinely unbuilt):**
-- **3b — auto-install on a weapon hit.** Today the marker needs a manual
-  `/use_eldritch_strike` call; RAW Eldritch Strike fires automatically
-  "when you hit a creature with a weapon attack." Hook the install into
-  `/attack` post-resolution (near the Sentinel walker) when the attacker
-  is EK Lv 10+ and `hit`. Extract a shared `_install_eldritch_strike(...)`
-  helper from the endpoint so both paths share it. Purely beneficial to
-  the EK (disadvantage on the *target*), so no opt-in prompt needed.
+- **3b — auto-install on a weapon hit. ✅ shipped v2.648.5.** On a
+  confirmed hit in `/attack` post-resolution, when the attacker is EK
+  Lv 10+ (`_pc_has_eldritch_knight(sheet, 10)`), the `eldritch-strike-target`
+  buff installs automatically — no manual `/use_eldritch_strike` call.
+  The install logic was extracted into a shared `_install_eldritch_strike(...)`
+  helper that both the endpoint and the `/attack` hook call. Purely
+  beneficial to the EK, so no opt-in prompt. Harness:
+  `test_eldritch_strike.py::test_es_auto_installs_on_weapon_hit` (+ a
+  non-EK negative test).
 - **3c — NPC-target path.** The endpoint only installs the buff for PC
   targets (`if target_char_id is not None`), and the resolver read lives
   in the PC-save branch — so the common case (EK hits a monster, then

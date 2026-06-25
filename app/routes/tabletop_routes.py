@@ -61652,6 +61652,70 @@ async def use_improved_war_magic(
     }
 
 
+# v2.648.5 — shared Eldritch Strike install. Builds + installs the
+# `eldritch-strike-target` buff on the struck target and broadcasts the
+# announce. Used by BOTH the manual `/use_eldritch_strike` endpoint and
+# the v2.648.5 auto-install on an EK Lv 10+ weapon hit (`/attack`
+# post-resolution). PC targets get the buff (read + consumed by the
+# per-cast PC-save resolver, v2.158.54); NPC targets get the announce
+# only — the NPC-target read is filed as Phase 3c in the EK plan.
+# Returns True iff a buff was actually installed (PC target).
+async def _install_eldritch_strike(
+    db: Session, campaign_id: int, ek_char, caster_color,
+    target_combatant_id: str, target_char_id, target_name: str,
+) -> bool:
+    es_buff = {
+        "key": "eldritch-strike-target",
+        "name": f"Eldritch Strike — disadvantage on save vs {ek_char.name}'s spell",
+        "icon": "🗡️",
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "source": "eldritch-strike",
+        "source_char_id": ek_char.id,
+        "effects": {
+            "save_disadvantage_against_caster_id": ek_char.id,
+            "consume_on_first_save": True,
+        },
+        "desc": (
+            f"Disadvantage on the next saving throw vs a spell cast by "
+            f"{ek_char.name} before end of {ek_char.name}'s next turn."
+        ),
+    }
+    installed = False
+    if target_char_id is not None:
+        await _install_buff(campaign_id, int(target_char_id), es_buff)
+        _mirror_buffs_to_sheet(
+            db, int(target_char_id),
+            _get_buffs(campaign_id, int(target_char_id)),
+        )
+        installed = True
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": ek_char.id,
+            "character_name": ek_char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🗡️ Eldritch Strike — {target_name or 'target'} "
+                f"disadvantage on next save"
+            ),
+            "feature_desc": (
+                f"{ek_char.name} marks {target_name or 'the target'} "
+                f"with Eldritch Strike: disadvantage on the next "
+                f"saving throw vs a spell {ek_char.name} casts before "
+                f"end of next turn. (Eldritch Knight Lv 10+ class "
+                f"feature.)"
+            ),
+            "source": "eldritch-strike",
+            "target_combatant_id": target_combatant_id,
+            "target_char_id": target_char_id,
+            "target_name": target_name,
+        },
+    })
+    return installed
+
+
 @router.post("/api/campaign/{campaign_id}/use_eldritch_strike")
 async def use_eldritch_strike(
     campaign_id: int,
@@ -61726,32 +61790,6 @@ async def use_eldritch_strike(
                 "target_combatant_id": target_combatant_id,
             })
 
-    es_buff = {
-        "key": "eldritch-strike-target",
-        "name": f"Eldritch Strike — disadvantage on save vs {char.name}'s spell",
-        "icon": "🗡️",
-        "duration_rounds": 10,
-        "duration_max": 10,
-        "concentration": False,
-        "source": "eldritch-strike",
-        "source_char_id": char.id,
-        "effects": {
-            "save_disadvantage_against_caster_id": char.id,
-            "consume_on_first_save": True,
-        },
-        "desc": (
-            f"Disadvantage on the next saving throw vs a spell "
-            f"cast by {char.name} before end of {char.name}'s "
-            f"next turn."
-        ),
-    }
-    if target_char_id is not None:
-        await _install_buff(campaign_id, int(target_char_id), es_buff)
-        _mirror_buffs_to_sheet(
-            db, int(target_char_id),
-            _get_buffs(campaign_id, int(target_char_id)),
-        )
-
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -61763,29 +61801,10 @@ async def use_eldritch_strike(
         else (campaign.gm_color if user.id == campaign.gm_user_id else None)
     )
     caster_color = char.color or player_color
-    await hub.broadcast(campaign_id, {
-        "type": "feature_used",
-        "data": {
-            "character_id": char.id,
-            "character_name": char.name,
-            "user_color": caster_color,
-            "feature_name": (
-                f"🗡️ Eldritch Strike — {target_name or 'target'} "
-                f"disadvantage on next save"
-            ),
-            "feature_desc": (
-                f"{char.name} marks {target_name or 'the target'} "
-                f"with Eldritch Strike: disadvantage on the next "
-                f"saving throw vs a spell {char.name} casts before "
-                f"end of next turn. (Eldritch Knight Lv 10+ class "
-                f"feature.)"
-            ),
-            "source": "eldritch-strike",
-            "target_combatant_id": target_combatant_id,
-            "target_char_id": target_char_id,
-            "target_name": target_name,
-        },
-    })
+    installed = await _install_eldritch_strike(
+        db, campaign_id, char, caster_color,
+        target_combatant_id, target_char_id, target_name,
+    )
 
     return {
         "ok": True,
@@ -61793,7 +61812,7 @@ async def use_eldritch_strike(
         "target_combatant_id": target_combatant_id,
         "target_char_id": target_char_id,
         "target_name": target_name,
-        "buff_installed": target_char_id is not None,
+        "buff_installed": installed,
     }
 
 
@@ -111256,6 +111275,27 @@ async def use_attack(
         )
     except Exception:
         _sentinel_triggers_for_response = []
+    # v2.648.5 — Eldritch Strike auto-install (Eldritch Knight Lv 10+,
+    # PHB p.74). RAW the marker fires automatically "when you hit a
+    # creature with a weapon attack" — so on a confirmed hit by an EK
+    # Lv 10+ we install the `eldritch-strike-target` buff on the target
+    # without requiring a manual `/use_eldritch_strike` call. Purely
+    # beneficial to the EK (disadvantage on the TARGET's next save vs
+    # the EK's spell), so no opt-in prompt. PC targets get the buff (read
+    # by the v2.158.54 PC-save resolver); NPC-target install is filed
+    # Phase 3c. Best-effort — a failure here never blocks the attack.
+    try:
+        if hit and target_combatant_id and _pc_has_eldritch_knight(sheet, 10):
+            _es_target = _lookup_combatant(campaign_id, target_combatant_id)
+            if _es_target is not None:
+                await _install_eldritch_strike(
+                    db, campaign_id, char, caster_color,
+                    target_combatant_id,
+                    _es_target.get("char_id"),
+                    _es_target.get("name") or "",
+                )
+    except Exception:
+        pass
     # v2.69.0 Phase 3a — Shield spell prompt. After a PC target is
     # hit, emit a reaction_prompt(attack_targeted) so the target's
     # owning user + GM see a "Cast Shield (+5 AC)" option in the

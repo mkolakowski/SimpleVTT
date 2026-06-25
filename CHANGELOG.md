@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.648.5] - 2026-06-25 — "The Automatic Mark"
+
+**Schema version:** 80
+
+**Commit summary:** Eldritch Knight 3b — Eldritch Strike now auto-installs its marker on an EK Lv 10+ weapon hit (RAW it's automatic), instead of requiring a manual `/use_eldritch_strike` call.
+
+**Description:** RAW (PHB p.74): "When you hit a creature with a weapon attack, that creature has disadvantage on the next saving throw it makes against a spell you cast before the end of your next turn." The marker install + the PC-save-resolver read were already shipped (v2.99.268 + v2.158.54), but the install only fired from the manual `/use_eldritch_strike` endpoint. This wires the auto-install (the EK plan's filed Phase 3b): on a confirmed hit in `/attack` post-resolution, when the attacker is an Eldritch Knight Lv 10+ (`_pc_has_eldritch_knight(sheet, 10)`), the `eldritch-strike-target` buff is installed on the target automatically. The install logic is extracted from the endpoint into a shared `_install_eldritch_strike(...)` helper that both paths now call (no duplication). It's purely beneficial to the EK (disadvantage on the *target's* next save vs the EK's spell), so there's no opt-in prompt; PC targets get the buff (read + consumed by the existing resolver), and the NPC-target install stays filed as Phase 3c. Best-effort + gated, so a non-EK attacker's hit is an untouched no-op.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_install_eldritch_strike(db, campaign_id, ek_char, caster_color, target_combatant_id, target_char_id, target_name)` shared helper (extracted from `/use_eldritch_strike`); an `/attack` post-resolution hook that calls it on a confirmed hit by an EK Lv 10+.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_eldritch_strike.py` (+2) — `test_es_auto_installs_on_weapon_hit` (Garrik PATCHed to EK Lv 10 attacks Pip until a hit → the `eldritch-strike-target` marker is on Pip + a `feature_used(source=eldritch-strike)` fired, with no `/use_eldritch_strike` call) and `test_es_does_not_auto_install_for_non_ek` (default Champion Garrik's hit installs no marker). The existing endpoint + resolver tests still pass against the shared helper.
+
 ## [2.648.4] - 2026-06-25 — "The Knight Already Armed"
 
 **Schema version:** 80
