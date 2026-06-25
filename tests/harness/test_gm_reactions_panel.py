@@ -490,6 +490,87 @@ async def test_bard_valor_via_patch(gm_client, roster):
         )
 
 
+async def test_available_reactions_lists_item_reaction(gm_client, roster):
+    """v2.642.0 — Lyra wears the Cloak of Displacement (equipped, with a
+    `_reactions` entry keyed `item-cloak-displacement-advantage`). The
+    GM panel now walks equipped `sheet.inventory[*]._reactions[]`, so the
+    item reaction surfaces in her catalog with kind/source fields the
+    panel UI reads.
+    """
+    lyra = roster["Lyra Sunstrider"]
+    await _seed_battle(gm_client, [
+        _make_combatant(lyra["name"], lyra["id"], init=10),
+    ])
+    resp = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/available_reactions",
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    lyra_entry = next(
+        (c for c in data["combatants"] if c["char_id"] == lyra["id"]),
+        None,
+    )
+    assert lyra_entry, (
+        f"expected Lyra in catalog; got "
+        f"{[c['name'] for c in data['combatants']]}"
+    )
+    item_rxn = next(
+        (
+            r for r in lyra_entry["reactions"]
+            if r["key"] == "item-cloak-displacement-advantage"
+        ),
+        None,
+    )
+    assert item_rxn, (
+        f"expected Cloak of Displacement item reaction in Lyra's "
+        f"catalog; got {[r['key'] for r in lyra_entry['reactions']]}"
+    )
+    assert item_rxn["kind"] == "item"
+    assert "Cloak of Displacement" in item_rxn["source"]
+
+
+async def test_spend_item_reaction_manual(gm_client, gm_ws, roster):
+    """v2.642.0 — the generic manual-spend dispatch accepts an
+    item-reaction key (validated against the catalog), flips the
+    reaction chip, and fires a feature_used card — no per-kind code
+    path needed now that the item-walk surfaces the key.
+    """
+    lyra = roster["Lyra Sunstrider"]
+    await _seed_battle(gm_client, [
+        _make_combatant(lyra["name"], lyra["id"], init=10),
+    ])
+    await asyncio.sleep(0.1)
+    gm_ws.mark()
+
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/spend_reaction_manual",
+        json={
+            "combatant_id": f"tok_gmrxn_{lyra['id']}",
+            "reaction_key": "item-cloak-displacement-advantage",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["reaction_key"] == "item-cloak-displacement-advantage"
+
+    await asyncio.sleep(0.15)
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == lyra["id"]
+        and (m.get("data") or {}).get("slot") == "reaction"
+    ]
+    assert econ, "expected economy_update flipping Lyra's reaction"
+    assert econ[-1]["data"]["used"] is True
+
+    fu = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "manual-reaction"
+        and (m.get("data") or {}).get("character_id") == lyra["id"]
+    ]
+    assert fu, "expected feature_used card with source=manual-reaction"
+
+
 async def test_paladin_crown_via_patch(gm_client, roster):
     """v2.68.9 catalog gap closer: PATCH Caelan subclass to
     "Oath of the Crown" → catalog includes rebuke-the-violent.

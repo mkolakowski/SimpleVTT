@@ -33123,6 +33123,35 @@ def _combatant_reactions_catalog(
                 "kind": "spell",
                 "desc": (sp.get("desc") or "").strip()[:160],
             })
+        # v2.642.0 — Item reactions (the GM-panel half of the v2.78.0
+        # Phase 5 inventory-reaction framework). Walk equipped
+        # sheet.inventory[*]._reactions[] so item-granted reactions
+        # (Cloak of Displacement, etc.) surface in the panel the same
+        # way _pc_item_reactions_for_trigger surfaces them in a live
+        # trigger-gated prompt. Unlike that helper, the panel is the
+        # GM's trigger-agnostic bypass, so it lists every entry
+        # regardless of the entry's `trigger` field. The `key` is the
+        # item-reaction's own key (e.g. `item-cloak-displacement-...`)
+        # so the v2.67.x spend dispatch routes it identically.
+        for it in (sheet.get("inventory") or []):
+            if not isinstance(it, dict):
+                continue
+            if not it.get("equipped"):
+                continue
+            item_name = (it.get("name") or "Item").strip()
+            for rx in (it.get("_reactions") or []):
+                if not isinstance(rx, dict):
+                    continue
+                rx_key = (rx.get("key") or "").strip()
+                if not rx_key:
+                    continue
+                out.append({
+                    "key": rx_key,
+                    "label": rx.get("label") or f"🎁 {item_name}",
+                    "source": f"Item · {item_name}",
+                    "kind": rx.get("kind") or "item",
+                    "desc": (rx.get("desc") or "").strip()[:200],
+                })
         return out
     # NPC path — walk projected sheet.actions for category="reaction".
     src_id = combatant.get("source_token_id")

@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.642.0] - 2026-06-25 — "The Worn Cloak"
+
+**Schema version:** 80
+
+**Commit summary:** Reactions v3 — the GM Reactions Panel now surfaces item-granted reactions: the catalog walks equipped `sheet.inventory[*]._reactions[]`, so a worn Cloak of Displacement (and any homebrew/SRD item with a `_reactions` array) shows up alongside class features, feats, and reaction spells.
+
+**Description:** The v2.78.0 Phase 5 framework let equipped inventory items declare reaction options (`sheet.inventory[*]._reactions[]`), but only the *trigger-gated* live-prompt path (`_pc_item_reactions_for_trigger`) read them — the GM Reactions Panel's `_combatant_reactions_catalog` walked class features, feats, and reaction spells but never inventory. So a GM glancing at the panel to spend a narrative reaction couldn't see, e.g., Lyra's Cloak of Displacement. This adds the inventory walk to the catalog's PC branch: for each **equipped** item it emits one panel option per `_reactions` entry, keyed by the entry's own `key` (e.g. `item-cloak-displacement-advantage`), with the item name in the `source` field. Because the panel is the GM's trigger-agnostic bypass, it lists every entry regardless of the entry's `trigger` field (unlike the live-prompt helper, which filters by the firing trigger). No new endpoint and no dispatch change — `/spend_reaction_manual` already validates the requested key against the catalog and flips the chip generically, so surfacing the key is all that's needed to make item reactions manually spendable end-to-end. Closes the "GM Reactions Panel item-walk" line filed in the reactions-automation v3 backlog (plan line 33, "quick extension").
+
+### Added
+- `app/routes/tabletop_routes.py` — `_combatant_reactions_catalog` PC branch now walks equipped `sheet.inventory[*]._reactions[]` and appends each entry as a panel option (`kind` from the entry or `"item"`, `source` naming the item).
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_gm_reactions_panel.py` (+2) — `test_available_reactions_lists_item_reaction` asserts Lyra's equipped Cloak surfaces `item-cloak-displacement-advantage` (kind=`item`, source names the item) via the new walk; `test_spend_item_reaction_manual` asserts the generic `/spend_reaction_manual` dispatch accepts the item key → 200 + `economy_update` flips the reaction + `feature_used(source=manual-reaction)` fires.
+
 ## [2.641.1] - 2026-06-25 — "The Honest Backlog"
 
 **Schema version:** 80
