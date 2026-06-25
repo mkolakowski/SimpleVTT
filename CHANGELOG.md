@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.640.2] - 2026-06-25 — "The Casting Call"
+
+**Schema version:** 80
+
+**Commit summary:** Rebuild the demo image-prompt page (`/wiki/doc/image-prompts`) to cover all six demo campaigns, with a tab selector and a per-demo image-progress checklist.
+
+**Description:** The image-prompt reference only documented the original flagship demo ("The Sundered Vault"). Five leveled demos have shipped since (L3 Goblin Warrens, L5 Tide-Wracked Catacombs, L9 Storm Over Saltmarsh, L13 Shadowfell Spire, L18 Dragon's Apotheosis), each with its own party, NPC roster, and battle map — all currently rendering as plain coloured rings (`image_url=None`) and waiting on art. The page now documents every one.
+
+### Added
+- **Tab selector** at the top of `/wiki/doc/image-prompts` to switch between the six demos. Implemented as HTML-comment section markers (`<!--TAB:title-->` … `<!--ENDTABS-->`) plus a small inline script that partitions the rendered markdown into selectable panels client-side. Degrades to a single long scroll with JS disabled. Deep-linkable via `#demo-N`.
+- **Per-demo progress checklist** at the top of each tab — an at-a-glance table of every token + map, the exact path to drop each file at, and ✅/⬜ status. Plus an **overall progress** summary table (10 / 58 images done) above the tabs.
+- **~50 new ready-to-paste prompts** — one per player character, NPC, and battle map across the five leveled demos, each grounded in that entity's race / class / subclass / weapons / personality and the demo's lighting theme.
+
+### Changed
+- The "After generation" section now documents how to wire art into the leveled demos via `app/demo_campaigns.py::_seed_one()` (which sets `image_url=None` today), in addition to the flagship `app/demo_seed.py seed_tokens()` path.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** Doc-only edit to an already-allowlisted, already-surfaced wiki reference (`image-prompts`) — no endpoint or broadcast surface changed, so no new harness test (per the doc-only exemption). Verified the HTML-comment markers + `<script>`/`<style>` blocks survive python-markdown rendering (`extensions=['tables','fenced_code','sane_lists']`) so the tabs initialize.
+
 ## [2.640.1] - 2026-06-24 — "The Missing Identity"
 
 **Schema version:** 80
