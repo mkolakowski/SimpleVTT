@@ -208,3 +208,88 @@ async def test_use_wm_level_gate(
             {"subclass": "Champion", "level": 9},
             class_slug="fighter",
         )
+
+
+def _wm_advisory_broadcasts(gm_ws, character_id):
+    return [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "war-magic-advisory"
+        and (m.get("data") or {}).get("character_id") == character_id
+    ]
+
+
+_FIRE_BOLT = {
+    "name": "Fire Bolt", "level": 0, "prepared": True,
+    "_slug": "fire-bolt", "casting_time": "1 action",
+}
+
+
+async def test_war_magic_advisory_on_ek_cantrip(gm_client, gm_ws, roster):
+    """v2.648.6 — an Eldritch Knight Lv 7+ casting a cantrip with their
+    action gets a War Magic advisory (feature_used source=
+    war-magic-advisory) so the player knows they may make a
+    bonus-action weapon attack. Garrik (Lv 9) PATCHed to EK + a cantrip.
+    """
+    garrik = roster["Garrik Ironside"]
+    sj = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/sheet-json",
+    )
+    sheet = sj.json().get("sheet") or {}
+    orig_sub = sheet.get("subclass")
+    orig_spells = sheet.get("spells")
+    await _patch_sheet(
+        gm_client, garrik["id"],
+        {"subclass": "Eldritch Knight", "spells": [_FIRE_BOLT]},
+        class_slug="fighter",
+    )
+    try:
+        gm_ws.mark()
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={"character_id": garrik["id"], "spell_index": 0},
+        )
+        assert r.status_code == 200, r.text
+        await asyncio.sleep(0.2)
+        assert _wm_advisory_broadcasts(gm_ws, garrik["id"]), (
+            "expected a war-magic-advisory after the EK cantrip cast"
+        )
+    finally:
+        await _patch_sheet(
+            gm_client, garrik["id"],
+            {"subclass": orig_sub or "Champion", "spells": orig_spells or []},
+            class_slug="fighter",
+        )
+
+
+async def test_war_magic_advisory_skips_non_ek(gm_client, gm_ws, roster):
+    """A non-EK fighter (Champion) casting a cantrip gets NO War Magic
+    advisory (the gate is EK Lv 7+)."""
+    garrik = roster["Garrik Ironside"]
+    sj = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/sheet-json",
+    )
+    sheet = sj.json().get("sheet") or {}
+    orig_sub = sheet.get("subclass")
+    orig_spells = sheet.get("spells")
+    await _patch_sheet(
+        gm_client, garrik["id"],
+        {"subclass": "Champion", "spells": [_FIRE_BOLT]},
+        class_slug="fighter",
+    )
+    try:
+        gm_ws.mark()
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={"character_id": garrik["id"], "spell_index": 0},
+        )
+        assert r.status_code == 200, r.text
+        await asyncio.sleep(0.2)
+        assert not _wm_advisory_broadcasts(gm_ws, garrik["id"]), (
+            "a Champion fighter must not get a War Magic advisory"
+        )
+    finally:
+        await _patch_sheet(
+            gm_client, garrik["id"],
+            {"subclass": orig_sub or "Champion", "spells": orig_spells or []},
+            class_slug="fighter",
+        )

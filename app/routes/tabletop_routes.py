@@ -26392,6 +26392,40 @@ async def cast_spell(
         )
     except Exception:
         pass
+    # v2.648.6 — War Magic advisory (Eldritch Knight Lv 7+, PHB p.74).
+    # RAW: "When you use your action to cast a cantrip, you can make one
+    # weapon attack as a bonus action." After an action-cast cantrip by
+    # an EK Lv 7+, surface a feature_used advisory so the player knows
+    # they may take the bonus-action weapon attack (resolved via the
+    # existing /use_war_magic + their weapon attack). Improved War Magic
+    # (Lv 18 — `_pc_improved_war_magic_min_level >= 1`) widens the
+    # trigger to any Lv 1+ spell. Best-effort; never blocks the cast.
+    try:
+        if slot_for_economy == "action" and _pc_has_eldritch_knight(sheet, 7):
+            _wm_min = _pc_improved_war_magic_min_level(sheet)
+            if spell_level == 0 or _wm_min >= 1:
+                _wm_kind = "spell" if spell_level >= 1 else "cantrip"
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "character_id": char.id,
+                        "character_name": char.name,
+                        "user_color": caster_color,
+                        "feature_name": (
+                            "⚔️ War Magic — bonus-action weapon attack "
+                            "available"
+                        ),
+                        "feature_desc": (
+                            f"{char.name} cast a {_wm_kind} with their "
+                            f"action — War Magic lets them make one weapon "
+                            f"attack as a bonus action this turn. (Eldritch "
+                            f"Knight Lv 7+.)"
+                        ),
+                        "source": "war-magic-advisory",
+                    },
+                })
+    except Exception:
+        pass
     return {
         "ok": True,
         "id": cast_id,

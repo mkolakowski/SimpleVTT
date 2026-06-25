@@ -74,18 +74,30 @@ so the harness can flip the list directly.
 weapon → 409 cap_reached; wrong subclass → 409; wrong level
 (Lv 2) → 409; bad weapon_index → 400.
 
-### Phase 2 — War Magic (⚪ deferred)
+### Phase 2 — War Magic (🟠 advisory shipped; economy-route filed)
 
-**Hook site:** `/cast_spell` post-cast for Eldritch Knight Lv 7+
-when `spell_level == 0` (cantrip). Stamps a per-turn flag
-`sheet.war_magic_bonus_attack_available = True`. The /attack
-endpoint then accepts an `as_war_magic_bonus: true` body field
-that consumes the flag instead of marking the action chip,
-marking only the bonus chip.
+**Phase 2a — `/cast_spell` advisory ✅ shipped v2.648.6.** On an
+action-cast cantrip by an EK Lv 7+ (`_pc_has_eldritch_knight(sheet, 7)`),
+`/cast_spell` post-resolution broadcasts a `feature_used(source=war-magic-advisory)`
+naming the available bonus-action weapon attack — so the player is
+prompted instead of having to call `/use_war_magic` blind. Respects
+Improved War Magic (Lv 18, `_pc_improved_war_magic_min_level >= 1`),
+widening the trigger to any Lv 1+ spell. The bonus attack is resolved via
+the existing `/use_war_magic` (marks the bonus chip, v2.99.267) + the
+player's weapon attack. Harness:
+`test_war_magic.py::test_war_magic_advisory_on_ek_cantrip` (+ a non-EK
+negative test).
 
-**Test:** Eldritch Knight Lv 7 casts Fire Bolt cantrip → flag
-set → /attack with `as_war_magic_bonus: true` → bonus chip
-marked + flag cleared.
+**Phase 2b — economy-route (filed).** The cleaner model: stamp a per-turn
+flag `sheet.war_magic_bonus_attack_available = True` on the cantrip cast,
+and have `/attack` accept an `as_war_magic_bonus: true` body field that
+marks only the **bonus** chip (reusing the `attack_slot` plumbing from
+v2.644.0 / v2.648.x) and clears the flag — so the bonus attack rides
+`/attack` directly instead of the separate `/use_war_magic` chip-mark.
+
+**Test:** Eldritch Knight Lv 7 casts Fire Bolt cantrip → advisory fires
+(2a, shipped); (2b filed) flag set → `/attack as_war_magic_bonus` →
+bonus chip marked + flag cleared.
 
 ### Phase 3 — Eldritch Strike (✅ PC-target path shipped)
 

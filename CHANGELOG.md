@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.648.6] - 2026-06-25 — "The War Mage's Cue"
+
+**Schema version:** 80
+
+**Commit summary:** Eldritch Knight War Magic — `/cast_spell` now surfaces a War Magic advisory when an EK Lv 7+ casts a cantrip with their action (the player may make a bonus-action weapon attack), instead of the player having to know to call `/use_war_magic` blind.
+
+**Description:** RAW (PHB p.74): "When you use your action to cast a cantrip, you can make one weapon attack as a bonus action." The resolution endpoint (`/use_war_magic`, v2.99.267 — marks the bonus chip) was already shipped, but nothing *prompted* the player after a cantrip cast, so the option was easy to forget. This adds the missing surface (the EK plan's filed Phase 2 `/cast_spell` hook): on an action-cast cantrip by an Eldritch Knight Lv 7+ (`_pc_has_eldritch_knight(sheet, 7)`), `/cast_spell` post-resolution broadcasts a `feature_used(source=war-magic-advisory)` naming the available bonus-action weapon attack. It respects **Improved War Magic** (Lv 18 — `_pc_improved_war_magic_min_level(sheet) >= 1`), widening the trigger from cantrips to any Lv 1+ spell. Mirrors the v2.648.5 Eldritch Strike auto-hook pattern: a gated, best-effort post-resolution broadcast that never blocks the cast. Advisory-only — the bonus-action weapon attack is the player's choice (RAW "you can"), resolved via the existing `/use_war_magic` + their weapon attack; the deeper flag + `/attack as_war_magic_bonus` economy-routing stays filed as the EK plan's Phase 2b.
+
+### Added
+- `app/routes/tabletop_routes.py` — `/cast_spell` post-resolution War Magic advisory hook (EK Lv 7+, action-cast cantrip, or any Lv 1+ spell with Improved War Magic).
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_war_magic.py` (+2) — `test_war_magic_advisory_on_ek_cantrip` (Garrik PATCHed to EK + a Fire Bolt cantrip casts it → a `war-magic-advisory` broadcast fires) and `test_war_magic_advisory_skips_non_ek` (default Champion Garrik casting the same cantrip → no advisory).
+
 ## [2.648.5] - 2026-06-25 — "The Automatic Mark"
 
 **Schema version:** 80
