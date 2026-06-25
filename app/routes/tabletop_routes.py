@@ -57,6 +57,7 @@ from ..models import (
 )
 from ..realtime import hub
 from .. import local_content
+from .. import stats_service
 from ..sheet_templates import (
     class_levels_summary,
     class_slug as _class_slug,
@@ -24441,6 +24442,32 @@ async def cast_spell(
             auto_heal_hp_after = heal_result["hp_after"]
             auto_heal_revived = heal_result["revived"]
             auto_heal_target_name = target_combatant.get("name", "")
+            # v2.651.0 — stats capture (Hook B): heal_done (caster) +
+            # heal_received (PC target). The cast-spell auto-heal is the
+            # main heal site; Lay on Hands + other heal endpoints are
+            # filed follow-ups. Best-effort. See docs/plans/campaign-stats.md.
+            try:
+                if auto_heal_applied > 0:
+                    _heal_tgt_id = target_combatant.get("char_id")
+                    _log_stat_event(
+                        campaign_id, event_type="heal_done",
+                        actor_char_id=int(char.id),
+                        target_char_id=(
+                            int(_heal_tgt_id) if _heal_tgt_id else None
+                        ),
+                        target_name=auto_heal_target_name,
+                        amount=int(auto_heal_applied),
+                    )
+                    if _heal_tgt_id:
+                        _log_stat_event(
+                            campaign_id, event_type="heal_received",
+                            actor_char_id=int(_heal_tgt_id),
+                            actor_name=auto_heal_target_name,
+                            target_char_id=int(char.id),
+                            amount=int(auto_heal_applied),
+                        )
+            except Exception:
+                logging.exception("stats Hook B (cast heal) failed")
             # Drop the heal-claim — heal was already applied to the
             # single target. (For AoE heals like Mass Healing Word, T.5
             # will pass multiple target_combatant_ids and we'll loop;
@@ -26664,6 +26691,20 @@ async def cast_spell(
                 })
     except Exception:
         pass
+    # v2.651.0 — stats capture (Hook C): one spell_cast event per PC cast.
+    # The cast's damage/heal riders are captured separately (Hooks A/B),
+    # so a damage cantrip logs spell_cast + damage_dealt — different
+    # stats, not double-counting. NPC casts aren't tracked (NPC actor
+    # policy). Best-effort. See docs/plans/campaign-stats.md.
+    try:
+        _log_stat_event(
+            campaign_id, event_type="spell_cast",
+            actor_char_id=int(char.id),
+            spell_slug=(spell_slug or None),
+            spell_name=(spell.get("name") or None),
+        )
+    except Exception:
+        logging.exception("stats Hook C (spell_cast) failed")
     return {
         "ok": True,
         "id": cast_id,
@@ -28066,6 +28107,71 @@ def campaign_roster(
             "portrait_url": c.portrait_url,
         })
     return {"characters": out}
+
+
+@router.get("/api/campaign/{campaign_id}/stats")
+def campaign_stats(
+    campaign_id: int,
+    character_id: "int | None" = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.651.0 — per-campaign statistics (see docs/plans/campaign-stats.md).
+
+    Visibility: the GM sees everyone (pass ``character_id`` for one, or
+    omit for the whole roster of characters with recorded stats). A
+    non-GM player is resolved server-side to THEIR OWN characters in this
+    campaign — any ``character_id`` they pass that isn't theirs is
+    ignored; the endpoint never returns another player's numbers.
+
+    Returns ``{scope: "gm"|"self", characters: [{id, name, totals,
+    top_spells, by_session}]}``.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    if not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    if _user_is_gm(user, campaign, db):
+        scope = "gm"
+        if character_id:
+            c = db.query(Character).filter(
+                Character.id == int(character_id),
+                Character.campaign_id == campaign_id,
+            ).first()
+            targets = [c] if c else []
+        else:
+            ids = stats_service.actor_char_ids(db, campaign_id)
+            targets = (
+                db.query(Character)
+                .filter(
+                    Character.campaign_id == campaign_id,
+                    Character.id.in_(ids),
+                )
+                .order_by(Character.name)
+                .all()
+            ) if ids else []
+    else:
+        # Non-GM: own characters only; ignore any character_id param.
+        scope = "self"
+        targets = (
+            db.query(Character)
+            .filter(
+                Character.campaign_id == campaign_id,
+                Character.owner_user_id == user.id,
+            )
+            .order_by(Character.name)
+            .all()
+        )
+
+    return {
+        "scope": scope,
+        "characters": [
+            stats_service.character_block(db, campaign_id, c.id, c.name)
+            for c in targets
+        ],
+    }
 
 
 # ----------- API: Lay on Hands (Paladin, priority #3) -----------
@@ -111659,6 +111765,20 @@ async def use_attack(
         "adamantine_crit_suppressor": adamantine_armor_source or "",
     }
     await hub.broadcast(campaign_id, {"type": "weapon_attack", "data": payload})
+    # v2.651.0 — stats capture (Hook D): one `attack` event per PC weapon
+    # attack-roll (drives attacks-made / hit-rate / crit-count). Skipped
+    # for save-based "attacks" (`hit is None`) so hit-rate only counts
+    # real attack rolls. The damage is captured in Hook A, NOT here, so
+    # attacks and damage never double-count. Best-effort.
+    try:
+        if hit is not None:
+            _log_stat_event(
+                campaign_id, event_type="attack",
+                actor_char_id=int(char.id),
+                is_hit=bool(hit), is_crit=bool(is_crit),
+            )
+    except Exception:
+        logging.exception("stats Hook D (attack) failed")
     # v2.364.0 — companion `feature_used` for the Adamantine crit
     # suppression so the chat-card log + the test harness have a
     # broadcast-source-keyed audit entry next to the weapon_attack.

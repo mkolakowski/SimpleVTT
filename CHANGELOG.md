@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.651.0] - 2026-06-25 — "The Tally Sheet"
+
+**Schema version:** 81
+
+**Commit summary:** Statistics logging Phase 2 — the read API (`GET /api/campaign/{id}/stats`, own-vs-GM gated) + the heal / cast / attack capture hooks. The recorded events are now queryable as per-character totals, per-session breakdowns, and top spells.
+
+**Description:** Second slice of the [stats plan](docs/plans/campaign-stats.md). Adds the remaining capture hooks: **B** (heal — the cast-spell auto-heal site logs `heal_done`/`heal_received`; Lay on Hands + other heal endpoints filed), **C** (`spell_cast` per PC cast in `/cast_spell`; NPC casts untracked), and **D** (`attack` per PC weapon attack-roll in `/attack`, driving attacks/hit-rate/crits — save-based "attacks" skipped so hit-rate is clean). Damage stays captured *only* in Hook A (the funnel), so attacks and casts never double-count their damage. The read layer is a new `app/stats_service.py` (`character_totals`, `character_top_spells`, `character_by_session`, `character_block`, `actor_char_ids`) using Postgres filtered aggregates, behind `GET /api/campaign/{id}/stats?character_id=`. **Visibility gate:** the GM may request any character (or omit `character_id` for the whole roster of characters with recorded stats); a non-GM is resolved server-side to **their own** characters in the campaign — any `character_id` they pass that isn't theirs is ignored, so the endpoint never returns another player's numbers. Response: `{scope: "gm"|"self", characters: [{id, name, totals, top_spells, by_session}]}`. The page lands in Phase 3.
+
+### Added
+- `app/stats_service.py` — the aggregation read layer.
+- `app/routes/tabletop_routes.py` — `GET /api/campaign/{id}/stats` (visibility-gated); capture Hooks B (cast-heal), C (`spell_cast`), D (`attack`).
+
+### Schema
+- No schema change (still v81).
+
+**Harness:** `tests/harness/test_stats_api.py` (new, +3) — `test_stats_reflects_attack_and_cast` (a GM-scoped attack + cast bump the actor's `damage_dealt`/`attacks`/`spells_cast` + `top_spells`, baseline-delta), `test_stats_player_sees_only_own` (a non-GM gets `scope="self"` and never a GM-owned character's stats, even passing that `character_id`), and `test_stats_unknown_campaign_404`.
+
 ## [2.650.0] - 2026-06-25 — "The First Tally"
 
 **Schema version:** 81
