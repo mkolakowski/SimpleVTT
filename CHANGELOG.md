@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.641.1] - 2026-06-25 — "The Honest Backlog"
+
+**Schema version:** 80
+
+**Commit summary:** Doc — reconcile the reactions-automation v3 backlog: the pending-damage / pending-resolution state machine it called "the biggest single remaining item, still GM-narrated" has in fact shipped through Phase 3a, spun into its own plan.
+
+**Description:** The [reactions-automation plan](docs/plans/reactions-automation.md)'s `Status:` line and its v3-backlog note claimed the pending-damage state machine — letting a reaction retroactively re-resolve a committed save — was unbuilt and "the biggest single remaining item in this backlog," with a Silvery Barbs reroll's downstream effect (condition install / save-for-half → full) "stays GM-narrated." That is stale: the work was spun into its own [pending-resolution-state-machine.md](docs/plans/pending-resolution-state-machine.md) plan and shipped through **Phase 3a** — the AC-bump-negation family (Shield / Defensive Duelist / Form of the Beast Tail / Combat Inspiration / Parry, v2.600.0–v2.608.0), the d20-reroll family (Lucky v2.609.0, Silvery Barbs v2.610.0), the condition re-install on a reroll pass→fail flip via `_resolve_save_failure` (v2.611.0), and the withheld-half application for save-for-half AoE damage via `_resolve_save_for_half_flip` (v2.612.0) are all auto-resolved server-side. This commit updates the two stale claims to point at the spun-out plan and lists what genuinely remains (auto-cast routing for War Caster / Mage Slayer advisories, per-item charge tracking, the `attack_resolved` / `check_resolved` own-roll events, and attack hit↔miss re-resolution). No code change — documentation accuracy only, closing the same TODO/plan-drift pattern the SRD-audit reconciliations keep hitting.
+
+### Changed
+- `docs/plans/reactions-automation.md` — `Status:` line and the v3-backlog "Auto-resolution of advisory reactions" bullet now reflect that the pending-resolution state machine shipped through Phase 3a (cross-linked to `pending-resolution-state-machine.md`), instead of describing it as the biggest unbuilt item.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** none — doc-only reconciliation of an already-wiki-surfaced plan (`/wiki/doc/plan-reactions-automation`); no new HTTP endpoint, allowlist entry, or WS broadcast-shape change.
+
 ## [2.641.0] - 2026-06-25 — "One-Click Copy"
 
 **Schema version:** 80
