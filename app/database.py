@@ -948,6 +948,15 @@ def _apply_inline_migrations() -> None:
                 "ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP"
             ))
 
+    # ---- Schema v81 (2.650.0): campaign_stat_events ----
+    # The per-campaign statistics event log (one row per damage/heal/
+    # cast/attack/ko event) backing the stats page. `create_all` above
+    # handles fresh DBs; this checkfirst create ensures existing
+    # deployments pick up the new table. See models.CampaignStatEvent +
+    # docs/plans/campaign-stats.md.
+    from .models import CampaignStatEvent
+    CampaignStatEvent.__table__.create(bind=engine, checkfirst=True)
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

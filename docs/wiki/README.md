@@ -92,7 +92,7 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 | [Warlock Pact Boon](../plans/warlock-pact-boon.md) | Markdown (design) | Contributors | ✅ all three boons shipped (Tome v2.99.200 / Blade v2.99.212 / Chain v2.99.213) |
 | [Wild Magic (Sorcerer subclass)](../plans/wild-magic.md) | Markdown (design) | Contributors | ✅ All 5 phases shipped (v2.99.227–231) |
 | [Eldritch Knight (Fighter subclass)](../plans/eldritch-knight.md) | Markdown (design) | Contributors | 🟠 Phase 1 + Arcane Charge P1 + Improved War Magic P1 shipped (v2.158.11–.12); War Magic + Eldritch Strike remain |
-| [Per-campaign statistics logging](../plans/campaign-stats.md) | Markdown (design) | Contributors | ⚪ design only · all phases unstarted |
+| [Per-campaign statistics logging](../plans/campaign-stats.md) | Markdown (design) | Contributors | 🟠 Phase 1 shipped (event table v81 + damage hook, v2.650.0); read API + page remain |
 | [Battle Master (Fighter subclass)](../plans/battle-master.md) | Markdown (design) | Contributors | ✅ 16/16 maneuvers shipped (v2.99.252–.266); Know Your Enemy + Relentless blocked on Lv 18+ fixture |
 | [Paladin oaths (non-Devotion)](../plans/paladin-oaths.md) | Markdown (design) | Contributors | 🟢 Lv 15/20 capstones all ✅ (v2.99.283–.292); outstanding: Conquest Lv 3/7 + Redemption Lv 3 + Glory Lv 3 + Vengeance Phase 2 |
 | [Magic-item automation](../plans/magic-items-automation.md) | Markdown (design) | Contributors | ✅ framework + Phases 1–9.1 shipped (v2.158.74–v2.367.0); 🟠 Phase 9.2 charge tracking for the announce-only Bucket D tail in flight (v2.403.0+) |

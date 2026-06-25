@@ -40,6 +40,7 @@ from ..models import (
     Battle,
     Campaign,
     CampaignMembership,
+    CampaignStatEvent,
     Character,
     ConcentrationEffect,
     DiceRoll,
@@ -10834,6 +10835,77 @@ async def _break_buffs_on_damage(
     return removed
 
 
+# ── v2.650.0 — per-campaign statistics capture (see
+# docs/plans/campaign-stats.md) ──
+#
+# The stats event log (`campaign_stat_events`) is written best-effort
+# from the gameplay funnels. `_log_stat_event` uses its OWN short-lived
+# DB session so a stats failure can never break or roll back combat, and
+# the row always persists regardless of how the caller manages its
+# transaction (the damage funnel commits in the PC branch but not the
+# NPC branch — a dedicated session sidesteps that entirely).
+def _session_key_for_campaign(db: Session, campaign_id: int) -> str:
+    """The per-session bucket key: the campaign's current
+    `session_started_at` (ISO), or the UTC date when no session is active."""
+    try:
+        camp = db.query(Campaign).filter(
+            Campaign.id == int(campaign_id),
+        ).first()
+        if camp is not None and camp.session_started_at is not None:
+            return camp.session_started_at.isoformat()[:40]
+    except Exception:
+        pass
+    return datetime.now(timezone.utc).date().isoformat()
+
+
+def _log_stat_event(
+    campaign_id: int, *, event_type: str,
+    actor_char_id=None, actor_name: str = "",
+    target_char_id=None, target_name: str = "",
+    amount=None, damage_type=None, spell_slug=None, spell_name=None,
+    is_crit: bool = False, is_hit=None,
+) -> None:
+    """Best-effort insert of one `CampaignStatEvent`. Resolves missing
+    actor/target names from their char ids. Swallows + logs exceptions —
+    a stats bug must never 500 an attack/cast."""
+    try:
+        from app.database import SessionLocal
+        with SessionLocal() as _s:
+            _an = actor_name or ""
+            _tn = target_name or ""
+            if actor_char_id and not _an:
+                _c = _s.query(Character).filter(
+                    Character.id == int(actor_char_id),
+                ).first()
+                _an = _c.name if _c else ""
+            if target_char_id and not _tn:
+                _c = _s.query(Character).filter(
+                    Character.id == int(target_char_id),
+                ).first()
+                _tn = _c.name if _c else ""
+            _s.add(CampaignStatEvent(
+                campaign_id=int(campaign_id),
+                actor_char_id=int(actor_char_id) if actor_char_id else None,
+                actor_name=(_an or "")[:120],
+                target_char_id=int(target_char_id) if target_char_id else None,
+                target_name=(_tn or "")[:120],
+                event_type=event_type,
+                amount=int(amount) if amount is not None else None,
+                damage_type=(damage_type or None),
+                spell_slug=(spell_slug or None),
+                spell_name=(spell_name or None),
+                is_crit=bool(is_crit),
+                is_hit=is_hit,
+                session_key=_session_key_for_campaign(_s, int(campaign_id)),
+            ))
+            _s.commit()
+    except Exception:
+        logging.exception(
+            "stat-event log failed (campaign=%s type=%s)",
+            campaign_id, event_type,
+        )
+
+
 async def _apply_damage_to_combatant(
     db: Session,
     campaign_id: int,
@@ -11400,6 +11472,42 @@ async def _apply_damage_to_combatant(
                                 "source": "cloak-displacement-suppressed",
                             },
                         })
+        # v2.650.0 — stats capture (Hook A), PC victim. Log damage_dealt
+        # (attacker) + damage_taken (this PC) + ko on a drop. The two
+        # damage rows for one hit are intentional (different stats,
+        # filtered by event_type) — do NOT "dedupe" them. PC-anchored
+        # events only; best-effort. See docs/plans/campaign-stats.md.
+        try:
+            if applied > 0:
+                _vic_id = int(combatant.get("char_id"))
+                _vic_name = combatant.get("name") or ""
+                if attacker_char_id:
+                    _log_stat_event(
+                        campaign_id, event_type="damage_dealt",
+                        actor_char_id=int(attacker_char_id),
+                        target_char_id=_vic_id, target_name=_vic_name,
+                        amount=int(applied), damage_type=damage_type,
+                        is_crit=bool(is_crit),
+                    )
+                _log_stat_event(
+                    campaign_id, event_type="damage_taken",
+                    actor_char_id=_vic_id, actor_name=_vic_name,
+                    target_char_id=(
+                        int(attacker_char_id) if attacker_char_id else None
+                    ),
+                    amount=int(applied), damage_type=damage_type,
+                    is_crit=bool(is_crit),
+                )
+                if result["death_saves"]["status"] == "dead":
+                    _log_stat_event(
+                        campaign_id, event_type="ko",
+                        actor_char_id=(
+                            int(attacker_char_id) if attacker_char_id else None
+                        ),
+                        target_char_id=_vic_id, target_name=_vic_name,
+                    )
+        except Exception:
+            logging.exception("stats Hook A (PC victim) failed")
         return {
             "applied": applied,
             "hp_before": hp_cur,
@@ -11553,6 +11661,28 @@ async def _apply_damage_to_combatant(
         await _fire_keeper_of_souls_on_npc_death(
             db, campaign_id, target, state,
         )
+    # v2.650.0 — stats capture (Hook A), NPC victim. Only PC-anchored
+    # rows: a PC's damage_dealt against this NPC + a PC's ko when it
+    # drops. No damage_taken (NPC victims have no PC stats home — see the
+    # NPC actor policy in docs/plans/campaign-stats.md). Best-effort.
+    try:
+        if applied > 0 and attacker_char_id:
+            _npc_name = target.get("name") or "NPC"
+            _log_stat_event(
+                campaign_id, event_type="damage_dealt",
+                actor_char_id=int(attacker_char_id),
+                target_name=_npc_name,
+                amount=int(applied), damage_type=damage_type,
+                is_crit=bool(is_crit),
+            )
+            if hp_cur > 0 and new_hp == 0 and hp_max > 0:
+                _log_stat_event(
+                    campaign_id, event_type="ko",
+                    actor_char_id=int(attacker_char_id),
+                    target_name=_npc_name,
+                )
+    except Exception:
+        logging.exception("stats Hook A (NPC victim) failed")
     return {
         "applied": applied,
         "hp_before": hp_cur,

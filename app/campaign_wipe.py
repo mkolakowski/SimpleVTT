@@ -23,6 +23,7 @@ from .models import (
     Battle,
     Campaign,
     CampaignMembership,
+    CampaignStatEvent,
     Character,
     DiceRoll,
     Encounter,
@@ -82,6 +83,17 @@ def wipe_campaign_children(
     counts["dice_rolls"] = (
         db.query(DiceRoll)
         .filter(DiceRoll.campaign_id.in_(campaign_ids))
+        .delete(synchronize_session=False)
+    )
+    # Stat events (the per-campaign statistics log). campaign_id is a
+    # CASCADE FK so the demo reseed's campaign-row delete would clear
+    # these anyway, but the importer's restore path KEEPS the campaign
+    # row — without this explicit delete a restored campaign would
+    # inherit the old campaign's stats. Deleting by campaign_id is safe
+    # at any point (the character FKs are ON DELETE SET NULL).
+    counts["stat_events"] = (
+        db.query(CampaignStatEvent)
+        .filter(CampaignStatEvent.campaign_id.in_(campaign_ids))
         .delete(synchronize_session=False)
     )
     # TokenTemplates.

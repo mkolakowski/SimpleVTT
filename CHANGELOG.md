@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.650.0] - 2026-06-25 — "The First Tally"
+
+**Schema version:** 81
+
+**Commit summary:** Statistics logging Phase 1 — the `campaign_stat_events` event-log table (schema v81) + the damage capture hook. A PC's hits now log `damage_dealt` / `damage_taken` / `ko` stat rows; the read API + page land in later phases.
+
+**Description:** First implementation slice of the [per-campaign statistics plan](docs/plans/campaign-stats.md). Adds the `CampaignStatEvent` model (`campaign_stat_events` — one row per gameplay stat event, mirroring `AudioPlayEvent`: indexed CASCADE `campaign_id`, nullable SET-NULL actor/target character FKs + snapshot name columns, `event_type`/`amount`/`damage_type`/`spell_slug`/`is_crit`/`is_hit`/`session_key` columns, three composite indexes) behind **migration v81** (`SCHEMA_VERSION` 80→81). The capture is wired at **Hook A**, the single damage funnel `_apply_damage_to_combatant` — the *only* damage capture point, so attacks/casts/riders that all flow through it never double-count. On applied damage it logs `damage_dealt` (actor = attacker) and, for PC victims, `damage_taken` (actor = victim) + `ko` on a drop; for NPC victims only the PC-anchored `damage_dealt`/`ko` rows (the NPC actor policy). Logging goes through `_log_stat_event`, which uses its **own short-lived DB session** so a stats failure can never break or roll back combat and the row persists regardless of how the funnel's branch manages its transaction. `session_key` buckets events by the campaign's `session_started_at` (the GM's Start Session). The new table is added to `wipe_campaign_children` so the demo reseed purges stats cleanly. No read endpoint or page yet — those are Phase 2/3.
+
+### Added
+- `app/models.py` — `CampaignStatEvent` model (+ `Index` import).
+- `app/database.py` — migration v81 (`CampaignStatEvent.__table__.create(checkfirst=True)`).
+- `app/routes/tabletop_routes.py` — `_session_key_for_campaign` + `_log_stat_event` helpers; Hook A in both branches of `_apply_damage_to_combatant`.
+- `app/campaign_wipe.py` — delete `campaign_stat_events` by campaign id (reseed idempotency).
+
+### Schema
+- **v81** — new `campaign_stat_events` table. No changes to existing tables.
+
+**Harness:** `tests/harness/test_stats_capture.py` (new, +1) — Garrik (PC) hits an NPC dummy via `/attack` until a damaging hit lands; a direct DB query (the `docker compose exec db psql` precedent) asserts a new `damage_dealt` stat row for Garrik (baseline-delta) and that the attack endpoint still 200s (no regression from the hook). The positive *aggregate* assertion via the API lands with Phase 2.
+
 ## [2.649.1] - 2026-06-25 — "The Drafting Table"
 
 **Schema version:** 80

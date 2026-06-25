@@ -1,6 +1,8 @@
 # Per-Campaign Statistics Logging — Design Plan
 
-**Status:** ⚪ design only · all phases unstarted. A player-facing stats page
+**Status:** 🟠 Phase 1 shipped (v2.650.0 — the `campaign_stat_events` table,
+schema v81, + the damage capture Hook A + reseed wiring); Phases 2 (read API +
+heal/cast/attack hooks) and 3 (the page) unstarted. A player-facing stats page
 showing damage dealt/taken, healing, attacks + hit-rate, crits, KOs, biggest
 hit, and most-used spells — per campaign, with a per-session breakdown.
 

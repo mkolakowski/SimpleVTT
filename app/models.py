@@ -12,6 +12,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     JSON,
     String,
@@ -635,6 +636,77 @@ class AudioPlayEvent(Base):
     source: Mapped[str] = mapped_column(String(20), default="manual")
     triggered_by_user_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+
+
+class CampaignStatEvent(Base):
+    """One row per gameplay stat event — the event log backing the
+    per-campaign statistics page (see docs/plans/campaign-stats.md).
+
+    Captured at the gameplay funnels (`_apply_damage_to_combatant`,
+    cast/heal/attack sites) so the stats page can aggregate per-character
+    totals, per-session breakdowns, and top-N spells.
+
+    Like ``AudioPlayEvent``: ``campaign_id`` is an indexed CASCADE FK;
+    the actor/target character FKs are nullable + ON DELETE SET NULL so a
+    character deletion doesn't strand history, and the ``*_name`` snapshot
+    columns keep the log readable (and identify NPC actors, who have no
+    Character row → NULL ``actor_char_id``).
+
+    ``event_type`` values (plain lowercase strings, not a DB enum — matches
+    the codebase + avoids ALTER-TYPE when adding types):
+      - ``damage_dealt``   — actor dealt ``amount`` damage.
+      - ``damage_taken``   — actor took ``amount`` damage (the same hit
+                             logs both rows by design; they answer
+                             different questions and filter by event_type
+                             — NOT double-counting).
+      - ``heal_done`` / ``heal_received`` — paired heal rows.
+      - ``spell_cast``     — actor cast a spell (``spell_slug``/``spell_name``).
+      - ``attack``         — actor made a weapon attack (``is_hit``/``is_crit``).
+      - ``ko``             — target dropped to 0 HP.
+
+    ``session_key`` buckets events by the campaign's current
+    ``session_started_at`` (the GM's Start Session), falling back to the
+    UTC date when no session is active.
+    """
+    __tablename__ = "campaign_stat_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="CASCADE"), index=True
+    )
+    actor_char_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("characters.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    actor_name: Mapped[str] = mapped_column(String(120), default="")
+    target_char_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("characters.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    target_name: Mapped[str] = mapped_column(String(120), default="")
+    event_type: Mapped[str] = mapped_column(String(24), index=True)
+    amount: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    damage_type: Mapped[Optional[str]] = mapped_column(
+        String(24), nullable=True,
+    )
+    spell_slug: Mapped[Optional[str]] = mapped_column(
+        String(80), nullable=True,
+    )
+    spell_name: Mapped[Optional[str]] = mapped_column(
+        String(120), nullable=True,
+    )
+    is_crit: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_hit: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    session_key: Mapped[str] = mapped_column(String(40), default="", index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), index=True,
+    )
+
+    __table_args__ = (
+        Index("ix_stat_events_campaign_actor", "campaign_id", "actor_char_id"),
+        Index("ix_stat_events_campaign_session", "campaign_id", "session_key"),
+        Index("ix_stat_events_campaign_type", "campaign_id", "event_type"),
     )
 
 
