@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.638.0] - 2026-06-24 — "The Sorting Hat"
+
+**Schema version:** 80
+
+**Commit summary:** Add **audience filter buttons** to the wiki landing page's "Available guides" table (All / Players / GMs / Operators / Contributors) and **remove the Format column** from the landing-page doc-tables.
+
+**Description:** The wiki landing page (`/wiki`) had grown to ~30 guides in one long table, hard to scan for "what's relevant to me." Now a row of pill buttons above the guides table filters it by audience:
+
+- **Filter bar.** All / Players / GMs / Operators / Contributors. Clicking a pill hides rows whose Audience doesn't match (rows tagged **Everyone** always show); **All** clears it. Pure client-side JS reading each row's Audience cell — no new endpoint, works without a reload. An "No guides match that audience" note covers the empty case (none today, but future-proof).
+- **Format column removed.** The `Format` column (Markdown/HTML/visual) was low-signal for readers and is dropped from all three landing-page doc-tables (Available guides, References, Repo documentation), leaving **Guide · Audience · Status**. (`docs/wiki/README.md`, the on-disk contributor index, keeps its Format column — md-vs-html is still useful when reading the repo raw.)
+
+### Added
+- Audience filter buttons (`.aud-filter`) on the `/wiki` guides table + the client-side filter script.
+
+### Changed
+- Dropped the `Format` column from the `/wiki` landing-page doc-tables (`app/templates/wiki.html`).
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_wiki.py::test_wiki_home_renders` — asserts the filter bar (`class="aud-filter"`, `data-aud-filter="players"`/`"gms"`, `id="guides-table"`) renders and that `<th>Format</th>` is gone.
+
 ## [2.637.0] - 2026-06-24 — "The Cartographer's Table"
 
 **Schema version:** 80

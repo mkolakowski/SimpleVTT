@@ -46,6 +46,13 @@ async def test_wiki_home_renders():
     assert "/wiki/inviting-players" in resp.text     # v2.635.0
     assert "/wiki/theming" in resp.text              # v2.636.0
     assert "/wiki/maps-grids-tokens" in resp.text     # v2.637.0
+    # v2.638.0: audience filter buttons on the guides table + the Format
+    # column was dropped from the landing-page doc-tables.
+    assert 'class="aud-filter"' in resp.text
+    assert 'data-aud-filter="players"' in resp.text
+    assert 'data-aud-filter="gms"' in resp.text
+    assert 'id="guides-table"' in resp.text
+    assert "<th>Format</th>" not in resp.text
     # v2.49.9: the wiki nav menu is rendered on the landing too.
     assert 'class="wiki-nav"' in resp.text
     # v2.630.0: the design-plans index moved to its own page; the landing

@@ -109,187 +109,210 @@
   </p>
 
   <h2 id="guides">Available guides</h2>
-  <table class="doc-table">
+  <style>
+    .aud-filter { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 14px; }
+    .aud-filter-btn {
+      min-height:44px; padding:6px 16px; border:1px solid var(--border, #444);
+      border-radius:999px; background:var(--bg-2, #23262e); color:var(--fg, #ddd);
+      cursor:pointer; font-size:13px; line-height:1;
+    }
+    .aud-filter-btn:hover { border-color:#777; }
+    .aud-filter-btn.is-active {
+      background:var(--accent, #6cb4ff); color:#10131a; border-color:var(--accent, #6cb4ff); font-weight:600;
+    }
+    .doc-table tr.aud-hidden { display:none; }
+    .aud-empty-note { color:var(--fg-mute, #9aa0aa); font-style:italic; margin:6px 0 14px; }
+  </style>
+  <div class="aud-filter" role="group" aria-label="Filter guides by audience">
+    <button type="button" class="aud-filter-btn is-active" data-aud-filter="all">All</button>
+    <button type="button" class="aud-filter-btn" data-aud-filter="players">Players</button>
+    <button type="button" class="aud-filter-btn" data-aud-filter="gms">GMs</button>
+    <button type="button" class="aud-filter-btn" data-aud-filter="operators">Operators</button>
+    <button type="button" class="aud-filter-btn" data-aud-filter="contributors">Contributors</button>
+  </div>
+  <p class="aud-empty-note" id="aud-empty-note" hidden>No guides match that audience.</p>
+  <table class="doc-table" id="guides-table">
     <thead>
-      <tr><th>Guide</th><th>Format</th><th>Audience</th><th>Status</th></tr>
+      <tr><th>Guide</th><th>Audience</th><th>Status</th></tr>
     </thead>
     <tbody>
       <tr>
         <td><a href="/wiki/demo-content">Demo content — campaigns, PCs &amp; NPCs</a></td>
-        <td>Markdown (reference)</td>
         <td>Everyone</td>
         <td><span class="status-shipped" title="✅ shipped (v2.597.0) — five leveled sample campaigns (3/5/9/13/18) + art prompts">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/roll-log-guide">Roll-log guide</a></td>
-        <td>HTML (visual)</td>
         <td>GMs + contributors</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/toast-notifications-guide">Toast notifications guide</a></td>
-        <td>HTML (visual)</td>
         <td>GMs + contributors</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/realtime-broadcasts-catalog">Realtime broadcasts catalog</a></td>
-        <td>Markdown (reference)</td>
         <td>Contributors</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/endpoint-catalog">Endpoint catalog</a></td>
-        <td>Markdown (reference)</td>
         <td>Contributors</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/architecture-overview">Architecture overview</a></td>
-        <td>Markdown (system map)</td>
         <td>Contributors</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/first-run-setup">First-run setup</a></td>
-        <td>Markdown (how-to)</td>
         <td>Operators</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/running-a-session-as-gm">Running a session as GM</a></td>
-        <td>Markdown (how-to)</td>
         <td>GMs</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/the-character-sheet">The character sheet</a></td>
-        <td>Markdown (how-to)</td>
         <td>Players + GMs</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/player-onboarding">Player onboarding — your first session</a></td>
-        <td>Markdown (how-to · screenshots)</td>
         <td>Players</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/inviting-players">Inviting players to your campaign</a></td>
-        <td>Markdown (how-to · screenshots)</td>
         <td>GMs + Operators</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/theming">Theming & display preferences</a></td>
-        <td>Markdown (how-to · screenshots)</td>
         <td>Everyone</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/maps-grids-tokens">Maps, grids & tokens</a></td>
-        <td>Markdown (how-to · screenshots)</td>
         <td>GMs</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/demo-mode">Demo mode</a></td>
-        <td>Markdown (how-to)</td>
         <td>Operators</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/fail2ban-deployment">fail2ban deployment</a></td>
-        <td>Markdown (how-to)</td>
         <td>Operators</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/privacy">Privacy Policy (GDPR-compliant template)</a></td>
-        <td>Markdown (policy)</td>
         <td>Operators + Users</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/admin-center">Admin Center</a></td>
-        <td>Markdown (how-to)</td>
         <td>Operators</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/backups">Backups &amp; restore</a></td>
-        <td>Markdown (how-to)</td>
         <td>Operators + GMs</td>
         <td><span class="status-shipped" title="✅ shipped (v2.628.0) — operator full-app backups + restore; campaign / PC / homebrew exports">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/pc-vs-npc-systems">PC vs NPC combat systems</a></td>
-        <td>Markdown (reference)</td>
         <td>Contributors</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/reactions">Reactions automation</a></td>
-        <td>Markdown (how-to)</td>
         <td>GMs + players</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/targeting-system-guide">Targeting system guide</a></td>
-        <td>HTML (visual)</td>
         <td>GMs + contributors</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/battle-character-sheets-guide">Battle &amp; Characters tab sheets</a></td>
-        <td>HTML (visual)</td>
         <td>Players + GMs + contributors</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/unified-mini-sheet-mockups">Unified mini-sheet mockups</a></td>
-        <td>HTML (visual)</td>
         <td>Contributors (design review)</td>
         <td><span class="status-pending" title="⚪ 3 mockups · companion to design plan">⚪ 3</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/consume-without-refund-audit">Consume-without-refund audit</a></td>
-        <td>Markdown (reference)</td>
         <td>Contributors</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/visual-regression-harness">Visual regression harness</a></td>
-        <td>Markdown (reference)</td>
         <td>Contributors</td>
         <td><span class="status-shipped" title="✅ shipped · local-only">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/testing-checklist">Testing checklist</a></td>
-        <td>Markdown (per-version log)</td>
         <td>Contributors</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/lair-regional-catalog">Lair actions &amp; regional effects catalog</a></td>
-        <td>Markdown (reference)</td>
         <td>GMs + contributors</td>
         <td><span class="status-shipped" title="✅ shipped (refreshed v2.382.0)">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/srd-races-implementation">SRD race rules — implementation guide</a></td>
-        <td>Markdown (reference + how-to)</td>
         <td>GMs + players + contributors</td>
         <td><span class="status-shipped" title="✅ shipped (v2.400.0) — per-race trait coverage after the v2.392.0–v2.399.2 race-features arc">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/srd-conditions">SRD conditions — implementation guide</a></td>
-        <td>Markdown (reference + how-to)</td>
         <td>GMs + players + contributors</td>
         <td><span class="status-shipped" title="✅ shipped (v2.402.0) — per-condition clause coverage after the v2.385.0–v2.401.0 enforcement + UI-surfacing arc">✅</span></td>
       </tr>
     </tbody>
   </table>
+  <script>
+    (function () {
+      // Filter the Available-guides table by audience. The audience text
+      // lives in each row's 2nd cell (Guide | Audience | Status); "Everyone"
+      // rows always show. Buttons carry data-aud-filter; "all" clears it.
+      const ROOTS = { players: 'player', gms: 'gm', operators: 'operator', contributors: 'contributor' };
+      const bar = document.querySelector('.aud-filter');
+      const table = document.getElementById('guides-table');
+      const note = document.getElementById('aud-empty-note');
+      if (!bar || !table) return;
+      const rows = Array.from(table.tBodies[0] ? table.tBodies[0].rows : []);
+      function apply(filter) {
+        const root = ROOTS[filter];
+        let shown = 0;
+        rows.forEach(r => {
+          const aud = (r.cells[1] ? r.cells[1].textContent : '').toLowerCase();
+          const match = filter === 'all' || aud.includes('everyone') || (root && aud.includes(root));
+          r.classList.toggle('aud-hidden', !match);
+          if (match) shown++;
+        });
+        if (note) note.hidden = shown !== 0;
+      }
+      bar.addEventListener('click', e => {
+        const btn = e.target.closest('.aud-filter-btn');
+        if (!btn) return;
+        bar.querySelectorAll('.aud-filter-btn').forEach(b => b.classList.toggle('is-active', b === btn));
+        apply(btn.dataset.audFilter);
+      });
+    })();
+  </script>
 
   <h2 id="plans">Design plans</h2>
   <p>
@@ -305,36 +328,31 @@
   </p>
   <table class="doc-table">
     <thead>
-      <tr><th>Reference</th><th>Format</th><th>Audience</th><th>Status</th></tr>
+      <tr><th>Reference</th><th>Audience</th><th>Status</th></tr>
     </thead>
     <tbody>
       <tr>
         <td><a href="/wiki/doc/roll-log-card-layout">Roll-log card layout</a></td>
-        <td>Markdown (semantic ref)</td>
         <td>Contributors</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/doc/test-harness-coverage">Test harness coverage catalog</a></td>
-        <td>Markdown (index)</td>
         <td>Contributors</td>
         <td><span class="status-shipped" title="✅ shipped · living">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/doc/automation-coverage">Automation coverage audit</a></td>
-        <td>Markdown (index)</td>
         <td>Contributors</td>
         <td><span class="status-shipped" title="✅ shipped · living">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/doc/condition-enforcement-audit">Condition enforcement audit</a></td>
-        <td>Markdown (audit)</td>
         <td>Contributors</td>
         <td><span class="status-shipped" title="✅ shipped (v2.384.0) · Charmed / Grappled / Incapacitated per-clause review">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/doc/image-prompts">Demo image-generation prompts</a></td>
-        <td>Markdown (asset notes)</td>
         <td>Contributors</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
@@ -349,54 +367,46 @@
   </p>
   <table class="doc-table">
     <thead>
-      <tr><th>Doc</th><th>Format</th><th>Audience</th><th>Status</th></tr>
+      <tr><th>Doc</th><th>Audience</th><th>Status</th></tr>
     </thead>
     <tbody>
       <tr>
         <td><a href="/wiki/doc/readme">README</a></td>
-        <td>Markdown (install + deploy)</td>
         <td>Operators</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/doc/changelog">CHANGELOG</a></td>
-        <td>Markdown (release history)</td>
         <td>All</td>
         <td><span class="status-shipped" title="✅ shipped · living">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/doc/changelog-v1">CHANGELOG (pre-2.0 archive)</a></td>
-        <td>Markdown (release history)</td>
         <td>All</td>
         <td><span class="status-shipped" title="✅ archived">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/doc/claude">CLAUDE — contributor + agent guidelines</a></td>
-        <td>Markdown (contributing)</td>
         <td>Contributors</td>
         <td><span class="status-shipped" title="✅ shipped · living">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/doc/credits">CREDITS &amp; attribution</a></td>
-        <td>Markdown (license)</td>
         <td>All</td>
         <td><span class="status-shipped" title="✅ shipped">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/doc/todo">TODO — planned features backlog</a></td>
-        <td>Markdown (backlog)</td>
         <td>Contributors</td>
         <td><span class="status-shipped" title="✅ shipped · living">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/doc/todone">TODONE — completed to-do archive</a></td>
-        <td>Markdown (archive)</td>
         <td>Contributors</td>
         <td><span class="status-shipped" title="✅ shipped · living">✅</span></td>
       </tr>
       <tr>
         <td><a href="/wiki/doc/bugs">BUGS — known-defect tracker</a></td>
-        <td>Markdown (tracker)</td>
         <td>Contributors</td>
         <td><span class="status-shipped" title="✅ shipped · living">✅</span></td>
       </tr>
