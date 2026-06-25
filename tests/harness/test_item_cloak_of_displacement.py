@@ -16,6 +16,8 @@ Demo fixture: Lyra Sunstrider (Bard) wears it as a (4th) attuned item —
 the seed predates the strict 3/3 cap, which lives only on the /attune
 runtime endpoint (Garrik / Frost Brand precedent, v2.251.0).
 """
+import asyncio
+
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
@@ -210,6 +212,78 @@ async def test_cloak_detuned_drops_disadvantage(gm_client, garrik, lyra):
         assert resp.json().get("roll_state_applied") is None, resp.json()
     finally:
         await _set_cloak_attuned(gm_client, lyra["id"], True)
+
+
+async def test_cloak_suppressed_after_taking_damage(
+    gm_client, gm_ws, garrik, lyra,
+):
+    """v2.645.0 — RAW DMG p.158 suppression clause: "If you take damage,
+    the property ceases to function until the start of your next turn."
+    Garrik attacks the cloak-wearer (Lyra, AC 1 so hits land); the first
+    attack still rolls at disadvantage (roll_state computed before the
+    hit's damage), the hit stamps the suppression + fires a
+    feature_used(source=cloak-displacement-suppressed) broadcast, and a
+    later attack the same round rolls straight (no cloak label).
+    """
+    # Full-heal Lyra first so she isn't left unconscious by an earlier
+    # test — an unconscious target would add attacker advantage and
+    # cancel the cloak's disadvantage label.
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{lyra['id']}/rest",
+        json={"type": "long"},
+    )
+    atk_cid = f"tok_cod_supp_garrik_{garrik['id']}"
+    tgt_cid = f"tok_cod_supp_lyra_{lyra['id']}"
+    await _seed_battle(gm_client, [
+        _mkc(atk_cid, garrik["id"], name=garrik["name"]),
+        _mkc(tgt_cid, lyra["id"], name=lyra["name"], ac=1),
+    ])
+    await asyncio.sleep(0.1)
+    gm_ws.mark()
+
+    async def _attack():
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": garrik["id"],
+                "attack_index": 0,
+                "target_combatant_id": tgt_cid,
+                "override": True,
+            },
+        )
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    # Attack #1 — cloak active (disadvantage), regardless of hit/miss.
+    first = await _attack()
+    assert (first.get("roll_state_applied") or "") == (
+        "disadvantage_cloak_of_displacement"
+    ), first
+
+    # Land a hit (AC 1 → near-certain; loop guards a nat-1 miss) so the
+    # applied damage stamps the suppression for this round.
+    hit = bool(first.get("hit")) or (first.get("damage_applied") or 0) > 0
+    tries = 0
+    while not hit and tries < 15:
+        d = await _attack()
+        hit = bool(d.get("hit")) or (d.get("damage_applied") or 0) > 0
+        tries += 1
+    assert hit, "Garrik never hit Lyra (AC 1) — extreme flake"
+
+    await asyncio.sleep(0.15)
+    supp = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "cloak-displacement-suppressed"
+        and (m.get("data") or {}).get("character_id") == lyra["id"]
+    ]
+    assert supp, "expected feature_used(source=cloak-displacement-suppressed)"
+
+    # A later attack the same round — cloak is suppressed, so no
+    # disadvantage label (straight roll → roll_state_applied None).
+    after = await _attack()
+    assert "cloak_of_displacement" not in (
+        after.get("roll_state_applied") or ""
+    ), after
 
 
 async def test_cloak_exposes_derived_flag(gm_client, lyra):

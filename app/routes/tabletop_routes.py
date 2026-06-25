@@ -11265,6 +11265,51 @@ async def _apply_damage_to_combatant(
                         db, campaign_id, _ow_target,
                         int(attacker_char_id), _ow_state,
                     )
+        # v2.645.0 — Cloak of Displacement suppression clause (RAW DMG
+        # p.158): "If you take damage, the property ceases to function
+        # until the start of your next turn." When a PC wearing a
+        # disadvantage-imposing item takes damage, stamp the current
+        # battle round on their hub combatant; the read site
+        # (`_target_wearer_imposes_attack_disadvantage`) then suppresses
+        # the disadvantage for the rest of that round. Only fires for
+        # wearers (one walker read), and announces once per round.
+        _cd_eff = _equipped_item_effects(sheet)
+        if applied > 0 and _cd_eff.get("incoming_attacks_have_disadvantage"):
+            _cd_state = hub.get_battle(campaign_id)
+            if _cd_state:
+                _cd_round = _cd_state.get("round")
+                _cd_target = None
+                for _c in _cd_state.get("combatants") or []:
+                    if _c.get("char_id") == int(combatant.get("char_id") or 0):
+                        _cd_target = _c
+                        break
+                if _cd_target is not None and _cd_round is not None:
+                    _cd_prev = _cd_target.get("cloak_disp_suppressed_round")
+                    _cd_target["cloak_disp_suppressed_round"] = _cd_round
+                    hub.set_battle(campaign_id, _cd_state)
+                    if _cd_prev != _cd_round:
+                        _cd_src = (
+                            _cd_eff.get(
+                                "incoming_attacks_have_disadvantage_sources"
+                            ) or ["Cloak of Displacement"]
+                        )[0]
+                        await hub.broadcast(campaign_id, {
+                            "type": "feature_used",
+                            "data": {
+                                "character_id": int(
+                                    combatant.get("char_id") or 0
+                                ),
+                                "character_name": char.name,
+                                "user_color": char.color,
+                                "feature_name": f"🌫 {_cd_src} suppressed",
+                                "feature_desc": (
+                                    f"{char.name} took damage — attackers no "
+                                    f"longer have disadvantage until the start "
+                                    f"of {char.name}'s next turn."
+                                ),
+                                "source": "cloak-displacement-suppressed",
+                            },
+                        })
         return {
             "applied": applied,
             "hp_before": hp_cur,
@@ -35532,9 +35577,11 @@ def _target_wearer_imposes_attack_disadvantage(
     if not state:
         return None
     char_id = None
+    target_c = None
     for c in state.get("combatants") or []:
         if c.get("id") == target_combatant_id:
             char_id = c.get("char_id")
+            target_c = c
             break
     if not char_id:
         return None
@@ -35544,6 +35591,19 @@ def _target_wearer_imposes_attack_disadvantage(
     eff = _equipped_item_effects(char.sheet or {})
     if not eff.get("incoming_attacks_have_disadvantage"):
         return None
+    # v2.645.0 — Cloak of Displacement suppression clause (RAW DMG
+    # p.158): "If you take damage, the property ceases to function until
+    # the start of your next turn." `_apply_damage_to_combatant` stamps
+    # `cloak_disp_suppressed_round` on the wearer's combatant when they
+    # take damage; while that stamp equals the current battle round the
+    # disadvantage is suppressed (it reactivates when the round
+    # advances). v1 round-scoped model of "until your next turn" — exact
+    # whenever the wearer already acted this round (the common melee
+    # case), slightly over-suppressing when hit earlier in the round.
+    if target_c is not None:
+        _supp_round = target_c.get("cloak_disp_suppressed_round")
+        if _supp_round is not None and _supp_round == state.get("round"):
+            return None
     sources = eff.get("incoming_attacks_have_disadvantage_sources") or []
     return sources[0] if sources else "Cloak of Displacement"
 

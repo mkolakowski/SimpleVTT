@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.645.0] - 2026-06-25 — "The Broken Mirage"
+
+**Schema version:** 80
+
+**Commit summary:** Reactions v3 — Cloak of Displacement's suppression clause: taking damage now mechanically disables the cloak's attacker-disadvantage for the rest of the battle round (RAW "until the start of your next turn"), instead of being GM-narrated.
+
+**Description:** RAW (DMG p.158): the Cloak of Displacement makes attackers roll at disadvantage, **but** "if you take damage, the property ceases to function until the start of your next turn." The always-on disadvantage has been mechanical since v2.252.0 (`incoming_attacks_have_disadvantage`, read at attack time via `_target_wearer_imposes_attack_disadvantage`); the suppression clause was the GM-narrated Phase-4b remainder. This wires it server-authoritatively: when a PC wearing a disadvantage-imposing item takes nonzero damage, `_apply_damage_to_combatant` stamps the current battle `round` on the wearer's hub combatant (`cloak_disp_suppressed_round`) and broadcasts a `feature_used(source=cloak-displacement-suppressed)` card; the read helper then suppresses the disadvantage while that stamp equals the current round, reactivating automatically when the round advances. Because the client-side buff-duration tick expires at the owner's turn *end* (not start), a round-scoped flag models "until the start of your next turn" more faithfully than a 1-round buff would — it's exact whenever the wearer already acted that round (the common melee-exchange case) and only slightly over-suppresses when the wearer is hit earlier in the round before acting. No new endpoint; the suppression rides the existing attack-disadvantage read used by both `/attack` and `/npc_attack`.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_apply_damage_to_combatant` stamps `cloak_disp_suppressed_round` + broadcasts the suppression card when a disadvantage-item wearer takes damage; `_target_wearer_imposes_attack_disadvantage` returns None (no disadvantage) while the stamp matches the current battle round.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_item_cloak_of_displacement.py::test_cloak_suppressed_after_taking_damage` (+1) — Garrik attacks Lyra (AC 1 so hits land): the first attack still rolls `disadvantage_cloak_of_displacement`, the hit fires a `feature_used(source=cloak-displacement-suppressed)` broadcast, and a later same-round attack rolls straight (no cloak label). Lyra is long-rested first so a leftover unconscious state can't add canceling advantage.
+
 ## [2.644.0] - 2026-06-25 — "The Counter-Swing"
 
 **Schema version:** 80
