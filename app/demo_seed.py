@@ -7843,7 +7843,7 @@ def seed_tokens(
             label="Drakkasha (Young Red Dragon)",
             color="#aa3322",
             image_url=None,  # color ring + label only — no portrait jpg yet
-            x=700, y=200, size=2, team="villain",
+            x=700, y=210, size=2, team="villain",  # 10·70, 3·70 — on grid
         ))
 
     db.add_all(tokens)

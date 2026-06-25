@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.640.0] - 2026-06-24 — "The Square Deal"
+
+**Schema version:** 80
+
+**Commit summary:** Demo-seed review fix — give every demo campaign a ready-to-load encounter, and snap all seeded tokens onto the grid.
+
+**Description:** A review of the demo found two gaps, both fixed in the seed so they survive the hourly reseed:
+
+- **Every campaign now ships an encounter.** Previously only the flagship *Sundered Vault* had one; the five leveled campaigns (L3–L18) had **zero**. `app/demo_campaigns.py` now seeds one snapshot encounter per campaign (the placed PC + NPC tokens, bound to the map, tagged `demo`/`combat`, filed under the `Demo` folder) and wires it as the campaign's `default_encounter_id` so **Start session** auto-loads it.
+- **All tokens sit on grid squares.** The leveled campaigns spaced tokens `140 + i·105 px` — a 1.5-cell step on a 70 px grid, so every other token landed half a cell off, and the NPC row sat at `y=640` (off by 10). Now the step is `i·140` (two cells) and the rows are `280` / `630` (both multiples of 70). The Vault's one stray token (Drakkasha at `y=200`) is snapped to `210`.
+
+A DB-only fix would have been wiped on the next demo reseed, so the change lives in the seed code.
+
+### Fixed
+- Every demo campaign now has at least one encounter (was: only the Sundered Vault).
+- All demo tokens are grid-aligned (was: ~6 of 9 off-grid on each leveled campaign).
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_demo_campaigns.py` (+12) — `test_demo_campaign_has_encounter` + `test_demo_tokens_are_grid_aligned`, parametrized over all 6 demo campaigns: ≥1 encounter each, and every token's `x`/`y` divisible by the 70 px grid.
+
 ## [2.639.0] - 2026-06-24 — "The Set Piece"
 
 **Schema version:** 80

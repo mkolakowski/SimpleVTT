@@ -24,6 +24,7 @@ from .models import (
     Campaign,
     CampaignMembership,
     Character,
+    Encounter,
     Map,
     Token,
     TokenTemplate,
@@ -842,21 +843,72 @@ def _seed_one(db: Session, spec: dict, users: dict[str, User]) -> Campaign:
         tmpls[slug] = tt
     db.flush()
 
-    # PC tokens across the top, NPC tokens across the bottom (placeholder
-    # map → positions just need to sit on the grid).
+    # PC tokens across the top, NPC tokens across the bottom. Positions are
+    # multiples of the 70 px grid (step 140 = two cells; rows at 4·70 and
+    # 9·70) so every token lands squarely on a grid cell.
+    enc_tokens: list[Token] = []
     for i, ch in enumerate(chars):
-        db.add(Token(
+        tk = Token(
             map_id=m.id, character_id=ch.id, controller_user_id=ch.owner_user_id,
             label=ch.name, color="#6cb4ff", image_url=None,
-            x=140 + i * 105, y=280, size=1, team="hero"))
+            x=140 + i * 140, y=280, size=1, team="hero")
+        db.add(tk)
+        enc_tokens.append(tk)
     for i, (slug, label, color) in enumerate(spec.get("npc_tokens", [])):
         tt = tmpls.get(slug)
         if tt is None:
             continue
-        db.add(Token(
+        tk = Token(
             map_id=m.id, character_id=None, token_template_id=tt.id,
             label=label, color=color, image_url=None,
-            x=140 + i * 105, y=640, size=1, team="villain"))
+            x=140 + i * 140, y=630, size=1, team="villain")
+        db.add(tk)
+        enc_tokens.append(tk)
+    db.flush()
+
+    # Seed one ready-to-load encounter per campaign (a snapshot of the
+    # placed tokens) so every demo campaign ships with a prepped fight —
+    # not just the flagship Sundered Vault.
+    scenario = spec["name"].split(":", 1)[-1].strip()
+    payload = {
+        "tokens": [
+            {
+                "template_id": t.token_template_id,
+                "character_id": t.character_id,
+                "controller_user_id": t.controller_user_id,
+                "label_override": t.label or "",
+                "color_override": t.color or "",
+                "image_url": t.image_url,
+                "size": int(t.size or 1),
+                "x": float(t.x or 0),
+                "y": float(t.y or 0),
+                "is_hidden": bool(t.is_hidden),
+                "team": t.team or "neutral",
+            }
+            for t in enc_tokens
+        ],
+        # No pre-rolled initiative — the GM clicks "Start initiative" to
+        # roll, same as any fresh fight.
+        "battle_state": {
+            "combatants": [], "turn_index": 0, "round": 1, "active": False,
+        },
+    }
+    enc = Encounter(
+        campaign_id=camp.id,
+        name=scenario,
+        description=(
+            f"{scenario}: the party squares off against the opposition. "
+            "Initiative is rolled."
+        ),
+        map_id=m.id,
+        payload=payload,
+        tags=["demo", "combat"],
+        folder="Demo",
+    )
+    db.add(enc)
+    db.flush()
+    camp.default_encounter_id = enc.id
+    camp.current_encounter_id = enc.id
     db.flush()
     return camp
 

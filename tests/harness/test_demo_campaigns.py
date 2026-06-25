@@ -176,3 +176,54 @@ async def test_second_gm_owns_only_its_campaign():
         assert "Goblin Warrens" not in resp.text
     finally:
         await client.aclose()
+
+
+# ── Demo-seed review (v2.640.0) ─────────────────────────────────────────
+# Every demo campaign ships with at least one encounter, and every seeded
+# token sits squarely on a grid cell. Guards the demo_campaigns.py fix that
+# replaced the off-grid 105 px token spacing (every other token landed half
+# a cell off) + added a per-campaign encounter to the five leveled games
+# (previously only the flagship Sundered Vault had one).
+_DEMO_GRID_PX = 70  # every demo map is a 70 px square grid, offset (0, 0)
+_CAMPAIGN_GMS = [
+    (1, "demo-gm@example.com"),    # Sundered Vault (archived flagship)
+    (2, "demo-gm@example.com"),    # L3  Goblin Warrens
+    (3, "demo-gm@example.com"),    # L5  Tide-Wracked Catacombs
+    (4, "demo-gm2@example.com"),   # L9  Storm Over Saltmarsh
+    (5, "demo-gm@example.com"),    # L13 Shadowfell Spire
+    (6, "demo-gm@example.com"),    # L18 Dragon's Apotheosis
+]
+
+
+@_LIVE
+@pytest.mark.parametrize("cid,gm", _CAMPAIGN_GMS)
+async def test_demo_campaign_has_encounter(cid, gm):
+    """Every demo campaign ships at least one saved encounter."""
+    client = await login_client(gm, "demopass")
+    try:
+        resp = await client.get(f"/api/campaign/{cid}/encounters")
+        assert resp.status_code == 200, f"campaign {cid}: {resp.status_code}"
+        assert len(resp.json()) >= 1, f"campaign {cid} has no encounter"
+    finally:
+        await client.aclose()
+
+
+@_LIVE
+@pytest.mark.parametrize("cid,gm", _CAMPAIGN_GMS)
+async def test_demo_tokens_are_grid_aligned(cid, gm):
+    """Every seeded token's (x, y) is a multiple of the 70 px grid, so each
+    token sits on a grid cell rather than drifting half a cell off."""
+    client = await login_client(gm, "demopass")
+    try:
+        resp = await client.get(f"/api/campaign/{cid}/tokens")
+        assert resp.status_code == 200, f"campaign {cid}: {resp.status_code}"
+        tokens = resp.json()["tokens"]
+        assert tokens, f"campaign {cid} has no tokens"
+        off = [
+            (t.get("label"), t["x"], t["y"])
+            for t in tokens
+            if float(t["x"]) % _DEMO_GRID_PX or float(t["y"]) % _DEMO_GRID_PX
+        ]
+        assert not off, f"campaign {cid} off-grid tokens: {off}"
+    finally:
+        await client.aclose()
