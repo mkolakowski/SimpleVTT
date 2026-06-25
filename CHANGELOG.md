@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.634.0] - 2026-06-24 — "The Guided Tour"
+
+**Schema version:** 80
+
+**Commit summary:** Add an illustrated **player onboarding** wiki guide (`docs/wiki/player-onboarding.md`) that walks a brand-new player through their first session with a screenshot of every screen they touch, served at `/wiki/player-onboarding`.
+
+**Description:** The wiki had GM- and operator-facing how-tos but no single walkthrough for a brand-new *player* — and every existing guide was text-only. This adds a screenshot-illustrated first-session journey using the 11 PNGs landed in v2.633.1:
+
+- **Register → Sign in → Lobby → My Characters → campaign launchpad → the 5e sheet → rolling dice → roll log → tabletop → monster stat block → settings/themes.** Each step is anchored by its real screenshot (embedded from `/static/docs/onboarding/`) plus a short "what you're looking at / what to click" note, with the rolling-dice and sheet sections getting the most detail.
+- Cross-links out to the existing **[The character sheet](/wiki/the-character-sheet)**, **[Reactions](/wiki/reactions)**, and **[Running a session as GM](/wiki/running-a-session-as-gm)** guides.
+- Wired into the wiki so it's discoverable: a row in the `wiki.html` "Available guides" table, the matching row + a checked-off "Player onboarding" TODO in `docs/wiki/README.md`. It's a directly-served wiki guide (`docs/wiki/<slug>.md` → `/wiki/<slug>`), so no `_DOC_ALLOWLIST` entry is needed.
+
+### Added
+- `docs/wiki/player-onboarding.md` — the illustrated player onboarding guide.
+
+### Changed
+- `app/templates/wiki.html` + `docs/wiki/README.md` — surface the new guide in the "Available guides" tables; marked the long-standing "Player onboarding" wiki-TODO done.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_wiki.py::test_wiki_home_renders` — added `/wiki/player-onboarding` to the landing-page assertion list so a regression that drops the guide row is caught. (Directly-served wiki guide — no per-slug `/wiki/doc/...` test required.)
+
 ## [2.633.1] - 2026-06-24 — "The Contact Sheet"
 
 **Schema version:** 80

@@ -32,6 +32,7 @@ How much of the SRD 5.1 ruleset SimpleVTT mechanically automates, by content cat
 | [First-run setup](first-run-setup.md) | Markdown (how-to) | Operators | ✅ shipped (v2.43.17) |
 | [Running a session as GM](running-a-session-as-gm.md) | Markdown (how-to) | GMs | ✅ shipped (v2.43.18) |
 | [The character sheet](the-character-sheet.md) | Markdown (how-to) | Players + GMs | ✅ shipped (v2.43.19) |
+| [Player onboarding — your first session](player-onboarding.md) | Markdown (how-to · screenshots) | Players | ✅ shipped (v2.634.0) — illustrated first-session walkthrough, 11 screenshots |
 | [Demo mode](demo-mode.md) | Markdown (how-to) | Operators | ✅ shipped (v2.43.21) |
 | [fail2ban deployment](fail2ban-deployment.md) | Markdown (how-to) | Operators | ✅ shipped (v2.476.0) |
 | [Privacy Policy (GDPR-compliant template)](privacy.md) | Markdown (policy) | Operators + Users | ✅ shipped (v2.479.0) |
@@ -147,7 +148,7 @@ This wiki is a stub. The list below is what we want it to grow into.
 - [ ] **Building an encounter.** Encounters panel CRUD, token templates, monsters from the SRD bestiary vs homebrew, spawn-point layout, default-encounter wiring on a campaign.
 - [ ] **Maps + grids + tokens.** Uploading maps, scaling, grid overlay (`show_grid`), placing PC and monster tokens, the token-tracker side panel.
 - [ ] **Homebrew content authoring.** Custom monsters (template editor), custom items, custom spells, the homebrew JSON contract.
-- [ ] **Player onboarding.** What players see vs. what the GM sees, the character sheet, the roll log, the dice toast, the per-character action economy chips.
+- [x] **Player onboarding.** What players see vs. what the GM sees, the character sheet, the roll log, the dice toast, the per-character action economy chips. → [player-onboarding.md](player-onboarding.md) (illustrated, 11 screenshots).
 - [ ] **Backups + restore.** The `simplevtt-backup` container, daily `pg_dump` cycle, restoring from a backup, exporting / importing a campaign.
 - [ ] **Theming.** The 8 built-in themes (Dark / Midnight / Dim / Light / Forest / Bubblegum / OLED / Fire), the per-user theme preference, font preferences, accessibility considerations (contrast, motion).
 
