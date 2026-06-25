@@ -51,8 +51,13 @@ plain coloured ring (`image_url=None`) and are waiting on art.
    art is dropped in. Small inline thumb in the table, larger preview by the prompt. */
 .demo-thumb{width:34px;height:34px;object-fit:cover;border-radius:6px;
   border:1px solid var(--border);vertical-align:middle;margin-right:8px;}
-.demo-thumb-side{float:right;width:104px;height:104px;object-fit:cover;
-  border-radius:10px;border:1px solid var(--border);margin:0 0 8px 14px;
+/* Prompt + preview as a flex row: thumbnail on the LEFT, stretched to the
+   box's full height; the prompt text is its own column and never wraps under
+   the image. */
+.demo-row{display:flex;align-items:stretch;gap:14px;margin:10px 0;}
+.demo-row blockquote{flex:1;margin:0;}
+.demo-thumb-side{flex:0 0 110px;width:110px;height:auto;align-self:stretch;
+  object-fit:cover;border-radius:10px;border:1px solid var(--border);
   box-shadow:0 1px 4px rgba(0,0,0,.25);}
 </style>
 
@@ -97,14 +102,22 @@ plain coloured ring (`image_url=None`) and are waiting on art.
           c[0].insertBefore(thumb(path,'demo-thumb',''),c[0].firstChild); // inline thumb in the row
         });
       }
-      // Larger preview beside each entity prompt (map = h3, characters/NPCs = h4).
+      // Larger preview to the LEFT of each entity prompt (map = h3, characters/NPCs = h4).
       Array.prototype.forEach.call(panel.querySelectorAll('h3, h4'),function(h){
         if(h.getAttribute('data-thumbed')) return;
         var hn=normName(h.textContent), best=null;
         for(var k in nameToPath){ if(k && hn.indexOf(k)!==-1 && (!best||k.length>best.length)) best=k; }
         if(!best) return;
+        // the prompt blockquote that follows the heading
+        var bq=h.nextElementSibling;
+        while(bq && bq.tagName!=='BLOCKQUOTE') bq=bq.nextElementSibling;
+        if(!bq) return;
         h.setAttribute('data-thumbed','1');
-        h.parentNode.insertBefore(thumb(nameToPath[best],'demo-thumb-side','art preview'),h.nextSibling);
+        var row=document.createElement('div');
+        row.className='demo-row';
+        bq.parentNode.insertBefore(row,bq);
+        row.appendChild(thumb(nameToPath[best],'demo-thumb-side','art preview')); // left
+        row.appendChild(bq);                                                      // right
       });
     }
     function select(i,push){

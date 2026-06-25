@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.640.7] - 2026-06-25 — "The Left Margin"
+
+**Schema version:** 80
+
+**Commit summary:** Move the demo image-prompt previews to the left of each prompt as a full-height flex column, so prose no longer wraps under the thumbnail.
+
+**Description:** Follow-up to v2.640.6. The art preview was a right-floated thumbnail that let the prompt text wrap beneath it once the prose ran longer than the image. The preview is now the left column of a flex row (`.demo-row`): a fixed 110px-wide thumbnail stretched to the box's full height (`align-items:stretch` + `object-fit:cover`), with the prompt blockquote as its own right-hand column. The script wraps each matched heading's following blockquote together with the thumbnail instead of floating the image after the heading.
+
+### Changed
+- `/wiki/doc/image-prompts` prompt previews are now left-aligned, full-box-height, and the prompt text never wraps under the image. Replaced the `float:right` `.demo-thumb-side` with a flex-row layout; the tab script now moves the prompt blockquote into a `.demo-row` next to its thumbnail.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** Doc-only edit to the already-allowlisted `image-prompts` wiki reference — no endpoint or broadcast surface changed. Verified the new CSS/JS survive python-markdown rendering and that all 49 character/NPC prompt headings + 6 map headings are immediately followed by their blockquote, so the wrap logic finds every prompt.
+
 ## [2.640.6] - 2026-06-25 — "The Contact Sheet"
 
 **Schema version:** 80
