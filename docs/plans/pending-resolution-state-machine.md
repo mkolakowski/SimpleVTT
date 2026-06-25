@@ -151,10 +151,18 @@ half, so this is a dedicated arc, not a quick slice:**
 
 **Recommended phasing:**
 
-- **3b (small):** on a Lucky/AC-bump hit→miss flip, also restore any *direct*
-  on-hit `buff_install` logged under `attack_id` (reuse `_restore_target_buffs`).
-  Covers weapons that install a buff directly on hit with no save. Needs a
-  direct-on-hit-buff demo fixture.
+- **3b (no producer today — verified v2.648.2):** the idea was "on a
+  Lucky/AC-bump hit→miss flip, restore any *direct* on-hit `buff_install`
+  logged under `attack_id`." A substrate check killed it as an independent
+  slice: the weapon `/attack` + `/npc_attack` paths log **only** `kind: damage`
+  and `kind: spell_slot_spend` entries under `attack_id` — **nothing logs a
+  direct on-hit `buff_install`**, because no shipped weapon installs a buff
+  directly on a hit. Every on-hit condition rides the deferred `weapon_hit_save`
+  save flow (= 3c). So 3b has nothing to revert today; it only becomes real
+  once a direct-on-hit-buff weapon exists (e.g. Sword of Wounding's recurring-
+  damage marker), and then the revert is a one-liner (`_restore_target_buffs`
+  over the `buff_install` entries). **Net: the entire genuine Phase 3 remainder
+  is 3c.**
 - **3c (the hard part):** revert weapon on-hit-*save* condition installs on a
   flip — either log the on-hit-save → install chain under the attack's
   `attack_id` so the reaction can walk it back, **or** build the true **pending

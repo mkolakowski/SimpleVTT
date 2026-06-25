@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.648.2] - 2026-06-25 — "The Empty Quarry"
+
+**Schema version:** 80
+
+**Commit summary:** Doc — verify-substrate kill of pending-resolution Phase 3b: there's no direct-on-hit-buff producer in the attack path, so 3b has nothing to revert; the entire genuine Phase 3 remainder is 3c.
+
+**Description:** Followed the v2.648.1 Phase 3 design toward building 3b ("on a Lucky/AC-bump hit→miss flip, restore any direct on-hit `buff_install` logged under `attack_id`") and a substrate check killed it as an independent slice. The weapon `/attack` and `/npc_attack` paths log **only** `kind: damage` and `kind: spell_slot_spend` entries under `attack_id` — **nothing logs a direct on-hit `buff_install`**, because no shipped weapon installs a buff directly on a hit. Every on-hit condition rides the deferred `weapon_hit_save` save flow (which is exactly 3c). So 3b has nothing to revert today; it only becomes real once a direct-on-hit-buff weapon exists (e.g. Sword of Wounding's recurring-damage marker), at which point the revert is a one-liner over `_restore_target_buffs`. The plan's 3b bullet is rewritten to record this so the genuine Phase 3 remainder is unambiguously **just 3c** (the deferred on-hit-save chain / pending window) — a dedicated arc, not a quick commit. No code change — second verify-substrate correction in the Phase 3 design pass.
+
+### Changed
+- `docs/plans/pending-resolution-state-machine.md` — Phase 3b bullet rewritten from "small slice, needs a fixture" to "no producer today (only `damage` + `spell_slot_spend` log under `attack_id`); becomes a one-liner once a direct-on-hit-buff weapon exists; the real remainder is 3c."
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** none — doc/design reconciliation of an already-wiki-surfaced plan; no new endpoint, allowlist entry, or WS broadcast-shape change.
+
 ## [2.648.1] - 2026-06-25 — "The Surveyed Ground"
 
 **Schema version:** 80
