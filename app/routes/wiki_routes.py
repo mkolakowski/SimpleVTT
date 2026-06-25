@@ -100,6 +100,7 @@ _DOC_ALLOWLIST: dict[str, Path] = {
     "plan-wiki-expansion": Path("docs") / "plans" / "wiki-expansion.md",
     "plan-wild-magic": Path("docs") / "plans" / "wild-magic.md",
     "plan-eldritch-knight": Path("docs") / "plans" / "eldritch-knight.md",
+    "plan-campaign-stats": Path("docs") / "plans" / "campaign-stats.md",
     "plan-battle-master": Path("docs") / "plans" / "battle-master.md",
     "plan-paladin-oaths": Path("docs") / "plans" / "paladin-oaths.md",
     "plan-magic-items-automation": Path("docs") / "plans" / "magic-items-automation.md",

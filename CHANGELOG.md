@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.649.1] - 2026-06-25 — "The Drafting Table"
+
+**Schema version:** 80
+
+**Commit summary:** Doc — add the per-campaign statistics-logging design plan (`docs/plans/campaign-stats.md`) and surface it through the wiki. Design only; no feature code.
+
+**Description:** Drafts the design for a player-facing **stats page** — damage dealt/taken, healing, attacks + hit-rate, crits, KOs, biggest hit, and most-used spells, **per campaign** with a **per-session breakdown**. Product decisions (locked with the requester): per-campaign scope, visibility = each player sees their own character + the GM sees everyone's, and an **event-log** table (so totals AND over-time views are derivable). The plan is substrate-verified against the codebase: the single damage funnel `_apply_damage_to_combatant` (the only capture point, so attacks/casts never double-count), the `AudioPlayEvent` one-row-per-event model precedent, the `_apply_inline_migrations` schema mechanism (a new `campaign_stat_events` table → migration v81), `Campaign.session_started_at` as the per-session bucket key, and `wipe_campaign_children` for demo-reseed idempotency. It specifies the data model, four capture hooks (damage / heal / cast / attack) with an explicit NPC-actor policy + a no-double-counting rule, a `stats_service.py` read layer, the `GET /api/campaign/{id}/stats` visibility gate, the page, and a 3-commit implementation phasing (schema+capture → API+hooks → page) plus risks. No implementation in this commit — design + wiki-surfacing only.
+
+### Added
+- `docs/plans/campaign-stats.md` — the design plan.
+- Wiki-surfacing: `_DOC_ALLOWLIST` entry (`plan-campaign-stats`), a `wiki_plans.html` + `docs/wiki/README.md` "Design plans" row, and the `tests/harness/test_wiki.py` per-slug serve test + plans-page assertion.
+
+### Schema
+- No schema change (still v80 — the `campaign_stat_events` table + migration v81 land with the plan's implementation Phase 1, not this doc commit).
+
+**Harness:** `tests/harness/test_wiki.py::test_wiki_doc_serves_campaign_stats_plan` (+1) — `/wiki/doc/plan-campaign-stats` returns 200 with the plan body + nav; the plans-page assertion now also lists the new slug.
+
 ## [2.649.0] - 2026-06-25 — "The Quickened Word"
 
 **Schema version:** 80
