@@ -60,11 +60,27 @@ plain coloured ring (`image_url=None`) and are waiting on art.
 /* Prompt + preview as a flex row: thumbnail on the LEFT, stretched to the
    box's full height; the prompt text is its own column and never wraps under
    the image. */
-.demo-row{display:flex;align-items:stretch;gap:14px;margin:10px 0;}
+.demo-row{display:flex;align-items:stretch;gap:14px;margin:10px 0;position:relative;}
 .demo-row blockquote{flex:1;margin:0;}
 .demo-thumb-side{flex:0 0 110px;width:110px;height:auto;align-self:stretch;
   object-fit:cover;border-radius:10px;border:1px solid var(--border);
   box-shadow:0 1px 4px rgba(0,0,0,.25);}
+/* Icon-only copy buttons (clipboard glyph, no text). 32px target — these are
+   a compact inline control cluster on each prompt card, the 32px-minimum
+   exception to the 44×44 touch-target rule (not a primary action). */
+.demo-copy{width:32px;height:32px;min-height:32px;padding:0;
+  display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;
+  border:1px solid var(--border);background:var(--bg-2);color:var(--fg);
+  border-radius:7px;cursor:pointer;opacity:.6;
+  transition:opacity .12s,border-color .12s,color .12s;}
+.demo-copy:hover{opacity:1;border-color:var(--accent);}
+.demo-copy.copied{color:var(--accent);border-color:var(--accent);opacity:1;}
+.demo-copy svg{width:16px;height:16px;display:block;}
+/* filename copy button sits inline at the end of the drop-path code line */
+.demo-pathline{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+/* description copy button pinned to the prompt blockquote's top-right corner */
+.demo-copy-desc{position:absolute;top:8px;right:8px;z-index:2;}
+.demo-row blockquote{padding-right:48px;}
 </style>
 
 <div class="demo-tabbar" id="demo-tabbar" role="tablist" aria-label="Demo selector"></div>
@@ -96,6 +112,28 @@ plain coloured ring (`image_url=None`) and are waiting on art.
     function normName(s){ return (s||'').replace(/\([^)]*\)/g,'').replace(/[^A-Za-z0-9' -]/g,'').replace(/\s+/g,' ').trim().toLowerCase(); }
     // Thumbnail that hides itself if the file 404s — so it only shows once art exists.
     function thumb(src,cls,alt){ var im=document.createElement('img'); im.className=cls; im.src=src; im.loading='lazy'; im.alt=alt||''; im.onerror=function(){ im.style.display='none'; }; return im; }
+    // Icon-only copy buttons. Clipboard glyph by default; flashes a check on copy.
+    var CLIP='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    var CHECK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+    function doCopy(text){
+      if(navigator.clipboard&&navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
+      return new Promise(function(res,rej){ try{ var ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); res(); }catch(e){ rej(e); } });
+    }
+    function copyBtn(getText,title,extra){
+      var b=document.createElement('button');
+      b.type='button'; b.className='demo-copy'+(extra?' '+extra:''); b.title=title;
+      b.setAttribute('aria-label',title); b.innerHTML=CLIP;
+      b.addEventListener('click',function(e){
+        e.preventDefault();
+        doCopy(getText()).then(function(){
+          b.classList.add('copied'); b.innerHTML=CHECK;
+          setTimeout(function(){ b.classList.remove('copied'); b.innerHTML=CLIP; },1100);
+        }).catch(function(){});
+      });
+      return b;
+    }
+    // "/static/demo/tokens/l3-thorin.png" -> "l3-thorin" (drop path + extension).
+    function baseName(p){ return (p||'').split('/').pop().replace(/\.[^.]+$/,''); }
     function decorate(panel){
       var nameToPath={};
       var table=panel.querySelector('table');
@@ -124,6 +162,18 @@ plain coloured ring (`image_url=None`) and are waiting on art.
         bq.parentNode.insertBefore(row,bq);
         row.appendChild(thumb(nameToPath[best],'demo-thumb-side','art preview')); // left
         row.appendChild(bq);                                                      // right
+        // Copy-prompt button pinned to the blockquote's top-right corner.
+        row.appendChild(copyBtn(function(){ return (bq.textContent||'').replace(/\s+/g,' ').trim(); },'Copy description','demo-copy-desc'));
+        // Copy-filename button inline at the end of the drop-path code line
+        // (the <p><code> between the heading and the row), copying e.g. "l3-thorin".
+        var fname=baseName(nameToPath[best]);
+        for(var p=h.nextElementSibling;p&&p!==row;p=p.nextElementSibling){
+          if(p.tagName==='P'&&p.querySelector('code')&&/static\//.test(p.textContent)){
+            p.classList.add('demo-pathline');
+            p.appendChild(copyBtn(function(){ return fname; },'Copy filename'));
+            break;
+          }
+        }
       });
     }
     function select(i,push){

@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.641.0] - 2026-06-25 — "One-Click Copy"
+
+**Schema version:** 80
+
+**Commit summary:** Demo image-prompts page — add icon-only copy buttons to every prompt card: one copies the prompt description, one copies the bare filename (no path, no extension, e.g. `l3-thorin`).
+
+**Description:** Generating art from `/wiki/doc/image-prompts` meant hand-selecting the long prompt blockquote and separately retyping the target filename. This adds two clipboard-glyph buttons (no text label, just a clipboard SVG that flashes a checkmark on success) to each of the 58 map/token entries, injected by the page's existing client-side `decorate()` pass: a **Copy description** button pinned to the prompt blockquote's top-right corner (copies the whitespace-collapsed prompt text), and a **Copy filename** button inline at the end of the drop-path code line (copies just the basename sans extension — `l3-thorin` from `app/static/demo/tokens/l3-thorin.png`, ready to paste into an image tool's filename field). Uses the async Clipboard API with a hidden-textarea `execCommand` fallback for non-secure contexts. The buttons are 32×32 — the compact-control exception to the 44×44 touch-target rule, noted in the CSS.
+
+### Added
+- `docs/demo/image-prompts.md` — per-card **Copy description** and **Copy filename** icon buttons (client-side JS in the page's embedded `<script>`, plus `.demo-copy*` styles). No server change; the page is still served as static markdown by the existing `/wiki/doc/image-prompts` route.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** none — client-side enhancement to an already-surfaced wiki doc; no new HTTP endpoint, allowlist entry, or WS broadcast-shape change. The existing `/wiki/doc/image-prompts` smoke coverage (200 + nav injection) is unaffected.
+
 ## [2.640.13] - 2026-06-25 — "The Warband's Faces"
 
 **Schema version:** 80
