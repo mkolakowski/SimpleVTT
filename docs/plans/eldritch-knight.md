@@ -125,12 +125,15 @@ bonus chip marked + flag cleared.
   beneficial to the EK, so no opt-in prompt. Harness:
   `test_eldritch_strike.py::test_es_auto_installs_on_weapon_hit` (+ a
   non-EK negative test).
-- **3c — NPC-target path.** The endpoint only installs the buff for PC
-  targets (`if target_char_id is not None`), and the resolver read lives
-  in the PC-save branch — so the common case (EK hits a monster, then
-  casts a spell at it) isn't wired. Needs an NPC-combatant buff install
-  (`_install_buff_on_combatant_id`) + an Eldritch-Strike read at the
-  NPC-save resolution site.
+- **3c — NPC-target path. ✅ shipped v2.648.7.** `_install_eldritch_strike`
+  now installs the marker on NPC combatants too (via
+  `_install_buff_on_combatant_id`), and the NPC auto-save site in
+  `/cast_spell` reads it — swapping the NPC save to `2d20kl1`, dropping the
+  one-use marker (new `_remove_buff_from_combatant_id` helper), and firing
+  a consume broadcast. Mirrors the NPC Heightened-Spell wire at the same
+  site. So the common "EK hits a monster then casts a save spell at it"
+  case is now fully automated (install on hit via 3b + NPC-save read).
+  Harness: `test_eldritch_strike_resolver.py::test_eldritch_strike_npc_save_disadvantage`.
 
 ### Phase 4 — Arcane Charge + Improved War Magic (⚪ deferred)
 

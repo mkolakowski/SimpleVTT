@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.648.7] - 2026-06-25 — "The Monster's Misfortune"
+
+**Schema version:** 80
+
+**Commit summary:** Eldritch Knight 3c — Eldritch Strike now works against NPC targets: the marker installs on the NPC combatant and the NPC's auto-save vs the EK's spell rolls at disadvantage (the common "EK hits a monster then casts at it" case, previously PC-only).
+
+**Description:** Eldritch Strike's PC-target path shipped earlier (install v2.99.268 + PC-save read v2.158.54 + auto-install v2.648.5), but the install only landed the marker on **PC** targets and the resolver read lived in the PC-save branch — so the common in-play case (an EK hits a monster, then casts a save spell at it) marked nothing. This closes that gap (the EK plan's filed Phase 3c). Two halves: (1) the shared `_install_eldritch_strike` helper now installs the `eldritch-strike-target` buff on **NPC** combatants too (via `_install_buff_on_combatant_id`) — so both the manual endpoint and the v2.648.5 auto-on-hit now mark monsters; (2) the **NPC auto-save site** in `/cast_spell` reads the marker (the NPC twin of the v2.158.54 PC read): when the NPC saver carries an `eldritch-strike-target` buff naming the casting EK, its save expression swaps `1d20` → `2d20kl1` (disadvantage), the one-use marker is dropped (via the new `_remove_buff_from_combatant_id` NPC buff-removal helper), and a `feature_used(source=eldritch-strike)` consume broadcast fires. Mirrors the existing NPC Heightened-Spell wire at the same site.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_remove_buff_from_combatant_id(campaign_id, combatant_id, key)` (NPC buff removal by combatant id, `battle_update` broadcast); `_install_eldritch_strike` NPC-install branch; the NPC auto-save Eldritch Strike read + consume in `/cast_spell`.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** `tests/harness/test_eldritch_strike_resolver.py::test_eldritch_strike_npc_save_disadvantage` (+1) — a Bandit Captain combatant (spawned from a real template so the NPC auto-save fires) carrying the mark naming Zara rolls its WIS save vs Zara's Hold Person at `2d20kl1`, the `eldritch-strike` consume broadcast fires, and the marker is dropped from the NPC combatant (verified via `GET /battle`).
+
 ## [2.648.6] - 2026-06-25 — "The War Mage's Cue"
 
 **Schema version:** 80

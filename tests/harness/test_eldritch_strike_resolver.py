@@ -141,6 +141,91 @@ async def test_eldritch_strike_imposes_save_disadvantage_and_consumes(
     ), f"Eldritch Strike buff should be dropped post-consume; got {pip_buffs}"
 
 
+async def test_eldritch_strike_npc_save_disadvantage(
+    gm_client, gm_ws, zara_rested, roster,
+):
+    """v2.648.7 Phase 3c — an NPC combatant carrying the
+    `eldritch-strike-target` mark naming Zara rolls its AUTO-save vs
+    Zara's Hold Person at disadvantage (2d20kl1), the consume broadcast
+    fires, and the marker is dropped from the NPC combatant. The NPC twin
+    of the PC-save read — closes the common "EK hits a monster then casts
+    at it" case.
+    """
+    zara = zara_rested
+    # The NPC auto-save branch only fires for a combatant backed by a
+    # monster stat block (token_template_id), so spawn a real humanoid
+    # (Bandit Captain — Hold Person targets humanoids + it has a WIS save).
+    tmpl = (await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/templates",
+        json={"name": "Bandit Captain (ES NPC test)", "template": "dnd5e",
+              "tags": ["npc", "harness"],
+              "sheet": {"monster_slug": "bandit-captain"}},
+    )).json()
+    tok = (await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/tokens",
+        json={"token_template_id": tmpl["id"], "label": "Bandit Captain",
+              "x": 350.0, "y": 350.0, "color": "#822222", "size": 1},
+    )).json()
+    npc_cid = "tok_es_npc_bc"
+    await _seed_battle(gm_client, [
+        _tok(zara),
+        {
+            "id": npc_cid, "char_id": None,
+            "source_token_id": tok["id"], "token_template_id": tmpl["id"],
+            "name": "Bandit Captain",
+            "initiative": 8, "hp_current": 65, "hp_max": 65,
+            "buffs": [_es_buff(zara["id"])],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0},
+        },
+    ])
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": zara["id"],
+            "spell_index": HOLD_PERSON_ZARA_INDEX,
+            "slot_level": 2,
+            "class_slug": "sorcerer",
+            "target_combatant_id": npc_cid,
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    await asyncio.sleep(0.25)
+    npc_rolls = [
+        m for m in gm_ws.buffered("roll")
+        if (m.get("data") or {}).get("char_name") == "Bandit Captain"
+    ]
+    assert npc_rolls, "expected an NPC auto-save roll for the Bandit Captain"
+    assert "2d20kl1" in (npc_rolls[-1]["data"].get("expression") or ""), (
+        f"expected the NPC save at disadvantage; got "
+        f"{npc_rolls[-1]['data'].get('expression')!r}"
+    )
+
+    consumed = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "eldritch-strike"
+        and (m.get("data") or {}).get("character_id") == zara["id"]
+    ]
+    assert consumed, "expected an eldritch-strike consume broadcast at the NPC save"
+
+    battle = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/battle"
+    )).json()
+    combatants = (battle.get("battle") or {}).get("combatants") or []
+    npc = next(
+        (c for c in combatants if c.get("id") == npc_cid),
+        None,
+    )
+    assert npc is not None, "Bandit Captain combatant missing from battle"
+    assert not any(
+        (b or {}).get("key") == "eldritch-strike-target"
+        for b in (npc.get("buffs") or [])
+    ), "the Eldritch Strike marker should be consumed from the NPC combatant"
+
+
 async def test_eldritch_strike_no_disadvantage_for_other_caster(
     gm_client, gm_ws, zara_rested, roster,
 ):

@@ -4907,6 +4907,39 @@ async def _remove_buff(
     return True
 
 
+async def _remove_buff_from_combatant_id(
+    campaign_id: int, combatant_id: str, key: str,
+) -> bool:
+    """v2.648.7 — NPC-friendly single-buff removal by key, matching the
+    combatant by ``id`` (not ``char_id``). Mirrors ``_remove_buff`` (PC)
+    but broadcasts ``battle_update`` like ``_install_buff_on_combatant_id``,
+    since NPC combatants have no Character row to route a ``buff_update``
+    to. Returns True if a buff was removed.
+    """
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("id") == combatant_id:
+            target = c
+            break
+    if target is None:
+        return False
+    buffs = target.get("buffs") or []
+    new_list = [b for b in buffs if (b or {}).get("key") != key]
+    if len(new_list) == len(buffs):
+        return False
+    target["buffs"] = new_list
+    hub.set_battle(campaign_id, state)
+    await hub.broadcast(campaign_id, {
+        "type": "battle_update",
+        "data": state,
+        "force_gm_sync": True,
+    })
+    return True
+
+
 async def _remove_buff_from_token(
     campaign_id: int, mover_token: "Token", key: str,
 ) -> bool:
@@ -25246,6 +25279,52 @@ async def cast_spell(
                         await _broadcast_heightened_consumed(
                             campaign_id, char, target_combatant.get("name") or "",
                         )
+                    # v2.648.7 — Eldritch Strike at the NPC save site (EK
+                    # Lv 10+, PHB p.74, Phase 3c). When the NPC saver
+                    # carries an `eldritch-strike-target` buff naming THIS
+                    # caster, the save is at disadvantage; the marker is
+                    # one-use, so drop it after. The NPC twin of the
+                    # v2.158.54 PC-save read — closes the common "EK hits a
+                    # monster then casts a spell at it" case.
+                    _es_npc_marked = False
+                    for _esb in (target_combatant.get("buffs") or []):
+                        if not isinstance(_esb, dict):
+                            continue
+                        if (_esb.get("key") or "").strip().lower() \
+                                != "eldritch-strike-target":
+                            continue
+                        _esm = (_esb.get("effects") or {}).get(
+                            "save_disadvantage_against_caster_id"
+                        )
+                        if _esm is not None and int(_esm) == int(char.id):
+                            _es_npc_marked = True
+                            break
+                    if _es_npc_marked:
+                        if "2d20kl1" not in expr:
+                            expr = expr.replace("1d20", "2d20kl1", 1)
+                        await _remove_buff_from_combatant_id(
+                            campaign_id,
+                            target_combatant.get("id") or "",
+                            "eldritch-strike-target",
+                        )
+                        await hub.broadcast(campaign_id, {
+                            "type": "feature_used",
+                            "data": {
+                                "character_id": char.id,
+                                "character_name": char.name,
+                                "user_color": caster_color,
+                                "feature_name": (
+                                    "🗡️ Eldritch Strike — disadvantage on "
+                                    "the save"
+                                ),
+                                "feature_desc": (
+                                    f"{target_combatant.get('name') or 'The '}"
+                                    f"target rolls its save at disadvantage "
+                                    f"(Eldritch Strike from {char.name})."
+                                ),
+                                "source": "eldritch-strike",
+                            },
+                        })
                     try:
                         _r = dice_mod.roll(expr)
                         auto_save_rolled = int(_r.total)
@@ -61724,6 +61803,14 @@ async def _install_eldritch_strike(
             _get_buffs(campaign_id, int(target_char_id)),
         )
         installed = True
+    elif target_combatant_id:
+        # v2.648.7 — Phase 3c: NPC target. Install the marker on the
+        # combatant directly; the NPC-save site in /cast_spell reads it
+        # and swaps the save to disadvantage (the common "EK hits a
+        # monster then casts at it" case).
+        installed = await _install_buff_on_combatant_id(
+            campaign_id, target_combatant_id, es_buff,
+        )
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
         "data": {
