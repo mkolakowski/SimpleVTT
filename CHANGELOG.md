@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.640.4] - 2026-06-25 — "The Roll Call"
+
+**Schema version:** 80
+
+**Commit summary:** Order the demo image-prompt tabs by character level and relabel them `Level N : Title`, with the archived flagship moved to the end as `ARCHIVE : The Sundered Vault`.
+
+**Description:** Follow-up to v2.640.2/.3. The tab selector on `/wiki/doc/image-prompts` previously led with the flagship and listed the rest in authoring order. Tabs now read as a level ladder — Level 3 → 5 → 9 → 13 → 18 — and the original hand-built Level-5 demo (kept seeded but archived) is listed last with no level, labelled `ARCHIVE : The Sundered Vault`. The overall progress summary table is reordered to match.
+
+### Changed
+- Tab labels are now `Level 3 : Goblin Warrens`, `Level 5 : Tide-Wracked Catacombs`, `Level 9 : Storm Over Saltmarsh`, `Level 13 : Shadowfell Spire`, `Level 18 : Dragon's Apotheosis`, and `ARCHIVE : The Sundered Vault` (last). The Sundered Vault panel heading changed from "Demo — … party level 5 · flagship" to "🗄️ Archive — … flagship · the original hand-built demo".
+- Overall progress summary table reordered to the same level ladder, with the archive row last.
+
+### Schema
+- No schema change (still v80).
+
+**Harness:** Doc-only edit to the already-allowlisted `image-prompts` wiki reference — no endpoint or broadcast surface changed. Verified the reordered/renamed HTML-comment TAB markers survive python-markdown rendering and stay top-level (not `<p>`-wrapped) so the tab script initializes in the documented order.
+
 ## [2.640.3] - 2026-06-25 — "The Open Slot"
 
 **Schema version:** 80
