@@ -518,3 +518,107 @@ async def test_no_empowered_block_when_buff_absent(gm_client, zara_rested):
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert "empowered_spell" not in data
+
+
+# ---------- AoE multi-target (/place_aoe) integration (v2.661.0) ----------
+
+async def test_empowered_reroll_aoe_multi_target_place_aoe(
+    gm_client, zara_rested,
+):
+    """v2.661.0 — Sorcery Phase 1.5: Empowered Spell reroll now integrates
+    with the AoE multi-target `/place_aoe` path (previously only the
+    single-target save-for-half + multi-beam attack paths were wired).
+
+    Arm Empowered, cast Fireball with NO target (→ pending AoE placement),
+    then `/place_aoe` at two NPC bandits. RAW Empowered rerolls "the damage
+    roll" once per cast, so the reroll fires on the FIRST target's damage
+    roll (first-target-wins) and the `/place_aoe` response + the
+    `spell_cast_aoe_resolved` broadcast carry the `empowered_spell` log.
+    Asserts on the SHAPE (block present, reroll count == CHA-mod, d6 dice)
+    since the RNG is non-deterministic.
+    """
+    zara = zara_rested
+    await _set_auto_apply(gm_client, on=True)
+    templates = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/templates")).json()
+    bandit = next(
+        (t for t in templates if "bandit" in t["name"].lower()), templates[0],
+    )
+    b1, b2 = "tok_emp_aoe_b1", "tok_emp_aoe_b2"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": f"tok_emp_aoe_z_{zara['id']}", "char_id": zara["id"],
+             "name": zara["name"], "initiative": 10,
+             "hp_current": 37, "hp_max": 37, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": b1, "char_id": None, "token_template_id": bandit["id"],
+             "name": "Bandit Alpha", "initiative": 7,
+             "hp_current": 100, "hp_max": 100, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": b2, "char_id": None, "token_template_id": bandit["id"],
+             "name": "Bandit Beta", "initiative": 6,
+             "hp_current": 100, "hp_max": 100, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+
+    # Arm Empowered (CHA 17 → +3 reroll budget).
+    arm = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_metamagic_empowered_spell",
+        json={"character_id": zara["id"]},
+    )
+    assert arm.status_code == 200, arm.text
+    rerolls = arm.json()["rerolls_available"]
+    assert rerolls == 3
+
+    # Cast Fireball with NO target → pending AoE placement (the armed
+    # Empowered buff survives — no damage rolls here).
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={"character_id": zara["id"], "spell_index": FIREBALL_INDEX,
+              "slot_level": 3, "class_slug": "sorcerer", "override": True},
+    )
+    assert cast.status_code == 200, cast.text
+    cd = cast.json()
+    assert cd.get("pending_aoe_placement") is True, cd
+    assert "empowered_spell" not in cd  # not consumed by the no-damage cast
+    cast_id = cd["id"]
+
+    # Place the AoE on both bandits → the reroll fires on the first target.
+    place = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/place_aoe",
+        json={"cast_id": cast_id, "target_combatant_ids": [b1, b2],
+              "center": {"x": 100, "y": 100}, "override_range": True},
+    )
+    assert place.status_code == 200, place.text
+    pd = place.json()
+    assert len(pd.get("auto_save_targets") or []) == 2, pd
+    assert "empowered_spell" in pd, pd
+    emp = pd["empowered_spell"]
+    assert emp["rerolled_count"] == rerolls
+    assert len(emp["rerolls"]) == rerolls
+    for entry in emp["rerolls"]:
+        assert entry["sides"] == 6
+        assert 1 <= entry["old"] <= 6
+        assert 1 <= entry["new"] <= 6
+
+    # Buff consumed once: a second placement of a fresh Fireball (no
+    # re-arm) carries no empowered_spell block.
+    cast2 = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={"character_id": zara["id"], "spell_index": FIREBALL_INDEX,
+              "slot_level": 3, "class_slug": "sorcerer", "override": True},
+    )
+    assert cast2.status_code == 200, cast2.text
+    place2 = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/place_aoe",
+        json={"cast_id": cast2.json()["id"],
+              "target_combatant_ids": [b1, b2],
+              "center": {"x": 100, "y": 100}, "override_range": True},
+    )
+    assert place2.status_code == 200, place2.text
+    assert "empowered_spell" not in place2.json()

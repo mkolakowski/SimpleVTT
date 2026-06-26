@@ -27106,6 +27106,49 @@ async def place_aoe(
         )
     _place_ee_fired = False
 
+    # v2.661.0 — Sorcery Phase 1.5: Empowered Spell reroll across the AoE
+    # multi-target loop. RAW PHB p.102 — Empowered rerolls up to CHA-mod
+    # damage dice once per spell cast. /place_aoe rolls damage per-target,
+    # so apply the reroll to the FIRST target that takes damage (PC or NPC,
+    # whichever lands first), then consume the budget — the same
+    # first-target-wins idiom as the Elemental Affinity / Empowered
+    # Evocation bonuses above. Read the pending buff's reroll budget once.
+    _place_empowered_rerolls = 0
+    _place_empowered_fired = False
+    _aoe_empowered_log: dict | None = None
+    _aoe_caster_id_for_emp = int(ctx.get("caster_char_id") or 0)
+    if _aoe_caster_id_for_emp:
+        for _b in _get_buffs(campaign_id, _aoe_caster_id_for_emp):
+            if (_b or {}).get("key") == "metamagic-empowered-pending":
+                _place_empowered_rerolls = int(
+                    ((_b.get("effects") or {}).get("rerolls_available")) or 0
+                )
+                break
+
+    async def _roll_aoe_damage(expr_to_roll: str) -> "tuple[int, str]":
+        """Roll an AoE damage expression, applying the pending Empowered
+        Spell reroll to the FIRST damage roll of the cast (once-per-cast,
+        first-target-wins) and consuming the metamagic buff. Returns
+        ``(rolled, breakdown)``; ``(0, "")`` on a parse error."""
+        nonlocal _place_empowered_fired, _aoe_empowered_log
+        try:
+            if _place_empowered_rerolls > 0 and not _place_empowered_fired:
+                total, bd_, log = _roll_with_empowered_reroll(
+                    expr_to_roll, _place_empowered_rerolls,
+                )
+                _place_empowered_fired = True
+                if log:
+                    _aoe_empowered_log = log
+                await _remove_buff(
+                    campaign_id, _aoe_caster_id_for_emp,
+                    "metamagic-empowered-pending",
+                )
+                return max(0, int(total)), bd_
+            r_ = dice_mod.roll(expr_to_roll)
+            return max(0, int(r_.total)), r_.breakdown
+        except dice_mod.DiceParseError:
+            return 0, ""
+
     auto_save_targets: list[dict] = []
     # v2.48.5 — track whether we auto-added any NPCs to the battle
     # state so we can broadcast one battle_update at the end.
@@ -27344,12 +27387,8 @@ async def place_aoe(
             dmg_applied = 0
             dmg_breakdown = ""
             if damage_expr and auto_apply_damage:
-                try:
-                    dr = dice_mod.roll(damage_expr)
-                    dmg_rolled = max(0, int(dr.total))
-                    dmg_breakdown = dr.breakdown
-                except dice_mod.DiceParseError:
-                    dmg_rolled = 0
+                # v2.661.0 — Empowered Spell reroll (first-target-wins).
+                dmg_rolled, dmg_breakdown = await _roll_aoe_damage(damage_expr)
                 if dmg_rolled > 0:
                     # v2.51.5: Evasion (Dex saves) for PC AoE single-target.
                     proposed, _ev_used = await _apply_evasion_to_dex_save_damage(
@@ -27480,12 +27519,10 @@ async def place_aoe(
             )
             _place_ee_fired = True
         if damage_expr and auto_apply_damage:
-            try:
-                dr = dice_mod.roll(_place_aoe_dmg_expr)
-                dmg_rolled = max(0, int(dr.total))
-                dmg_breakdown = dr.breakdown
-            except dice_mod.DiceParseError:
-                dmg_rolled = 0
+            # v2.661.0 — Empowered Spell reroll (first-target-wins). Rolls
+            # the EA/EE-augmented expr so the metamagic reroll composes with
+            # the Elemental Affinity / Empowered Evocation flat bonuses.
+            dmg_rolled, dmg_breakdown = await _roll_aoe_damage(_place_aoe_dmg_expr)
             if dmg_rolled > 0:
                 # v2.51.5: Evasion (Dex saves) — NPC targets won't
                 # have it but the helper short-circuits cleanly. Kept
@@ -27610,25 +27647,34 @@ async def place_aoe(
 
     # Broadcast the resolved AoE so every client's cast card mutates
     # in place: pending button → per-target pill row.
+    _aoe_resolved_data = {
+        "cast_id": cast_id,
+        "auto_save_targets": auto_save_targets,
+        "save_ability": save_ability,
+        "dc": dc,
+    }
+    # v2.661.0 — surface the Empowered Spell reroll log (if the metamagic
+    # fired on this cast) so the cast card can render the rerolled dice,
+    # mirroring the single-target `empowered_spell` payload field.
+    if _aoe_empowered_log is not None:
+        _aoe_resolved_data["empowered_spell"] = _aoe_empowered_log
     await hub.broadcast(campaign_id, {
         "type": "spell_cast_aoe_resolved",
-        "data": {
-            "cast_id": cast_id,
-            "auto_save_targets": auto_save_targets,
-            "save_ability": save_ability,
-            "dc": dc,
-        },
+        "data": _aoe_resolved_data,
     })
 
     # One-shot: drop the stash so a second /place_aoe for the same
     # cast_id can't re-resolve and double-apply damage.
     _pending_aoe_casts.pop(cast_id, None)
 
-    return {
+    _resp = {
         "ok": True,
         "cast_id": cast_id,
         "auto_save_targets": auto_save_targets,
     }
+    if _aoe_empowered_log is not None:
+        _resp["empowered_spell"] = _aoe_empowered_log
+    return _resp
 
 
 @router.post("/api/campaign/{campaign_id}/move_aoe")

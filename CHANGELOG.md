@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.661.0] - 2026-06-26 — "The Empowered Blast"
+
+**Schema version:** 81
+
+**Commit summary:** Sorcery Phase 1.5 — wire the Empowered Spell metamagic reroll into the AoE multi-target `/place_aoe` path (previously only the single-target save-for-half and multi-beam attack paths honored it).
+
+**Description:** Closes the last filed Empowered-scope finisher on [`docs/plans/sorcery-points-and-metamagic.md`](docs/plans/sorcery-points-and-metamagic.md). When a Sorcerer arms Empowered Spell and casts an AoE save-for-half damage spell (Fireball) that resolves through the placement flow (`/cast_spell` with no targets → pending → `/place_aoe`), the reroll now fires. RAW PHB p.102 Empowered rerolls "the damage roll" once per cast; since `/place_aoe` rolls damage per-target, the reroll applies to the **first** target that takes damage (PC or NPC, first-target-wins — the same idiom as the existing Elemental Affinity / Empowered Evocation flat bonuses in that loop), then consumes the `metamagic-empowered-pending` buff. The reroll log surfaces on the `/place_aoe` response + the `spell_cast_aoe_resolved` broadcast as `empowered_spell` (matching the single-target payload). Reconciled the stale backlog note: Quickened Spell was already shipped (v2.649.0); this AoE loop was the only remaining Empowered item, so the metamagic set is now complete end-to-end.
+
+### Added
+- `tests/harness/test_use_metamagic_empowered.py::test_empowered_reroll_aoe_multi_target_place_aoe` — arm Empowered, cast Fireball with no target, `/place_aoe` at two bandits → asserts the `empowered_spell` reroll log (count == CHA-mod, d6 dice) on the response + that the buff is consumed once (a second placement carries no block).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `place_aoe` reads the caster's pending Empowered reroll budget once, applies it to the first damaged target via a `_roll_aoe_damage` helper (first-target-wins + buff-consume), and surfaces the `empowered_spell` log on the broadcast + response.
+- `docs/plans/sorcery-points-and-metamagic.md` — Phase 1.5 marked shipped; status header updated.
+- `docs/test-harness-coverage.md` — catalog the new test.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.660.0] - 2026-06-26 — "The Heavy Pack"
 
 **Schema version:** 81
