@@ -170,7 +170,7 @@ or passive damage-boosters that already ride other code paths
 | `use_aura_of_the_guardian` | ✅ tracked | A use/resource |
 | `use_avatar_of_battle` | ✅ tracked | D buff-install |
 | `use_avenging_angel` | ✅ tracked | D buff-install |
-| `use_balm_of_the_summer_court` | ✅ tracked | A use/resource |
+| `use_balm_of_the_summer_court` | ✅ tracked | v2.679.0 — with `target_combatant_id`, applies the rolled heal (`_apply_heal_to_combatant`) AND the per-die temp HP (`_grant_temp_hp`) to the same ally; announce-only without a target |
 | `use_bardic_inspiration` | ✅ tracked | D buff-install |
 | `use_bend_luck` | ✅ tracked | A use/resource |
 | `use_bladesong` | ✅ tracked | A use/resource |

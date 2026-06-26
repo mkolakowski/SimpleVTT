@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.679.0] - 2026-06-26 — "The Summer Balm"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — apply Balm of the Summer Court's heal + per-die temp HP to the target server-side (Dreams Druid).
+
+**Description:** `use_balm_of_the_summer_court` (XGE p.23) rolled the pooled-d6 heal + computed the per-die temp HP but the GM applied both to the ally by hand. When a `target_combatant_id` is supplied, the endpoint now applies **both halves to the same ally combatant** — the HP via `_apply_heal_to_combatant` (the Hands of Healing wire; caps at max HP, revives a dying PC) AND the `1-per-die` temp HP via `_grant_temp_hp` (the Mantle of Inspiration wire). This is the first endpoint this session to compose two apply-substrates on one target. The response/broadcast gain `target_combatant_id` / `heal_applied` / `temp_hp_applied` / `revived`. Backward-compatible: no `target_combatant_id` stays announce-only.
+
+### Added
+- `tests/harness/test_balm_of_the_summer_court.py` (+2) — `test_bsc_applies_heal_and_temp_hp` (wounded NPC at 10/50 HP, 2 dice → `heal_applied == heal_amount` + `temp_hp_applied == temp_hp` + `revived == False`) + `test_bsc_no_target_announce_only` (no target → all three fields stay None).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_balm_of_the_summer_court` applies the heal + temp HP to `target_combatant_id`; surfaces `heal_applied` / `temp_hp_applied` / `revived`.
+- `docs/automation-coverage.md` — `use_balm_of_the_summer_court` note updated (heal + temp HP applied server-side).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Balm of the Summer Court.
+- `docs/test-harness-coverage.md` — catalog the new tests.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.678.0] - 2026-06-26 — "The Grasping Deep"
 
 **Schema version:** 81

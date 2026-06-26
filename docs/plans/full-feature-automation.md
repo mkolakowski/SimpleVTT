@@ -598,6 +598,15 @@ composition. Batch by class, same cadence as the breadth sweep.
   `target_ac`/`attack_nat`/`attack_total`/`is_crit`/`hit`/`damage_applied`;
   speed reduction stays GM-narrated; announce-only without a target. Harness:
   `test_tentacle_of_the_deeps.py` (+2).
+- **v2.679.0 ("The Summer Balm") — Balm of the Summer Court** (Dreams Druid
+  Lv 2+): `use_balm_of_the_summer_court` rolled the pooled-d6 heal + computed
+  the per-die temp HP but was announce-only. With a `target_combatant_id` it
+  now applies **both halves to the same ally** — the HP via
+  `_apply_heal_to_combatant` (Hands of Healing wire) AND the temp HP via
+  `_grant_temp_hp` (Mantle of Inspiration wire). First endpoint this session
+  to compose two apply-substrates on one target. Surfaces `heal_applied`/
+  `temp_hp_applied`/`revived`; announce-only without a target. Harness:
+  `test_balm_of_the_summer_court.py` (+2).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

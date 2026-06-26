@@ -87167,18 +87167,21 @@ async def use_balm_of_the_summer_court(
     regains HP = total rolled, +1 temp HP per die spent.
     Refills on long rest."
 
-    Body: ``{character_id, dice_spent?, override?}``. Default
-    dice_spent = 1. Costs a bonus chip. Auto-bootstraps a
-    `balm-of-summer-court-dice` resource (max=druid_lv,
-    reset=long). v1 announce-only — actual heal dice are
-    rolled server-side and broadcast; ally HP/temp HP
-    application is GM-tracked.
+    Body: ``{character_id, dice_spent?, target_combatant_id?,
+    override?}``. Default dice_spent = 1. Costs a bonus chip.
+    Auto-bootstraps a `balm-of-summer-court-dice` resource
+    (max=druid_lv, reset=long). The heal dice are rolled server-
+    side; v2.679.0 (Phase 8): when ``target_combatant_id`` is
+    supplied the ally's HP is restored via ``_apply_heal_to_combatant``
+    AND the per-die temp HP granted via ``_grant_temp_hp`` (one
+    target, both effects); otherwise it stays announce-only.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
     override = bool(body.get("override"))
+    target_combatant_id = (str(body.get("target_combatant_id") or "")).strip()
     dice_spent_raw = body.get("dice_spent") or 1
     try:
         dice_spent = max(1, int(dice_spent_raw))
@@ -87270,6 +87273,28 @@ async def use_balm_of_the_summer_court(
 
     await _mark_battle_economy(campaign_id, char.id, "bonus")
 
+    # v2.679.0 — Phase 8: apply both halves to the named ally combatant (was
+    # announce-only) — the HP via `_apply_heal_to_combatant` (Hands of Healing
+    # wire; caps at max HP, revives a dying PC) AND the per-die temp HP via
+    # `_grant_temp_hp` (Mantle of Inspiration wire). RAW targets one creature,
+    # both effects. Backward-compatible: no `target_combatant_id` → no apply.
+    heal_applied = None
+    temp_hp_applied = None
+    revived = None
+    if target_combatant_id:
+        _bsc_target = _lookup_combatant(campaign_id, target_combatant_id)
+        if _bsc_target is not None:
+            _bhr = await _apply_heal_to_combatant(
+                db, campaign_id, _bsc_target, heal_total,
+            )
+            heal_applied = int(_bhr.get("applied") or 0)
+            revived = bool(_bhr.get("revived"))
+            _btr = await _grant_temp_hp(
+                db, campaign_id, _bsc_target, temp_hp,
+                source="balm-of-the-summer-court",
+            )
+            temp_hp_applied = int(_btr.get("applied") or 0)
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -87313,6 +87338,10 @@ async def use_balm_of_the_summer_court(
             "max_range_ft": 120,
             "dice_remaining": bsc_cur - dice_spent,
             "druid_level": druid_lv,
+            "target_combatant_id": target_combatant_id,
+            "heal_applied": heal_applied,
+            "temp_hp_applied": temp_hp_applied,
+            "revived": revived,
         },
     })
 
@@ -87326,6 +87355,10 @@ async def use_balm_of_the_summer_court(
         "dice_remaining": bsc_cur - dice_spent,
         "max_dice": bsc_max,
         "druid_level": druid_lv,
+        "target_combatant_id": target_combatant_id,
+        "heal_applied": heal_applied,
+        "temp_hp_applied": temp_hp_applied,
+        "revived": revived,
     }
 
 

@@ -4,14 +4,18 @@ E.4 Druid ship #6 (Dreams, XGE). RAW XGE p.23: bonus action
 spend d6 from pool (max=druid_lv, half-druid-lv dice per use)
 → ally within 120 ft heals total + 1 temp HP per die.
 
-v1 announce-only — actual HP/temp HP application GM-tracked.
-Costs bonus chip. Auto-bootstraps balm-of-summer-court-dice
-resource (max=druid_lv, reset=long).
+**v2.679.0 (Phase 8):** when a `target_combatant_id` is supplied the
+ally's HP is restored via `_apply_heal_to_combatant` AND the per-die
+temp HP granted via `_grant_temp_hp` (one target, both effects); no
+target → announce-only. Costs bonus chip. Auto-bootstraps
+balm-of-summer-court-dice resource (max=druid_lv, reset=long).
 
 Mira Lv 5 → pool 5, half-level 2 (max dice per use).
 
 Tests:
   - Lv 5 happy default 1 die → heal in [1, 6], temp HP 1.
+  - Apply: wounded NPC target → heal + temp HP both applied.
+  - Announce-only: no target → apply fields stay None.
   - dice_spent 2 → heal in [2, 12], temp HP 2.
   - dice_spent clamped to half-level 2.
   - Wrong subclass → 409.
@@ -87,6 +91,63 @@ async def test_use_bsc_happy_lv5_one_die(
     await asyncio.sleep(0.3)
     feats = _bsc_broadcasts(gm_ws, mira["id"])
     assert feats
+
+
+async def test_bsc_applies_heal_and_temp_hp(
+    gm_client, mira_dreams,
+):
+    """v2.679.0 — Phase 8: a wounded NPC target now has both the heal AND the
+    per-die temp HP applied server-side. Seed Mira + a bandit at 10/50 HP (lots
+    of headroom → the full heal lands)."""
+    mira = mira_dreams
+    templates = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/templates")).json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": f"tok_bsc_{mira['id']}", "char_id": mira["id"],
+             "name": mira["name"], "initiative": 12,
+             "hp_current": 40, "hp_max": 40, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": "tok_bsc_ally", "char_id": None,
+             "token_template_id": bandit["id"], "name": "Wounded Ally",
+             "initiative": 8, "hp_current": 10, "hp_max": 50, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_balm_of_the_summer_court",
+        json={"character_id": mira["id"], "dice_spent": 2, "override": True,
+              "target_combatant_id": "tok_bsc_ally"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    # 40 headroom → full heal lands; fresh target → full temp HP.
+    assert data["heal_applied"] == data["heal_amount"], data
+    assert data["temp_hp_applied"] == data["temp_hp"], data
+    assert data["revived"] is False
+
+
+async def test_bsc_no_target_announce_only(
+    gm_client, mira_dreams,
+):
+    """v2.679.0 — no target → backward-compatible announce-only."""
+    mira = mira_dreams
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_balm_of_the_summer_court",
+        json={"character_id": mira["id"], "override": True},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["heal_applied"] is None
+    assert data["temp_hp_applied"] is None
+    assert data["revived"] is None
 
 
 async def test_use_bsc_two_dice(
