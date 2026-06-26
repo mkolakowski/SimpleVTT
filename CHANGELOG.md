@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.655.6] - 2026-06-25 — "The Missed Tail"
+
+**Schema version:** 81
+
+**Commit summary:** Fix the one test the v2.655.3 teardown missed — `test_tail_reaction_auto_negates_exact_ac_hit` drove **Brakka natively** (not Krieger like the rest of the file), so re-statting her subclass made `/use_form_of_the_beast` 409. PATCH her into Path of the Beast for the probe + restore, matching the file's Krieger pattern.
+
+**Description:** v2.655.3 re-statted Brakka from Path of the Beast to Path of the Berserker and removed the demo seed-contract test, but `test_form_of_the_beast.py::test_tail_reaction_auto_negates_exact_ac_hit` (added later, v2.602.0) relied on Brakka being a *native* Path of the Beast fixture ("no subclass PATCH needed") — so after the re-stat the endpoint returned `409 wrong_subclass_or_level` (`got_subclass: "path of the berserker"`). My first blast-radius pass saw only the Krieger-PATCHed calls higher in the same file and wrongly dismissed this as flaky; a re-run showed it deterministic (3/3) and a closer read found the native-Brakka call at line 728. Fix: PATCH Brakka's subclass to "Path of the Beast" alongside the existing HP patch, and restore "Path of the Berserker" in the `finally` — the same PATCH-and-restore pattern the file's other tests use for Krieger. A thorough sweep confirmed this was the only remaining test using a re-statted Vault PC natively with its showcase endpoint (Quan/Seraphine have none). Full `test_form_of_the_beast.py` now green (17 passed).
+
+### Fixed
+- `tests/harness/test_form_of_the_beast.py` — the tail-reaction test now PATCHes Brakka into Path of the Beast for the probe + restores, instead of relying on her (re-statted) native subclass.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.655.5] - 2026-06-25 — "The Heavier Sack"
 
 **Schema version:** 81

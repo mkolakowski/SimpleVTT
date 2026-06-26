@@ -700,8 +700,9 @@ async def test_tail_reaction_auto_negates_exact_ac_hit(
     """v2.602.0 — Form of the Beast (Tail) auto-negation. Same
     retroactive-HP-restore recipe as v2.600.0 Shield / v2.601.0
     Defensive Duelist, but the AC bump is the rolled 1d8. Uses Brakka
-    Wildmane (native Path of the Beast Barbarian — the v2.158.60 demo
-    fixture, no subclass PATCH needed). Garrik swings until a hit
+    Wildmane PATCHed to Path of the Beast for the probe (she's natively
+    Path of the Berserker since v2.655.3), restored after — like the
+    other tests in this file PATCH Krieger. Garrik swings until a hit
     lands EXACTLY at Brakka's AC (`attack_total == target_ac`), which
     guarantees any 1d8 roll (>= 1) turns it into a miss — so the
     negation is deterministic regardless of the random tail die.
@@ -713,9 +714,13 @@ async def test_tail_reaction_auto_negates_exact_ac_hit(
     orig_hp = brakka.get("hp")
     await _set_auto_apply(gm_client, True)
     # Patch Brakka's sheet HP high so he survives the probe without
-    # dropping to 0 (auto-applied damage hits the sheet for a PC).
+    # dropping to 0 (auto-applied damage hits the sheet for a PC), and
+    # PATCH her into Path of the Beast so /use_form_of_the_beast applies
+    # (her seeded subclass is Path of the Berserker since v2.655.3).
     await _patch_sheet(
-        gm_client, brakka["id"], {"hp": {"current": 9999, "max": 9999}},
+        gm_client, brakka["id"],
+        {"hp": {"current": 9999, "max": 9999},
+         "subclass": "Path of the Beast"},
     )
     try:
         kr_cid = await _seed_attacker_vs_tail_watcher(
@@ -810,8 +815,11 @@ async def test_tail_reaction_auto_negates_exact_ac_hit(
         )
         assert int(hp_up[-1]["data"].get("delta") or 0) == dmg
     finally:
+        # Restore HP + the seeded subclass (Path of the Berserker).
+        restore = {"subclass": "Path of the Berserker"}
         if isinstance(orig_hp, dict):
-            await _patch_sheet(gm_client, brakka["id"], {"hp": orig_hp})
+            restore["hp"] = orig_hp
+        await _patch_sheet(gm_client, brakka["id"], restore)
 
 
 async def test_tail_reaction_absent_with_claws_form(
