@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.658.0] - 2026-06-26 — "The Undoable Fright"
+
+**Schema version:** 81
+
+**Commit summary:** Phase 3c-1 of the pending-resolution state machine — log NPC weapon on-hit-*save* condition installs under the originating attack's id so they become undoable via `/undo_attack_damage` (and, in Phase 3c-2, revertible on a hit→miss reaction flip).
+
+**Description:** When a Battle Master arms an on-hit maneuver (Menacing / Trip Attack) and lands a hit on an **NPC**, the WIS/STR save resolves *synchronously* in `_resolve_feature_save` and installs the condition (Frightened / Prone) immediately — but until now that install was **logged nowhere**, so `/undo_attack_damage` healed the swing's HP yet left the condition stuck on the target. This commit threads the attacking swing's `attack_id` through `_fire_weapon_hit_saves` → `_resolve_feature_save`; the NPC-target branch now snapshots the target's pre-install buffs and writes a `buff_install` entry under that id (mirroring the PC `/respond` path), and the PC-target branch defaults its deferred `cast_id` to the `attack_id` for free. No flip logic yet — that's Phase 3c-2; this is the smallest shippable slice that makes the NPC on-hit condition genuinely undoable. Reconciled the stale TODO/plan note: Phases 1, 2, and 3a were already shipped (v2.610.2–v2.612.0); 3c-1 is the real next slice.
+
+### Added
+- `tests/harness/test_weapon_hit_save_undo.py` — Garrik (Battle Master) arms Menacing Attack, hits an NPC bandit until the WIS save fails (Frightened installs), then `/undo_attack_damage` reverts it; plus a 404 error-path test for an unknown attack id.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `_resolve_feature_save` + `_fire_weapon_hit_saves` take an `attack_id`; the NPC on-hit-save condition install is snapshot + logged as a `buff_install` undo entry under the swing's id, and the PC path threads `attack_id` onto its deferred `cast_id`.
+- `docs/plans/pending-resolution-state-machine.md` — Phase 3c-1 marked shipped; noted there's only one `_fire_weapon_hit_saves` call site (`/attack`), not the `/npc_attack` pair the design pass assumed.
+- `docs/test-harness-coverage.md` — catalog the new test file.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.657.3] - 2026-06-25 — "The Bare Thumbnail"
 
 **Schema version:** 81

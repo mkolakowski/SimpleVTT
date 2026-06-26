@@ -38772,6 +38772,7 @@ async def _resolve_feature_save(
     prompt_user: "User | None" = None,
     feature_name: str = "",
     cast_id: "str | None" = None,
+    attack_id: "str | None" = None,
 ) -> dict:
     """v2.99.406 (P3.1) / v2.99.407 (P3.2) of docs/plans/feature-saves.md:
     resolve a class-feature saving throw and, on a FAILED save, install
@@ -38799,10 +38800,24 @@ async def _resolve_feature_save(
     later; when False (Menacing Attack's fixed-duration Frightened) it
     just expires. Installs are condition-immunity-gated.
 
+    ``attack_id`` (v2.658.0 — Phase 3c-1 of
+    docs/plans/pending-resolution-state-machine.md) is the originating
+    weapon swing's id when this save is a ``weapon_hit_save`` rider. It
+    makes the on-hit condition install **undoable under the attack's id**:
+    the PC branch threads it onto ``ctx["cast_id"]`` (so /respond logs the
+    install under it), and the NPC branch — which installs synchronously
+    here — snapshots + logs a ``buff_install`` entry under it directly.
+    This is what lets a later hit->miss flip walk the condition back
+    (Phase 3c-2). No-op when absent.
+
     Returns ``{resolved, target_combatant_id, save_total, save_breakdown,
     passed, save_dc, save_ability, condition_installed, condition_key,
     prompted, prompt_id}``.
     """
+    # v2.658.0 — Phase 3c-1: when fired as a weapon on-hit rider, key the
+    # undo log under the attack's id so the install can be reverted on a
+    # hit->miss flip. An explicit cast_id still wins (none threads one today).
+    cast_id = cast_id or attack_id
     result = {
         "resolved": False,
         "source": source,
@@ -38999,12 +39014,24 @@ async def _resolve_feature_save(
         if repeated_save:
             buff["repeated_save_ability"] = result["save_ability"]
             buff["repeated_save_dc"] = int(dc)
+        # v2.658.0 — Phase 3c-1: snapshot the NPC target's pre-install buffs
+        # so an attack-undo / hit->miss flip (Phase 3c-2) can restore them.
+        # NPC installs here are synchronous (no /respond round-trip), so the
+        # buff_install entry is logged inline under the originating attack_id.
+        _buffs_before = _snapshot_target_buffs(db, campaign_id, target_combatant)
         installed = await _install_buff_on_combatant_id(
             campaign_id, target_combatant.get("id"), buff,
         )
         result["condition_installed"] = bool(installed)
         if installed:
             result["condition_key"] = str(buff.get("key") or "")
+            _log_damage_entry(attack_id, {
+                "kind": "buff_install",
+                "campaign_id": campaign_id,
+                "target_combatant_id": target_combatant.get("id"),
+                "buffs_before": _buffs_before,
+                "buff_installed_key": str(buff.get("key") or ""),
+            })
 
     return result
 
@@ -39018,6 +39045,7 @@ async def _fire_weapon_hit_saves(
     target_combatant: "dict | None",
     campaign: "Campaign | None" = None,
     prompt_user: "User | None" = None,
+    attack_id: "str | None" = None,
 ) -> list[dict]:
     """v2.99.408 — Phase 3.3 of docs/plans/feature-saves.md: after a
     confirmed weapon hit, fire any ``effects.weapon_hit_save`` rider on
@@ -39089,6 +39117,7 @@ async def _fire_weapon_hit_saves(
             campaign=campaign,
             prompt_user=prompt_user,
             feature_name=str(spec.get("label") or ""),
+            attack_id=attack_id,
         )
         results.append(sr)
     return results
@@ -111157,6 +111186,7 @@ async def use_attack(
                 attacker_char_id=char.id, attacker_char_name=char.name,
                 target_combatant=target_combatant,
                 campaign=campaign, prompt_user=user,
+                attack_id=attack_id,
             )
             if any(u.get("source") == "colossus-slayer" for u in auto_uplifts):
                 await _mark_colossus_slayer_used(campaign_id, char.id)

@@ -16,8 +16,9 @@ deferred `weapon_hit_save` flow keyed on the save's cast_id (not the attack's
 architectural lift). **Phase 3c is now designed (v2.648.3) — see the
 implementation arc in the Phase 3 section:** NPC-defender flips are synchronous
 (log-and-replay, 3c-1/3c-2 — small, shippable now) and PC-defender flips are
-async (the held pending window, 3c-3 — its own arc). 3c-1 (log NPC on-hit-save
-installs under `attack_id`) is the smallest first commit. Unstarted.
+async (the held pending window, 3c-3 — its own arc). **3c-1 (log NPC on-hit-save
+installs under `attack_id`) shipped v2.658.0** — the install is now an undoable
+`buff_install` entry; 3c-2 (auto-revert it on a flip) is next.
 
 This was the single biggest remaining item in the
 [reactions-automation](reactions-automation.md) v3 backlog — **and the save
@@ -192,19 +193,20 @@ timing splits by defender type.**
 **Per-commit breakdown (NPC-first; each its own version bump + CHANGELOG + push):**
 
 - **3c-1 (smallest shippable first commit) — log NPC on-hit-save installs under
-  `attack_id`.** Thread an `attack_id` param through `_fire_weapon_hit_saves`
-  (`~38575`) → `_resolve_feature_save` (`~38321`) from the `/attack` (`~110503`)
-  + `/npc_attack` call sites. In the NPC-target branch, snapshot-before +
-  `_log_damage_entry(attack_id, {"kind": "buff_install", target_combatant_id,
-  buffs_before, buff_installed_key})` (mirroring the PC path's `/respond` log at
-  `~22535`). The PC branch gets `cast_id = attack_id` for free (it already
-  stashes `_save_request_context[req.id]["cast_id"]`, currently `None`). Ships
-  standalone value: the NPC on-hit condition becomes undoable via the existing
-  `/undo_attack_damage`. No flip logic. Test: a new
+  `attack_id`. ✅ SHIPPED v2.658.0.** Threaded an `attack_id` param through
+  `_fire_weapon_hit_saves` → `_resolve_feature_save` from the `/attack` call
+  site. **Correction:** there is only **one** `_fire_weapon_hit_saves` call site
+  (`/attack`), not the `/npc_attack` pair this design pass assumed — `/npc_attack`
+  doesn't fire weapon-hit-save riders today. In the NPC-target branch, the
+  install now snapshots-before + `_log_damage_entry(attack_id, {"kind":
+  "buff_install", target_combatant_id, buffs_before, buff_installed_key})`
+  (mirroring the PC path's `/respond` log). The PC branch gets `cast_id =
+  cast_id or attack_id` for free. The NPC on-hit condition is now undoable via
+  the existing `/undo_attack_damage`. No flip logic. Test:
   `tests/harness/test_weapon_hit_save_undo.py` using the `garrik_battle_master`
   PATCH recipe (`test_menacing_attack.py`) — Garrik arms Menacing Attack, hits
   an NPC bandit until the WIS save fails (Frightened installs), then
-  `/undo_attack_damage` reverts it.
+  `/undo_attack_damage` reverts it (+ a 404 error path).
 - **3c-2 — auto-revert the NPC condition on a flip.** New shared helper
   `_revert_attack_buff_installs(db, campaign_id, attack_id)` that walks
   `_attack_damage_log[attack_id]`, restores each `buff_install` via
