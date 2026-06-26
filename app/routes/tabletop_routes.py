@@ -10356,6 +10356,41 @@ async def _restore_target_buffs(
     })
 
 
+# v2.664.0 — Phase 3c-3 of docs/plans/pending-resolution-state-machine.md:
+# registry of attack ids that a flip-producing reaction negated (turned the
+# hit into a miss). Keyed by attack_id → ts (TTL-purged). 3c-2 handles the
+# *answer-then-negate* ordering by reverting the already-logged install; this
+# registry handles the *negate-then-answer* ordering for a PC defender, where
+# the on-hit save is still a deferred RollRequest at flip time (nothing to
+# revert yet). When that save later resolves to a fail, ``_resolve_save_failure``
+# consults this registry and SKIPS the install — the attack missed, so its
+# on-hit condition never lands.
+_negated_attack_ids: dict[str, float] = {}
+
+
+def _purge_negated_attack_ids() -> None:
+    cutoff = _time.time() - 8 * 3600
+    stale = [k for k, ts in _negated_attack_ids.items() if ts < cutoff]
+    for k in stale:
+        _negated_attack_ids.pop(k, None)
+
+
+def _mark_attack_negated(attack_id: str | None) -> None:
+    """Record that ``attack_id`` was negated (hit → miss) by a reaction, so a
+    later deferred on-hit save keyed on it skips its condition install."""
+    if not attack_id:
+        return
+    _purge_negated_attack_ids()
+    _negated_attack_ids[str(attack_id)] = _time.time()
+
+
+def _attack_was_negated(attack_id: str | None) -> bool:
+    if not attack_id:
+        return False
+    _purge_negated_attack_ids()
+    return str(attack_id) in _negated_attack_ids
+
+
 async def _revert_attack_buff_installs(
     db: Session, campaign_id: int, attack_id: str | None,
 ) -> list[str]:
@@ -10364,6 +10399,12 @@ async def _revert_attack_buff_installs(
     (the on-hit condition install logged under ``attack_id`` by Phase 3c-1's
     ``_resolve_feature_save`` NPC branch), then PRUNE the reverted entries so a
     second reaction on the same swing can't double-revert.
+
+    v2.664.0 — Phase 3c-3: also marks ``attack_id`` as negated (the single
+    chokepoint hit by all six flip-producer blocks), so a PC defender's
+    deferred on-hit save — not yet installed at flip time — skips its install
+    when it later resolves to a fail (the negate-then-answer ordering, which
+    3c-2's revert can't reach because there's no logged install yet).
 
     Called from the six flip-producer reaction heal-back blocks (Shield /
     Lucky / Defensive Duelist / Form-of-the-Beast Tail / Combat Inspiration /
@@ -10381,6 +10422,11 @@ async def _revert_attack_buff_installs(
     """
     if not attack_id:
         return []
+    # v2.664.0 — Phase 3c-3: mark the negated attack FIRST (unconditionally),
+    # before any buff_install lookup. A PC defender's flip arrives before the
+    # on-hit save is answered, so there's nothing to revert yet — but the mark
+    # must still land so the later save resolution skips the install.
+    _mark_attack_negated(attack_id)
     _purge_attack_damage_log()
     entries = _attack_damage_log.get(attack_id) or []
     reverted: list[str] = []
@@ -22542,6 +22588,17 @@ async def _resolve_save_failure(db, campaign_id, roll_req, ctx) -> str:
     immunity gate blocked it or there is no condition to install. See
     docs/plans/pending-resolution-state-machine.md (Phase 1)."""
     auto_buff_installed = ""
+    # v2.664.0 — Phase 3c-3: if this is a weapon on-hit save whose triggering
+    # attack was negated by a flip reaction (Shield / Lucky / Defensive Duelist
+    # / Form-of-the-Beast / Combat Inspiration / NPC Parry) AFTER the save was
+    # prompted but BEFORE the player answered it, the attack missed — so the
+    # on-hit condition must NOT land. The on-hit save's ctx carries
+    # ``cast_id == the attack_id`` (Phase 3c-1); a spell save-or-suck ctx
+    # carries an unrelated cast_id that's never in the negated registry, so
+    # this is a precise no-op for those (and for the Silvery-Barbs re-invoke).
+    if _attack_was_negated(ctx.get("cast_id")):
+        _save_request_context.pop(roll_req.id, None)
+        return ""
     cond = ctx.get("condition_buff") or _SPELL_CONDITION_MAP.get(
         ctx.get("spell_slug") or "")
     tgt_char_id = ctx.get("target_character_id")

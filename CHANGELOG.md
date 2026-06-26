@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.664.0] - 2026-06-26 — "The Missed Threat"
+
+**Schema version:** 81
+
+**Commit summary:** Pending-resolution Phase 3c-3 — a PC defender who negates a hit BEFORE answering its deferred on-hit save no longer suffers the on-hit condition (the negate-then-answer ordering).
+
+**Description:** Completes the attack-flip arc of [`docs/plans/pending-resolution-state-machine.md`](docs/plans/pending-resolution-state-machine.md). 3c-2 (v2.659.0) handled the *answer-then-negate* order: the PC's on-hit condition install is logged under the attack id, so a later flip reverts it. This commit handles the order 3c-2 can't reach — *negate-then-answer*: when a PC is hit by a weapon on-hit-save rider (a Battle Master's Menacing Attack), the save is a **deferred RollRequest**, so at flip time the condition isn't installed yet and there's nothing to revert. Rather than the architecturally heavy "held pending window" the plan sketched (which reorders the attack pipeline for PC targets), this ships the simpler, equivalent **record-negated + skip-at-resolution** model: `_revert_attack_buff_installs` (the single chokepoint all six flip-producer reactions call) now also records the negated `attack_id` in a TTL registry, and `_resolve_save_failure` consults it — if the failing save's `cast_id` (== the attack id, per 3c-1) was negated, the install is skipped. The check is precise: spell save-or-suck and Silvery-Barbs re-invokes carry unrelated cast_ids that are never in the registry, so they're unaffected. Together with 3c-2, both reaction orderings now correctly suppress the on-hit condition when the attack misses.
+
+### Added
+- `tests/harness/test_reaction_prompt.py::test_pc_defender_negate_then_answer_skips_on_hit_condition` — Garrik (Battle Master, armed Menacing) hits Thalindra in the Shield band; she casts Shield (negate) FIRST, then answers the deferred on-hit WIS save and fails → Frightened does NOT install (asserted only on a confirmed failed save, so passing-save cycles retry).
+
+### Changed
+- `app/routes/tabletop_routes.py` — new `_negated_attack_ids` registry + `_mark_attack_negated` / `_attack_was_negated` helpers; `_revert_attack_buff_installs` marks the negated attack id; `_resolve_save_failure` skips the install when the on-hit save's attack was negated.
+- `docs/plans/pending-resolution-state-machine.md` — 3c-3 marked shipped (record-negated + skip approach, chosen over the held-window lift); the attack-flip arc is now complete.
+- `docs/test-harness-coverage.md` — catalog the new test.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.663.0] - 2026-06-26 — "The Honest Ledger"
 
 **Schema version:** 81

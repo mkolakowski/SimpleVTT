@@ -1,6 +1,6 @@
 # Pending-Resolution State Machine — Design Plan
 
-**Status:** 🔥 IN PROGRESS — Phase 0 (plan) v2.610.1; Phase 1 (extract
+**Status:** ✅ **the attack-flip arc is complete** (Phases 0–3a + 3c-1/3c-2/3c-3 all shipped). The save path closed at v2.612.0; the attack hit→miss condition arc closed at v2.664.0 (3c-3). Phase 0 (plan) v2.610.1; Phase 1 (extract
 `_resolve_save_failure`) v2.610.2; Phase 2 (Silvery Barbs re-resolves the
 save-or-suck condition on a reroll pass→fail flip) v2.611.0; **Phase 3a
 (Silvery Barbs applies the *withheld half* of a save-for-half AoE damage spell
@@ -20,8 +20,17 @@ async (the held pending window, 3c-3 — its own arc). **3c-1 (log NPC on-hit-sa
 installs under `attack_id`) shipped v2.658.0** and **3c-2 (auto-revert the
 condition on a flip via `_revert_attack_buff_installs`) shipped v2.659.0** — an
 NPC Parry that flips a hit to a miss now restores HP **and** removes the on-hit
-condition. The only remaining slice is **3c-3** (the PC-defender held pending
-window, an async arc).
+condition. **3c-3 (the PC-defender negate-then-answer case) shipped v2.664.0**
+— but **not** via the held "pending window" sketched below. Instead it ships
+the simpler, equivalent **record-negated + skip-at-resolution** model:
+`_revert_attack_buff_installs` (the single chokepoint all six flip-producers
+call) records the negated `attack_id` in a TTL registry, and
+`_resolve_save_failure` skips the install when the deferred on-hit save's
+`cast_id` (== the attack id, per 3c-1) was negated. This achieves the same RAW
+outcome (a PC who negates the hit doesn't suffer the on-hit condition) without
+reordering the attack pipeline — the held-window lift proved unnecessary once
+3c-2 already covered the answer-then-negate order via revert and only the
+negate-then-answer order remained. **The attack-flip arc is now fully closed.**
 
 This was the single biggest remaining item in the
 [reactions-automation](reactions-automation.md) v3 backlog — **and the save
@@ -222,14 +231,23 @@ timing splits by defender type.**
   Test: `test_npc_parry_flip_reverts_on_hit_condition` — Garrik (Battle Master,
   Frightened rider) hits a Bandit Captain in the Parry band until Frightened
   installs, the NPC Parries → HP healed **and** Frightened removed.
-- **3c-3 — true pending window for the async PC-defender case** (own follow-up
-  arc; may sub-phase). When a PC target with a live flip-producing reaction
-  would take an on-hit save, **defer** firing it: stash the save spec on a new
-  `_pending_on_hit_saves[attack_id]` instead of building the RollRequest inline.
-  A flip drains + **discards** the held saves (attack missed → no effect); a
-  decline/timeout fires them (window-close trigger via the existing
-  `reaction_prompt_resolved` / decline path + a TTL purge fallback). This
-  reorders the attack pipeline for PC targets, hence its own arc.
+- **3c-3 — the async PC-defender case. ✅ SHIPPED v2.664.0 — but simpler than
+  this bullet planned.** The original sketch was a true pending window: hold the
+  on-hit save un-fired until the reaction window closes, then drain+discard on a
+  flip or fire on decline/timeout — a real attack-pipeline reorder for PC
+  targets. **That lift proved unnecessary.** Once 3c-2 covered the
+  answer-then-negate order (the install logs under `attack_id`, so a flip
+  reverts it), only the **negate-then-answer** order remained, and that's
+  handled by a far smaller **record-negated + skip-at-resolution** change: the
+  flip records the negated `attack_id` in a TTL registry (`_negated_attack_ids`,
+  marked inside `_revert_attack_buff_installs` — the single chokepoint all six
+  flip-producers already call), and `_resolve_save_failure` skips the install
+  when the deferred on-hit save's `cast_id` (== the attack id, per 3c-1) is in
+  it. Same RAW outcome, no pipeline reorder, no new held-save state. Precise:
+  spell save-or-suck + Silvery-Barbs re-invokes carry unrelated cast_ids never
+  in the registry. Harness:
+  `test_pc_defender_negate_then_answer_skips_on_hit_condition` (Garrik Menacing
+  → Thalindra Shields first, then fails the on-hit save → Frightened skipped).
 
 **Risks (full analysis in the design pass):** double-revert (3c-2 prunes the log
 entries it reverts); the PC-async ordering (quarantined to 3c-3's held window so

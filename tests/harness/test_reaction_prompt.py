@@ -4300,6 +4300,149 @@ async def test_npc_parry_flip_reverts_on_hit_condition(
                         {"subclass": _orig_sub, "resources": _orig_res})
 
 
+async def test_pc_defender_negate_then_answer_skips_on_hit_condition(
+    gm_client, gm_ws, roster,
+):
+    """v2.664.0 — Phase 3c-3: the negate-then-answer ordering for a PC
+    defender. When a Battle Master's armed Menacing Attack hits a PC, the
+    on-hit WIS save is a DEFERRED RollRequest (the condition isn't installed
+    yet). If the PC negates the attack FIRST (here: casts Shield, +5 AC turns
+    the hit into a miss) and only THEN answers the on-hit save and fails, the
+    Frightened condition must NOT land — the attack missed.
+
+    3c-2 already covers the *answer-then-negate* order (the install is logged
+    under attack_id, so `_revert_attack_buff_installs` reverts it). This test
+    covers the order 3c-2 can't reach: at negate time there's nothing to
+    revert, so the negate marks the attack id and the deferred save's
+    resolution (`_resolve_save_failure`) skips the install.
+
+    Garrik (Battle Master) attacks Thalindra (Shield). Each cycle resets +
+    re-arms (once-per-turn rider) and probes the first hit for the Shield
+    negation band [AC, AC+5) AND a prompted on-hit save; then casts Shield
+    (negate) and answers the on-hit save. The skip is asserted only on a
+    confirmed FAILED save (total < DC) — a passed save installs nothing
+    regardless, so those cycles retry."""
+    garrik = roster["Garrik Ironside"]
+    thalindra = roster["Thalindra Moonwhisper"]
+    await _set_auto_apply(gm_client, True)
+    _orig = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/sheet-json"
+    )).json().get("sheet") or {}
+    _orig_sub = _orig.get("subclass") or "Champion"
+    _orig_res = _orig.get("resources") or []
+    await _bm_patch(gm_client, garrik["id"], {
+        "subclass": "Battle Master", "superiority_die_size": "d8",
+        "resources": [_sup_dice(99, 99)],
+    })
+    try:
+        garrik_cid = f"tok_3c3_g_{garrik['id']}"
+        thal_cid = f"tok_3c3_t_{thalindra['id']}"
+        proven = False
+        for _ in range(80):
+            await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/rest",
+                json={"type": "long"},
+            )
+            await _seed_battle(gm_client, [
+                _make_combatant(garrik["name"], garrik["id"], init=12, hp=70),
+                {"id": thal_cid, "char_id": thalindra["id"],
+                 "name": thalindra["name"], "initiative": 10,
+                 "hp_current": 32, "hp_max": 32, "buffs": [],
+                 "economy": {"action": False, "bonus": False,
+                             "reaction": False, "movement": 0}},
+            ])
+            arm = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/use_menacing_attack",
+                json={"character_id": garrik["id"]},
+            )
+            assert arm.status_code == 200, arm.text
+            gm_ws.mark()
+            # First hit (misses don't consume the rider).
+            fired = None
+            for _ in range(15):
+                a = await gm_client.post(
+                    f"/api/campaign/{CAMPAIGN_ID}/attack",
+                    json={"character_id": garrik["id"], "attack_index": 0,
+                          "target_combatant_id": thal_cid,
+                          "override": True, "override_range": True},
+                )
+                assert a.status_code == 200, a.text
+                if a.json().get("hit"):
+                    fired = a.json()
+                    break
+            if not fired:
+                continue
+            at, tac = fired.get("attack_total"), fired.get("target_ac")
+            if not (isinstance(at, int) and isinstance(tac, int)
+                    and not fired.get("is_crit")
+                    and int(fired.get("damage_applied") or 0) > 0
+                    and at < tac + 5):
+                continue  # not in the Shield negation band
+            # The on-hit save must have PROMPTED the PC (deferred, not yet
+            # installed) — that's the 3c-3 case.
+            fs = [s for s in (fired.get("feature_saves") or [])
+                  if s.get("source") == "menacing-attack"
+                  and s.get("prompted") and s.get("prompt_id")]
+            if not fs:
+                continue
+            save_prompt_id = fs[0]["prompt_id"]
+            save_dc = int(fs[0]["save_dc"])
+
+            # Negate FIRST: Thalindra casts Shield.
+            await asyncio.sleep(0.2)
+            prompts = [
+                m for m in _prompt_broadcasts(gm_ws)
+                if (m.get("data") or {}).get("watcher_char_id") == thalindra["id"]
+                and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+                and "cast-shield" in [
+                    o.get("key") for o in (m["data"].get("options") or [])]
+            ]
+            if not prompts:
+                continue
+            cast = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+                json={"prompt_id": prompts[-1]["data"]["prompt_id"],
+                      "reaction_key": "cast-shield",
+                      "watcher_char_id": thalindra["id"]},
+            )
+            assert cast.status_code == 200, cast.text
+            # Confirm the negate actually fired (hit → miss).
+            await asyncio.sleep(0.2)
+            if not [m for m in gm_ws.buffered("feature_used")
+                    if (m.get("data") or {}).get("source") == "shield-negate"
+                    and (m.get("data") or {}).get("character_id") == thalindra["id"]]:
+                continue
+
+            # THEN answer the deferred on-hit save.
+            rr = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/roll_request/{save_prompt_id}/respond",
+                json={"character_id": thalindra["id"]},
+            )
+            assert rr.status_code == 200, rr.text
+            rd = rr.json()
+            if int(rd.get("total") or 0) >= save_dc:
+                continue  # save passed — nothing installs regardless; retry
+            # Save FAILED — and because the attack was negated, the skip must
+            # have suppressed the install.
+            assert rd.get("auto_buff_installed") in (None, ""), \
+                f"on-hit condition should be skipped after a negate: {rd}"
+            buffs = (await gm_client.get(
+                f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/buffs"
+            )).json().get("buffs", [])
+            assert not any((b or {}).get("key") == "frightened" for b in buffs), \
+                f"Frightened installed despite the negate: {buffs}"
+            proven = True
+            break
+
+        assert proven, (
+            "no cycle produced an in-band hit + prompted on-hit save + a "
+            "failed save in 80 tries; couldn't exercise the 3c-3 skip"
+        )
+    finally:
+        await _bm_patch(gm_client, garrik["id"],
+                        {"subclass": _orig_sub, "resources": _orig_res})
+
+
 # ── v2.72.0 — Phase 3d: Silvery Barbs ──
 
 
