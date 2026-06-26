@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.655.4] - 2026-06-25 — "The Loose Threads"
+
+**Schema version:** 81
+
+**Commit summary:** Complete the v2.655.3 teardown — remove the 3 `harness_ui` picker tests that drove the re-statted Vault showcase PCs (Brakka/Quan/Seraphine) by name and expected their now-removed showcase subclass.
+
+**Description:** v2.655.3 re-statted the 3 Vault showcase PCs and removed their 3 HTTP seed-contract tests, but missed the parallel **Playwright** picker-UI tests in `tests/harness_ui/`, which drive the same PCs (`PC_NAME = "Brakka Wildmane"` / `"Quan Reelstep"` / `"Dame Seraphine Vael"`) and assert the Form-of-the-Beast / Drunken-Technique / Vow-of-Enmity option appears in the picker — which no longer holds after the re-stat. This removes those 3 UI tests (the picker UI itself stays covered generically; only the demo-PC-specific fixtures are gone). Caught by a post-change collection sweep for references to the re-statted PCs.
+
+### Removed
+- `tests/harness_ui/test_form_of_the_beast_picker_ui.py`, `test_drunken_technique_picker_ui.py`, `test_channel_divinity_picker_ui.py` (3 tests) — drove the re-statted demo PCs; their showcase subclass no longer exists.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.655.3] - 2026-06-25 — "The Last Three Holdouts"
 
 **Schema version:** 81
