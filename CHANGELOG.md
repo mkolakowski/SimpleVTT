@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.685.0] - 2026-06-26 — "Four Battlegrounds"
+
+**Schema version:** 81
+
+**Commit summary:** Demo art — generate + wire the 4 missing leveled-demo battle maps (L5 catacombs, L9 reef, L13 spire, L18 caldera) and refresh the L3 Aldric token.
+
+**Description:** The L5/L9/L13/L18 demos rendered with no battle-map art (`image_url=None`). Generated all four from their `docs/demo/image-prompts.md` prompts via the ImagineArt MCP (nano-banana-pro at 2K, grid-line-free so SimpleVTT's own grid overlay doesn't double up — the Drowned Reef was regenerated once with a stronger anti-grid prompt after the first pass baked a faint square grid into the tide pools), dropped them under `app/static/demo/maps/`, and wired each web-path onto its demo's `map` dict (`image_url=mp.get("image")` already consumes it). Also re-rolled the `l3-aldric.png` evoker token (same path, fresher art; no rewiring). **Every leveled demo now opens on real cartography.**
+
+### Added
+- `app/static/demo/maps/tide-wracked-catacombs.png`, `drowned-reef.png`, `shadowfell-spire.png`, `caldera-throne.png` — 2K painterly battle maps, no baked grid.
+
+### Changed
+- `app/demo_campaigns.py` — wire the four battle-map web-paths onto the L5/L9/L13/L18 `map` dicts.
+- `app/static/demo/tokens/l3-aldric.png` — regenerated token art (path unchanged).
+- `docs/demo/image-prompts.md` — flip the four map checklist rows + per-demo/overall progress counts to ✅ (overall 19→23 / 58).
+
+### Schema
+- No schema change (still v81).
+
 ## [2.684.0] - 2026-06-26 — "The Warren Awakens"
 
 **Schema version:** 81

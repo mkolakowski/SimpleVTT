@@ -204,7 +204,8 @@ _STORM_SALTMARSH = {
              "Each PC shows off a feature gained around level 9 — most "
              "notably full casters' first 5th-level spells. Demo campaign — "
              "resets on a fixed interval."),
-    "map": {"name": "The Drowned Reef", "width": 1600, "height": 1100},
+    "map": {"name": "The Drowned Reef", "width": 1600, "height": 1100,
+            "image": "/static/demo/maps/drowned-reef.png"},
     "party": [
         {"owner": "dave", "name": "Vaelith Stormscale", "sheet": dict(
             klass="Sorcerer", subclass="Draconic Bloodline", race="Tiefling", level=9,
@@ -352,7 +353,8 @@ _SHADOWFELL_SPIRE = {
              "spill out. Each PC shows off a feature gained around level 13 — "
              "full casters' first 7th-level spells, and tier-3 martial power. "
              "Demo campaign — resets on a fixed interval."),
-    "map": {"name": "The Shadowfell Spire (threshold)", "width": 1600, "height": 1200},
+    "map": {"name": "The Shadowfell Spire (threshold)", "width": 1600, "height": 1200,
+            "image": "/static/demo/maps/shadowfell-spire.png"},
     "party": [
         {"owner": "bob", "name": "Maelen Farsight", "sheet": dict(
             klass="Wizard", subclass="School of Evocation", race="High Elf", level=13,
@@ -506,7 +508,8 @@ _DRAGONS_APOTHEOSIS = {
              "stop it. Each PC shows off a high-tier feature — full casters' "
              "9th-level spells and martial capstones. Demo campaign — resets "
              "on a fixed interval."),
-    "map": {"name": "The Caldera Throne", "width": 1800, "height": 1300},
+    "map": {"name": "The Caldera Throne", "width": 1800, "height": 1300,
+            "image": "/static/demo/maps/caldera-throne.png"},
     "party": [
         {"owner": "gm", "name": "Archmagus Selene", "sheet": dict(
             klass="Wizard", subclass="School of Evocation", race="High Elf", level=18,
@@ -668,7 +671,8 @@ _TIDEWRACKED_CATACOMBS = {
              "class gains at level 5 (Extra Attack, 3rd-level spells, Uncanny "
              "Dodge). The remade Level-5 demo — the original 'Sundered Vault' "
              "is kept as an archived example. Resets on a fixed interval."),
-    "map": {"name": "The Tide-Wracked Catacombs", "width": 1400, "height": 1000},
+    "map": {"name": "The Tide-Wracked Catacombs", "width": 1400, "height": 1000,
+            "image": "/static/demo/maps/tide-wracked-catacombs.png"},
     "party": [
         {"owner": "gm", "name": "Sir Gareth Tidebreaker", "sheet": dict(
             klass="Fighter", subclass="Champion", race="Human", level=5,

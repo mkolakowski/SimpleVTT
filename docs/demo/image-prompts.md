@@ -25,15 +25,15 @@ plain coloured ring (`image_url=None`) and are waiting on art.
 > misalign. Each map prompt below already says "no grid lines"; if your model
 > adds one anyway, put `grid, grid lines, grid overlay` in the negative prompt.
 
-## Overall progress — 19 / 58 images
+## Overall progress — 23 / 58 images
 
 | Demo | Map | Tokens | Done |
 |---|---|---|---|
 | Level 3 : The Goblin Warrens | ✅ | ✅ 9 / 9 | **10 / 10** |
-| Level 5 : The Tide-Wracked Catacombs | ⬜ | ⬜ 0 / 9 | **0 / 10** |
-| Level 9 : Storm Over Saltmarsh | ⬜ | ⬜ 0 / 9 | **0 / 10** |
-| Level 13 : The Shadowfell Spire | ⬜ | ⬜ 0 / 8 | **0 / 9** |
-| Level 18 : The Dragon's Apotheosis | ⬜ | ⬜ 0 / 8 | **0 / 9** |
+| Level 5 : The Tide-Wracked Catacombs | ✅ | ⬜ 0 / 9 | **1 / 10** |
+| Level 9 : Storm Over Saltmarsh | ✅ | ⬜ 0 / 9 | **1 / 10** |
+| Level 13 : The Shadowfell Spire | ✅ | ⬜ 0 / 8 | **1 / 9** |
+| Level 18 : The Dragon's Apotheosis | ✅ | ⬜ 0 / 8 | **1 / 9** |
 | ARCHIVE : The Sundered Vault *(flagship)* | 🟡 placeholder | ✅ 9 / 9 shipped | **10 / 10** |
 
 <style>
@@ -342,11 +342,11 @@ Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
 The Tier-2 power-spike tier. A drowned crypt beneath a ruined lighthouse spills undead onto the coast at every high tide.
 
-**Progress: 0 / 10 images generated** — every token below still renders as a plain coloured ring (`image_url=None`). Generate the art, drop it at the listed path, then wire it in `app/demo_campaigns.py`.
+**Progress: 1 / 10 images generated** — the battle map is wired; every token below still renders as a plain coloured ring (`image_url=None`). Generate the art, drop it at the listed path, then wire it in `app/demo_campaigns.py`.
 
 | Entity | Drop file at | Status |
 |---|---|---|
-| 🗺️ The Tide-Wracked Catacombs (map) | `app/static/demo/maps/tide-wracked-catacombs.png` | ⬜ needs art |
+| 🗺️ The Tide-Wracked Catacombs (map) | `app/static/demo/maps/tide-wracked-catacombs.png` | ✅ wired |
 | 🛡️ Sir Gareth Tidebreaker (Human Fighter 5) | `app/static/demo/tokens/l5tide-gareth.jpg` | ⬜ needs art |
 | 🛡️ Maelis Stormcaller (High Elf Wizard 5) | `app/static/demo/tokens/l5tide-maelis.jpg` | ⬜ needs art |
 | 🛡️ Mother Coralind (Half-Elf Cleric 5) | `app/static/demo/tokens/l5tide-coralind.jpg` | ⬜ needs art |
@@ -428,11 +428,11 @@ Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
 A Tier-2/3 coastal adventure run by the demo's second GM. Sahuagin raiders boil up from a storm-wracked reef.
 
-**Progress: 0 / 10 images generated** — every token below still renders as a plain coloured ring (`image_url=None`). Generate the art, drop it at the listed path, then wire it in `app/demo_campaigns.py`.
+**Progress: 1 / 10 images generated** — the battle map is wired; every token below still renders as a plain coloured ring (`image_url=None`). Generate the art, drop it at the listed path, then wire it in `app/demo_campaigns.py`.
 
 | Entity | Drop file at | Status |
 |---|---|---|
-| 🗺️ The Drowned Reef (map) | `app/static/demo/maps/drowned-reef.png` | ⬜ needs art |
+| 🗺️ The Drowned Reef (map) | `app/static/demo/maps/drowned-reef.png` | ✅ wired |
 | 🛡️ Vaelith Stormscale (PC) | `app/static/demo/tokens/l9-vaelith.jpg` | ⬜ needs art |
 | 🛡️ Lirael Songhaven (PC) | `app/static/demo/tokens/l9-lirael.jpg` | ⬜ needs art |
 | 🛡️ Oakheart Mossbrook (PC) | `app/static/demo/tokens/l9-oakheart.jpg` | ⬜ needs art |
@@ -514,11 +514,11 @@ Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
 A Tier-3 dark-fantasy siege. A spire of black glass bleeds the Shadowfell into the world; undead and worse spill out.
 
-**Progress: 0 / 9 images generated** — every token below still renders as a plain coloured ring (`image_url=None`). Generate the art, drop it at the listed path, then wire it in `app/demo_campaigns.py`.
+**Progress: 1 / 9 images generated** — the battle map is wired; every token below still renders as a plain coloured ring (`image_url=None`). Generate the art, drop it at the listed path, then wire it in `app/demo_campaigns.py`.
 
 | Entity | Drop file at | Status |
 |---|---|---|
-| 🗺️ The Shadowfell Spire (map) | `app/static/demo/maps/shadowfell-spire.png` | ⬜ needs art |
+| 🗺️ The Shadowfell Spire (map) | `app/static/demo/maps/shadowfell-spire.png` | ✅ wired |
 | 🛡️ Maelen Farsight — High Elf Wizard 13 | `app/static/demo/tokens/l13-maelen.jpg` | ⬜ needs art |
 | 🛡️ Cassius Emberbinder — Tiefling Warlock 13 | `app/static/demo/tokens/l13-cassius.jpg` | ⬜ needs art |
 | 🛡️ High Cleric Doran — Goliath Cleric 13 | `app/static/demo/tokens/l13-doran.jpg` | ⬜ needs art |
@@ -593,11 +593,11 @@ Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
 A Tier-4 capstone. An ancient red wyrm is ascending to godhood atop a volcano; the party has one shot to stop it.
 
-**Progress: 0 / 9 images generated** — every token below still renders as a plain coloured ring (`image_url=None`). Generate the art, drop it at the listed path, then wire it in `app/demo_campaigns.py`.
+**Progress: 1 / 9 images generated** — the battle map is wired; every token below still renders as a plain coloured ring (`image_url=None`). Generate the art, drop it at the listed path, then wire it in `app/demo_campaigns.py`.
 
 | Entity | Drop file at | Status |
 |---|---|---|
-| 🗺️ The Caldera Throne (map) | `app/static/demo/maps/caldera-throne.png` | ⬜ needs art |
+| 🗺️ The Caldera Throne (map) | `app/static/demo/maps/caldera-throne.png` | ✅ wired |
 | 🛡️ Archmagus Selene — High Elf Wizard 18 | `app/static/demo/tokens/l18-selene.jpg` | ⬜ needs art |
 | 🛡️ Ignar Flamesoul — Dragonborn Sorcerer 18 | `app/static/demo/tokens/l18-ignar.jpg` | ⬜ needs art |
 | 🛡️ Dame Aurelia Dawnward — Aasimar Paladin 18 | `app/static/demo/tokens/l18-aurelia.jpg` | ⬜ needs art |
