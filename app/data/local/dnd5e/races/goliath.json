@@ -1,0 +1,31 @@
+{
+  "slug": "goliath",
+  "name": "Goliath",
+  "ability_bonuses": [],
+  "size": "Medium",
+  "speed": 35,
+  "age": "Goliaths reach adulthood in their late teens and live less than a century.",
+  "alignment": "Under the 2024 rules a creature's species doesn't determine its alignment; choose freely.",
+  "languages": "You can speak, read, and write Common and one other language of your choice. (Ability score increases come from your background, not your species, under the 2024 rules.)",
+  "traits": [
+    {
+      "name": "Giant Ancestry",
+      "level": null,
+      "desc": "You are descended from Giants. Choose one supernatural boon from your giant ancestry; you can use it a number of times equal to your Proficiency Bonus, regaining all expended uses when you finish a Long Rest:\n\n- **Cloud's Jaunt (Cloud Giant)** — As a Bonus Action, magically teleport up to 30 feet to an unoccupied space you can see.\n- **Fire's Burn (Fire Giant)** — When you hit a target with an attack roll and deal damage to it, you can deal an extra 1d10 Fire damage.\n- **Frost's Chill (Frost Giant)** — When you hit a target with an attack roll and deal damage, you can deal an extra 1d6 Cold damage and reduce its Speed by 10 feet until the start of your next turn.\n- **Hill's Tumble (Hill Giant)** — When you hit a Large or smaller creature with an attack roll and deal damage, you can knock it Prone.\n- **Stone's Endurance (Stone Giant)** — When you take damage, you can use your Reaction to roll 1d12, add your Constitution modifier, and reduce the damage by that total.\n- **Storm's Thunder (Storm Giant)** — When you take damage from a creature within 60 feet of you, you can use your Reaction to deal 1d8 Thunder damage to it."
+    },
+    {
+      "name": "Large Form",
+      "level": 5,
+      "desc": "Starting at character level 5, you can change your size to Large as a Bonus Action if you're in a big enough space. For 10 minutes you have Advantage on Strength checks, and your Speed increases by 10 feet. Once you use this trait, you can't do so again until you finish a Long Rest."
+    },
+    {
+      "name": "Powerful Build",
+      "level": null,
+      "desc": "You have Advantage on any ability check you make to end the Grappled condition. You also count as one size larger when determining your carrying capacity."
+    }
+  ],
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 2024 System Reference Document (SRD 5.2) by Wizards of the Coast, licensed under Creative Commons Attribution 4.0 International (CC BY 4.0). Mechanical summaries shipped as descriptive trait cards; not a verbatim copy of the SRD prose. See CREDITS.md."
+}

@@ -45,7 +45,7 @@ _FLOORS = {
     "monsters": 322,
     "items": 294,
     "conditions": 15,
-    "races": 14,
+    "races": 16,
     "class_features": 12,
     "subclass_features": 13,
     "feats": 1,

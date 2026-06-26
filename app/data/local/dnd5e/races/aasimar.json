@@ -1,0 +1,41 @@
+{
+  "slug": "aasimar",
+  "name": "Aasimar",
+  "ability_bonuses": [],
+  "size": "Medium",
+  "speed": 30,
+  "age": "Aasimar mature at the same rate as humans but can live a few decades longer. (You can choose Small or Medium size.)",
+  "alignment": "Under the 2024 rules a creature's species doesn't determine its alignment; choose freely.",
+  "languages": "You can speak, read, and write Common and one other language of your choice. (Ability score increases come from your background, not your species, under the 2024 rules.)",
+  "traits": [
+    {
+      "name": "Celestial Resistance",
+      "level": null,
+      "desc": "You have Resistance to Necrotic damage and Radiant damage."
+    },
+    {
+      "name": "Darkvision",
+      "level": null,
+      "desc": "You have Darkvision with a range of 60 feet."
+    },
+    {
+      "name": "Healing Hands",
+      "level": null,
+      "desc": "As a Magic action, you touch a creature and roll a number of d4s equal to your Proficiency Bonus. The creature regains a number of Hit Points equal to the total rolled. Once you use this trait, you can't do so again until you finish a Long Rest."
+    },
+    {
+      "name": "Light Bearer",
+      "level": null,
+      "desc": "You know the Light cantrip. Charisma is your spellcasting ability for it."
+    },
+    {
+      "name": "Celestial Revelation",
+      "level": 3,
+      "desc": "Starting at character level 3, as a Bonus Action you can transform for 1 minute, taking on a celestial form. Choose one of the following each time you transform; once during the transformation you can deal extra damage to one target equal to your Proficiency Bonus when you deal damage to it with an attack or a spell. The transformation ends early if you are Incapacitated or die.\n\n- **Heavenly Wings** — You gain a Fly Speed equal to your Speed.\n- **Inner Radiance** — You shed Bright Light in a 10-foot radius and Dim Light for an additional 10 feet; at the end of each of your turns, each creature within 10 feet of you takes Radiant damage equal to your Proficiency Bonus.\n- **Necrotic Shroud** — Each creature of your choice within 10 feet that can see you must succeed on a Charisma saving throw (DC 8 + your Charisma modifier + your Proficiency Bonus) or have the Frightened condition until the end of your next turn.\n\nOnce you use this trait, you can't do so again until you finish a Long Rest."
+    }
+  ],
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 2024 System Reference Document (SRD 5.2) by Wizards of the Coast, licensed under Creative Commons Attribution 4.0 International (CC BY 4.0). Mechanical summaries shipped as descriptive trait cards; not a verbatim copy of the SRD prose. See CREDITS.md."
+}

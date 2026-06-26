@@ -30,6 +30,19 @@ If you redistribute or modify this project you must preserve the per-file
 `_attribution` metadata and (per CC BY 4.0) provide credit to both Wizards of
 the Coast and Open5e in any user-visible distribution.
 
+### A few records sourced from SRD 5.2 (2024 rules)
+
+Most shipped content adapts **SRD 5.1**. A small number of records adapt the
+later **D&D 2024 System Reference Document (SRD 5.2)**, also released by
+Wizards of the Coast under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) —
+specifically the **Goliath** and **Aasimar** species
+(`app/data/local/dnd5e/races/{goliath,aasimar}.json`), which are part of the
+SRD 5.2 core species list but were never in SRD 5.1. These carry the 2024
+mechanics (so they differ from their pre-2024 sourcebook versions) and an
+`_attribution` field citing SRD 5.2. Non-SRD races (e.g. Firbolg, Genasi, the
+pre-2024 "Variant Human") remain outside the shipped tier — they belong to the
+campaign/operator homebrew tier.
+
 ---
 
 ## Frontend dependencies (loaded from CDN at runtime)

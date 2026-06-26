@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.655.0] - 2026-06-25 — "The Celestial Loophole"
+
+**Schema version:** 81
+
+**Commit summary:** Ship **Goliath + Aasimar** as SRD content — sourced from the **2024 SRD 5.2** (CC BY 4.0), the two demo non-SRD races that became freely distributable when WotC released the 2024 reference document. Unblocks the Goliath/Aasimar demo PCs' race-trait seeding.
+
+**Description:** Goliath and Aasimar aren't in SRD 5.1, but WotC's later **SRD 5.2** (the 2024 rules, also released under CC BY 4.0) includes both as core species — so they're legitimately shippable, in their **2024** form. This adds `goliath.json` + `aasimar.json` under the shipped tier with the 2024 mechanics (Goliath: Giant Ancestry boon menu, Large Form at L5, Powerful Build; Aasimar: Celestial Resistance, Healing Hands, Light Bearer, Celestial Revelation at L3), `source: "srd"`, `scope: "global"`, and an `_attribution` citing **SRD 5.2** rather than 5.1. Per the 2024 rules, species no longer grant fixed ability bonuses (those come from the background), so `ability_bonuses` is empty — correct for 5.2 and harmless to the demo (PC sheets store final ability scores directly). `CREDITS.md` gains a short SRD-5.2 subsection documenting the dual-document provenance. With these, the demo PCs Bryn + High Cleric Doran (Goliath) and Dame Aurelia (Aasimar) now backfill race traits offline. The remaining non-SRD demo races — Firbolg (Oakheart, Thornroot), Water Genasi (Tym), and the pre-2024 Variant Human (Garrik, Rowan) — are in *no* SRD (5.1 or 5.2) and stay correctly in the homebrew tier. Completeness floor bumped **14 → 16**.
+
+### Added
+- `app/data/local/dnd5e/races/{goliath,aasimar}.json` — 2024 SRD 5.2 species, CC BY 4.0 attributed.
+
+### Changed
+- `CREDITS.md` — new "A few records sourced from SRD 5.2" subsection (dual-document provenance).
+- `tests/harness/test_srd_provenance.py` — races completeness floor `14 → 16`.
+
+### Schema
+- No schema change (still v81) — content files, no migration.
+
+**Harness:** `tests/harness/test_demo_features.py` (+2) — Goliath + Aasimar resolve from the shipped SRD tier (`local-srd`) with their 2024 signature traits and an SRD-5.2 attribution; a Goliath demo PC now seeds `race_trait_items` (Giant Ancestry + Powerful Build). `test_srd_provenance.py` confirms both pass the SRD-provenance gate (`source: "srd"`) + the floor of 16.
+
 ## [2.654.0] - 2026-06-25 — "The Missing Kin"
 
 **Schema version:** 81

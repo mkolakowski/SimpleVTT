@@ -111,3 +111,28 @@ def test_wood_elf_demo_pc_now_seeds_race_traits():
     s = _apply("Druid", "Circle of the Moon", "Wood Elf")
     names = [t.get("name") for t in s.get("race_trait_items") or []]
     assert "Fleet of Foot" in names and "Mask of the Wild" in names, names
+
+
+def test_srd_5_2_species_resolve():
+    # v2.655.0 — Goliath + Aasimar ship from SRD 5.2 (2024 rules, CC BY 4.0),
+    # the two demo non-SRD races that became freely distributable.
+    from app import local_features as lf
+    expected = {
+        "goliath": "Giant Ancestry",
+        "aasimar": "Celestial Revelation",
+    }
+    for slug, signature in expected.items():
+        rec, src = lf.resolve_race(slug, scopes=["global"])
+        assert rec, f"{slug} should ship in the SRD tier"
+        assert src == "local-srd"
+        assert "5.2" in (rec.get("_attribution") or ""), \
+            f"{slug} must cite SRD 5.2"
+        names = [t.get("name") for t in rec.get("traits") or []]
+        assert signature in names, f"{slug} missing {signature!r}: {names}"
+
+
+def test_goliath_demo_pc_now_seeds_race_traits():
+    # Bryn / High Cleric Doran are Goliath; Aurelia is Aasimar.
+    s = _apply("Fighter", "Champion", "Goliath")
+    names = [t.get("name") for t in s.get("race_trait_items") or []]
+    assert "Giant Ancestry" in names and "Powerful Build" in names, names
