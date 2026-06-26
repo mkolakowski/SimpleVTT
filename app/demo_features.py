@@ -23,9 +23,46 @@ when the sheet is opened). Only empty fields are filled; curated
 """
 from __future__ import annotations
 
+import re
+
 
 def _slug(s: str) -> str:
     return (s or "").strip().lower().replace(" ", "-")
+
+
+def _parse_class_features(blob: str, max_level: int) -> list:
+    """Parse the shipped SRD class-features markdown blob (from
+    `local_features.resolve_class`) into the structured
+    `[{key, name, desc, level}]` list the sheet renders, keeping only
+    features whose level is ≤ ``max_level``.
+
+    The blob is a stable shape: a top-level ``## <Class> Features`` title
+    followed by ``### <Feature>`` sections, each whose first body line is
+    a ``*Nth-level <class> feature*`` annotation (ASI uses a multi-level
+    list — we take the first number). The parsed entries carry no
+    automation ``key`` matches (they're display-only); the curated Vault
+    PCs that DO drive automation keep their hand-authored lists (this only
+    fills empty `class_features`)."""
+    out: list = []
+    for part in re.split(r"(?m)^###\s+", blob or ""):
+        part = part.strip()
+        if not part:
+            continue
+        head, _, body = part.partition("\n")
+        name = head.strip()
+        if not name or name.startswith("#"):
+            continue  # the "## <Class> Features" preamble
+        body = body.strip()
+        m = re.search(r"\*\s*(\d+)(?:st|nd|rd|th)\b", body)
+        level = int(m.group(1)) if m else 1
+        if level > max_level:
+            continue
+        desc = re.sub(r"^\*[^*\n]*\*\s*", "", body).strip()
+        key = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+        out.append({
+            "key": key, "name": name, "desc": desc[:800], "level": level,
+        })
+    return out
 
 
 # A few demo subrace/variant names map onto a shipped SRD base record.
@@ -46,6 +83,26 @@ def apply_srd_features(sheet: dict) -> dict:
         from . import local_features as lf
     except Exception:
         return sheet
+
+    # --- class features (parsed from the SRD markdown blob, level-filtered) ---
+    # Only fills an EMPTY class_features — the curated Vault PCs keep their
+    # hand-authored automation-driving lists. The parsed entries are
+    # display-only (no automation key matches).
+    if not (sheet.get("class_features") or []):
+        class_slug = _slug(sheet.get("class") or sheet.get("klass") or "")
+        try:
+            level = int(sheet.get("level") or 1)
+        except (TypeError, ValueError):
+            level = 1
+        if class_slug:
+            try:
+                crec, _csrc = lf.resolve_class(class_slug, scopes=["global"])
+            except Exception:
+                crec = None
+            blob = (crec or {}).get("features") or ""
+            feats = _parse_class_features(blob, level) if blob else []
+            if feats:
+                sheet["class_features"] = feats
 
     # --- subclass features ---
     if not (sheet.get("subclass_features") or []):

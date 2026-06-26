@@ -13,7 +13,13 @@ from app.demo_features import apply_srd_features
 
 def _apply(klass, subclass, race):
     s = {"class": klass, "subclass": subclass, "race": race,
-         "subclass_features": [], "race_trait_items": []}
+         "subclass_features": [], "race_trait_items": [], "class_features": []}
+    return apply_srd_features(s)
+
+
+def _apply_lvl(klass, subclass, race, level):
+    s = {"class": klass, "subclass": subclass, "race": race, "level": level,
+         "subclass_features": [], "race_trait_items": [], "class_features": []}
     return apply_srd_features(s)
 
 
@@ -51,3 +57,27 @@ def test_does_not_overwrite_existing_features():
     assert s["subclass_features"] == [{"name": "Curated", "desc": "x"}], \
         "must not overwrite a pre-set subclass_features list"
     assert s.get("race_trait_items"), "but still fills the empty race field"
+
+
+def test_class_features_parsed_and_level_filtered():
+    # Every SRD class gets class features parsed from the markdown blob,
+    # filtered to the PC's level.
+    s = _apply_lvl("Fighter", "Champion", "Human", 9)
+    names = [(f["name"], f["level"]) for f in s.get("class_features") or []]
+    assert names, "expected parsed class features"
+    assert ("Indomitable", 9) in names, "Lv 9 feature should appear at L9"
+    s3 = _apply_lvl("Fighter", "Battle Master", "Mountain Dwarf", 3)
+    # Even a non-SRD subclass/race PC gets class features (Fighter is SRD).
+    cf3 = [f["name"] for f in s3.get("class_features") or []]
+    assert "Martial Archetype" in cf3
+    assert "Indomitable" not in cf3, "Lv 9 feature must be filtered out at L3"
+
+
+def test_class_features_not_overwritten():
+    s = {"class": "Rogue", "subclass": "Thief", "race": "Human", "level": 5,
+         "class_features": [{"key": "cunning-action", "name": "Cunning Action",
+                             "desc": "curated"}]}
+    apply_srd_features(s)
+    assert s["class_features"] == [{"key": "cunning-action",
+                                    "name": "Cunning Action", "desc": "curated"}], \
+        "must not overwrite a curated class_features list"

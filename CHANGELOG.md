@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.653.1] - 2026-06-25 — "The Class Roll"
+
+**Schema version:** 81
+
+**Commit summary:** Extend the demo-PC feature backfill to **class features** — parse the shipped SRD class-features markdown blob into the structured, level-filtered list the sheet renders, so every demo PC now shows its class features too (the curated Vault PCs keep their hand-authored lists).
+
+**Description:** Follow-up to v2.653.0 (subclass + race). `apply_srd_features` now also fills empty `class_features`: `_parse_class_features(blob, max_level)` walks the `### <Feature>` sections of the SRD class record from `local_features.resolve_class` — reading each feature's name, its `*Nth-level … feature*` level annotation (ASI's multi-level list takes the first number), and its body — and emits `[{key, name, desc, level}]` filtered to the PC's level. Because all 12 classes are in the SRD, **class features populate for all 40 demo PCs** (verified on a forced reseed: class 40/40, subclass 27/40, race 25/40). The parsed entries are display-only (their `key`s don't match an automation handler); the 7 curated Vault PCs whose `class_features` lists DO drive automation are left untouched (only empty `class_features` is filled). With this, the original "all three" goal is met for every demo PC to the extent the SRD covers them — class always, subclass/race where the subclass/race is SRD.
+
+### Added
+- `app/demo_features.py` — `_parse_class_features(blob, max_level)` + a class-features branch in `apply_srd_features`.
+
+### Schema
+- No schema change (still v81).
+
+**Harness:** `tests/harness/test_demo_features.py` (+2) — class features parse + level-filter (Lv-9 feature present at L9, absent at L3; a non-SRD-subclass PC still gets its SRD class features); a curated `class_features` list is never overwritten.
+
 ## [2.653.0] - 2026-06-25 — "The Featured Cast"
 
 **Schema version:** 81
