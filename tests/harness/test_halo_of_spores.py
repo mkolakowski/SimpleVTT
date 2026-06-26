@@ -10,13 +10,18 @@ Damage die by druid level:
 - Lv 10-13: 1d8
 - Lv 14+: 1d10
 
-v1 announce-only — actual CON save + damage application
-GM-tracked. Costs reaction chip.
+**v2.676.0 (Phase 8):** the target's CON save is now rolled + the
+necrotic damage applied server-side (was announce-only). RAW is
+save-OR-NOTHING (no save-for-half): full `damage_rolled` on a fail,
+ZERO on a success, via `_apply_damage_to_combatant`. Costs reaction
+chip; no resolvable target → announce-only.
 
 Mira Lv 5 → 1d4 + DC 14 (prof 3 + WIS 17 mod 3 + 8).
 
 Tests:
   - Lv 5 happy → 1d4, DC 14, CON save, radius 10.
+  - Apply: templated bandit target → save rolled + necrotic applied.
+  - Announce-only: no target → save/damage fields stay None.
   - Lv 6 → 1d6.
   - Lv 14 → 1d10.
   - Wrong subclass → 409.
@@ -87,6 +92,67 @@ async def test_use_hs_happy_lv5(
     await asyncio.sleep(0.3)
     feats = _hs_broadcasts(gm_ws, mira["id"])
     assert feats
+
+
+async def test_hs_applies_damage_to_target(
+    gm_client, mira_spores,
+):
+    """v2.676.0 — Phase 8: a templated NPC target now has its CON save rolled
+    + the necrotic applied server-side (save-OR-NOTHING). Seed Mira + a real
+    bandit template, then assert the applied amount matches the outcome:
+    full `damage_rolled` on a fail, 0 on a success (vanilla bandit → no
+    necrotic resistance → exact)."""
+    mira = mira_spores
+    templates = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/templates")).json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": f"tok_hs_{mira['id']}", "char_id": mira["id"],
+             "name": mira["name"], "initiative": 12,
+             "hp_current": 40, "hp_max": 40, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": "tok_hs_bandit", "char_id": None,
+             "token_template_id": bandit["id"], "name": bandit["name"],
+             "initiative": 8, "hp_current": 50, "hp_max": 50, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_halo_of_spores",
+        json={"character_id": mira["id"], "override": True,
+              "target_combatant_id": "tok_hs_bandit"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["save_total"] is not None, data
+    assert isinstance(data["save_passed"], bool), data
+    assert data["damage_rolled"] is not None and 1 <= data["damage_rolled"] <= 4
+    # save-or-nothing: 0 on a pass, full rolled on a fail.
+    expected = 0 if data["save_passed"] else data["damage_rolled"]
+    assert data["damage_applied"] == expected, data
+
+
+async def test_hs_no_target_announce_only(
+    gm_client, mira_spores,
+):
+    """v2.676.0 — no target → backward-compatible announce-only."""
+    mira = mira_spores
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_halo_of_spores",
+        json={"character_id": mira["id"], "override": True},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["save_total"] is None
+    assert data["save_passed"] is None
+    assert data["damage_applied"] is None
 
 
 async def test_use_hs_lv6(

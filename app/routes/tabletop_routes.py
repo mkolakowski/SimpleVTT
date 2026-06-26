@@ -86882,6 +86882,92 @@ async def use_halo_of_spores(
     wis_mod = (wis - 10) // 2
     save_dc = 8 + prof + wis_mod
 
+    # v2.676.0 — Phase 8: resolve the target's CON save + apply the necrotic
+    # damage server-side (was announce-only). RAW TCE p.36 is save-OR-NOTHING
+    # (NOT save-for-half): the die is rolled + full damage applied on a FAIL,
+    # zero on a success. Same NPC/PC save-mod resolution as Wrath of the Storm
+    # (v2.673.0) but a CON save; necrotic is magical class-feature damage →
+    # `_apply_damage_to_combatant` with `is_magical=True`. Backward-compatible:
+    # no resolvable target combatant leaves all fields None (announce-only).
+    save_total = None
+    save_passed = None
+    damage_rolled = None
+    damage_applied = None
+    _hos_target = (
+        _lookup_combatant(campaign_id, target_combatant_id)
+        if target_combatant_id else None
+    )
+    _hos_save_mod = None
+    if _hos_target is not None:
+        if _hos_target.get("char_id"):
+            _ht_char = db.query(Character).filter(
+                Character.id == int(_hos_target["char_id"]),
+            ).first()
+            if _ht_char and _ht_char.sheet:
+                _ht_sheet = dict(_ht_char.sheet or {})
+                _con = int((_ht_sheet.get("abilities") or {}).get("CON", 10))
+                _con_mod = (_con - 10) // 2
+                _ht_prof = int(_ht_sheet.get("proficiency_bonus") or 2)
+                _con_prof = bool(
+                    (_ht_sheet.get("saving_throws") or {}).get("CON")
+                )
+                _hos_save_mod = _con_mod + (_ht_prof if _con_prof else 0)
+        elif _hos_target.get("token_template_id"):
+            try:
+                _htmpl = db.query(TokenTemplate).filter(
+                    TokenTemplate.id == int(_hos_target["token_template_id"]),
+                ).first()
+                if _htmpl is not None:
+                    _hnpc_sheet = _monster_template_to_sheet(
+                        _htmpl, campaign_id,
+                    )
+                    _hsmr, _ = _resolve_stat_modifier(
+                        _hnpc_sheet, "dnd5e", "con_save",
+                    )
+                    _hos_save_mod = int(_hsmr)
+            except Exception:
+                _hos_save_mod = None
+    if _hos_target is not None and _hos_save_mod is not None:
+        _hname = _hos_target.get("name") or "target"
+        try:
+            _hsr = dice_mod.roll(f"1d20{_hos_save_mod:+d}")
+            save_total = int(_hsr.total)
+            _hsr_breakdown = _hsr.breakdown
+        except dice_mod.DiceParseError:
+            save_total = _hos_save_mod
+            _hsr_breakdown = ""
+        save_passed = save_total >= save_dc
+        await hub.broadcast(campaign_id, {
+            "type": "roll",
+            "data": {
+                "expression": f"1d20{_hos_save_mod:+d}",
+                "total": save_total,
+                "breakdown": _hsr_breakdown,
+                "note": (
+                    f"☠️ {_hname}'s CON save vs "
+                    f"{char.name}'s Halo of Spores"
+                ),
+                "user_name": char.name,
+                "char_name": _hname,
+                "visibility": Visibility.PUBLIC.value,
+                "dc": save_dc,
+            },
+        })
+        try:
+            _hdr = dice_mod.roll(damage_die)
+            damage_rolled = max(0, int(_hdr.total))
+        except dice_mod.DiceParseError:
+            damage_rolled = 0
+        # RAW: full on fail, ZERO on success (no save-for-half).
+        if save_passed:
+            damage_applied = 0
+        else:
+            _hadr = await _apply_damage_to_combatant(
+                db, campaign_id, _hos_target, damage_rolled, "necrotic",
+                is_magical=True, attacker_char_id=char.id,
+            )
+            damage_applied = int(_hadr.get("applied") or 0)
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -86915,6 +87001,10 @@ async def use_halo_of_spores(
             "damage_type": "necrotic",
             "save_ability": "CON",
             "save_dc": save_dc,
+            "save_total": save_total,
+            "save_passed": save_passed,
+            "damage_rolled": damage_rolled,
+            "damage_applied": damage_applied,
             "aura_radius_ft": 10,
             "druid_level": druid_lv,
         },
@@ -86928,6 +87018,10 @@ async def use_halo_of_spores(
         "damage_type": "necrotic",
         "save_ability": "CON",
         "save_dc": save_dc,
+        "save_total": save_total,
+        "save_passed": save_passed,
+        "damage_rolled": damage_rolled,
+        "damage_applied": damage_applied,
         "aura_radius_ft": 10,
         "druid_level": druid_lv,
     }

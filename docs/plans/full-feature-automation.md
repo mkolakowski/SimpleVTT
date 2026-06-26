@@ -569,6 +569,15 @@ composition. Batch by class, same cadence as the breadth sweep.
   `_apply_heal_to_combatant` — the same heal-pipeline wire as Hands of
   Healing (v2.674.0). Surfaces `target_combatant_id`/`heal_applied`/`revived`;
   announce-only without a target. Harness: `test_healing_light.py` (+2).
+- **v2.676.0 ("The Necrotic Bloom") — Halo of Spores** (Spores Druid Lv 2+):
+  `use_halo_of_spores` computed the level-scaled necrotic die + CON save DC
+  but was announce-only. With a `target_combatant_id` it now rolls the
+  target's CON save server-side (same NPC/PC resolution as Wrath of the
+  Storm, but a CON save) and applies the necrotic — **save-OR-NOTHING** (RAW:
+  full on a fail, ZERO on a success, NOT save-for-half) — via
+  `_apply_damage_to_combatant` (`is_magical=True`). Surfaces `save_total`/
+  `save_passed`/`damage_rolled`/`damage_applied`; announce-only without a
+  resolvable target. Harness: `test_halo_of_spores.py` (+2).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

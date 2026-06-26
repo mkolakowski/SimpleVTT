@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.676.0] - 2026-06-26 — "The Necrotic Bloom"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — resolve Halo of Spores' CON save + apply the necrotic damage server-side (Spores Druid).
+
+**Description:** `use_halo_of_spores` (TCE p.36) computed the level-scaled necrotic die + the CON save DC but broadcast them announce-only — the GM rolled the save and applied the damage by hand. When a `target_combatant_id` resolves to a sheet, the endpoint now rolls the target's Constitution save server-side (NPC save mod via `_monster_template_to_sheet` + `_resolve_stat_modifier`; PC via `Character.sheet` CON + proficiency — the same resolution as Wrath of the Storm, v2.673.0, but a CON save) and applies the necrotic damage. **RAW Halo of Spores is save-OR-NOTHING (not save-for-half):** the die is rolled and the full amount applied on a fail via `_apply_damage_to_combatant` (`is_magical=True`), and **zero** on a success. The save roll is broadcast as a public `roll`; the response/broadcast gain `save_total` / `save_passed` / `damage_rolled` / `damage_applied`. Backward-compatible: no resolvable target leaves all four None (announce-only).
+
+### Added
+- `tests/harness/test_halo_of_spores.py` (+2) — `test_hs_applies_damage_to_target` (templated bandit target → `save_total`/`save_passed` set, `damage_applied` == `damage_rolled` on a fail / `0` on a success) + `test_hs_no_target_announce_only` (no target → fields stay None).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_halo_of_spores` resolves the target's CON save + applies the necrotic (save-or-nothing); surfaces `save_total` / `save_passed` / `damage_rolled` / `damage_applied`.
+- `docs/automation-coverage.md` — `use_halo_of_spores` note updated (save rolled + damage applied server-side).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Halo of Spores.
+- `docs/test-harness-coverage.md` — catalog the new tests.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.675.0] - 2026-06-26 — "The Celestial Mend"
 
 **Schema version:** 81

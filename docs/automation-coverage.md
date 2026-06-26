@@ -229,7 +229,7 @@ or passive damage-boosters that already ride other code paths
 | `use_goading_attack` | ✅ tracked | A use/resource |
 | `use_grapple` | ✅ tracked | D buff-install, D/E buff-install |
 | `use_grim_harvest` | ✅ tracked | heal |
-| `use_halo_of_spores` | ✅ tracked | A use/resource |
+| `use_halo_of_spores` | ✅ tracked | v2.676.0 — with `target_combatant_id`, rolls the target's CON save server-side (NPC via template, PC via sheet) + applies the necrotic via `_apply_damage_to_combatant` (save-OR-NOTHING: full on fail, 0 on success); announce-only without a resolvable target |
 | `use_hands_of_healing` | ✅ tracked | v2.674.0 — applies the rolled heal (Martial Arts die + WIS) to `target_combatant_id` via `_apply_heal_to_combatant` (caps at max HP, revives a dying PC); announce-only without a target |
 | `use_healing_light` | ✅ tracked | v2.675.0 — applies the rolled pooled-d6 heal to `target_combatant_id` via `_apply_heal_to_combatant` (caps at max HP, revives a dying PC); announce-only without a target |
 | `use_hexblades_curse` | ✅ tracked | D buff-install |
