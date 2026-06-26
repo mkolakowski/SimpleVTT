@@ -505,6 +505,16 @@ composition. Batch by class, same cadence as the breadth sweep.
   supplied (the v2.146.0 Blade Flourish damage-half pattern), surfacing
   `damage_rolled`/`damage_applied`/`damage_breakdown`. Announce-only without a
   target. Harness: `test_whispers_psychic_blades.py` (+2).
+- **v2.669.0 ("The Sheltered Blast") — Sculpt Spells** (Evocation Wizard Lv
+  2+): RAW-identical to Careful Spell metamagic, so it rides that substrate.
+  `use_sculpt_spells` installs a `sculpt-spells-active` buff carrying
+  `effects.protected_combatant_ids`; `_caster_has_careful_pending_buff` was
+  extended to match the key (so all six AoE-save read sites honor it for free)
+  and `_broadcast_careful_protected` reads `effects.protection_label` so the
+  auto-pass card says "Sculpt Spells" not "Careful Spell". Consumed per-cast at
+  the AoE cleanup. Announce-only without `protected_combatant_ids`. First
+  substrate **shared across two features under distinct keys**. Harness:
+  `test_sculpt_spells.py` (+3, incl. an end-to-end Fireball auto-pass).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.669.0] - 2026-06-26 — "The Sheltered Blast"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — mechanize Evocation Wizard's Sculpt Spells by riding the existing Careful Spell auto-pass substrate.
+
+**Description:** Sculpt Spells (PHB p.117) is RAW-identical to the Careful Spell metamagic — chosen creatures auto-succeed their save and take no damage from your save-for-half AoE — so it now rides that exact substrate instead of being announce-only. `use_sculpt_spells` accepts `protected_combatant_ids` (capped at `1 + spell_level`) and installs a `sculpt-spells-active` buff carrying `effects.protected_combatant_ids`; `_caster_has_careful_pending_buff` was extended to match the new key, so all six AoE-save read sites (`/cast_spell` single-target + AoE, `/place_aoe`) honor it for free. The auto-pass card now reads its label from the buff (`effects.protection_label`), so a Wizard's Sculpt protection announces as "Sculpt Spells (auto-pass)" rather than "Careful Spell" — `_broadcast_careful_protected` gained an optional `buff` param threaded through all six call sites. The buff is consumed per-cast at the AoE-loop cleanup (alongside the careful buff). Backward-compatible: no `protected_combatant_ids` stays announce-only.
+
+### Added
+- `tests/harness/test_sculpt_spells.py` (new, +3) — arming installs the `sculpt-spells-active` buff payload (`protected_combatant_ids` + `protection_label`); end-to-end a Sculpt-protected NPC auto-succeeds its Fireball save (the read substrate forces `1d20+99`) and the auto-pass card is labeled "Sculpt Spells"; a non-wizard → 409.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_sculpt_spells` installs the protection buff; `_caster_has_careful_pending_buff` matches `sculpt-spells-active`; `_broadcast_careful_protected` is label-aware (threaded `buff` through all six call sites); both AoE cleanups also consume the sculpt buff.
+- `docs/automation-coverage.md` — `use_sculpt_spells` flipped ⚪ announce-only → ✅ tracked.
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Sculpt Spells.
+- `docs/test-harness-coverage.md` — catalog the new test file.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.668.0] - 2026-06-26 — "The Whispered Wound"
 
 **Schema version:** 81

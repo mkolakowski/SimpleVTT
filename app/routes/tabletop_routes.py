@@ -25400,6 +25400,7 @@ async def cast_spell(
                     _ds_base = _ds_base.replace("1d20", "1d20+99", 1)
                     await _broadcast_careful_protected(
                         campaign_id, char, tgt_char.name,
+                        buff=_careful_buff,
                     )
                 # v2.97.50 — PFE&G type-aware save advantage helper
                 # ``_saver_pfeag_save_advantage`` exists for future
@@ -25596,6 +25597,7 @@ async def cast_spell(
                         expr = expr.replace("1d20", "1d20+99", 1)
                         await _broadcast_careful_protected(
                             campaign_id, char, target_combatant.get("name") or "",
+                            buff=_npc_careful_buff,
                         )
                     # v2.99.42 — Heightened Spell disadvantage at the
                     # single-target NPC save site. Same shape as the
@@ -25953,6 +25955,7 @@ async def cast_spell(
                     _aoe_ds_base = _aoe_ds_base.replace("1d20", "1d20+99", 1)
                     await _broadcast_careful_protected(
                         campaign_id, char, extra_pc.name,
+                        buff=_aoe_careful_buff,
                     )
                 _aoe_req = RollRequest(
                     campaign_id=campaign_id,
@@ -26095,6 +26098,7 @@ async def cast_spell(
                 _expr = _expr.replace("1d20", "1d20+99", 1)
                 await _broadcast_careful_protected(
                     campaign_id, char, extra_name,
+                    buff=_aoe_npc_careful_buff,
                 )
             # v2.99.42 — Heightened disadvantage at AoE NPC save site.
             # Same one-use semantic as the PC paths: first eligible
@@ -26190,6 +26194,11 @@ async def cast_spell(
             await _remove_buff(
                 campaign_id, int(char.id),
                 "metamagic-careful-pending",
+            )
+            # v2.669.0 — Sculpt Spells rides the same substrate under a
+            # distinct key; consume it per-cast too (no-op if absent).
+            await _remove_buff(
+                campaign_id, int(char.id), "sculpt-spells-active",
             )
 
         # v2.32.0 Phase T.3c: save-or-suck condition install. When the
@@ -27363,6 +27372,7 @@ async def place_aoe(
                 expr = f"1d20+99{pc_mod:+d}"
                 await _broadcast_careful_protected(
                     campaign_id, _caster_char_for_broadcast, extra_pc.name,
+                    buff=_aoe_pl_careful_buff,
                 )
                 # Still broadcast advantage triggers if they happened
                 # to fire, but the auto-pass takes precedence.
@@ -27518,6 +27528,7 @@ async def place_aoe(
             expr = expr.replace("1d20", "1d20+99", 1)
             await _broadcast_careful_protected(
                 campaign_id, _caster_char_for_broadcast, extra_name,
+                buff=_place_npc_careful_buff,
             )
         # v2.99.42 — Heightened disadvantage at /place_aoe NPC save
         # site. Same one-use semantic as PC sites: first eligible
@@ -27618,6 +27629,10 @@ async def place_aoe(
     ):
         await _remove_buff(
             campaign_id, _aoe_caster_id, "metamagic-careful-pending",
+        )
+        # v2.669.0 — Sculpt Spells per-cast consume (no-op if absent).
+        await _remove_buff(
+            campaign_id, _aoe_caster_id, "sculpt-spells-active",
         )
 
     # v2.48.5 — push one battle_update so every client's init tracker
@@ -54630,6 +54645,13 @@ def _caster_has_careful_pending_buff(
     Caller reads `effects.protected_combatant_ids` to check
     membership. Returns the FULL buff so the same call covers both
     the gate check AND the protected-list lookup.
+
+    v2.669.0 — also matches `sculpt-spells-active` (Evocation Wizard's
+    Sculpt Spells, PHB p.117): mechanically identical to Careful Spell
+    (chosen creatures auto-succeed their save + take no damage on a
+    save-for-half AoE), so it rides this exact substrate. The returned
+    buff's `effects.protection_label` (when present) lets the auto-pass
+    broadcast name the right feature.
     """
     if not caster_char_id:
         return None
@@ -54642,7 +54664,9 @@ def _caster_has_careful_pending_buff(
         for b in (c.get("buffs") or []):
             if not isinstance(b, dict):
                 continue
-            if (b.get("key") or "").strip().lower() == "metamagic-careful-pending":
+            if (b.get("key") or "").strip().lower() in (
+                "metamagic-careful-pending", "sculpt-spells-active",
+            ):
                 return b
         return None
     return None
@@ -54665,25 +54689,37 @@ def _combatant_is_careful_protected(
 
 async def _broadcast_careful_protected(
     campaign_id: int, caster_char: "Character | None", target_name: str,
+    buff: "dict | None" = None,
 ) -> None:
     """Companion broadcast when Careful Spell auto-passes a save.
     Emits `feature_used(source=metamagic-careful-spell)`.
+
+    v2.669.0 — when the protecting buff carries `effects.protection_label`
+    (Sculpt Spells rides the same substrate), name that feature in the card
+    instead of "Careful Spell", with a feature-specific `source` so the chat
+    log attributes it correctly. Defaults preserve the Careful Spell wording.
     """
     if not caster_char:
         return
+    label = "Careful Spell"
+    source = "metamagic-careful-spell"
+    eff = (buff or {}).get("effects") if isinstance(buff, dict) else None
+    if isinstance(eff, dict) and eff.get("protection_label"):
+        label = str(eff.get("protection_label"))
+        source = str(eff.get("protection_source") or "feature-auto-pass")
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
         "data": {
             "character_id": caster_char.id,
             "character_name": caster_char.name,
             "user_color": caster_char.color,
-            "feature_name": "✨ Metamagic — Careful Spell (auto-pass)",
+            "feature_name": f"✨ {label} (auto-pass)",
             "feature_desc": (
-                f"{caster_char.name}'s Careful Spell protects "
+                f"{caster_char.name}'s {label} protects "
                 f"{target_name or 'target'}: save auto-succeeds "
                 f"(1d20+99 ≥ any DC)."
             ),
-            "source": "metamagic-careful-spell",
+            "source": source,
         },
     })
 
@@ -61297,6 +61333,47 @@ async def use_sculpt_spells(
 
     protected = 1 + spell_level
 
+    # v2.669.0 — Phase 8: mechanize the protection (was announce-only).
+    # Sculpt Spells is RAW-identical to Careful Spell metamagic (chosen
+    # creatures auto-succeed their save + take no damage on a save-for-half
+    # AoE), so it rides the SAME substrate: install a `sculpt-spells-active`
+    # buff carrying `effects.protected_combatant_ids` that the place_aoe /
+    # cast_spell AoE save loops already honor via
+    # `_caster_has_careful_pending_buff` (extended to match this key) +
+    # `_combatant_is_careful_protected`. `protection_label` makes the
+    # auto-pass card say "Sculpt Spells" (not "Careful Spell"). The buff is
+    # consumed per-cast at the AoE-loop cleanup. Backward-compatible: when no
+    # `protected_combatant_ids` is supplied, the endpoint stays announce-only.
+    _raw_ids = body.get("protected_combatant_ids") or []
+    protected_combatant_ids = (
+        [str(t) for t in _raw_ids][:protected]
+        if isinstance(_raw_ids, list) else []
+    )
+    buff_installed = False
+    if protected_combatant_ids:
+        buff_installed = await _install_buff(campaign_id, char.id, {
+            "key": "sculpt-spells-active",
+            "name": "💠 Sculpt Spells",
+            "icon": "💠",
+            "duration_rounds": 1,
+            "duration_max": 1,
+            "concentration": False,
+            "source_char_id": char.id,
+            "effects": {
+                "protected_combatant_ids": protected_combatant_ids,
+                "protection_label": "Sculpt Spells",
+                "protection_source": "sculpt-spells",
+            },
+            "desc": (
+                f"Up to {protected} chosen creature"
+                f"{'s' if protected != 1 else ''} auto-succeed their save "
+                f"and take no damage from this Lv {spell_level} evocation "
+                f"(Sculpt Spells, Evocation Wizard)."
+            ),
+        })
+        if buff_installed:
+            _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -61328,6 +61405,8 @@ async def use_sculpt_spells(
             "source": "sculpt-spells",
             "spell_level": spell_level,
             "protected_count": protected,
+            "protected_combatant_ids": protected_combatant_ids,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -61336,6 +61415,8 @@ async def use_sculpt_spells(
         "feature": "sculpt-spells",
         "spell_level": spell_level,
         "protected_count": protected,
+        "protected_combatant_ids": protected_combatant_ids,
+        "buff_installed": buff_installed,
     }
 
 

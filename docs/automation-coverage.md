@@ -368,7 +368,7 @@ or passive damage-boosters that already ride other code paths
 | `use_potent_spellcasting` | ✅ tracked | v2.612.1 — installs permanent `potent-spellcasting-active` flag-buff (`potent_spellcasting_*`: active/wis_mod/class); Phase 8 cleric/cantrip twin of Empowered Evocation |
 | `use_relentless_avenger` | ⚪ announce-only | — |
 | `use_scornful_rebuke` | ⚪ announce-only | — |
-| `use_sculpt_spells` | ⚪ announce-only | — |
+| `use_sculpt_spells` | ✅ tracked | v2.669.0 — installs a `sculpt-spells-active` protection buff riding the Careful Spell auto-pass substrate (`_caster_has_careful_pending_buff` matches the key); protected creatures auto-succeed + take no damage from the evocation AoE |
 | `use_supreme_healing` | ⚪ announce-only | — |
 | `use_totem_spirit` | ✅ tracked | v2.612.2 — installs permanent `totem-spirit-active` flag-buff (per-totem `totem_spirit_*` rage-gated params: Bear resistance-except-psychic / Eagle OA-dis + Dash / Wolf ally-advantage); Phase 8 |
 | `use_unwavering_mark` | ⚪ announce-only | — |
