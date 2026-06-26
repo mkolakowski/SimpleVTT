@@ -93828,6 +93828,31 @@ async def use_whispers_psychic_blades(
         dice_count = 2
     damage_expression = f"{dice_count}d6"
 
+    # v2.668.0 — Phase 8: roll + apply the psychic damage server-side when a
+    # target is supplied (was announce-only). Mirrors the v2.146.0 Blade
+    # Flourish damage half: roll the level-scaled NdN psychic, then route it
+    # through `_apply_damage_to_combatant` (which honors the target's
+    # resistance/immunity + death-save pipeline). Backward-compatible: no
+    # `target_combatant_id` stays announce-only (damage_rolled = None).
+    damage_rolled = None
+    damage_applied = None
+    damage_breakdown = ""
+    if target_combatant_id:
+        try:
+            _dr = dice_mod.roll(damage_expression)
+            damage_rolled = max(0, int(_dr.total))
+            damage_breakdown = _dr.breakdown
+        except dice_mod.DiceParseError:
+            damage_rolled = None
+        if damage_rolled and damage_rolled > 0:
+            _target = _lookup_combatant(campaign_id, target_combatant_id)
+            if _target is not None:
+                _adr = await _apply_damage_to_combatant(
+                    db, campaign_id, _target, damage_rolled, "psychic",
+                    is_attack=True, attacker_char_id=char.id,
+                )
+                damage_applied = int(_adr.get("applied") or 0)
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -93862,6 +93887,9 @@ async def use_whispers_psychic_blades(
             "target_combatant_id": target_combatant_id,
             "damage_expression": damage_expression,
             "damage_type": "psychic",
+            "damage_rolled": damage_rolled,
+            "damage_applied": damage_applied,
+            "damage_breakdown": damage_breakdown,
             "consumed_bardic_inspiration": True,
             "bard_level": bard_lv,
         },
@@ -93873,6 +93901,9 @@ async def use_whispers_psychic_blades(
         "target_combatant_id": target_combatant_id,
         "damage_expression": damage_expression,
         "damage_type": "psychic",
+        "damage_rolled": damage_rolled,
+        "damage_applied": damage_applied,
+        "damage_breakdown": damage_breakdown,
         "consumed_bardic_inspiration": True,
         "bard_level": bard_lv,
     }

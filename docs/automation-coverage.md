@@ -375,6 +375,6 @@ or passive damage-boosters that already ride other code paths
 | `use_visions_of_distant_realms` | ⚪ announce-only | — |
 | `use_whispers_of_the_dead` | ⚪ announce-only | — |
 | `use_whispers_of_the_grave` | ⚪ announce-only | — |
-| `use_whispers_psychic_blades` | ⚪ announce-only | — |
+| `use_whispers_psychic_blades` | ✅ tracked | v2.668.0 — rolls + applies the level-scaled NdN psychic damage server-side via `_apply_damage_to_combatant` when targeted (Blade-Flourish damage-half pattern); announce-only without a target |
 | `use_bardic_inspiration_die` | 🔧 mechanical | mechanical |
 | `use_repeated_save` | 🔧 mechanical | mechanical |

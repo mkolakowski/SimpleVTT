@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.668.0] - 2026-06-26 — "The Whispered Wound"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — mechanize Whispers College Bard's Psychic Blades: roll + apply the level-scaled psychic damage server-side (was announce-only).
+
+**Description:** Continues the Phase 8 tail, mirroring the v2.146.0 Blade Flourish damage half. `use_whispers_psychic_blades` already computed the level-scaled `NdN` psychic expression (2d6 → 8d6 by bard level) but only broadcast it — the GM rolled + applied by hand. Now, when a `target_combatant_id` is supplied, the endpoint rolls the expression server-side and routes the damage through `_apply_damage_to_combatant` (which honors the target's resistance/immunity + death-save pipeline), surfacing `damage_rolled` / `damage_applied` / `damage_breakdown` on the response + broadcast. Backward-compatible: no target stays announce-only.
+
+### Added
+- `tests/harness/test_whispers_psychic_blades.py` — `test_wpb_applies_psychic_damage_to_target` (Lv 6 Lyra → 3d6 lands on an NPC bandit; rolled ∈ 3..18, applied lands accepting resistance halving) + `test_use_wpb_no_target_announce_only` (no target → `damage_rolled`/`damage_applied` stay None).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_whispers_psychic_blades` rolls + applies the psychic damage when targeted; surfaces the damage fields.
+- `docs/automation-coverage.md` — `use_whispers_psychic_blades` flipped ⚪ announce-only → ✅ tracked.
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Psychic Blades.
+- `docs/test-harness-coverage.md` — catalog the new tests.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.667.1] - 2026-06-26 — "The Steady Roll"
 
 **Schema version:** 81

@@ -498,6 +498,13 @@ composition. Batch by class, same cadence as the breadth sweep.
   the move cap (reuses the Longstrider/Eagle-Totem substrate — zero new engine
   code). Flourish-agnostic (rides the Attack action). Harness:
   `test_blade_flourish.py::test_bf_installs_speed_bonus_buff`.
+- **v2.668.0 ("The Whispered Wound") — Psychic Blades** (Whispers College
+  Bard Lv 3+): `use_whispers_psychic_blades` computed the level-scaled NdN
+  psychic (2d6→8d6) but was announce-only; it now rolls + applies the damage
+  server-side via `_apply_damage_to_combatant` when a `target_combatant_id` is
+  supplied (the v2.146.0 Blade Flourish damage-half pattern), surfacing
+  `damage_rolled`/`damage_applied`/`damage_breakdown`. Announce-only without a
+  target. Harness: `test_whispers_psychic_blades.py` (+2).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`
