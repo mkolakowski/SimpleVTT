@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.666.0] - 2026-06-26 — "The Settled Oaths"
+
+**Schema version:** 81
+
+**Commit summary:** Reconcile the paladin-oaths plan — every "outstanding" oath feature was already built (verify-substrate); mark the plan complete and move it to TODONE.md.
+
+**Description:** Doc-only. The picked-for-work item was "Paladin oath follow-ups," but a code check (the verify-substrate discipline this session kept hitting) found **all** of the plan's listed-outstanding features already mechanized: Vengeance Relentless Avenger Phase 2 OA-flow gate (`/token/move` consumes the `relentless-avenger-bonus-move` free-move budget, `tabletop_routes.py:~17314`), Conquering Presence (Frightened install via `_resolve_feature_save`, v2.99.409), Aura of Conquest (`_tick_auras` speed-0 + psychic, v2.99.448), Rebuke the Violent (attacker WIS save + psychic, v2.99.249), and Inspiring Smite (temp-HP via `_grant_temp_hp`, v2.99.420). All are v2.99.x — they predate the v2.158.68 status that listed them open, so the "outstanding" list was stale even when written. The non-Devotion paladin-oath plan is now marked complete and moved to `TODONE.md`. (Conquest/Redemption/Glory are XGE/TCE features whose endpoints already existed; this reconciles the status only — no new non-SRD shipped content.)
+
+### Changed
+- `docs/plans/paladin-oaths.md` — "Real outstanding scope" replaced with the verified shipped state (per-feature version refs); plan marked complete.
+- `TODONE.md` — added paladin-oaths to the shipped-end-to-end list.
+- `TODO.md` — removed the stale paladin-oaths P2 entry.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.665.0] - 2026-06-26 — "The Drop on Them"
 
 **Schema version:** 81

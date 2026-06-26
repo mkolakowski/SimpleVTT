@@ -42,12 +42,30 @@ Path: per-oath subclass shipping for the non-Devotion sacred oaths.
 >   reactive ✅ v2.99.286; Living Legend Lv 20 capstone ✅ v2.99.291.
 >   Lv 3 Inspiring Smite remains.
 >
-> **Real outstanding scope (post 2026-06-11):** Vengeance Phase 2
-> OA-flow gate (`/token/move` reads `relentless-avenger.free-move`
-> budget + skips OA prompts); Conquest Lv 3 (Conquering Presence
-> frightful CD) + Lv 7 (Aura of Conquest); Redemption Lv 3
-> (Rebuke the Violent on-damage-taken hook); Glory Lv 3 Inspiring
-> Smite (BA spend slot → self-buff). All are RAW PHB / SRD.
+> **✅ FULLY SHIPPED — reconciled v2.666.0 (verify-substrate).** The
+> "real outstanding scope" the 2026-06-10/11 status listed was **already
+> stale when written** — every item is built (the mechanizations are
+> v2.99.x, which *predates* the v2.158.68 status that called them open):
+>
+> - **Vengeance Phase 2 OA-flow gate** ✅ — `/token/move` reads the
+>   `relentless-avenger-bonus-move` buff's `free_movement_remaining_ft` and
+>   consumes it from over-speed movement (`tabletop_routes.py:~17314`),
+>   broadcasting `relentless_avenger_applied`.
+> - **Conquest Lv 3 Conquering Presence** ✅ v2.99.409 — `use_conquering_presence`
+>   installs Frightened on NPC targets via `_resolve_feature_save`.
+> - **Conquest Lv 7 Aura of Conquest** ✅ v2.99.448 — `use_aura_of_conquest`
+>   installs an aura buff (`requires_condition: frightened`) the `_tick_auras`
+>   start-of-turn engine reads to deal speed-0 + half-level psychic to
+>   frightened enemies in range.
+> - **Redemption Lv 3 Rebuke the Violent** ✅ v2.99.249 — `use_rebuke_the_violent`
+>   resolves the attacker's WIS save + applies the psychic damage.
+> - **Glory Lv 3 Inspiring Smite** ✅ v2.99.420 — `use_inspiring_smite`
+>   distributes temp HP via `_grant_temp_hp`.
+>
+> **The non-Devotion paladin-oath plan is complete.** Moved to
+> [`TODONE.md`](../../TODONE.md). (Conquest/Redemption/Glory are XGE/TCE
+> features whose endpoints already existed in the codebase — this note only
+> reconciles the stale status; it adds no new non-SRD shipped content.)
 
 ## Why a plan doc
 

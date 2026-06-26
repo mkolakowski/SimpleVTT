@@ -1167,7 +1167,6 @@ Now lives in [`TODONE.md`](TODONE.md#design-plans-backlog--shipped-end-to-end) �
 
 ### 🟡 P2 — Substantial deferred phases
 
-- [`paladin-oaths.md`](docs/plans/paladin-oaths.md) — header refreshed 2026-06-11; Lv 15/20 capstones for Ancients / Vengeance / Conquest / Redemption / Glory all ✅ (v2.99.283–.292). Outstanding small follow-ups: Vengeance Phase 2 OA-flow gate; Conquest Lv 3 (Conquering Presence) + Lv 7 (Aura of Conquest); Redemption Lv 3 (Rebuke the Violent); Glory Lv 3 (Inspiring Smite). Down-ranked from prior P2 position because most scope has shipped. **Verify each against the plan doc before promoting — the sorcery + EK entries here were both stale-shipped (reconciled v2.663.0).**
 - [`unified-mini-sheet.md`](docs/plans/unified-mini-sheet.md) — 3 mockups landed; **Phase 1–3 unstarted**. Pairs naturally with Class Resource Tracking + Combat 2.0.
 - [`encounter-sim-test-suite.md`](docs/plans/encounter-sim-test-suite.md) — **substantial progress** (Level 1 smoke + Level 2 encounter sim shipped through v2.49.x); Level 3 edge-case framework seeded; Phase 4 (Level 3 completion, ~40 tests) pending.
 - [`docs/encounters-plan.md`](docs/encounters-plan.md) — **proposed, not started**. Save/load encounter state.
