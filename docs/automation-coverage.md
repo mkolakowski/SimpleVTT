@@ -290,7 +290,7 @@ or passive damage-boosters that already ride other code paths
 | `use_rallying_cry` | ✅ tracked | heal |
 | `use_rangers_companion` | ✅ tracked | A use/resource |
 | `use_reaction` | ✅ tracked | D buff-install, damage, heal/damage |
-| `use_rebuke_the_violent` | ✅ tracked | A use/resource |
+| `use_rebuke_the_violent` | ✅ tracked | v2.672.0 — rolls the attacker's WIS save server-side (NPC via template, PC via sheet) + applies the reflected psychic via `_apply_damage_to_combatant` (full on fail, half on success); announce-only when the attacker has no resolvable sheet |
 | `use_reckless_attack` | ✅ tracked | D buff-install |
 | `use_restore_balance` | ✅ tracked | A use/resource |
 | `use_riposte` | ✅ tracked | damage |

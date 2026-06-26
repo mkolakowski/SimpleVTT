@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.672.0] - 2026-06-26 — "The Turned Blow"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — resolve Rebuke the Violent's attacker Wis save + apply the reflected psychic damage server-side (Redemption Paladin).
+
+**Description:** `use_rebuke_the_violent` (XGE p.39) computed the save DC + the on-fail/on-success psychic amounts but broadcast them announce-only — the GM rolled the attacker's save and applied the damage by hand. Now, when the attacker combatant resolves to a sheet, the endpoint rolls its Wisdom save server-side (NPC save mod via `_monster_template_to_sheet` + `_resolve_stat_modifier`, mirroring the Polymorph resolution; PC via `Character.sheet` WIS + proficiency) and applies the reflected psychic — **full `damage_dealt` on a fail, half on a success** — through `_apply_damage_to_combatant` with `is_magical=True` (Channel Divinity is magical, save-based, not an attack). The save roll is broadcast as a public `roll` and the response/broadcast gain `save_total` / `save_passed` / `psychic_damage_applied`. Backward-compatible: an attacker that doesn't resolve to a sheet leaves all three None (announce-only).
+
+### Added
+- `tests/harness/test_rebuke_the_violent.py::test_rtv_applies_psychic_damage` (+1) — re-seeds the battle with a real bandit *template* (the existing fixture's bandit carries no `token_template_id`), then asserts `save_total` is set, `save_passed` is a bool, and `psychic_damage_applied` is `15` on a fail / `7` on a success (consistent with the rolled outcome; a vanilla bandit has no psychic resistance so the amount is exact).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_rebuke_the_violent` resolves the attacker's WIS save + applies the psychic damage; surfaces `save_total` / `save_passed` / `psychic_damage_applied`.
+- `docs/automation-coverage.md` — `use_rebuke_the_violent` note updated (save rolled + psychic applied server-side).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Rebuke the Violent.
+- `docs/test-harness-coverage.md` — catalog the new test.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.671.0] - 2026-06-26 — "The Fey-Woven Shield"
 
 **Schema version:** 81

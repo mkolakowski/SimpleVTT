@@ -15,12 +15,19 @@ v1 ships:
 With this commit, Phase H.2 (5 non-Devotion oaths) is
 substantially complete.
 
+**v2.672.0 (Phase 8):** the attacker's Wis save is now rolled +
+the psychic damage applied server-side (was announce-only) when
+the attacker combatant resolves to a sheet (NPC via template, PC
+via Character.sheet). Full psychic on a fail, half on a success,
+routed through `_apply_damage_to_combatant` (`is_magical=True`).
+
 Sir Caelan Lightbringer is the demo fixture. Tests PATCH his
 subclass to "Oath of Redemption" + seed Caelan + Bandit
 attacker in battle. Caelan Lv 7 CHA 16 → DC 14.
 
 Tests:
   - Happy 15 dmg → DC 14, on_fail 15, on_success 7, broadcast.
+  - Apply: templated bandit attacker → save rolled + psychic applied.
   - Missing damage_dealt → 400.
   - Damage_dealt < 1 → 400.
   - Attacker not in battle → 404.
@@ -130,6 +137,58 @@ async def test_use_rtv_happy(
     await asyncio.sleep(0.3)
     feats = _rtv_broadcasts(gm_ws, caelan["id"])
     assert feats
+
+
+async def test_rtv_applies_psychic_damage(
+    gm_client, caelan_redemption_with_bandit,
+):
+    """v2.672.0 — Phase 8: a templated NPC attacker now has its WIS save
+    rolled + the psychic damage applied server-side. Re-seed the battle with
+    a real bandit *template* (the fixture's bandit carries no
+    token_template_id, so the save mod can't resolve). Full damage on a fail,
+    half on a success; either way the applied amount is consistent with the
+    save outcome (vanilla bandit → no psychic resistance → exact)."""
+    caelan = caelan_redemption_with_bandit
+    templates = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/templates")).json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": f"tok_cr_{caelan['id']}",
+             "char_id": caelan["id"], "name": caelan["name"],
+             "initiative": 12, "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": "tok_bandit_rtv_tmpl", "char_id": None,
+             "token_template_id": bandit["id"], "name": bandit["name"],
+             "initiative": 8, "hp_current": 50, "hp_max": 50, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_rebuke_the_violent",
+        json={
+            "character_id": caelan["id"],
+            "attacker_combatant_id": "tok_bandit_rtv_tmpl",
+            "damage_dealt": 15,
+            "override": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["save_dc"] == 14
+    assert data["save_total"] is not None, data
+    assert isinstance(data["save_passed"], bool), data
+    applied = data["psychic_damage_applied"]
+    assert applied is not None, data
+    # full (15) on fail, half (7) on success — consistent with the outcome.
+    expected = 7 if data["save_passed"] else 15
+    assert applied == expected, data
 
 
 async def test_use_rtv_missing_damage(

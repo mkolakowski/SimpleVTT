@@ -534,6 +534,16 @@ composition. Batch by class, same cadence as the breadth sweep.
   OAs half stays GM-narrated. Surfaces `targets_buffed`/`applied_targets`.
   Announce-only without target ids. Harness: `test_mantle_of_inspiration.py`
   (+3).
+- **v2.672.0 ("The Turned Blow") — Rebuke the Violent** (Redemption Paladin
+  Lv 3+): `use_rebuke_the_violent` computed the save DC + on-fail/on-success
+  psychic but was announce-only. It now rolls the attacker's Wisdom save
+  server-side (NPC save mod via `_monster_template_to_sheet` +
+  `_resolve_stat_modifier`, the Polymorph pattern; PC via sheet WIS + prof)
+  and applies the reflected psychic — full `damage_dealt` on a fail, half on
+  a success — via `_apply_damage_to_combatant` (`is_magical=True`, Channel
+  Divinity is magical/save-based, not an attack). Surfaces `save_total`/
+  `save_passed`/`psychic_damage_applied`; announce-only when the attacker has
+  no resolvable sheet. Harness: `test_rebuke_the_violent.py` (+1).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

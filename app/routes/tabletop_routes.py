@@ -97864,6 +97864,76 @@ async def use_rebuke_the_violent(
     )
     caster_color = char.color or player_color
     half = damage_dealt // 2
+
+    # v2.672.0 — Phase 8: resolve the attacker's Wis save + apply the psychic
+    # damage server-side (was announce-only). RAW XGE p.39: fail → full
+    # psychic equal to `damage_dealt`; success → half. Mirrors the Polymorph
+    # NPC/PC save-mod resolution (`_monster_template_to_sheet` +
+    # `_resolve_stat_modifier` for NPCs; sheet WIS + prof for PCs). The
+    # psychic is Channel Divinity — magical, save-based (not an attack) — so
+    # it routes through `_apply_damage_to_combatant` with `is_magical=True`.
+    save_total = None
+    save_passed = None
+    psychic_damage_applied = None
+    _attacker = _lookup_combatant(campaign_id, attacker_combatant_id)
+    _save_mod = None
+    if _attacker is not None:
+        if _attacker.get("char_id"):
+            _atk_char = db.query(Character).filter(
+                Character.id == int(_attacker["char_id"]),
+            ).first()
+            if _atk_char and _atk_char.sheet:
+                _a_sheet = dict(_atk_char.sheet or {})
+                _wis = int((_a_sheet.get("abilities") or {}).get("WIS", 10))
+                _wis_mod = (_wis - 10) // 2
+                _a_prof = int(_a_sheet.get("proficiency_bonus") or 2)
+                _wis_prof = bool((_a_sheet.get("saving_throws") or {}).get("WIS"))
+                _save_mod = _wis_mod + (_a_prof if _wis_prof else 0)
+        elif _attacker.get("token_template_id"):
+            try:
+                _tmpl = db.query(TokenTemplate).filter(
+                    TokenTemplate.id == int(_attacker["token_template_id"]),
+                ).first()
+                if _tmpl is not None:
+                    _npc_sheet = _monster_template_to_sheet(_tmpl, campaign_id)
+                    _smr, _ = _resolve_stat_modifier(
+                        _npc_sheet, "dnd5e", "wis_save",
+                    )
+                    _save_mod = int(_smr)
+            except Exception:
+                _save_mod = None
+    if _attacker is not None and _save_mod is not None:
+        try:
+            _sr = dice_mod.roll(f"1d20{_save_mod:+d}")
+            save_total = int(_sr.total)
+            _sr_breakdown = _sr.breakdown
+        except dice_mod.DiceParseError:
+            save_total = _save_mod
+            _sr_breakdown = ""
+        save_passed = save_total >= save_dc
+        await hub.broadcast(campaign_id, {
+            "type": "roll",
+            "data": {
+                "expression": f"1d20{_save_mod:+d}",
+                "total": save_total,
+                "breakdown": _sr_breakdown,
+                "note": (
+                    f"☮️ {attacker_name or 'attacker'}'s WIS save vs "
+                    f"{char.name}'s Rebuke the Violent"
+                ),
+                "user_name": char.name,
+                "char_name": attacker_name,
+                "visibility": Visibility.PUBLIC.value,
+                "dc": save_dc,
+            },
+        })
+        _psy = half if save_passed else damage_dealt
+        _adr = await _apply_damage_to_combatant(
+            db, campaign_id, _attacker, _psy, "psychic",
+            is_magical=True, attacker_char_id=char.id,
+        )
+        psychic_damage_applied = int(_adr.get("applied") or 0)
+
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
         "data": {
@@ -97888,6 +97958,9 @@ async def use_rebuke_the_violent(
             "psychic_damage_on_fail": damage_dealt,
             "psychic_damage_on_success": half,
             "save_dc": save_dc,
+            "save_total": save_total,
+            "save_passed": save_passed,
+            "psychic_damage_applied": psychic_damage_applied,
             "uses_remaining": cd_cur - 1,
             "over_budget": was_used,
             "over_budget_slot": "reaction" if was_used else "",
@@ -97903,6 +97976,9 @@ async def use_rebuke_the_violent(
         "psychic_damage_on_fail": damage_dealt,
         "psychic_damage_on_success": half,
         "save_dc": save_dc,
+        "save_total": save_total,
+        "save_passed": save_passed,
+        "psychic_damage_applied": psychic_damage_applied,
         "uses_remaining": cd_cur - 1,
         "over_budget": was_used,
     }
