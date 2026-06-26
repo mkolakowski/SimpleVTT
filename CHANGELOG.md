@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.655.5] - 2026-06-25 — "The Heavier Sack"
+
+**Schema version:** 81
+
+**Commit summary:** Fix a **pre-existing** stale assertion in `test_bag_of_holding.py` (unrelated to the demo-features work): Brakka's expected carried weight was hardcoded at 30 lb but is now 30.5 lb because a later commit added a 0.5-lb Bag of Tricks to her loadout.
+
+**Description:** Surfaced while verifying the v2.655.3 teardown's blast radius. The test asserts Brakka Wildmane's `/sheet-json` carried weight reflects the Bag of Holding discount (her 59-lb Explorer's pack, flagged `_in_bag_of_holding`, is excluded). It was written at v2.159.30 expecting `7 (greataxe) + 8 (javelins) + 15 (bag) = 30`, but since then Brakka accreted magic-item loot as a test carrier — almost all 0-weight, **except a Bag of Tricks at 0.5 lb** (a usable item carried on-person, correctly NOT in the Bag of Holding). Investigation confirmed the discount logic is healthy (the pack's 59 lb is still excluded; the `carry_capacity_lb == 435` belt assertion was already current) — only the weight expectation was stale. Updated `30 → 30.5` with a comment enumerating the loadout, and added a robustness guard (`weight < 89.5`) so a genuine discount regression is still caught even if future loot churns the exact total. Not caused by the demo-features arc (those commits never touched inventory); fixed here because the verification pass found it.
+
+### Fixed
+- `tests/harness/test_bag_of_holding.py` — stale carried-weight expectation `30 → 30.5` (Bag of Tricks 0.5 lb) + a `weight < 89.5` discount-regression guard.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.655.4] - 2026-06-25 — "The Loose Threads"
 
 **Schema version:** 81
