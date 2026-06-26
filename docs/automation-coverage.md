@@ -308,7 +308,7 @@ or passive damage-boosters that already ride other code paths
 | `use_steel_defender` | ✅ tracked | H summon, damage |
 | `use_step_of_the_wind` | ✅ tracked | D buff-install |
 | `use_stillness_of_mind` | ✅ tracked | A use/resource |
-| `use_storm_aura` | ✅ tracked | D buff-install |
+| `use_storm_aura` | ✅ tracked | Desert = auto-tick aura buff (v2.99.426). v2.677.0 — with `target_combatant_id`, Sea rolls the target's DEX save + applies the lightning save-for-half (`_apply_damage_to_combatant`) and Tundra grants temp HP (`_grant_temp_hp`); announce-only without a target |
 | `use_stormborn` | ✅ tracked | D buff-install |
 | `use_strength_of_the_grave` | ✅ tracked | A use/resource |
 | `use_stroke_of_luck` | ✅ tracked | A use/resource |

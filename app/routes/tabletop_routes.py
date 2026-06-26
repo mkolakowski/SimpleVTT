@@ -90243,21 +90243,26 @@ async def use_storm_aura(
     creature in the aura gains temp HP). Magnitudes scale at Lv
     10/15/20.
 
-    Body: ``{character_id, environment?}``. ``environment`` is
-    desert (default), sea, or tundra. No action cost (the aura
-    activates with your rage). The Sea lightning is rolled
-    server-side.
+    Body: ``{character_id, environment?, target_combatant_id?}``.
+    ``environment`` is desert (default), sea, or tundra. No action
+    cost (the aura activates with your rage). The Sea lightning is
+    rolled server-side.
 
     v2.99.426 — Phase 5.2 of docs/plans/auras.md: the **desert**
     environment ("each other creature in your aura takes fire damage")
     now installs a `storm-aura` aura buff (`effects.aura` with a fire
     `damage` payload, `affects: "others"`, 10-ft radius), so the v2.99.425
     aura tick auto-applies the fire damage to every other creature in
-    range at the start of each of the barbarian's turns. Sea (one
-    creature, Dex save) and Tundra (one chosen creature gains temp HP)
-    are single-target *choices*, not auto-tick-all, so they stay
-    announce-only (GM/player picks the target). Response gains
-    `aura_installed`.
+    range at the start of each of the barbarian's turns.
+
+    v2.677.0 — Phase 8: the **sea** (one creature, DEX save-for-half
+    lightning) and **tundra** (one creature gains temp HP) single-
+    target choices now resolve server-side when a ``target_combatant_id``
+    is supplied — sea rolls the target's DEX save (same NPC/PC resolution
+    as Wrath of the Storm) + applies the lightning (full on fail, half on
+    success) via ``_apply_damage_to_combatant``; tundra grants the temp HP
+    via ``_grant_temp_hp``. Without a target they stay announce-only.
+    Response gains `aura_installed` (+ the sea/tundra apply fields).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -90266,6 +90271,7 @@ async def use_storm_aura(
     environment = (body.get("environment") or "desert").strip().lower()
     if environment not in ("desert", "sea", "tundra"):
         raise HTTPException(400, "environment must be desert, sea, or tundra")
+    target_combatant_id = (str(body.get("target_combatant_id") or "")).strip()
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -90325,6 +90331,95 @@ async def use_storm_aura(
 
     env_icon = {"desert": "🏜️", "sea": "🌊", "tundra": "❄️"}[environment]
 
+    # v2.677.0 — Phase 8: resolve the single-target sea / tundra choices
+    # server-side when a target combatant is supplied. Sea = DEX save-for-half
+    # lightning (same NPC/PC save-mod resolution as Wrath of the Storm); tundra
+    # = flat temp HP via `_grant_temp_hp`. Desert stays the auto-tick aura
+    # (installed below). Backward-compatible: no target → announce-only.
+    save_total = None
+    save_passed = None
+    damage_applied = None
+    temp_hp_applied = None
+    _sa_target = (
+        _lookup_combatant(campaign_id, target_combatant_id)
+        if target_combatant_id and environment in ("sea", "tundra") else None
+    )
+    if _sa_target is not None and environment == "tundra":
+        _satr = await _grant_temp_hp(
+            db, campaign_id, _sa_target, int(effect["temp_hp"]),
+            source="storm-aura-tundra",
+        )
+        temp_hp_applied = int(_satr.get("applied") or 0)
+    elif _sa_target is not None and environment == "sea":
+        # Storm Aura's save DC = 8 + prof + CON mod (RAW XGE p.10).
+        prof = int(sheet.get("proficiency_bonus") or 2)
+        _con_mod = (int(
+            (sheet.get("abilities") or {}).get("CON", 10)) - 10) // 2
+        save_dc = 8 + prof + _con_mod
+        _sa_save_mod = None
+        if _sa_target.get("char_id"):
+            _st_char = db.query(Character).filter(
+                Character.id == int(_sa_target["char_id"]),
+            ).first()
+            if _st_char and _st_char.sheet:
+                _st_sheet = dict(_st_char.sheet or {})
+                _dex = int((_st_sheet.get("abilities") or {}).get("DEX", 10))
+                _dex_mod = (_dex - 10) // 2
+                _st_prof = int(_st_sheet.get("proficiency_bonus") or 2)
+                _dex_prof = bool(
+                    (_st_sheet.get("saving_throws") or {}).get("DEX")
+                )
+                _sa_save_mod = _dex_mod + (_st_prof if _dex_prof else 0)
+        elif _sa_target.get("token_template_id"):
+            try:
+                _stmpl = db.query(TokenTemplate).filter(
+                    TokenTemplate.id == int(_sa_target["token_template_id"]),
+                ).first()
+                if _stmpl is not None:
+                    _snpc_sheet = _monster_template_to_sheet(
+                        _stmpl, campaign_id,
+                    )
+                    _ssmr, _ = _resolve_stat_modifier(
+                        _snpc_sheet, "dnd5e", "dex_save",
+                    )
+                    _sa_save_mod = int(_ssmr)
+            except Exception:
+                _sa_save_mod = None
+        if _sa_save_mod is not None:
+            _sname = _sa_target.get("name") or "target"
+            try:
+                _ssr = dice_mod.roll(f"1d20{_sa_save_mod:+d}")
+                save_total = int(_ssr.total)
+                _ssr_breakdown = _ssr.breakdown
+            except dice_mod.DiceParseError:
+                save_total = _sa_save_mod
+                _ssr_breakdown = ""
+            save_passed = save_total >= save_dc
+            await hub.broadcast(campaign_id, {
+                "type": "roll",
+                "data": {
+                    "expression": f"1d20{_sa_save_mod:+d}",
+                    "total": save_total,
+                    "breakdown": _ssr_breakdown,
+                    "note": (
+                        f"🌊 {_sname}'s DEX save vs "
+                        f"{char.name}'s Storm Aura (Sea)"
+                    ),
+                    "user_name": char.name,
+                    "char_name": _sname,
+                    "visibility": Visibility.PUBLIC.value,
+                    "dc": save_dc,
+                },
+            })
+            _full = int(effect["lightning_damage"])
+            _dmg = (_full // 2) if save_passed else _full
+            _sadr = await _apply_damage_to_combatant(
+                db, campaign_id, _sa_target, _dmg, "lightning",
+                is_magical=True, attacker_char_id=char.id,
+            )
+            damage_applied = int(_sadr.get("applied") or 0)
+            effect["save_dc"] = save_dc
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -90353,6 +90448,11 @@ async def use_storm_aura(
             "source": "storm-aura",
             **effect,
             "barbarian_level": barb_lv,
+            "target_combatant_id": target_combatant_id,
+            "save_total": save_total,
+            "save_passed": save_passed,
+            "damage_applied": damage_applied,
+            "temp_hp_applied": temp_hp_applied,
         },
     })
 
@@ -90396,6 +90496,11 @@ async def use_storm_aura(
         **effect,
         "barbarian_level": barb_lv,
         "aura_installed": aura_installed,
+        "target_combatant_id": target_combatant_id,
+        "save_total": save_total,
+        "save_passed": save_passed,
+        "damage_applied": damage_applied,
+        "temp_hp_applied": temp_hp_applied,
     }
 
 

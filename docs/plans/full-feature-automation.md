@@ -578,6 +578,16 @@ composition. Batch by class, same cadence as the breadth sweep.
   `_apply_damage_to_combatant` (`is_magical=True`). Surfaces `save_total`/
   `save_passed`/`damage_rolled`/`damage_applied`; announce-only without a
   resolvable target. Harness: `test_halo_of_spores.py` (+2).
+- **v2.677.0 ("The Roaming Tempest") — Storm Aura (Sea + Tundra)** (Storm
+  Herald Barbarian Lv 3+): the Desert environment already auto-ticks as an
+  aura (v2.99.426); the two single-target choices were announce-only. With a
+  `target_combatant_id` they now resolve server-side — **Sea** rolls the
+  target's DEX save (same NPC/PC resolution as Wrath of the Storm; DC = 8 +
+  prof + CON mod) + applies the lightning save-for-half via
+  `_apply_damage_to_combatant`; **Tundra** grants the flat `2 + tiers` temp
+  HP via `_grant_temp_hp`. Surfaces `save_total`/`save_passed`/
+  `damage_applied`/`temp_hp_applied`; announce-only without a target. Harness:
+  `test_storm_aura.py` (+3).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

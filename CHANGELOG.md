@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.677.0] - 2026-06-26 — "The Roaming Tempest"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — resolve Storm Aura's Sea (Dex-save lightning) + Tundra (temp HP) single-target choices server-side (Storm Herald Barbarian).
+
+**Description:** `use_storm_aura` (XGE p.10) already auto-ticks the **Desert** environment as an aura (v2.99.426), but the two single-target choices stayed announce-only. They now resolve server-side when a `target_combatant_id` is supplied: **Sea** rolls the target's Dexterity save (same NPC-via-template / PC-via-sheet resolution as Wrath of the Storm) and applies the lightning **save-for-half** (full on a fail, half on a success) via `_apply_damage_to_combatant` (`is_magical=True`); **Tundra** grants the flat `2 + tiers` temp HP via `_grant_temp_hp`. The Sea save DC is `8 + prof + CON mod` (RAW). The response/broadcast gain `target_combatant_id` / `save_total` / `save_passed` / `damage_applied` / `temp_hp_applied`. Backward-compatible: no `target_combatant_id` leaves Sea/Tundra announce-only; Desert is unchanged.
+
+### Added
+- `tests/harness/test_storm_aura.py` (+3) — `test_sa_sea_applies_lightning_to_target` (templated bandit → `save_total`/`save_passed` set, `damage_applied` == full on fail / half on success), `test_sa_tundra_applies_temp_hp` (NPC target → `temp_hp_applied == 2`), `test_sa_sea_no_target_announce_only` (no target → apply fields stay None).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_storm_aura` resolves the Sea DEX save + applies the lightning, and grants the Tundra temp HP; surfaces the apply fields and accepts `target_combatant_id`.
+- `docs/automation-coverage.md` — `use_storm_aura` note updated (sea/tundra single-target apply alongside the desert aura).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Storm Aura (sea + tundra).
+- `docs/test-harness-coverage.md` — catalog the test file (was previously uncatalogued).
+
+### Schema
+- No schema change (still v81).
+
 ## [2.676.0] - 2026-06-26 — "The Necrotic Bloom"
 
 **Schema version:** 81

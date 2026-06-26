@@ -7,9 +7,11 @@ creature in the aura takes fire damage), Sea (one creature makes a
 DEX save or takes lightning), or Tundra (one creature gains temp
 HP). Magnitudes scale at Lv 10/15/20.
 
-v1 announce-only — the aura targeting + saves + HP/damage
-application are GM-tracked. The Sea lightning is rolled
-server-side. No action cost.
+The Sea lightning is rolled server-side. No action cost. Desert
+installs an auto-tick aura (v2.99.426). **v2.677.0 (Phase 8):** with
+a `target_combatant_id`, sea resolves the target's DEX save + applies
+the lightning (full on fail, half on success), and tundra grants the
+temp HP via `_grant_temp_hp`; without a target both stay announce-only.
 
 Krieger Stonefist (Barbarian, PATCHed to Path of the Storm Herald
 Lv 7) is the demo fixture (base magnitudes — no tier bumps).
@@ -17,6 +19,10 @@ Lv 7) is the demo fixture (base magnitudes — no tier bumps).
 Tests:
   - Lv 7 happy (default desert): fire 2, aura 10 ft.
   - Lv 7 happy (sea): lightning 1d6 in [1,6], DEX save.
+  - Desert installs aura + ticks fire (v2.99.426).
+  - Sea apply: templated bandit → DEX save rolled + lightning applied.
+  - Tundra apply: NPC target → temp_hp_applied == 2.
+  - Announce-only: sea, no target → save/damage fields None.
   - Wrong subclass (default Berserker) → 409.
   - Invalid environment → 400.
 """
@@ -137,6 +143,93 @@ def _npc(cid, name, hp=30):
         "economy": {"action": False, "bonus": False,
                     "reaction": False, "movement": 0},
     }
+
+
+async def test_sa_sea_applies_lightning_to_target(
+    gm_client, krieger_storm,
+):
+    """v2.677.0 — Phase 8: sea now rolls a templated NPC target's DEX save +
+    applies the 1d6 lightning (save-for-half). Seed Krieger + a real bandit
+    template, assert the applied amount matches the outcome."""
+    krieger = krieger_storm
+    templates = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/templates")).json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": f"tok_sa_k_{krieger['id']}", "char_id": krieger["id"],
+             "name": krieger["name"], "initiative": 20,
+             "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": "tok_sa_sea", "char_id": None,
+             "token_template_id": bandit["id"], "name": bandit["name"],
+             "initiative": 5, "hp_current": 50, "hp_max": 50, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_storm_aura",
+        json={"character_id": krieger["id"], "environment": "sea",
+              "target_combatant_id": "tok_sa_sea"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["save_total"] is not None, data
+    assert isinstance(data["save_passed"], bool), data
+    full = data["lightning_damage"]
+    expected = (full // 2) if data["save_passed"] else full
+    assert data["damage_applied"] == expected, data
+
+
+async def test_sa_tundra_applies_temp_hp(
+    gm_client, krieger_storm,
+):
+    """v2.677.0 — Phase 8: tundra now grants the temp HP to the target via
+    `_grant_temp_hp`. Lv 7 → temp HP = 2 + 0 tiers = 2, fresh NPC → applied
+    in full."""
+    krieger = krieger_storm
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": f"tok_sa_kt_{krieger['id']}", "char_id": krieger["id"],
+             "name": krieger["name"], "initiative": 20,
+             "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            _npc("tok_sa_tundra", "Ally"),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_storm_aura",
+        json={"character_id": krieger["id"], "environment": "tundra",
+              "target_combatant_id": "tok_sa_tundra"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["temp_hp"] == 2
+    assert data["temp_hp_applied"] == 2, data
+
+
+async def test_sa_sea_no_target_announce_only(
+    gm_client, krieger_storm,
+):
+    """v2.677.0 — sea with no target → backward-compatible announce-only."""
+    krieger = krieger_storm
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_storm_aura",
+        json={"character_id": krieger["id"], "environment": "sea"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["save_total"] is None
+    assert data["damage_applied"] is None
+    assert data["temp_hp_applied"] is None
 
 
 async def test_sa_desert_installs_aura_and_ticks_fire(
