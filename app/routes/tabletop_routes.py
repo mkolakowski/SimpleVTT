@@ -94001,6 +94001,29 @@ async def use_blade_flourish(
             campaign_id, char.id, _bf_buff,
         )
 
+    # v2.667.0 — Phase 8: mechanize the +10 ft walking-speed bonus (was
+    # announce-only). RAW XGE p.16: "On your turn, when you take the Attack
+    # action, your walking speed increases by 10 feet until the end of the
+    # turn." Applies regardless of which flourish is chosen (it rides the
+    # Attack action, not the flourish option). Installs a 1-round
+    # `blade-flourish-speed-active` buff carrying `effects.speed_bonus_ft`,
+    # which the `effective_speed_walk` engine adds to the move cap (the same
+    # substrate Longstrider / Eagle Totem use). Idempotent on re-press.
+    speed_buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "blade-flourish-speed-active",
+        "name": "⚔️ Blade Flourish (speed)",
+        "icon": "💨",
+        "duration_rounds": 1,
+        "duration_max": 1,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {"speed_bonus_ft": walking_speed_bonus_ft},
+        "desc": (
+            f"+{walking_speed_bonus_ft} ft walking speed until end of turn "
+            f"(Blade Flourish, Swords Bard Lv {bard_lv})."
+        ),
+    })
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -94046,6 +94069,7 @@ async def use_blade_flourish(
             "flourish": flourish,
             "target_combatant_id": target_combatant_id,
             "walking_speed_bonus_ft": walking_speed_bonus_ft,
+            "speed_buff_installed": speed_buff_installed,
             "consumed_bardic_inspiration": True,
             "bard_level": bard_lv,
             "die_expression": f"1d{die_size}",
@@ -94068,6 +94092,7 @@ async def use_blade_flourish(
         "flourish": flourish,
         "target_combatant_id": target_combatant_id,
         "walking_speed_bonus_ft": walking_speed_bonus_ft,
+        "speed_buff_installed": speed_buff_installed,
         "consumed_bardic_inspiration": True,
         "bard_level": bard_lv,
         "die_expression": f"1d{die_size}",

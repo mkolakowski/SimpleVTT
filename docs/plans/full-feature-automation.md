@@ -490,6 +490,14 @@ composition. Batch by class, same cadence as the breadth sweep.
   Warding, Fancy Footwork, Relentless Avenger, Unwavering Mark, Order's
   Wrath, Improved Duplicity all already mechanized) — re-run the classifier
   before trusting the announce-only counts.
+- **v2.667.0 ("The Quickened Blade") — Blade Flourish speed bonus** (Swords
+  College Bard Lv 3+): `use_blade_flourish` already installed the Defensive
+  Flourish AC self-buff (v2.158.66); the +10 ft walking-speed bonus was still
+  announce-only. Now installs a 1-round `blade-flourish-speed-active` buff with
+  `effects.speed_bonus_ft: 10` that the `effective_speed_walk` engine adds to
+  the move cap (reuses the Longstrider/Eagle-Totem substrate — zero new engine
+  code). Flourish-agnostic (rides the Attack action). Harness:
+  `test_blade_flourish.py::test_bf_installs_speed_bonus_buff`.
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

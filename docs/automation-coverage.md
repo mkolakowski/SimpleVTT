@@ -350,7 +350,7 @@ or passive damage-boosters that already ride other code paths
 | `use_awakened_mind` | ⚪ announce-only | — |
 | `use_beast_speech` | ⚪ announce-only | — |
 | `use_beguiling_influence` | ⚪ announce-only | — |
-| `use_blade_flourish` | ⚪ announce-only | — |
+| `use_blade_flourish` | ✅ tracked | Defensive Flourish AC self-buff v2.158.66; +10 ft walking-speed `speed_bonus_ft` buff v2.667.0 (rides `effective_speed_walk`) |
 | `use_bonus_cantrip` | ⚪ announce-only | — |
 | `use_combat_inspiration` | ⚪ announce-only | — |
 | `use_dash` | ⚪ announce-only | — |

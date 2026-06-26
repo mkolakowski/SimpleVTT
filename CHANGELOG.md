@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.667.0] - 2026-06-26 — "The Quickened Blade"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — mechanize Blade Flourish's +10 ft walking-speed bonus (Swords College Bard) via the existing `speed_bonus_ft` substrate.
+
+**Description:** Continues the Phase 8 tail. `use_blade_flourish` already mechanized the Defensive Flourish AC self-buff (v2.158.66) but the **+10 ft walking-speed bonus** (RAW XGE p.16: "on your turn when you take the Attack action, your walking speed increases by 10 ft until the end of the turn") was still announce-only. It now installs a 1-round `blade-flourish-speed-active` buff carrying `effects.speed_bonus_ft: 10`, which the `effective_speed_walk` engine adds to the bard's move cap — the same substrate Longstrider / Eagle Totem use (verify-substrate: reused, zero new engine code). The bonus rides the Attack action, so it installs regardless of the chosen flourish option (Defensive / Slashing / Mobile). Idempotent on re-press; surfaced as `speed_buff_installed` on the response + broadcast.
+
+### Added
+- `tests/harness/test_blade_flourish.py::test_bf_installs_speed_bonus_buff` — a Mobile flourish (no target) installs the 1-round `blade-flourish-speed-active` buff with `speed_bonus_ft: 10` (battle-seeded so `_install_buff` lands; pre-clears + cleans up the buff; flourish-agnostic).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_blade_flourish` installs the speed-bonus buff (was announce-only for the +10 ft) + surfaces `speed_buff_installed`.
+- `docs/automation-coverage.md` — `use_blade_flourish` flipped ⚪ announce-only → ✅ tracked (AC self-buff v2.158.66 + speed buff v2.667.0).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Blade Flourish speed bonus.
+- `docs/test-harness-coverage.md` — catalog the new test.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.666.1] - 2026-06-26 — "The Painted Pills"
 
 **Schema version:** 81

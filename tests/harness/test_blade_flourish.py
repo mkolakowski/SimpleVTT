@@ -113,6 +113,65 @@ async def test_use_bf_mobile(
     assert data["flourish"] == "mobile"
 
 
+async def test_bf_installs_speed_bonus_buff(
+    gm_client, lyra_swords,
+):
+    """v2.667.0 — Phase 8: Blade Flourish's +10 ft walking-speed bonus is now
+    mechanized (was announce-only). Using the flourish installs a 1-round
+    `blade-flourish-speed-active` buff carrying `effects.speed_bonus_ft: 10`,
+    which the `effective_speed_walk` engine adds to the move cap (same
+    substrate Longstrider uses). Applies regardless of the flourish option.
+
+    Seeds a battle with Lyra because `_install_buff` requires an active battle
+    (returns False otherwise); pre-clears the buff for order-independence."""
+    lyra = lyra_swords
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [{
+                "id": f"tok_bf_{lyra['id']}", "char_id": lyra["id"],
+                "name": lyra["name"], "initiative": 11,
+                "hp_current": 40, "hp_max": 40, "buffs": [],
+                "economy": {"action": False, "bonus": False,
+                            "reaction": False, "movement": 0},
+            }],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+        json={"character_id": lyra["id"],
+              "key": "blade-flourish-speed-active"},
+    )
+    # mobile flourish (no target) — proves the speed buff is flourish-agnostic.
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_blade_flourish",
+        json={"character_id": lyra["id"], "flourish": "mobile"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json().get("speed_buff_installed") is True
+    buffs = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{lyra['id']}/buffs"
+    )).json().get("buffs", [])
+    sp = next(
+        (b for b in buffs if b.get("key") == "blade-flourish-speed-active"),
+        None,
+    )
+    assert sp is not None, (
+        f"blade-flourish-speed-active buff missing; got keys="
+        f"{[b.get('key') for b in buffs]}"
+    )
+    assert (sp.get("effects") or {}).get("speed_bonus_ft") == 10
+    # 1-round duration (until end of turn) — not a permanent passive.
+    assert int(sp.get("duration_rounds") or 0) == 1
+    assert sp.get("concentration") in (False, None)
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+        json={"character_id": lyra["id"],
+              "key": "blade-flourish-speed-active"},
+    )
+
+
 async def test_use_bf_wrong_subclass(
     gm_client, roster,
 ):
