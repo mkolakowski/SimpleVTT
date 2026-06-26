@@ -630,6 +630,14 @@ composition. Batch by class, same cadence as the breadth sweep.
   Unholy shape, ends on damage so `repeated_save=False`) on a fail. The
   fey/fiend creature-type filter stays GM-tracked. Surfaces `feature_saves`
   (one per target). Harness: `test_turn_the_faithless.py` (+1).
+- **v2.683.0 ("The Menacing Glare") — Intimidating Presence** (Berserker
+  Barbarian Lv 10+): `use_intimidating_presence` now accepts an optional
+  `target_combatant_id` and resolves the target's WIS save via
+  `_resolve_feature_save` (NPC inline, PC via RollRequest), installing
+  Frightened on a fail (short fixed duration — RAW "until the end of your next
+  turn" — so `repeated_save=False`). The free-form `target_name` label still
+  drives the announce-only path. Surfaces `feature_save`. Harness:
+  `test_berserker_path.py` (+1).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

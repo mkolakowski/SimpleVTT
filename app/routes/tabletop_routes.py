@@ -61691,16 +61691,22 @@ async def use_intimidating_presence(
     + your Charisma modifier) or be frightened of you until the
     end of your next turn..."
 
-    Body: ``{character_id, target_name?, override?}``.
+    Body: ``{character_id, target_combatant_id?, target_name?,
+    override?}``.
 
     Validates Berserker Barbarian Lv 10+ + Phase 4 action chip.
-    Computes DC = 8 + prof + CHA mod. Marks the action chip +
-    broadcasts the DC for the GM to roll the target's Wis save
-    manually. v1 ships as announce-only — the actual Frightened
-    install on save-fail is the GM's call.
+    Computes DC = 8 + prof + CHA mod. v2.683.0 (Phase 8): when a
+    ``target_combatant_id`` is supplied, the target's Wisdom save is
+    resolved server-side via `_resolve_feature_save` — an NPC saves
+    inline (install Frightened on a fail), a PC is prompted via a
+    RollRequest. RAW the fear lasts "until the end of your next turn"
+    (a short fixed duration, no end-of-turn re-save). Without a
+    ``target_combatant_id`` it stays announce-only (free-form
+    ``target_name`` label only).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
+    target_combatant_id = (str(body.get("target_combatant_id") or "")).strip()
     target_name = (str(body.get("target_name") or "")).strip()[:80]
     override = bool(body.get("override"))
     if char_id <= 0:
@@ -61783,12 +61789,51 @@ async def use_intimidating_presence(
         },
     })
 
+    # v2.683.0 — Phase 8: resolve the target's WIS save + install Frightened on
+    # a fail via `_resolve_feature_save` (the Abjure Enemy substrate). NPC saves
+    # inline; a PC is prompted via RollRequest. RAW Berserker IP frightens
+    # "until the end of your next turn" — a short fixed duration, NO end-of-turn
+    # re-save (repeated_save=False). Backward-compatible: no target_combatant_id
+    # → announce-only (free-form target_name label only).
+    feature_save = None
+    if target_combatant_id:
+        _ip_target = _lookup_combatant(campaign_id, target_combatant_id)
+        if _ip_target is not None:
+            frightened_buff = {
+                "key": "frightened",
+                "name": "Frightened (Intimidating Presence)",
+                "icon": "😨",
+                "duration_rounds": 2,
+                "duration_max": 2,
+                "concentration": False,
+                "source_spell": "Intimidating Presence",
+                "effects": [
+                    "disadvantage on ability checks / attacks while the "
+                    "source is in sight",
+                    "can't willingly move closer to the source",
+                ],
+            }
+            feature_save = await _resolve_feature_save(
+                db, campaign_id,
+                caster_char_id=char.id, caster_char_name=char.name,
+                target_combatant=_ip_target,
+                save_ability="WIS", dc=dc,
+                note_label=f"Intimidating Presence save (DC {dc})",
+                condition_buff=frightened_buff,
+                repeated_save=False,
+                source="intimidating-presence",
+                campaign=campaign,
+                prompt_user=user,
+                feature_name="Intimidating Presence",
+            )
+
     return {
         "ok": True,
         "feature": "intimidating-presence",
         "dc": dc,
         "target_name": target_name,
         "over_budget": was_used,
+        "feature_save": feature_save,
     }
 
 

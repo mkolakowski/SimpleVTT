@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.683.0] - 2026-06-26 — "The Menacing Glare"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — resolve Intimidating Presence's WIS save + install Frightened server-side (Berserker Barbarian).
+
+**Description:** `use_intimidating_presence` (PHB p.49) computed the save DC + broadcast it but the GM rolled the target's Wisdom save and installed Frightened by hand. The endpoint now accepts an optional `target_combatant_id`; when supplied, the target's save is resolved server-side via `_resolve_feature_save` (the Abjure Enemy substrate) — an **NPC** saves inline (install the Frightened condition on a fail) and a **PC** is prompted via a `RollRequest`. RAW the Berserker fear lasts "until the end of your next turn" — a short fixed duration, so **no end-of-turn re-save** (`repeated_save=False`). The free-form `target_name` label continues to work for the announce-only path. The response gains `feature_save`. Backward-compatible: no `target_combatant_id` stays announce-only.
+
+### Added
+- `tests/harness/test_berserker_path.py::test_ip_resolves_save_and_installs_frightened` (+1) — Krieger PATCH'd to Lv 10 + a real bandit *template* target, then asserts `feature_save.resolved is True`, `passed` is a bool, and `condition_installed == (not passed)` with `condition_key == "frightened"` on a fail.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_intimidating_presence` resolves the WIS save + installs Frightened via `_resolve_feature_save`; surfaces `feature_save` and accepts `target_combatant_id`.
+- `docs/automation-coverage.md` — `use_intimidating_presence` note updated (save resolved + Frightened installed server-side).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Intimidating Presence.
+- `docs/test-harness-coverage.md` — catalog the new test.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.682.0] - 2026-06-26 — "The Faithless Routed"
 
 **Schema version:** 81

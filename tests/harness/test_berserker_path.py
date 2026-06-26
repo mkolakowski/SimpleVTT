@@ -15,6 +15,12 @@ v1 ships:
   - /use_intimidating_presence: validates Berserker Lv 10+ +
     action chip; computes DC; announces.
 
+**v2.683.0 (Phase 8):** Intimidating Presence now resolves the
+target's WIS save server-side via `_resolve_feature_save` when a
+`target_combatant_id` is supplied — an NPC saves inline (install
+Frightened on a fail), a PC is prompted via a RollRequest; no target
+id → announce-only (free-form `target_name` label only).
+
 Krieger Stonefist (Barbarian Path of the Berserker Lv 7
 default) is the demo fixture. The IP test PATCHes him Lv 7 →
 10.
@@ -24,6 +30,7 @@ Tests:
   - Frenzy without rage → 409 not_raging.
   - Frenzy wrong-class → 409 wrong_subclass_or_level.
   - Intimidating Presence at Lv 10 → 200 with DC.
+  - IP apply: templated NPC → WIS save resolved + Frightened on a fail.
   - Intimidating Presence level gate (Lv 7) → 409.
 """
 import asyncio
@@ -169,6 +176,63 @@ async def test_use_intimidating_presence_at_lv10(
     finally:
         await _patch_sheet(
             gm_client, krieger["id"], {"level": pre_level},
+            class_slug="barbarian",
+        )
+
+
+async def test_ip_resolves_save_and_installs_frightened(
+    gm_client, roster,
+):
+    """v2.683.0 — Phase 8: with a `target_combatant_id`, a templated NPC has
+    its WIS save rolled inline + Frightened installed on a fail via
+    `_resolve_feature_save`. Krieger Lv 10 + a real bandit template."""
+    krieger = roster["Krieger Stonefist"]
+    await _patch_sheet(
+        gm_client, krieger["id"], {"level": 10},
+        class_slug="barbarian",
+    )
+    try:
+        templates = (await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/templates")).json()
+        bandit = next(
+            (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+            templates[0],
+        )
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/battle",
+            json={"combatants": [
+                {"id": f"tok_ip_{krieger['id']}", "char_id": krieger["id"],
+                 "name": krieger["name"], "initiative": 15,
+                 "hp_current": 55, "hp_max": 55, "buffs": [],
+                 "economy": {"action": False, "bonus": False,
+                             "reaction": False, "movement": 0}},
+                {"id": "tok_ip_bandit", "char_id": None,
+                 "token_template_id": bandit["id"], "name": bandit["name"],
+                 "initiative": 8, "hp_current": 50, "hp_max": 50, "buffs": [],
+                 "economy": {"action": False, "bonus": False,
+                             "reaction": False, "movement": 0}},
+            ], "turn_index": 0, "round": 1, "active": True},
+        )
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_intimidating_presence",
+            json={
+                "character_id": krieger["id"],
+                "target_combatant_id": "tok_ip_bandit",
+                "override": True,
+            },
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        fs = data["feature_save"]
+        assert fs is not None, data
+        assert fs["resolved"] is True, fs
+        assert isinstance(fs["passed"], bool), fs
+        assert fs["condition_installed"] == (not fs["passed"]), fs
+        if fs["condition_installed"]:
+            assert fs["condition_key"] == "frightened", fs
+    finally:
+        await _patch_sheet(
+            gm_client, krieger["id"], {"level": 7},
             class_slug="barbarian",
         )
 

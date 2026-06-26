@@ -244,7 +244,7 @@ or passive damage-boosters that already ride other code paths
 | `use_indomitable_reroll` | ✅ tracked | A use/resource |
 | `use_insightful_fighting` | ✅ tracked | A use/resource |
 | `use_inspiring_smite` | ✅ tracked | F temp-HP |
-| `use_intimidating_presence` | ✅ tracked | A use/resource |
+| `use_intimidating_presence` | ✅ tracked | v2.683.0 — with `target_combatant_id`, resolves the target's WIS save via `_resolve_feature_save` (NPC inline, PC via RollRequest) + installs Frightened (short fixed duration, no re-save) on a fail; announce-only without a target |
 | `use_invincible_conqueror` | ✅ tracked | A use/resource |
 | `use_item` | ✅ tracked | heal/damage |
 | `use_keeper_of_souls` | ✅ tracked | D buff-install (watcher flag, Phase 1) |
