@@ -1,0 +1,45 @@
+{
+  "slug": "forest-gnome",
+  "name": "Forest Gnome",
+  "ability_bonuses": [
+    {
+      "attribute": "Intelligence",
+      "bonus": 2
+    },
+    {
+      "attribute": "Dexterity",
+      "bonus": 1
+    }
+  ],
+  "size": "Small",
+  "speed": 25,
+  "age": "Gnomes mature at the same rate humans do, and most are expected to settle into adult life around the age of 40. They can live 350 to almost 500 years.",
+  "alignment": "Gnomes are most often good. Those who tend toward law are sages, engineers, researchers, scholars, investigators, or inventors. Those who tend toward chaos are minstrels, tricksters, wanderers, or fanciful jewelers. Gnomes are good-hearted, and even the tricksters among them are more playful than vicious.",
+  "languages": "You can speak, read, and write Common and Gnomish.",
+  "traits": [
+    {
+      "name": "Darkvision",
+      "level": null,
+      "desc": "Accustomed to life underground, you have superior vision in dark and dim conditions. You can see in dim light within 60 feet of you as if it were bright light, and in darkness as if it were dim light. You can't discern color in darkness, only shades of gray."
+    },
+    {
+      "name": "Gnome Cunning",
+      "level": null,
+      "desc": "You have advantage on all Intelligence, Wisdom, and Charisma saving throws against magic."
+    },
+    {
+      "name": "Natural Illusionist",
+      "level": null,
+      "desc": "You know the minor illusion cantrip. Intelligence is your spellcasting ability for it."
+    },
+    {
+      "name": "Speak with Small Beasts",
+      "level": null,
+      "desc": "Through sounds and gestures, you can communicate simple ideas with Small or smaller beasts."
+    }
+  ],
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a), via the Open5e API (open5e.com, CC BY 4.0). Mechanical summaries shipped as descriptive trait cards; not a verbatim copy of the SRD prose. See CREDITS.md."
+}

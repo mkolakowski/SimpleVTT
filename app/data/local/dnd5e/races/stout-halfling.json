@@ -1,0 +1,54 @@
+{
+  "slug": "stout-halfling",
+  "name": "Stout Halfling",
+  "ability_bonuses": [
+    {
+      "attribute": "Dexterity",
+      "bonus": 2
+    },
+    {
+      "attribute": "Constitution",
+      "bonus": 1
+    }
+  ],
+  "size": "Small",
+  "speed": 25,
+  "age": "A halfling reaches adulthood at the age of 20 and generally lives into the middle of his or her second century.",
+  "alignment": "Most halflings are lawful good. As a rule, they are good-hearted and kind, hate to see others in pain, and have no tolerance for oppression.",
+  "languages": "You can speak, read, and write Common and Halfling.",
+  "traits": [
+    {
+      "name": "Lucky",
+      "level": null,
+      "desc": "When you roll a 1 on the d20 for an attack roll, ability check, or saving throw, you can reroll the die and must use the new roll."
+    },
+    {
+      "name": "Brave",
+      "level": null,
+      "desc": "You have advantage on saving throws against being frightened."
+    },
+    {
+      "name": "Halfling Nimbleness",
+      "level": null,
+      "desc": "You can move through the space of any creature that is of a size larger than yours."
+    },
+    {
+      "name": "Stout Resilience",
+      "level": null,
+      "desc": "You have advantage on saving throws against poison, and you have resistance against poison damage."
+    }
+  ],
+  "actions": [
+    {
+      "id": "lucky-reroll",
+      "name": "Lucky",
+      "desc": "When you roll a 1 on the d20 for an attack roll, ability check, or saving throw, you may reroll the die and must use the new roll.",
+      "category": "passive",
+      "reroll_trigger": "d20_natural_1"
+    }
+  ],
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a), via the Open5e API (open5e.com, CC BY 4.0). Mechanical summaries shipped as descriptive trait cards; not a verbatim copy of the SRD prose. See CREDITS.md."
+}

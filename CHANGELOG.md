@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.654.0] - 2026-06-25 — "The Missing Kin"
+
+**Schema version:** 81
+
+**Commit summary:** Ship the **5 SRD 5.1 subraces** that were missing from the shipped content tier — Mountain Dwarf, Wood Elf, Forest Gnome, Stout Halfling, and Drow (Dark Elf) — so the SRD race roster is actually complete and ~7 more demo PCs seed their race traits offline.
+
+**Description:** The shipped SRD tier carried only **9** race files (`dragonborn, half-elf, half-orc, high-elf, hill-dwarf, human, lightfoot-halfling, rock-gnome, tiefling`) — exactly **one subrace per base race**. SRD 5.1 actually defines the other subraces too, and the TODO audit's "Races | 9 | ✅ 100%" was misleading: it counted the 9 shipped races' *traits* as fully automated, not the *roster* as complete. This adds the 5 missing SRD subraces as shipped global content (each with `source: "srd"`, `scope: "global"`, SRD/Open5e `_attribution`, and correct SRD 5.1 mechanics — e.g. Mountain Dwarf's Dwarven Armor Training + STR+2, Wood Elf's Fleet of Foot + Mask of the Wild + 35-ft speed, Forest Gnome's Natural Illusionist + Speak with Small Beasts, Stout Halfling's Stout Resilience, Drow's Superior Darkvision + Sunlight Sensitivity + Drow Magic). With these, the demo PCs on Mountain Dwarf (Thorin), Wood Elf (Mira, Kael, Nyx, Vesh), and Forest Gnome (Aldric, Wisp) now backfill race traits offline via `apply_srd_features` (v2.653.0). The genuinely-non-SRD demo races (Variant Human, Firbolg, Goliath, Aasimar, Water Genasi) remain correctly absent from the shipped tier — those belong to the homebrew tier. The provenance completeness floor is bumped **9 → 14** so this content can't silently regress, and the TODO SRD audit's race line is corrected.
+
+### Added
+- `app/data/local/dnd5e/races/{mountain-dwarf,wood-elf,forest-gnome,stout-halfling,drow}.json` — the 5 SRD 5.1 subraces, SRD-attributed.
+
+### Changed
+- `tests/harness/test_srd_provenance.py` — races completeness floor `9 → 14`.
+- `TODO.md` — corrected the SRD audit's race count/wording (9 → 14; the "100%" was trait-automation coverage, not roster completeness).
+
+### Schema
+- No schema change (still v81) — content files, no migration.
+
+**Harness:** `tests/harness/test_demo_features.py` (+2) — the 5 new subraces resolve from the shipped SRD tier (`local-srd`) with their signature subrace traits; a Wood Elf demo PC now seeds `race_trait_items` (Fleet of Foot + Mask of the Wild). `test_srd_provenance.py` validates the 5 new files carry SRD provenance + the floor of 14.
+
 ## [2.653.1] - 2026-06-25 — "The Class Roll"
 
 **Schema version:** 81

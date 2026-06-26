@@ -27,7 +27,7 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 
 ## SRD 5e Audit (v2.553.0 refresh)
 
-> **Re-verified + re-scored 2026-06-22 (v2.565.1).** Denominators confirmed directly against `app/data/local/dnd5e/`: **319 spells, 322 monsters, 9 races, 15 conditions, 294 equipment (239 magic items), 12 class-feature + 13 subclass-feature files (222 per-row entries)**. A `git diff` of `app/data/local/dnd5e/` **and** `app/routes/tabletop_routes.py` from the v2.553.1 audit (78ea2cc3) to HEAD is **empty** — the entire interim (v2.554.0–v2.565.1) was the Notes & Handouts feature, which touches no SRD content or spell engine.
+> **Re-verified + re-scored 2026-06-22 (v2.565.1).** Denominators confirmed directly against `app/data/local/dnd5e/`: **319 spells, 322 monsters, 14 races, 15 conditions, 294 equipment (239 magic items), 12 class-feature + 13 subclass-feature files (222 per-row entries)**. A `git diff` of `app/data/local/dnd5e/` **and** `app/routes/tabletop_routes.py` from the v2.553.1 audit (78ea2cc3) to HEAD is **empty** — the entire interim (v2.554.0–v2.565.1) was the Notes & Handouts feature, which touches no SRD content or spell engine.
 >
 > **Scoring rubric change (2026-06-22): GM-narrated resolution counts as completed.** In a VTT the GM is the rules authority, so a spell/condition/feature whose resolution is *adjudicated at the table* is **supported**, not a gap — the cast endpoint spends the slot + broadcasts, and the GM narrates the spatial/scrying/object outcome. Under this "supported (automated **or** GM-narrated)" rubric the SRD ruleset is **functionally complete: every category sits at 100%, overall 100%.** The per-category table below uses the older *mechanically-automated-only* scoring (Spells ~93%, Conditions ~92%); the difference between those numbers and 100% is exactly the GM-narrated remainder — the 40,000-sq-ft zone geometry (Forbiddance / Antilife Shell / Globe), remote scrying views (Clairvoyance / Arcane Eye / Project Image), object triggers (Magic Mouth / Illusory Script), and the permanently-narrated condition clauses (Charmed / Grappled / Deafened). All of those are now considered **done** (GM-narrated). Mechanically automating the spatial/scrying remainder (Maps 2.0 geometry, a remote-sensor surface) is an **optional future enhancement**, not missing SRD coverage. What genuinely remains un-built is only **out-of-SRD-scope** content (Tasha's / Xanathar's-beyond-SRD / 2024 rules / Mythic Actions — future-3.x).
 >
@@ -58,7 +58,7 @@ The v2.437.0 → v2.502.0 arc (tail #1–#35) is documented in the [v2.502.0 ref
 
 | Category | SRD count | Automated | Notes |
 |---|---|---|---|
-| Races | 9 | **✅ ~100%** | Unchanged. |
+| Races | 14 | **✅ ~100%** | v2.654.0: added the 5 SRD 5.1 subraces missing from the shipped tier (Mountain Dwarf, Wood Elf, Forest Gnome, Stout Halfling, Drow). The prior "9 = 100%" counted the 9 shipped races' traits as fully automated, but the SRD subrace roster was incomplete — only one subrace per base race shipped. Completeness floor bumped 9→14. |
 | Monsters | 322 | **✅ ~100%** | Unchanged. |
 | Conditions | 15 | **~92%** automated · **100% supported** | The ~8% is the permanently-GM-narrated clauses (Charmed / Grappled / Deafened) — **counted done** under the 2026-06-22 rubric. |
 | Class features | **222 rows** | **✅ 100%** | Unchanged. |

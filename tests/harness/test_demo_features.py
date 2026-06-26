@@ -44,7 +44,10 @@ def test_per_field_partial_coverage():
 
 
 def test_non_srd_combo_left_empty():
-    s = _apply("Fighter", "Battle Master", "Mountain Dwarf")  # neither SRD
+    # Firbolg is genuinely non-SRD (homebrew tier only); Battle Master too.
+    # (Mountain Dwarf moved into the SRD tier in v2.654.0, so it no longer
+    # works as a "non-SRD race" example.)
+    s = _apply("Fighter", "Battle Master", "Firbolg")
     assert not (s.get("subclass_features") or [])
     assert not (s.get("race_trait_items") or [])
 
@@ -81,3 +84,30 @@ def test_class_features_not_overwritten():
     assert s["class_features"] == [{"key": "cunning-action",
                                     "name": "Cunning Action", "desc": "curated"}], \
         "must not overwrite a curated class_features list"
+
+
+def test_newly_shipped_srd_subraces_resolve():
+    # v2.654.0 — the 5 SRD 5.1 subraces missing from the shipped tier
+    # (Mountain Dwarf, Wood Elf, Forest Gnome, Stout Halfling, Drow) now
+    # ship, so demo PCs on them seed race traits offline.
+    from app import local_features as lf
+    expected = {
+        "mountain-dwarf": "Dwarven Armor Training",
+        "wood-elf": "Mask of the Wild",
+        "forest-gnome": "Natural Illusionist",
+        "stout-halfling": "Stout Resilience",
+        "drow": "Drow Magic",
+    }
+    for slug, signature in expected.items():
+        rec, src = lf.resolve_race(slug, scopes=["global"])
+        assert rec, f"{slug} should ship in the SRD tier"
+        assert src == "local-srd", f"{slug} must resolve from shipped SRD, got {src}"
+        names = [t.get("name") for t in rec.get("traits") or []]
+        assert signature in names, f"{slug} missing subrace trait {signature!r}: {names}"
+
+
+def test_wood_elf_demo_pc_now_seeds_race_traits():
+    # Mira / Kael / Nyx / Vesh are Wood Elf — previously empty, now filled.
+    s = _apply("Druid", "Circle of the Moon", "Wood Elf")
+    names = [t.get("name") for t in s.get("race_trait_items") or []]
+    assert "Fleet of Foot" in names and "Mask of the Wild" in names, names
