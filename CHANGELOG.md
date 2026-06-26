@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.655.1] - 2026-06-25 — "The Naturalized Citizens"
+
+**Schema version:** 81
+
+**Commit summary:** Re-stat the last 5 demo PCs on non-SRD races onto thematically-fitting SRD races, so **all 40 demo PCs now seed race traits offline** (35→40).
+
+**Description:** After the SRD-race build-out (v2.654.0 subraces + v2.655.0 SRD 5.2 species), 5 demo PCs still had blank race traits because their races are in *no* SRD: Brother Tym (Water Genasi), Oakheart Mossbrook + Thornroot Elder (Firbolg), plus two precision cases — Pip Quickfingers and Thalindra Moonwhisper were seeded on the *base* race names "Halfling"/"Elf", which only ship as subraces. This swaps each onto a fitting SRD race: **Pip → Lightfoot Halfling** (Naturally Stealthy suits the rogue), **Thalindra → High Elf** (Cantrip + INT suits the wizard), **Oakheart → Wood Elf** and **Tym → Wood Elf** (forest mobility for the moon druid + open-hand monk), **Thornroot → Hill Dwarf** (WIS + Dwarven Toughness for the elder druid). The PCs keep their existing ability scores and flavor names (only the `race` label + seeded trait cards change). Demo-data-only — no endpoint, content file, or schema change (harness-test-exempt). With this, race-trait seed coverage is **40/40**, and the only non-SRD races left anywhere are in the campaign/operator homebrew tier where they belong.
+
+### Changed
+- `app/demo_seed.py` — Pip "Halfling" → "Lightfoot Halfling"; Thalindra "Elf" → "High Elf".
+- `app/demo_campaigns.py` — Oakheart "Firbolg" → "Wood Elf"; Brother Tym "Water Genasi" → "Wood Elf"; Thornroot "Firbolg" → "Hill Dwarf".
+
+### Schema
+- No schema change (still v81).
+
 ## [2.655.0] - 2026-06-25 — "The Celestial Loophole"
 
 **Schema version:** 81

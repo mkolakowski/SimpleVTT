@@ -256,7 +256,7 @@ _STORM_SALTMARSH = {
                 "Bardic Inspiration d8 keeps the front line swinging."),
         )},
         {"owner": "erin", "name": "Oakheart Mossbrook", "sheet": dict(
-            klass="Druid", subclass="Circle of the Moon", race="Firbolg", level=9,
+            klass="Druid", subclass="Circle of the Moon", race="Wood Elf", level=9,
             abilities={"STR": 12, "DEX": 13, "CON": 16, "INT": 10, "WIS": 18, "CHA": 11},
             ac=15, hp_max=70,
             attacks=[
@@ -305,7 +305,7 @@ _STORM_SALTMARSH = {
                 "Vow of Enmity advantage. Two attacks, then smite the hit."),
         )},
         {"owner": "gm2", "name": "Brother Tym", "sheet": dict(
-            klass="Monk", subclass="Way of the Open Hand", race="Water Genasi", level=9,
+            klass="Monk", subclass="Way of the Open Hand", race="Wood Elf", level=9,
             abilities={"STR": 12, "DEX": 18, "CON": 14, "INT": 10, "WIS": 16, "CHA": 9},
             ac=17, hp_max=63,
             attacks=[
@@ -604,7 +604,7 @@ _DRAGONS_APOTHEOSIS = {
                 "with Action Surge; Indomitable rerolls two failed saves."),
         )},
         {"owner": "erin", "name": "Thornroot Elder", "sheet": dict(
-            klass="Druid", subclass="Circle of the Moon", race="Firbolg", level=18,
+            klass="Druid", subclass="Circle of the Moon", race="Hill Dwarf", level=18,
             abilities={"STR": 12, "DEX": 12, "CON": 17, "INT": 10, "WIS": 20, "CHA": 11},
             ac=16, hp_max=140,
             attacks=[
