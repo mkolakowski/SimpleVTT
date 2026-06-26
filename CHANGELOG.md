@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.667.1] - 2026-06-26 — "The Steady Roll"
+
+**Schema version:** 81
+
+**Commit summary:** De-flake `test_bf_damage_with_target_applies_bonus` — accept `applied == 0` when the BI die rolls a 1 and resistance halves it (1 // 2 == 0), which is correct behavior, not a no-damage bug.
+
+**Description:** Test-only. The pre-existing test asserted `bonus_applied > 0`, but when the Bardic Inspiration die rolls a 1 **and** the target has resistance (Pip can carry a residual resistance buff from accumulated shared-DB state across a long suite run), the applied amount is `1 // 2 == 0`. The test's own comment already documented that resistance "may fire on Pip's residual state," so the `> 0` requirement was the bug. Dropped it; the existing `applied in (rolled, rolled // 2)` assertion remains the real guard — for any `rolled > 1` that check still fails on a genuine "damage never applied" defect (since `rolled // 2 >= 1`), so only the `rolled == 1` case now tolerates `applied == 0`. No behavior change; the version bump exists so `/version` tracks the edit.
+
+### Changed
+- `tests/harness/test_blade_flourish.py` — `test_bf_damage_with_target_applies_bonus` no longer requires `bonus_applied > 0`.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.667.0] - 2026-06-26 — "The Quickened Blade"
 
 **Schema version:** 81

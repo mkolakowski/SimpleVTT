@@ -256,7 +256,14 @@ async def test_bf_damage_with_target_applies_bonus(
     assert br is not None and 1 <= br <= 8, (
         f"BI die should roll 1-8; got {br}"
     )
-    assert ba is not None and ba > 0
+    # v2.667.1 — de-flake: don't require ba > 0. When the BI die rolls a 1 AND
+    # the target has resistance (Pip can carry a residual resistance buff from
+    # accumulated shared-DB state across a long suite run), the applied amount
+    # is 1 // 2 == 0 — correct behavior, not a no-damage bug. The
+    # ``ba in (br, br // 2)`` check below is the real guard: it would still
+    # catch a genuine "damage never applied" defect (ba=0 while br>1 is not in
+    # {br, br//2} for br>1, so it fails).
+    assert ba is not None
     assert ba in (br, br // 2), (
         f"applied should be rolled or halved (resistance); got "
         f"rolled={br}, applied={ba}"
