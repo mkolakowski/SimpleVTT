@@ -78996,19 +78996,26 @@ async def use_wrath_of_the_storm(
     equal to your Wisdom modifier (a minimum of once). You regain
     all expended uses when you finish a long rest."
 
-    Body: ``{character_id, damage_type, attacker_name?, override?}``
-    where damage_type ∈ {lightning, thunder}.
+    Body: ``{character_id, damage_type, attacker_combatant_id?,
+    attacker_name?, override?}`` where damage_type ∈ {lightning,
+    thunder}.
 
     Validates Tempest Cleric Lv 1+ + ``sheet.resources`` has a
     `wrath-of-the-storm` entry with `current >= 1` + Phase 4
     reaction-chip gate. Decrements counter, marks chip, rolls
     2d8 server-side, computes spell save DC = 8 + prof + WIS mod,
-    broadcasts. v1 ships announce-only — the GM applies the
-    damage post-save manually.
+    broadcasts. v2.673.0 (Phase 8): when ``attacker_combatant_id``
+    resolves to a sheet, the attacker's Dex save is rolled + the
+    2d8 applied server-side (full on fail, half on success);
+    otherwise (or with only a free-form ``attacker_name``) it stays
+    announce-only.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     damage_type = (str(body.get("damage_type") or "")).strip().lower()
+    attacker_combatant_id = (
+        str(body.get("attacker_combatant_id") or "")
+    ).strip()
     attacker_name = (str(body.get("attacker_name") or "")).strip()[:80]
     override = bool(body.get("override"))
     if char_id <= 0:
@@ -79093,6 +79100,86 @@ async def use_wrath_of_the_storm(
     wis_mod = (int((sheet.get("abilities") or {}).get("WIS") or 10) - 10) // 2
     save_dc = 8 + prof + wis_mod
 
+    # v2.673.0 — Phase 8: resolve the attacker's Dex save + apply the 2d8
+    # server-side (was announce-only). RAW PHB p.62: fail → full 2d8
+    # lightning/thunder; success → half. Same NPC/PC save-mod resolution as
+    # Rebuke the Violent (v2.672.0) but a DEX save; the damage is elemental
+    # (magical class-feature damage, not an attack) → `_apply_damage_to_combatant`
+    # with `is_magical=True`. Backward-compatible: no resolvable attacker
+    # combatant leaves all three None (free-form `attacker_name` stays
+    # announce-only).
+    save_total = None
+    save_passed = None
+    damage_applied = None
+    _wots_attacker = (
+        _lookup_combatant(campaign_id, attacker_combatant_id)
+        if attacker_combatant_id else None
+    )
+    _wots_save_mod = None
+    if _wots_attacker is not None:
+        if _wots_attacker.get("char_id"):
+            _wa_char = db.query(Character).filter(
+                Character.id == int(_wots_attacker["char_id"]),
+            ).first()
+            if _wa_char and _wa_char.sheet:
+                _wa_sheet = dict(_wa_char.sheet or {})
+                _dex = int((_wa_sheet.get("abilities") or {}).get("DEX", 10))
+                _dex_mod = (_dex - 10) // 2
+                _wa_prof = int(_wa_sheet.get("proficiency_bonus") or 2)
+                _dex_prof = bool(
+                    (_wa_sheet.get("saving_throws") or {}).get("DEX")
+                )
+                _wots_save_mod = _dex_mod + (_wa_prof if _dex_prof else 0)
+        elif _wots_attacker.get("token_template_id"):
+            try:
+                _wtmpl = db.query(TokenTemplate).filter(
+                    TokenTemplate.id == int(
+                        _wots_attacker["token_template_id"]
+                    ),
+                ).first()
+                if _wtmpl is not None:
+                    _wnpc_sheet = _monster_template_to_sheet(
+                        _wtmpl, campaign_id,
+                    )
+                    _wsmr, _ = _resolve_stat_modifier(
+                        _wnpc_sheet, "dnd5e", "dex_save",
+                    )
+                    _wots_save_mod = int(_wsmr)
+            except Exception:
+                _wots_save_mod = None
+    if _wots_attacker is not None and _wots_save_mod is not None:
+        _wname = _wots_attacker.get("name") or attacker_name or "attacker"
+        try:
+            _wsr = dice_mod.roll(f"1d20{_wots_save_mod:+d}")
+            save_total = int(_wsr.total)
+            _wsr_breakdown = _wsr.breakdown
+        except dice_mod.DiceParseError:
+            save_total = _wots_save_mod
+            _wsr_breakdown = ""
+        save_passed = save_total >= save_dc
+        await hub.broadcast(campaign_id, {
+            "type": "roll",
+            "data": {
+                "expression": f"1d20{_wots_save_mod:+d}",
+                "total": save_total,
+                "breakdown": _wsr_breakdown,
+                "note": (
+                    f"⚡ {_wname}'s DEX save vs "
+                    f"{char.name}'s Wrath of the Storm"
+                ),
+                "user_name": char.name,
+                "char_name": _wname,
+                "visibility": Visibility.PUBLIC.value,
+                "dc": save_dc,
+            },
+        })
+        _wdmg = (damage // 2) if save_passed else damage
+        _wadr = await _apply_damage_to_combatant(
+            db, campaign_id, _wots_attacker, _wdmg, damage_type,
+            is_magical=True, attacker_char_id=char.id,
+        )
+        damage_applied = int(_wadr.get("applied") or 0)
+
     await _mark_battle_economy(campaign_id, char.id, "reaction")
     await hub.broadcast(campaign_id, {
         "type": "resource_update",
@@ -79138,6 +79225,10 @@ async def use_wrath_of_the_storm(
             "damage_type": damage_type,
             "save_dc": save_dc,
             "attacker_name": attacker_name,
+            "attacker_combatant_id": attacker_combatant_id,
+            "save_total": save_total,
+            "save_passed": save_passed,
+            "damage_applied": damage_applied,
             "uses_remaining": w_cur - 1,
             "over_budget": was_used,
             "over_budget_slot": "reaction" if was_used else "",
@@ -79150,6 +79241,10 @@ async def use_wrath_of_the_storm(
         "damage": damage,
         "damage_type": damage_type,
         "save_dc": save_dc,
+        "attacker_combatant_id": attacker_combatant_id,
+        "save_total": save_total,
+        "save_passed": save_passed,
+        "damage_applied": damage_applied,
         "uses_remaining": w_cur - 1,
         "over_budget": was_used,
     }

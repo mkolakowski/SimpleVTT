@@ -341,7 +341,7 @@ or passive damage-boosters that already ride other code paths
 | `use_weapon_bond` | ✅ tracked | A use/resource |
 | `use_wholeness_of_body` | ✅ tracked | heal/damage |
 | `use_wizardly_quill` | ✅ tracked | A use/resource |
-| `use_wrath_of_the_storm` | ✅ tracked | A use/resource |
+| `use_wrath_of_the_storm` | ✅ tracked | v2.673.0 — with `attacker_combatant_id`, rolls the attacker's DEX save server-side (NPC via template, PC via sheet) + applies the 2d8 via `_apply_damage_to_combatant` (full on fail, half on success); free-form `attacker_name` stays announce-only |
 | `use_ancestral_protectors` | ⚪ announce-only | — |
 | `use_arcane_mastery` | ⚪ announce-only | — |
 | `use_ascendant_step` | ⚪ announce-only | — |

@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.673.0] - 2026-06-26 — "The Answering Thunder"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — resolve Wrath of the Storm's attacker Dex save + apply the 2d8 server-side (Tempest Domain Cleric).
+
+**Description:** `use_wrath_of_the_storm` (PHB p.62) rolled the 2d8 and computed the save DC but broadcast them announce-only — the GM rolled the attacker's Dex save and applied the damage by hand. The endpoint now accepts an optional `attacker_combatant_id`; when it resolves to a sheet, the attacker's Dexterity save is rolled server-side (NPC save mod via `_monster_template_to_sheet` + `_resolve_stat_modifier`; PC via `Character.sheet` DEX + proficiency — the same resolution as Rebuke the Violent, v2.672.0) and the elemental damage applied — **full 2d8 on a fail, half on a success** — through `_apply_damage_to_combatant` with `is_magical=True`. The save roll is broadcast as a public `roll`; the response/broadcast gain `save_total` / `save_passed` / `damage_applied`. Backward-compatible: the free-form `attacker_name` path (no combatant id) stays announce-only with all three None.
+
+### Added
+- `tests/harness/test_wrath_of_the_storm.py` (+2) — `test_wots_applies_damage_to_attacker` (re-seeds a real bandit *template* attacker → `save_total`/`save_passed` set, `damage_applied` == `2d8` on a fail / half on a success) + `test_wots_no_combatant_announce_only` (free-form `attacker_name` → save/damage fields stay None).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_wrath_of_the_storm` resolves the attacker's DEX save + applies the 2d8; surfaces `save_total` / `save_passed` / `damage_applied` and accepts `attacker_combatant_id`.
+- `docs/automation-coverage.md` — `use_wrath_of_the_storm` note updated (save rolled + damage applied server-side).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Wrath of the Storm.
+- `docs/test-harness-coverage.md` — catalog the new tests.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.672.0] - 2026-06-26 — "The Turned Blow"
 
 **Schema version:** 81

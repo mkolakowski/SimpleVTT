@@ -12,6 +12,12 @@ v1 ships:
     broadcasts feature_used (source wrath-of-the-storm) with
     (damage, damage_type, save_dc, attacker_name, uses_remaining).
 
+**v2.673.0 (Phase 8):** when `attacker_combatant_id` resolves to a
+sheet, the attacker's DEX save is rolled + the 2d8 applied server-
+side (full on fail, half on success) via `_apply_damage_to_combatant`
+(`is_magical=True`); a free-form `attacker_name` alone stays
+announce-only.
+
 Brother Tavik Stonebrow is the demo fixture; tests PATCH his
 subclass to "Tempest Domain" + seed a wrath-of-the-storm
 resource via sheet.resources PATCH.
@@ -19,6 +25,8 @@ resource via sheet.resources PATCH.
 Tests:
   - Happy lightning → uses 3 → 2, damage in 2..16, DC 14
     (Tavik Lv 8: prof +3 + WIS +3).
+  - Apply: templated bandit attacker → DEX save rolled + 2d8 applied.
+  - Announce-only: free-form attacker_name → no save/damage applied.
   - Thunder mode → damage_type "thunder" in broadcast.
   - Bad damage_type → 400.
   - Out of uses (current 0) → 409.
@@ -120,6 +128,77 @@ async def test_use_wots_lightning_happy(
     await asyncio.sleep(0.3)
     feats = _wots_broadcasts(gm_ws, tavik["id"])
     assert feats
+
+
+async def test_wots_applies_damage_to_attacker(
+    gm_client, tavik_tempest_domain,
+):
+    """v2.673.0 — Phase 8: a templated NPC attacker now has its DEX save
+    rolled + the 2d8 applied server-side. Re-seed the battle with Tavik + a
+    real bandit *template*, then assert save resolution + applied amount
+    consistent with the outcome (vanilla bandit → no lightning resistance →
+    exact)."""
+    tavik = tavik_tempest_domain
+    templates = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/templates")).json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": f"tok_wots_{tavik['id']}",
+             "char_id": tavik["id"], "name": tavik["name"],
+             "initiative": 10, "hp_current": 55, "hp_max": 55, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": "tok_wots_bandit", "char_id": None,
+             "token_template_id": bandit["id"], "name": bandit["name"],
+             "initiative": 8, "hp_current": 50, "hp_max": 50, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_wrath_of_the_storm",
+        json={
+            "character_id": tavik["id"],
+            "damage_type": "lightning",
+            "attacker_combatant_id": "tok_wots_bandit",
+            "override": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["save_total"] is not None, data
+    assert isinstance(data["save_passed"], bool), data
+    applied = data["damage_applied"]
+    assert applied is not None, data
+    expected = (data["damage"] // 2) if data["save_passed"] else data["damage"]
+    assert applied == expected, data
+
+
+async def test_wots_no_combatant_announce_only(
+    gm_client, tavik_tempest_domain,
+):
+    """v2.673.0 — a free-form attacker_name (no combatant id) stays
+    backward-compatible announce-only: no save rolled, no damage applied."""
+    tavik = tavik_tempest_domain
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_wrath_of_the_storm",
+        json={
+            "character_id": tavik["id"],
+            "damage_type": "thunder",
+            "attacker_name": "Some Goblin",
+            "override": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["save_total"] is None
+    assert data["save_passed"] is None
+    assert data["damage_applied"] is None
 
 
 async def test_use_wots_thunder(

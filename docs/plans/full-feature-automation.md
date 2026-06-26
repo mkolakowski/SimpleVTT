@@ -544,6 +544,15 @@ composition. Batch by class, same cadence as the breadth sweep.
   Divinity is magical/save-based, not an attack). Surfaces `save_total`/
   `save_passed`/`psychic_damage_applied`; announce-only when the attacker has
   no resolvable sheet. Harness: `test_rebuke_the_violent.py` (+1).
+- **v2.673.0 ("The Answering Thunder") — Wrath of the Storm** (Tempest Domain
+  Cleric Lv 1+): `use_wrath_of_the_storm` rolled the 2d8 + DC but was
+  announce-only. It now accepts an optional `attacker_combatant_id`; when it
+  resolves to a sheet, the attacker's Dexterity save is rolled server-side
+  (same NPC/PC resolution as Rebuke the Violent, but a DEX save) and the
+  elemental damage applied — full 2d8 on a fail, half on a success — via
+  `_apply_damage_to_combatant` (`is_magical=True`). Surfaces `save_total`/
+  `save_passed`/`damage_applied`; the free-form `attacker_name` path stays
+  announce-only. Harness: `test_wrath_of_the_storm.py` (+2).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`
