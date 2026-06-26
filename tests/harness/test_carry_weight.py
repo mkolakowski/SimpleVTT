@@ -5,8 +5,10 @@ no HTTP / WS harness fixtures. RAW PHB p.176: carrying capacity =
 STR × 15 lb. See `docs/plans/carrying-capacity.md` for the design.
 """
 from app.content.carry_weight import (
+    BAG_OF_HOLDING_CAPACITY_LB,
     item_weight_lb,
     parse_weight_lb,
+    sheet_bag_of_holding_weight_lb,
     sheet_carry_capacity_lb,
     sheet_carry_summary,
     sheet_inventory_weight_lb,
@@ -309,3 +311,52 @@ async def test_sheet_json_exposes_derived_carry(gm_client):
     assert cap >= 240, (
         f"Barbarian carry capacity should be ≥ 240 lb (STR 16+); got {cap}"
     )
+
+
+# ── Bag of Holding 500-lb capacity (v2.656.0) ────────────────────────────────
+
+
+def test_bag_weight_sums_only_in_bag_items():
+    sheet = {"inventory": [
+        {"name": "Greataxe", "weight_lb": 7},                       # on-person
+        {"name": "Anvil", "weight_lb": 200, "_in_bag_of_holding": True},
+        {"name": "Crates", "weight_lb": 100, "qty": 2, "_in_bag_of_holding": True},
+    ]}
+    # On-person sum excludes the bagged items.
+    assert sheet_inventory_weight_lb(sheet) == 7
+    # Bag sum is only the bagged items: 200 + 100×2 = 400.
+    assert sheet_bag_of_holding_weight_lb(sheet) == 400
+
+
+def test_bag_weight_zero_when_nothing_stowed():
+    sheet = {"inventory": [{"name": "Greataxe", "weight_lb": 7}]}
+    assert sheet_bag_of_holding_weight_lb(sheet) == 0.0
+
+
+def test_summary_omits_bag_fields_without_a_bag():
+    sheet = {"abilities": {"STR": 14},
+             "inventory": [{"name": "Greataxe", "weight_lb": 7}]}
+    s = sheet_carry_summary(sheet)
+    assert "bag_of_holding_weight_lb" not in s
+    assert "bag_of_holding_over_capacity" not in s
+
+
+def test_summary_flags_bag_under_capacity():
+    sheet = {"abilities": {"STR": 14}, "inventory": [
+        {"name": "Pack", "weight_lb": 59, "_in_bag_of_holding": True},
+    ]}
+    s = sheet_carry_summary(sheet)
+    assert s["bag_of_holding_weight_lb"] == 59
+    assert s["bag_of_holding_capacity_lb"] == BAG_OF_HOLDING_CAPACITY_LB == 500
+    assert s["bag_of_holding_over_capacity"] is False
+
+
+def test_summary_flags_bag_rupture_over_500():
+    sheet = {"abilities": {"STR": 20}, "inventory": [
+        {"name": "Gold bars", "weight_lb": 501, "_in_bag_of_holding": True},
+    ]}
+    s = sheet_carry_summary(sheet)
+    assert s["bag_of_holding_weight_lb"] == 501
+    assert s["bag_of_holding_over_capacity"] is True
+    # The bagged weight still doesn't burden the wielder (0 on-person).
+    assert s["inventory_weight_lb"] == 0

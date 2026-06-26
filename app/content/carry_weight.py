@@ -191,6 +191,45 @@ def sheet_inventory_weight_lb(
     return total
 
 
+# RAW DMG p.153: a Bag of Holding holds up to 500 lb. Overloading it
+# ruptures the bag (contents scattered to the Astral Plane). v2.656.0
+# tracks the in-bag weight so the carry meter can flag the rupture —
+# previously the 500-lb cap was descriptive-only (unenforced).
+BAG_OF_HOLDING_CAPACITY_LB = 500.0
+
+
+def sheet_bag_of_holding_weight_lb(
+    sheet: dict,
+    catalog_weight_by_slug: "dict[str, str] | None" = None,
+) -> float:
+    """Sum ``item_weight_lb × qty`` across inventory items flagged
+    ``_in_bag_of_holding: True`` — i.e. the weight that
+    ``sheet_inventory_weight_lb`` excludes from the wielder's burden.
+    Used to surface the Bag of Holding's RAW 500-lb internal capacity."""
+    if not isinstance(sheet, dict):
+        return 0.0
+    inv = sheet.get("inventory") or []
+    if not isinstance(inv, list):
+        return 0.0
+    total = 0.0
+    for item in inv:
+        if not isinstance(item, dict) or not item.get("_in_bag_of_holding"):
+            continue
+        try:
+            qty = int(item.get("qty") or 1)
+        except (TypeError, ValueError):
+            qty = 1
+        if qty <= 0:
+            continue
+        catalog_w = None
+        if catalog_weight_by_slug:
+            slug = str(item.get("_slug") or "").strip().lower()
+            if slug:
+                catalog_w = catalog_weight_by_slug.get(slug)
+        total += item_weight_lb(item, catalog_w) * qty
+    return total
+
+
 def sheet_is_over_capacity(
     sheet: dict,
     catalog_weight_by_slug: "dict[str, str] | None" = None,
@@ -215,8 +254,23 @@ def sheet_carry_summary(
     STR (Belt of Giant Strength) so the carry meter reflects the boost."""
     cap = sheet_carry_capacity_lb(sheet, effective_str)
     weight = sheet_inventory_weight_lb(sheet, catalog_weight_by_slug)
-    return {
+    summary = {
         "carry_capacity_lb": cap,
         "inventory_weight_lb": weight,
         "is_over_capacity": weight > cap,
     }
+    # v2.656.0 — Bag of Holding 500-lb capacity. Only surface the bag
+    # fields when the PC actually has items stowed in a bag (else the
+    # carry block stays clean for everyone else).
+    inv = sheet.get("inventory") if isinstance(sheet, dict) else None
+    has_bag = isinstance(inv, list) and any(
+        isinstance(it, dict) and it.get("_in_bag_of_holding") for it in inv
+    )
+    if has_bag:
+        bag_weight = sheet_bag_of_holding_weight_lb(sheet, catalog_weight_by_slug)
+        summary["bag_of_holding_weight_lb"] = bag_weight
+        summary["bag_of_holding_capacity_lb"] = BAG_OF_HOLDING_CAPACITY_LB
+        summary["bag_of_holding_over_capacity"] = (
+            bag_weight > BAG_OF_HOLDING_CAPACITY_LB
+        )
+    return summary

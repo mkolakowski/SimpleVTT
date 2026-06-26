@@ -64,3 +64,9 @@ async def test_brakka_bag_of_holding_discounts_pack_weight(gm_client):
     # (Storm, v2.223.0) sets effective STR to 29 → 29 × 15 = 435 lb cap.
     assert cap == 435, f"expected cap 435 (effective STR 29 × 15); got {cap}"
     assert carry.get("is_over_capacity") is False
+    # v2.656.0 — the derived block now surfaces the Bag of Holding's
+    # 500-lb internal capacity. Brakka stows her 59-lb Explorer's pack,
+    # well under the cap.
+    assert carry.get("bag_of_holding_weight_lb") == pytest.approx(59), carry
+    assert carry.get("bag_of_holding_capacity_lb") == 500
+    assert carry.get("bag_of_holding_over_capacity") is False

@@ -5379,7 +5379,7 @@ def _barbarian_beast_sheet(name: str) -> dict:
             {"name": "Bag of Holding", "type": "gear", "qty": 1,
              "equippable": True, "equipped": True,
              "_slug": "bag-of-holding", "weight_lb": 15,
-             "desc": "RAW DMG p.153 (uncommon, no attunement). Holds up to 500 lb (not enforced in v1). Bag weighs 15 lb regardless of contents. Tag items `_in_bag_of_holding: True` to discount their weight from the carry meter."},
+             "desc": "RAW DMG p.153 (uncommon, no attunement). Holds up to 500 lb (tracked since v2.656.0 — the carry meter flags a rupture if exceeded). Bag weighs 15 lb regardless of contents. Tag items `_in_bag_of_holding: True` to discount their weight from the carry meter."},
             # v2.223.0 — ability-score override Phase 2c: the legendary top
             # tier of the Belt of Giant Strength (RAW DMG p.155, attunement).
             # The SRD's single `belt-of-giant-strength` slug defaults to the

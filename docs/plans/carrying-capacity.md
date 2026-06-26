@@ -6,6 +6,7 @@
 - **Phase 2a** ✅ v2.159.28 (Krieger weight backfill + carry meter UI; updated `updateTotalWeight()` to prefer `i.weight_lb` numeric + skip `_in_bag_of_holding` items + red-when-over-capacity).
 - **Phase 2b** ✅ v2.159.29 (RAW weight backfill for the remaining 11 demo PCs).
 - **Phase 3** ✅ v2.159.30 (Bag of Holding catalog row + Brakka demo seed + integration test).
+- **Phase 3b** ✅ v2.656.0 (Bag of Holding **500-lb internal capacity** — previously descriptive-only/unenforced). `sheet_bag_of_holding_weight_lb()` sums the stowed weight; `sheet_carry_summary` surfaces `bag_of_holding_weight_lb` / `bag_of_holding_capacity_lb` / `bag_of_holding_over_capacity` in the `/sheet-json` derived `carry` block, and the sheet's carry meter shows a "⚠ Bag overloaded" rupture warning past 500 lb (RAW DMG p.153). v1 assumes a single bag (the `_in_bag_of_holding` flag isn't per-container).
 
 Future weight-related items (Heward's Handy Haversack, Belt of Giant Strength, Heroes' Feast +5 STR, Bag of Devouring) drop in via the existing substrate without new helper work. Phase 4 (Encumbered variant rule, PHB p.176) is the only follow-up still on the table.
 

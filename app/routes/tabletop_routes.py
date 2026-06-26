@@ -40161,9 +40161,10 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     # p.153, uncommon, no attunement). The bag itself weighs 15 lb
     # regardless of contents; items flagged ``_in_bag_of_holding: True``
     # on the wielder's inventory contribute 0 lb to the v2.159.27
-    # carry-weight sum. The 500-lb internal-capacity gate (RAW
-    # constraint) is descriptive only — v1 doesn't track sub-bag
-    # weight. The "drag through a portal" Astral-Plane mechanic is
+    # carry-weight sum. The 500-lb internal-capacity gate is tracked
+    # since v2.656.0 — `sheet_carry_summary` surfaces
+    # `bag_of_holding_weight_lb` + `bag_of_holding_over_capacity` and the
+    # carry meter flags a rupture. The "drag through a portal" mechanic is
     # also descriptive (GM-adjudicated). Catalog entry is empty
     # (no AC / save / sensory payload); the weight-discount fires
     # purely from the substrate's read-time skip in

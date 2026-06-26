@@ -1394,6 +1394,8 @@
                       title="Current inventory weight / carry capacity (RAW: STR × 15 lb). Turns red when over capacity.">
                     Weight: <span id="inv-total-weight" style="font-weight:700;color:var(--s-fg);">0</span> / <span id="inv-carry-capacity" style="font-weight:700;color:var(--s-fg);">—</span> lb
                 </span>
+                <span id="inv-bag-rupture" style="display:none;margin-left:8px;font-size:11px;font-weight:700;color:var(--s-danger,#d33);flex-shrink:0;"
+                      title="RAW DMG p.153: a Bag of Holding holds up to 500 lb. Overloading it ruptures the bag — its contents scatter into the Astral Plane."></span>
             </div>
 
             {# Inventory data — JSON, hidden #}
@@ -6829,6 +6831,28 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
             totalWeightEl.style.color = over
                 ? 'var(--s-danger, #d33)'
                 : 'var(--s-fg)';
+        }
+        // v2.656.0 — Bag of Holding 500-lb capacity (RAW DMG p.153).
+        // Sum the weight of items stowed in a bag; warn on rupture.
+        const ruptureEl = document.getElementById('inv-bag-rupture');
+        if (ruptureEl) {
+            let bagWeight = 0, hasBag = false;
+            for (const i of inventory) {
+                if (!i._in_bag_of_holding) continue;
+                hasBag = true;
+                const qty = parseInt(i.qty) || 1;
+                const w = Number.isFinite(parseFloat(i.weight_lb))
+                    ? parseFloat(i.weight_lb)
+                    : (Number.isFinite(parseFloat(i.weight)) ? parseFloat(i.weight) : 0);
+                bagWeight += w * qty;
+            }
+            const bagRounded = Math.round(bagWeight * 10) / 10;
+            if (hasBag && bagRounded > 500) {
+                ruptureEl.textContent = `⚠ Bag overloaded: ${bagRounded} / 500 lb`;
+                ruptureEl.style.display = '';
+            } else {
+                ruptureEl.style.display = 'none';
+            }
         }
     }
 

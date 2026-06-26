@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.656.0] - 2026-06-25 — "The Five-Hundred-Pound Limit"
+
+**Schema version:** 81
+
+**Commit summary:** Resolve the one real Bag of Holding gap surfaced while investigating the carry test — enforce/track the **RAW 500-lb internal capacity** (previously "descriptive only, not enforced in v1"). The discount logic itself was already correct; this adds the missing rupture surface.
+
+**Description:** Investigation confirmed the Bag of Holding weight *discount* is healthy (items flagged `_in_bag_of_holding` correctly contribute 0 to the wielder's burden; the v2.655.5 test fix to 30.5 lb was right — Brakka simply carries a 0.5-lb Bag of Tricks on-person). The genuine unresolved piece was the **500-lb cap**: RAW DMG p.153, overloading the bag ruptures it and scatters the contents to the Astral Plane, but the engine let you stow unlimited weight with no signal. This adds `sheet_bag_of_holding_weight_lb()` (sums the stowed weight — the inverse of the existing skip) and `BAG_OF_HOLDING_CAPACITY_LB = 500`, and extends `sheet_carry_summary` to surface `bag_of_holding_weight_lb` / `bag_of_holding_capacity_lb` / `bag_of_holding_over_capacity` in the `/sheet-json` derived `carry` block — only when the PC actually has items stowed, so every other sheet's carry block stays clean. The sheet's carry meter shows a **"⚠ Bag overloaded: N / 500 lb"** rupture warning past the cap. v1 assumes a single bag (the boolean `_in_bag_of_holding` flag isn't per-container; per-bag tracking for Heward's Haversack / multiple bags is filed). Backward-compatible additive feature.
+
+### Added
+- `app/content/carry_weight.py` — `BAG_OF_HOLDING_CAPACITY_LB` + `sheet_bag_of_holding_weight_lb()`; `sheet_carry_summary` now surfaces the three `bag_of_holding_*` fields when a bag is in use.
+- `app/templates/sheet_dnd5e.html` — carry meter shows a rupture warning (`#inv-bag-rupture`) when the stowed weight exceeds 500 lb.
+
+### Changed
+- `app/demo_seed.py`, `app/routes/tabletop_routes.py`, `docs/plans/carrying-capacity.md` — comments/status updated: the 500-lb cap is now tracked (Phase 3b), no longer "descriptive only".
+
+### Schema
+- No schema change (still v81).
+
+**Harness:** `tests/harness/test_carry_weight.py` (+6) — `sheet_bag_of_holding_weight_lb` sums only stowed items (× qty); the summary omits the bag fields without a bag, reports under-capacity (59 lb), and flags rupture over 500 lb (while the stowed weight still doesn't burden the wielder). `tests/harness/test_bag_of_holding.py` — the existing Brakka integration test now also asserts the derived `bag_of_holding_*` fields (59 lb stowed, cap 500, not over).
+
 ## [2.655.6] - 2026-06-25 — "The Missed Tail"
 
 **Schema version:** 81
