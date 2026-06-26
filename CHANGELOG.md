@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.662.0] - 2026-06-26 — "The Arcane Step"
+
+**Schema version:** 81
+
+**Commit summary:** Eldritch Knight Arcane Charge Phase 4 — the actual teleport movement: a new `/use_arcane_charge_teleport` endpoint moves the EK's token to a chosen destination, bypassing the walk-speed cap but enforcing the 30-ft budget.
+
+**Description:** Closes the last genuine mechanical gap on [`docs/plans/eldritch-knight.md`](docs/plans/eldritch-knight.md). Phase 1 (v2.158.11) installed the `arcane-charge-active` buff; Phase 2 (v2.158.39) surfaced the 30-ft budget on `/use_action_surge` — but the *actual* token move was still left to the existing primitives, which enforce the walk-speed cap and so can't model a teleport. `POST /api/campaign/{cid}/use_arcane_charge_teleport` performs the move: it validates the caster carries the Arcane Charge buff (`_pc_arcane_charge_teleport_ft > 0`), finds the EK's token on the active map, computes the distance from its current spot to the requested destination via the shared grid helper, and — when within the budget (or `override`) — sets the token's position and broadcasts `token_move` with a `teleport: True` flag (distinct from `forced`, so the client renders it instantly and skips the speed-cap / OA logic). RAW PHB p.74's "unoccupied space you can see" clause (destination occupancy + line-of-sight) stays GM-narrated — the server enforces the range, the GM adjudicates the legal landing spot. Also reconciled the plan doc's stale status header, which listed already-shipped Phase-2 read sites (Arcane Charge budget on Action Surge, Improved War Magic widening the War Magic advisory) as outstanding.
+
+### Added
+- `POST /api/campaign/{cid}/use_arcane_charge_teleport` — range-gated Arcane Charge teleport.
+- `tests/harness/test_arcane_charge_teleport.py` — in-range teleport (200 + `token_move(teleport=True)` + the token moves), too-far → 409 `too_far` (+ `override` bypass), no-buff → 409 `no_arcane_charge`, missing dest → 400. Garrik PATCHed to EK Lv 15; restore-safe fixture.
+
+### Changed
+- `docs/plans/eldritch-knight.md` — Phase 4 Arcane Charge teleport marked shipped; stale status-header items corrected.
+- `docs/test-harness-coverage.md` — catalog the new test.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.661.0] - 2026-06-26 — "The Empowered Blast"
 
 **Schema version:** 81

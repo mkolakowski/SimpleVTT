@@ -62283,6 +62283,153 @@ async def use_arcane_charge(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_arcane_charge_teleport")
+async def use_arcane_charge_teleport(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.662.0 — Phase 4 of docs/plans/eldritch-knight.md: the ACTUAL
+    Arcane Charge teleport movement (PHB p.74). Phase 1 (v2.158.11)
+    installed the `arcane-charge-active` buff; Phase 2 (v2.158.39) surfaced
+    the 30-ft budget on `/use_action_surge`. This endpoint performs the
+    move: it teleports the EK's token to a chosen destination, bypassing the
+    walk-speed cap that the normal `/token/{id}/move` enforces, while
+    enforcing the buff's teleport budget (≤ 30 ft RAW). The "unoccupied
+    space you can see" clause (destination occupancy + line-of-sight) stays
+    GM-narrated — the GM adjudicates the legal landing spot; the server
+    enforces the range.
+
+    Body: ``{character_id, dest_x, dest_y, override?}``. ``dest_x``/``dest_y``
+    are token pixel coords on the active map (the same space as
+    ``Token.x``/``Token.y`` — the picker hands them over). ``override`` skips
+    the range gate (GM fiat / known longer-range future sources).
+
+    Errors: 400 missing fields; 409 ``no_arcane_charge`` (buff absent),
+    ``no_active_map`` / ``no_grid`` / ``no_token_on_map`` (off-grid scene),
+    ``too_far`` (destination beyond the budget without ``override``).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if body.get("dest_x") is None or body.get("dest_y") is None:
+        raise HTTPException(400, "dest_x and dest_y are required")
+    try:
+        dest_x = float(body.get("dest_x"))
+        dest_y = float(body.get("dest_y"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "dest_x and dest_y must be numbers")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Fighter character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    max_ft = _pc_arcane_charge_teleport_ft(sheet)
+    if max_ft <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "no_arcane_charge",
+            "expected": "eldritch knight lv 15+ with Arcane Charge active",
+            "hint": "call /use_arcane_charge first to install the buff",
+        })
+
+    if not campaign.active_map_id:
+        return JSONResponse(status_code=409, content={"error": "no_active_map"})
+    map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
+    if not map_row or not map_row.grid_size_px:
+        return JSONResponse(status_code=409, content={"error": "no_grid"})
+    token = db.query(Token).filter(
+        Token.character_id == char.id, Token.map_id == map_row.id,
+    ).first()
+    if not token:
+        return JSONResponse(status_code=409, content={
+            "error": "no_token_on_map"})
+
+    from_x, from_y = float(token.x or 0), float(token.y or 0)
+    grid_type = (
+        map_row.grid_type.value if map_row.grid_type else "square"
+    ).lower()
+    dist_ft = _distance_ft_between_points(
+        int(map_row.grid_size_px), grid_type, from_x, from_y, dest_x, dest_y,
+    )
+    # 0.05 ft epsilon so a destination rounded to exactly the budget edge
+    # (e.g. 30.0 ft) isn't rejected by float noise.
+    if dist_ft > max_ft + 0.05 and not override:
+        return JSONResponse(status_code=409, content={
+            "error": "too_far",
+            "max_ft": max_ft,
+            "attempted_ft": dist_ft,
+        })
+
+    token.x = dest_x
+    token.y = dest_y
+    db.commit()
+    await hub.broadcast(campaign_id, {
+        "type": "token_move",
+        "data": {
+            "id": token.id,
+            "x": dest_x, "y": dest_y,
+            "from_x": from_x, "from_y": from_y,
+            "distance_ft": dist_ft,
+            "character_id": token.character_id,
+            "token_template_id": token.token_template_id,
+            # Distinct from `forced`: a voluntary teleport, not a push/pull.
+            # The client can render it instantly (no glide) + skip the
+            # speed-cap / OA logic that a normal move triggers.
+            "teleport": True,
+        },
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": "🌀 Arcane Charge — teleport",
+            "feature_desc": (
+                f"{char.name} teleports {dist_ft:.0f} ft "
+                f"(≤ {max_ft} ft) to an unoccupied space they can see. "
+                f"(Eldritch Knight Lv 15+ class feature.)"
+            ),
+            "source": "arcane-charge-teleport",
+            "distance_ft": dist_ft,
+            "max_ft": max_ft,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "arcane-charge-teleport",
+        "token_id": token.id,
+        "from_x": from_x, "from_y": from_y,
+        "to_x": dest_x, "to_y": dest_y,
+        "distance_ft": dist_ft,
+        "max_ft": max_ft,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_improved_war_magic")
 async def use_improved_war_magic(
     campaign_id: int,

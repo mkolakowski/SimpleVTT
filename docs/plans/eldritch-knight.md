@@ -23,12 +23,21 @@ Path: Fighter Martial Archetype: Eldritch Knight (PHB p.74).
 > on hit) and the **NPC-target path** (the endpoint only installs the
 > buff for PC targets, and the resolver read is in the PC-save branch —
 > the common "EK hits a monster then casts at it" case isn't wired).
-> **Outstanding (other features):** Lv 7 War Magic (bonus-action weapon
-> attack after cantrip cast — `/cast_spell` post-cast bonus-attack
-> rider); Arcane Charge Phase 2 (`/use_action_surge` reads the buff +
-> surfaces a teleport budget); Improved War Magic Phase 2 (`/cast_spell`
-> reads the buff + allows the bonus-action weapon attack when
-> `spell_level >= 1`).
+> **Status-header correction (v2.662.0):** the three items this header
+> previously listed as "Outstanding" are all **already shipped** — verified
+> against the code: **Lv 7 War Magic** (advisory v2.648.6 + `/attack
+> as_war_magic_bonus` economy route v2.648.8); **Arcane Charge Phase 2**
+> (`/use_action_surge` reads the buff via `_pc_arcane_charge_teleport_ft` +
+> surfaces `arcane_charge_teleport_ft`, line ~56956); **Improved War Magic
+> Phase 2** (the War Magic advisory reads `_pc_improved_war_magic_min_level`
+> and widens the trigger to any Lv 1+ spell, line ~26763). The only genuine
+> mechanical gap left was the **actual Arcane Charge teleport move** —
+> **shipped v2.662.0**: `POST /use_arcane_charge_teleport` moves the EK's
+> token to a chosen destination, bypassing the walk-speed cap but enforcing
+> the 30-ft budget (`test_arcane_charge_teleport.py`). With that, **every EK
+> feature is mechanically live**; the only remaining slices are GM-tracked
+> preconditions (War Magic's cantrip-cast / Action-Surge-this-turn timing)
+> and the styled picker-modal polish (Phase 4 of the metamagic plan, not EK).
 
 ## Why a plan doc
 
@@ -140,14 +149,26 @@ shipped).
   case is now fully automated (install on hit via 3b + NPC-save read).
   Harness: `test_eldritch_strike_resolver.py::test_eldritch_strike_npc_save_disadvantage`.
 
-### Phase 4 — Arcane Charge + Improved War Magic (⚪ deferred)
+### Phase 4 — Arcane Charge + Improved War Magic (✅ shipped)
 
-Lv 15 Arcane Charge: extend `/use_action_surge` to optionally
-accept a `teleport_dest_cell` body field that moves the
-attacker's token before / after the surge.
+**Lv 15 Arcane Charge — ✅ install v2.158.11 + budget-read v2.158.39 +
+teleport move v2.662.0.** Rather than fold the move into `/use_action_surge`
+(which would force "during the surge"), the teleport ships as its own
+endpoint `POST /use_arcane_charge_teleport` so the EK can fire it before OR
+after the additional action per RAW. It validates the `arcane-charge-active`
+buff, finds the EK's token on the active map, range-checks the requested
+destination against the 30-ft budget (shared `_distance_ft_between_points`
+grid helper), and on success sets the token position + broadcasts
+`token_move(teleport=True)` — bypassing the walk-speed cap that
+`/token/{id}/move` enforces. "Unoccupied space you can see" stays GM-narrated.
+Harness: `test_arcane_charge_teleport.py`.
 
-Lv 18 Improved War Magic: same plumbing as Phase 2 but the
-cantrip-only constraint is dropped to "Lv 1+ spell."
+**Lv 18 Improved War Magic — ✅ install v2.158.12 + read v2.648.6.** The
+`improved-war-magic-active` flag buff installs via `/use_improved_war_magic`,
+and the v2.648.6 War Magic `/cast_spell` advisory reads
+`_pc_improved_war_magic_min_level` to widen the bonus-attack trigger from
+cantrips-only to any Lv 1+ spell. The bonus attack itself rides the same
+`/attack as_war_magic_bonus` economy route as Lv 7 War Magic.
 
 ## What this plan does NOT cover
 
