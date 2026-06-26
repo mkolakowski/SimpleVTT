@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.665.0] - 2026-06-26 — "The Drop on Them"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — flip Assassinate (Assassin Rogue Lv 3+) from announce-only to tracked by installing a permanent `assassinate-active` flag-buff.
+
+**Description:** Continues the Phase 8 long tail of [`docs/plans/full-feature-automation.md`](docs/plans/full-feature-automation.md), same install-then-deferred-read shape as v2.612.1 Potent Spellcasting / v2.612.2 Totem Spirit. `use_assassinate` now installs a permanent `assassinate-active` buff carrying the two parameter keys — `effects.assassinate_advantage_vs_pre_turn` (advantage vs a creature that hasn't acted yet this combat) and `effects.assassinate_auto_crit_vs_surprised` (auto-crit vs a surprised target) — sheet-mirrored + idempotent on re-press. Phase 2 (deferred): `/attack` reads the flags off the attacker's `_buffs_active`; both need the engine's not-yet-built per-combat turn-order + surprise tracking, so the resolution stays GM-applied until that substrate lands. **Verify-substrate note:** the `automation-coverage.md` classifier tags are stale for several rows — while picking this feature, Aura of Warding, Fancy Footwork, Relentless Avenger, Unwavering Mark, Order's Wrath, and Improved Duplicity were all found already-mechanized despite being tagged/listed as announce-only or deferred; Assassinate was confirmed genuinely announce-only before mechanizing.
+
+### Added
+- `tests/harness/test_assassinate.py::test_assassinate_buff_payload_carries_flags` — using Assassinate installs the permanent `assassinate-active` buff with both `assassinate_*` flags (battle-seeded so `_install_buff` lands; pre-clears the permanent buff for order-independence; cleans up after).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_assassinate` installs the `assassinate-active` flag-buff + surfaces `buff_installed` on the response/broadcast (was announce-only).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Assassinate; corrected the stale "Improved Reaper is the last of the Lv-17 cleric batch" note (Improved Reaper shipped v2.158.9 install + v2.158.41 read site).
+- `docs/automation-coverage.md` — `use_assassinate` flipped ⚪ announce-only → ✅ tracked; added a caution that the classifier is stale for several already-mechanized rows.
+- `docs/test-harness-coverage.md` — catalog the new test.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.664.0] - 2026-06-26 — "The Missed Threat"
 
 **Schema version:** 81

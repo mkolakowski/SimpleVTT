@@ -477,10 +477,24 @@ composition. Batch by class, same cadence as the breadth sweep.
   benefit (Bear needs a new "all except" matcher in `_resistance_halve`).
   First multi-variant Phase-8 flag-buff (three parameter payloads behind
   one endpoint).
+- **v2.665.0 ("The Drop on Them") — Assassinate** (Assassin Rogue Lv 3+):
+  `use_assassinate` was announce-only; the Phase 8 enhancement installs a
+  permanent `assassinate-active` buff carrying two parameter keys
+  (`effects.assassinate_advantage_vs_pre_turn=True` +
+  `effects.assassinate_auto_crit_vs_surprised=True`), sheet-mirrored +
+  idempotent. Phase 2 (deferred): `/attack` reads the flags for advantage vs
+  a not-yet-acted target + auto-crit vs a surprised target — both need
+  per-combat turn-order + surprise tracking the engine doesn't yet have.
+  **Verify-substrate note:** picking this feature surfaced that the
+  `automation-coverage.md` classifier is stale for several rows (Aura of
+  Warding, Fancy Footwork, Relentless Avenger, Unwavering Mark, Order's
+  Wrath, Improved Duplicity all already mechanized) — re-run the classifier
+  before trusting the announce-only counts.
 
-The Lv-17 cleric subclass capstone batch is 5/6 shipped — Improved
-Reaper is the last (necromancy single-target → double-target spell
-routing; touches `/cast_spell`, biggest of the batch). Then the
+The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
+Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`
+`/cast_spell` read site); the earlier "5/6, Improved Reaper is the last" note
+was stale. Then the
 Lv-15 / Lv-18 / Lv-20 capstones (Arcane Charge / Purity of Spirit /
 Arcane Mastery / Emissary of Redemption / Improved War Magic / …) and
 the Phase-2 read sites for the deferred Phase-1 commits (Keeper of

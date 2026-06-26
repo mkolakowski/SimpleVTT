@@ -75,6 +75,15 @@ for the archetype → primitive mapping.
 
 ## Notable announce-only backlog (candidates for automation)
 
+> **⚠ Classifier drift (noted v2.665.0).** The ⚪ announce-only tags in the
+> per-endpoint table below are pinned to an old classifier run and are **stale
+> for several rows** — Aura of Warding, Fancy Footwork, Relentless Avenger,
+> Unwavering Mark, Order's Wrath, and Improved Duplicity were all found
+> already-mechanized when spot-checked. **Verify in code (grep the endpoint
+> body for `_install_buff` / a mechanical read site) before picking a row to
+> automate** — don't trust the tag alone. Re-running the classifier would
+> correct the counts; until then this table over-states the announce-only set.
+
 Most of the 59 announce-only rows are **archetype J** (narration /
 passive senses: `beast_speech`, `devils_sight`, `eldritch_sight`,
 `mask_of_many_faces`, `eyes_of_the_rune_keeper`, `improved_minor_illusion`, …)
@@ -336,7 +345,7 @@ or passive damage-boosters that already ride other code paths
 | `use_ancestral_protectors` | ⚪ announce-only | — |
 | `use_arcane_mastery` | ⚪ announce-only | — |
 | `use_ascendant_step` | ⚪ announce-only | — |
-| `use_assassinate` | ⚪ announce-only | — |
+| `use_assassinate` | ✅ tracked | v2.665.0 — installs permanent `assassinate-active` flag-buff (`assassinate_advantage_vs_pre_turn` + `assassinate_auto_crit_vs_surprised`); Phase 8 Assassin Rogue, install-then-deferred-read |
 | `use_aura_of_warding` | ⚪ announce-only | — |
 | `use_awakened_mind` | ⚪ announce-only | — |
 | `use_beast_speech` | ⚪ announce-only | — |
