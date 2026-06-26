@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.663.0] - 2026-06-26 — "The Honest Ledger"
+
+**Schema version:** 81
+
+**Commit summary:** Reconcile TODO.md drift — flip the backlog entries that were listed as outstanding but have actually shipped (carrying-capacity Phase 4, all of sorcery-points-and-metamagic, all of eldritch-knight, the pending-resolution 3c-1/3c-2 slices), and move the now-complete plans to TODONE.md.
+
+**Description:** Doc-only. Across this session, repeated "what's next?" picks surfaced backlog items that the plan docs + code showed were already shipped — Quickened Spell, pending-resolution Phase 1, and three Eldritch Knight "Phase 2 read sites" were all listed as open but done. This sweep brings [`TODO.md`](TODO.md)'s Design Plans Backlog back in line with reality: the pending-resolution + reactions-automation entries now reflect that everything through 3c-2 (v2.659.0) shipped and only **3c-3** (the PC-defender held pending window) remains; the fully-shipped **carrying-capacity**, **sorcery-points-and-metamagic**, and **eldritch-knight** plans move to [`TODONE.md`](TODONE.md) with their per-phase ship references preserved; and the surviving Paladin-oaths P2 entry gains a "verify against the plan doc before promoting" caution. No code or schema change — the version bump exists so `/version` tracks the doc edit.
+
+### Changed
+- `TODO.md` — Design Plans Backlog reconciled: pending-resolution/reactions updated to "only 3c-3 remains"; carrying-capacity Phase 4 / sorcery / eldritch-knight removed from P2 (shipped).
+- `TODONE.md` — added the three now-complete plans (carrying-capacity, sorcery-points-and-metamagic, eldritch-knight) to the shipped-end-to-end list.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.662.0] - 2026-06-26 — "The Arcane Step"
 
 **Schema version:** 81
