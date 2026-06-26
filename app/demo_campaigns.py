@@ -361,7 +361,8 @@ _SHADOWFELL_SPIRE = {
     "map": {"name": "The Shadowfell Spire (threshold)", "width": 1600, "height": 1200,
             "image": "/static/demo/maps/shadowfell-spire.png"},
     "party": [
-        {"owner": "bob", "name": "Maelen Farsight", "sheet": dict(
+        {"owner": "bob", "name": "Maelen Farsight",
+         "image": "/static/demo/tokens/l13-maelen.png", "sheet": dict(
             klass="Wizard", subclass="School of Evocation", race="High Elf", level=13,
             abilities={"STR": 8, "DEX": 14, "CON": 14, "INT": 20, "WIS": 12, "CHA": 10},
             ac=12, hp_max=84,
@@ -387,7 +388,8 @@ _SHADOWFELL_SPIRE = {
                 "the spire's lich). Portent: two foretold d20s replace any roll "
                 "(turn the boss's save into a 1)."),
         )},
-        {"owner": "dave", "name": "Cassius Emberbinder", "sheet": dict(
+        {"owner": "dave", "name": "Cassius Emberbinder",
+         "image": "/static/demo/tokens/l13-cassius.png", "sheet": dict(
             klass="Warlock", subclass="The Fiend", race="Tiefling", level=13,
             abilities={"STR": 8, "DEX": 14, "CON": 16, "INT": 11, "WIS": 12, "CHA": 20},
             ac=15, hp_max=94,
@@ -414,7 +416,8 @@ _SHADOWFELL_SPIRE = {
                 "top of three level-5 pact slots. Spam Eldritch Blast (3 beams) "
                 "between Arcanum nukes."),
         )},
-        {"owner": "gm", "name": "High Cleric Doran", "sheet": dict(
+        {"owner": "gm", "name": "High Cleric Doran",
+         "image": "/static/demo/tokens/l13-doran.png", "sheet": dict(
             klass="Cleric", subclass="Life Domain", race="Goliath", level=13,
             abilities={"STR": 16, "DEX": 10, "CON": 15, "INT": 10, "WIS": 20, "CHA": 12},
             ac=19, hp_max=97,
@@ -441,7 +444,8 @@ _SHADOWFELL_SPIRE = {
                 "stun the undead host). War Priest bonus attacks + Divine Strike "
                 "(+2d8 radiant) make his Maul hit like a siege ram."),
         )},
-        {"owner": "gm", "name": "Hruld Skullcleaver", "sheet": dict(
+        {"owner": "gm", "name": "Hruld Skullcleaver",
+         "image": "/static/demo/tokens/l13-hruld.png", "sheet": dict(
             klass="Barbarian", subclass="Path of the Berserker", race="Half-Orc", level=13,
             abilities={"STR": 20, "DEX": 14, "CON": 18, "INT": 8, "WIS": 12, "CHA": 8},
             ac=17, hp_max=140,
@@ -459,7 +463,8 @@ _SHADOWFELL_SPIRE = {
                 "extra weapon dice. Bear Totem halves nearly all damage while "
                 "raging; Relentless Rage keeps him at 1 HP instead of dropping."),
         )},
-        {"owner": "gm", "name": "Wisp Underbough", "sheet": dict(
+        {"owner": "gm", "name": "Wisp Underbough",
+         "image": "/static/demo/tokens/l13-wisp.png", "sheet": dict(
             klass="Rogue", subclass="Thief", race="Forest Gnome", level=13,
             abilities={"STR": 8, "DEX": 20, "CON": 14, "INT": 16, "WIS": 12, "CHA": 10},
             ac=16, hp_max=82,
@@ -493,10 +498,10 @@ _SHADOWFELL_SPIRE = {
         ("specter", "Specter"),
     ],
     "npc_tokens": [
-        ("wraith", "Spire Wraith", "#6d28d9"),
-        ("vampire-spawn", "Vampire Spawn", "#7f1d1d"),
-        ("vampire-spawn", "Vampire Spawn", "#7f1d1d"),
-        ("mind-flayer", "Illithid Adept", "#581c87"),
+        ("wraith", "Spire Wraith", "#6d28d9", "/static/demo/tokens/l13-spire-wraith.png"),
+        ("vampire-spawn", "Vampire Spawn", "#7f1d1d", "/static/demo/tokens/l13-vampire-spawn.png"),
+        ("vampire-spawn", "Vampire Spawn", "#7f1d1d", "/static/demo/tokens/l13-vampire-spawn.png"),
+        ("mind-flayer", "Illithid Adept", "#581c87", "/static/demo/tokens/l13-illithid-adept.png"),
     ],
 }
 

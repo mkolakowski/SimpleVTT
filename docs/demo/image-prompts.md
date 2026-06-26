@@ -25,14 +25,14 @@ plain coloured ring (`image_url=None`) and are waiting on art.
 > misalign. Each map prompt below already says "no grid lines"; if your model
 > adds one anyway, put `grid, grid lines, grid overlay` in the negative prompt.
 
-## Overall progress — 41 / 58 images
+## Overall progress — 49 / 58 images
 
 | Demo | Map | Tokens | Done |
 |---|---|---|---|
 | Level 3 : The Goblin Warrens | ✅ | ✅ 9 / 9 | **10 / 10** |
 | Level 5 : The Tide-Wracked Catacombs | ✅ | ✅ 9 / 9 | **10 / 10** |
 | Level 9 : Storm Over Saltmarsh | ✅ | ✅ 9 / 9 | **10 / 10** |
-| Level 13 : The Shadowfell Spire | ✅ | ⬜ 0 / 8 | **1 / 9** |
+| Level 13 : The Shadowfell Spire | ✅ | ✅ 8 / 8 | **9 / 9** |
 | Level 18 : The Dragon's Apotheosis | ✅ | ⬜ 0 / 8 | **1 / 9** |
 | ARCHIVE : The Sundered Vault *(flagship)* | 🟡 placeholder | ✅ 9 / 9 shipped | **10 / 10** |
 
@@ -514,19 +514,19 @@ Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
 A Tier-3 dark-fantasy siege. A spire of black glass bleeds the Shadowfell into the world; undead and worse spill out.
 
-**Progress: 1 / 9 images generated** — the battle map is wired; every token below still renders as a plain coloured ring (`image_url=None`). Generate the art, drop it at the listed path, then wire it in `app/demo_campaigns.py`.
+**Progress: 9 / 9 images generated** — the full L13 token set is wired (generated via the ImagineArt MCP, background-removed to true alpha, shipped as `.png`).
 
 | Entity | Drop file at | Status |
 |---|---|---|
 | 🗺️ The Shadowfell Spire (map) | `app/static/demo/maps/shadowfell-spire.png` | ✅ wired |
-| 🛡️ Maelen Farsight — High Elf Wizard 13 | `app/static/demo/tokens/l13-maelen.jpg` | ⬜ needs art |
-| 🛡️ Cassius Emberbinder — Tiefling Warlock 13 | `app/static/demo/tokens/l13-cassius.jpg` | ⬜ needs art |
-| 🛡️ High Cleric Doran — Goliath Cleric 13 | `app/static/demo/tokens/l13-doran.jpg` | ⬜ needs art |
-| 🛡️ Hruld Skullcleaver — Half-Orc Barbarian 13 | `app/static/demo/tokens/l13-hruld.jpg` | ⬜ needs art |
-| 🛡️ Wisp Underbough — Forest Gnome Rogue 13 | `app/static/demo/tokens/l13-wisp.jpg` | ⬜ needs art |
-| 💀 Spire Wraith | `app/static/demo/tokens/l13-spire-wraith.jpg` | ⬜ needs art |
-| 💀 Vampire Spawn ×2 (shared file) | `app/static/demo/tokens/l13-vampire-spawn.jpg` | ⬜ needs art |
-| 💀 Illithid Adept (Mind Flayer) | `app/static/demo/tokens/l13-illithid-adept.jpg` | ⬜ needs art |
+| 🛡️ Maelen Farsight — High Elf Wizard 13 | `app/static/demo/tokens/l13-maelen.png` | ✅ wired |
+| 🛡️ Cassius Emberbinder — Tiefling Warlock 13 | `app/static/demo/tokens/l13-cassius.png` | ✅ wired |
+| 🛡️ High Cleric Doran — Goliath Cleric 13 | `app/static/demo/tokens/l13-doran.png` | ✅ wired |
+| 🛡️ Hruld Skullcleaver — Half-Orc Barbarian 13 | `app/static/demo/tokens/l13-hruld.png` | ✅ wired |
+| 🛡️ Wisp Underbough — Forest Gnome Rogue 13 | `app/static/demo/tokens/l13-wisp.png` | ✅ wired |
+| 💀 Spire Wraith | `app/static/demo/tokens/l13-spire-wraith.png` | ✅ wired |
+| 💀 Vampire Spawn ×2 (shared file) | `app/static/demo/tokens/l13-vampire-spawn.png` | ✅ wired |
+| 💀 Illithid Adept (Mind Flayer) | `app/static/demo/tokens/l13-illithid-adept.png` | ✅ wired |
 
 ### 🗺️ Battle map — The Shadowfell Spire (1600×1200)
 
@@ -540,31 +540,31 @@ Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
 #### Maelen Farsight — High Elf Wizard 13 (School of Divination)
 
-`app/static/demo/tokens/l13-maelen.jpg`
+`app/static/demo/tokens/l13-maelen.png`
 
 > Painterly digital dark-fantasy character portrait, three-quarter view from the chest up, neutral serene expression, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, cold violet shadowfell rim-lighting, no frame, no text. An ice-calm high elf diviner with pale luminous skin, sharp angular features, and long silver-white hair; pale glacial-blue eyes that seem to look past the viewer. Faint glowing third-eye sigil shimmering on his brow. Fine layered robes of frost-white and deep indigo trimmed with silver astrological glyphs. Holds a slender pale-wood quarterstaff topped with a floating crystalline foresight-rune. Aura of quiet certainty. 1:1 square, 1024×1024.
 
 #### Cassius Emberbinder — Tiefling Warlock 13 (The Fiend)
 
-`app/static/demo/tokens/l13-cassius.jpg`
+`app/static/demo/tokens/l13-cassius.png`
 
 > Painterly digital dark-fantasy character portrait, three-quarter view from the chest up, glib half-smile, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, cold violet shadowfell rim-lighting, no frame, no text. A charismatic crimson-skinned tiefling warlock with curling black infernal horns, slit golden eyes, and a barbed tail flicking into frame. Dark finery — a high-collared black-and-burgundy coat with infernal brass clasps. Wisps of eldritch force-energy crackle violet-and-ember around one upraised hand, lit from within as if paying a debt. Roguish confident set to the mouth. 1:1 square, 1024×1024.
 
 #### High Cleric Doran — Goliath Cleric 13 (War Domain)
 
-`app/static/demo/tokens/l13-doran.jpg`
+`app/static/demo/tokens/l13-doran.png`
 
 > Painterly digital dark-fantasy character portrait, three-quarter view from the chest up, fearless resolute expression, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, cold violet shadowfell rim-lighting, no frame, no text. A mountainous goliath war-priest with grey-stone skin marked by darker lithoderm patterns, a bald scarred head, and a heavy jaw. Clad in dented radiant heavy plate armor inlaid with a glowing golden warding sun-sigil at the chest that pushes warm holy light back against the violet gloom. One huge hand rests on the haft of a massive warhammer maul slung over a shoulder. Booming, immovable presence. 1:1 square, 1024×1024.
 
 #### Hruld Skullcleaver — Half-Orc Barbarian 13 (Path of the Totem Warrior)
 
-`app/static/demo/tokens/l13-hruld.jpg`
+`app/static/demo/tokens/l13-hruld.png`
 
 > Painterly digital dark-fantasy character portrait, three-quarter view from the chest up, grim defiant expression with a flicker of a wild grin, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, cold violet shadowfell rim-lighting, no frame, no text. A towering half-orc totem barbarian with weathered green-grey skin, jutting lower tusks, and a face crossed with old battle scars. Wild dark hair bound back; bear-totem fetishes — claws, teeth, a small carved bear skull — hung from leather straps across a bare scarred chest. Hefts a brutal worn greataxe over one shoulder, knuckles white on the haft. Sweat and old blood; unstoppable presence. 1:1 square, 1024×1024.
 
 #### Wisp Underbough — Forest Gnome Rogue 13 (Arcane Trickster)
 
-`app/static/demo/tokens/l13-wisp.jpg`
+`app/static/demo/tokens/l13-wisp.png`
 
 > Painterly digital dark-fantasy character portrait, three-quarter view from the chest up, impish sidelong smirk, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, cold violet shadowfell rim-lighting, no frame, no text. A small quick forest gnome arcane trickster with warm brown skin, bright mischievous eyes, and a tousled mop of mossy-brown hair. Snug dark leather armor and a hooded half-cloak. A faint arcane shimmer of pale violet runes drifts around her fingers; she half-turns as if already slipping out of frame. Carries a slender rapier and a compact hand crossbow tucked at her hip, with a tiny spellbook chained to her belt. 1:1 square, 1024×1024.
 
@@ -572,19 +572,19 @@ Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
 #### Spire Wraith
 
-`app/static/demo/tokens/l13-spire-wraith.jpg`
+`app/static/demo/tokens/l13-spire-wraith.png`
 
 > Painterly digital dark-fantasy character portrait, three-quarter view from the chest up, malevolent hollow expression, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, cold violet shadowfell rim-lighting, no frame, no text. An incorporeal undead wraith born of the spire — a hooded, tattered shroud of frayed black shadow-cloth that dissolves into drifting violet smoke where a body should be. Beneath the cowl, a void of darkness pierced by two burning points of cold pale light for eyes. Skeletal smoke-wreathed hands reaching from ragged sleeves, fingers tipped with frost. Trailing ribbons of shadowstuff. Menacing, weightless, draining presence. 1:1 square, 1024×1024.
 
 #### Vampire Spawn ×2 — two identical tokens, generate once, reuse for both
 
-`app/static/demo/tokens/l13-vampire-spawn.jpg`
+`app/static/demo/tokens/l13-vampire-spawn.png`
 
 > Painterly digital dark-fantasy character portrait, three-quarter view from the chest up, feral hungry snarl baring fangs, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, cold violet shadowfell rim-lighting, no frame, no text. A newly-risen vampire spawn — corpse-pale grey-white skin stretched tight over gaunt features, bloodshot crimson eyes, and elongated fangs. Lank dark hair and a smear of dried blood at the lips. Wears the torn, grave-stained remnants of fine clothing — a ruined dark doublet, frayed collar. Clawed hands raised, half-crouched and predatory. Cruel, ravenous, recently-dead pallor. 1:1 square, 1024×1024.
 
 #### Illithid Adept (Mind Flayer)
 
-`app/static/demo/tokens/l13-illithid-adept.jpg`
+`app/static/demo/tokens/l13-illithid-adept.png`
 
 > Painterly digital dark-fantasy character portrait, three-quarter view from the chest up, coldly impassive alien expression, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, cold violet shadowfell rim-lighting, no frame, no text. A mind flayer adept with a bulbous mauve-and-violet octopoid head, four writhing facial tentacles framing a lamprey maw, and milky pupil-less white eyes. Slick rubbery amphibian skin glistening with mucus. Robed in elaborate dark psionic-priest vestments of deep purple and tarnished bronze, set with a faintly glowing soul-gem at the throat. One slender clawed hand raised as if exerting psychic dominance, faint violet mind-energy haloing the skull. Utterly alien, calculating menace. 1:1 square, 1024×1024.
 

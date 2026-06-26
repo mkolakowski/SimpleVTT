@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.688.0] - 2026-06-26 — "The Spire Bleeds"
+
+**Schema version:** 81
+
+**Commit summary:** Demo art — generate + wire all 8 Level 13 Shadowfell Spire tokens (5 PCs + 3 NPC art assets, the Vampire Spawn shared across its ×2 entries), completing the L13 set.
+
+**Description:** The L13 demo rendered every token as a plain coloured ring. Generated all eight art assets from their `docs/demo/image-prompts.md` prompts via the ImagineArt MCP (nano-banana-pro → `remove_background` for true alpha) — Maelen Farsight, Cassius Emberbinder, High Cleric Doran, Hruld Skullcleaver, Wisp Underbough, plus the Spire Wraith, Vampire Spawn (one file reused for both ×2 tokens), and Illithid Adept. Dropped under `app/static/demo/tokens/` and wired the web-paths into `app/demo_campaigns.py`. **L13 is now 9/9 images.**
+
+### Added
+- `app/static/demo/tokens/l13-{maelen,cassius,doran,hruld,wisp,spire-wraith,vampire-spawn,illithid-adept}.png` — transparent 1024×1024 token art.
+
+### Changed
+- `app/demo_campaigns.py` — wire the L13 token web-paths into the spec (both Vampire Spawn entries point at the shared file).
+- `docs/demo/image-prompts.md` — flip the L13 checklist rows + progress counts to ✅ (overall 41→49 / 58).
+
+### Schema
+- No schema change (still v81).
+
 ## [2.687.0] - 2026-06-26 — "The Reef Boils"
 
 **Schema version:** 81
