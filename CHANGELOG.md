@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.657.2] - 2026-06-25 — "Aldric's Portrait"
+
+**Schema version:** 81
+
+**Commit summary:** Wire Aldric the Sudden's token art (`l3-aldric.png`) — drops the file in, marks the prompts-page checklist ✅ wired, and sets the L3 demo campaign's Aldric token image so the art shows on his combatant.
+
+**Description:** Adds the supplied 1254×1254 portrait at `app/static/demo/tokens/l3-aldric.png` (the existing token convention; the prompts-page checklist had it as a `.jpg` placeholder under "⬜ needs art"). Flips both the checklist table row and the prompt's drop-path code line to `l3-aldric.png` / ✅ wired, and sets `"image": "/static/demo/tokens/l3-aldric.png"` on Aldric's entry in the Level-3 "Goblin Warrens" demo campaign (`demo_campaigns.py`) — matching how Thorin's token is wired. On reseed the art surfaces both as the auto-thumbnail on the image-prompts wiki page (now framed + clickable from v2.657.0/.1) and as Aldric's token in the demo battle.
+
+### Added
+- `app/static/demo/tokens/l3-aldric.png` — Aldric the Sudden's token art.
+
+### Changed
+- `app/demo_campaigns.py` — Aldric's L3 entry now carries the token `image`.
+- `docs/demo/image-prompts.md` — Aldric's checklist row + drop-path updated to `.png` / ✅ wired.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.657.1] - 2026-06-25 — "The Gilded Frame"
 
 **Schema version:** 81

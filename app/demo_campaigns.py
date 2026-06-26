@@ -128,7 +128,8 @@ _GOBLIN_WARRENS = {
                 "(AoE radiant that ignores cover) plus her first 2nd-level "
                 "slots (Scorching Ray, Spiritual Weapon)."),
         )},
-        {"owner": "gm", "name": "Aldric the Sudden", "sheet": dict(
+        {"owner": "gm", "name": "Aldric the Sudden",
+         "image": "/static/demo/tokens/l3-aldric.png", "sheet": dict(
             klass="Wizard", subclass="School of Evocation", race="Forest Gnome", level=3,
             abilities={"STR": 8, "DEX": 14, "CON": 13, "INT": 16, "WIS": 11, "CHA": 10},
             ac=12, hp_max=17,

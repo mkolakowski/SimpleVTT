@@ -264,7 +264,7 @@ Tier-1 starter dungeon. A goblin warband raids the trade road from a warren of t
 | 🛡️ Thorin Battlehammer | `app/static/demo/tokens/l3-thorin.png` | ✅ wired |
 | 🗡️ Nyx Shadowstep | `app/static/demo/tokens/l3-nyx.png` | ✅ wired |
 | ✨ Sister Elsbeth | `app/static/demo/tokens/l3-elsbeth.png` | ✅ wired |
-| 🔥 Aldric the Sudden | `app/static/demo/tokens/l3-aldric.jpg` | ⬜ needs art |
+| 🔥 Aldric the Sudden | `app/static/demo/tokens/l3-aldric.png` | ✅ wired |
 | 🏹 Brisa Quickarrow | `app/static/demo/tokens/l3-brisa.jpg` | ⬜ needs art |
 | 👹 Grukk the Warlord | `app/static/demo/tokens/l3-grukk.jpg` | ⬜ needs art |
 | 👺 Goblin Skirmisher | `app/static/demo/tokens/l3-goblin-skirmisher.jpg` | ⬜ needs art |
@@ -301,7 +301,7 @@ Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
 #### Aldric the Sudden — Forest Gnome Wizard 3 (Evocation)
 
-`app/static/demo/tokens/l3-aldric.jpg`
+`app/static/demo/tokens/l3-aldric.png`
 
 > Painterly digital fantasy character portrait, full body for this small race, neutral expression unless noted, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle warm rim-lighting, no frame, no text. A small, twitchy forest gnome evoker with wide alert eyes, a wild shock of hair, and the tense look of someone silently counting seconds before a fireball. He wears scorch-marked arcane robes in deep reds and oranges, a dagger at his belt, and one hand cupped around a flickering ember of evocation flame that casts warm orange light over his face. Embers and faint heat-shimmer trail from his fingertips. Recommended 1:1 square, 1024×1024.
 
