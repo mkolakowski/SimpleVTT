@@ -81,6 +81,20 @@ plain coloured ring (`image_url=None`) and are waiting on art.
 /* description copy button pinned to the prompt blockquote's top-right corner */
 .demo-copy-desc{position:absolute;top:8px;right:8px;z-index:2;}
 .demo-row blockquote{padding-right:48px;}
+/* Lightbox: click any thumbnail to view the full-size image in an
+   overlay in the same window. Backdrop click / ✕ / Escape closes it. */
+.demo-thumb,.demo-thumb-side{cursor:zoom-in;}
+.demo-lightbox{position:fixed;inset:0;z-index:9999;display:none;
+  align-items:center;justify-content:center;padding:24px;
+  background:rgba(0,0,0,.85);cursor:zoom-out;}
+.demo-lightbox.open{display:flex;}
+.demo-lightbox img{max-width:95vw;max-height:95vh;object-fit:contain;
+  border-radius:8px;box-shadow:0 4px 40px rgba(0,0,0,.6);cursor:default;}
+.demo-lightbox-close{position:absolute;top:16px;right:20px;
+  width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+  font-size:26px;line-height:1;color:#fff;background:rgba(0,0,0,.45);
+  border:1px solid rgba(255,255,255,.25);border-radius:8px;cursor:pointer;}
+.demo-lightbox-close:hover{background:rgba(0,0,0,.7);}
 </style>
 
 <div class="demo-tabbar" id="demo-tabbar" role="tablist" aria-label="Demo selector"></div>
@@ -110,8 +124,30 @@ plain coloured ring (`image_url=None`) and are waiting on art.
     function webPath(s){ var t=(s||'').trim(); var i=t.indexOf('static/'); return i<0?null:'/'+t.slice(i); }
     // Normalize a label to letters/digits for fuzzy heading↔row matching.
     function normName(s){ return (s||'').replace(/\([^)]*\)/g,'').replace(/[^A-Za-z0-9' -]/g,'').replace(/\s+/g,' ').trim().toLowerCase(); }
+    // Lightbox: view the full-size image in an overlay (same window).
+    var lb=null,lbImg=null;
+    function ensureLightbox(){
+      if(lb) return;
+      lb=document.createElement('div'); lb.className='demo-lightbox';
+      lb.setAttribute('role','dialog'); lb.setAttribute('aria-modal','true');
+      lb.setAttribute('aria-label','Image preview');
+      lbImg=document.createElement('img'); lbImg.alt='';
+      var close=document.createElement('button');
+      close.type='button'; close.className='demo-lightbox-close';
+      close.innerHTML='✕'; close.setAttribute('aria-label','Close preview');
+      lb.appendChild(lbImg); lb.appendChild(close);
+      document.body.appendChild(lb);
+      // Click the backdrop (anywhere but the image) or ✕ to close.
+      lb.addEventListener('click',function(e){ if(e.target!==lbImg) closeLightbox(); });
+      document.addEventListener('keydown',function(e){
+        if(e.key==='Escape'||e.keyCode===27) closeLightbox();
+      });
+    }
+    function openLightbox(src,alt){ ensureLightbox(); lbImg.src=src; lbImg.alt=alt||''; lb.classList.add('open'); }
+    function closeLightbox(){ if(lb) lb.classList.remove('open'); }
     // Thumbnail that hides itself if the file 404s — so it only shows once art exists.
-    function thumb(src,cls,alt){ var im=document.createElement('img'); im.className=cls; im.src=src; im.loading='lazy'; im.alt=alt||''; im.onerror=function(){ im.style.display='none'; }; return im; }
+    // Click to enlarge in the lightbox overlay.
+    function thumb(src,cls,alt){ var im=document.createElement('img'); im.className=cls; im.src=src; im.loading='lazy'; im.alt=alt||''; im.onerror=function(){ im.style.display='none'; }; im.addEventListener('click',function(){ openLightbox(src,alt); }); return im; }
     // Icon-only copy buttons. Clipboard glyph by default; flashes a check on copy.
     var CLIP='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
     var CHECK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';

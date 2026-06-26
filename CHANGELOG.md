@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.657.0] - 2026-06-25 — "The Zoom Lens"
+
+**Schema version:** 81
+
+**Commit summary:** On the demo image-generation prompts wiki page, clicking any thumbnail now opens the full-size image in a lightbox overlay in the same window (backdrop-click / ✕ / Escape to close).
+
+**Description:** The `/wiki/doc/image-prompts` page auto-derives a small in-row thumbnail and a larger side preview for each entity from its drop-path (shown once art exists). Previously those thumbnails were display-only at their fixed small size. This makes every thumbnail clickable: a click opens the image at full resolution in a dim-backdrop lightbox overlay (`object-fit: contain`, up to 95vw/95vh) without leaving the page. The overlay closes on backdrop click, the 44×44 ✕ button, or Escape. Implemented entirely in the page's existing embedded `<script>`/`<style>` (the shared `thumb()` builder gains a click handler that calls a lazily-created overlay), so both the inline row thumbnails and the side previews get it for free; with JS off the page still degrades to plain images.
+
+### Added
+- `docs/demo/image-prompts.md` — thumbnail-click lightbox overlay (CSS `.demo-lightbox*` + `openLightbox`/`closeLightbox` in the page script; thumbnails get `cursor: zoom-in`).
+
+### Schema
+- No schema change (still v81).
+
 ## [2.656.0] - 2026-06-25 — "The Five-Hundred-Pound Limit"
 
 **Schema version:** 81
