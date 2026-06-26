@@ -10356,6 +10356,60 @@ async def _restore_target_buffs(
     })
 
 
+async def _revert_attack_buff_installs(
+    db: Session, campaign_id: int, attack_id: str | None,
+) -> list[str]:
+    """v2.659.0 — Phase 3c-2 of docs/plans/pending-resolution-state-machine.md:
+    walk an attack's undo log and restore every ``buff_install`` snapshot
+    (the on-hit condition install logged under ``attack_id`` by Phase 3c-1's
+    ``_resolve_feature_save`` NPC branch), then PRUNE the reverted entries so a
+    second reaction on the same swing can't double-revert.
+
+    Called from the six flip-producer reaction heal-back blocks (Shield /
+    Lucky / Defensive Duelist / Form-of-the-Beast Tail / Combat Inspiration /
+    NPC Parry): when a +AC or reroll reaction turns a hit into a miss, the
+    damage is healed back AND any condition the swing installed (e.g.
+    Frightened from a Battle Master maneuver against an NPC) is walked back.
+    Only NPC-defender flips (NPC Parry) have an install logged under the
+    attack id today — for a PC defender the on-hit save is still deferred
+    (prompted, not installed) at flip time, so this returns ``[]`` for them
+    (the async PC case is Phase 3c-3's held pending window).
+
+    Returns the list of reverted condition keys for the negate broadcast's
+    ``conditions_reverted`` field. No-op (``[]``) when ``attack_id`` is falsy
+    or carries no buff_install entries.
+    """
+    if not attack_id:
+        return []
+    _purge_attack_damage_log()
+    entries = _attack_damage_log.get(attack_id) or []
+    reverted: list[str] = []
+    kept: list = []
+    for entry in entries:
+        if (
+            isinstance(entry, dict)
+            and entry.get("kind") == "buff_install"
+            and entry.get("campaign_id") == campaign_id
+        ):
+            await _restore_target_buffs(
+                db, campaign_id,
+                entry.get("target_char_id"),
+                entry.get("target_combatant_id"),
+                entry.get("buffs_before") or [],
+            )
+            reverted.append(str(entry.get("buff_installed_key") or ""))
+        else:
+            kept.append(entry)
+    if reverted:
+        # Prune only the reverted buff_install entries; keep damage /
+        # slot-spend entries so a later /undo_attack_damage still works.
+        if kept:
+            _attack_damage_log[attack_id] = kept
+        else:
+            _attack_damage_log.pop(attack_id, None)
+    return reverted
+
+
 # v2.37.0 Phase T.3d: side-channel context for PC save-or-suck spells.
 # When ``/cast_spell`` creates a RollRequest for a PC-targeted save
 # spell (Hold Person at a player ally), we stash the spell's slug +
@@ -31275,6 +31329,12 @@ async def use_reaction(
                 )
                 _hp_res = _apply_hp_change(watcher_char, _new_hp)
                 db.commit()
+                # v2.659.0 — Phase 3c-2: walk back any on-hit condition the
+                # negated swing installed under this attack_id (no-op for a
+                # PC defender today — the on-hit save is still deferred).
+                _reverted = await _revert_attack_buff_installs(
+                    db, campaign_id, _ctx.get("attack_id"),
+                )
                 await hub.broadcast(campaign_id, {
                     "type": "character_hp_update",
                     "data": {
@@ -31299,6 +31359,7 @@ async def use_reaction(
                         "reaction_kind": "spell",
                         "damage_applied": _dmg_applied,
                         "heal_back": _dmg_applied,
+                        "conditions_reverted": _reverted,
                         "attack_id": _ctx.get("attack_id"),
                     },
                 })
@@ -32770,6 +32831,11 @@ async def use_reaction(
                 )
                 _hp_res = _apply_hp_change(watcher_char, _new_hp)
                 db.commit()
+                # v2.659.0 — Phase 3c-2: walk back any on-hit condition the
+                # negated swing installed under this attack_id.
+                _reverted = await _revert_attack_buff_installs(
+                    db, campaign_id, _ctx.get("attack_id"),
+                )
                 await hub.broadcast(campaign_id, {
                     "type": "character_hp_update",
                     "data": {
@@ -32794,6 +32860,7 @@ async def use_reaction(
                         "reaction_kind": "feat",
                         "damage_applied": _dmg_applied,
                         "heal_back": _dmg_applied,
+                        "conditions_reverted": _reverted,
                         "attack_id": _ctx.get("attack_id"),
                     },
                 })
@@ -32867,6 +32934,11 @@ async def use_reaction(
                 )
                 _hp_res = _apply_hp_change(watcher_char, _new_hp)
                 db.commit()
+                # v2.659.0 — Phase 3c-2: walk back any on-hit condition the
+                # negated swing installed under this attack_id.
+                _reverted = await _revert_attack_buff_installs(
+                    db, campaign_id, _ctx.get("attack_id"),
+                )
                 await hub.broadcast(campaign_id, {
                     "type": "character_hp_update",
                     "data": {
@@ -32891,6 +32963,7 @@ async def use_reaction(
                         "reaction_kind": "feat",
                         "damage_applied": _dmg_applied,
                         "heal_back": _dmg_applied,
+                        "conditions_reverted": _reverted,
                         "attack_id": _ctx.get("attack_id"),
                     },
                 })
@@ -32984,6 +33057,11 @@ async def use_reaction(
                 )
                 _hp_res = _apply_hp_change(watcher_char, _new_hp)
                 db.commit()
+                # v2.659.0 — Phase 3c-2: walk back any on-hit condition the
+                # negated swing installed under this attack_id.
+                _reverted = await _revert_attack_buff_installs(
+                    db, campaign_id, _ctx.get("attack_id"),
+                )
                 await hub.broadcast(campaign_id, {
                     "type": "character_hp_update",
                     "data": {
@@ -33008,6 +33086,7 @@ async def use_reaction(
                         "reaction_kind": "class_feature",
                         "damage_applied": _dmg_applied,
                         "heal_back": _dmg_applied,
+                        "conditions_reverted": _reverted,
                         "attack_id": _ctx.get("attack_id"),
                     },
                 })
@@ -33163,6 +33242,11 @@ async def use_reaction(
                 )
                 _hp_res = _apply_hp_change(watcher_char, _new_hp)
                 db.commit()
+                # v2.659.0 — Phase 3c-2: walk back any on-hit condition the
+                # negated swing installed under this attack_id.
+                _reverted = await _revert_attack_buff_installs(
+                    db, campaign_id, _ctx.get("attack_id"),
+                )
                 await hub.broadcast(campaign_id, {
                     "type": "character_hp_update",
                     "data": {
@@ -33187,6 +33271,7 @@ async def use_reaction(
                         "reaction_kind": "class_feature",
                         "damage_applied": _dmg_applied,
                         "heal_back": _dmg_applied,
+                        "conditions_reverted": _reverted,
                         "attack_id": _ctx.get("attack_id"),
                     },
                 })
@@ -33272,6 +33357,13 @@ async def use_reaction(
                         await _apply_heal_to_combatant(
                             db, campaign_id, _npc_cb, _dmg_applied,
                         )
+                        # v2.659.0 — Phase 3c-2: the swing also installed an
+                        # on-hit condition on this NPC (Frightened from a
+                        # Battle Master maneuver, logged under attack_id by
+                        # Phase 3c-1). A miss should walk it back too.
+                        _reverted = await _revert_attack_buff_installs(
+                            db, campaign_id, _ctx.get("attack_id"),
+                        )
                         await hub.broadcast(campaign_id, {
                             "type": "feature_used",
                             "data": {
@@ -33292,6 +33384,7 @@ async def use_reaction(
                                 "action_name": action_name,
                                 "damage_applied": _dmg_applied,
                                 "heal_back": _dmg_applied,
+                                "conditions_reverted": _reverted,
                                 "attack_id": _ctx.get("attack_id"),
                                 "watcher_combatant_id": watcher_combatant_id,
                             },

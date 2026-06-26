@@ -4112,6 +4112,194 @@ async def test_npc_parry_auto_negates_exact_ac_hit(
     )
 
 
+# ── v2.659.0 — Phase 3c-2: NPC Parry flip reverts the on-hit condition ──
+
+
+async def _bm_patch(gm_client, char_id, fields):
+    r = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-fields",
+        json={**fields, "class_slug": "fighter"},
+    )
+    assert r.status_code == 200, r.text
+
+
+def _sup_dice(current, maximum):
+    return {
+        "key": "superiority-dice", "name": "Superiority Dice",
+        "current": current, "max": maximum, "reset": "short",
+        "source": "fighter Lv 3 / Combat Superiority", "class_slug": "fighter",
+        "desc": "Battle Master maneuvers.", "manual": False,
+    }
+
+
+async def test_npc_parry_flip_reverts_on_hit_condition(
+    gm_client, gm_ws, roster,
+):
+    """v2.659.0 — Phase 3c-2: when an NPC Parry negates a hit that ALSO
+    installed an on-hit condition (Frightened from Garrik's armed Menacing
+    Attack rider), the negate now walks the Frightened install back via
+    ``_revert_attack_buff_installs`` — not just the HP.
+
+    Garrik (Battle Master) arms Menacing Attack and swings on a Bandit
+    Captain. The negate fires only for a non-crit hit in the +2 Parry band
+    AND we need the WIS save to fail (Frightened installs) on that same
+    once-per-turn rider swing — both are server-random, so each cycle
+    resets + re-arms (the rider is once-per-turn) and probes the first hit.
+    On a qualifying swing, using the monster Parry reaction restores the
+    NPC's HP **and** removes Frightened (asserted via `conditions_reverted`
+    + the live battle state)."""
+    garrik = roster["Garrik Ironside"]
+    await _set_auto_apply(gm_client, True)
+    # Restore-safe: snapshot the original subclass + resources so Garrik's
+    # demo Lucky `luck-point` survives for later tests (don't wipe to []).
+    _orig = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/sheet-json"
+    )).json().get("sheet") or {}
+    _orig_sub = _orig.get("subclass") or "Champion"
+    _orig_res = _orig.get("resources") or []
+    await _bm_patch(gm_client, garrik["id"], {
+        "subclass": "Battle Master", "superiority_die_size": "d8",
+        "resources": [_sup_dice(99, 99)],
+    })
+    try:
+        tmpl = (await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/templates",
+            json={
+                "name": "Bandit Captain (3c-2 revert test)",
+                "template": "dnd5e", "tags": ["npc", "harness"],
+                "sheet": {"monster_slug": "bandit-captain"},
+            },
+        )).json()
+        bc_tok = (await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/tokens",
+            json={
+                "token_template_id": tmpl["id"], "label": "Bandit Captain",
+                "x": 350.0, "y": 350.0, "color": "#822222", "size": 1,
+            },
+        )).json()
+        garrik_cid = f"tok_3c2_garrik_{garrik['id']}"
+        bc_cid = f"tok_3c2_bc_{tmpl['id']}"
+
+        qualifying = None  # the attack response that hit in-band + frightened
+        for _ in range(150):
+            # Fresh battle each cycle: clears Garrik's once-per-turn flag +
+            # any Frightened left on the captain from a prior probe.
+            await _seed_battle(gm_client, [
+                _make_combatant(garrik["name"], garrik["id"], init=12, hp=60),
+                {
+                    "id": bc_cid, "char_id": None,
+                    "source_token_id": bc_tok["id"],
+                    "token_template_id": tmpl["id"], "name": "Bandit Captain",
+                    "initiative": 9, "hp_current": 9999, "hp_max": 9999,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False,
+                                "reaction": False, "movement": 0},
+                },
+            ])
+            arm = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/use_menacing_attack",
+                json={"character_id": garrik["id"]},
+            )
+            assert arm.status_code == 200, arm.text
+            # Swing until the FIRST hit (misses don't consume the rider).
+            first_hit = None
+            for _ in range(15):
+                a = await gm_client.post(
+                    f"/api/campaign/{CAMPAIGN_ID}/attack",
+                    json={"character_id": garrik["id"], "attack_index": 0,
+                          "target_combatant_id": bc_cid,
+                          "override": True, "override_range": True},
+                )
+                assert a.status_code == 200, a.text
+                if a.json().get("hit"):
+                    first_hit = a.json()
+                    break
+            if not first_hit:
+                continue
+            at, tac = first_hit.get("attack_total"), first_hit.get("target_ac")
+            # In the +2 Parry negation band, non-crit, with damage applied?
+            if not (
+                isinstance(at, int) and isinstance(tac, int)
+                and not first_hit.get("is_crit")
+                and int(first_hit.get("damage_applied") or 0) > 0
+                and at < tac + 2
+            ):
+                continue
+            # Did the on-hit WIS save fail (Frightened installed + logged)?
+            fs = [s for s in (first_hit.get("feature_saves") or [])
+                  if s.get("source") == "menacing-attack" and s.get("resolved")]
+            if not fs or not fs[0].get("condition_installed"):
+                continue
+            qualifying = first_hit
+            break
+
+        assert qualifying is not None, (
+            "no swing that both landed in the Parry band AND failed the WIS "
+            "save in 150 cycles"
+        )
+        dmg = int(qualifying["damage_applied"])
+
+        # Confirm Frightened is on the captain pre-Parry.
+        await asyncio.sleep(0.2)
+        st = (await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/battle")).json().get("battle") or {}
+        cap = next((c for c in (st.get("combatants") or [])
+                    if c.get("id") == bc_cid), None)
+        assert cap is not None
+        assert any((b or {}).get("key") == "frightened"
+                   for b in (cap.get("buffs") or [])), \
+            f"Frightened not installed pre-Parry: {cap.get('buffs')}"
+
+        # Find the monster-parry prompt for the qualifying swing + use it.
+        prompts = [
+            m for m in _prompt_broadcasts(gm_ws)
+            if (m.get("data") or {}).get("watcher_combatant_id") == bc_cid
+            and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+        ]
+        parry_prompt = None
+        for m in reversed(prompts):
+            if "monster-parry" in [
+                o.get("key") for o in (m["data"].get("options") or [])
+            ]:
+                parry_prompt = m
+                break
+        assert parry_prompt, "expected a monster-parry option on the prompt"
+
+        gm_ws.mark()
+        use = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+            json={"prompt_id": parry_prompt["data"]["prompt_id"],
+                  "reaction_key": "monster-parry"},
+        )
+        assert use.status_code == 200, use.text
+        await asyncio.sleep(0.2)
+
+        neg = [
+            m for m in gm_ws.buffered("feature_used")
+            if (m.get("data") or {}).get("source") == "monster-parry-negate"
+        ]
+        assert neg, "expected a monster-parry-negate feature_used"
+        data = neg[-1]["data"]
+        assert int(data.get("heal_back") or 0) == dmg
+        # Phase 3c-2: the on-hit Frightened install is reported reverted...
+        assert "frightened" in (data.get("conditions_reverted") or []), \
+            f"expected Frightened in conditions_reverted: {data}"
+
+        # ...and is actually gone from the captain.
+        await asyncio.sleep(0.2)
+        st2 = (await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/battle")).json().get("battle") or {}
+        cap2 = next((c for c in (st2.get("combatants") or [])
+                     if c.get("id") == bc_cid), None)
+        assert cap2 is not None
+        assert not any((b or {}).get("key") == "frightened"
+                       for b in (cap2.get("buffs") or [])), \
+            f"Frightened still present after Parry flip: {cap2.get('buffs')}"
+    finally:
+        await _bm_patch(gm_client, garrik["id"],
+                        {"subclass": _orig_sub, "resources": _orig_res})
+
+
 # ── v2.72.0 — Phase 3d: Silvery Barbs ──
 
 

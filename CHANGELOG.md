@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.659.0] - 2026-06-26 — "The Recalled Terror"
+
+**Schema version:** 81
+
+**Commit summary:** Phase 3c-2 of the pending-resolution state machine — when an NPC Parry (or any AC-bump/reroll reaction) flips a hit to a miss, also walk back the on-hit condition the swing installed, not just the HP.
+
+**Description:** Builds on v2.658.0 (3c-1, which logged NPC weapon on-hit-save condition installs under the attack's id). A new shared helper `_revert_attack_buff_installs(db, campaign_id, attack_id)` walks the attack's undo log, restores each `buff_install` snapshot via `_restore_target_buffs`, and prunes the reverted entries (double-revert guard). It's called from all six flip-producer reaction heal-back blocks — Shield, Lucky, Defensive Duelist, Form-of-the-Beast Tail, Combat Inspiration, and NPC Parry — right after the HP heal-back, and each negate broadcast now carries a `conditions_reverted` field. Today only **NPC Parry** has an install logged under the attack id at flip time (a PC defender's on-hit save is still deferred/prompted, so the helper is a safe no-op there — that async case is Phase 3c-3's held pending window). Concretely: a Battle Master arms Menacing Attack, hits a Bandit Captain in the Parry band and frightens it, the captain Parries → the hit misses, its HP is restored **and** Frightened is removed.
+
+### Added
+- `tests/harness/test_reaction_prompt.py::test_npc_parry_flip_reverts_on_hit_condition` — Garrik (Battle Master) arms Menacing Attack, lands an in-band hit that frightens a Bandit Captain, the captain Parries → asserts the `monster-parry-negate` broadcast reports `conditions_reverted: ["frightened"]` and the captain's live battle state is clean. The new `garrik_battle_master` setup here + the 3c-1 fixture are now **restore-safe** (snapshot + restore the original subclass/resources) so Garrik's demo Lucky `luck-point` survives for later tests.
+
+### Changed
+- `app/routes/tabletop_routes.py` — new `_revert_attack_buff_installs` helper, wired into the six flip-producer negate blocks; each negate `feature_used` broadcast gains a `conditions_reverted` list.
+- `tests/harness/test_weapon_hit_save_undo.py` — `garrik_battle_master` fixture made restore-safe (no longer wipes Garrik's resources to `[]`).
+- `docs/plans/pending-resolution-state-machine.md` — Phase 3c-2 marked shipped; 3c-3 (PC-defender held pending window) is the remaining slice.
+- `docs/test-harness-coverage.md` — catalog the new test.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.658.0] - 2026-06-26 — "The Undoable Fright"
 
 **Schema version:** 81

@@ -17,8 +17,11 @@ architectural lift). **Phase 3c is now designed (v2.648.3) — see the
 implementation arc in the Phase 3 section:** NPC-defender flips are synchronous
 (log-and-replay, 3c-1/3c-2 — small, shippable now) and PC-defender flips are
 async (the held pending window, 3c-3 — its own arc). **3c-1 (log NPC on-hit-save
-installs under `attack_id`) shipped v2.658.0** — the install is now an undoable
-`buff_install` entry; 3c-2 (auto-revert it on a flip) is next.
+installs under `attack_id`) shipped v2.658.0** and **3c-2 (auto-revert the
+condition on a flip via `_revert_attack_buff_installs`) shipped v2.659.0** — an
+NPC Parry that flips a hit to a miss now restores HP **and** removes the on-hit
+condition. The only remaining slice is **3c-3** (the PC-defender held pending
+window, an async arc).
 
 This was the single biggest remaining item in the
 [reactions-automation](reactions-automation.md) v3 backlog — **and the save
@@ -207,18 +210,18 @@ timing splits by defender type.**
   PATCH recipe (`test_menacing_attack.py`) — Garrik arms Menacing Attack, hits
   an NPC bandit until the WIS save fails (Frightened installs), then
   `/undo_attack_damage` reverts it (+ a 404 error path).
-- **3c-2 — auto-revert the NPC condition on a flip.** New shared helper
-  `_revert_attack_buff_installs(db, campaign_id, attack_id)` that walks
+- **3c-2 — auto-revert the NPC condition on a flip. ✅ SHIPPED v2.659.0.** New
+  shared helper `_revert_attack_buff_installs(db, campaign_id, attack_id)` walks
   `_attack_damage_log[attack_id]`, restores each `buff_install` via
   `_restore_target_buffs`, and prunes the reverted entries (double-undo guard).
-  Call it from all **six** flip-producer heal-back blocks (Shield `~30864`,
-  Lucky `~32359`, Defensive Duelist `~32456`, Form-of-Beast `~32573`, Combat
-  Inspiration `~32752`, NPC Parry `~32857`) right after the HP heal-back, and
-  add a `conditions_reverted` field to each negate broadcast. Only **NPC Parry**
-  fires for an NPC defender, so it's the only one 3c-2's test exercises (the
-  other five are PC-defender → exercised in 3c-3). Test: Garrik (Battle Master,
-  Frightened rider) hits a Bandit-Captain in the Parry negation band until
-  Frightened installs, the NPC Parries → HP healed **and** Frightened removed.
+  Called from all **six** flip-producer heal-back blocks (Shield, Lucky,
+  Defensive Duelist, Form-of-Beast, Combat Inspiration, NPC Parry) right after
+  the HP heal-back, with a `conditions_reverted` field added to each negate
+  broadcast. Only **NPC Parry** fires for an NPC defender, so it's the only one
+  3c-2's test exercises (the other five are PC-defender no-ops until 3c-3).
+  Test: `test_npc_parry_flip_reverts_on_hit_condition` — Garrik (Battle Master,
+  Frightened rider) hits a Bandit Captain in the Parry band until Frightened
+  installs, the NPC Parries → HP healed **and** Frightened removed.
 - **3c-3 — true pending window for the async PC-defender case** (own follow-up
   arc; may sub-phase). When a PC target with a live flip-producing reaction
   would take an on-hit save, **defer** firing it: stash the save spec on a new

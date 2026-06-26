@@ -44,8 +44,18 @@ def _superiority_dice_block(current: int, maximum: int) -> dict:
 
 @pytest_asyncio.fixture
 async def garrik_battle_master(gm_client, roster):
-    """PATCH Garrik to Battle Master + seed a deep superiority-dice pool."""
+    """PATCH Garrik to Battle Master + seed a deep superiority-dice pool.
+
+    Restore-safe: snapshots the original subclass + resources first and
+    writes them back in teardown, so Garrik's demo Lucky `luck-point`
+    resource survives for later tests in a shared dev container (the
+    `resources: []` wipe pattern silently corrupts it)."""
     garrik = roster["Garrik Ironside"]
+    orig = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/sheet-json"
+    )).json().get("sheet") or {}
+    orig_sub = orig.get("subclass") or "Champion"
+    orig_res = orig.get("resources") or []
     await _patch_sheet(
         gm_client, garrik["id"],
         {
@@ -60,7 +70,7 @@ async def garrik_battle_master(gm_client, roster):
     finally:
         await _patch_sheet(
             gm_client, garrik["id"],
-            {"subclass": "Champion", "resources": []},
+            {"subclass": orig_sub, "resources": orig_res},
             class_slug="fighter",
         )
 
