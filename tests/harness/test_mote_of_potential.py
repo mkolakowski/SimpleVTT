@@ -114,6 +114,82 @@ async def test_use_mp_mode_save(
     assert data["mode"] == "save"
 
 
+async def _seed_lyra_plus_bandit(gm_client, lyra, bandit_cid):
+    templates = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/templates")).json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": f"tok_mp_l_{lyra['id']}", "char_id": lyra["id"],
+             "name": lyra["name"], "initiative": 11,
+             "hp_current": 40, "hp_max": 40, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": bandit_cid, "char_id": None,
+             "token_template_id": bandit["id"], "name": bandit["name"],
+             "initiative": 8, "hp_current": 100, "hp_max": 100, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+
+
+async def test_mp_attack_mode_applies_force_damage(
+    gm_client, lyra_creation,
+):
+    """v2.670.0 — Phase 8: attack mode now rolls + applies 1d{die} force
+    damage to the target via `_apply_damage_to_combatant` (was announce-
+    only). Lv 6 Lyra → 1d8."""
+    lyra = lyra_creation
+    bandit_cid = "tok_mp_atk_bandit"
+    await _seed_lyra_plus_bandit(gm_client, lyra, bandit_cid)
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_mote_of_potential",
+        json={"character_id": lyra["id"], "mode": "attack",
+              "target_combatant_id": bandit_cid},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["mode"] == "attack"
+    dr = data.get("die_rolled")
+    da = data.get("damage_applied")
+    assert dr is not None and 1 <= dr <= 8, f"1d8 should roll 1..8; got {dr}"
+    # force damage vs a vanilla bandit applies fully; accept halving
+    # defensively but it always lands ≥ 1 (min 1d8 = 1).
+    assert da is not None and da > 0
+    assert da in (dr, dr // 2), f"applied should be rolled or halved; got {dr}/{da}"
+
+
+async def test_mp_save_mode_grants_temp_hp(
+    gm_client, lyra_creation,
+):
+    """v2.670.0 — Phase 8: save mode now grants 1d{die} + CHA-mod temp HP to
+    the target via `_grant_temp_hp` (was announce-only). Lv 6 Lyra CHA 17 →
+    1d8 + 3, granted to a fresh NPC (no existing temp pool → applied full)."""
+    lyra = lyra_creation
+    bandit_cid = "tok_mp_save_bandit"
+    await _seed_lyra_plus_bandit(gm_client, lyra, bandit_cid)
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_mote_of_potential",
+        json={"character_id": lyra["id"], "mode": "save",
+              "target_combatant_id": bandit_cid},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["mode"] == "save"
+    dr = data.get("die_rolled")
+    thp = data.get("temp_hp_granted")
+    cha = data.get("cha_mod")
+    assert dr is not None and 1 <= dr <= 8
+    assert cha == 3
+    # Fresh target (no temp HP) → granted == roll + CHA mod.
+    assert thp == dr + cha, f"temp HP should be {dr}+{cha}; got {thp}"
+
+
 async def test_use_mp_wrong_subclass(
     gm_client, roster,
 ):

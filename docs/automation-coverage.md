@@ -364,7 +364,7 @@ or passive damage-boosters that already ride other code paths
 | `use_invocation` | ⚪ announce-only | — |
 | `use_mask_of_many_faces` | ⚪ announce-only | — |
 | `use_minor_alchemy` | ⚪ announce-only | — |
-| `use_mote_of_potential` | ⚪ announce-only | — |
+| `use_mote_of_potential` | ✅ tracked | v2.670.0 — attack mode applies 1d{die} force damage (`_apply_damage_to_combatant`) + save mode grants 1d{die}+CHA temp HP (`_grant_temp_hp`); check mode stays GM-narrated |
 | `use_potent_spellcasting` | ✅ tracked | v2.612.1 — installs permanent `potent-spellcasting-active` flag-buff (`potent_spellcasting_*`: active/wis_mod/class); Phase 8 cleric/cantrip twin of Empowered Evocation |
 | `use_relentless_avenger` | ⚪ announce-only | — |
 | `use_scornful_rebuke` | ⚪ announce-only | — |

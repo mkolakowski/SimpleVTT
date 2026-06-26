@@ -94576,6 +94576,44 @@ async def use_mote_of_potential(
         ),
     }[mode]
 
+    # v2.670.0 — Phase 8: roll the mote die server-side + apply the two
+    # mechanizable modes (was announce-only). RAW TCE p.31:
+    #   - attack → 1d{die} FORCE damage to a creature near the target
+    #     (applied via `_apply_damage_to_combatant`, the Psychic Blades shape);
+    #   - save   → 1d{die}+CHA temp HP to the target (via `_grant_temp_hp`,
+    #     the Inspiring Smite shape).
+    # check mode stays GM-narrated — the server doesn't track the ability
+    # check the bonus adds to — but the die is still rolled + surfaced so the
+    # player can read the value. Backward-compatible: no target → no apply.
+    die_rolled = None
+    die_breakdown = ""
+    damage_applied = None
+    temp_hp_granted = None
+    try:
+        _mr = dice_mod.roll(f"1d{die_size}")
+        die_rolled = max(0, int(_mr.total))
+        die_breakdown = _mr.breakdown
+    except dice_mod.DiceParseError:
+        die_rolled = None
+    if die_rolled is not None and target_combatant_id and mode in (
+        "attack", "save",
+    ):
+        _mote_target = _lookup_combatant(campaign_id, target_combatant_id)
+        if _mote_target is not None:
+            if mode == "attack" and die_rolled > 0:
+                _madr = await _apply_damage_to_combatant(
+                    db, campaign_id, _mote_target, die_rolled, "force",
+                    is_attack=True, attacker_char_id=char.id,
+                )
+                damage_applied = int(_madr.get("applied") or 0)
+            elif mode == "save":
+                _mthp = max(0, die_rolled + cha_mod)
+                _mtr = await _grant_temp_hp(
+                    db, campaign_id, _mote_target, _mthp,
+                    source="mote-of-potential",
+                )
+                temp_hp_granted = int(_mtr.get("applied") or 0)
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -94607,6 +94645,10 @@ async def use_mote_of_potential(
             "die_expression": f"1d{die_size}",
             "die_size": die_size,
             "cha_mod": cha_mod,
+            "die_rolled": die_rolled,
+            "die_breakdown": die_breakdown,
+            "damage_applied": damage_applied,
+            "temp_hp_granted": temp_hp_granted,
             "bard_level": bard_lv,
         },
     })
@@ -94619,6 +94661,10 @@ async def use_mote_of_potential(
         "die_expression": f"1d{die_size}",
         "die_size": die_size,
         "cha_mod": cha_mod,
+        "die_rolled": die_rolled,
+        "die_breakdown": die_breakdown,
+        "damage_applied": damage_applied,
+        "temp_hp_granted": temp_hp_granted,
         "bard_level": bard_lv,
     }
 

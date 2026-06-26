@@ -515,6 +515,13 @@ composition. Batch by class, same cadence as the breadth sweep.
   the AoE cleanup. Announce-only without `protected_combatant_ids`. First
   substrate **shared across two features under distinct keys**. Harness:
   `test_sculpt_spells.py` (+3, incl. an end-to-end Fireball auto-pass).
+- **v2.670.0 ("The Mote Made Real") — Mote of Potential** (Creation College
+  Bard Lv 3+): `use_mote_of_potential` had three modes but was announce-only.
+  Two now apply server-side: **attack** → `1d{die}` force damage via
+  `_apply_damage_to_combatant` (Psychic Blades shape); **save** → `1d{die}+CHA`
+  temp HP via `_grant_temp_hp` (Inspiring Smite shape). **check** mode stays
+  GM-narrated (no ability-check substrate) but the die is rolled + surfaced.
+  Harness: `test_mote_of_potential.py` (+2).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

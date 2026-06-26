@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.670.0] - 2026-06-26 — "The Mote Made Real"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — mechanize Mote of Potential's two applicable modes (Creation College Bard): attack → force damage, save → temp HP.
+
+**Description:** `use_mote_of_potential` (TCE p.31) had three modes but was announce-only. Two are now mechanized server-side, reusing substrate from earlier this session: **attack** mode rolls `1d{die}` and applies **force** damage to the target via `_apply_damage_to_combatant` (the Psychic Blades shape), and **save** mode grants `1d{die} + CHA-mod` temp HP via `_grant_temp_hp` (the Inspiring Smite shape). The third — **check** mode (re-roll a BI die and add it to an ability check) — stays GM-narrated since the server doesn't track the check, but the die is still rolled + surfaced (`die_rolled`) so the player can read the value. The response/broadcast gain `die_rolled` / `die_breakdown` / `damage_applied` / `temp_hp_granted`. Backward-compatible: no `target_combatant_id` leaves attack/save unapplied.
+
+### Added
+- `tests/harness/test_mote_of_potential.py` — `test_mp_attack_mode_applies_force_damage` (Lv 6 Lyra → 1d8 force lands on an NPC bandit) + `test_mp_save_mode_grants_temp_hp` (save mode grants `roll + CHA-mod` temp HP to a fresh NPC → granted == roll + 3).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_mote_of_potential` rolls the mote die + applies attack (force damage) / save (temp HP) modes when targeted; surfaces the new fields.
+- `docs/automation-coverage.md` — `use_mote_of_potential` flipped ⚪ announce-only → ✅ tracked (attack + save modes; check stays GM-narrated).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Mote of Potential.
+- `docs/test-harness-coverage.md` — catalog the new tests.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.669.0] - 2026-06-26 — "The Sheltered Blast"
 
 **Schema version:** 81
