@@ -607,6 +607,14 @@ composition. Batch by class, same cadence as the breadth sweep.
   to compose two apply-substrates on one target. Surfaces `heal_applied`/
   `temp_hp_applied`/`revived`; announce-only without a target. Harness:
   `test_balm_of_the_summer_court.py` (+2).
+- **v2.680.0 ("The Ensnaring Vines") — Nature's Wrath** (Ancients Paladin Lv
+  3+ CD): first **save → condition-install** wire of this session's tail (the
+  prior nine applied damage / heal / temp-HP). `use_natures_wrath` now
+  resolves the target's STR/DEX save via `_resolve_feature_save` (the Champion
+  Challenge / feature-saves substrate — NPC saves inline, PC via RollRequest)
+  and installs Restrained (`_make_restrained_buff`, key `restrained`, with the
+  end-of-turn repeated-save stamps) on a fail. Surfaces `feature_save`.
+  Harness: `test_natures_wrath.py` (+1).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

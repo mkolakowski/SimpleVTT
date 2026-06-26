@@ -269,7 +269,7 @@ or passive damage-boosters that already ride other code paths
 | `use_minor_conjuration` | ✅ tracked | A use/resource |
 | `use_mystic_arcanum` | ✅ tracked | A use/resource |
 | `use_natural_recovery` | ✅ tracked | A use/resource |
-| `use_natures_wrath` | ✅ tracked | A use/resource |
+| `use_natures_wrath` | ✅ tracked | v2.680.0 — resolves the target's STR/DEX save via `_resolve_feature_save` (NPC inline, PC via RollRequest) + installs Restrained (`_make_restrained_buff`, repeated save) on a fail |
 | `use_open_hand_technique` | ✅ tracked | D buff-install, D/E buff-install, G forced-move |
 | `use_orders_wrath` | ✅ tracked | D buff-install (target-side curse, Phase 1) |
 | `use_parry` | ✅ tracked | A use/resource |

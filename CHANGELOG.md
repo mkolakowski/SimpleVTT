@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.680.0] - 2026-06-26 — "The Ensnaring Vines"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — resolve Nature's Wrath's STR/DEX save + install Restrained server-side (Ancients Paladin).
+
+**Description:** `use_natures_wrath` (PHB p.86) computed the save DC + broadcast the save request but the GM rolled the target's save and installed Restrained by hand. It now resolves the save server-side via `_resolve_feature_save` — the Champion Challenge / feature-saves substrate: an **NPC** target saves inline (roll `1d20` + its STR/DEX save mod; install the Restrained condition immediately on a fail) and a **PC** target is prompted via a `RollRequest` (the existing `/roll_request/{id}/respond` installs the condition when the PC fails, sharing the immunity gates + undo plumbing). This is the first **save → condition-install** wire of this Phase 8 session (the prior nine applied damage / heal / temp-HP). The Restrained buff (built by `_make_restrained_buff`, key `restrained`) carries the end-of-turn repeated-save stamps so the engine re-rolls + drops it per RAW. The response gains `feature_save` (`{resolved, passed, condition_installed, condition_key, prompted, …}`).
+
+### Added
+- `tests/harness/test_natures_wrath.py::test_nw_resolves_save_and_installs_restrained` (+1) — re-seeds a real bandit *template* target (the fixture's bandit has no `token_template_id` so the NPC save can't resolve), then asserts `feature_save.resolved is True`, `passed` is a bool, and `condition_installed == (not passed)` with `condition_key == "restrained"` on a fail.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_natures_wrath` resolves the STR/DEX save + installs Restrained via `_resolve_feature_save` + `_make_restrained_buff`; surfaces `feature_save`.
+- `docs/automation-coverage.md` — `use_natures_wrath` note updated (save resolved + Restrained installed server-side).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Nature's Wrath.
+- `docs/test-harness-coverage.md` — catalog the new test.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.679.0] - 2026-06-26 — "The Summer Balm"
 
 **Schema version:** 81

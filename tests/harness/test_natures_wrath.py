@@ -5,12 +5,13 @@ Ancients Paladin Lv 3+ CD — target within 10 ft makes Str or
 Dex save (its choice) DC = 8 + prof + CHA mod or be Restrained
 until end of next turn (repeat save each of its turns).
 
-v1 ships:
-  - /use_natures_wrath: validates Ancients Paladin Lv 3+ +
-    channel-divinity resource current >= 1 + action chip.
-    Decrements CD counter, marks chip, computes DC, broadcasts
-    feature_used (source natures-wrath) with (target_name,
-    save_ability, save_dc, uses_remaining).
+/use_natures_wrath validates Ancients Paladin Lv 3+ +
+channel-divinity resource current >= 1 + action chip; decrements CD,
+marks chip, computes DC, broadcasts feature_used. **v2.680.0
+(Phase 8):** the target's STR/DEX save is now resolved server-side
+via `_resolve_feature_save` — an NPC saves inline (install Restrained
+on a fail via `_make_restrained_buff`), a PC is prompted via a
+RollRequest. The response gains `feature_save`.
 
 Sir Caelan Lightbringer (Paladin Oath of Devotion Lv 8 default;
 CHA 16 → +3 mod; prof +3) is the demo fixture. Tests PATCH his
@@ -19,6 +20,7 @@ a battle. Expected DC: 8 + 3 + 3 = 14.
 
 Tests:
   - Happy Str save → CD 1 → 0, DC 14, broadcast.
+  - Apply: templated NPC → save resolved + Restrained on a fail.
   - Dex save mode.
   - Bad save_ability (CON) → 400.
   - Out of CD uses → 409.
@@ -126,6 +128,56 @@ async def test_use_nw_str_happy(
     await asyncio.sleep(0.3)
     feats = _nw_broadcasts(gm_ws, caelan["id"])
     assert feats
+
+
+async def test_nw_resolves_save_and_installs_restrained(
+    gm_client, caelan_ancients,
+):
+    """v2.680.0 — Phase 8: a templated NPC target now has its STR save rolled
+    inline + Restrained installed on a fail via `_resolve_feature_save`. Seed
+    Caelan + a real bandit template, then assert the feature_save outcome is
+    consistent (condition installed iff the save failed)."""
+    caelan = caelan_ancients
+    templates = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/templates")).json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": f"tok_ca_{caelan['id']}", "char_id": caelan["id"],
+             "name": caelan["name"], "initiative": 12,
+             "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": "tok_nw_tmpl", "char_id": None,
+             "token_template_id": bandit["id"], "name": bandit["name"],
+             "initiative": 8, "hp_current": 50, "hp_max": 50, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_natures_wrath",
+        json={
+            "character_id": caelan["id"],
+            "target_combatant_id": "tok_nw_tmpl",
+            "save_ability": "STR",
+            "override": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    fs = data["feature_save"]
+    assert fs is not None, data
+    assert fs["resolved"] is True, fs
+    assert isinstance(fs["passed"], bool), fs
+    # Restrained installs iff the save failed.
+    assert fs["condition_installed"] == (not fs["passed"]), fs
+    if fs["condition_installed"]:
+        assert fs["condition_key"] == "restrained", fs
 
 
 async def test_use_nw_dex_mode(

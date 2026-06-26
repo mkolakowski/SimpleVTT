@@ -80786,9 +80786,13 @@ async def use_natures_wrath(
     Validates Ancients Paladin Lv 3+ + `sheet.resources` has a
     `channel-divinity` entry with `current >= 1` + Phase 4
     action chip. Decrements CD counter, marks chip, computes
-    spell save DC = 8 + prof + CHA mod, broadcasts the save
-    request. v1 ships announce-only — the GM rolls the target's
-    save + installs Restrained manually.
+    spell save DC = 8 + prof + CHA mod. v2.680.0 (Phase 8): the
+    target's STR/DEX save is now resolved server-side via
+    `_resolve_feature_save` — an NPC saves inline (install Restrained
+    on a fail), a PC is prompted via a RollRequest (the existing
+    /roll_request/{id}/respond installs it on a fail). The Restrained
+    buff (built by `_make_restrained_buff`) carries the end-of-turn
+    repeated-save stamps so the engine re-rolls + drops it per RAW.
 
     See docs/plans/paladin-oaths.md for the Phase 2+ roadmap.
     """
@@ -80950,6 +80954,49 @@ async def use_natures_wrath(
         },
     })
 
+    # v2.680.0 — Phase 8: resolve the target's STR/DEX save + install Restrained
+    # on a fail via `_resolve_feature_save` (the Champion Challenge / feature-
+    # saves substrate). NPC saves inline; a PC is prompted via RollRequest and
+    # the install is deferred to /roll_request/{id}/respond. The Restrained buff
+    # carries the end-of-turn repeated-save stamps (RAW: repeat the save at the
+    # end of each of its turns to free itself).
+    _nw_target = _lookup_combatant(campaign_id, target_combatant_id)
+    feature_save = None
+    if _nw_target is not None:
+        try:
+            _nw_speed = int(_nw_target.get("speed_walk") or 30)
+        except (TypeError, ValueError):
+            _nw_speed = 30
+        restrained_buff = _make_restrained_buff(
+            target_speed_walk=_nw_speed,
+            source_char_id=char.id,
+            source_char_name=char.name,
+            source="natures-wrath",
+            display_name="Restrained (Nature's Wrath)",
+            icon="🌿",
+            duration_rounds=10,
+            concentration=False,
+            source_specific_raw_effects=[
+                "Spectral vines (Ancients Paladin Channel Divinity)",
+                f"{save_ability} save at end of each turn to break free",
+            ],
+            repeated_save_ability=save_ability,
+            repeated_save_dc=save_dc,
+        )
+        feature_save = await _resolve_feature_save(
+            db, campaign_id,
+            caster_char_id=char.id, caster_char_name=char.name,
+            target_combatant=_nw_target,
+            save_ability=save_ability, dc=save_dc,
+            note_label=f"Nature's Wrath save (DC {save_dc})",
+            condition_buff=restrained_buff,
+            repeated_save=True,
+            source="natures-wrath",
+            campaign=campaign,
+            prompt_user=user,
+            feature_name="Nature's Wrath",
+        )
+
     return {
         "ok": True,
         "feature": "natures-wrath",
@@ -80959,6 +81006,7 @@ async def use_natures_wrath(
         "save_dc": save_dc,
         "uses_remaining": cd_cur - 1,
         "over_budget": was_used,
+        "feature_save": feature_save,
     }
 
 
