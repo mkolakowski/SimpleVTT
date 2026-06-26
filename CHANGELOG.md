@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.666.1] - 2026-06-26 — "The Painted Pills"
+
+**Schema version:** 81
+
+**Commit summary:** Reconcile a stale P3 — the "more pills in the roll log for spells" item shipped at v2.97.12; remove it from TODO.md and record it in TODONE.md.
+
+**Description:** Doc-only. The picked P3 ("move spell type / range / action type / details to pills; details as an expanding pill; distinct color from damage pills") was found **already fully implemented** (verify-substrate). `appendSpellCast` (`app/static/tabletop.js`) renders a `.spell-meta-pills` row — school (type), range, casting time (action type), concentration/ritual flags, and an expanding `<details class="spell-meta-pill">` for the description; the server sends the `spell_*` fields (`tabletop_routes.py:~24223`); the inline CSS in `tabletop.html` uses the accent-purple family, distinct from `.result-pill`'s damage/heal colors. All shipped at v2.97.12 — the backlog item was simply never closed. The drift-reconciliation sweep this session (v2.658.0–v2.666.x) reached even the Manually Added P3 list.
+
+### Changed
+- `TODO.md` — removed the stale "more pills in the roll log" P3 item.
+- `TODONE.md` — recorded it under "Manually Added — shipped" (v2.97.12).
+
+### Schema
+- No schema change (still v81).
+
 ## [2.666.0] - 2026-06-26 — "The Settled Oaths"
 
 **Schema version:** 81

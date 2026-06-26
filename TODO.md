@@ -873,10 +873,6 @@ Setting-specific subclasses (Tasha's: Beast Barbarian Phase 1 shipped v2.158.20 
 
 ## Manually Added
 
-- 🟢 **P3** — Feature: More pills in the roll log for spells
-    - Move spell type, range, action type and details to pills
-        - details should be an expanding pill
-        - pills should be different color than damage pills
 - 🟢 **P3** — Allow the map and roll log (when on the left) to move over the tt-topbar but not over the title of the campaign or the ruler, roll log, battle, characters, tools buttons
 - 🟢 **P3** — Change the logout button under tools > quick links to reverse how its animated (better for backgrounds)
 - 🟢 **P3** — Update all of roll log to look like spells
