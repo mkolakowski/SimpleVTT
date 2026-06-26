@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.653.0] - 2026-06-25 — "The Featured Cast"
+
+**Schema version:** 81
+
+**Commit summary:** Demo PCs now backfill their **subclass features + race traits** from the shipped SRD content at seed time (offline), so a fresh reseed shows those sections instead of blank. Non-SRD subclasses/races (Battle Master, Wood Elf, …) are left for the existing live-Open5e-on-open path; class features are unchanged.
+
+**Description:** An audit found that demo PC sheets shipped with **empty** `subclass_features` / `race_trait_items` — the sheet UI normally fetches them from `/api/open5e/*-detail` on sheet open, so a freshly-reseeded demo showed blank subclass/race sections until each sheet was visited (online). This adds `app/demo_features.apply_srd_features(sheet)`, wired into `build_dnd5e_sheet` (the leveled-campaign PC builder) and the Vault PC seed loop, which fills those fields **offline** from `app/local_features` (the shipped SRD layer) — matching the exact `[{name, level, desc}]` shapes the UI's `_saveSubclassCache` / `_saveRaceCache` write, plus `subclass_name` / `subclass_flavor` / `race_flavor`. It fills **per field** (a PC with an SRD subclass but a non-SRD race still gets its subclass features), only fills **empty** fields (never overwrites the curated `class_features` lists), and maps `variant-human → human`. Because SRD 5.1 ships only one subclass per class + 9 races, the ~25 demo PCs on non-SRD subclasses/races resolve nothing here and keep backfilling from live Open5e when opened — by design (the shipped tier is SRD-only). Verified on a forced reseed: **27 of 40 PCs now carry subclass features and 25 carry race traits** (both were 0). **Class features** are not addressed here — the 7 curated Vault PCs keep their hand-authored lists; the SRD class record is a markdown blob (not the structured list the sheet renders), so auto-seeding class features is a separate follow-up.
+
+### Added
+- `app/demo_features.py` — `apply_srd_features(sheet)` (offline SRD backfill of subclass features + race traits).
+- `app/demo_seed.py` — applies it in `build_dnd5e_sheet` (leveled PCs) + the Vault PC seed loop.
+
+### Schema
+- No schema change (still v81).
+
+**Harness:** `tests/harness/test_demo_features.py` (new, +5) — host-side unit tests of `apply_srd_features`: an SRD combo (Champion/Human) fills subclass features + name + race traits; `variant-human` aliases to `human`; per-field partial coverage (Thief subclass fills, base-Halfling race doesn't); a fully non-SRD combo (Battle Master/Mountain Dwarf) stays empty; a pre-set `subclass_features` list is never overwritten.
+
 ## [2.652.1] - 2026-06-25 — "The Healer's Ledger"
 
 **Schema version:** 81

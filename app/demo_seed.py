@@ -160,6 +160,11 @@ def build_dnd5e_sheet(
     })
     if extra:
         sheet.update(extra)
+    # v2.653.0 — backfill subclass features + race traits from the shipped
+    # SRD content (offline) so the demo PCs show those sections on a fresh
+    # reseed. No-op for non-SRD subclasses/races. See app/demo_features.py.
+    from .demo_features import apply_srd_features
+    apply_srd_features(sheet)
     return sheet
 
 
@@ -7608,6 +7613,16 @@ def seed_characters(
         })
         _sheet["inventory"] = _inv
         _pc.sheet = _sheet
+
+    # v2.653.0 — backfill subclass features + race traits on every Vault PC
+    # from the shipped SRD content (offline; no-op for non-SRD subclasses/
+    # races, and never overwrites the curated class_features lists). Mirrors
+    # the leveled-campaign path in build_dnd5e_sheet. See app/demo_features.py.
+    from .demo_features import apply_srd_features
+    for _vpc in _pc_by_name.values():
+        _vs = _vpc.sheet or {}
+        apply_srd_features(_vs)
+        _vpc.sheet = _vs
 
     db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc, warlock_pc, vengeance_pc, beast_barbarian_pc, drunken_monk_pc])
     db.flush()
