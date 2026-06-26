@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.682.0] - 2026-06-26 — "The Faithless Routed"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — resolve Turn the Faithless' per-target WIS saves + install Turned server-side (Ancients Paladin AoE).
+
+**Description:** `use_turn_the_faithless` (PHB p.87) — the AoE sibling of Nature's Wrath — computed the save DC + broadcast the per-target save request but the GM rolled each target's Wisdom save and installed Turned by hand. It now resolves each target's save server-side via `_resolve_feature_save` in the Champion Challenge AoE-loop pattern: per target, an **NPC** saves inline (install the Turned condition on a fail) and a **PC** is prompted via a `RollRequest`. The Turned buff (key `turned`, the Turn the Unholy shape — flee-the-caster, no reactions, `break_on_damage`) ends on damage, so there's **no end-of-turn re-save** (`repeated_save=False`). The fey/fiend creature-type filter stays GM-tracked. The response gains `feature_saves` (one entry per target).
+
+### Added
+- `tests/harness/test_turn_the_faithless.py::test_ttf_resolves_saves_and_installs_turned` (+1) — re-seeds two real bandit *template* targets (the fixture's fiends have no `token_template_id`), then asserts each of the two `feature_saves` is `resolved`, `passed` is a bool, and `condition_installed == (not passed)` with `condition_key == "turned"` on a fail.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_turn_the_faithless` resolves each target's WIS save + installs Turned via `_resolve_feature_save`; surfaces `feature_saves`.
+- `docs/automation-coverage.md` — `use_turn_the_faithless` note updated (per-target save resolved + Turned installed server-side).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Turn the Faithless.
+- `docs/test-harness-coverage.md` — catalog the new test.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.681.0] - 2026-06-26 — "The Holy Symbol"
 
 **Schema version:** 81

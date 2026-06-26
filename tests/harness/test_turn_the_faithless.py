@@ -8,8 +8,14 @@ until damaged).
 Mirrors v2.99.247 Conquering Presence (multi-target AOE Wis
 save) but for Ancients oath instead of Conquest.
 
+**v2.682.0 (Phase 8):** each target's WIS save is now resolved
+server-side via `_resolve_feature_save` (NPC inline, PC via
+RollRequest) + Turned installed on a fail (ends on damage). The
+response gains `feature_saves` (one per target).
+
 Tests:
   - Happy 2 targets → CD 1 → 0, DC 14, broadcast.
+  - Apply: 2 templated NPCs → per-target save resolved + Turned on fail.
   - Empty target list → 400.
   - Unknown target → 404.
   - Out of CD → 409.
@@ -122,6 +128,60 @@ async def test_use_ttf_happy(
     await asyncio.sleep(0.3)
     feats = _ttf_broadcasts(gm_ws, caelan["id"])
     assert feats
+
+
+async def test_ttf_resolves_saves_and_installs_turned(
+    gm_client, caelan_ancients_with_fiends,
+):
+    """v2.682.0 — Phase 8: each templated NPC target now has its WIS save
+    rolled inline + Turned installed on a fail via `_resolve_feature_save`.
+    Re-seed Caelan + 2 real bandit templates, then assert each per-target
+    feature_save resolved with condition_installed == (not passed)."""
+    caelan = caelan_ancients_with_fiends
+    templates = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/templates")).json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": f"tok_at_{caelan['id']}", "char_id": caelan["id"],
+             "name": caelan["name"], "initiative": 12,
+             "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": "tok_ttf_a", "char_id": None,
+             "token_template_id": bandit["id"], "name": "Fiend A",
+             "initiative": 10, "hp_current": 50, "hp_max": 50, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": "tok_ttf_b", "char_id": None,
+             "token_template_id": bandit["id"], "name": "Fiend B",
+             "initiative": 8, "hp_current": 50, "hp_max": 50, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_turn_the_faithless",
+        json={
+            "character_id": caelan["id"],
+            "target_combatant_ids": ["tok_ttf_a", "tok_ttf_b"],
+            "override": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    fss = data["feature_saves"]
+    assert isinstance(fss, list) and len(fss) == 2, data
+    for fs in fss:
+        assert fs["resolved"] is True, fs
+        assert isinstance(fs["passed"], bool), fs
+        assert fs["condition_installed"] == (not fs["passed"]), fs
+        if fs["condition_installed"]:
+            assert fs["condition_key"] == "turned", fs
 
 
 async def test_use_ttf_empty_target_list(

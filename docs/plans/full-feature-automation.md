@@ -622,6 +622,14 @@ composition. Batch by class, same cadence as the breadth sweep.
   Presence shape, with the end-of-turn repeated save) on a fail. The
   fiends/undead disadvantage + speed-0/halved mutation stay GM-narrated.
   Surfaces `feature_save`. Harness: `test_abjure_enemy.py` (+1).
+- **v2.682.0 ("The Faithless Routed") — Turn the Faithless** (Ancients Paladin
+  Lv 3+ AoE CD): the multi-target sibling of Nature's Wrath —
+  `use_turn_the_faithless` now resolves each target's WIS save via
+  `_resolve_feature_save` in the Champion Challenge AoE-loop pattern (NPC
+  inline, PC via RollRequest) and installs Turned (key `turned`, the Turn the
+  Unholy shape, ends on damage so `repeated_save=False`) on a fail. The
+  fey/fiend creature-type filter stays GM-tracked. Surfaces `feature_saves`
+  (one per target). Harness: `test_turn_the_faithless.py` (+1).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

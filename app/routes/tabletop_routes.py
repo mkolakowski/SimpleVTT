@@ -80600,11 +80600,13 @@ async def use_turn_the_faithless(
 
     Validates Ancients Paladin Lv 3+ + CD resource >= 1 + non-
     empty target list + each target in active battle + Phase 4
-    action chip. Decrements CD, computes DC = 8 + prof + CHA,
-    broadcasts the per-target save request. v1 ships announce-
-    only — GM rolls each Wis save + applies the Turned condition
-    on failures (and the fey/fiend creature-type filter is
-    GM-tracked).
+    action chip. Decrements CD, computes DC = 8 + prof + CHA.
+    v2.682.0 (Phase 8): each target's Wisdom save is now resolved
+    server-side via `_resolve_feature_save` (the Champion Challenge
+    AoE-loop substrate) — an NPC saves inline (install the Turned
+    condition on a fail), a PC is prompted via a RollRequest. Turned
+    ends on damage (no end-of-turn re-save). The fey/fiend creature-
+    type filter stays GM-tracked. The response gains `feature_saves`.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -80749,6 +80751,53 @@ async def use_turn_the_faithless(
         },
     })
 
+    # v2.682.0 — Phase 8: resolve each target's WIS save + install Turned on a
+    # fail via `_resolve_feature_save` (the Champion Challenge AoE-loop
+    # substrate). NPCs save inline; PCs are prompted via RollRequest. Turned
+    # ends on damage (`break_on_damage`), so no end-of-turn re-save
+    # (repeated_save=False). The fey/fiend creature-type gate stays GM-tracked.
+    feature_saves: list[dict] = []
+    for tcid in target_ids:
+        cb = _lookup_combatant(campaign_id, str(tcid).strip())
+        if cb is None:
+            continue
+        turned_buff = {
+            "key": "turned",
+            "name": "Turned (Turn the Faithless)",
+            "icon": "🌿",
+            "duration_rounds": 10,
+            "duration_max": 10,
+            "concentration": False,
+            "source": "turn-the-faithless",
+            "source_char_id": int(char.id),
+            "source_char_name": char.name,
+            "effects": {
+                "must_move_away_from_caster": True,
+                "cant_take_reactions": True,
+                "break_on_damage": True,
+            },
+            "raw_effects": [
+                "Must use all movement to flee the caster",
+                "Can't willingly move within 30 ft of caster",
+                "Can't take reactions",
+                "Ends on damage taken",
+            ],
+        }
+        sr = await _resolve_feature_save(
+            db, campaign_id,
+            caster_char_id=char.id, caster_char_name=char.name,
+            target_combatant=cb,
+            save_ability="WIS", dc=save_dc,
+            note_label=f"Turn the Faithless save (DC {save_dc})",
+            condition_buff=turned_buff,
+            repeated_save=False,
+            source="turn-the-faithless",
+            campaign=campaign,
+            prompt_user=user,
+            feature_name="Turn the Faithless",
+        )
+        feature_saves.append(sr)
+
     return {
         "ok": True,
         "feature": "turn-the-faithless",
@@ -80757,6 +80806,7 @@ async def use_turn_the_faithless(
         "save_dc": save_dc,
         "uses_remaining": cd_cur - 1,
         "over_budget": was_used,
+        "feature_saves": feature_saves,
     }
 
 

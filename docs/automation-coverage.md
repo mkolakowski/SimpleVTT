@@ -326,7 +326,7 @@ or passive damage-boosters that already ride other code paths
 | `use_tides_of_chaos` | ✅ tracked | D buff-install |
 | `use_touch_of_death` | ✅ tracked | F temp-HP |
 | `use_trip_attack` | ✅ tracked | A use/resource |
-| `use_turn_the_faithless` | ✅ tracked | A use/resource |
+| `use_turn_the_faithless` | ✅ tracked | v2.682.0 — resolves each target's WIS save via `_resolve_feature_save` (AoE loop; NPC inline, PC via RollRequest) + installs Turned (ends on damage) on a fail; fey/fiend filter GM-tracked |
 | `use_turn_the_unholy` | ✅ tracked | D buff-install, D/E buff-install |
 | `use_undying_sentinel` | ✅ tracked | A use/resource |
 | `use_vanish` | ✅ tracked | A use/resource + D buff-install (Lv-14 passive parameter flags) |
