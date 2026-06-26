@@ -87973,18 +87973,21 @@ async def use_healing_light(
     minimum of one die). You regain all expended dice when you
     finish a long rest."
 
-    Body: ``{character_id, dice_spent?, override?}``. Default
-    dice_spent = 1, capped at the per-use max (CHA mod, min 1) and
-    the remaining pool. Costs a bonus chip. Auto-bootstraps a
-    `healing-light-dice` resource (max = 1 + warlock_lv,
-    reset=long). The heal dice are rolled server-side and
-    broadcast; target HP application is GM-tracked.
+    Body: ``{character_id, dice_spent?, target_combatant_id?,
+    override?}``. Default dice_spent = 1, capped at the per-use max
+    (CHA mod, min 1) and the remaining pool. Costs a bonus chip.
+    Auto-bootstraps a `healing-light-dice` resource (max = 1 +
+    warlock_lv, reset=long). The heal dice are rolled server-side;
+    v2.675.0 (Phase 8): when ``target_combatant_id`` is supplied the
+    HP is applied via ``_apply_heal_to_combatant`` (the Hands of
+    Healing wire), otherwise it stays announce-only.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
     override = bool(body.get("override"))
+    target_combatant_id = (str(body.get("target_combatant_id") or "")).strip()
     dice_spent_raw = body.get("dice_spent") or 1
     try:
         dice_spent = max(1, int(dice_spent_raw))
@@ -88081,6 +88084,21 @@ async def use_healing_light(
 
     await _mark_battle_economy(campaign_id, char.id, "bonus")
 
+    # v2.675.0 — Phase 8: apply the rolled heal to the named target combatant
+    # (was announce-only), riding `_apply_heal_to_combatant` — the same heal-
+    # pipeline wire as Hands of Healing (v2.674.0); caps at max HP + revives a
+    # dying PC. Backward-compatible: no `target_combatant_id` → no apply.
+    heal_applied = None
+    revived = None
+    if target_combatant_id:
+        _hl_target = _lookup_combatant(campaign_id, target_combatant_id)
+        if _hl_target is not None:
+            _hlr = await _apply_heal_to_combatant(
+                db, campaign_id, _hl_target, heal_total,
+            )
+            heal_applied = int(_hlr.get("applied") or 0)
+            revived = bool(_hlr.get("revived"))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -88126,6 +88144,9 @@ async def use_healing_light(
             "max_dice": hl_max,
             "per_use_max": per_use_max,
             "warlock_level": warlock_lv,
+            "target_combatant_id": target_combatant_id,
+            "heal_applied": heal_applied,
+            "revived": revived,
         },
     })
 
@@ -88139,6 +88160,9 @@ async def use_healing_light(
         "max_dice": hl_max,
         "per_use_max": per_use_max,
         "warlock_level": warlock_lv,
+        "target_combatant_id": target_combatant_id,
+        "heal_applied": heal_applied,
+        "revived": revived,
     }
 
 

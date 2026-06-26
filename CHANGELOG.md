@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.675.0] - 2026-06-26 — "The Celestial Mend"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — apply Healing Light's pooled-dice heal to the target server-side (Celestial Warlock), riding `_apply_heal_to_combatant`.
+
+**Description:** `use_healing_light` (XGE p.54) rolled the pooled d6 heal and tracked the `healing-light-dice` resource but the GM applied the HP by hand. The endpoint now accepts an optional `target_combatant_id`; when supplied, the rolled HP is applied via `_apply_heal_to_combatant` — the same heal-pipeline wire as Hands of Healing (v2.674.0), which caps at max HP and revives a dying PC. The response/broadcast gain `target_combatant_id` / `heal_applied` / `revived`. Backward-compatible: no `target_combatant_id` stays announce-only.
+
+### Added
+- `tests/harness/test_healing_light.py` (+2) — `test_hl_applies_heal_to_target` (wounded NPC at 10/50 HP → `heal_applied == heal_amount`, `revived == False`) + `test_hl_no_target_announce_only` (no target → `heal_applied`/`revived` stay None).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_healing_light` applies the rolled heal to `target_combatant_id` via `_apply_heal_to_combatant`; surfaces `target_combatant_id` / `heal_applied` / `revived`.
+- `docs/automation-coverage.md` — `use_healing_light` note updated (HP applied server-side).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Healing Light.
+- `docs/test-harness-coverage.md` — catalog the test file (was previously uncatalogued).
+
+### Schema
+- No schema change (still v81).
+
 ## [2.674.0] - 2026-06-26 — "The Mending Touch"
 
 **Schema version:** 81

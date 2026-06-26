@@ -562,6 +562,13 @@ composition. Batch by class, same cadence as the breadth sweep.
   damage / temp-HP substrates). Surfaces `target_combatant_id`/`heal_applied`/
   `revived`; announce-only without a target. Harness:
   `test_hands_of_healing.py` (+2).
+- **v2.675.0 ("The Celestial Mend") — Healing Light** (The Celestial Warlock
+  Lv 1+): `use_healing_light` rolled the pooled-d6 heal + tracked the
+  `healing-light-dice` resource but was announce-only. It now accepts an
+  optional `target_combatant_id` and applies the rolled HP via
+  `_apply_heal_to_combatant` — the same heal-pipeline wire as Hands of
+  Healing (v2.674.0). Surfaces `target_combatant_id`/`heal_applied`/`revived`;
+  announce-only without a target. Harness: `test_healing_light.py` (+2).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

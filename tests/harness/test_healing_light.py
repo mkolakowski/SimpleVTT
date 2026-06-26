@@ -6,15 +6,19 @@ RAW XGE p.54: pool of d6s = 1 + warlock level. As a bonus action,
 heal one creature within 60 ft, spending up to CHA-mod dice (min
 1) at once. Regain all dice on a long rest.
 
-v1 — the heal dice are rolled server-side and the pool is tracked
-on a `healing-light-dice` resource (reset=long); target HP
-application is GM-tracked. Bonus chip.
+The heal dice are rolled server-side and the pool is tracked on a
+`healing-light-dice` resource (reset=long). **v2.675.0 (Phase 8):**
+the rolled HP is applied to a `target_combatant_id` via
+`_apply_heal_to_combatant` (the Hands of Healing wire; caps at max
+HP, revives a dying PC); no target → announce-only. Bonus chip.
 
 Magnus Hexbinder (Warlock, PATCHed to The Celestial Lv 5) is the
 demo fixture (pool max = 1 + 5 = 6).
 
 Tests:
   - Lv 5 happy (1 die): heal in [1,6], max_dice 6, dice_remaining 5.
+  - Apply: wounded NPC target → heal_applied == heal_amount.
+  - Announce-only: no target → heal_applied/revived stay None.
   - Wrong subclass (default The Fiend) → 409.
   - Wrong class (Caelan paladin) → 409.
 """
@@ -91,6 +95,62 @@ async def test_use_hl_happy_lv5(
     feats = _hl_broadcasts(gm_ws, magnus["id"])
     assert feats
     assert feats[-1]["data"]["heal_amount"] == data["heal_amount"]
+
+
+async def test_hl_applies_heal_to_target(
+    gm_client, magnus_celestial,
+):
+    """v2.675.0 — Phase 8: a wounded NPC target now has the rolled heal
+    applied server-side via `_apply_heal_to_combatant`. Seed Magnus + a
+    bandit at 10/50 HP (lots of headroom so the 1d6 heal lands in full)."""
+    magnus = magnus_celestial
+    templates = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/templates")).json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": f"tok_hl_{magnus['id']}", "char_id": magnus["id"],
+             "name": magnus["name"], "initiative": 12,
+             "hp_current": 40, "hp_max": 40, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": "tok_hl_ally", "char_id": None,
+             "token_template_id": bandit["id"], "name": "Wounded Ally",
+             "initiative": 8, "hp_current": 10, "hp_max": 50, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_healing_light",
+        json={"character_id": magnus["id"], "dice_spent": 1,
+              "override": True, "target_combatant_id": "tok_hl_ally"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    # 40 headroom on the target → the full heal lands.
+    assert data["heal_applied"] == data["heal_amount"], data
+    assert data["revived"] is False
+
+
+async def test_hl_no_target_announce_only(
+    gm_client, magnus_celestial,
+):
+    """v2.675.0 — no target → backward-compatible announce-only."""
+    magnus = magnus_celestial
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_healing_light",
+        json={"character_id": magnus["id"], "dice_spent": 1,
+              "override": True},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["heal_applied"] is None
+    assert data["revived"] is None
 
 
 async def test_use_hl_wrong_subclass(
