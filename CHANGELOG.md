@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.681.0] - 2026-06-26 — "The Holy Symbol"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — resolve Abjure Enemy's WIS save + install Frightened server-side (Vengeance Paladin).
+
+**Description:** `use_abjure_enemy` (PHB p.87) computed the save DC + broadcast the save request but the GM rolled the target's Wisdom save and installed Frightened by hand. It now resolves the save server-side via `_resolve_feature_save` — the same Nature's Wrath / Conquering Presence substrate: an **NPC** saves inline (install the Frightened condition immediately on a fail) and a **PC** is prompted via a `RollRequest` (the existing `/roll_request/{id}/respond` installs it on a fail). The Frightened buff (key `frightened`, the proven Conquering Presence shape) carries the end-of-turn repeated save (RAW: ends after 1 min OR on any damage — the on-damage end is the engine default for frightened). The fiends/undead disadvantage and the speed-0 (fail) / speed-halved (success) mutation stay GM-narrated. The response gains `feature_save`.
+
+### Added
+- `tests/harness/test_abjure_enemy.py::test_ae_resolves_save_and_installs_frightened` (+1) — re-seeds a real bandit *template* target, then asserts `feature_save.resolved is True`, `passed` is a bool, and `condition_installed == (not passed)` with `condition_key == "frightened"` on a fail.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_abjure_enemy` resolves the WIS save + installs Frightened via `_resolve_feature_save`; surfaces `feature_save`.
+- `docs/automation-coverage.md` — `use_abjure_enemy` note updated (save resolved + Frightened installed server-side).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Abjure Enemy.
+- `docs/test-harness-coverage.md` — catalog the new test.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.680.0] - 2026-06-26 — "The Ensnaring Vines"
 
 **Schema version:** 81

@@ -155,7 +155,7 @@ or passive damage-boosters that already ride other code paths
 | `cast_slow` | ✅ tracked | D buff-install, D/E buff-install |
 | `cast_spell` | ✅ tracked | D buff-install, D/E buff-install, damage, heal, heal/damage |
 | `cast_web` | ✅ tracked | D buff-install, D/E buff-install |
-| `use_abjure_enemy` | ✅ tracked | A use/resource |
+| `use_abjure_enemy` | ✅ tracked | v2.681.0 — resolves the target's WIS save via `_resolve_feature_save` (NPC inline, PC via RollRequest) + installs Frightened (repeated save) on a fail; speed-0/halved mutation GM-narrated |
 | `use_action_surge` | ✅ tracked | A use/resource |
 | `use_adjust_density` | ✅ tracked | A use/resource |
 | `use_animal_companion` | ✅ tracked | H summon, damage |

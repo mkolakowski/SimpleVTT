@@ -615,6 +615,13 @@ composition. Batch by class, same cadence as the breadth sweep.
   and installs Restrained (`_make_restrained_buff`, key `restrained`, with the
   end-of-turn repeated-save stamps) on a fail. Surfaces `feature_save`.
   Harness: `test_natures_wrath.py` (+1).
+- **v2.681.0 ("The Holy Symbol") — Abjure Enemy** (Vengeance Paladin Lv 3+
+  CD): the Nature's Wrath sibling — `use_abjure_enemy` now resolves the
+  target's WIS save via `_resolve_feature_save` (NPC inline, PC via
+  RollRequest) and installs Frightened (key `frightened`, the Conquering
+  Presence shape, with the end-of-turn repeated save) on a fail. The
+  fiends/undead disadvantage + speed-0/halved mutation stay GM-narrated.
+  Surfaces `feature_save`. Harness: `test_abjure_enemy.py` (+1).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

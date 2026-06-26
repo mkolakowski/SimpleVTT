@@ -9,8 +9,15 @@ disadvantage.
 Mirrors v2.99.272 Turn the Faithless shape, but single target
 instead of AOE.
 
+**v2.681.0 (Phase 8):** the target's WIS save is now resolved
+server-side via `_resolve_feature_save` — an NPC saves inline
+(install Frightened on a fail), a PC is prompted via a RollRequest.
+The speed-0/halved mutation stays GM-narrated. The response gains
+`feature_save`.
+
 Tests:
   - Happy → DC 14, CD 1 → 0.
+  - Apply: templated NPC → WIS save resolved + Frightened on a fail.
   - Target not in battle → 404.
   - Out of CD → 409.
   - Wrong subclass → 409.
@@ -115,6 +122,54 @@ async def test_use_ae_happy(
     await asyncio.sleep(0.3)
     feats = _ae_broadcasts(gm_ws, caelan["id"])
     assert feats
+
+
+async def test_ae_resolves_save_and_installs_frightened(
+    gm_client, caelan_vengeance_with_bandit,
+):
+    """v2.681.0 — Phase 8: a templated NPC target now has its WIS save rolled
+    inline + Frightened installed on a fail via `_resolve_feature_save`. Seed
+    Caelan + a real bandit template, then assert the feature_save outcome is
+    consistent (condition installed iff the save failed)."""
+    caelan = caelan_vengeance_with_bandit
+    templates = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/templates")).json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": f"tok_av_{caelan['id']}", "char_id": caelan["id"],
+             "name": caelan["name"], "initiative": 12,
+             "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": "tok_ae_tmpl", "char_id": None,
+             "token_template_id": bandit["id"], "name": bandit["name"],
+             "initiative": 8, "hp_current": 50, "hp_max": 50, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_abjure_enemy",
+        json={
+            "character_id": caelan["id"],
+            "target_combatant_id": "tok_ae_tmpl",
+            "override": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    fs = data["feature_save"]
+    assert fs is not None, data
+    assert fs["resolved"] is True, fs
+    assert isinstance(fs["passed"], bool), fs
+    assert fs["condition_installed"] == (not fs["passed"]), fs
+    if fs["condition_installed"]:
+        assert fs["condition_key"] == "frightened", fs
 
 
 async def test_use_ae_target_not_in_battle(

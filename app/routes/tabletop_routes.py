@@ -81033,8 +81033,12 @@ async def use_abjure_enemy(
 
     Validates Vengeance Paladin Lv 3+ + CD >= 1 + target in
     battle + action chip. Decrements CD, computes DC, broadcasts.
-    v1 announce-only — Wis save + Frightened install + speed
-    mutation GM-tracked.
+    v2.681.0 (Phase 8): the target's Wisdom save is now resolved
+    server-side via `_resolve_feature_save` — an NPC saves inline
+    (install Frightened on a fail), a PC is prompted via a
+    RollRequest. The Frightened buff carries the end-of-turn repeated
+    save (RAW: until 1 min or any damage). The speed-0 (on fail) /
+    speed-halved (on success) mutation stays GM-narrated.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -81176,6 +81180,44 @@ async def use_abjure_enemy(
         },
     })
 
+    # v2.681.0 — Phase 8: resolve the target's WIS save + install Frightened on
+    # a fail via `_resolve_feature_save` (the Nature's Wrath / Conquering
+    # Presence substrate). NPC saves inline; a PC is prompted via RollRequest.
+    # The Frightened buff carries the end-of-turn repeated save (RAW: ends
+    # after 1 min OR on any damage — the on-damage end is the engine default
+    # for frightened). The fiends/undead disadvantage + the speed-0/halved
+    # mutation stay GM-narrated.
+    _ae_target = _lookup_combatant(campaign_id, target_combatant_id)
+    feature_save = None
+    if _ae_target is not None:
+        frightened_buff = {
+            "key": "frightened",
+            "name": "Frightened (Abjure Enemy)",
+            "icon": "🩸",
+            "duration_rounds": 10,
+            "duration_max": 10,
+            "concentration": False,
+            "source_spell": "Abjure Enemy",
+            "effects": [
+                "disadvantage on ability checks / attacks while the source "
+                "is in sight",
+                "speed 0 while frightened (Abjure Enemy) — GM-narrated",
+            ],
+        }
+        feature_save = await _resolve_feature_save(
+            db, campaign_id,
+            caster_char_id=char.id, caster_char_name=char.name,
+            target_combatant=_ae_target,
+            save_ability="WIS", dc=save_dc,
+            note_label=f"Abjure Enemy save (DC {save_dc})",
+            condition_buff=frightened_buff,
+            repeated_save=True,
+            source="abjure-enemy",
+            campaign=campaign,
+            prompt_user=user,
+            feature_name="Abjure Enemy",
+        )
+
     return {
         "ok": True,
         "feature": "abjure-enemy",
@@ -81184,6 +81226,7 @@ async def use_abjure_enemy(
         "save_dc": save_dc,
         "uses_remaining": cd_cur - 1,
         "over_budget": was_used,
+        "feature_save": feature_save,
     }
 
 
