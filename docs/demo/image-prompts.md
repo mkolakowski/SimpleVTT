@@ -25,13 +25,13 @@ plain coloured ring (`image_url=None`) and are waiting on art.
 > misalign. Each map prompt below already says "no grid lines"; if your model
 > adds one anyway, put `grid, grid lines, grid overlay` in the negative prompt.
 
-## Overall progress — 32 / 58 images
+## Overall progress — 41 / 58 images
 
 | Demo | Map | Tokens | Done |
 |---|---|---|---|
 | Level 3 : The Goblin Warrens | ✅ | ✅ 9 / 9 | **10 / 10** |
 | Level 5 : The Tide-Wracked Catacombs | ✅ | ✅ 9 / 9 | **10 / 10** |
-| Level 9 : Storm Over Saltmarsh | ✅ | ⬜ 0 / 9 | **1 / 10** |
+| Level 9 : Storm Over Saltmarsh | ✅ | ✅ 9 / 9 | **10 / 10** |
 | Level 13 : The Shadowfell Spire | ✅ | ⬜ 0 / 8 | **1 / 9** |
 | Level 18 : The Dragon's Apotheosis | ✅ | ⬜ 0 / 8 | **1 / 9** |
 | ARCHIVE : The Sundered Vault *(flagship)* | 🟡 placeholder | ✅ 9 / 9 shipped | **10 / 10** |
@@ -428,20 +428,20 @@ Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
 A Tier-2/3 coastal adventure run by the demo's second GM. Sahuagin raiders boil up from a storm-wracked reef.
 
-**Progress: 1 / 10 images generated** — the battle map is wired; every token below still renders as a plain coloured ring (`image_url=None`). Generate the art, drop it at the listed path, then wire it in `app/demo_campaigns.py`.
+**Progress: 10 / 10 images generated** — the full L9 token set is wired (generated via the ImagineArt MCP, background-removed to true alpha, shipped as `.png`).
 
 | Entity | Drop file at | Status |
 |---|---|---|
 | 🗺️ The Drowned Reef (map) | `app/static/demo/maps/drowned-reef.png` | ✅ wired |
-| 🛡️ Vaelith Stormscale (PC) | `app/static/demo/tokens/l9-vaelith.jpg` | ⬜ needs art |
-| 🛡️ Lirael Songhaven (PC) | `app/static/demo/tokens/l9-lirael.jpg` | ⬜ needs art |
-| 🛡️ Oakheart Mossbrook (PC) | `app/static/demo/tokens/l9-oakheart.jpg` | ⬜ needs art |
-| 🛡️ Ser Kadvan Tideward (PC) | `app/static/demo/tokens/l9-kadvan.jpg` | ⬜ needs art |
-| 🛡️ Brother Tym (PC) | `app/static/demo/tokens/l9-tym.jpg` | ⬜ needs art |
-| 🔱 Sahuagin Raider (NPC) | `app/static/demo/tokens/l9-sahuagin-raider.jpg` | ⬜ needs art |
-| 🔱 Sahuagin Priestess (NPC) | `app/static/demo/tokens/l9-sahuagin-priestess.jpg` | ⬜ needs art |
-| 🔱 Reef Shark (NPC) | `app/static/demo/tokens/l9-reef-shark.jpg` | ⬜ needs art |
-| 🔱 Tide Elemental (NPC) | `app/static/demo/tokens/l9-tide-elemental.jpg` | ⬜ needs art |
+| 🛡️ Vaelith Stormscale (PC) | `app/static/demo/tokens/l9-vaelith.png` | ✅ wired |
+| 🛡️ Lirael Songhaven (PC) | `app/static/demo/tokens/l9-lirael.png` | ✅ wired |
+| 🛡️ Oakheart Mossbrook (PC) | `app/static/demo/tokens/l9-oakheart.png` | ✅ wired |
+| 🛡️ Ser Kadvan Tideward (PC) | `app/static/demo/tokens/l9-kadvan.png` | ✅ wired |
+| 🛡️ Brother Tym (PC) | `app/static/demo/tokens/l9-tym.png` | ✅ wired |
+| 🔱 Sahuagin Raider (NPC) | `app/static/demo/tokens/l9-sahuagin-raider.png` | ✅ wired |
+| 🔱 Sahuagin Priestess (NPC) | `app/static/demo/tokens/l9-sahuagin-priestess.png` | ✅ wired |
+| 🔱 Reef Shark (NPC) | `app/static/demo/tokens/l9-reef-shark.png` | ✅ wired |
+| 🔱 Tide Elemental (NPC) | `app/static/demo/tokens/l9-tide-elemental.png` | ✅ wired |
 
 ### 🗺️ Battle map — The Drowned Reef (1600×1100)
 
@@ -455,31 +455,31 @@ Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
 #### Vaelith Stormscale — Tiefling Sorcerer 9 (Draconic Bloodline)
 
-`app/static/demo/tokens/l9-vaelith.jpg`
+`app/static/demo/tokens/l9-vaelith.png`
 
 > Painterly digital fantasy character portrait, three-quarter view from the chest up, neutral imperious expression, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle stormy sea rim-lighting, no frame, no text. A storm-born tiefling sorceress of draconic frost bloodline: pale blue-grey skin faintly scaled at the cheekbones and temples, curving silver-blue horns, frost rimes her dark hair and breath, glacial pale eyes glowing cold. A sinuous draconic tail curls into frame. Layered dark teal-and-silver arcane robes with frost-crystal embroidery, a rime-edged dagger sheathed at her hip, wisps of cold mist and snowflakes drifting from one raised hand.
 
 #### Lirael Songhaven — Half-Elf Bard 9 (College of Lore)
 
-`app/static/demo/tokens/l9-lirael.jpg`
+`app/static/demo/tokens/l9-lirael.png`
 
 > Painterly digital fantasy character portrait, three-quarter view from the chest up, lively knowing half-smile, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle stormy sea rim-lighting, no frame, no text. A silver-tongued half-elf lore bard with windswept honey-brown hair, slightly pointed ears, bright clever eyes mid-narration. Fine sea-faring finery in deep blues and brass — embroidered coat, ruffled collar, a lute of pale spiral-grained driftwood slung across her chest. A slim rapier and a compact hand crossbow at her belt, a small open notebook of drowned songs tucked under one arm, salt spray glinting in her hair.
 
 #### Oakheart Mossbrook — Firbolg Druid 9 (Circle of the Moon)
 
-`app/static/demo/tokens/l9-oakheart.jpg`
+`app/static/demo/tokens/l9-oakheart.png`
 
 > Painterly digital fantasy character portrait, three-quarter view from the chest up, calm watchful expression, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle stormy sea rim-lighting, no frame, no text. A towering firbolg moon-druid with pale grey-blue bovine-ish features — long soft ears, a broad gentle muzzle, small mossy horns, deep amber eyes. Living moss, kelp, and barnacle clusters grow across his shoulders and natural druidic garb of woven sea-grass and weathered leather. A curved scimitar of antler-and-stone at his side, a faint silver moonglow shimmering at the edges of his fur as if mid-transformation into a storm-beast.
 
 #### Ser Kadvan Tideward — Human Paladin 9 (Oath of Vengeance)
 
-`app/static/demo/tokens/l9-kadvan.jpg`
+`app/static/demo/tokens/l9-kadvan.png`
 
 > Painterly digital fantasy character portrait, three-quarter view from the chest up, grim unsmiling expression, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle stormy sea rim-lighting, no frame, no text. A grim oath-bound human knight, weathered scarred face, short rain-soaked dark hair, hard hunter's eyes fixed on a distant prey. Heavy full plate (AC 20) in storm-grey steel etched with vengeance sigils, a tabard of dark sea-blue, salt and seawater beaded on the armour. A longsword drawn low and a javelin sheathed at his back, faint cold divine light tracing the plate's edges, the relentless air of a man hunting a raider-lord across the tides.
 
 #### Brother Tym — Water Genasi Monk 9 (Way of the Open Hand)
 
-`app/static/demo/tokens/l9-tym.jpg`
+`app/static/demo/tokens/l9-tym.png`
 
 > Painterly digital fantasy character portrait, three-quarter view from the chest up, eerily serene expression, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle stormy sea rim-lighting, no frame, no text. A water genasi monk with translucent sea-blue skin marbled by faint flowing currents, hair like rippling water frozen mid-motion, calm pale-aqua eyes with no whites, a thin sheen of moisture always on his skin. Simple undyed sea-grey monk robes belted with rope, a slender driftwood shortspear held loosely. Beads of water orbit one open palm, his stance balanced and weightless as if poised to run across a wave.
 
@@ -487,25 +487,25 @@ Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
 #### Sahuagin Raider
 
-`app/static/demo/tokens/l9-sahuagin-raider.jpg`
+`app/static/demo/tokens/l9-sahuagin-raider.png`
 
 > Painterly digital fantasy character portrait, three-quarter view from the chest up, hostile snarling expression, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle stormy sea rim-lighting, no frame, no text. A vicious sahuagin sea-devil raider: glistening blue-green scaled hide, a finned ridge running over its skull, black bulging shark-like eyes, a jaw crammed with needle teeth, gill slits flaring at its neck. Webbed clawed hands grip a barbed bone trident and a net of woven kelp and sinew. Coral-shard and shark-tooth ornaments, dripping seawater, the feral predatory posture of a reef-born raider mid-attack.
 
 #### Sahuagin Priestess
 
-`app/static/demo/tokens/l9-sahuagin-priestess.jpg`
+`app/static/demo/tokens/l9-sahuagin-priestess.png`
 
 > Painterly digital fantasy character portrait, three-quarter view from the chest up, cold zealous expression, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle stormy sea rim-lighting, no frame, no text. A sahuagin priestess of the shark-god: deep indigo-and-teal scaled hide, an elaborate crest of dorsal fins and spines, four arms ending in webbed claws, baleful luminous eyes. Draped in regalia of black pearls, shark-jaw fetishes, and bleached bone, clutching a coral-and-bone ritual staff topped with a glowing abyssal pearl. Tendrils of dark water magic coil around her, the eerie authority of a deep-sea cult leader.
 
 #### Reef Shark
 
-`app/static/demo/tokens/l9-reef-shark.jpg`
+`app/static/demo/tokens/l9-reef-shark.png`
 
 > Painterly digital fantasy creature portrait, three-quarter view, predatory side-on framing of head and forebody, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle stormy sea rim-lighting, no frame, no text. A sleek grey reef shark surging through churning green water: countershaded slate-grey back fading to pale underbelly, a blunt powerful snout, lifeless black eye, gill slits and jagged tooth-lined jaw slightly agape. Sharp pectoral and dorsal fins cutting the current, motion blur of foam and bubbles trailing its tail, the cold mindless menace of a storm-driven hunter.
 
 #### Tide Elemental (Water Elemental)
 
-`app/static/demo/tokens/l9-tide-elemental.jpg`
+`app/static/demo/tokens/l9-tide-elemental.png`
 
 > Painterly digital fantasy creature portrait, three-quarter view from the chest up, faceless elemental presence, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle stormy sea rim-lighting, no frame, no text. A towering tide elemental — a roiling humanoid mass of translucent storm-green seawater, foam, and torn kelp, its form constantly collapsing and reforming into surging waves. Two faint glowing whitecap "eyes" hint at a face within the churn; spray, brine, and small swept-up shells swirl through its body. Rivulets of water arc off its crest, the raw oceanic fury of the storm given shape and will.
 

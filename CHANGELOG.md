@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.687.0] - 2026-06-26 — "The Reef Boils"
+
+**Schema version:** 81
+
+**Commit summary:** Demo art — generate + wire all 9 Level 9 Storm Over Saltmarsh tokens (5 PCs + 4 NPCs), completing the L9 set.
+
+**Description:** The L9 demo rendered every token as a plain coloured ring. Generated all nine from their `docs/demo/image-prompts.md` prompts via the ImagineArt MCP (nano-banana-pro → `remove_background` for true alpha) — Vaelith Stormscale, Lirael Songhaven, Oakheart Mossbrook, Ser Kadvan Tideward, Brother Tym, plus the Sahuagin Raider, Sahuagin Priestess, Reef Shark, and Tide Elemental. Dropped under `app/static/demo/tokens/` and wired the web-paths into `app/demo_campaigns.py`. **L9 is now 10/10 images.**
+
+### Added
+- `app/static/demo/tokens/l9-{vaelith,lirael,oakheart,kadvan,tym,sahuagin-raider,sahuagin-priestess,reef-shark,tide-elemental}.png` — transparent 1024×1024 token art.
+
+### Changed
+- `app/demo_campaigns.py` — wire the nine L9 token web-paths into the spec.
+- `docs/demo/image-prompts.md` — flip the L9 checklist rows + progress counts to ✅ (overall 32→41 / 58).
+
+### Schema
+- No schema change (still v81).
+
 ## [2.686.0] - 2026-06-26 — "The Drowned Muster"
 
 **Schema version:** 81

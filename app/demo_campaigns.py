@@ -207,7 +207,8 @@ _STORM_SALTMARSH = {
     "map": {"name": "The Drowned Reef", "width": 1600, "height": 1100,
             "image": "/static/demo/maps/drowned-reef.png"},
     "party": [
-        {"owner": "dave", "name": "Vaelith Stormscale", "sheet": dict(
+        {"owner": "dave", "name": "Vaelith Stormscale",
+         "image": "/static/demo/tokens/l9-vaelith.png", "sheet": dict(
             klass="Sorcerer", subclass="Draconic Bloodline", race="Tiefling", level=9,
             abilities={"STR": 8, "DEX": 14, "CON": 16, "INT": 11, "WIS": 12, "CHA": 18},
             ac=14, hp_max=66,
@@ -232,7 +233,8 @@ _STORM_SALTMARSH = {
                 "cold, 60-ft cone). Soften clusters with Fireball, finish with "
                 "the cone; 9 Sorcery Points for Quicken/Twin."),
         )},
-        {"owner": "bob", "name": "Lirael Songhaven", "sheet": dict(
+        {"owner": "bob", "name": "Lirael Songhaven",
+         "image": "/static/demo/tokens/l9-lirael.png", "sheet": dict(
             klass="Bard", subclass="College of Lore", race="Half-Elf", level=9,
             abilities={"STR": 8, "DEX": 14, "CON": 14, "INT": 12, "WIS": 10, "CHA": 18},
             ac=15, hp_max=58,
@@ -258,7 +260,8 @@ _STORM_SALTMARSH = {
                 "down a sahuagin baron) + Countercharm vs. siren-song. "
                 "Bardic Inspiration d8 keeps the front line swinging."),
         )},
-        {"owner": "erin", "name": "Oakheart Mossbrook", "sheet": dict(
+        {"owner": "erin", "name": "Oakheart Mossbrook",
+         "image": "/static/demo/tokens/l9-oakheart.png", "sheet": dict(
             klass="Druid", subclass="Circle of the Moon", race="Wood Elf", level=9,
             abilities={"STR": 12, "DEX": 13, "CON": 16, "INT": 10, "WIS": 18, "CHA": 11},
             ac=15, hp_max=70,
@@ -282,7 +285,8 @@ _STORM_SALTMARSH = {
                 "(summon a water elemental ally) and high-CR Wild Shape brawling "
                 "with Moonbeam up for sustained area control."),
         )},
-        {"owner": "gm2", "name": "Ser Kadvan Tideward", "sheet": dict(
+        {"owner": "gm2", "name": "Ser Kadvan Tideward",
+         "image": "/static/demo/tokens/l9-kadvan.png", "sheet": dict(
             klass="Paladin", subclass="Oath of Devotion", race="Human", level=9,
             abilities={"STR": 18, "DEX": 10, "CON": 14, "INT": 10, "WIS": 12, "CHA": 16},
             ac=20, hp_max=84,
@@ -307,7 +311,8 @@ _STORM_SALTMARSH = {
                 "frightened) + 3rd-level slots for Divine Smite bursts and "
                 "Vow of Enmity advantage. Two attacks, then smite the hit."),
         )},
-        {"owner": "gm2", "name": "Brother Tym", "sheet": dict(
+        {"owner": "gm2", "name": "Brother Tym",
+         "image": "/static/demo/tokens/l9-tym.png", "sheet": dict(
             klass="Monk", subclass="Way of the Open Hand", race="Wood Elf", level=9,
             abilities={"STR": 12, "DEX": 18, "CON": 14, "INT": 10, "WIS": 16, "CHA": 9},
             ac=17, hp_max=63,
@@ -333,10 +338,10 @@ _STORM_SALTMARSH = {
         ("young-red-dragon", "Storm Drake (Young Dragon)", "dragon"),
     ],
     "npc_tokens": [
-        ("sahuagin", "Sahuagin Raider", "#0e7490"),
-        ("sahuagin", "Sahuagin Priestess", "#155e75"),
-        ("reef-shark", "Reef Shark", "#475569"),
-        ("water-elemental", "Tide Elemental", "#0891b2"),
+        ("sahuagin", "Sahuagin Raider", "#0e7490", "/static/demo/tokens/l9-sahuagin-raider.png"),
+        ("sahuagin", "Sahuagin Priestess", "#155e75", "/static/demo/tokens/l9-sahuagin-priestess.png"),
+        ("reef-shark", "Reef Shark", "#475569", "/static/demo/tokens/l9-reef-shark.png"),
+        ("water-elemental", "Tide Elemental", "#0891b2", "/static/demo/tokens/l9-tide-elemental.png"),
     ],
 }
 
