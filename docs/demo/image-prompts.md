@@ -25,7 +25,7 @@ plain coloured ring (`image_url=None`) and are waiting on art.
 > misalign. Each map prompt below already says "no grid lines"; if your model
 > adds one anyway, put `grid, grid lines, grid overlay` in the negative prompt.
 
-## Overall progress — 49 / 58 images
+## Overall progress — 57 / 58 images
 
 | Demo | Map | Tokens | Done |
 |---|---|---|---|
@@ -33,7 +33,7 @@ plain coloured ring (`image_url=None`) and are waiting on art.
 | Level 5 : The Tide-Wracked Catacombs | ✅ | ✅ 9 / 9 | **10 / 10** |
 | Level 9 : Storm Over Saltmarsh | ✅ | ✅ 9 / 9 | **10 / 10** |
 | Level 13 : The Shadowfell Spire | ✅ | ✅ 8 / 8 | **9 / 9** |
-| Level 18 : The Dragon's Apotheosis | ✅ | ⬜ 0 / 8 | **1 / 9** |
+| Level 18 : The Dragon's Apotheosis | ✅ | ✅ 8 / 8 | **9 / 9** |
 | ARCHIVE : The Sundered Vault *(flagship)* | 🟡 placeholder | ✅ 9 / 9 shipped | **10 / 10** |
 
 <style>
@@ -593,19 +593,19 @@ Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
 A Tier-4 capstone. An ancient red wyrm is ascending to godhood atop a volcano; the party has one shot to stop it.
 
-**Progress: 1 / 9 images generated** — the battle map is wired; every token below still renders as a plain coloured ring (`image_url=None`). Generate the art, drop it at the listed path, then wire it in `app/demo_campaigns.py`.
+**Progress: 9 / 9 images generated** — the full L18 token set is wired (generated via the ImagineArt MCP, background-removed to true alpha, shipped as `.png`).
 
 | Entity | Drop file at | Status |
 |---|---|---|
 | 🗺️ The Caldera Throne (map) | `app/static/demo/maps/caldera-throne.png` | ✅ wired |
-| 🛡️ Archmagus Selene — High Elf Wizard 18 | `app/static/demo/tokens/l18-selene.jpg` | ⬜ needs art |
-| 🛡️ Ignar Flamesoul — Dragonborn Sorcerer 18 | `app/static/demo/tokens/l18-ignar.jpg` | ⬜ needs art |
-| 🛡️ Dame Aurelia Dawnward — Aasimar Paladin 18 | `app/static/demo/tokens/l18-aurelia.jpg` | ⬜ needs art |
-| 🛡️ Bryn Ironwall — Goliath Fighter 18 | `app/static/demo/tokens/l18-bryn.jpg` | ⬜ needs art |
-| 🛡️ Thornroot Elder — Firbolg Druid 18 | `app/static/demo/tokens/l18-thornroot.jpg` | ⬜ needs art |
-| 🐉 Pyraxis the Ascendant — Adult Red Dragon (boss) | `app/static/demo/tokens/l18-pyraxis.jpg` | ⬜ needs art |
-| 🔥 Fire Giant Honor Guard ×2 (shared file) | `app/static/demo/tokens/l18-fire-giant.jpg` | ⬜ needs art |
-| 🔮 Cult Archmage | `app/static/demo/tokens/l18-cult-archmage.jpg` | ⬜ needs art |
+| 🛡️ Archmagus Selene — High Elf Wizard 18 | `app/static/demo/tokens/l18-selene.png` | ✅ wired |
+| 🛡️ Ignar Flamesoul — Dragonborn Sorcerer 18 | `app/static/demo/tokens/l18-ignar.png` | ✅ wired |
+| 🛡️ Dame Aurelia Dawnward — Aasimar Paladin 18 | `app/static/demo/tokens/l18-aurelia.png` | ✅ wired |
+| 🛡️ Bryn Ironwall — Goliath Fighter 18 | `app/static/demo/tokens/l18-bryn.png` | ✅ wired |
+| 🛡️ Thornroot Elder — Firbolg Druid 18 | `app/static/demo/tokens/l18-thornroot.png` | ✅ wired |
+| 🐉 Pyraxis the Ascendant — Adult Red Dragon (boss) | `app/static/demo/tokens/l18-pyraxis.png` | ✅ wired |
+| 🔥 Fire Giant Honor Guard ×2 (shared file) | `app/static/demo/tokens/l18-fire-giant.png` | ✅ wired |
+| 🔮 Cult Archmage | `app/static/demo/tokens/l18-cult-archmage.png` | ✅ wired |
 
 ### 🗺️ Battle map — The Caldera Throne (1800×1300)
 
@@ -619,31 +619,31 @@ Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
 #### Archmagus Selene — High Elf Wizard 18 (Evocation)
 
-`app/static/demo/tokens/l18-selene.jpg`
+`app/static/demo/tokens/l18-selene.png`
 
 > Painterly digital fantasy character portrait, three-quarter view from the chest up, neutral expression, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, hot volcanic ember rim-lighting, no frame, no text. A high elf archmage of a century's preparation: sharp ageless features, pale luminous skin, long silver-white hair bound in an elaborate braided coronet, faintly glowing pale-gold eyes, calm and detached. Layered archmage robes of deep midnight-blue and violet, threaded with silver evocation runes and a high collar set with cold starlight gems. One open hand cradles a spark of incandescent meteor-fire, embers and tiny falling motes of flame orbiting her fingers. No weapon. Square 1:1, 1024×1024.
 
 #### Ignar Flamesoul — Dragonborn Sorcerer 18 (Draconic Bloodline)
 
-`app/static/demo/tokens/l18-ignar.jpg`
+`app/static/demo/tokens/l18-ignar.png`
 
 > Painterly digital fantasy character portrait, three-quarter view from the chest up, neutral expression with a proud theatrical tilt, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, hot volcanic ember rim-lighting, no frame, no text. A draconic-bloodline dragonborn sorcerer: scaled red-and-bronze draconic head, ridged brow and curved horns, slit golden eyes, smoke curling from his nostrils. Rich sorcerer's robes of crimson and burnished bronze with flame-shaped trim, sleeves rolled to show scaled forearms wreathed in living fire. One clawed hand raised, a sphere of roaring dragon-fire crackling in his palm as he answers a dragon-god in kind. Square 1:1, 1024×1024.
 
 #### Dame Aurelia Dawnward — Aasimar Paladin 18 (Oath of Devotion)
 
-`app/static/demo/tokens/l18-aurelia.jpg`
+`app/static/demo/tokens/l18-aurelia.png`
 
 > Painterly digital fantasy character portrait, three-quarter view from the chest up, serene expression, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, hot volcanic ember rim-lighting, no frame, no text. A radiant aasimar paladin, the party's unbreakable anchor: flawless luminous skin with faint glowing celestial markings tracing her cheekbones, calm pale eyes lit from within, a soft golden halo and half-furled radiant wings of light behind her shoulders. Gleaming silver-and-gold plate armour catching warm divine light, a white tabard. She holds aloft a Holy Avenger longsword whose blade burns with clean golden-white radiance that pushes back the surrounding ember glow. Square 1:1, 1024×1024.
 
 #### Bryn Ironwall — Goliath Fighter 18 (Champion)
 
-`app/static/demo/tokens/l18-bryn.jpg`
+`app/static/demo/tokens/l18-bryn.png`
 
 > Painterly digital fantasy character portrait, three-quarter view from the chest up, a faint hard grin (he only smiles when outnumbered), isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, hot volcanic ember rim-lighting, no frame, no text. A goliath champion built like a mountain: massive grey stony skin marbled with darker lithoderm patches and tribal markings, bald head, heavy brow, pale grey eyes. Battered heavy plate armour scarred from outlasting dragons, pauldrons like boulders. He rests an enormous greatsword over one shoulder, its steel reflecting the molten orange around him. Stoic, immovable, unafraid. Square 1:1, 1024×1024.
 
 #### Thornroot Elder — Firbolg Druid 18 (Circle of the Moon)
 
-`app/static/demo/tokens/l18-thornroot.jpg`
+`app/static/demo/tokens/l18-thornroot.png`
 
 > Painterly digital fantasy character portrait, three-quarter view from the chest up, grave elemental expression, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, hot volcanic ember rim-lighting, no frame, no text. An ancient firbolg archdruid who speaks for a mountain that hates the wyrm: tall, broad, with a long blunt bovine nose, mossy blue-grey skin like weathered bark, deep-set ageless eyes, lichen and small leaves growing along his brow, modest branching antlers. Robes of woven bark, root, and stone, hung with riverstones and bone fetishes. He grips a glowing Shillelagh quarterstaff sheathed in soft green druidic light that stands defiant against the surrounding fire. Square 1:1, 1024×1024.
 
@@ -651,19 +651,19 @@ Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
 #### Pyraxis the Ascendant — Adult Red Dragon (the boss)
 
-`app/static/demo/tokens/l18-pyraxis.jpg`
+`app/static/demo/tokens/l18-pyraxis.png`
 
 > Painterly digital fantasy creature token, FULL BODY (not a portrait) of an adult red dragon, posed for a top-down-friendly three-quarter overhead view so the whole serpentine form reads inside a circular token, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, hot volcanic ember rim-lighting, no frame, no text. Pyraxis the Ascendant, an ancient red wyrm mid-apotheosis into godhood: coiled and menacing, crimson and blackened-scarlet scales running molten-gold at the seams as divine fire wells up beneath them, vast spread wings, sweeping horns and frilled crest, jaws parted around a glow of building flame, claws gripping obsidian. An aura of ascending godfire and rising sparks haloes the body. Enormous, predatory, triumphant. Square 1:1, 1024×1024.
 
 #### Fire Giant Honor Guard ×2 (two identical tokens — generate once, reuse for both)
 
-`app/static/demo/tokens/l18-fire-giant.jpg`
+`app/static/demo/tokens/l18-fire-giant.png`
 
 > Painterly digital fantasy character portrait, three-quarter view from the chest up, stern expression, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, hot volcanic ember rim-lighting, no frame, no text. A fire giant honor guard sworn to the ascending wyrm: charcoal-grey skin with a dull glowing-coal undertone, fiery orange flame-like hair and beard, smoldering ember eyes, heavy jaw. Soot-blackened iron plate armour trimmed with brass and volcanic glass, draconic cult sigils burned into the breastplate. A massive iron-and-obsidian sword rests against one shoulder, its edge faintly red-hot. Square 1:1, 1024×1024.
 
 #### Cult Archmage — Archmage
 
-`app/static/demo/tokens/l18-cult-archmage.jpg`
+`app/static/demo/tokens/l18-cult-archmage.png`
 
 > Painterly digital fantasy character portrait, three-quarter view from the chest up, cold zealot's expression, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, hot volcanic ember rim-lighting, no frame, no text. A human cult archmage devoted to the dragon's ascension: gaunt face, shaved or close-cropped head marked with branded draconic sigils, fervent fire-lit eyes. Dark scarlet-and-charcoal mage robes layered with scale-patterned mantle and a high asymmetric collar, gold dragon-claw clasps. One hand wreathed in violet-and-orange arcane fire, the air around him distorting with heat as he channels power to fuel the wyrm's apotheosis. Square 1:1, 1024×1024.
 

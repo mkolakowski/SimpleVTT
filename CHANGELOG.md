@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.689.0] - 2026-06-26 — "The Wyrm Ascendant"
+
+**Schema version:** 81
+
+**Commit summary:** Demo art — generate + wire all 8 Level 18 Dragon's Apotheosis tokens (5 PCs + 3 NPC art assets, the Fire Giant shared across its ×2 entries), completing the L18 set and bringing every leveled demo to full art.
+
+**Description:** The L18 capstone demo rendered every token as a plain coloured ring. Generated all eight art assets from their `docs/demo/image-prompts.md` prompts via the ImagineArt MCP (nano-banana-pro → `remove_background` for true alpha) — Archmagus Selene, Ignar Flamesoul, Dame Aurelia Dawnward, Bryn Ironwall, Thornroot Elder, plus Pyraxis the Ascendant (the adult red dragon boss, generated as a circular medallion that reads cleanly in a circle-cropped token), the Fire Giant Honor Guard (one file reused for both ×2 tokens), and the Cult Archmage. Dropped under `app/static/demo/tokens/` and wired the web-paths into `app/demo_campaigns.py`. **L18 is now 9/9 images — the catalog stands at 57/58 (only the optional Sundered Tavern map regen remains).**
+
+### Added
+- `app/static/demo/tokens/l18-{selene,ignar,aurelia,bryn,thornroot,pyraxis,fire-giant,cult-archmage}.png` — transparent 1024×1024 token art.
+
+### Changed
+- `app/demo_campaigns.py` — wire the L18 token web-paths into the spec (both Fire Giant entries point at the shared file).
+- `docs/demo/image-prompts.md` — flip the L18 checklist rows + progress counts to ✅ (overall 49→57 / 58).
+
+### Schema
+- No schema change (still v81).
+
 ## [2.688.0] - 2026-06-26 — "The Spire Bleeds"
 
 **Schema version:** 81

@@ -521,7 +521,8 @@ _DRAGONS_APOTHEOSIS = {
     "map": {"name": "The Caldera Throne", "width": 1800, "height": 1300,
             "image": "/static/demo/maps/caldera-throne.png"},
     "party": [
-        {"owner": "gm", "name": "Archmagus Selene", "sheet": dict(
+        {"owner": "gm", "name": "Archmagus Selene",
+         "image": "/static/demo/tokens/l18-selene.png", "sheet": dict(
             klass="Wizard", subclass="School of Evocation", race="High Elf", level=18,
             abilities={"STR": 8, "DEX": 14, "CON": 16, "INT": 20, "WIS": 12, "CHA": 11},
             ac=15, hp_max=122,
@@ -548,7 +549,8 @@ _DRAGONS_APOTHEOSIS = {
                 "four 40-ft spheres). Overchannel max-damages a low-level evocation; "
                 "Spell Mastery casts Shield / Misty Step at will."),
         )},
-        {"owner": "gm", "name": "Ignar Flamesoul", "sheet": dict(
+        {"owner": "gm", "name": "Ignar Flamesoul",
+         "image": "/static/demo/tokens/l18-ignar.png", "sheet": dict(
             klass="Sorcerer", subclass="Draconic Bloodline", race="Dragonborn", level=18,
             abilities={"STR": 10, "DEX": 14, "CON": 18, "INT": 11, "WIS": 12, "CHA": 20},
             ac=15, hp_max=131,
@@ -575,7 +577,8 @@ _DRAGONS_APOTHEOSIS = {
                 "(CHA save) — plus a 9th-level slot for Time Stop → stacked nukes. "
                 "20 Sorcery Points fuel Quicken + Twin."),
         )},
-        {"owner": "carol", "name": "Dame Aurelia Dawnward", "sheet": dict(
+        {"owner": "carol", "name": "Dame Aurelia Dawnward",
+         "image": "/static/demo/tokens/l18-aurelia.png", "sheet": dict(
             klass="Paladin", subclass="Oath of Devotion", race="Aasimar", level=18,
             abilities={"STR": 20, "DEX": 10, "CON": 16, "INT": 10, "WIS": 12, "CHA": 18},
             ac=21, hp_max=164,
@@ -600,7 +603,8 @@ _DRAGONS_APOTHEOSIS = {
                 "30 ft — the whole party adds her +4 CHA to every save. Holy Nimbus "
                 "(Channel Divinity) burns nearby fiends; Divine Smite on demand."),
         )},
-        {"owner": "gm", "name": "Bryn Ironwall", "sheet": dict(
+        {"owner": "gm", "name": "Bryn Ironwall",
+         "image": "/static/demo/tokens/l18-bryn.png", "sheet": dict(
             klass="Fighter", subclass="Champion", race="Goliath", level=18,
             abilities={"STR": 20, "DEX": 13, "CON": 18, "INT": 9, "WIS": 12, "CHA": 8},
             ac=20, hp_max=184,
@@ -618,7 +622,8 @@ _DRAGONS_APOTHEOSIS = {
                 "and Superior Critical crits on 18–20. Three attacks a turn, four "
                 "with Action Surge; Indomitable rerolls two failed saves."),
         )},
-        {"owner": "erin", "name": "Thornroot Elder", "sheet": dict(
+        {"owner": "erin", "name": "Thornroot Elder",
+         "image": "/static/demo/tokens/l18-thornroot.png", "sheet": dict(
             klass="Druid", subclass="Circle of the Moon", race="Hill Dwarf", level=18,
             abilities={"STR": 12, "DEX": 12, "CON": 17, "INT": 10, "WIS": 20, "CHA": 11},
             ac=16, hp_max=140,
@@ -654,10 +659,10 @@ _DRAGONS_APOTHEOSIS = {
         ("salamander", "Salamander"),
     ],
     "npc_tokens": [
-        ("adult-red-dragon", "Pyraxis the Ascendant (Adult Red Dragon)", "#b91c1c"),
-        ("fire-giant", "Fire Giant Honor Guard", "#ea580c"),
-        ("fire-giant", "Fire Giant Honor Guard", "#ea580c"),
-        ("archmage", "Cult Archmage", "#7c3aed"),
+        ("adult-red-dragon", "Pyraxis the Ascendant (Adult Red Dragon)", "#b91c1c", "/static/demo/tokens/l18-pyraxis.png"),
+        ("fire-giant", "Fire Giant Honor Guard", "#ea580c", "/static/demo/tokens/l18-fire-giant.png"),
+        ("fire-giant", "Fire Giant Honor Guard", "#ea580c", "/static/demo/tokens/l18-fire-giant.png"),
+        ("archmage", "Cult Archmage", "#7c3aed", "/static/demo/tokens/l18-cult-archmage.png"),
     ],
 }
 
