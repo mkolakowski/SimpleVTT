@@ -11,16 +11,21 @@ v2.99.391 — Phase 1 of docs/plans/full-feature-automation.md: the
 PB-per-long-rest budget is now server-tracked via the feature-use
 registry (`sheet.tentacle_uses`, computed max = proficiency bonus):
 each summon decrements, a depleted budget returns 409 `out_of_uses`,
-and the /rest hook refills it. The attack roll, cold-damage rider,
-and speed reduction stay GM-tracked pending the Phase 2/7
-primitives. The cold damage is rolled + attack bonus computed
-server-side. Bonus chip.
+and the /rest hook refills it. **v2.678.0 (Phase 8):** the melee spell attack is now resolved
+server-side vs the target's AC (`_read_target_ac`) when a
+`target_combatant_id` is supplied — nat 20 auto-crits (doubles the
+dice), nat 1 auto-misses; on a hit the cold damage is applied via
+`_apply_damage_to_combatant`. The speed reduction stays GM-narrated.
+The cold damage is rolled + attack bonus computed server-side. Bonus
+chip.
 
 Magnus Hexbinder (Warlock, PATCHed to The Fathomless Lv 5) is the
 demo fixture (1d8 cold below Lv 10; PB 3 → 3 uses).
 
 Tests:
   - Lv 5 happy: cold in [1,8], reach 10, range 60, uses 3→2 (PB).
+  - Apply: templated bandit target → attack rolled vs AC + cold applied.
+  - Announce-only: no target → attack/damage fields stay None.
   - Exhausted budget (tentacle_uses=0) → 409 out_of_uses.
   - Long-rest refill: exhaust → /rest long → refills to PB (3).
   - Wrong subclass (default The Fiend) → 409.
@@ -96,6 +101,73 @@ async def test_use_td_happy_lv5(
     feats = _td_broadcasts(gm_ws, magnus["id"])
     assert feats
     assert feats[-1]["data"]["uses_remaining"] == 2
+
+
+async def test_td_resolves_attack_and_applies_cold(
+    gm_client, magnus_fathomless,
+):
+    """v2.678.0 — Phase 8: a templated NPC target now has the melee spell
+    attack rolled vs its AC + the cold applied on a hit. Seed Magnus + a real
+    bandit template, then assert the attack/damage fields are consistent with
+    the rolled outcome (vanilla bandit → no cold resistance → exact)."""
+    magnus = magnus_fathomless
+    templates = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/templates")).json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": f"tok_td_{magnus['id']}", "char_id": magnus["id"],
+             "name": magnus["name"], "initiative": 12,
+             "hp_current": 40, "hp_max": 40, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": "tok_td_bandit", "char_id": None,
+             "token_template_id": bandit["id"], "name": bandit["name"],
+             "initiative": 8, "hp_current": 50, "hp_max": 50, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_tentacle_of_the_deeps",
+        json={"character_id": magnus["id"], "override": True,
+              "target_combatant_id": "tok_td_bandit"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["target_ac"] is not None and data["target_ac"] >= 1
+    assert 1 <= data["attack_nat"] <= 20
+    assert data["attack_total"] == data["attack_nat"] + data["attack_bonus"]
+    assert isinstance(data["hit"], bool)
+    if data["hit"]:
+        if data["is_crit"]:
+            # crit rolls an extra dice_count d8 on top of the base roll.
+            assert data["damage_applied"] >= data["cold_damage"], data
+        else:
+            assert data["damage_applied"] == data["cold_damage"], data
+    else:
+        assert data["damage_applied"] == 0, data
+
+
+async def test_td_no_target_announce_only(
+    gm_client, magnus_fathomless,
+):
+    """v2.678.0 — no target → backward-compatible announce-only."""
+    magnus = magnus_fathomless
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_tentacle_of_the_deeps",
+        json={"character_id": magnus["id"], "override": True},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["attack_nat"] is None
+    assert data["attack_total"] is None
+    assert data["hit"] is None
+    assert data["damage_applied"] is None
 
 
 async def test_use_td_out_of_uses(

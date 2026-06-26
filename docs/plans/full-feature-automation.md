@@ -588,6 +588,16 @@ composition. Batch by class, same cadence as the breadth sweep.
   HP via `_grant_temp_hp`. Surfaces `save_total`/`save_passed`/
   `damage_applied`/`temp_hp_applied`; announce-only without a target. Harness:
   `test_storm_aura.py` (+3).
+- **v2.678.0 ("The Grasping Deep") — Tentacle of the Deeps** (Fathomless
+  Warlock Lv 1+): first **attack-roll** wire of this session's tail (the
+  prior seven rode save / heal / temp-HP substrates). With a
+  `target_combatant_id`, `use_tentacle_of_the_deeps` rolls the melee spell
+  attack server-side vs the target's AC (`_read_target_ac`; nat 20 crits +
+  doubles the dice, nat 1 misses) and applies the cold on a hit via
+  `_apply_damage_to_combatant` (`is_attack=True, is_magical=True`). Surfaces
+  `target_ac`/`attack_nat`/`attack_total`/`is_crit`/`hit`/`damage_applied`;
+  speed reduction stays GM-narrated; announce-only without a target. Harness:
+  `test_tentacle_of_the_deeps.py` (+2).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

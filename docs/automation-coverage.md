@@ -319,7 +319,7 @@ or passive damage-boosters that already ride other code paths
 | `use_tales_from_beyond` | ✅ tracked | A use/resource |
 | `use_telepathic_speech` | ✅ tracked | A use/resource |
 | `use_tempestuous_magic` | ✅ tracked | A use/resource |
-| `use_tentacle_of_the_deeps` | ✅ tracked | A use/resource |
+| `use_tentacle_of_the_deeps` | ✅ tracked | v2.678.0 — with `target_combatant_id`, rolls the melee spell attack vs the target's AC (`_read_target_ac`; nat 20 crits + doubles dice, nat 1 misses) + applies the cold on a hit via `_apply_damage_to_combatant`; speed reduction GM-narrated; announce-only without a target |
 | `use_third_eye` | ✅ tracked | A use/resource |
 | `use_thorn_whip` | ✅ tracked | G forced-move, damage |
 | `use_thunderwave` | ✅ tracked | G forced-move, damage |

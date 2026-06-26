@@ -88278,17 +88278,22 @@ async def use_tentacle_of_the_deeps(
     Lv 10. Summonable a number of times equal to proficiency
     bonus per long rest.
 
-    Body: ``{character_id, override?}``. Costs a bonus chip. Rolls
-    the cold damage server-side + reports the melee-spell-attack
-    bonus. v1 announce-only — the attack roll resolution, target
-    choice, speed reduction, and uses-per-rest limit stay
-    GM-tracked.
+    Body: ``{character_id, target_combatant_id?, override?}``. Costs
+    a bonus chip. Reports the melee-spell-attack bonus + rolls the
+    cold damage server-side. v2.678.0 (Phase 8): when
+    ``target_combatant_id`` is supplied, the melee spell attack is
+    rolled server-side vs the target's AC (`_read_target_ac`) and the
+    cold damage applied on a hit (nat 20 auto-crits + doubles the
+    dice; nat 1 auto-misses) via `_apply_damage_to_combatant`. The
+    1-minute speed reduction stays GM-narrated. Without a target it
+    stays announce-only.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
     override = bool(body.get("override"))
+    target_combatant_id = (str(body.get("target_combatant_id") or "")).strip()
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -88366,6 +88371,73 @@ async def use_tentacle_of_the_deeps(
         cold_damage = dice_count
         breakdown = ""
 
+    # v2.678.0 — Phase 8: resolve the melee spell attack server-side vs the
+    # target's AC (`_read_target_ac`) + apply the cold damage on a hit (was
+    # announce-only). RAW: a melee spell attack; nat 20 auto-crits (double the
+    # damage dice), nat 1 auto-misses. The pre-rolled `cold_damage` is the
+    # base hit; a crit rolls an extra `dice_count`d8. Cold is magical spell-
+    # attack damage → `_apply_damage_to_combatant` with `is_attack=True,
+    # is_magical=True`. The 1-min speed reduction stays GM-narrated. Backward-
+    # compatible: no resolvable target → all attack fields None (announce-only).
+    attack_nat = None
+    attack_total = None
+    is_crit = None
+    hit = None
+    damage_applied = None
+    target_ac = None
+    _tod_target = (
+        _lookup_combatant(campaign_id, target_combatant_id)
+        if target_combatant_id else None
+    )
+    if _tod_target is not None:
+        target_ac = _read_target_ac(db, campaign_id, _tod_target)
+        try:
+            _ar = dice_mod.roll("1d20")
+            attack_nat = max(1, min(20, int(_ar.total)))
+        except dice_mod.DiceParseError:
+            attack_nat = 10
+        attack_total = attack_nat + attack_bonus
+        is_crit = attack_nat == 20
+        if attack_nat == 1:
+            hit = False
+        else:
+            hit = is_crit or attack_total >= target_ac
+        await hub.broadcast(campaign_id, {
+            "type": "roll",
+            "data": {
+                "expression": f"1d20{attack_bonus:+d}",
+                "total": attack_total,
+                "breakdown": (
+                    f"Melee spell attack: 1d20[{attack_nat}]"
+                    f"{attack_bonus:+d} = {attack_total} vs AC "
+                    f"{target_ac} → {'CRIT' if is_crit else ('HIT' if hit else 'MISS')}"
+                ),
+                "note": (
+                    f"🐙 {char.name}'s Tentacle of the Deeps vs "
+                    f"{_tod_target.get('name') or 'target'}"
+                ),
+                "user_name": char.name,
+                "char_name": _tod_target.get("name") or "",
+                "visibility": Visibility.PUBLIC.value,
+            },
+        })
+        if hit:
+            _final_cold = cold_damage
+            if is_crit:
+                try:
+                    _cr = dice_mod.roll(f"{dice_count}d8")
+                    _final_cold += int(_cr.total)
+                except dice_mod.DiceParseError:
+                    pass
+            _tadr = await _apply_damage_to_combatant(
+                db, campaign_id, _tod_target, _final_cold, "cold",
+                is_crit=bool(is_crit), is_attack=True, is_magical=True,
+                attacker_char_id=char.id,
+            )
+            damage_applied = int(_tadr.get("applied") or 0)
+        else:
+            damage_applied = 0
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -88407,6 +88479,13 @@ async def use_tentacle_of_the_deeps(
             "uses_remaining": uses_remaining,
             "uses_max": uses_max,
             "warlock_level": warlock_lv,
+            "target_combatant_id": target_combatant_id,
+            "target_ac": target_ac,
+            "attack_nat": attack_nat,
+            "attack_total": attack_total,
+            "is_crit": is_crit,
+            "hit": hit,
+            "damage_applied": damage_applied,
         },
     })
 
@@ -88422,6 +88501,13 @@ async def use_tentacle_of_the_deeps(
         "uses_remaining": uses_remaining,
         "uses_max": uses_max,
         "warlock_level": warlock_lv,
+        "target_combatant_id": target_combatant_id,
+        "target_ac": target_ac,
+        "attack_nat": attack_nat,
+        "attack_total": attack_total,
+        "is_crit": is_crit,
+        "hit": hit,
+        "damage_applied": damage_applied,
     }
 
 

@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.678.0] - 2026-06-26 — "The Grasping Deep"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — resolve Tentacle of the Deeps' melee spell attack + apply the cold damage server-side (Fathomless Warlock).
+
+**Description:** `use_tentacle_of_the_deeps` (TCE p.70) computed the melee-spell-attack bonus + rolled the cold damage but the GM resolved the attack roll and applied the damage by hand. This is the first **attack-roll** wire of this Phase 8 session (the prior seven rode save / heal / temp-HP substrates). When a `target_combatant_id` is supplied, the endpoint now rolls the melee spell attack server-side vs the target's AC (`_read_target_ac` — PC sheet AC / monster-template AC, including buff `ac_bonus`/`ac_floor`), with **nat 20 auto-critting (doubling the damage dice) and nat 1 auto-missing**, and applies the cold damage on a hit via `_apply_damage_to_combatant` (`is_attack=True, is_magical=True`). The attack roll is broadcast as a public `roll`; the response/broadcast gain `target_ac` / `attack_nat` / `attack_total` / `is_crit` / `hit` / `damage_applied`. The 1-minute speed reduction stays GM-narrated. Backward-compatible: no `target_combatant_id` leaves all attack fields None (announce-only).
+
+### Added
+- `tests/harness/test_tentacle_of_the_deeps.py` (+2) — `test_td_resolves_attack_and_applies_cold` (templated bandit → `target_ac`/`attack_nat`/`attack_total` set, `attack_total == attack_nat + attack_bonus`, `damage_applied` == `cold_damage` on a non-crit hit / ≥ on a crit / `0` on a miss) + `test_td_no_target_announce_only` (no target → fields stay None).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_tentacle_of_the_deeps` resolves the melee spell attack vs AC + applies the cold on a hit (crit-aware); surfaces the attack fields and accepts `target_combatant_id`.
+- `docs/automation-coverage.md` — `use_tentacle_of_the_deeps` note updated (attack rolled + cold applied server-side).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Tentacle of the Deeps.
+- `docs/test-harness-coverage.md` — catalog the test file (was previously uncatalogued).
+
+### Schema
+- No schema change (still v81).
+
 ## [2.677.0] - 2026-06-26 — "The Roaming Tempest"
 
 **Schema version:** 81
