@@ -93702,16 +93702,29 @@ async def use_mantle_of_inspiration(
     immediately to move up to their speed without provoking
     OAs."
 
-    Body: ``{character_id, override?}``. Costs a bonus chip
-    AND expends a BI use. v1 announce-only — actual ally
-    temp HP + reaction-move application is GM-tracked. BI
-    decrement is performed via the existing resource flow.
+    Body: ``{character_id, target_combatant_ids?, override?}``.
+    Costs a bonus chip AND expends a BI use. The free reaction-
+    move (move up to speed without provoking OAs) stays GM-
+    narrated — the server doesn't model the ally reactions — but
+    the temp HP is applied server-side to each named ally combatant
+    (v2.671.0 Phase 8). BI decrement is performed via the existing
+    resource flow. Backward-compatible: no ``target_combatant_ids``
+    stays announce-only.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
     override = bool(body.get("override"))
+    raw_targets = body.get("target_combatant_ids") or []
+    target_combatant_ids = []
+    if isinstance(raw_targets, list):
+        for _t in raw_targets:
+            # Combatant ids are opaque strings (e.g. "tok_…"); keep them
+            # verbatim and de-dup, dropping empties.
+            _ts = str(_t).strip() if _t is not None else ""
+            if _ts and _ts not in target_combatant_ids:
+                target_combatant_ids.append(_ts)
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -93759,6 +93772,27 @@ async def use_mantle_of_inspiration(
     max_targets = max(1, cha_mod)
     temp_hp = 5 + bard_lv
 
+    # v2.671.0 — Phase 8: apply the fixed 5 + bard_level temp HP to each named
+    # ally combatant (was announce-only), riding `_grant_temp_hp` — the same
+    # substrate as Mote of Potential's save mode + Inspiring Smite. Honors the
+    # RAW cap of up to CHA-mod (min 1) targets; extra ids beyond the cap are
+    # dropped. The free reaction-move half stays GM-narrated. Backward-
+    # compatible: no target ids → no apply.
+    applied_targets = []
+    for _cid in target_combatant_ids[:max_targets]:
+        _ally = _lookup_combatant(campaign_id, _cid)
+        if _ally is None:
+            continue
+        _tr = await _grant_temp_hp(
+            db, campaign_id, _ally, temp_hp,
+            source="mantle-of-inspiration",
+        )
+        applied_targets.append({
+            "combatant_id": _cid,
+            "temp_hp_applied": int(_tr.get("applied") or 0),
+        })
+    targets_buffed = len(applied_targets)
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -93794,6 +93828,8 @@ async def use_mantle_of_inspiration(
             "free_move_no_oa": True,
             "consumed_bardic_inspiration": True,
             "bard_level": bard_lv,
+            "targets_buffed": targets_buffed,
+            "applied_targets": applied_targets,
         },
     })
 
@@ -93806,6 +93842,8 @@ async def use_mantle_of_inspiration(
         "free_move_no_oa": True,
         "consumed_bardic_inspiration": True,
         "bard_level": bard_lv,
+        "targets_buffed": targets_buffed,
+        "applied_targets": applied_targets,
     }
 
 

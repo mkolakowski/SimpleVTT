@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.671.0] - 2026-06-26 — "The Fey-Woven Shield"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — apply Mantle of Inspiration's temp HP to each named ally server-side (Glamour College Bard), riding `_grant_temp_hp`.
+
+**Description:** `use_mantle_of_inspiration` (XGE p.16) computed the `5 + bard_level` temp HP and broadcast it, but the GM applied it to each ally by hand. Now the endpoint accepts `target_combatant_ids` (a list — the feature buffs up to CHA-mod allies) and grants the temp HP to each named combatant via `_grant_temp_hp` — the same substrate as Mote of Potential's save mode (v2.670.0) and Inspiring Smite. RAW cap is honored: ids beyond CHA-mod (min 1) are dropped. The free reaction-move-without-OAs half stays GM-narrated (the server doesn't model the ally reactions). The response/broadcast gain `targets_buffed` + `applied_targets` (`[{combatant_id, temp_hp_applied}]`). Backward-compatible: no `target_combatant_ids` stays announce-only.
+
+### Added
+- `tests/harness/test_mantle_of_inspiration.py` (+3) — `test_mi_applies_temp_hp_to_allies` (two fresh NPC allies each granted 11 temp HP), `test_mi_caps_targets_at_cha_mod` (5 ids → only 3 buffed), `test_mi_no_target_announce_only` (no ids → `targets_buffed == 0`).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_mantle_of_inspiration` parses `target_combatant_ids`, applies `5 + bard_level` temp HP to each (capped at CHA-mod) via `_grant_temp_hp`, surfaces `targets_buffed` / `applied_targets`.
+- `docs/automation-coverage.md` — `use_mantle_of_inspiration` flipped ⚪ announce-only → ✅ tracked (temp HP applied; free-move stays GM-narrated).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Mantle of Inspiration.
+- `docs/test-harness-coverage.md` — catalog the new tests.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.670.0] - 2026-06-26 — "The Mote Made Real"
 
 **Schema version:** 81

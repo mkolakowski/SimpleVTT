@@ -255,7 +255,7 @@ or passive damage-boosters that already ride other code paths
 | `use_mage_hand_legerdemain` | ✅ tracked | D buff-install (Mage Hand spell-task parameter flags) |
 | `use_maneuvering_attack` | ✅ tracked | A use/resource |
 | `use_manifest_echo` | ✅ tracked | A use/resource |
-| `use_mantle_of_inspiration` | ✅ tracked | A use/resource |
+| `use_mantle_of_inspiration` | ✅ tracked | v2.671.0 — applies `5 + bard_level` temp HP to each named ally (`target_combatant_ids`, capped at CHA-mod) via `_grant_temp_hp`; free reaction-move stays GM-narrated |
 | `use_master_of_nature` | ✅ tracked | A use/resource |
 | `use_master_of_tactics` | ✅ tracked | A use/resource |
 | `use_menacing_attack` | ✅ tracked | C save-or-condition, D buff-install |

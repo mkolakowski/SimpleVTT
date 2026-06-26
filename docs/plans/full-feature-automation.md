@@ -525,6 +525,15 @@ composition. Batch by class, same cadence as the breadth sweep.
   temp HP via `_grant_temp_hp` (Inspiring Smite shape). **check** mode stays
   GM-narrated (no ability-check substrate) but the die is rolled + surfaced.
   Harness: `test_mote_of_potential.py` (+2).
+- **v2.671.0 ("The Fey-Woven Shield") — Mantle of Inspiration** (Glamour
+  College Bard Lv 3+): `use_mantle_of_inspiration` computed `5 + bard_level`
+  temp HP but applied it by hand. It now accepts `target_combatant_ids` (a
+  list — the feature buffs up to CHA-mod allies) and grants the temp HP to
+  each named combatant via `_grant_temp_hp` (the Mote save-mode / Inspiring
+  Smite substrate), honoring the CHA-mod cap. The free reaction-move-without-
+  OAs half stays GM-narrated. Surfaces `targets_buffed`/`applied_targets`.
+  Announce-only without target ids. Harness: `test_mantle_of_inspiration.py`
+  (+3).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`
