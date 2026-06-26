@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.686.0] - 2026-06-26 — "The Drowned Muster"
+
+**Schema version:** 81
+
+**Commit summary:** Demo art — generate + wire all 9 Level 5 Tide-Wracked Catacombs tokens (5 PCs + 4 undead), completing the L5 set.
+
+**Description:** The L5 demo rendered every token as a plain coloured ring. Generated all nine from their `docs/demo/image-prompts.md` prompts via the ImagineArt MCP (nano-banana-pro → `remove_background` for true alpha) — Sir Gareth Tidebreaker, Maelis Stormcaller, Mother Coralind, Vesh Quillon, Hrudd Saltmane, plus the Brine Skeleton, Drowned Zombie, Tide Ghoul, and the Captain of the Drowned. Dropped under `app/static/demo/tokens/` and wired the web-paths into `app/demo_campaigns.py` (an `image` key on each PC dict + a 4th element on each `npc_tokens` tuple). **L5 is now 10/10 images.**
+
+### Added
+- `app/static/demo/tokens/l5tide-{gareth,maelis,coralind,vesh,hrudd,brine-skeleton,drowned-zombie,tide-ghoul,drowned-captain}.png` — transparent 1024×1024 token art.
+
+### Changed
+- `app/demo_campaigns.py` — wire the nine L5 token web-paths into the spec.
+- `docs/demo/image-prompts.md` — flip the L5 checklist rows + progress counts to ✅ (overall 23→32 / 58).
+
+### Schema
+- No schema change (still v81).
+
 ## [2.685.0] - 2026-06-26 — "Four Battlegrounds"
 
 **Schema version:** 81

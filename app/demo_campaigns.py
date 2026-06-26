@@ -674,7 +674,8 @@ _TIDEWRACKED_CATACOMBS = {
     "map": {"name": "The Tide-Wracked Catacombs", "width": 1400, "height": 1000,
             "image": "/static/demo/maps/tide-wracked-catacombs.png"},
     "party": [
-        {"owner": "gm", "name": "Sir Gareth Tidebreaker", "sheet": dict(
+        {"owner": "gm", "name": "Sir Gareth Tidebreaker",
+         "image": "/static/demo/tokens/l5tide-gareth.png", "sheet": dict(
             klass="Fighter", subclass="Champion", race="Human", level=5,
             abilities={"STR": 18, "DEX": 13, "CON": 16, "INT": 9, "WIS": 12, "CHA": 11},
             ac=18, hp_max=44,
@@ -692,7 +693,8 @@ _TIDEWRACKED_CATACOMBS = {
                 "Attack action. Champion's Improved Critical crits on 19-20, "
                 "doubling that burst."),
         )},
-        {"owner": "gm", "name": "Maelis Stormcaller", "sheet": dict(
+        {"owner": "gm", "name": "Maelis Stormcaller",
+         "image": "/static/demo/tokens/l5tide-maelis.png", "sheet": dict(
             klass="Wizard", subclass="School of Evocation", race="High Elf", level=5,
             abilities={"STR": 8, "DEX": 14, "CON": 14, "INT": 18, "WIS": 12, "CHA": 10},
             ac=12, hp_max=27,
@@ -722,7 +724,8 @@ _TIDEWRACKED_CATACOMBS = {
                 "radius). Sculpt Spells carves allies out of the blast so he "
                 "can drop it into melee."),
         )},
-        {"owner": "carol", "name": "Mother Coralind", "sheet": dict(
+        {"owner": "carol", "name": "Mother Coralind",
+         "image": "/static/demo/tokens/l5tide-coralind.png", "sheet": dict(
             klass="Cleric", subclass="Life Domain", race="Half-Elf", level=5,
             abilities={"STR": 12, "DEX": 10, "CON": 14, "INT": 11, "WIS": 17, "CHA": 13},
             ac=18, hp_max=38,
@@ -749,7 +752,8 @@ _TIDEWRACKED_CATACOMBS = {
                 "wrath (3d8, half on save) that shreds the undead swarm as she "
                 "advances."),
         )},
-        {"owner": "alice", "name": "Vesh Quillon", "sheet": dict(
+        {"owner": "alice", "name": "Vesh Quillon",
+         "image": "/static/demo/tokens/l5tide-vesh.png", "sheet": dict(
             klass="Rogue", subclass="Thief", race="Wood Elf", level=5,
             abilities={"STR": 10, "DEX": 18, "CON": 14, "INT": 12, "WIS": 13, "CHA": 10},
             ac=16, hp_max=33,
@@ -765,7 +769,8 @@ _TIDEWRACKED_CATACOMBS = {
                 "Level-5 showcase: Uncanny Dodge — a reaction to halve a big "
                 "hit (try the v2.600.0 reaction prompt). Sneak Attack is now 3d6."),
         )},
-        {"owner": "gm", "name": "Hrudd Saltmane", "sheet": dict(
+        {"owner": "gm", "name": "Hrudd Saltmane",
+         "image": "/static/demo/tokens/l5tide-hrudd.png", "sheet": dict(
             klass="Barbarian", subclass="Path of the Berserker", race="Half-Orc", level=5,
             abilities={"STR": 18, "DEX": 14, "CON": 16, "INT": 8, "WIS": 10, "CHA": 10},
             ac=15, hp_max=52,
@@ -791,10 +796,10 @@ _TIDEWRACKED_CATACOMBS = {
         ("wight", "Wight"),
     ],
     "npc_tokens": [
-        ("skeleton", "Brine Skeleton", "#9ca3af"),
-        ("zombie", "Drowned Zombie", "#6b7a5a"),
-        ("ghoul", "Tide Ghoul", "#7c8a8a"),
-        ("wight", "Captain of the Drowned (Wight)", "#3f6f6f"),
+        ("skeleton", "Brine Skeleton", "#9ca3af", "/static/demo/tokens/l5tide-brine-skeleton.png"),
+        ("zombie", "Drowned Zombie", "#6b7a5a", "/static/demo/tokens/l5tide-drowned-zombie.png"),
+        ("ghoul", "Tide Ghoul", "#7c8a8a", "/static/demo/tokens/l5tide-tide-ghoul.png"),
+        ("wight", "Captain of the Drowned (Wight)", "#3f6f6f", "/static/demo/tokens/l5tide-drowned-captain.png"),
     ],
 }
 

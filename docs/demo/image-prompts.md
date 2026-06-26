@@ -25,12 +25,12 @@ plain coloured ring (`image_url=None`) and are waiting on art.
 > misalign. Each map prompt below already says "no grid lines"; if your model
 > adds one anyway, put `grid, grid lines, grid overlay` in the negative prompt.
 
-## Overall progress — 23 / 58 images
+## Overall progress — 32 / 58 images
 
 | Demo | Map | Tokens | Done |
 |---|---|---|---|
 | Level 3 : The Goblin Warrens | ✅ | ✅ 9 / 9 | **10 / 10** |
-| Level 5 : The Tide-Wracked Catacombs | ✅ | ⬜ 0 / 9 | **1 / 10** |
+| Level 5 : The Tide-Wracked Catacombs | ✅ | ✅ 9 / 9 | **10 / 10** |
 | Level 9 : Storm Over Saltmarsh | ✅ | ⬜ 0 / 9 | **1 / 10** |
 | Level 13 : The Shadowfell Spire | ✅ | ⬜ 0 / 8 | **1 / 9** |
 | Level 18 : The Dragon's Apotheosis | ✅ | ⬜ 0 / 8 | **1 / 9** |
@@ -342,20 +342,20 @@ Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
 The Tier-2 power-spike tier. A drowned crypt beneath a ruined lighthouse spills undead onto the coast at every high tide.
 
-**Progress: 1 / 10 images generated** — the battle map is wired; every token below still renders as a plain coloured ring (`image_url=None`). Generate the art, drop it at the listed path, then wire it in `app/demo_campaigns.py`.
+**Progress: 10 / 10 images generated** — the full L5 token set is wired (generated via the ImagineArt MCP, background-removed to true alpha, shipped as `.png`).
 
 | Entity | Drop file at | Status |
 |---|---|---|
 | 🗺️ The Tide-Wracked Catacombs (map) | `app/static/demo/maps/tide-wracked-catacombs.png` | ✅ wired |
-| 🛡️ Sir Gareth Tidebreaker (Human Fighter 5) | `app/static/demo/tokens/l5tide-gareth.jpg` | ⬜ needs art |
-| 🛡️ Maelis Stormcaller (High Elf Wizard 5) | `app/static/demo/tokens/l5tide-maelis.jpg` | ⬜ needs art |
-| 🛡️ Mother Coralind (Half-Elf Cleric 5) | `app/static/demo/tokens/l5tide-coralind.jpg` | ⬜ needs art |
-| 🛡️ Vesh Quillon (Wood Elf Rogue 5) | `app/static/demo/tokens/l5tide-vesh.jpg` | ⬜ needs art |
-| 🛡️ Hrudd Saltmane (Half-Orc Barbarian 5) | `app/static/demo/tokens/l5tide-hrudd.jpg` | ⬜ needs art |
-| 💀 Brine Skeleton | `app/static/demo/tokens/l5tide-brine-skeleton.jpg` | ⬜ needs art |
-| 💀 Drowned Zombie | `app/static/demo/tokens/l5tide-drowned-zombie.jpg` | ⬜ needs art |
-| 💀 Tide Ghoul | `app/static/demo/tokens/l5tide-tide-ghoul.jpg` | ⬜ needs art |
-| 💀 Captain of the Drowned (Wight) | `app/static/demo/tokens/l5tide-drowned-captain.jpg` | ⬜ needs art |
+| 🛡️ Sir Gareth Tidebreaker (Human Fighter 5) | `app/static/demo/tokens/l5tide-gareth.png` | ✅ wired |
+| 🛡️ Maelis Stormcaller (High Elf Wizard 5) | `app/static/demo/tokens/l5tide-maelis.png` | ✅ wired |
+| 🛡️ Mother Coralind (Half-Elf Cleric 5) | `app/static/demo/tokens/l5tide-coralind.png` | ✅ wired |
+| 🛡️ Vesh Quillon (Wood Elf Rogue 5) | `app/static/demo/tokens/l5tide-vesh.png` | ✅ wired |
+| 🛡️ Hrudd Saltmane (Half-Orc Barbarian 5) | `app/static/demo/tokens/l5tide-hrudd.png` | ✅ wired |
+| 💀 Brine Skeleton | `app/static/demo/tokens/l5tide-brine-skeleton.png` | ✅ wired |
+| 💀 Drowned Zombie | `app/static/demo/tokens/l5tide-drowned-zombie.png` | ✅ wired |
+| 💀 Tide Ghoul | `app/static/demo/tokens/l5tide-tide-ghoul.png` | ✅ wired |
+| 💀 Captain of the Drowned (Wight) | `app/static/demo/tokens/l5tide-drowned-captain.png` | ✅ wired |
 
 ### 🗺️ Battle map — The Tide-Wracked Catacombs (1400×1000)
 
@@ -369,31 +369,31 @@ Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
 #### Sir Gareth Tidebreaker — Human Fighter 5 (Champion)
 
-`app/static/demo/tokens/l5tide-gareth.jpg`
+`app/static/demo/tokens/l5tide-gareth.png`
 
 > A steadfast human knight in storm-darkened full plate armour, salt-rimed and dented from holding the crypt stair, a heavy weather-beaten storm-cloak billowing from his pauldrons. He grips a longsword with a brace of javelins slung at his back, jaw set in dutiful resolve, sea-spray beading on the metal. Painterly digital fantasy character portrait, three-quarter view from the chest up, neutral expression unless noted, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle cold sea-storm rim-lighting, no frame, no text.
 
 #### Maelis Stormcaller — High Elf Wizard 5 (Evocation)
 
-`app/static/demo/tokens/l5tide-maelis.jpg`
+`app/static/demo/tokens/l5tide-maelis.png`
 
 > A theatrical, tempest-touched high elf wizard with windswept pale hair crackling at the tips, one hand raised mid-flourish as a curl of orange firelight and storm-static dances over the fingertips. Elegant teal-and-grey arcane robes trimmed with lightning motifs, a slim dagger at the belt, eyes alight with the showman's glee of narrating a blast radius. Painterly digital fantasy character portrait, three-quarter view from the chest up, neutral expression unless noted, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle cold sea-storm rim-lighting, no frame, no text.
 
 #### Mother Coralind — Half-Elf Cleric 5 (Tempest Domain)
 
-`app/static/demo/tokens/l5tide-coralind.jpg`
+`app/static/demo/tokens/l5tide-coralind.png`
 
 > A grave half-elf storm-priestess of the drowned coast, plate-and-vestment armour the colour of deep sea-glass, a faint ring of spectral storm-wrath shimmering at her shoulders. She bears a rune-etched warhammer, holy symbol shaped like a cresting wave clutched at her chest, brine-soaked braids and a tidal calm in her steady eyes. Painterly digital fantasy character portrait, three-quarter view from the chest up, neutral expression unless noted, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle cold sea-storm rim-lighting, no frame, no text.
 
 #### Vesh Quillon — Wood Elf Rogue 5 (Assassin)
 
-`app/static/demo/tokens/l5tide-vesh.jpg`
+`app/static/demo/tokens/l5tide-vesh.png`
 
 > A laconic, marsh-born wood elf assassin half-melted into shadow, hood drawn low over sharp angular features and watchful pale-green eyes. Mottled grey-green leather armour streaked with bog-mud, a slender rapier drawn low in one hand and a hand crossbow ready in the other, poised to open from the dark. Painterly digital fantasy character portrait, three-quarter view from the chest up, neutral expression unless noted, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle cold sea-storm rim-lighting, no frame, no text.
 
 #### Hrudd Saltmane — Half-Orc Barbarian 5 (Path of the Berserker)
 
-`app/static/demo/tokens/l5tide-hrudd.jpg`
+`app/static/demo/tokens/l5tide-hrudd.png`
 
 > A loud, fearless half-orc reaver, broad and battle-scarred with a tangled salt-crusted mane and tusked grin, drenched to the waist from wading flooded halls. He hefts a massive greataxe over one shoulder with handaxes lashed across his chest, half-plate and hide armour barnacled and dripping, green-grey skin slick with seawater. Painterly digital fantasy character portrait, three-quarter view from the chest up, neutral expression unless noted, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle cold sea-storm rim-lighting, no frame, no text.
 
@@ -401,25 +401,25 @@ Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
 #### Brine Skeleton
 
-`app/static/demo/tokens/l5tide-brine-skeleton.jpg`
+`app/static/demo/tokens/l5tide-brine-skeleton.png`
 
 > A waterlogged undead skeleton risen from the drowned crypt, yellowed bones crusted with white brine and clinging barnacles, ribbons of green seaweed snagged in its empty ribcage. Hollow eye-sockets glow faint sea-green, a rusted notched cutlass gripped in skeletal fingers, seawater dripping from every joint. Painterly digital fantasy character portrait, three-quarter view from the chest up, neutral expression unless noted, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle cold sea-storm rim-lighting, no frame, no text.
 
 #### Drowned Zombie
 
-`app/static/demo/tokens/l5tide-drowned-zombie.jpg`
+`app/static/demo/tokens/l5tide-drowned-zombie.png`
 
 > A bloated, drowned undead zombie, grey-green waterlogged flesh sloughing from its frame, kelp and mussels matted into its rotting clothes. Milky drowned eyes stare blankly, seawater and silt spilling from its slack jaw, arms reaching forward in shambling hunger as brine streams down its swollen limbs. Painterly digital fantasy character portrait, three-quarter view from the chest up, neutral expression unless noted, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle cold sea-storm rim-lighting, no frame, no text.
 
 #### Tide Ghoul
 
-`app/static/demo/tokens/l5tide-tide-ghoul.jpg`
+`app/static/demo/tokens/l5tide-tide-ghoul.png`
 
 > A gaunt, feral tide ghoul, slick grey-blue skin stretched over sharp bones, webbed claws and a maw of needle teeth flecked with brine. Sunken predatory eyes gleam pale in the gloom, lank seaweed-tangled hair plastered to its skull, water sheeting off its hunched, twitching frame as it crouches to spring. Painterly digital fantasy character portrait, three-quarter view from the chest up, neutral expression unless noted, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle cold sea-storm rim-lighting, no frame, no text.
 
 #### Captain of the Drowned (Wight)
 
-`app/static/demo/tokens/l5tide-drowned-captain.jpg`
+`app/static/demo/tokens/l5tide-drowned-captain.png`
 
 > A commanding undead wight captain, the Captain of the Drowned, clad in corroded ceremonial sea-officer's armour green with verdigris and crusted with coral. Cold blue grave-light burns in his hollowed eyes beneath a barnacled tricorne-style helm, a rusted officer's longsword raised in authority, tattered storm-grey cloak trailing kelp and brine. Painterly digital fantasy character portrait, three-quarter view from the chest up, menacing expression, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle cold sea-storm rim-lighting, no frame, no text.
 
