@@ -55,19 +55,19 @@ plain coloured ring (`image_url=None`) and are waiting on art.
 /* Auto-thumbnails: derived from each checklist row's path. Hidden until the
    file exists at that path (img.onerror), so they appear automatically once
    art is dropped in. Small inline thumb in the table, larger preview by the prompt. */
-.demo-thumb{width:34px;height:34px;object-fit:cover;border-radius:3px;
-  border:3px solid #b08d57;box-shadow:0 0 0 1px #3a2c18,0 1px 3px rgba(0,0,0,.4);
+.demo-thumb{width:34px;height:34px;object-fit:cover;border-radius:4px;
+  box-shadow:0 1px 3px rgba(0,0,0,.4);
   vertical-align:middle;margin-right:8px;}
 /* Prompt + preview as a flex row: thumbnail on the LEFT, stretched to the
    box's full height; the prompt text is its own column and never wraps under
    the image. */
 .demo-row{display:flex;align-items:stretch;gap:14px;margin:10px 0;position:relative;}
 .demo-row blockquote{flex:1;margin:0;}
-/* Picture-frame border: a warm bronze/gold band with a dark outer edge
-   and an inner bevel line, so each art preview reads like a framed print. */
+/* Side preview: borderless (the picture frame is reserved for the enlarged
+   lightbox image), with a soft drop shadow to lift it off the page. */
 .demo-thumb-side{flex:0 0 110px;width:110px;height:auto;align-self:stretch;
-  object-fit:cover;border-radius:4px;border:6px solid #b08d57;
-  box-shadow:0 0 0 1px #3a2c18,inset 0 0 0 1px #6e5630,0 3px 10px rgba(0,0,0,.45);}
+  object-fit:cover;border-radius:6px;
+  box-shadow:0 2px 8px rgba(0,0,0,.4);}
 /* Icon-only copy buttons (clipboard glyph, no text). 32px target — these are
    a compact inline control cluster on each prompt card, the 32px-minimum
    exception to the 44×44 touch-target rule (not a primary action). */

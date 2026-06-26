@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.657.3] - 2026-06-25 — "The Bare Thumbnail"
+
+**Schema version:** 81
+
+**Commit summary:** Remove the picture-frame border from the image-prompts thumbnails (inline row thumb + side preview) — the frame is now reserved for the enlarged lightbox image only.
+
+**Description:** Follow-up to v2.657.1: the bronze/gold picture-frame border looked good on the opened image but was visually heavy on the small thumbnails. This drops the `border` + frame box-shadow lines from `.demo-thumb` and `.demo-thumb-side`, keeping just a soft drop shadow and rounded corners so the thumbnails stay defined but uncluttered. The enlarged lightbox image (`.demo-lightbox img`) keeps its full picture frame.
+
+### Changed
+- `docs/demo/image-prompts.md` — `.demo-thumb` / `.demo-thumb-side` are now borderless (soft drop shadow only); the picture frame remains on the lightbox image.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.657.2] - 2026-06-25 — "Aldric's Portrait"
 
 **Schema version:** 81
