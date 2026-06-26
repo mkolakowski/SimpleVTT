@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.684.0] - 2026-06-26 — "The Warren Awakens"
+
+**Schema version:** 81
+
+**Commit summary:** Demo art — generate + wire the 5 remaining Level 3 Goblin Warrens tokens (Brisa, Grukk, two goblins, the warg), completing the L3 token set.
+
+**Description:** The L3 demo previously rendered Brisa Quickarrow and its four NPC encounter tokens (Goblin Skirmisher, Goblin Sneak, Warg, Grukk the Warlord) as plain coloured rings. Generated all five from their `docs/demo/image-prompts.md` prompts via the ImagineArt MCP (nano-banana-pro → `remove_background` for true alpha, matching the shipped `l3-*.png` tokens), dropped them under `app/static/demo/tokens/`, and wired the web-paths into `app/demo_campaigns.py` — an `image` key on Brisa's party dict and a 4th `image` element on each of the four `npc_tokens` tuples. **L3 is now 10/10 images** (map + 9 tokens). No code-path change beyond the spec data; the existing `party[i].get("image")` and `npc_tokens` `*rest` unpacking already consume the fields.
+
+### Added
+- `app/static/demo/tokens/l3-brisa.png`, `l3-grukk.png`, `l3-goblin-skirmisher.png`, `l3-goblin-sneak.png`, `l3-warg.png` — transparent 1024×1024 token art.
+
+### Changed
+- `app/demo_campaigns.py` — wire the five new token web-paths into the L3 spec (Brisa `image` + four `npc_tokens` image elements).
+- `docs/demo/image-prompts.md` — flip the L3 checklist rows + progress counts to ✅ (overall 14→19 / 58).
+
+### Schema
+- No schema change (still v81).
+
 ## [2.683.0] - 2026-06-26 — "The Menacing Glare"
 
 **Schema version:** 81

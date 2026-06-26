@@ -25,11 +25,11 @@ plain coloured ring (`image_url=None`) and are waiting on art.
 > misalign. Each map prompt below already says "no grid lines"; if your model
 > adds one anyway, put `grid, grid lines, grid overlay` in the negative prompt.
 
-## Overall progress — 14 / 58 images
+## Overall progress — 19 / 58 images
 
 | Demo | Map | Tokens | Done |
 |---|---|---|---|
-| Level 3 : The Goblin Warrens | ✅ | 🟠 3 / 9 | **4 / 10** |
+| Level 3 : The Goblin Warrens | ✅ | ✅ 9 / 9 | **10 / 10** |
 | Level 5 : The Tide-Wracked Catacombs | ⬜ | ⬜ 0 / 9 | **0 / 10** |
 | Level 9 : Storm Over Saltmarsh | ⬜ | ⬜ 0 / 9 | **0 / 10** |
 | Level 13 : The Shadowfell Spire | ⬜ | ⬜ 0 / 8 | **0 / 9** |
@@ -256,7 +256,7 @@ plain coloured ring (`image_url=None`) and are waiting on art.
 
 Tier-1 starter dungeon. A goblin warband raids the trade road from a warren of tunnels.
 
-**Progress: 4 / 10 images generated** — remaining tokens render as a plain coloured ring (`image_url=None`). Generate the art, drop it at the listed path, then wire it in `app/demo_campaigns.py`.
+**Progress: 10 / 10 images generated** — the full L3 token set is now wired. (Tokens were generated via the ImagineArt MCP and background-removed to true alpha, so they ship as `.png`, matching the other `l3-*.png` tokens.)
 
 | Entity | Drop file at | Status |
 |---|---|---|
@@ -265,11 +265,11 @@ Tier-1 starter dungeon. A goblin warband raids the trade road from a warren of t
 | 🗡️ Nyx Shadowstep | `app/static/demo/tokens/l3-nyx.png` | ✅ wired |
 | ✨ Sister Elsbeth | `app/static/demo/tokens/l3-elsbeth.png` | ✅ wired |
 | 🔥 Aldric the Sudden | `app/static/demo/tokens/l3-aldric.png` | ✅ wired |
-| 🏹 Brisa Quickarrow | `app/static/demo/tokens/l3-brisa.jpg` | ⬜ needs art |
-| 👹 Grukk the Warlord | `app/static/demo/tokens/l3-grukk.jpg` | ⬜ needs art |
-| 👺 Goblin Skirmisher | `app/static/demo/tokens/l3-goblin-skirmisher.jpg` | ⬜ needs art |
-| 👺 Goblin Sneak | `app/static/demo/tokens/l3-goblin-sneak.jpg` | ⬜ needs art |
-| 🐺 Warg | `app/static/demo/tokens/l3-warg.jpg` | ⬜ needs art |
+| 🏹 Brisa Quickarrow | `app/static/demo/tokens/l3-brisa.png` | ✅ wired |
+| 👹 Grukk the Warlord | `app/static/demo/tokens/l3-grukk.png` | ✅ wired |
+| 👺 Goblin Skirmisher | `app/static/demo/tokens/l3-goblin-skirmisher.png` | ✅ wired |
+| 👺 Goblin Sneak | `app/static/demo/tokens/l3-goblin-sneak.png` | ✅ wired |
+| 🐺 Warg | `app/static/demo/tokens/l3-warg.png` | ✅ wired |
 
 ### 🗺️ Battle map — The Goblin Warrens (1400×1000)
 
@@ -307,7 +307,7 @@ Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
 #### Brisa Quickarrow — Lightfoot Halfling Ranger 3 (Hunter)
 
-`app/static/demo/tokens/l3-brisa.jpg`
+`app/static/demo/tokens/l3-brisa.png`
 
 > Painterly digital fantasy character portrait, full body for this small race, neutral expression unless noted, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle warm rim-lighting, no frame, no text. A cheerful lightfoot halfling archer with curly hair, freckles, and a bright confident grin. She wears practical brown-and-green leather armor and carries a longbow nocked-ready in one hand with a shortsword at her hip. Her quiver is notched with tiny carved tally-marks — her running kill-count — and she stands light on her feet, mid-step, as if already sighting the next goblin. Warm woodland rim-lighting. Recommended 1:1 square, 1024×1024.
 
@@ -315,25 +315,25 @@ Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
 #### Grukk the Warlord — goblin warlord (Bandit Captain)
 
-`app/static/demo/tokens/l3-grukk.jpg`
+`app/static/demo/tokens/l3-grukk.png`
 
 > Painterly digital fantasy character portrait, three-quarter view from the chest up, menacing expression, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle warm rim-lighting, no frame, no text. A hulking, battle-scarred goblin warlord — bigger and meaner than his kin — with mottled green skin, a notched ear, yellow eyes, and a fanged sneer of command. He wears scavenged mismatched plate and chain looted from fallen caravan guards, a trophy-strung cloak of bones and broken weapons, and a crude crown of bent swords. He brandishes a wicked scimitar in one hand and a hand-axe in the other, every inch the bandit captain who rules by force. Cruel firelight glints off his armor. Recommended 1:1 square, 1024×1024.
 
 #### Goblin Skirmisher — goblin warband fighter
 
-`app/static/demo/tokens/l3-goblin-skirmisher.jpg`
+`app/static/demo/tokens/l3-goblin-skirmisher.png`
 
 > Painterly digital fantasy character portrait, full body for this small race, snarling expression, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle warm rim-lighting, no frame, no text. A wiry, hunched goblin skirmisher with mottled green-grey skin, oversized pointed ears, a flat broad nose, and sharp little fangs bared in a battle-snarl. He wears scrappy patchwork leather and rusted scavenged scraps of armor, and brandishes a notched scimitar with a small battered shield. Quick, vicious, and feral, crouched low for a darting strike. Cold cave light with a warm rim along one shoulder. Recommended 1:1 square, 1024×1024.
 
 #### Goblin Sneak — goblin ambusher
 
-`app/static/demo/tokens/l3-goblin-sneak.jpg`
+`app/static/demo/tokens/l3-goblin-sneak.png`
 
 > Painterly digital fantasy character portrait, full body for this small race, sly expression, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle warm rim-lighting, no frame, no text. A skulking goblin sneak with mottled green-grey skin, oversized ears flattened back, and narrowed cunning eyes over a thin sly grin. He wears a dark ragged hood and muted scavenged leathers built for ambush, creeping low with a wicked dagger held in a reverse grip and a sling tucked at his belt. Hunched and furtive, half-melting into shadow, ready to backstab. Cool low-key light with a single warm rim. Recommended 1:1 square, 1024×1024.
 
 #### Warg — fanged goblin-mount wolf
 
-`app/static/demo/tokens/l3-warg.jpg`
+`app/static/demo/tokens/l3-warg.png`
 
 > Painterly digital fantasy creature portrait, full body, snarling aggressive expression, isolated against a fully transparent background, suitable for cropping to a 256×256 circular virtual-tabletop token, subtle warm rim-lighting, no frame, no text. A massive, shaggy warg — an oversized evil wolf used as a goblin mount — with coarse grey-black fur, glowing yellow eyes, a scarred muzzle, and a slavering jaw of yellowed fangs bared in a snarl. Lean and powerful, hackles raised, muscles tensed mid-prowl. A crude goblin riding harness of rope and bone is buckled across its back. Cold predatory light with a warm rim along its raised hackles. Recommended 1:1 square, 1024×1024.
 

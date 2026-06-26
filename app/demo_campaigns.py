@@ -152,7 +152,8 @@ _GOBLIN_WARRENS = {
                 "Level-3 showcase: Sculpt Spells — carve allies out of his own "
                 "Burning Hands / Shatter so he can blast into melee safely."),
         )},
-        {"owner": "gm", "name": "Brisa Quickarrow", "sheet": dict(
+        {"owner": "gm", "name": "Brisa Quickarrow",
+         "image": "/static/demo/tokens/l3-brisa.png", "sheet": dict(
             klass="Ranger", subclass="Hunter", race="Lightfoot Halfling", level=3,
             abilities={"STR": 10, "DEX": 17, "CON": 14, "INT": 11, "WIS": 14, "CHA": 10},
             ac=15, hp_max=25,
@@ -183,10 +184,10 @@ _GOBLIN_WARRENS = {
         ("bandit-captain", "Goblin Warlord (Bandit Captain)"),
     ],
     "npc_tokens": [
-        ("goblin", "Goblin Skirmisher", "#7c9c54"),
-        ("goblin", "Goblin Sneak", "#7c9c54"),
-        ("wolf", "Warg", "#8a6d3b"),
-        ("bandit-captain", "Grukk the Warlord", "#c84a4a"),
+        ("goblin", "Goblin Skirmisher", "#7c9c54", "/static/demo/tokens/l3-goblin-skirmisher.png"),
+        ("goblin", "Goblin Sneak", "#7c9c54", "/static/demo/tokens/l3-goblin-sneak.png"),
+        ("wolf", "Warg", "#8a6d3b", "/static/demo/tokens/l3-warg.png"),
+        ("bandit-captain", "Grukk the Warlord", "#c84a4a", "/static/demo/tokens/l3-grukk.png"),
     ],
 }
 
