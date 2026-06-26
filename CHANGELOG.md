@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.657.1] - 2026-06-25 — "The Gilded Frame"
+
+**Schema version:** 81
+
+**Commit summary:** Polish the image-prompts lightbox — a picture-frame border (bronze/gold band with a dark edge + inner bevel) on the thumbnails and the enlarged image, a stronger drop shadow on the opened image, and clicking the image itself now also closes the lightbox.
+
+**Description:** Three visual/UX tweaks on `/wiki/doc/image-prompts`: (1) the auto-thumbnails (inline row thumb + side preview) and the lightbox image now carry a **picture-frame border** — a warm `#b08d57` band with a dark `#3a2c18` outer edge and a `#6e5630` inner bevel line, so each art preview reads like a framed print rather than a bare image with a hairline border; (2) the **lightbox image's shadow** is now a pronounced `0 30px 80px` drop plus a soft ambient halo, so the framed image lifts off the dark backdrop when opened; (3) **clicking the opened image now closes the lightbox** too (previously only the backdrop / ✕ / Escape closed it — the image was deliberately excluded), and the image cursor is now `zoom-out` to signal it. Pure CSS/JS in the page's embedded blocks.
+
+### Changed
+- `docs/demo/image-prompts.md` — picture-frame border on `.demo-thumb` / `.demo-thumb-side` / `.demo-lightbox img`, stronger lightbox drop shadow, and click-image-to-close (the overlay click handler no longer excludes the image).
+
+### Schema
+- No schema change (still v81).
+
 ## [2.657.0] - 2026-06-25 — "The Zoom Lens"
 
 **Schema version:** 81
