@@ -88782,15 +88782,18 @@ async def use_hands_of_healing(
     restore a number of hit points equal to a roll of your Martial
     Arts die + your Wisdom modifier."
 
-    Body: ``{character_id, override?}``. Costs an action chip +
-    1 ki. Rolls the heal (Martial Arts die + WIS mod) server-side.
-    v1 announce-only — the target choice + HP application stay
-    GM-tracked.
+    Body: ``{character_id, target_combatant_id?, override?}``. Costs
+    an action chip + 1 ki. Rolls the heal (Martial Arts die + WIS
+    mod) server-side. v2.674.0 (Phase 8): when ``target_combatant_id``
+    is supplied, the HP is applied to that combatant via
+    ``_apply_heal_to_combatant`` (revives a dying PC); otherwise it
+    stays announce-only.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
+    target_combatant_id = (str(body.get("target_combatant_id") or "")).strip()
     override = bool(body.get("override"))
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
@@ -88874,6 +88877,22 @@ async def use_hands_of_healing(
         breakdown = ""
     heal_amount = max(1, die_roll + wis_mod)
 
+    # v2.674.0 — Phase 8: apply the rolled heal to the named target combatant
+    # (was announce-only), riding `_apply_heal_to_combatant` — the heal-
+    # pipeline twin of `_apply_damage_to_combatant` (caps at max HP, revives
+    # a dying PC via the death-save state machine). Backward-compatible: no
+    # `target_combatant_id` → no apply.
+    heal_applied = None
+    revived = None
+    if target_combatant_id:
+        _hh_target = _lookup_combatant(campaign_id, target_combatant_id)
+        if _hh_target is not None:
+            _hhr = await _apply_heal_to_combatant(
+                db, campaign_id, _hh_target, heal_amount,
+            )
+            heal_applied = int(_hhr.get("applied") or 0)
+            revived = bool(_hhr.get("revived"))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -88918,6 +88937,9 @@ async def use_hands_of_healing(
             "ki_spent": 1,
             "ki_remaining": ki_remaining,
             "monk_level": monk_lv,
+            "target_combatant_id": target_combatant_id,
+            "heal_applied": heal_applied,
+            "revived": revived,
         },
     })
 
@@ -88931,6 +88953,9 @@ async def use_hands_of_healing(
         "ki_spent": 1,
         "ki_remaining": ki_remaining,
         "monk_level": monk_lv,
+        "target_combatant_id": target_combatant_id,
+        "heal_applied": heal_applied,
+        "revived": revived,
     }
 
 

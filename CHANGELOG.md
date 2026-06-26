@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.674.0] - 2026-06-26 — "The Mending Touch"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — apply Hands of Healing's HP to the target server-side (Way of Mercy Monk), riding `_apply_heal_to_combatant`.
+
+**Description:** `use_hands_of_healing` (TCE p.51) rolled the heal (Martial Arts die + WIS mod) but the GM applied the HP by hand. The endpoint now accepts an optional `target_combatant_id`; when supplied, the rolled HP is applied to that combatant via `_apply_heal_to_combatant` — the heal-pipeline twin of `_apply_damage_to_combatant` that caps at max HP and revives a dying PC through the death-save state machine. This is the first **heal-application** wire of this Phase 8 session (the prior three rode damage / temp-HP substrates). The response/broadcast gain `target_combatant_id` / `heal_applied` / `revived`. Backward-compatible: no `target_combatant_id` stays announce-only.
+
+### Added
+- `tests/harness/test_hands_of_healing.py` (+2) — `test_hh_applies_heal_to_target` (wounded NPC at 10/50 HP → `heal_applied == heal_amount`, `revived == False`) + `test_hh_no_target_announce_only` (no target → `heal_applied`/`revived` stay None).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_hands_of_healing` applies the rolled heal to `target_combatant_id` via `_apply_heal_to_combatant`; surfaces `target_combatant_id` / `heal_applied` / `revived`.
+- `docs/automation-coverage.md` — `use_hands_of_healing` note updated (HP applied server-side).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Hands of Healing.
+- `docs/test-harness-coverage.md` — catalog the new tests.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.673.0] - 2026-06-26 — "The Answering Thunder"
 
 **Schema version:** 81

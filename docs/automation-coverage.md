@@ -230,7 +230,7 @@ or passive damage-boosters that already ride other code paths
 | `use_grapple` | ✅ tracked | D buff-install, D/E buff-install |
 | `use_grim_harvest` | ✅ tracked | heal |
 | `use_halo_of_spores` | ✅ tracked | A use/resource |
-| `use_hands_of_healing` | ✅ tracked | A use/resource |
+| `use_hands_of_healing` | ✅ tracked | v2.674.0 — applies the rolled heal (Martial Arts die + WIS) to `target_combatant_id` via `_apply_heal_to_combatant` (caps at max HP, revives a dying PC); announce-only without a target |
 | `use_healing_light` | ✅ tracked | A use/resource |
 | `use_hexblades_curse` | ✅ tracked | D buff-install |
 | `use_hide_in_plain_sight` | ✅ tracked | D buff-install |
