@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.655.3] - 2026-06-25 — "The Last Three Holdouts"
+
+**Schema version:** 81
+
+**Commit summary:** Re-stat the final 3 Vault showcase PCs (Brakka, Quan, Seraphine) onto their class's SRD subclass so **subclass-feature seed coverage hits 40/40** — completing all-three at 40/40 — and remove the 3 now-obsolete demo seed-contract tests. **Trade-off, made explicitly:** this orphans those PCs' purpose-built showcase buttons.
+
+**Description:** The last 3 subclass-empty demo PCs were the Vault *showcase* characters, each built (v2.158.56/.60/.62) to demonstrate a non-SRD subclass with a dedicated endpoint + sheet button + seed-contract test: Brakka Wildmane (Path of the Beast → `/use_form_of_the_beast`), Quan Reelstep (Way of the Drunken Master → `/use_drunken_technique`), Dame Seraphine Vael (Oath of Vengeance → `/use_vow_of_enmity`). This re-stats their `subclass` label to the class's SRD subclass (Path of the Berserker / Way of the Open Hand / Oath of Devotion), so their Subclass Features section now seeds from the shipped SRD content. **Because the subclass string is load-bearing** — those three endpoints gate on it (returning 409 `wrong_subclass_or_level` otherwise) and the three `test_demo_*` seed-contract tests assert the exact subclass — this is *not* a cosmetic swap: it would have failed 6 harness tests. So the 3 obsolete `test_demo_{beast_barbarian,drunken_monk,vengeance_paladin}.py` files are removed (the underlying endpoints stay covered by the PATCH-based `test_{form_of_the_beast,drunken_technique,vow_of_enmity}.py`, which PATCH Krieger/Kael/Caelan rather than the demo PCs). **Accepted consequence:** these 3 PCs retain their curated showcase `class_features` entries + notes, so the Form-of-the-Beast / Drunken-Technique / Vow-of-Enmity buttons now error (the endpoint rejects the new subclass) and the showcase notes describe the former subclass. This was chosen deliberately to reach a uniform **class 40/40, subclass 40/40, race 40/40** across all demo PCs. Demo-data + test-removal only — no endpoint/content/schema change.
+
+### Changed
+- `app/demo_seed.py` — Brakka "Path of the Beast" → "Path of the Berserker"; Quan "Way of the Drunken Master" → "Way of the Open Hand"; Seraphine "Oath of Vengeance" → "Oath of Devotion".
+
+### Removed
+- `tests/harness/test_demo_beast_barbarian.py`, `test_demo_drunken_monk.py`, `test_demo_vengeance_paladin.py` (6 tests) — the demo seed-contracts they asserted no longer hold after the re-stat; the endpoints remain covered by their PATCH-based tests.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.655.2] - 2026-06-25 — "The Standard Issue"
 
 **Schema version:** 81

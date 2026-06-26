@@ -2486,7 +2486,7 @@ def _paladin_vengeance_sheet(name: str) -> dict:
     """
     return {
         "class": "Paladin",
-        "subclass": "Oath of Vengeance",
+        "subclass": "Oath of Devotion",
         "level": 3,
         "race": "Human",
         "alignment": "Lawful Neutral",
@@ -5324,7 +5324,7 @@ def _barbarian_beast_sheet(name: str) -> dict:
     """
     return {
         "class": "Barbarian",
-        "subclass": "Path of the Beast",
+        "subclass": "Path of the Berserker",
         "level": 5,
         "race": "Human",
         "alignment": "Chaotic Good",
@@ -5560,7 +5560,7 @@ def _monk_drunken_sheet(name: str) -> dict:
     """
     return {
         "class": "Monk",
-        "subclass": "Way of the Drunken Master",
+        "subclass": "Way of the Open Hand",
         "level": 5,
         "race": "Human",
         "alignment": "Chaotic Good",
