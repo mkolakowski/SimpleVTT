@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.655.2] - 2026-06-25 — "The Standard Issue"
+
+**Schema version:** 81
+
+**Commit summary:** Re-stat the **10 leveled** demo PCs on non-SRD subclasses onto their class's SRD subclass, so their Subclass Features section seeds offline (subclass coverage 27→37). The 3 Vault *showcase* PCs (Path of the Beast, Drunken Master, Vengeance) are intentionally left for a separate decision — they have dedicated endpoints/tests/buttons.
+
+**Description:** Unlike races, SRD 5.1/5.2 ship only **one subclass per class**, so the only way to seed these PCs' subclass features is to move them onto that SRD subclass — collapsing the demo's subclass variety (the accepted trade). This re-stats the 10 leveled-campaign PCs: Battle Master→Champion (Thorin), Assassin→Thief (Nyx, Vesh), Arcane Trickster→Thief (Wisp), Light/War/Tempest Domain→Life Domain (Elsbeth, Doran, Coralind), Oath of Vengeance→Oath of Devotion (Kadvan), School of Divination→School of Evocation (Maelen), Path of the Totem Warrior→Path of the Berserker (Hruld). Only the `subclass` label changes (abilities, spells, names unchanged), so the SRD subclass features now seed; some showcase *notes* still describe the original subclass's flavor (a known cosmetic mismatch — these are lightweight leveled PCs, not the purpose-built Vault showcases). The **3 Vault showcase PCs** — Brakka (Path of the Beast → `use_form_of_the_beast`), Quan (Drunken Master → `use_drunken_technique`), Seraphine (Oath of Vengeance, subclass-granted spells) — were each added in a dedicated commit to demonstrate that subclass's mechanics, with harness tests + sheet buttons, so re-statting them would orphan that machinery; they're deferred to an explicit decision. Demo-data-only — no endpoint/content/schema change (harness-test-exempt). Subclass-feature seed coverage: **27 → 37 of 40**.
+
+### Changed
+- `app/demo_campaigns.py` — 10 leveled PCs re-statted to their class's SRD subclass (see list above).
+
+### Schema
+- No schema change (still v81).
+
 ## [2.655.1] - 2026-06-25 — "The Naturalized Citizens"
 
 **Schema version:** 81

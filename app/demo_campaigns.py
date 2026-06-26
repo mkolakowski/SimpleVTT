@@ -68,7 +68,7 @@ _GOBLIN_WARRENS = {
     "party": [
         {"owner": "gm", "name": "Thorin Battlehammer",
          "image": "/static/demo/tokens/l3-thorin.png", "sheet": dict(
-            klass="Fighter", subclass="Battle Master", race="Mountain Dwarf", level=3,
+            klass="Fighter", subclass="Champion", race="Mountain Dwarf", level=3,
             abilities={"STR": 16, "DEX": 12, "CON": 16, "INT": 10, "WIS": 12, "CHA": 8},
             ac=18, hp_max=28,
             attacks=[
@@ -86,7 +86,7 @@ _GOBLIN_WARRENS = {
         )},
         {"owner": "alice", "name": "Nyx Shadowstep",
          "image": "/static/demo/tokens/l3-nyx.png", "sheet": dict(
-            klass="Rogue", subclass="Assassin", race="Wood Elf", level=3,
+            klass="Rogue", subclass="Thief", race="Wood Elf", level=3,
             abilities={"STR": 10, "DEX": 17, "CON": 14, "INT": 12, "WIS": 13, "CHA": 10},
             ac=15, hp_max=24,
             attacks=[
@@ -105,7 +105,7 @@ _GOBLIN_WARRENS = {
         )},
         {"owner": "carol", "name": "Sister Elsbeth",
          "image": "/static/demo/tokens/l3-elsbeth.png", "sheet": dict(
-            klass="Cleric", subclass="Light Domain", race="Human", level=3,
+            klass="Cleric", subclass="Life Domain", race="Human", level=3,
             abilities={"STR": 12, "DEX": 10, "CON": 14, "INT": 10, "WIS": 16, "CHA": 13},
             ac=18, hp_max=24,
             attacks=[
@@ -280,7 +280,7 @@ _STORM_SALTMARSH = {
                 "with Moonbeam up for sustained area control."),
         )},
         {"owner": "gm2", "name": "Ser Kadvan Tideward", "sheet": dict(
-            klass="Paladin", subclass="Oath of Vengeance", race="Human", level=9,
+            klass="Paladin", subclass="Oath of Devotion", race="Human", level=9,
             abilities={"STR": 18, "DEX": 10, "CON": 14, "INT": 10, "WIS": 12, "CHA": 16},
             ac=20, hp_max=84,
             attacks=[
@@ -353,7 +353,7 @@ _SHADOWFELL_SPIRE = {
     "map": {"name": "The Shadowfell Spire (threshold)", "width": 1600, "height": 1200},
     "party": [
         {"owner": "bob", "name": "Maelen Farsight", "sheet": dict(
-            klass="Wizard", subclass="School of Divination", race="High Elf", level=13,
+            klass="Wizard", subclass="School of Evocation", race="High Elf", level=13,
             abilities={"STR": 8, "DEX": 14, "CON": 14, "INT": 20, "WIS": 12, "CHA": 10},
             ac=12, hp_max=84,
             attacks=[
@@ -406,7 +406,7 @@ _SHADOWFELL_SPIRE = {
                 "between Arcanum nukes."),
         )},
         {"owner": "gm", "name": "High Cleric Doran", "sheet": dict(
-            klass="Cleric", subclass="War Domain", race="Goliath", level=13,
+            klass="Cleric", subclass="Life Domain", race="Goliath", level=13,
             abilities={"STR": 16, "DEX": 10, "CON": 15, "INT": 10, "WIS": 20, "CHA": 12},
             ac=19, hp_max=97,
             attacks=[
@@ -433,7 +433,7 @@ _SHADOWFELL_SPIRE = {
                 "(+2d8 radiant) make his Maul hit like a siege ram."),
         )},
         {"owner": "gm", "name": "Hruld Skullcleaver", "sheet": dict(
-            klass="Barbarian", subclass="Path of the Totem Warrior", race="Half-Orc", level=13,
+            klass="Barbarian", subclass="Path of the Berserker", race="Half-Orc", level=13,
             abilities={"STR": 20, "DEX": 14, "CON": 18, "INT": 8, "WIS": 12, "CHA": 8},
             ac=17, hp_max=140,
             attacks=[
@@ -451,7 +451,7 @@ _SHADOWFELL_SPIRE = {
                 "raging; Relentless Rage keeps him at 1 HP instead of dropping."),
         )},
         {"owner": "gm", "name": "Wisp Underbough", "sheet": dict(
-            klass="Rogue", subclass="Arcane Trickster", race="Forest Gnome", level=13,
+            klass="Rogue", subclass="Thief", race="Forest Gnome", level=13,
             abilities={"STR": 8, "DEX": 20, "CON": 14, "INT": 16, "WIS": 12, "CHA": 10},
             ac=16, hp_max=82,
             attacks=[
@@ -717,7 +717,7 @@ _TIDEWRACKED_CATACOMBS = {
                 "can drop it into melee."),
         )},
         {"owner": "carol", "name": "Mother Coralind", "sheet": dict(
-            klass="Cleric", subclass="Tempest Domain", race="Half-Elf", level=5,
+            klass="Cleric", subclass="Life Domain", race="Half-Elf", level=5,
             abilities={"STR": 12, "DEX": 10, "CON": 14, "INT": 11, "WIS": 17, "CHA": 13},
             ac=18, hp_max=38,
             attacks=[
@@ -744,7 +744,7 @@ _TIDEWRACKED_CATACOMBS = {
                 "advances."),
         )},
         {"owner": "alice", "name": "Vesh Quillon", "sheet": dict(
-            klass="Rogue", subclass="Assassin", race="Wood Elf", level=5,
+            klass="Rogue", subclass="Thief", race="Wood Elf", level=5,
             abilities={"STR": 10, "DEX": 18, "CON": 14, "INT": 12, "WIS": 13, "CHA": 10},
             ac=16, hp_max=33,
             attacks=[
