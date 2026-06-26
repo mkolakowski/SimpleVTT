@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.689.1] - 2026-06-26 — "True to Form"
+
+**Schema version:** 81
+
+**Commit summary:** Fix two demo druids' `race` fields to match their firbolg art + flavor — Oakheart Mossbrook (L9) and Thornroot Elder (L18).
+
+**Description:** Both Circle-of-the-Moon druids are written as firbolgs in their `notes` flavor ("firbolg moon-druid" / "Ancient firbolg archdruid") and were drawn as firbolgs from the `docs/demo/image-prompts.md` prompts (shipped in v2.687.0 / v2.689.0), but their `race` field said **Wood Elf** (Oakheart) and **Hill Dwarf** (Thornroot) — so the mini-sheet displayed a race that contradicted the token art. Corrected both to `race="Firbolg"`, consistent with the demos' other non-SRD races (Aasimar, Goliath, Water Genasi). Demo-seed data only; no schema or endpoint change.
+
+### Fixed
+- `app/demo_campaigns.py` — Oakheart Mossbrook `race` Wood Elf → Firbolg; Thornroot Elder `race` Hill Dwarf → Firbolg, matching their art + flavor notes.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.689.0] - 2026-06-26 — "The Wyrm Ascendant"
 
 **Schema version:** 81

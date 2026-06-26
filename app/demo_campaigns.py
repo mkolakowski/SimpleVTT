@@ -262,7 +262,7 @@ _STORM_SALTMARSH = {
         )},
         {"owner": "erin", "name": "Oakheart Mossbrook",
          "image": "/static/demo/tokens/l9-oakheart.png", "sheet": dict(
-            klass="Druid", subclass="Circle of the Moon", race="Wood Elf", level=9,
+            klass="Druid", subclass="Circle of the Moon", race="Firbolg", level=9,
             abilities={"STR": 12, "DEX": 13, "CON": 16, "INT": 10, "WIS": 18, "CHA": 11},
             ac=15, hp_max=70,
             attacks=[
@@ -624,7 +624,7 @@ _DRAGONS_APOTHEOSIS = {
         )},
         {"owner": "erin", "name": "Thornroot Elder",
          "image": "/static/demo/tokens/l18-thornroot.png", "sheet": dict(
-            klass="Druid", subclass="Circle of the Moon", race="Hill Dwarf", level=18,
+            klass="Druid", subclass="Circle of the Moon", race="Firbolg", level=18,
             abilities={"STR": 12, "DEX": 12, "CON": 17, "INT": 10, "WIS": 20, "CHA": 11},
             ac=16, hp_max=140,
             attacks=[
