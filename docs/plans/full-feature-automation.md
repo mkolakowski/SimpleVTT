@@ -477,15 +477,18 @@ composition. Batch by class, same cadence as the breadth sweep.
   benefit (Bear needs a new "all except" matcher in `_resistance_halve`).
   First multi-variant Phase-8 flag-buff (three parameter payloads behind
   one endpoint).
-- **v2.665.0 ("The Drop on Them") — Assassinate** (Assassin Rogue Lv 3+):
-  `use_assassinate` was announce-only; the Phase 8 enhancement installs a
-  permanent `assassinate-active` buff carrying two parameter keys
-  (`effects.assassinate_advantage_vs_pre_turn=True` +
-  `effects.assassinate_auto_crit_vs_surprised=True`), sheet-mirrored +
-  idempotent. Phase 2 (deferred): `/attack` reads the flags for advantage vs
-  a not-yet-acted target + auto-crit vs a surprised target — both need
-  per-combat turn-order + surprise tracking the engine doesn't yet have.
-  **Verify-substrate note:** picking this feature surfaced that the
+- **v2.665.0 ("The Drop on Them") — Assassinate — REVERTED v2.670.1.** This
+  commit added an `assassinate-active` flag-buff believing the feature was
+  announce-only. **It wasn't:** Assassinate was already mechanized in `/attack`
+  (v2.131.0–v2.132.0) — auto-crit vs `target_surprised` + advantage vs a target
+  whose `has_acted` is False, gated directly on `_pc_has_assassin_subclass`.
+  The flag-buff's keys were never read (dead flags), so v2.670.1 reverted the
+  install + its test and corrected the docs. **Lesson (verify-substrate):**
+  checking the endpoint body for `_install_buff` is NOT enough — a feature can
+  be mechanized in a *different* path (here `/attack`, keyed on the subclass,
+  not the endpoint). Grep the read path (`/attack`, `/cast_spell`, the tick
+  engines) before declaring a feature announce-only.
+  **Verify-substrate note (still valid):** picking this feature surfaced that the
   `automation-coverage.md` classifier is stale for several rows (Aura of
   Warding, Fancy Footwork, Relentless Avenger, Unwavering Mark, Order's
   Wrath, Improved Duplicity all already mechanized) — re-run the classifier

@@ -95,67 +95,6 @@ async def test_use_ass_wrong_subclass(
     assert data.get("error") == "wrong_subclass_or_level"
 
 
-async def test_assassinate_buff_payload_carries_flags(
-    gm_client, pip_assassin,
-):
-    """v2.665.0 — Phase 8 state contract: using Assassinate now installs a
-    permanent `assassinate-active` buff carrying the two `assassinate_*`
-    effect keys (advantage_vs_pre_turn=True, auto_crit_vs_surprised=True).
-    Phase 2 (deferred) will have `/attack` read these off the attacker's
-    `_buffs_active` once the engine tracks per-combat turn order + surprise;
-    this pins the flag shape so that future read site has a stable contract.
-
-    Seeds a battle with Pip because `_install_buff` requires an active battle
-    (returns False otherwise), and pre-clears the permanent buff so the
-    assertion is independent of test ordering."""
-    pip = pip_assassin
-    await gm_client.put(
-        f"/api/campaign/{CAMPAIGN_ID}/battle",
-        json={
-            "combatants": [{
-                "id": f"tok_ass_{pip['id']}", "char_id": pip["id"],
-                "name": pip["name"], "initiative": 14,
-                "hp_current": 40, "hp_max": 40, "buffs": [],
-                "economy": {"action": False, "bonus": False,
-                            "reaction": False, "movement": 0},
-            }],
-            "turn_index": 0, "round": 1, "active": True,
-        },
-    )
-    # Permanent buff — clear any prior install so we assert a fresh one.
-    await gm_client.post(
-        f"/api/campaign/{CAMPAIGN_ID}/end_buff",
-        json={"character_id": pip["id"], "key": "assassinate-active"},
-    )
-    r = await gm_client.post(
-        f"/api/campaign/{CAMPAIGN_ID}/use_assassinate",
-        json={"character_id": pip["id"]},
-    )
-    assert r.status_code == 200, r.text
-    assert r.json().get("buff_installed") is True
-    buffs = (await gm_client.get(
-        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/buffs"
-    )).json().get("buffs", [])
-    ass_buff = next(
-        (b for b in buffs if b.get("key") == "assassinate-active"), None,
-    )
-    assert ass_buff is not None, (
-        f"assassinate-active buff missing; got keys="
-        f"{[b.get('key') for b in buffs]}"
-    )
-    effects = ass_buff.get("effects") or {}
-    assert effects.get("assassinate_advantage_vs_pre_turn") is True
-    assert effects.get("assassinate_auto_crit_vs_surprised") is True
-    # Permanent passive — no concentration, very long duration.
-    assert ass_buff.get("concentration") in (False, None)
-    assert int(ass_buff.get("duration_rounds") or 0) >= 1000
-    # Cleanup so the permanent buff doesn't leak to sibling tests.
-    await gm_client.post(
-        f"/api/campaign/{CAMPAIGN_ID}/end_buff",
-        json={"character_id": pip["id"], "key": "assassinate-active"},
-    )
-
-
 async def test_use_ass_level_gate(
     gm_client, roster,
 ):

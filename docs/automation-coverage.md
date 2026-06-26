@@ -345,7 +345,7 @@ or passive damage-boosters that already ride other code paths
 | `use_ancestral_protectors` | ⚪ announce-only | — |
 | `use_arcane_mastery` | ⚪ announce-only | — |
 | `use_ascendant_step` | ⚪ announce-only | — |
-| `use_assassinate` | ✅ tracked | v2.665.0 — installs permanent `assassinate-active` flag-buff (`assassinate_advantage_vs_pre_turn` + `assassinate_auto_crit_vs_surprised`); Phase 8 Assassin Rogue, install-then-deferred-read |
+| `use_assassinate` | ✅ tracked | mechanized in `/attack` (v2.131.0–v2.132.0): auto-crit vs `target_surprised` + advantage vs a target whose `has_acted` is False, gated on `_pc_has_assassin_subclass`. The `use_assassinate` endpoint is the chat-log declaration (a v2.665.0 flag-buff attempt was reverted v2.670.1 as redundant — its flags were never read) |
 | `use_aura_of_warding` | ⚪ announce-only | — |
 | `use_awakened_mind` | ⚪ announce-only | — |
 | `use_beast_speech` | ⚪ announce-only | — |

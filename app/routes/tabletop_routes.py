@@ -85292,18 +85292,15 @@ async def use_assassinate(
     is a passive declaration that the next attack against a
     not-yet-acted (or surprised) target gets the bonus.
 
-    v2.665.0 — Phase 8 (full-feature-automation): flips Assassinate from
-    announce-only to **tracked**. Installs a permanent ``assassinate-active``
-    flag-buff carrying the two parameter keys
-    (``effects.assassinate_advantage_vs_pre_turn`` +
-    ``effects.assassinate_auto_crit_vs_surprised``), sheet-mirrored +
-    idempotent (Phase 1 of the standard install-then-deferred-read split,
-    same shape as v2.612.1 Potent Spellcasting / v2.612.2 Totem Spirit).
-    Phase 2 (deferred): ``/attack`` reads the flags off the attacker's
-    ``_buffs_active`` and grants advantage vs a target that hasn't acted yet
-    + auto-crit vs a surprised target — both need the engine's (not-yet-built)
-    per-combat turn-order + surprise tracking, so the resolution stays
-    GM-applied until that substrate lands.
+    **Already mechanized in `/attack` (v2.131.0–v2.132.0), NOT here.** The
+    auto-crit-vs-surprised + advantage-vs-not-yet-acted resolution lives in
+    the `/attack` path, gated directly on `_pc_has_assassin_subclass(sheet, 3)`
+    + the attack body's `target_surprised` flag + the target combatant's
+    `has_acted` field (flipped by the turn-advance hook). This endpoint is just
+    the **chat-log declaration** that the rogue is invoking the feature — it
+    does NOT need to install anything (a v2.665.0 attempt to add an
+    `assassinate-active` flag-buff was reverted v2.670.1: the flags it wrote
+    were never read, since `/attack` keys off the subclass directly).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -85332,33 +85329,6 @@ async def use_assassinate(
         })
 
     rogue_lv = _rogue_level_from_sheet(sheet)
-
-    # v2.665.0 — Phase 8: install the parameter-flag buff. Permanent passive
-    # (idempotent on re-press via key dedupe). Phase 2 (deferred): `/attack`
-    # reads `effects.assassinate_*` off the attacker's `_buffs_active`.
-    # Sheet-mirrored so a sheet-reading attack site can consult it.
-    buff_installed = await _install_buff(campaign_id, char.id, {
-        "key": "assassinate-active",
-        "name": "🗡️ Assassinate",
-        "icon": "🗡️",
-        "duration_rounds": 100000,
-        "duration_max": 100000,
-        "permanent": True,
-        "concentration": False,
-        "source_char_id": char.id,
-        "effects": {
-            "assassinate_advantage_vs_pre_turn": True,
-            "assassinate_auto_crit_vs_surprised": True,
-        },
-        "desc": (
-            f"{char.name} has advantage on attack rolls against creatures "
-            f"that haven't taken a turn yet this combat, and any hit against "
-            f"a surprised creature is a critical hit. (Assassin Rogue Lv 3+ "
-            f"passive permanent. Phase 2: `/attack` reads these flags.)"
-        ),
-    })
-    if buff_installed:
-        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
 
     membership = (
         db.query(CampaignMembership)
@@ -85389,7 +85359,6 @@ async def use_assassinate(
             "source": "assassinate",
             "advantage_vs_pre_turn": True,
             "auto_crit_vs_surprised": True,
-            "buff_installed": buff_installed,
             "rogue_level": rogue_lv,
         },
     })
@@ -85399,7 +85368,6 @@ async def use_assassinate(
         "feature": "assassinate",
         "advantage_vs_pre_turn": True,
         "auto_crit_vs_surprised": True,
-        "buff_installed": buff_installed,
         "rogue_level": rogue_lv,
     }
 
