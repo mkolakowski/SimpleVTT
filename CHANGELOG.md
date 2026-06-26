@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.660.0] - 2026-06-26 — "The Heavy Pack"
+
+**Schema version:** 81
+
+**Commit summary:** Carrying-capacity Phase 4 — the optional Encumbrance variant rule (PHB p.176) as a request-time derivation surfaced on the sheet's carry block.
+
+**Description:** Closes the last filed follow-up on [`docs/plans/carrying-capacity.md`](docs/plans/carrying-capacity.md). A new pure helper `sheet_encumbrance()` in `app/content/carry_weight.py` classifies a PC's current inventory weight into the RAW variant tiers: **encumbered** (load > STR×5 → speed −10 ft) and **heavily encumbered** (load > STR×10 → speed −20 ft + disadvantage on STR/DEX/CON ability checks, attack rolls, and saving throws). `sheet_carry_summary()` folds the tier + penalties into the `/sheet-json` `derived.carry` block — but only when the PC is actually encumbered, so the common unencumbered case keeps its clean 3-field shape (mirroring the bag-of-holding fields). It's **informational/derivation-only**: the optional variant is a table opt-in, so the sheet surfaces the tier for the player/GM to self-manage; the engine does not auto-install the speed/disadvantage buffs (that mechanical-install slice needs an inventory-change hook and stays a deferred follow-up). **Also corrects the plan doc**, which mis-stated the thresholds as STR×10/STR×15 — the correct RAW variant is STR×5/STR×10 (STR×15 is the normal max carrying capacity).
+
+### Added
+- `app/content/carry_weight.py` — `sheet_encumbrance()` helper + `_ENCUMBERED_MULTIPLIER`/`_HEAVILY_ENCUMBERED_MULTIPLIER` constants.
+- `tests/harness/test_carry_weight.py` — 8 pure-Python unit tests (tier boundaries at STR×5/STR×10, strict-`>` edges, `effective_str` override, summary include/omit) + 1 `/sheet-json` integration test (a PC overloaded past STR×10 surfaces `heavily_encumbered` + the penalties; restore-safe).
+
+### Changed
+- `app/content/carry_weight.py::sheet_carry_summary` — surfaces `encumbrance_tier` / `encumbrance_speed_penalty_ft` / `encumbrance_disadvantage_abilities` when the load crosses STR×5.
+- `docs/plans/carrying-capacity.md` — Phase 4 marked shipped; RAW threshold typo (STR×10/×15 → STR×5/×10) corrected.
+- `docs/test-harness-coverage.md` — catalog the new tests.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.659.0] - 2026-06-26 — "The Recalled Terror"
 
 **Schema version:** 81

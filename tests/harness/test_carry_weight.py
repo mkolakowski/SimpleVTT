@@ -11,6 +11,7 @@ from app.content.carry_weight import (
     sheet_bag_of_holding_weight_lb,
     sheet_carry_capacity_lb,
     sheet_carry_summary,
+    sheet_encumbrance,
     sheet_inventory_weight_lb,
     sheet_is_over_capacity,
 )
@@ -275,6 +276,92 @@ def test_carry_summary_over_capacity_flag():
     assert summary["carry_capacity_lb"] == 120
 
 
+# ── sheet_encumbrance (Phase 4 — PHB p.176 variant) ──────────────────────────
+# STR 10 → encumbered > 50 lb, heavily encumbered > 100 lb, max cap 150 lb.
+
+
+def test_encumbrance_none_under_str_x5():
+    enc = sheet_encumbrance({
+        "abilities": {"strength": 10},
+        "inventory": [{"name": "Pack", "weight_lb": 40, "qty": 1}],
+    })
+    assert enc == {
+        "tier": "none", "speed_penalty_ft": 0, "disadvantage_abilities": [],
+    }
+
+
+def test_encumbrance_exactly_at_str_x5_is_none():
+    # RAW: "in excess of" — the threshold is strict (>), so a load of
+    # exactly STR×5 is still unencumbered.
+    enc = sheet_encumbrance({
+        "abilities": {"strength": 10},
+        "inventory": [{"name": "Pack", "weight_lb": 50, "qty": 1}],
+    })
+    assert enc["tier"] == "none"
+
+
+def test_encumbrance_encumbered_speed_minus_10():
+    enc = sheet_encumbrance({
+        "abilities": {"strength": 10},  # >50, ≤100
+        "inventory": [{"name": "Loot", "weight_lb": 60, "qty": 1}],
+    })
+    assert enc["tier"] == "encumbered"
+    assert enc["speed_penalty_ft"] == 10
+    assert enc["disadvantage_abilities"] == []
+
+
+def test_encumbrance_exactly_at_str_x10_is_only_encumbered():
+    # 100 lb == STR×10 exactly → not yet heavily encumbered (strict >).
+    enc = sheet_encumbrance({
+        "abilities": {"strength": 10},
+        "inventory": [{"name": "Loot", "weight_lb": 100, "qty": 1}],
+    })
+    assert enc["tier"] == "encumbered"
+
+
+def test_encumbrance_heavily_speed_minus_20_plus_disadvantage():
+    enc = sheet_encumbrance({
+        "abilities": {"strength": 10},  # >100
+        "inventory": [{"name": "Anvil", "weight_lb": 120, "qty": 1}],
+    })
+    assert enc["tier"] == "heavily_encumbered"
+    assert enc["speed_penalty_ft"] == 20
+    assert enc["disadvantage_abilities"] == ["STR", "DEX", "CON"]
+
+
+def test_encumbrance_effective_str_override_raises_threshold():
+    # Belt of Giant Strength (effective STR 20) → encumbered only past
+    # 100 lb; a 60 lb load that WOULD encumber a STR-10 PC is fine.
+    sheet = {
+        "abilities": {"strength": 10},
+        "inventory": [{"name": "Loot", "weight_lb": 60, "qty": 1}],
+    }
+    assert sheet_encumbrance(sheet)["tier"] == "encumbered"
+    assert sheet_encumbrance(sheet, effective_str=20)["tier"] == "none"
+
+
+def test_carry_summary_omits_encumbrance_when_unencumbered():
+    # STR 16 → encumbered past 80 lb; 68 lb load stays clean (3 fields).
+    summary = sheet_carry_summary({
+        "abilities": {"strength": 16},
+        "inventory": [{"name": "Plate", "weight_lb": 68, "qty": 1}],
+    })
+    assert "encumbrance_tier" not in summary
+    assert set(summary) == {
+        "carry_capacity_lb", "inventory_weight_lb", "is_over_capacity",
+    }
+
+
+def test_carry_summary_includes_encumbrance_when_encumbered():
+    summary = sheet_carry_summary({
+        "abilities": {"strength": 10},  # encumbered past 50 lb
+        "inventory": [{"name": "Loot", "weight_lb": 60, "qty": 1}],
+    })
+    assert summary["encumbrance_tier"] == "encumbered"
+    assert summary["encumbrance_speed_penalty_ft"] == 10
+    assert summary["encumbrance_disadvantage_abilities"] == []
+
+
 # ── Integration: /sheet-json populates derived.carry ────────────────────────
 
 
@@ -311,6 +398,44 @@ async def test_sheet_json_exposes_derived_carry(gm_client):
     assert cap >= 240, (
         f"Barbarian carry capacity should be ≥ 240 lb (STR 16+); got {cap}"
     )
+
+
+@pytest.mark.asyncio
+async def test_sheet_json_surfaces_encumbrance_when_overloaded(gm_client):
+    """v2.660.0 — Phase 4: a PC carrying more than STR×10 lb surfaces the
+    heavily-encumbered tier (speed −20 + STR/DEX/CON disadvantage) in the
+    `/sheet-json` `derived.carry` block. Restore-safe: snapshots the PC's
+    inventory, drops in one absurdly heavy item, asserts, then restores."""
+    from .conftest import CAMPAIGN_ID  # noqa: I001
+    roster_resp = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/roster")
+    chars = roster_resp.json().get("characters") or []
+    pip = next(c for c in chars if c["name"] == "Pip Quickfingers")
+    sj = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-json"
+    )).json()
+    orig_inv = (sj.get("sheet") or {}).get("inventory") or []
+    try:
+        r = await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-fields",
+            json={"inventory": [
+                {"name": "Lead Anvil (test)", "weight_lb": 9999, "qty": 1},
+            ]},
+        )
+        assert r.status_code == 200, r.text
+        carry = ((await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-json"
+        )).json().get("derived") or {}).get("carry") or {}
+        assert carry.get("encumbrance_tier") == "heavily_encumbered", carry
+        assert carry.get("encumbrance_speed_penalty_ft") == 20
+        assert carry.get("encumbrance_disadvantage_abilities") == [
+            "STR", "DEX", "CON",
+        ]
+        assert carry.get("is_over_capacity") is True
+    finally:
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-fields",
+            json={"inventory": orig_inv},
+        )
 
 
 # ── Bag of Holding 500-lb capacity (v2.656.0) ────────────────────────────────

@@ -242,6 +242,76 @@ def sheet_is_over_capacity(
     )
 
 
+# ── Encumbrance variant (PHB p.176) ──────────────────────────────────────────
+
+# RAW PHB p.176 "Variant: Encumbrance" — the two penalty thresholds are
+# multiples of the STR score:
+#   - weight > STR × 5   → encumbered          (speed −10 ft)
+#   - weight > STR × 10  → heavily encumbered  (speed −20 ft + disadvantage
+#                                               on STR/DEX/CON checks, attacks,
+#                                               and saves)
+# (STR × 15 is the normal maximum carrying capacity — see
+# ``sheet_carry_capacity_lb`` — beyond which you can't effectively move.)
+#
+# NOTE: docs/plans/carrying-capacity.md (Phase 4 + the RAW summary) mis-stated
+# these as STR × 10 / STR × 15. The correct RAW variant thresholds are
+# STR × 5 / STR × 10, implemented here; the plan doc was corrected to match.
+_ENCUMBERED_MULTIPLIER = 5
+_HEAVILY_ENCUMBERED_MULTIPLIER = 10
+
+
+def sheet_encumbrance(
+    sheet: dict,
+    catalog_weight_by_slug: "dict[str, str] | None" = None,
+    effective_str: "int | None" = None,
+) -> dict:
+    """RAW PHB p.176 optional **Encumbrance variant**. Classifies the PC's
+    current inventory weight into one of three tiers + the mechanical penalty
+    each carries:
+
+      - ``"heavily_encumbered"`` (weight > STR × 10): speed −20 ft AND
+        disadvantage on STR/DEX/CON ability checks, attack rolls, and saving
+        throws (``disadvantage_abilities = ["STR", "DEX", "CON"]``).
+      - ``"encumbered"`` (weight > STR × 5): speed −10 ft.
+      - ``"none"``: no penalty.
+
+    **Derivation-only / informational.** The optional variant is a table
+    opt-in, so this surfaces the tier on the sheet (via ``sheet_carry_summary``
+    → ``/sheet-json``'s ``derived.carry``) for the player/GM to self-manage —
+    it does NOT auto-install the speed-reduction / disadvantage buffs. Wiring
+    the mechanical install (on the ``speed_reduction_ft`` substrate + the
+    condition-disadvantage helpers) is a deferred follow-up that needs an
+    inventory-change hook; see docs/plans/carrying-capacity.md Phase 4.
+
+    Returns ``{tier, speed_penalty_ft, disadvantage_abilities}`` — always the
+    same shape (``"none"`` carries a 0 penalty + empty list) so callers can
+    read it unconditionally.
+    """
+    str_score = (
+        effective_str if isinstance(effective_str, int)
+        else _str_score_from_sheet(sheet)
+    )
+    str_score = max(1, str_score)
+    weight = sheet_inventory_weight_lb(sheet, catalog_weight_by_slug)
+    if weight > str_score * _HEAVILY_ENCUMBERED_MULTIPLIER:
+        return {
+            "tier": "heavily_encumbered",
+            "speed_penalty_ft": 20,
+            "disadvantage_abilities": ["STR", "DEX", "CON"],
+        }
+    if weight > str_score * _ENCUMBERED_MULTIPLIER:
+        return {
+            "tier": "encumbered",
+            "speed_penalty_ft": 10,
+            "disadvantage_abilities": [],
+        }
+    return {
+        "tier": "none",
+        "speed_penalty_ft": 0,
+        "disadvantage_abilities": [],
+    }
+
+
 def sheet_carry_summary(
     sheet: dict,
     catalog_weight_by_slug: "dict[str, str] | None" = None,
@@ -273,4 +343,16 @@ def sheet_carry_summary(
         summary["bag_of_holding_over_capacity"] = (
             bag_weight > BAG_OF_HOLDING_CAPACITY_LB
         )
+    # v2.660.0 — Phase 4: encumbrance variant (PHB p.176). Only surface the
+    # fields when the PC is actually encumbered, so the carry block stays
+    # clean (3 fields) for the common unencumbered case — mirroring the
+    # bag-of-holding fields above. The optional variant is informational
+    # (player/GM self-manages); see ``sheet_encumbrance``.
+    enc = sheet_encumbrance(sheet, catalog_weight_by_slug, effective_str)
+    if enc["tier"] != "none":
+        summary["encumbrance_tier"] = enc["tier"]
+        summary["encumbrance_speed_penalty_ft"] = enc["speed_penalty_ft"]
+        summary["encumbrance_disadvantage_abilities"] = enc[
+            "disadvantage_abilities"
+        ]
     return summary

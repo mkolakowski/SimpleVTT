@@ -1,6 +1,6 @@
 # Carrying capacity — design plan
 
-**Status:** ✅ shipped end-to-end (re-audited 2026-06-11, v2.159.31 — SRD audit refresh). Phases 0–3 all closed:
+**Status:** ✅ shipped end-to-end — **all phases (0–4) now closed** (Phase 4 / Encumbrance variant shipped v2.660.0). Phases 0–3 detail:
 - **Phase 0** ✅ v2.159.26 (this plan doc filed + wiki surface).
 - **Phase 1** ✅ v2.159.27 (`app/content/carry_weight.py` leaf module + helpers + `/sheet-json` derived `carry` block; 37 unit tests).
 - **Phase 2a** ✅ v2.159.28 (Krieger weight backfill + carry meter UI; updated `updateTotalWeight()` to prefer `i.weight_lb` numeric + skip `_in_bag_of_holding` items + red-when-over-capacity).
@@ -8,7 +8,7 @@
 - **Phase 3** ✅ v2.159.30 (Bag of Holding catalog row + Brakka demo seed + integration test).
 - **Phase 3b** ✅ v2.656.0 (Bag of Holding **500-lb internal capacity** — previously descriptive-only/unenforced). `sheet_bag_of_holding_weight_lb()` sums the stowed weight; `sheet_carry_summary` surfaces `bag_of_holding_weight_lb` / `bag_of_holding_capacity_lb` / `bag_of_holding_over_capacity` in the `/sheet-json` derived `carry` block, and the sheet's carry meter shows a "⚠ Bag overloaded" rupture warning past 500 lb (RAW DMG p.153). v1 assumes a single bag (the `_in_bag_of_holding` flag isn't per-container).
 
-Future weight-related items (Heward's Handy Haversack, Belt of Giant Strength, Heroes' Feast +5 STR, Bag of Devouring) drop in via the existing substrate without new helper work. Phase 4 (Encumbered variant rule, PHB p.176) is the only follow-up still on the table.
+Future weight-related items (Heward's Handy Haversack, Belt of Giant Strength, Heroes' Feast +5 STR, Bag of Devouring) drop in via the existing substrate without new helper work. Phase 4 (Encumbrance variant rule, PHB p.176) shipped v2.660.0 as an informational derivation; the only remaining follow-up is mechanically auto-installing the encumbrance speed/disadvantage in combat (needs an inventory-change hook — see Phase 4 below).
 
 **Authors:** rolling
 **Last updated:** 2026-06-11
@@ -21,12 +21,15 @@ A plan to add RAW carrying capacity to the engine so weight-related items (Bag o
 
 **Push, drag, lift** = `STR × 30 lb` (variant rule, skipped v1).
 
-**Encumbered (variant rule, PHB p.176)** — optional, skipped v1:
-- `STR × 5 lb` — no penalty.
-- `STR × 10 lb` — speed −10 ft.
-- `STR × 15 lb` — speed −20 ft + disadvantage on STR/DEX/CON ability checks, saves, attacks.
+**Encumbered (variant rule, PHB p.176)** — optional, shipped v2.660.0 (Phase 4):
+- ≤ `STR × 5 lb` — no penalty.
+- > `STR × 5 lb` — **encumbered**: speed −10 ft.
+- > `STR × 10 lb` — **heavily encumbered**: speed −20 ft + disadvantage on STR/DEX/CON ability checks, saves, attacks.
+- (`STR × 15 lb` is the normal **maximum carrying capacity** — see the basic rule above — not a penalty tier.)
 
-The plan ships only the **basic rule** (`STR × 15 lb`). The encumbered variant is filed for a future phase if a table wants it; the engine surface stays the same (carry capacity + current weight), the variant rule just gates additional buff installs.
+> **Threshold correction (v2.660.0):** earlier drafts of this section + the Phase 4 note below listed the penalty tiers as STR×10 / STR×15. That was wrong — the RAW variant tiers are **STR×5 (encumbered) / STR×10 (heavily encumbered)**, with STR×15 being the carry-capacity maximum. The shipped `sheet_encumbrance()` uses the correct values.
+
+The basic rule (`STR × 15 lb`) shipped in Phase 1; the encumbered variant shipped in Phase 4 as a **request-time derivation** (informational — the engine surfaces the tier on the sheet for the table to self-manage, it doesn't auto-install the speed/disadvantage buffs).
 
 ## Why this matters
 
@@ -121,9 +124,9 @@ v1 simplification: the player tags items as "in the bag" by adding the `_in_bag_
 - Bag added to a demo PC's inventory (TBD which — likely Krieger or Garrik — the strength-based PCs who'd carry the most).
 - HTTP harness test: equip Bag → flag items as in-bag → carry weight drops.
 
-### Phase 4 (filed) — Encumbered variant rule
+### Phase 4 — Encumbered variant rule ✅ v2.660.0
 
-Optional variant. Adds two buff installs (`encumbered`/`heavily-encumbered`) when current weight crosses STR×10 / STR×15 thresholds. Speed reduction via the existing `speed_reduction_ft` substrate; disadvantage via the v2.152.0 condition-dis helpers. No new substrate.
+Optional variant (PHB p.176). Shipped as a **request-time derivation** rather than buff installs: `sheet_encumbrance()` classifies the load into `none` / `encumbered` (> STR×5 → speed −10) / `heavily_encumbered` (> STR×10 → speed −20 + STR/DEX/CON disadvantage), and `sheet_carry_summary()` folds the tier + penalty fields into `/sheet-json`'s `derived.carry` block (only when encumbered, to keep the unencumbered shape clean). Informational — the sheet surfaces the tier for the table to self-manage. **Deferred follow-up:** mechanically auto-installing the `speed_reduction_ft` reduction + the v2.152.0 condition-disadvantage on the combatant (so the variant gates movement + attack rolls in combat) needs an inventory-change hook to fire the install; the derivation is the substrate that follow-up will read.
 
 ## Non-goals (v1)
 
