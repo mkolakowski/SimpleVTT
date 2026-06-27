@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}My reports — SimpleVTT{% endblock %}
+{% block content %}
+<h1>My suggestions &amp; reports</h1>
+<p class="muted">Suggestions and issues you've filed via the
+    “💡 Suggest” button, with their current status.
+    <a href="#" onclick="event.preventDefault(); window.openSuggestModal && window.openSuggestModal();">File a new one →</a>
+</p>
+
+{% set _status_label = {"new": "🆕 New", "in_progress": "🔧 In progress", "resolved": "✅ Resolved", "wont_fix": "🚫 Won't fix"} %}
+
+{% if suggestions %}
+<table class="data">
+    <thead><tr>
+        <th>Type</th><th>Title &amp; details</th><th>Filed</th><th>Status</th>
+    </tr></thead>
+    <tbody>
+        {% for s in suggestions %}
+        <tr>
+            <td>{{ "🐞 Issue" if s.kind == "issue" else "💡 Suggestion" }}</td>
+            <td>
+                <strong>{{ s.title }}</strong>
+                {% if s.body %}<br><small class="muted">{{ s.body }}</small>{% endif %}
+                {% if s.admin_note %}<br><small style="color:var(--accent);">📝 Admin: {{ s.admin_note }}</small>{% endif %}
+            </td>
+            <td><small class="muted">{{ s.created_at.strftime("%Y-%m-%d") if s.created_at else "" }}</small></td>
+            <td>{{ _status_label.get(s.status or "new", s.status) }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="muted">You haven't filed any reports yet.
+    <a href="#" onclick="event.preventDefault(); window.openSuggestModal && window.openSuggestModal();">File your first →</a>
+</p>
+{% endif %}
+{% endblock %}

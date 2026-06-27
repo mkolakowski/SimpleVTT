@@ -13,12 +13,14 @@ Endpoints:
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from ..auth import require_admin, require_user
 from ..database import get_db
 from ..models import Suggestion, User
+from ..templates import templates
 
 router = APIRouter()
 
@@ -73,6 +75,42 @@ async def create_suggestion(
     db.commit()
     db.refresh(s)
     return {"ok": True, "suggestion": _suggestion_dict(s)}
+
+
+@router.get("/api/my-suggestions")
+def list_my_suggestions(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.721.0 — the caller's own reports, newest first (for the "My
+    reports" page + any client that wants the JSON)."""
+    rows = (
+        db.query(Suggestion)
+        .filter(Suggestion.user_id == user.id)
+        .order_by(desc(Suggestion.created_at))
+        .all()
+    )
+    return {"ok": True, "suggestions": [_suggestion_dict(s) for s in rows]}
+
+
+@router.get("/my-suggestions", response_class=HTMLResponse)
+def my_suggestions_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.721.0 — the "My reports" page: a user sees the suggestions / issues
+    they've filed and each one's current status + any admin note."""
+    rows = (
+        db.query(Suggestion)
+        .filter(Suggestion.user_id == user.id)
+        .order_by(desc(Suggestion.created_at))
+        .all()
+    )
+    return templates.TemplateResponse(
+        "my_suggestions.html",
+        {"request": request, "user": user, "suggestions": rows},
+    )
 
 
 @router.get("/api/admin/suggestions")

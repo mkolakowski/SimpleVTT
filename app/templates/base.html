@@ -129,6 +129,8 @@
                 {% if user.is_admin %}<a href="/admin" title="Admin portal">Admin<span id="admin-suggest-badge" title="Open suggestion / issue reports" style="display:none;margin-left:5px;background:var(--accent);color:#fff;border-radius:10px;padding:0 6px;font-size:11px;font-weight:700;vertical-align:middle;"></span></a>{% endif %}
                 {# v2.718.0 — open the Suggest / Report modal (defined near </body>). #}
                 <a href="#" onclick="event.preventDefault(); window.openSuggestModal && window.openSuggestModal();" title="Suggest a feature or report an issue">💡 Suggest</a>
+                {# v2.721.0 — the user's own filed reports + their statuses. #}
+                <a href="/my-suggestions" title="View the reports you've filed">My reports</a>
                 <a href="/logout">Logout</a>
             {% endif %}
         </nav>

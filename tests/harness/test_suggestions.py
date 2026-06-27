@@ -74,6 +74,30 @@ async def test_admin_update_requires_admin(alice_client):
     assert r.status_code in (401, 403), r.text
 
 
+async def test_my_suggestions_scoped_to_user(gm_client, alice_client):
+    """GET /api/my-suggestions returns only the caller's own reports."""
+    gm_title = "GM scope report ZZZ"
+    al_title = "Alice scope report ZZZ"
+    await gm_client.post("/api/suggestions", json={"title": gm_title})
+    await alice_client.post("/api/suggestions", json={"title": al_title})
+    gm_titles = [s["title"] for s in
+                 (await gm_client.get("/api/my-suggestions")).json()["suggestions"]]
+    al_titles = [s["title"] for s in
+                 (await alice_client.get("/api/my-suggestions")).json()["suggestions"]]
+    assert gm_title in gm_titles and gm_title not in al_titles
+    assert al_title in al_titles and al_title not in gm_titles
+
+
+async def test_my_suggestions_page_renders(gm_client):
+    """The /my-suggestions page renders the caller's reports."""
+    await gm_client.post(
+        "/api/suggestions", json={"title": "Page render report QQQ"})
+    r = await gm_client.get("/my-suggestions")
+    assert r.status_code == 200, r.text
+    assert "Page render report QQQ" in r.text
+    assert "My suggestions" in r.text
+
+
 async def test_count_requires_admin(alice_client):
     r = await alice_client.get("/api/admin/suggestions/count")
     assert r.status_code in (401, 403), r.text

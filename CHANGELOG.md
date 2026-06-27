@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.721.0] - 2026-06-27 — "The Paper Trail"
+
+**Schema version:** 83
+
+**Commit summary:** Suggestion polish — a "My reports" page so users can see the reports they've filed + each one's status.
+
+**Description:** Third of the suggestion polish set. Adds a **My reports** page (`GET /my-suggestions`) listing the caller's own suggestions / issues with their current status (🆕 New / 🔧 In progress / ✅ Resolved / 🚫 Won't fix) and any admin note, plus a "File a new one" shortcut that opens the Suggest modal. Backed by `GET /api/my-suggestions` (user-scoped JSON). Linked from the topnav ("My reports", logged-in users). Closes the loop so a reporter can follow what happened to their feedback.
+
+### Added
+- `app/routes/suggestion_routes.py` — `GET /api/my-suggestions` (JSON) + `GET /my-suggestions` (page).
+- `app/templates/my_suggestions.html` — the My reports page.
+- `app/templates/base.html` — "My reports" topnav link.
+- `tests/harness/test_suggestions.py` (+2) — `/api/my-suggestions` is scoped to the caller (a user sees their report, not another's); the `/my-suggestions` page renders the caller's reports.
+
+### Schema
+- No schema change (still v83).
+
 ## [2.720.0] - 2026-06-27 — "The Lit Beacon"
 
 **Schema version:** 83
