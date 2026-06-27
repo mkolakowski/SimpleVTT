@@ -5739,6 +5739,44 @@ def _visibility_between(
     return result
 
 
+def _attack_vision_edges(
+    db: Session, campaign_id: int, attacker_char_id: int,
+    target_combatant_id: "str | None",
+) -> tuple:
+    """Phase 2 of vision-and-light: compute the lighting-model sight edges
+    for a PC attack — returns ``(target_unseen, attacker_unseen)`` where
+    ``target_unseen`` (the attacker can't see the target) imposes attack
+    **disadvantage** and ``attacker_unseen`` (the target can't see the
+    attacker) grants **advantage**. Best-effort: ``(False, False)`` off-grid,
+    with no battle, or on a bright map (bright ambient can never produce an
+    ``unseen`` from the lighting model — light sources only add light, so
+    the hot path short-circuits before the per-token scan).
+    """
+    try:
+        campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+        if not campaign or not campaign.active_map_id:
+            return (False, False)
+        map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
+        if not map_row or (getattr(map_row, "ambient_light", "bright")
+                           or "bright") == "bright":
+            return (False, False)
+        target_combatant = _lookup_combatant(
+            campaign_id, str(target_combatant_id).strip()
+        ) if target_combatant_id else None
+        state = hub.get_battle(campaign_id) or {}
+        atkr = next((c for c in (state.get("combatants") or [])
+                     if c.get("char_id") == attacker_char_id), None)
+        if atkr is None or not target_combatant:
+            return (False, False)
+        target_unseen = _visibility_between(
+            db, campaign_id, atkr, target_combatant).get("visibility") == "unseen"
+        attacker_unseen = _visibility_between(
+            db, campaign_id, target_combatant, atkr).get("visibility") == "unseen"
+        return (target_unseen, attacker_unseen)
+    except Exception:
+        return (False, False)
+
+
 async def _force_move(
     db: Session,
     campaign_id: int,
@@ -112900,6 +112938,16 @@ async def use_attack(
         # entries onto the same adv/dis source set as Rage / Dodge /
         # Reckless. RAW order matters only for the label; the cancel
         # logic is set-OR.
+        # v2.706.0 — Phase 2 of vision-and-light: compute the lighting-model
+        # sight edges. A target the attacker can't see (dark map, no usable
+        # sense) → disadvantage (folded into `_attacker_cant_see` below); an
+        # attacker the target can't see → advantage (folded into `has_adv`).
+        # Bright maps short-circuit to (False, False) so the hot path is
+        # unchanged. The manual `attacker_cant_see_target` flag stays a GM
+        # override (OR'd in).
+        _vis_target_unseen, _vis_attacker_unseen = _attack_vision_edges(
+            db, campaign_id, char.id, target_combatant_id,
+        )
         # v2.510.0 — See Invisibility (#43): the invisible-attacker
         # advantage only applies while the target can't see the attacker.
         # If the target carries `effects.sees_invisible` (See
@@ -112920,6 +112968,7 @@ async def use_attack(
             rage_advantage or target_grants_advantage
             or assassinate_target_hasnt_acted
             or _attacker_invisible_adv
+            or _vis_attacker_unseen
             or bool(_target_adv_condition)
             or _voe_advantage
         )
@@ -112928,6 +112977,7 @@ async def use_attack(
             "reckless" if target_grants_advantage else
             "assassinate_hasnt_acted" if assassinate_target_hasnt_acted else
             "invisible" if _attacker_invisible_adv else
+            "unseen_attacker" if _vis_attacker_unseen else
             f"target_{_target_adv_condition}" if _target_adv_condition else
             "vow_of_enmity" if _voe_advantage else ""
         )
@@ -112952,7 +113002,7 @@ async def use_attack(
         # field is set AND the attacker doesn't have Feral Senses,
         # add it as a disadvantage source.
         _attacker_cant_see = (
-            attacker_cant_see_target
+            (attacker_cant_see_target or _vis_target_unseen)
             and not _pc_has_feral_senses(char.sheet or {})
         )
         # v2.137.0 — Ancestral Protectors Phase 1b: the marked creature
@@ -113052,6 +113102,11 @@ async def use_attack(
         # v2.152.0 — Phase 2a advantage/disadvantage automation
         # (bonusless branch mirror). Same source-set fold as the
         # bonused branch above; see comment there for the contract.
+        # v2.706.0 — Phase 2 of vision-and-light (bonusless branch mirror):
+        # compute the lighting-model sight edges. See the bonused branch.
+        _vis_target_unseen, _vis_attacker_unseen = _attack_vision_edges(
+            db, campaign_id, char.id, target_combatant_id,
+        )
         # v2.510.0 — See Invisibility (#43): negate the invisible-attacker
         # advantage when the target can see invisible creatures.
         _attacker_invisible_adv = (
@@ -113069,6 +113124,7 @@ async def use_attack(
             rage_advantage or target_grants_advantage
             or assassinate_target_hasnt_acted
             or _attacker_invisible_adv
+            or _vis_attacker_unseen
             or bool(_target_adv_condition)
             or _voe_advantage
         )
@@ -113077,6 +113133,7 @@ async def use_attack(
             "reckless" if target_grants_advantage else
             "assassinate_hasnt_acted" if assassinate_target_hasnt_acted else
             "invisible" if _attacker_invisible_adv else
+            "unseen_attacker" if _vis_attacker_unseen else
             f"target_{_target_adv_condition}" if _target_adv_condition else
             "vow_of_enmity" if _voe_advantage else ""
         )
@@ -113101,7 +113158,7 @@ async def use_attack(
         # field is set AND the attacker doesn't have Feral Senses,
         # add it as a disadvantage source.
         _attacker_cant_see = (
-            attacker_cant_see_target
+            (attacker_cant_see_target or _vis_target_unseen)
             and not _pc_has_feral_senses(char.sheet or {})
         )
         # v2.137.0 — Ancestral Protectors Phase 1b: the marked creature

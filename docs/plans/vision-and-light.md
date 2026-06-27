@@ -1,6 +1,6 @@
 # Vision & Light — server-side sight/obscurement engine
 
-**Status:** 🟠 Phases 0–1 shipped (v2.704.0 data model + migration; v2.705.0 the `_visibility_between` resolver + read-only `/visibility` endpoint). Phase 2 (`/attack` wiring — the headline payoff) is next. Plan authored v2.703.0.
+**Status:** 🟢 Phases 0–2 shipped — the core combat automation is live (v2.704.0 data model; v2.705.0 the `_visibility_between` resolver; v2.706.0 wired into PC `/attack`: dark→disadvantage, unseen-attacker→advantage). Remaining: Phase 3 spell light/darkness emitters, Phase 4 Hide/Stealth, Phase 5 client lighting, + NPC `/npc_attack` wiring. Plan authored v2.703.0.
 
 The one combat mechanic that is still **entirely GM-narrated** and is *not*
 buildable on an existing substrate: whether an attacker can **see** its
@@ -120,11 +120,13 @@ changes** — it can be validated in isolation before touching `/attack`.
    at_point` (ambient ∪ token light sources). Exposed read-only at
    `GET /visibility` for validation. Harness: `test_vision_light_phase1.py`
    (the ambient × senses × range matrix). No `/attack` change yet.
-2. **Phase 2 — wire into `/attack` (M).** Replace the manual
-   `attacker_cant_see_target` body flag with the computed verdict: target
-   `unseen` → attack **disadvantage** (the plumbing already exists); attacker
-   `unseen` by the target → **advantage**. Keep the manual flag as a GM
-   override. This is the headline player-facing payoff.
+2. **Phase 2 — wire into `/attack` (M). ✅ shipped v2.706.0.** The
+   `_attack_vision_edges` helper feeds both PC `/attack` branches: target
+   `unseen` → **disadvantage** (`disadvantage_cant_see`); attacker `unseen`
+   by the target → **advantage** (`advantage_unseen_attacker`); mutual →
+   cancel. The manual `attacker_cant_see_target` flag stays a GM override;
+   bright maps short-circuit (hot path untouched). Harness:
+   `test_vision_light_phase2.py`. **Follow-up:** NPC `/npc_attack` wiring.
 3. **Phase 3 — spell light/darkness emitters (M).** Darkness (magical dark
    sphere — composes with Devil's Sight's `sees_in_darkness`), Daylight,
    Fog Cloud (heavy obscurement = `unseen` inside). Reuse the

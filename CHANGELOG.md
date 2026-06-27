@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.706.0] - 2026-06-27 — "The Honest Dark"
+
+**Schema version:** 82
+
+**Commit summary:** Vision & Light Phase 2 — wire the `_visibility_between` resolver into the PC `/attack` pipeline. Lighting now drives attack advantage/disadvantage automatically.
+
+**Description:** Phase 2 (the headline payoff) of [`docs/plans/vision-and-light.md`](docs/plans/vision-and-light.md). A new `_attack_vision_edges(db, campaign_id, attacker_char_id, target_combatant_id)` helper computes the lighting-model sight edges and both PC `/attack` branches (bonused + bonusless) fold them in: a target the attacker **can't see** (dark map, no usable sense, target unlit) → attack **disadvantage** (`roll_state_applied` `disadvantage_cant_see`) **without** the manual flag; an attacker the *target* can't see → **advantage** (`advantage_unseen_attacker`); mutual blindness → adv + dis **cancel** (the existing `has_adv && has_dis` rule). The manual `attacker_cant_see_target` body flag stays a GM override (OR'd into the disadvantage). The helper short-circuits to `(False, False)` on a **bright** map (bright ambient can never produce an `unseen` — light only adds), off-grid, or with no battle, so the overwhelming-majority hot path is untouched and a full attack-suite regression stays green. No NPC `/npc_attack` wiring yet (a follow-up); no schema change.
+
+### Added
+- `tests/harness/test_vision_light_phase2.py` (new, +6) — dark+target-unseen → `disadvantage_cant_see`; dark+unseen-attacker → `advantage_unseen_attacker`; dark+mutual-blind → `canceled_…`; dark+both-darkvision → no edge; bright map → no edge (fast path); manual override on a bright map still forces disadvantage.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `_attack_vision_edges` helper; both PC `/attack` branches fold `_vis_target_unseen` into `_attacker_cant_see` (disadvantage) and `_vis_attacker_unseen` into `has_adv` (`unseen_attacker` adv label).
+
+### Schema
+- No schema change (still v82).
+
 ## [2.705.0] - 2026-06-27 — "The Seeing Eye"
 
 **Schema version:** 82
