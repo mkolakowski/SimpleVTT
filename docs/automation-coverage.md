@@ -189,7 +189,7 @@ or passive damage-boosters that already ride other code paths
 | `use_dark_ones_blessing` | ✅ tracked | F temp-HP |
 | `use_devils_sight` | ✅ tracked | D buff-install (vision-parameter flags) |
 | `use_diamond_soul_reroll` | ✅ tracked | A use/resource |
-| `use_disarming_attack` | ✅ tracked | A use/resource |
+| `use_disarming_attack` | ✅ tracked | v2.692.0 — with `target_combatant_id` (trust-the-caller), applies the superiority die as bonus damage (`_apply_damage_to_combatant`) + rolls the STR save (`_resolve_feature_save`, `condition_buff=None`); drop-object outcome GM-narrated |
 | `use_distracting_strike` | ✅ tracked | A use/resource |
 | `use_drunken_technique` | ✅ tracked | D buff-install (1-turn Disengage rider + speed bonus) |
 | `use_divine_fury` | ✅ tracked | D buff-install |

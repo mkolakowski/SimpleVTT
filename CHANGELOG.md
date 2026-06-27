@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.692.0] - 2026-06-26 — "The Wrested Blade"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — resolve Disarming Attack's bonus damage + STR save server-side (Battle Master Fighter), closing the maneuver tail.
+
+**Description:** `use_disarming_attack` (PHB p.74) rolled the superiority die + computed the Maneuver DC but the GM added the damage and rolled the STR save by hand. It now resolves the maneuver server-side when a `target_combatant_id` is supplied, on the trust-the-caller convention (the Trip/Pushing Attack shape — the triggering attack already hit): the superiority die lands as bonus weapon damage via `_apply_damage_to_combatant` (`is_attack=True`), and the STR save is rolled via `_resolve_feature_save` with **`condition_buff=None`** (NPC inline, PC via RollRequest) — the "drop one held object" outcome has no engine condition, so it's resolved-but-GM-narrated (SimpleVTT models no held-item engine). The optional `damage_type` body field types the bonus die. The response gains `damage_applied` + `feature_save`. Backward-compatible: no `target_combatant_id` stays announce-only.
+
+With this, the four targeted Battle Master maneuvers — Trip (v2.690.0), Pushing (v2.691.0), Disarming (this), and Menacing (earlier) — all mechanize their damage + save server-side; the on-fail movement/object effects are mechanical where SimpleVTT has an engine (Prone, push) and GM-narrated where it doesn't (drop-object).
+
+### Added
+- `tests/harness/test_disarming_attack.py` (+2) — `test_da_applies_damage_and_resolves_save` (templated bandit → `damage_applied == extra_damage`, `feature_save.resolved`, `condition_installed is False`) + `test_da_no_target_announce_only` (no target → `damage_applied`/`feature_save` stay None).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_disarming_attack` applies the bonus damage + resolves the STR save (no condition); accepts `target_combatant_id` / `damage_type`; surfaces `damage_applied` / `feature_save`.
+- `docs/automation-coverage.md` — `use_disarming_attack` note updated (bonus damage applied + STR save resolved server-side).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Disarming Attack.
+- `docs/test-harness-coverage.md` — catalog the new tests.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.691.0] - 2026-06-26 — "The Driving Blow"
 
 **Schema version:** 81

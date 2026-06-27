@@ -78432,18 +78432,30 @@ async def use_disarming_attack(
     saving throw. On a failed save, it drops the object you
     choose. The object lands at its feet."
 
-    Body: ``{character_id, override?}``. Mirrors Trip Attack
-    (v2.99.233) but the target save is fixed STR (Trip Attack
-    is target's choice STR or DEX) and the on-fail effect is
-    "drops one held object" instead of Prone.
+    Body: ``{character_id, target_combatant_id?, damage_type?,
+    override?}``. Mirrors Trip Attack (v2.99.233) but the target
+    save is fixed STR (Trip Attack is target's choice STR or DEX)
+    and the on-fail effect is "drops one held object" instead of
+    Prone.
 
     Validates Battle Master Lv 3+ + `superiority-dice` resource
     current >= 1. Decrements counter, rolls 1d<size>, computes
-    Maneuver DC = 8 + prof + max(STR, DEX) mod, broadcasts. v1
-    ships announce-only.
+    Maneuver DC = 8 + prof + max(STR, DEX) mod.
+
+    v2.692.0 (Phase 8): when a ``target_combatant_id`` is supplied,
+    the maneuver resolves server-side on the trust-the-caller
+    convention (Trip Attack shape — the triggering attack already
+    hit): the superiority die is applied as bonus weapon damage via
+    `_apply_damage_to_combatant`, and the STR save is rolled via
+    `_resolve_feature_save` (NPC inline, PC via RollRequest;
+    ``condition_buff=None`` — no engine condition for "drop object").
+    The drop-the-object outcome stays GM-narrated (SimpleVTT models
+    no held-item engine). Without a target it stays announce-only.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
+    target_combatant_id = (str(body.get("target_combatant_id") or "")).strip()
+    damage_type = (str(body.get("damage_type") or "")).strip().lower()
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
 
@@ -78560,6 +78572,36 @@ async def use_disarming_attack(
         },
     })
 
+    # v2.692.0 — Phase 8: resolve the maneuver server-side when a target is
+    # supplied (trust-the-caller — the hit already landed). Apply the
+    # superiority die as bonus weapon damage, then roll the STR save via
+    # `_resolve_feature_save` with no condition (the "drop object" outcome has
+    # no engine condition → GM-narrated). Backward-compatible: no target →
+    # announce-only.
+    damage_applied = None
+    feature_save = None
+    if target_combatant_id:
+        _da_target = _lookup_combatant(campaign_id, target_combatant_id)
+        if _da_target is not None:
+            _dadr = await _apply_damage_to_combatant(
+                db, campaign_id, _da_target, int(extra), damage_type,
+                is_attack=True, attacker_char_id=char.id,
+            )
+            damage_applied = int(_dadr.get("applied") or 0)
+            feature_save = await _resolve_feature_save(
+                db, campaign_id,
+                caster_char_id=char.id, caster_char_name=char.name,
+                target_combatant=_da_target,
+                save_ability="STR", dc=save_dc,
+                note_label=f"Disarming Attack save (DC {save_dc})",
+                condition_buff=None,
+                repeated_save=False,
+                source="disarming-attack",
+                campaign=campaign,
+                prompt_user=user,
+                feature_name="Disarming Attack",
+            )
+
     return {
         "ok": True,
         "feature": "disarming-attack",
@@ -78567,6 +78609,9 @@ async def use_disarming_attack(
         "die_size": die_size,
         "save_dc": save_dc,
         "dice_remaining": new_sd,
+        "target_combatant_id": target_combatant_id,
+        "damage_applied": damage_applied,
+        "feature_save": feature_save,
     }
 
 

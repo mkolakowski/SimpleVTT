@@ -656,6 +656,15 @@ composition. Batch by class, same cadence as the breadth sweep.
   (`is_attack=True`, trust-the-caller). With both halves server-side, Pushing
   Attack is fully mechanized but for the GM-tracked size gate. Surfaces
   `damage_applied`. Harness: `test_pushing_attack.py` (+1).
+- **v2.692.0 ("The Wrested Blade") — Disarming Attack** (Battle Master Fighter
+  Lv 3+): closes the targeted-maneuver tail. With a `target_combatant_id`
+  (trust-the-caller), `use_disarming_attack` applies the superiority die as
+  bonus damage via `_apply_damage_to_combatant` and rolls the STR save via
+  `_resolve_feature_save` with `condition_buff=None` (no engine condition for
+  "drop object" → resolved-but-GM-narrated). Surfaces `damage_applied` +
+  `feature_save`. Harness: `test_disarming_attack.py` (+2). **All four targeted
+  Battle Master maneuvers (Trip / Pushing / Disarming / Menacing) now
+  mechanize damage + save server-side.**
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`
