@@ -1,6 +1,6 @@
 # Vision & Light — server-side sight/obscurement engine
 
-**Status:** 🟠 Phase 0 shipped (v2.704.0 — data model + migration + GM set-endpoints); Phases 1–5 unstarted. Plan authored v2.703.0.
+**Status:** 🟠 Phases 0–1 shipped (v2.704.0 data model + migration; v2.705.0 the `_visibility_between` resolver + read-only `/visibility` endpoint). Phase 2 (`/attack` wiring — the headline payoff) is next. Plan authored v2.703.0.
 
 The one combat mechanic that is still **entirely GM-narrated** and is *not*
 buildable on an existing substrate: whether an attacker can **see** its
@@ -114,10 +114,12 @@ changes** — it can be validated in isolation before touching `/attack`.
    set-endpoints (`/settings/maps/{id}/ambient_light`; `PATCH /token/{id}`
    light radii) + surfaced on `GET /tokens` + `_token_dict`. No combat
    behavior change yet. Harness: `test_vision_light_phase0.py`.
-1. **Phase 1 — `_visibility_between` resolver (M).** The pure resolver above
-   + a normalized senses extractor (folds the existing darkvision/truesight/
-   blindsight/devils-sight flags). Harness tests over a matrix of
-   ambient × senses × range. No caller changes.
+1. **Phase 1 — `_visibility_between` resolver (M). ✅ shipped v2.705.0.**
+   The resolver + `_combatant_vision_senses` extractor (folds darkvision/
+   truesight/blindsight/devils-sight across buffs + sheet) + `_illumination_
+   at_point` (ambient ∪ token light sources). Exposed read-only at
+   `GET /visibility` for validation. Harness: `test_vision_light_phase1.py`
+   (the ambient × senses × range matrix). No `/attack` change yet.
 2. **Phase 2 — wire into `/attack` (M).** Replace the manual
    `attacker_cant_see_target` body flag with the computed verdict: target
    `unseen` → attack **disadvantage** (the plumbing already exists); attacker

@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.705.0] - 2026-06-27 — "The Seeing Eye"
+
+**Schema version:** 82
+
+**Commit summary:** Vision & Light Phase 1 — the `_visibility_between` resolver + a read-only `/visibility` query endpoint. No `/attack` wiring yet.
+
+**Description:** Phase 1 of [`docs/plans/vision-and-light.md`](docs/plans/vision-and-light.md), built on the Phase 0 data model. Adds `_visibility_between(db, campaign_id, attacker, target)` → `{visibility, illumination, range_ft, senses}` where visibility ∈ `seen` / `obscured` / `unseen`: it computes the illumination at the target's square (the map's `ambient_light` upgraded by any token light source whose bright/dim radius covers it — `_illumination_at_point`), normalizes the attacker's vision senses (`_combatant_vision_senses` aggregates `darkvision_ft`/`blindsight_ft`/`truesight_ft` + Devil's-Sight `sees_in_darkness` across the combatant's buffs + sheet), and applies PHB p.183/194-195: truesight/blindsight in range → seen; Devil's Sight makes dark read as bright; darkvision in range makes dark read as dim; then bright→seen, dim→obscured (lightly obscured = Perception disadvantage, **not** an attack edge), dark→unseen. Off-grid tokens fall back to `seen` (no obscurement model). The resolver is exposed read-only at `GET /api/campaign/{cid}/visibility?attacker_combatant_id=&target_combatant_id=` for validation + the future GM/canvas UI — **nothing wires it into `/attack` yet** (that's Phase 2, the headline payoff). Invisibility composes at the attack site and is out of Phase-1 scope.
+
+### Added
+- `tests/harness/test_vision_light_phase1.py` (new, +7) — the resolver matrix via `/visibility`: bright→seen; dark+no-senses→unseen; dark+darkvision(≥range)→obscured (illumination dim); darkvision-beyond-range→unseen; dark+truesight→seen; dark+Devil's-Sight→seen; dark+target-carries-light→seen. Senses ride combatant buffs (read by the resolver, the same seeding the Relentless-Avenger move test uses).
+
+### Changed
+- `app/routes/tabletop_routes.py` — added `_combatant_vision_senses`, `_illumination_at_point`, `_visibility_between` (+ `_combatant_effective_buffs` / `_combatant_sheet_for_vision` / `_brighter` helpers) and the read-only `GET /visibility` endpoint.
+
+### Schema
+- No schema change (still v82).
+
 ## [2.704.0] - 2026-06-27 — "The First Lantern"
 
 **Schema version:** 82

@@ -5565,6 +5565,180 @@ def _combatant_token(db: Session, campaign_id: int, combatant: "dict | None"):
     return None
 
 
+# ── Vision & Light — Phase 1 resolver (docs/plans/vision-and-light.md) ──
+# A pure-ish "can attacker see target?" verdict combining the map's ambient
+# light + token light sources + the attacker's vision senses. No caller
+# wires it into /attack yet (that's Phase 2); the read-only /visibility
+# endpoint below exposes it for validation + the future canvas/GM UI.
+
+def _combatant_effective_buffs(
+    db: Session, campaign_id: int, combatant: "dict | None",
+) -> list:
+    """The active buff list for a combatant — PC buffs from the hub store
+    (`_get_buffs` by char_id), NPC buffs from the combatant dict."""
+    if not combatant:
+        return []
+    cid = combatant.get("char_id")
+    if cid:
+        return list(_get_buffs(campaign_id, int(cid)) or [])
+    return list(combatant.get("buffs") or [])
+
+
+def _combatant_sheet_for_vision(
+    db: Session, campaign_id: int, combatant: "dict | None",
+) -> dict:
+    """Best-effort sheet for a combatant — the Character sheet (PC) or the
+    monster-template projection (NPC). Empty dict when neither resolves."""
+    if not combatant:
+        return {}
+    cid = combatant.get("char_id")
+    if cid:
+        ch = db.query(Character).filter(Character.id == int(cid)).first()
+        return dict(ch.sheet or {}) if ch else {}
+    tmpl_id = combatant.get("token_template_id")
+    if tmpl_id:
+        t = db.query(TokenTemplate).filter(TokenTemplate.id == int(tmpl_id)).first()
+        if t:
+            try:
+                return _monster_template_to_sheet(t, campaign_id)
+            except Exception:
+                return {}
+    return {}
+
+
+def _combatant_vision_senses(
+    db: Session, campaign_id: int, combatant: "dict | None",
+) -> dict:
+    """Normalize a combatant's vision senses to
+    ``{darkvision_ft, blindsight_ft, truesight_ft, sees_in_darkness}``.
+    Aggregates the max range across the combatant's active buffs
+    (`effects.darkvision_ft` / `truesight_ft` / `blindsight_ft`) + the sheet's
+    own `darkvision_ft` (race / monster sense). `sees_in_darkness` is True
+    when any buff carries `devils_sight_through_magical_darkness` or
+    `sees_in_darkness` (Devil's Sight). Phase-1 simplification: monster
+    `senses` strings aren't parsed beyond a numeric `darkvision_ft` field.
+    """
+    out = {"darkvision_ft": 0, "blindsight_ft": 0,
+           "truesight_ft": 0, "sees_in_darkness": False}
+    sheet = _combatant_sheet_for_vision(db, campaign_id, combatant)
+    for fld in ("darkvision_ft", "blindsight_ft", "truesight_ft"):
+        try:
+            out[fld] = max(out[fld], int(sheet.get(fld) or 0))
+        except (TypeError, ValueError):
+            pass
+    for b in _combatant_effective_buffs(db, campaign_id, combatant):
+        eff = (b or {}).get("effects")
+        if not isinstance(eff, dict):
+            continue
+        for fld in ("darkvision_ft", "blindsight_ft", "truesight_ft"):
+            try:
+                out[fld] = max(out[fld], int(eff.get(fld) or 0))
+            except (TypeError, ValueError):
+                pass
+        if eff.get("devils_sight_through_magical_darkness") or \
+                eff.get("sees_in_darkness"):
+            out["sees_in_darkness"] = True
+    return out
+
+
+_LIGHT_RANK = {"dark": 0, "dim": 1, "bright": 2}
+
+
+def _brighter(a: str, b: str) -> str:
+    return a if _LIGHT_RANK.get(a, 0) >= _LIGHT_RANK.get(b, 0) else b
+
+
+def _illumination_at_point(
+    db: Session, campaign_id: int, map_row, tx: float, ty: float,
+) -> str:
+    """The illumination level (`bright`/`dim`/`dark`) at a map point: the
+    map ambient, upgraded by any token light source whose bright/dim radius
+    covers the point (bright wins, then dim)."""
+    level = (getattr(map_row, "ambient_light", "bright") or "bright")
+    if level not in _LIGHT_RANK:
+        level = "bright"
+    if level == "bright":
+        return "bright"  # already max; no source can raise it
+    grid_px = int(map_row.grid_size_px or 70)
+    grid_type = getattr(map_row.grid_type, "value", map_row.grid_type) or "square"
+    for t in db.query(Token).filter(Token.map_id == map_row.id).all():
+        b = int(getattr(t, "light_bright_ft", 0) or 0)
+        d = int(getattr(t, "light_dim_ft", 0) or 0)
+        if b <= 0 and d <= 0:
+            continue
+        dist = _distance_ft_between_points(
+            grid_px, grid_type, float(t.x or 0), float(t.y or 0),
+            float(tx), float(ty))
+        if b > 0 and dist <= b:
+            return "bright"
+        if d > 0 and dist <= d:
+            level = _brighter(level, "dim")
+    return level
+
+
+def _visibility_between(
+    db: Session, campaign_id: int, attacker: "dict | None",
+    target: "dict | None",
+) -> dict:
+    """Phase 1 verdict: can ``attacker`` see ``target``? Returns
+    ``{visibility, illumination, range_ft, senses}`` where ``visibility`` is
+    ``seen`` / ``obscured`` / ``unseen``.
+
+    Rules (PHB p.183 / p.194-195):
+      - illumination at the target's square = ambient ∪ light sources;
+      - truesight / blindsight within range → always ``seen``;
+      - ``sees_in_darkness`` (Devil's Sight) treats ``dark`` as ``bright``;
+      - darkvision within range treats ``dark`` as ``dim``;
+      - then: ``bright`` → seen, ``dim`` → obscured (lightly obscured =
+        Perception disadvantage, NOT an attack edge), ``dark`` → unseen.
+    Invisibility composes at the /attack site (Phase 2) and is out of scope
+    here. Falls back to ``seen`` when either token is off-grid (no map).
+    """
+    result = {"visibility": "seen", "illumination": "bright",
+              "range_ft": None, "senses": {}}
+    atk_tok = _combatant_token(db, campaign_id, attacker)
+    tgt_tok = _combatant_token(db, campaign_id, target)
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    map_row = (
+        db.query(Map).filter(Map.id == campaign.active_map_id).first()
+        if campaign and campaign.active_map_id else None
+    )
+    if not (atk_tok and tgt_tok and map_row):
+        return result  # off-grid → no obscurement model, assume seen
+    senses = _combatant_vision_senses(db, campaign_id, attacker)
+    result["senses"] = senses
+    grid_px = int(map_row.grid_size_px or 70)
+    grid_type = getattr(map_row.grid_type, "value", map_row.grid_type) or "square"
+    rng = _distance_ft_between_points(
+        grid_px, grid_type, float(atk_tok.x or 0), float(atk_tok.y or 0),
+        float(tgt_tok.x or 0), float(tgt_tok.y or 0))
+    result["range_ft"] = rng
+    illum = _illumination_at_point(
+        db, campaign_id, map_row, float(tgt_tok.x or 0), float(tgt_tok.y or 0))
+    result["illumination"] = illum
+    # Senses that grant sight regardless of light, within range.
+    if senses["truesight_ft"] >= rng and senses["truesight_ft"] > 0:
+        result["visibility"] = "seen"
+        return result
+    if senses["blindsight_ft"] >= rng and senses["blindsight_ft"] > 0:
+        result["visibility"] = "seen"
+        return result
+    # Devil's Sight: magical darkness reads as bright.
+    if illum == "dark" and senses["sees_in_darkness"]:
+        illum = "bright"
+    # Darkvision: darkness reads as dim within range.
+    elif illum == "dark" and senses["darkvision_ft"] >= rng \
+            and senses["darkvision_ft"] > 0:
+        illum = "dim"
+    result["illumination"] = illum
+    result["visibility"] = (
+        "seen" if illum == "bright"
+        else "obscured" if illum == "dim"
+        else "unseen"
+    )
+    return result
+
+
 async def _force_move(
     db: Session,
     campaign_id: int,
@@ -19953,6 +20127,33 @@ def list_tokens(
             # illumination ("bright" default). Surfaced for the Phase-1
             # resolver + future canvas lighting.
             "ambient_light": getattr(map_row, "ambient_light", "bright") or "bright"}
+
+
+@router.get("/api/campaign/{campaign_id}/visibility")
+def get_visibility(
+    campaign_id: int,
+    attacker_combatant_id: str,
+    target_combatant_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.705.0 — Phase 1 of docs/plans/vision-and-light.md: read-only
+    "can the attacker see the target?" query exposing the
+    `_visibility_between` resolver for validation + the future GM/canvas UI.
+    Query params: ``attacker_combatant_id`` + ``target_combatant_id`` (battle
+    combatant ids). Returns ``{visibility, illumination, range_ft, senses}``
+    (visibility ∈ seen / obscured / unseen). No `/attack` wiring yet — that's
+    Phase 2.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    attacker = _lookup_combatant(campaign_id, str(attacker_combatant_id).strip())
+    target = _lookup_combatant(campaign_id, str(target_combatant_id).strip())
+    if attacker is None or target is None:
+        raise HTTPException(404, "attacker or target combatant not found")
+    verdict = _visibility_between(db, campaign_id, attacker, target)
+    return {"ok": True, **verdict}
 
 
 @router.post("/api/campaign/{campaign_id}/tokens")
