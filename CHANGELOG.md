@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.718.0] - 2026-06-27 — "The Open Door"
+
+**Schema version:** 83
+
+**Commit summary:** Suggestion system — the in-app "💡 Suggest" button + modal: a topnav link and a tabletop Quick Links pill that file reports. Completes the arc.
+
+**Description:** Final commit of the suggestion-system arc (backend v2.716.0 + admin view v2.717.0). Adds a shared **Suggest / report** modal in `base.html` (outside the overridable blocks, so it's on every page including the tabletop, which suppresses the topnav) with a type select (suggestion / issue), title, and details, posting to `POST /api/suggestions` along with the current page URL for context. Two triggers call `window.openSuggestModal()`: a **💡 Suggest** link in the global topnav (logged-in users, every non-tabletop page) and a **💡 Suggest** pill in the tabletop Quick Links panel (since the tabletop hides the topnav). Closeable via Cancel, backdrop click, or Escape; shows an inline "Thanks!" on success.
+
+### Added
+- `app/templates/base.html` — the Suggest/report modal + JS (`openSuggestModal`/`closeSuggestModal`) + the topnav "💡 Suggest" link.
+- `app/templates/tabletop.html` — a "💡 Suggest" Quick Links pill.
+- `tests/harness_ui/test_tabletop_canvas.py::test_suggest_modal_submits` (+1) — opens the modal, fills a title, submits, and asserts the success message (proving the `/api/suggestions` POST returned 2xx) with no JS errors.
+
+### Schema
+- No schema change (still v83).
+
 ## [2.717.0] - 2026-06-27 — "The Triage Desk"
 
 **Schema version:** 83

@@ -127,6 +127,8 @@
                 <a href="/characters">My Characters</a>
                 <a href="/settings">Settings</a>
                 {% if user.is_admin %}<a href="/admin">Admin</a>{% endif %}
+                {# v2.718.0 — open the Suggest / Report modal (defined near </body>). #}
+                <a href="#" onclick="event.preventDefault(); window.openSuggestModal && window.openSuggestModal();" title="Suggest a feature or report an issue">💡 Suggest</a>
                 <a href="/logout">Logout</a>
             {% endif %}
         </nav>
@@ -141,5 +143,98 @@
         SimpleVTT v{{ APP_VERSION }} · schema v{{ SCHEMA_VERSION }} · <a href="/wiki" target="_blank" rel="noopener noreferrer">Wiki</a>
     </footer>
     {% endblock %}
+
+    {# v2.718.0 — Suggest / Report modal. Lives in base.html (outside the
+       overridable blocks) so it's available on EVERY page including the
+       tabletop, which suppresses the topnav block. Two triggers call
+       window.openSuggestModal(): the topnav "💡 Suggest" link and the
+       tabletop Quick Links pill. POSTs to /api/suggestions (v2.716.0). #}
+    {% if user %}
+    <div id="suggest-modal-overlay" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.55);align-items:center;justify-content:center;padding:16px;">
+        <div role="dialog" aria-modal="true" aria-labelledby="suggest-modal-title"
+             style="background:var(--bg);color:var(--fg);border:1px solid var(--accent);border-radius:12px;max-width:480px;width:100%;padding:18px 20px;box-shadow:0 8px 32px rgba(0,0,0,.45);">
+            <h2 id="suggest-modal-title" style="margin:0 0 12px;font-size:18px;">💡 Suggest / report an issue</h2>
+            <form id="suggest-form">
+                <label for="suggest-kind" style="display:block;font-size:13px;margin-bottom:4px;">Type</label>
+                <select id="suggest-kind" style="width:100%;margin-bottom:10px;">
+                    <option value="suggestion">💡 Suggestion</option>
+                    <option value="issue">🐞 Issue / bug</option>
+                </select>
+                <label for="suggest-title" style="display:block;font-size:13px;margin-bottom:4px;">Title</label>
+                <input id="suggest-title" type="text" maxlength="200" required
+                       placeholder="Short summary" style="width:100%;margin-bottom:10px;">
+                <label for="suggest-body" style="display:block;font-size:13px;margin-bottom:4px;">Details (optional)</label>
+                <textarea id="suggest-body" rows="4" maxlength="8000"
+                          placeholder="What happened, or what you'd like to see"
+                          style="width:100%;margin-bottom:12px;"></textarea>
+                <div id="suggest-msg" style="font-size:13px;margin-bottom:10px;min-height:18px;"></div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                    <button type="button" id="suggest-cancel">Cancel</button>
+                    <button type="submit">Send</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <script>
+        (function () {
+            const ov = document.getElementById('suggest-modal-overlay');
+            const msg = document.getElementById('suggest-msg');
+            window.openSuggestModal = function () {
+                if (!ov) return;
+                ov.style.display = 'flex';
+                if (msg) msg.textContent = '';
+                const t = document.getElementById('suggest-title');
+                if (t) t.focus();
+            };
+            window.closeSuggestModal = function () {
+                if (ov) ov.style.display = 'none';
+            };
+            if (ov) {
+                ov.addEventListener('click', function (e) {
+                    if (e.target === ov) window.closeSuggestModal();
+                });
+            }
+            const cancel = document.getElementById('suggest-cancel');
+            if (cancel) cancel.addEventListener('click', window.closeSuggestModal);
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && ov && ov.style.display !== 'none') {
+                    window.closeSuggestModal();
+                }
+            });
+            const form = document.getElementById('suggest-form');
+            if (form) form.addEventListener('submit', async function (e) {
+                e.preventDefault();
+                const kind = document.getElementById('suggest-kind').value;
+                const title = (document.getElementById('suggest-title').value || '').trim();
+                const body = (document.getElementById('suggest-body').value || '').trim();
+                if (!title) {
+                    if (msg) { msg.style.color = 'var(--danger, #c0392b)'; msg.textContent = 'Please add a title.'; }
+                    return;
+                }
+                try {
+                    const r = await fetch('/api/suggestions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            kind: kind, title: title, body: body,
+                            page_url: location.pathname + location.search,
+                        }),
+                    });
+                    if (r.ok) {
+                        if (msg) { msg.style.color = 'var(--accent)'; msg.textContent = 'Thanks! Your report was sent.'; }
+                        form.reset();
+                        setTimeout(window.closeSuggestModal, 1200);
+                    } else if (msg) {
+                        msg.style.color = 'var(--danger, #c0392b)';
+                        msg.textContent = 'Could not send (' + r.status + ').';
+                    }
+                } catch (err) {
+                    if (msg) { msg.style.color = 'var(--danger, #c0392b)'; msg.textContent = 'Could not send.'; }
+                }
+            });
+        })();
+    </script>
+    {% endif %}
 </body>
 </html>

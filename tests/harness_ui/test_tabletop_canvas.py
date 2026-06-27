@@ -349,3 +349,28 @@ def test_quick_links_has_home_button(gm_page: Page) -> None:
     # regardless of visibility) rather than inner_text() (empty when hidden).
     assert "Home" in (home.first.text_content() or ""), (
         f"Home pill label unexpected: {home.first.text_content()!r}")
+
+
+def test_suggest_modal_submits(gm_page: Page) -> None:
+    """v2.718.0 — the in-app Suggest / Report modal (base.html, opened from
+    the tabletop Quick Links pill + the topnav) posts to /api/suggestions.
+    Opens the modal, fills a title, submits, and asserts the success message
+    (the JS only shows it on a 2xx response, proving the POST succeeded)."""
+    console_errors: list[str] = []
+    gm_page.on("pageerror", lambda exc: console_errors.append(str(exc)))
+    gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}")
+    _wait_for_tabletop_ready(gm_page)
+
+    # The modal markup must exist, and the opener must be defined.
+    assert gm_page.evaluate("() => typeof window.openSuggestModal === 'function'")
+    gm_page.evaluate("() => window.openSuggestModal()")
+    expect(gm_page.locator("#suggest-modal-overlay")).to_be_visible()
+
+    gm_page.select_option("#suggest-kind", "issue")
+    gm_page.fill("#suggest-title", "UI harness suggestion")
+    gm_page.fill("#suggest-body", "Filed by the harness.")
+    gm_page.click("#suggest-form button[type='submit']")
+
+    # Success message appears on a 2xx; gives the POST a moment to round-trip.
+    expect(gm_page.locator("#suggest-msg")).to_contain_text("Thanks", timeout=4000)
+    assert not console_errors, f"JS errors during suggest flow: {console_errors}"
