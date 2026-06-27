@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.693.0] - 2026-06-26 — "The Refused Fall"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — apply Undying Sentinel's "drop to 1 HP instead of 0" server-side (Ancients Paladin).
+
+**Description:** `use_undying_sentinel` (PHB p.87) decremented the once-per-long-rest resource + announced, but the GM applied the "drop to 1 HP instead of 0" HP-mutation by hand. The endpoint now brings the caster up to **exactly 1 HP** server-side via `_apply_heal_to_combatant` (the Protective Spirit v2.99.458 self-apply shape — heal `1 - current`, so a 0-HP/dying paladin → 1 HP and the death-save state flips dying → alive; a misuse above 0 HP is a no-op heal). Called on the trust-the-caller convention at the moment the paladin is reduced to 0. This deliberately rides the heal pipeline on the caster's own combatant rather than threading a fourth branch into the high-traffic `_apply_hp_change` HP-floor chain (Relentless Endurance / Death Ward / Relentless Rage), avoiding a manual-decrement-vs-auto-fire conflict. The response/broadcast gain `hp_after` / `revived`.
+
+### Added
+- `tests/harness/test_undying_sentinel.py::test_us_drops_to_one_hp_when_at_zero` (+1) — sets Caelan (Ancients Lv 15) to 0 HP via the sheet, then asserts the endpoint returns `hp_after == 1` + `revived is True` and the `/sheet-json` HP reflects 1.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_undying_sentinel` brings the caster to 1 HP via `_apply_heal_to_combatant`; surfaces `hp_after` / `revived`.
+- `docs/automation-coverage.md` — `use_undying_sentinel` note updated (drop-to-1-HP applied server-side).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Undying Sentinel.
+- `docs/test-harness-coverage.md` — catalog the new test.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.692.0] - 2026-06-26 — "The Wrested Blade"
 
 **Schema version:** 81

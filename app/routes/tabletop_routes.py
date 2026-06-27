@@ -82472,10 +82472,14 @@ async def use_undying_sentinel(
     current=1, reset=long) if missing — the /rest long-rest
     hook handles refill via the generic resource-refill loop.
 
-    v1 announce-only — the actual "drop to 1 HP instead of 0"
-    HP-mutation is GM-tracked (a follow-up could wire this into
-    the /apply_damage path to set HP to 1 instead of 0 when
-    Undying Sentinel uses remain).
+    v2.693.0 (Phase 8): the "drop to 1 HP instead of 0" HP-mutation
+    is now applied server-side. Called at the moment the paladin is
+    reduced to 0 (trust-the-caller — the killing damage already
+    landed): the caster's combatant is brought up to **exactly 1 HP**
+    via `_apply_heal_to_combatant` (the Protective Spirit self-apply
+    shape), which flips the death-save state dying → alive. If the
+    caster is somehow above 0 HP it's a no-op heal. Response gains
+    `hp_after` / `revived`.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -82537,6 +82541,20 @@ async def use_undying_sentinel(
     flag_modified(char, "sheet")
     db.commit()
 
+    # v2.693.0 — Phase 8: bring the caster up to exactly 1 HP (the
+    # "drop to 1 instead of 0" mutation). Heal `1 - current` (so a
+    # 0-HP/dying paladin → 1 HP + alive via `_apply_heal_to_combatant`'s
+    # death-save flip; a >0-HP misuse → no-op heal). Self-apply on the
+    # caster's own combatant, the Protective Spirit (v2.99.458) shape.
+    _hp_cur = int((sheet.get("hp") or {}).get("current") or 0)
+    _heal_to_one = max(0, 1 - _hp_cur)
+    _us_res = await _apply_heal_to_combatant(
+        db, campaign_id, {"char_id": char.id, "name": char.name},
+        _heal_to_one,
+    )
+    hp_after = int(_us_res.get("hp_after") or 0)
+    revived = bool(_us_res.get("revived"))
+
     pal_lv = _paladin_level_from_sheet(sheet)
 
     membership = (
@@ -82573,6 +82591,8 @@ async def use_undying_sentinel(
             "source": "undying-sentinel",
             "uses_remaining": us_cur - 1,
             "paladin_level": pal_lv,
+            "hp_after": hp_after,
+            "revived": revived,
         },
     })
 
@@ -82582,6 +82602,8 @@ async def use_undying_sentinel(
         "uses_remaining": us_cur - 1,
         "max_uses": us_max,
         "paladin_level": pal_lv,
+        "hp_after": hp_after,
+        "revived": revived,
     }
 
 

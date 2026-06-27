@@ -665,6 +665,16 @@ composition. Batch by class, same cadence as the breadth sweep.
   `feature_save`. Harness: `test_disarming_attack.py` (+2). **All four targeted
   Battle Master maneuvers (Trip / Pushing / Disarming / Menacing) now
   mechanize damage + save server-side.**
+- **v2.693.0 ("The Refused Fall") — Undying Sentinel** (Ancients Paladin Lv
+  15+): `use_undying_sentinel` now applies the "drop to 1 HP instead of 0"
+  HP-mutation — brings the caster to exactly 1 HP via
+  `_apply_heal_to_combatant` (heal `1 - current`; flips the death-save state
+  dying → alive), the Protective Spirit self-apply shape. Deliberately rides
+  the heal pipeline on the caster's own combatant rather than threading a
+  fourth branch into the high-traffic `_apply_hp_change` HP-floor chain
+  (Relentless Endurance / Death Ward / Relentless Rage), avoiding a
+  manual-decrement-vs-auto-fire conflict. Surfaces `hp_after`/`revived`.
+  Harness: `test_undying_sentinel.py` (+1).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`
