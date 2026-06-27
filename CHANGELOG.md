@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.698.0] - 2026-06-26 — "The Nimble Exit"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — wire `/token/move` to honor the `disengage` flag, making Step of the Wind / Drunken Technique's disengage mechanical.
+
+**Description:** Step of the Wind (Monk) and Drunken Technique (Way of the Drunken Master) already install a buff carrying `effects.disengage: True`, but nothing read it — a "disengaged" mover still tripped opportunity-attack prompts. This wires the read into `/token/move`: a mover carrying any active buff with `effects.disengage: True` provokes **no** opportunity attacks (the triggers a move out of reach would raise are dropped, so no `oa_confirmation_required` 409). Unlike the single-use free-move budget (Relentless Avenger / Skirmisher / Tempestuous Magic, v2.696.0/.697.0), the disengage flag is **not consumed** on the move — RAW the Disengage action lasts the whole turn, so subsequent moves also provoke nothing while the buff persists. The read keys on the buff's effect, not the class, so any disengage source (incl. Cunning Action) rides it. The move response gains `disengage_applied`.
+
+### Added
+- `tests/harness/test_disengage_oa.py` (new, +3) — `test_disengage_suppresses_oa` (mover with the buff leaves a watcher's reach → 200, no triggers, `disengage_applied True`), `test_disengage_not_consumed_second_move` (a second out-of-reach move also suppresses → persists, not consumed), `test_move_provokes_oa_without_disengage` (control: no buff → 409 `oa_confirmation_required`).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `/token/move` OA check suppresses triggers when the mover has an active `disengage` buff (not consumed); surfaces `disengage_applied`.
+- `docs/automation-coverage.md` — `use_step_of_the_wind` / `use_drunken_technique` notes updated (disengage now read by the move path).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += disengage OA-read.
+- `docs/test-harness-coverage.md` — catalog the new test file.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.697.0] - 2026-06-26 — "The Riding Storm"
 
 **Schema version:** 81

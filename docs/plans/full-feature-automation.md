@@ -710,6 +710,14 @@ composition. Batch by class, same cadence as the breadth sweep.
   on-ground / recent-cast prereq + fly-vs-walk stay GM-narrated. Surfaces
   `buff_installed`. Harness: `test_tempestuous_magic.py` (+1, end-to-end
   over-cap move proof).
+- **v2.698.0 ("The Nimble Exit") — Disengage OA-read** (Monk Step of the Wind
+  / Drunken Technique, + any Cunning Action source): wired `/token/move`'s OA
+  check to honor a mover's `effects.disengage: True` buff — a disengaged mover
+  provokes no opportunity attacks for the turn (triggers dropped, no 409).
+  Effect-keyed (not class-specific); **not consumed** (persists for the turn,
+  unlike the single-use free-move budget). Makes the long-installed-but-unread
+  disengage flag mechanical. Surfaces `disengage_applied`. Harness:
+  `test_disengage_oa.py` (+3).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

@@ -17448,6 +17448,20 @@ async def move_token(
     if _ra_buff is not None and distance_ft > 0:
         _ra_applied = True
         oa_triggers = []
+    # v2.698.0 — Disengage: a mover carrying an active `disengage` buff
+    # (Step of the Wind, Drunken Technique, Cunning Action) provokes no
+    # opportunity attacks for the rest of the turn. RAW the Disengage
+    # action lasts the whole turn, so unlike the single-use free-move
+    # budget above the flag is NOT consumed here — it persists until the
+    # buff expires at turn end. Suppresses all OA triggers this move.
+    _disengaged = False
+    if oa_triggers and token.character_id and distance_ft > 0:
+        for _db in _get_buffs(campaign_id, int(token.character_id)):
+            if ((_db or {}).get("effects") or {}).get("disengage"):
+                _disengaged = True
+                break
+        if _disengaged:
+            oa_triggers = []
     if oa_triggers and not bool(body.get("oa_confirmed")):
         return JSONResponse(status_code=409, content={
             "error": "oa_confirmation_required",
@@ -17814,6 +17828,9 @@ async def move_token(
         # v2.158.51 — Relentless Avenger applied to this move (OAs
         # suppressed + buff consumed). False on every other move.
         "relentless_avenger_applied": _ra_applied,
+        # v2.698.0 — Disengage applied to this move (OAs suppressed by an
+        # active disengage buff; NOT consumed — persists for the turn).
+        "disengage_applied": _disengaged,
         # v2.66.0 — F1 OA: surface trigger advisories on the move
         # response too so harness tests + future client UI can assert
         # on them without watching the WS broadcast.

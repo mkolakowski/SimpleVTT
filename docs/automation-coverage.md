@@ -191,7 +191,7 @@ or passive damage-boosters that already ride other code paths
 | `use_diamond_soul_reroll` | ✅ tracked | A use/resource |
 | `use_disarming_attack` | ✅ tracked | v2.692.0 — with `target_combatant_id` (trust-the-caller), applies the superiority die as bonus damage (`_apply_damage_to_combatant`) + rolls the STR save (`_resolve_feature_save`, `condition_buff=None`); drop-object outcome GM-narrated |
 | `use_distracting_strike` | ✅ tracked | A use/resource |
-| `use_drunken_technique` | ✅ tracked | D buff-install (1-turn Disengage rider + speed bonus) |
+| `use_drunken_technique` | ✅ tracked | D buff-install (1-turn Disengage rider + speed bonus). v2.698.0 — the `disengage` flag is now read by `/token/move` (suppresses OAs, not consumed); speed bonus folds into the move cap (v2.158.37) |
 | `use_divine_fury` | ✅ tracked | D buff-install |
 | `use_divine_intervention` | ✅ tracked | A use/resource |
 | `use_draconic_presence` | ✅ tracked | C save-or-condition |
@@ -306,7 +306,7 @@ or passive damage-boosters that already ride other code paths
 | `use_spiritual_weapon` | ✅ tracked | H summon, damage |
 | `use_star_map` | ✅ tracked | D buff-install + auto-bootstrap guiding-bolt-charges resource |
 | `use_steel_defender` | ✅ tracked | H summon, damage |
-| `use_step_of_the_wind` | ✅ tracked | D buff-install |
+| `use_step_of_the_wind` | ✅ tracked | D buff-install. v2.698.0 — the `disengage` flag is now read by `/token/move` (a disengaged mover provokes no OAs for the turn; not consumed) |
 | `use_stillness_of_mind` | ✅ tracked | A use/resource |
 | `use_storm_aura` | ✅ tracked | Desert = auto-tick aura buff (v2.99.426). v2.677.0 — with `target_combatant_id`, Sea rolls the target's DEX save + applies the lightning save-for-half (`_apply_damage_to_combatant`) and Tundra grants temp HP (`_grant_temp_hp`); announce-only without a target |
 | `use_stormborn` | ✅ tracked | D buff-install |
