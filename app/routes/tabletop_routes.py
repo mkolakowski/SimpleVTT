@@ -97300,8 +97300,15 @@ async def use_tempestuous_magic(
     higher. You must be on the ground when you cast the spell."
 
     Body: ``{character_id, override?}``. Costs a bonus chip.
-    v1 announce-only — recent-cast requirement + ground
-    restriction + OA-free fly GM-tracked.
+
+    v2.697.0 (Phase 8): installs a 1-round `tempestuous-magic-fly` buff
+    carrying `free_movement_remaining_ft: 10` + `oa_immune_during_move`,
+    riding the generalized free-move substrate (v2.696.0). The
+    Sorcerer's next `/token/move` of up to 10 ft is exempt from the
+    over-speed cap AND provokes no opportunity attacks, then the buff
+    is consumed. The "must be on the ground, immediately after casting
+    a Lv 1+ spell" prerequisite + the fly-vs-walk distinction stay
+    GM-narrated (the endpoint is the bonus action).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -97348,6 +97355,29 @@ async def use_tempestuous_magic(
 
     sorc_lv = _sorcerer_level_from_sheet(sheet)
 
+    # v2.697.0 — Phase 8: install the free-move buff so the Sorcerer's next
+    # move (up to 10 ft) is cap-exempt + OA-free, riding the generalized
+    # free-move substrate (v2.696.0). Single-use: consumed on the next move.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "tempestuous-magic-fly",
+        "name": "Tempestuous Magic (fly)",
+        "icon": "🌪️",
+        "duration_rounds": 1,
+        "duration_max": 1,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "free_movement_remaining_ft": 10,
+            "oa_immune_during_move": True,
+        },
+        "desc": (
+            "+10 ft fly movement that doesn't provoke OAs. (Storm Sorcery "
+            "Lv 1+ Tempestuous Magic; consumed on next move.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -97380,6 +97410,7 @@ async def use_tempestuous_magic(
             "fly_distance": 10,
             "oa_free": True,
             "sorcerer_level": sorc_lv,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -97389,6 +97420,7 @@ async def use_tempestuous_magic(
         "fly_distance": 10,
         "oa_free": True,
         "sorcerer_level": sorc_lv,
+        "buff_installed": buff_installed,
     }
 
 

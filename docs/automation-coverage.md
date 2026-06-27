@@ -318,7 +318,7 @@ or passive damage-boosters that already ride other code paths
 | `use_sweeping_attack` | ✅ tracked | A use/resource |
 | `use_tales_from_beyond` | ✅ tracked | v2.695.0 — with `target_combatant_id`, resolves the 4 mechanizable tales: 3/6 temp HP (`_grant_temp_hp`), 4 Brute STR save → Prone + 2d10 force, 5 Tragic Romance WIS save → Charmed (`_resolve_feature_save`); tales 1/2 GM-narrated |
 | `use_telepathic_speech` | ✅ tracked | A use/resource |
-| `use_tempestuous_magic` | ✅ tracked | A use/resource |
+| `use_tempestuous_magic` | ✅ tracked | v2.697.0 — installs a `tempestuous-magic-fly` free-move buff (`free_movement_remaining_ft: 10` + `oa_immune_during_move`) riding the generalized free-move read in `/token/move`; next ≤10-ft move is cap-exempt + OA-free, then consumed; on-ground/recent-cast prereq GM-narrated |
 | `use_tentacle_of_the_deeps` | ✅ tracked | v2.678.0 — with `target_combatant_id`, rolls the melee spell attack vs the target's AC (`_read_target_ac`; nat 20 crits + doubles dice, nat 1 misses) + applies the cold on a hit via `_apply_damage_to_combatant`; speed reduction GM-narrated; announce-only without a target |
 | `use_third_eye` | ✅ tracked | A use/resource |
 | `use_thorn_whip` | ✅ tracked | G forced-move, damage |

@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.697.0] - 2026-06-26 — "The Riding Storm"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — mechanize Tempestuous Magic (Storm Sorcery) onto the generalized free-move substrate.
+
+**Description:** `use_tempestuous_magic` (PHB p.137) marked the bonus action + announced, but the 10-ft fly-without-OAs was GM-tracked. It now installs a 1-round `tempestuous-magic-fly` buff carrying `free_movement_remaining_ft: 10` + `oa_immune_during_move`, riding the **generalized free-move substrate** shipped in v2.696.0 — so the Sorcerer's next `/token/move` of up to 10 ft is exempt from the over-speed cap AND provokes no opportunity attacks, then the buff is consumed. The "must be on the ground, immediately after casting a Lv 1+ spell" prerequisite and the fly-vs-walk distinction stay GM-narrated (the endpoint is the bonus action). The response/broadcast gain `buff_installed`. Second feature to ride the v2.696.0 substrate (after Skirmisher), confirming its reusability.
+
+### Added
+- `tests/harness/test_tempestuous_magic.py` (+1) — `test_tm_buff_rides_generalized_free_move_substrate` (Zara at her 30-ft cap + the buff → a +5-ft over-cap move returns 200 with `relentless_avenger_applied == True`; control without the buff 409s `over_speed_cap`). `test_use_tm_happy_lv5` now seeds a battle + asserts `buff_installed is True`.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_tempestuous_magic` installs the free-move buff + surfaces `buff_installed`.
+- `docs/automation-coverage.md` — `use_tempestuous_magic` note updated (rides the generalized free-move substrate).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Tempestuous Magic.
+- `docs/test-harness-coverage.md` — catalog the test file (was previously uncatalogued).
+
+### Schema
+- No schema change (still v81).
+
 ## [2.696.0] - 2026-06-26 — "The Open Field"
 
 **Schema version:** 81

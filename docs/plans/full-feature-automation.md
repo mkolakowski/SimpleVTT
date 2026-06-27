@@ -702,6 +702,14 @@ composition. Batch by class, same cadence as the breadth sweep.
   `skirmisher-bonus-move` buff (half-speed budget + OA-immune). Relentless
   Avenger rides the same generalized path unchanged. Harness:
   `test_skirmisher.py` (+1, end-to-end over-cap move proof).
+- **v2.697.0 ("The Riding Storm") — Tempestuous Magic** (Storm Sorcery Lv 1+):
+  second feature to ride the v2.696.0 free-move substrate. `use_tempestuous_
+  magic` installs a 1-round `tempestuous-magic-fly` buff
+  (`free_movement_remaining_ft: 10` + `oa_immune_during_move`), so the
+  Sorcerer's next ≤10-ft move is cap-exempt + OA-free, then consumed. The
+  on-ground / recent-cast prereq + fly-vs-walk stay GM-narrated. Surfaces
+  `buff_installed`. Harness: `test_tempestuous_magic.py` (+1, end-to-end
+  over-cap move proof).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`
