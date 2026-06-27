@@ -338,6 +338,15 @@ class Map(Base):
     show_grid: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     width_px: Mapped[int] = mapped_column(Integer, default=2000)
     height_px: Mapped[int] = mapped_column(Integer, default=1500)
+    # v2.704.0 — Phase 0 of docs/plans/vision-and-light.md: the map's
+    # ambient illumination. "bright" (default) preserves the pre-vision
+    # behavior — no obscurement, everything seen. "dim" / "dark" engage
+    # the Phase-1 `_visibility_between` resolver (dim = lightly obscured,
+    # dark = unseen unless a sense/light source overrides). One of
+    # {"bright", "dim", "dark"}.
+    ambient_light: Mapped[str] = mapped_column(
+        String(10), default="bright", server_default="bright",
+    )
     # Per-character session-prep spawn points. JSON dict keyed by
     # character id (as a string, since JSON dict keys must be strings)
     # to ``{x, y}``. The GM sets these ahead of a session so they can
@@ -412,6 +421,17 @@ class Token(Base):
     y: Mapped[float] = mapped_column(Float, default=0)
     size: Mapped[int] = mapped_column(Integer, default=1)
     is_hidden: Mapped[bool] = mapped_column(Boolean, default=False)
+    # v2.704.0 — Phase 0 of docs/plans/vision-and-light.md: a token-anchored
+    # light source. 0/0 (default) = emits no light (status quo). A torch /
+    # Light cantrip is 20/20; Corona of Light 60/30. The Phase-1 resolver
+    # reads these radii (in feet) to compute illumination at a target's
+    # square. Additive + default-off, so existing maps are unchanged.
+    light_bright_ft: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0",
+    )
+    light_dim_ft: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0",
+    )
     # v2.64.0 — F2 fog-of-war: per-user-id hidden list. When a user's
     # id appears in this list, GET /tokens (non-GM) omits the token
     # AND the canvas render filter skips it on broadcasts. GMs always

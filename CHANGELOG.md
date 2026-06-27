@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.704.0] - 2026-06-27 — "The First Lantern"
+
+**Schema version:** 82
+
+**Commit summary:** Vision & Light Phase 0 — the lighting data model: `Map.ambient_light` + token light sources, plus the GM endpoints to set them. No combat behavior change yet.
+
+**Description:** Phase 0 of [`docs/plans/vision-and-light.md`](docs/plans/vision-and-light.md) — additive, default-preserving schema for the coming sight/obscurement engine. Adds **`Map.ambient_light`** (`"bright"` default | `"dim"` | `"dark"`; bright = exact status quo) and a per-token light source **`Token.light_bright_ft` / `Token.light_dim_ft`** (default `0/0` = emits no light). The migration (Schema v82) `ALTER TABLE`s both with defaults so every existing map/token behaves identically. GMs set them via a new `POST /campaign/{cid}/settings/maps/{map_id}/ambient_light` (validates to the closed set, falls back to `"bright"`, broadcasts `map_ambient_light`) and the existing `PATCH /token/{id}` (now accepts `light_bright_ft`/`light_dim_ft`, clamped to `[0, 240]`). Both are surfaced on `GET /tokens` (top-level `ambient_light` + per-token light radii) and on `_token_dict` (which also now carries `map_id`) so the Phase-1 resolver + future canvas lighting can read them. No resolver / `/attack` wiring yet — that's Phases 1–2.
+
+### Added
+- `tests/harness/test_vision_light_phase0.py` (new, +4) — defaults preserve status quo (token 0/0, ambient bright); PATCH token light radii clamp + surface on GET /tokens; set map ambient_light persists + broadcasts + invalid→bright; non-GM → 403.
+
+### Changed
+- `app/models.py` — `Map.ambient_light`, `Token.light_bright_ft/light_dim_ft` columns.
+- `app/database.py` — Schema v82 inline migration (ALTER TABLE maps/tokens, default-preserving).
+- `app/routes/tabletop_routes.py` — `settings_map_ambient_light` endpoint; `update_token` accepts the light radii; `_token_dict` + GET `/tokens` surface `map_id` / light fields / `ambient_light`.
+- `app/version.py` — `SCHEMA_VERSION` 81 → 82.
+
+### Schema
+- **v82** — `maps.ambient_light` (default `'bright'`), `tokens.light_bright_ft` / `tokens.light_dim_ft` (default `0`). Additive; existing rows unchanged.
+
 ## [2.703.0] - 2026-06-27 — "The Drawn Map"
 
 **Schema version:** 81

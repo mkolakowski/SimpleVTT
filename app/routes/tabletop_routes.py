@@ -19941,10 +19941,18 @@ def list_tokens(
             # so map clients can render a disguise indicator + the
             # token-disguise harness tests can verify the metadata.
             "disguise": t.disguise,
+            # v2.704.0 — Phase 0 of docs/plans/vision-and-light.md: token
+            # light-source radii (ft); 0/0 = no light.
+            "light_bright_ft": int(getattr(t, "light_bright_ft", 0) or 0),
+            "light_dim_ft": int(getattr(t, "light_dim_ft", 0) or 0),
         })
     return {"tokens": out, "map_id": map_row.id,
             "grid_size_px": map_row.grid_size_px,
-            "grid_type": map_row.grid_type.value if map_row.grid_type else "square"}
+            "grid_type": map_row.grid_type.value if map_row.grid_type else "square",
+            # v2.704.0 — Phase 0 vision & light: the active map's ambient
+            # illumination ("bright" default). Surfaced for the Phase-1
+            # resolver + future canvas lighting.
+            "ambient_light": getattr(map_row, "ambient_light", "bright") or "bright"}
 
 
 @router.post("/api/campaign/{campaign_id}/tokens")
@@ -21157,6 +21165,16 @@ async def update_token(
         if _t not in ("hero", "villain", "neutral"):
             _t = "neutral"
         token.team = _t
+    # v2.704.0 — Phase 0 of docs/plans/vision-and-light.md: token light
+    # source (a torch / Light cantrip / etc.). Clamped to [0, 240] ft;
+    # 0 = no light. The Phase-1 resolver reads these radii.
+    for _lk in ("light_bright_ft", "light_dim_ft"):
+        if _lk in body:
+            try:
+                _lv = max(0, min(240, int(body[_lk])))
+            except (TypeError, ValueError):
+                _lv = 0
+            setattr(token, _lk, _lv)
     db.commit()
     await hub.broadcast(campaign_id, {"type": "token_update", "data": _token_dict(token)})
     return _token_dict(token)
@@ -21204,6 +21222,7 @@ async def upload_token_image(
 def _token_dict(t: Token) -> dict:
     return {
         "id": t.id,
+        "map_id": t.map_id,
         "label": t.label,
         "color": t.color,
         "x": t.x,
@@ -21228,6 +21247,11 @@ def _token_dict(t: Token) -> dict:
         # rendered, but its existence isn't strictly secret). Per-
         # user broadcast filtering filed for a follow-up.
         "hidden_from_user_ids": list(t.hidden_from_user_ids or []),
+        # v2.704.0 — Phase 0 of docs/plans/vision-and-light.md: the token's
+        # light-source radii (ft). 0/0 = emits no light. Surfaced so the
+        # Phase-1 resolver + future canvas lighting read them.
+        "light_bright_ft": int(getattr(t, "light_bright_ft", 0) or 0),
+        "light_dim_ft": int(getattr(t, "light_dim_ft", 0) or 0),
     }
 
 
@@ -122443,6 +122467,39 @@ async def settings_map_show_grid(
     m.show_grid = bool(body.get("show_grid", True))
     db.commit()
     return {"ok": True, "show_grid": m.show_grid}
+
+
+@router.post("/campaign/{campaign_id}/settings/maps/{map_id}/ambient_light")
+async def settings_map_ambient_light(
+    campaign_id: int,
+    map_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.704.0 — Phase 0 of docs/plans/vision-and-light.md: set a map's
+    ambient illumination. GM-only. Body: ``{ambient_light: "bright" |
+    "dim" | "dark"}`` (unknown values fall back to "bright" = status quo,
+    no obscurement). Broadcasts a ``map_ambient_light`` event so clients
+    can re-render (Phase 5) and so the Phase-1 resolver sees the change.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404)
+    body = await request.json()
+    val = str(body.get("ambient_light") or "bright").strip().lower()
+    if val not in ("bright", "dim", "dark"):
+        val = "bright"
+    m.ambient_light = val
+    db.commit()
+    await hub.broadcast(campaign_id, {
+        "type": "map_ambient_light",
+        "data": {"map_id": m.id, "ambient_light": m.ambient_light},
+    })
+    return {"ok": True, "ambient_light": m.ambient_light}
 
 
 @router.post("/campaign/{campaign_id}/settings/maps/{map_id}/tags")

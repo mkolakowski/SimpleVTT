@@ -1,6 +1,6 @@
 # Vision & Light — server-side sight/obscurement engine
 
-**Status:** ⚪ design only · Phase 0 unstarted (plan authored v2.703.0).
+**Status:** 🟠 Phase 0 shipped (v2.704.0 — data model + migration + GM set-endpoints); Phases 1–5 unstarted. Plan authored v2.703.0.
 
 The one combat mechanic that is still **entirely GM-narrated** and is *not*
 buildable on an existing substrate: whether an attacker can **see** its
@@ -108,10 +108,12 @@ changes** — it can be validated in isolation before touching `/attack`.
 
 ## Phases
 
-0. **Phase 0 — data model + migration (S).** `Map.ambient_light`,
-   `Token.light_bright_ft/light_dim_ft` (nullable, defaults preserve current
-   behavior). `SCHEMA_VERSION +1` + inline migration. GM settings UI to set a
-   map's ambient light + a token's light radius. No combat behavior change yet.
+0. **Phase 0 — data model + migration (S). ✅ shipped v2.704.0.**
+   `Map.ambient_light` (`bright`/`dim`/`dark`), `Token.light_bright_ft/light_dim_ft`
+   (defaults preserve current behavior). Schema v82 inline migration. GM
+   set-endpoints (`/settings/maps/{id}/ambient_light`; `PATCH /token/{id}`
+   light radii) + surfaced on `GET /tokens` + `_token_dict`. No combat
+   behavior change yet. Harness: `test_vision_light_phase0.py`.
 1. **Phase 1 — `_visibility_between` resolver (M).** The pure resolver above
    + a normalized senses extractor (folds the existing darkvision/truesight/
    blindsight/devils-sight flags). Harness tests over a matrix of

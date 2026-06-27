@@ -957,6 +957,32 @@ def _apply_inline_migrations() -> None:
     from .models import CampaignStatEvent
     CampaignStatEvent.__table__.create(bind=engine, checkfirst=True)
 
+    # ---- Schema v82 (2.704.0): vision & light columns ----
+    # Phase 0 of docs/plans/vision-and-light.md. maps.ambient_light
+    # ("bright" | "dim" | "dark", default "bright" = status quo) + a
+    # token-anchored light source (light_bright_ft / light_dim_ft, default
+    # 0 = emits no light). All additive + default-preserving, so existing
+    # maps/tokens behave exactly as before until a GM opts in.
+    map_cols_v82 = _column_names("maps")
+    with engine.begin() as conn:
+        if map_cols_v82 and "ambient_light" not in map_cols_v82:
+            conn.execute(text(
+                "ALTER TABLE maps ADD COLUMN ambient_light VARCHAR(10) "
+                "NOT NULL DEFAULT 'bright'"
+            ))
+    tok_cols_v82 = _column_names("tokens")
+    with engine.begin() as conn:
+        if tok_cols_v82 and "light_bright_ft" not in tok_cols_v82:
+            conn.execute(text(
+                "ALTER TABLE tokens ADD COLUMN light_bright_ft INTEGER "
+                "NOT NULL DEFAULT 0"
+            ))
+        if tok_cols_v82 and "light_dim_ft" not in tok_cols_v82:
+            conn.execute(text(
+                "ALTER TABLE tokens ADD COLUMN light_dim_ft INTEGER "
+                "NOT NULL DEFAULT 0"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""
