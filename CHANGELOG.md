@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.715.0] - 2026-06-27 — "The Way Home"
+
+**Schema version:** 82
+
+**Commit summary:** Add a "🏠 Home" button to the tabletop Quick Links so players can get back to the main page.
+
+**Description:** The tabletop hides the global topnav, so its Quick Links panel (in the Tools drawer) is the only navigation surface — but it had no link back to the main page (`/`, the campaign list). Adds a `🏠 Home` pill as the first quick link, matching the existing `.ql-pill` styling.
+
+### Added
+- `app/templates/tabletop.html` — `🏠 Home` Quick Links pill linking to `/`.
+- `tests/harness_ui/test_tabletop_canvas.py::test_quick_links_has_home_button` (+1) — asserts the Home pill exists and points at `/`.
+
+### Schema
+- No schema change (still v82).
+
 ## [2.714.1] - 2026-06-27 — "The Steady Focus"
 
 **Schema version:** 82

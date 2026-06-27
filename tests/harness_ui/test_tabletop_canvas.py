@@ -334,3 +334,18 @@ def test_zoom_in_supersamples_canvas(gm_page: Page) -> None:
     assert abs(css_w - initial_w) < 2 or css_w < zoomed_w, (
         f"CSS display width unexpectedly changed: css={css_w}, backing={zoomed_w}")
     assert not console_errors, f"JS errors during zoom: {console_errors}"
+
+
+def test_quick_links_has_home_button(gm_page: Page) -> None:
+    """v2.715.0 — the tabletop Quick Links panel includes a Home pill that
+    points at the main page (`/`). Presence-only (the Tools drawer may be
+    collapsed), so we assert the anchor exists with the right href + label
+    rather than visibility."""
+    gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}")
+    _wait_for_tabletop_ready(gm_page)
+    home = gm_page.locator('a.ql-pill[href="/"]')
+    assert home.count() >= 1, "No Home quick-link pill found"
+    # The Tools drawer may be collapsed, so use text_content() (returns text
+    # regardless of visibility) rather than inner_text() (empty when hidden).
+    assert "Home" in (home.first.text_content() or ""), (
+        f"Home pill label unexpected: {home.first.text_content()!r}")
