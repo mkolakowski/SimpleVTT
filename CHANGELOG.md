@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.700.0] - 2026-06-27 — "The Avatar of Peace"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — fully mechanize Emissary of Redemption (Redemption Paladin L20): resistance-to-all buff + radiant-reflect on-damage hook.
+
+**Description:** `use_emissary_of_redemption` (XGE p.39) was announce-only; both halves of the L20 capstone are now mechanical. **(1) Resistance to all damage** — the endpoint installs a permanent `emissary-of-redemption` buff carrying `effects.resistance_to: ["all"]`, the wildcard the damage pipeline already honors (every type halved while active), mirrored to the sheet so the resistance readers see it. **(2) Radiant reflect** — a new branch in the `_apply_damage_to_combatant` on-damage-taken hook (right after Scornful Rebuke) fires for a Redemption Paladin Lv 20: when a creature hits them with an attack, it takes radiant damage equal to half the damage taken (`applied // 2`), via a recursive `is_attack=False` call (no ping-pong). The reflect auto-fires (passive, no endpoint call needed); since the resistance halves the incoming damage first, the reflected amount is half of the post-resistance total — RAW-correct. The per-target "neither benefit works against a creature you attack/damage until a long rest" caveat stays GM-narrated. Response gains `resistance_installed`.
+
+### Added
+- `tests/harness/test_emissary_of_redemption.py` (+1) — `test_er_reflects_radiant_on_attack` (Pip attacks the Lv 20 Paladin with auto-apply on → an `emissary-of-redemption` broadcast with `radiant_damage ≥ 1` + `attacker_char_id == Pip`; retry-on-miss bound 10). `test_use_er_happy_lv20` now seeds a battle + asserts `resistance_installed is True`.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `_apply_damage_to_combatant` reflects half-damage radiant for Redemption Lv 20 (on-damage hook); `use_emissary_of_redemption` installs the resistance-to-all buff + surfaces `resistance_installed`.
+- `docs/automation-coverage.md` — `use_emissary_of_redemption` note updated (both halves mechanical).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Emissary of Redemption.
+- `docs/test-harness-coverage.md` — catalog the new test.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.699.0] - 2026-06-26 — "The Vanishing Mist"
 
 **Schema version:** 81

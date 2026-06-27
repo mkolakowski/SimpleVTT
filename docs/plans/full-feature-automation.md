@@ -726,6 +726,15 @@ composition. Batch by class, same cadence as the breadth sweep.
   read). Teleport destination is player-dragged; attack/cast-cancel of
   invisibility GM-narrated. First reaction to compose invisible + disengage.
   Harness: `test_misty_escape.py` (+4, incl. error paths).
+- **v2.700.0 ("The Avatar of Peace") — Emissary of Redemption** (Redemption
+  Paladin Lv 20 capstone): both halves mechanized. The endpoint installs a
+  permanent `resistance_to: ["all"]` buff (the resistance half — the damage
+  pipeline halves every type against the wildcard), and a new on-damage-taken
+  hook in `_apply_damage_to_combatant` (after Scornful Rebuke) reflects half
+  the applied damage as radiant to the attacker (the reflect half, Redemption
+  Lv 20 gate, recursive `is_attack=False`). The per-target "ends if you attack
+  them" caveat stays GM-narrated. Surfaces `resistance_installed`. Harness:
+  `test_emissary_of_redemption.py` (+1, end-to-end reflect-on-hit).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

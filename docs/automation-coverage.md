@@ -356,7 +356,7 @@ or passive damage-boosters that already ride other code paths
 | `use_combat_inspiration` | ⚪ announce-only | — |
 | `use_dash` | ⚪ announce-only | — |
 | `use_eldritch_sight` | ⚪ announce-only | — |
-| `use_emissary_of_redemption` | ⚪ announce-only | — |
+| `use_emissary_of_redemption` | ✅ tracked | v2.700.0 — installs a permanent `resistance_to: ["all"]` buff (resistance half) + a new `_apply_damage_to_combatant` on-damage hook reflects half-damage radiant to attackers (Redemption Lv 20); per-target "ends if you attack them" caveat GM-narrated |
 | `use_expansive_bond` | ⚪ announce-only | — |
 | `use_eyes_of_the_rune_keeper` | ⚪ announce-only | — |
 | `use_fancy_footwork` | ⚪ announce-only | — |

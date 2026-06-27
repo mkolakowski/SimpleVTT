@@ -11329,6 +11329,55 @@ async def _apply_damage_to_combatant(
                         "attacker_combatant_id": _atk_comb.get("id"),
                     },
                 })
+        # v2.700.0 — Emissary of Redemption (Redemption Paladin Lv 20, XGE
+        # p.39): "Whenever a creature hits you with an attack, it takes
+        # radiant damage equal to half the damage you take from the attack."
+        # Same on-damage-taken hook shape as Scornful Rebuke — reflect half
+        # the APPLIED damage (post-resistance, since the resistance-to-all
+        # buff from `/use_emissary_of_redemption` halves it first) as radiant
+        # to the attacker, via a recursive is_attack=False call (no
+        # ping-pong). The per-target "ends if you attack them" caveat stays
+        # GM-narrated.
+        if (
+            is_attack and applied > 0 and attacker_char_id
+            and _pc_has_redemption_oath(sheet, 20)
+        ):
+            _eor_radiant = applied // 2
+            if _eor_radiant >= 1:
+                _eor_state = hub.get_battle(campaign_id)
+                _eor_comb = None
+                if _eor_state:
+                    for _c in _eor_state.get("combatants") or []:
+                        if _c.get("char_id") == int(attacker_char_id):
+                            _eor_comb = _c
+                            break
+                if _eor_comb is not None:
+                    await _apply_damage_to_combatant(
+                        db, campaign_id, _eor_comb, _eor_radiant, "radiant",
+                        is_attack=False, attacker_char_id=None,
+                    )
+                    await hub.broadcast(campaign_id, {
+                        "type": "feature_used",
+                        "data": {
+                            "source": "emissary-of-redemption",
+                            "character_id": int(combatant.get("char_id") or 0),
+                            "character_name": (char.name if char else ""),
+                            "feature_name": (
+                                f"🕊️ Emissary of Redemption — {_eor_radiant} "
+                                f"radiant to attacker"
+                            ),
+                            "feature_desc": (
+                                f"The attacker who hit "
+                                f"{char.name if char else 'the Paladin'} takes "
+                                f"{_eor_radiant} radiant (half the damage "
+                                f"dealt). (Redemption Paladin Lv 20 capstone; "
+                                f"passive auto-trigger.)"
+                            ),
+                            "radiant_damage": _eor_radiant,
+                            "attacker_char_id": int(attacker_char_id),
+                            "attacker_combatant_id": _eor_comb.get("id"),
+                        },
+                    })
         await hub.broadcast(campaign_id, {
             "type": "character_hp_update",
             "data": {
@@ -83849,11 +83898,19 @@ async def use_emissary_of_redemption(
     against that creature until you finish a long rest."
 
     Body: ``{character_id, override?}``. No chip cost —
-    passive permanent feature; this endpoint serves as a
-    "remind GM/clients" announce trigger. v1 announce-only —
-    the actual resistance + half-damage-radiant-back
-    application is GM-tracked, with the "until you attack
-    them" caveat needing per-target tracking.
+    passive permanent feature.
+
+    v2.700.0 (Phase 8): both halves are now mechanical. This endpoint
+    installs a permanent `emissary-of-redemption` buff carrying
+    `effects.resistance_to: ["all"]` (the damage pipeline already
+    honors this wildcard — every damage type is halved), mirrored to
+    the sheet so the resistance readers see it. The **radiant-reflect**
+    half (a creature that hits you takes radiant = half the damage you
+    take) fires automatically from the on-damage-taken hook in
+    `_apply_damage_to_combatant`, gated on Redemption Paladin Lv 20 —
+    no endpoint call needed for it. The "neither benefit works against
+    a creature you attack/damage until a long rest" per-target caveat
+    stays GM-narrated.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -83882,6 +83939,28 @@ async def use_emissary_of_redemption(
         })
 
     pal_lv = _paladin_level_from_sheet(sheet)
+
+    # v2.700.0 — install the resistance-to-all buff (the radiant-reflect half
+    # auto-fires from the on-damage hook). `effects.resistance_to: ["all"]` is
+    # the wildcard the damage pipeline halves every type against; mirror to
+    # the sheet since the resistance readers consult the DB sheet.
+    resistance_installed = await _install_buff(campaign_id, char.id, {
+        "key": "emissary-of-redemption",
+        "name": "Emissary of Redemption (resistance to all)",
+        "icon": "🕊️",
+        "duration_rounds": 0,
+        "duration_max": 0,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {"resistance_to": ["all"]},
+        "desc": (
+            "Resistance to all damage from other creatures; attackers take "
+            "half the damage back as radiant. (Redemption Paladin Lv 20 "
+            "capstone; permanent.)"
+        ),
+    })
+    if resistance_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
 
     membership = (
         db.query(CampaignMembership)
@@ -83916,6 +83995,7 @@ async def use_emissary_of_redemption(
             "source": "emissary-of-redemption",
             "resistance_all_creature_damage": True,
             "radiant_back_fraction": 0.5,
+            "resistance_installed": resistance_installed,
             "paladin_level": pal_lv,
         },
     })
@@ -83925,6 +84005,7 @@ async def use_emissary_of_redemption(
         "feature": "emissary-of-redemption",
         "resistance_all_creature_damage": True,
         "radiant_back_fraction": 0.5,
+        "resistance_installed": resistance_installed,
         "paladin_level": pal_lv,
     }
 
