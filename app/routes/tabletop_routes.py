@@ -5739,20 +5739,22 @@ def _visibility_between(
     return result
 
 
-def _attack_vision_edges(
-    db: Session, campaign_id: int, attacker_char_id: int,
-    target_combatant_id: "str | None",
+def _compute_vision_edges(
+    db: Session, campaign_id: int, attacker_combatant: "dict | None",
+    target_combatant: "dict | None",
 ) -> tuple:
-    """Phase 2 of vision-and-light: compute the lighting-model sight edges
-    for a PC attack — returns ``(target_unseen, attacker_unseen)`` where
+    """Phase 2 of vision-and-light: the lighting-model sight edges for an
+    attack — returns ``(target_unseen, attacker_unseen)`` where
     ``target_unseen`` (the attacker can't see the target) imposes attack
     **disadvantage** and ``attacker_unseen`` (the target can't see the
     attacker) grants **advantage**. Best-effort: ``(False, False)`` off-grid,
     with no battle, or on a bright map (bright ambient can never produce an
-    ``unseen`` from the lighting model — light sources only add light, so
-    the hot path short-circuits before the per-token scan).
+    ``unseen`` — light sources only add light, so the hot path short-circuits
+    before the per-token scan).
     """
     try:
+        if not attacker_combatant or not target_combatant:
+            return (False, False)
         campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
         if not campaign or not campaign.active_map_id:
             return (False, False)
@@ -5760,19 +5762,49 @@ def _attack_vision_edges(
         if not map_row or (getattr(map_row, "ambient_light", "bright")
                            or "bright") == "bright":
             return (False, False)
-        target_combatant = _lookup_combatant(
-            campaign_id, str(target_combatant_id).strip()
-        ) if target_combatant_id else None
+        target_unseen = _visibility_between(
+            db, campaign_id, attacker_combatant, target_combatant
+        ).get("visibility") == "unseen"
+        attacker_unseen = _visibility_between(
+            db, campaign_id, target_combatant, attacker_combatant
+        ).get("visibility") == "unseen"
+        return (target_unseen, attacker_unseen)
+    except Exception:
+        return (False, False)
+
+
+def _attack_vision_edges(
+    db: Session, campaign_id: int, attacker_char_id: int,
+    target_combatant_id: "str | None",
+) -> tuple:
+    """PC-attack wrapper for `_compute_vision_edges` — resolves the attacker
+    combatant by char_id (from the battle hub) and the target by id."""
+    try:
         state = hub.get_battle(campaign_id) or {}
         atkr = next((c for c in (state.get("combatants") or [])
                      if c.get("char_id") == attacker_char_id), None)
-        if atkr is None or not target_combatant:
-            return (False, False)
-        target_unseen = _visibility_between(
-            db, campaign_id, atkr, target_combatant).get("visibility") == "unseen"
-        attacker_unseen = _visibility_between(
-            db, campaign_id, target_combatant, atkr).get("visibility") == "unseen"
-        return (target_unseen, attacker_unseen)
+        target_combatant = _lookup_combatant(
+            campaign_id, str(target_combatant_id).strip()
+        ) if target_combatant_id else None
+        return _compute_vision_edges(db, campaign_id, atkr, target_combatant)
+    except Exception:
+        return (False, False)
+
+
+def _npc_attack_vision_edges(
+    db: Session, campaign_id: int, attacker_combatant_id: "str | None",
+    target_combatant_id: "str | None",
+) -> tuple:
+    """NPC-attack wrapper for `_compute_vision_edges` — resolves both the
+    attacker and the target combatant by id."""
+    try:
+        atkr = _lookup_combatant(
+            campaign_id, str(attacker_combatant_id).strip()
+        ) if attacker_combatant_id else None
+        target_combatant = _lookup_combatant(
+            campaign_id, str(target_combatant_id).strip()
+        ) if target_combatant_id else None
+        return _compute_vision_edges(db, campaign_id, atkr, target_combatant)
     except Exception:
         return (False, False)
 
@@ -114886,6 +114918,13 @@ async def use_npc_attack(
     target_cloak_dis = _target_wearer_imposes_attack_disadvantage(
         db, campaign_id, target_combatant_id,
     )
+    # v2.707.0 — Phase 2 of vision-and-light, NPC mirror: the lighting-model
+    # sight edges. A target the NPC can't see → disadvantage; an NPC the
+    # target can't see → advantage. Bright maps short-circuit (hot path
+    # untouched). Symmetric with the PC /attack wiring (v2.706.0).
+    _vis_target_unseen, _vis_attacker_unseen = _npc_attack_vision_edges(
+        db, campaign_id, combatant_id, target_combatant_id,
+    )
 
     # Build the d20 attack expression. Accept "+5", "5", or "" (flat).
     attack_total = None
@@ -114911,11 +114950,13 @@ async def use_npc_attack(
     has_adv = (
         target_grants_advantage
         or _npc_attacker_invisible_adv
+        or _vis_attacker_unseen
         or bool(_npc_target_adv_condition)
     )
     adv_label = (
         "reckless" if target_grants_advantage else
         "invisible" if _npc_attacker_invisible_adv else
+        "unseen_attacker" if _vis_attacker_unseen else
         f"target_{_npc_target_adv_condition}" if _npc_target_adv_condition else ""
     )
     # v2.514.0 — See Invisibility target-side (#43 follow-up), NPC mirror:
@@ -114928,6 +114969,7 @@ async def use_npc_attack(
     has_dis = (
         target_dodging
         or target_blurred
+        or _vis_target_unseen
         or bool(_npc_attacker_dis_condition)
         or bool(target_cloak_dis)
         or _npc_target_invisible_dis
@@ -114935,6 +114977,7 @@ async def use_npc_attack(
     dis_label = (
         "dodging" if target_dodging else
         "blur" if target_blurred else
+        "cant_see" if _vis_target_unseen else
         f"attacker_{_npc_attacker_dis_condition}"
         if _npc_attacker_dis_condition else
         "cloak_of_displacement" if target_cloak_dis else

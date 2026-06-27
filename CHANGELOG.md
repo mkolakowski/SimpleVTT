@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.707.0] - 2026-06-27 — "The Stalker's Edge"
+
+**Schema version:** 82
+
+**Commit summary:** Vision & Light Phase 2, NPC mirror — wire the resolver into `/npc_attack` so monsters fighting in the dark get the same auto disadvantage/advantage as PCs.
+
+**Description:** Completes the attack-side story of [`docs/plans/vision-and-light.md`](docs/plans/vision-and-light.md). v2.706.0 wired the lighting model into the PC `/attack`; this commit mirrors it into the NPC `/npc_attack` pipeline. The Phase-2 core was refactored into `_compute_vision_edges(db, campaign_id, attacker_combatant, target_combatant)` (takes combatant dicts directly) with two thin wrappers: `_attack_vision_edges` (PC — resolves the attacker by char_id) and the new `_npc_attack_vision_edges` (NPC — resolves both by combatant id). `/npc_attack` now folds `_vis_target_unseen` into its disadvantage set (`disadvantage_cant_see`) and `_vis_attacker_unseen` into its advantage set (`advantage_unseen_attacker`), so an NPC attacking a PC it can't see rolls disadvantage and an unseen NPC rolls advantage — same cancel-on-mutual + bright-map short-circuit as the PC path. No schema change; no behavior change on bright maps.
+
+### Added
+- `tests/harness/test_vision_light_npc_attack.py` (new, +3) — NPC-can't-see-target → `disadvantage_cant_see`; unseen-NPC → `advantage_unseen_attacker`; bright map → no edge. The NPC attacker carries a real created token for its position; senses ride combatant buffs.
+
+### Changed
+- `app/routes/tabletop_routes.py` — extracted `_compute_vision_edges`; added `_npc_attack_vision_edges`; `/npc_attack` folds the lighting edges into its has_adv/has_dis/labels. `_attack_vision_edges` (PC) now delegates to the shared core.
+
+### Schema
+- No schema change (still v82).
+
 ## [2.706.0] - 2026-06-27 — "The Honest Dark"
 
 **Schema version:** 82

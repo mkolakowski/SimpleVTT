@@ -1,6 +1,6 @@
 # Vision & Light — server-side sight/obscurement engine
 
-**Status:** 🟢 Phases 0–2 shipped — the core combat automation is live (v2.704.0 data model; v2.705.0 the `_visibility_between` resolver; v2.706.0 wired into PC `/attack`: dark→disadvantage, unseen-attacker→advantage). Remaining: Phase 3 spell light/darkness emitters, Phase 4 Hide/Stealth, Phase 5 client lighting, + NPC `/npc_attack` wiring. Plan authored v2.703.0.
+**Status:** 🟢 Phases 0–2 shipped — the core combat automation is live for **both** PC and NPC attacks (v2.704.0 data model; v2.705.0 the `_visibility_between` resolver; v2.706.0 wired into PC `/attack`; v2.707.0 mirrored into NPC `/npc_attack`: dark→disadvantage, unseen-attacker→advantage). Remaining: Phase 3 spell light/darkness emitters, Phase 4 Hide/Stealth, Phase 5 client lighting. Plan authored v2.703.0.
 
 The one combat mechanic that is still **entirely GM-narrated** and is *not*
 buildable on an existing substrate: whether an attacker can **see** its
@@ -126,7 +126,9 @@ changes** — it can be validated in isolation before touching `/attack`.
    by the target → **advantage** (`advantage_unseen_attacker`); mutual →
    cancel. The manual `attacker_cant_see_target` flag stays a GM override;
    bright maps short-circuit (hot path untouched). Harness:
-   `test_vision_light_phase2.py`. **Follow-up:** NPC `/npc_attack` wiring.
+   `test_vision_light_phase2.py`. **NPC `/npc_attack` mirror ✅ shipped
+   v2.707.0** (`_compute_vision_edges` core + `_npc_attack_vision_edges`
+   wrapper; harness `test_vision_light_npc_attack.py`).
 3. **Phase 3 — spell light/darkness emitters (M).** Darkness (magical dark
    sphere — composes with Devil's Sight's `sees_in_darkness`), Daylight,
    Fog Cloud (heavy obscurement = `unseen` inside). Reuse the
