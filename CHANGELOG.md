@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.714.0] - 2026-06-27 — "The Sharper Lens"
+
+**Schema version:** 82
+
+**Commit summary:** Supersample-on-zoom — token portraits stay crisp when a player zooms in, instead of bitmap-upscaling a fixed-resolution canvas.
+
+**Description:** Fixes soft tokens at high zoom. The map pan/zoom is a CSS `transform: scale()` (up to 5×), but the canvas backing store was rasterized once at `mapSize × devicePixelRatio` and never re-rendered at higher resolution — so zooming in just bilinearly upscaled a fixed-res bitmap, wasting the detail in the ~1000 px token source images. The canvas now carries a `renderScale` (default `DPR`, the prior behaviour): `applyTransform` schedules a debounced (180 ms after zoom settles) re-raster that raises `renderScale` toward `DPR × zoom`, so the high-res sources are drawn at many more physical pixels. The CSS display size stays the logical map size (pan/zoom math unchanged); only the backing store grows. Bounded for memory — capped at 4096 px per dimension, ~16.7M px total (the iOS Safari ceiling), and `DPR × 4`, with a floor at `DPR` so an already-huge map never renders worse than before. Zooming back out downsamples to `DPR`. Mid-zoom uses the fast CSS upscale; it snaps crisp when the gesture settles.
+
+### Changed
+- `app/static/tabletop.js` — `renderScale` + `applyRenderScale()` (refactored from the v2.3.45 init sizing) + `fittedRenderScale()` memory caps; `scheduleRenderScaleUpdate()` debounced re-raster wired into `applyTransform()`.
+
+### Added
+- `tests/harness_ui/test_tabletop_canvas.py::test_zoom_in_supersamples_canvas` (+1) — zooming in grows `canvas.width` (the backing store) >1.2× while the CSS display size holds; no JS errors.
+
+### Schema
+- No schema change (still v82).
+
 ## [2.713.0] - 2026-06-27 — "The Bottled Sun"
 
 **Schema version:** 82

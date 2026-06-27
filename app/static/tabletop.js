@@ -46,21 +46,50 @@
     const MAP_W = canvas.width - 2 * stripH;
     const MAP_H = canvas.height - 2 * stripH;
     const DPR = Math.max(1, window.devicePixelRatio || 1);
-    canvas.width = (MAP_W + 2 * stripH) * DPR;
-    canvas.height = (MAP_H + 2 * stripH) * DPR;
-    canvas.style.width = (MAP_W + 2 * stripH) + 'px';
-    canvas.style.height = (MAP_H + 2 * stripH) + 'px';
-    ctx.scale(DPR, DPR);
-    // Shift the drawing origin so logical (0, 0) is at canvas-physical
-    // (stripH, stripH). Everything downstream draws in map coords; the
-    // gutter strips paint at logical (-stripH..0) which lands in the
-    // outer halo.
-    ctx.translate(stripH, stripH);
-    // ``high`` resampling matters for the demo-token portraits which
-    // are sourced ~1000 px wide and rendered at ~70 px on canvas; the
-    // browser default (``low``) makes that 14× downscale look mushy.
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
+    // v2.714.0 — supersample-on-zoom. The backing-store resolution is a
+    // ``renderScale`` multiple of the logical map size (the CSS display size
+    // stays the logical map size, so the pan/zoom transform math is
+    // unchanged). At rest renderScale = DPR (the v2.3.45 behaviour); when a
+    // player zooms in, `scheduleRenderScaleUpdate` raises it toward
+    // DPR×zoom (capped for memory) and re-rasters once on zoom-settle, so
+    // the ~1000 px token sources are drawn at MANY more physical pixels
+    // instead of the CSS transform bitmap-upscaling a fixed-res canvas.
+    let renderScale = DPR;
+    // Bounds: never exceed a single-dimension cap (older Safari/iOS choke
+    // past ~4096) nor a total-area cap (~16.7M px on iOS), and never
+    // supersample past DPR×4. Floors at DPR so an already-huge map that
+    // exceeds the cap at DPR keeps its existing behaviour (never worse).
+    const MAX_CANVAS_DIM = 4096;
+    const MAX_CANVAS_AREA = 16e6;
+    const RS_MAX = DPR * 4;
+    function fittedRenderScale(targetRS) {
+        const w = MAP_W + 2 * stripH;
+        const h = MAP_H + 2 * stripH;
+        const capByDim = MAX_CANVAS_DIM / Math.max(w, h);
+        const capByArea = Math.sqrt(MAX_CANVAS_AREA / Math.max(1, w * h));
+        const rs = Math.min(targetRS, RS_MAX, capByDim, capByArea);
+        return Math.max(DPR, rs);
+    }
+    function applyRenderScale(rs) {
+        renderScale = rs;
+        canvas.width = Math.round((MAP_W + 2 * stripH) * rs);
+        canvas.height = Math.round((MAP_H + 2 * stripH) * rs);
+        canvas.style.width = (MAP_W + 2 * stripH) + 'px';
+        canvas.style.height = (MAP_H + 2 * stripH) + 'px';
+        // Resizing the backing store resets the 2D context — re-establish
+        // the rs scale + the stripH origin shift + high-quality resampling.
+        // Shift the drawing origin so logical (0, 0) is at canvas-physical
+        // (stripH, stripH); the gutter strips paint at logical (-stripH..0)
+        // which lands in the outer halo.
+        ctx.setTransform(rs, 0, 0, rs, 0, 0);
+        ctx.translate(stripH, stripH);
+        // ``high`` resampling matters for the demo-token portraits which
+        // are sourced ~1000 px wide and rendered at ~70 px on canvas; the
+        // browser default (``low``) makes that downscale look mushy.
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+    }
+    applyRenderScale(DPR);
 
     const initialData = JSON.parse(document.getElementById('initial-data').textContent);
     let tokens = initialData.tokens || [];
@@ -3074,6 +3103,24 @@
     // transform applied separately but CSS scale with
     // transform-origin: 0 0 doesn't account for the child's box
     // top/left, so different top/left values diverged at scale ≠ 1.
+    // v2.714.0 — supersample-on-zoom driver. Zooming changes `scale`, which
+    // changes the target backing-store resolution. Re-rastering on every
+    // wheel notch / pinch frame would be janky, so the CSS transform handles
+    // the live (bitmap-scaled) zoom and this debounced pass re-rasters ONCE
+    // after the zoom settles — only when the target moves >5% from the
+    // current renderScale, so panning (same scale) never triggers a re-raster.
+    let _renderScaleTimer = null;
+    function scheduleRenderScaleUpdate() {
+        clearTimeout(_renderScaleTimer);
+        _renderScaleTimer = setTimeout(() => {
+            const target = fittedRenderScale(DPR * Math.max(1, scale));
+            if (Math.abs(target - renderScale) / renderScale > 0.05) {
+                applyRenderScale(target);
+                try { render(); } catch (_) {}
+            }
+        }, 180);
+    }
+
     const mapTransform = document.getElementById('map-transform');
     function applyTransform() {
         clampPan();
@@ -3094,6 +3141,7 @@
             }
         }
         scheduleSaveView();
+        scheduleRenderScaleUpdate();
     }
 
     // Restore previously-saved view (GM only). Clamps scale into the

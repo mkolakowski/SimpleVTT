@@ -293,3 +293,44 @@ def test_left_click_drag_moves_token(gm_page: Page) -> None:
         f"drag on the canvas is not reaching the mousedown handler."
     )
     assert not console_errors, f"JS errors during drag: {console_errors}"
+
+
+def test_zoom_in_supersamples_canvas(gm_page: Page) -> None:
+    """v2.714.0 — supersample-on-zoom. Zooming in should re-raster the
+    canvas at a HIGHER backing-store resolution (so high-res token sources
+    stay crisp instead of the CSS transform bitmap-upscaling a fixed-res
+    canvas). Asserts ``canvas.width`` (the backing store, not the CSS
+    display size) grows after a zoom-in settles, and no JS errors fire.
+    """
+    console_errors: list[str] = []
+    gm_page.on("pageerror", lambda exc: console_errors.append(str(exc)))
+    gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}")
+    _wait_for_tabletop_ready(gm_page)
+
+    initial_w = gm_page.evaluate(
+        "() => document.getElementById('vtt-canvas').width")
+    assert initial_w and initial_w > 0
+
+    pane = gm_page.locator(".map-pane").bounding_box()
+    assert pane is not None, "Map pane has no bounding box"
+    cx = pane["x"] + pane["width"] / 2
+    cy = pane["y"] + pane["height"] / 2
+    gm_page.mouse.move(cx, cy)
+    # Many notches of zoom-in (deltaY < 0). The handler ignores magnitude
+    # (only the sign), so each event is one zoom step.
+    for _ in range(14):
+        gm_page.mouse.wheel(0, -120)
+    # Past the 180ms re-raster debounce.
+    gm_page.wait_for_timeout(500)
+
+    zoomed_w = gm_page.evaluate(
+        "() => document.getElementById('vtt-canvas').width")
+    # The CSS display size must stay the logical map size (transform math
+    # depends on it) — only the backing store grows.
+    css_w = gm_page.evaluate(
+        "() => parseFloat(getComputedStyle(document.getElementById('vtt-canvas')).width)")
+    assert zoomed_w > initial_w * 1.2, (
+        f"Backing store did not supersample on zoom: {initial_w} -> {zoomed_w}")
+    assert abs(css_w - initial_w) < 2 or css_w < zoomed_w, (
+        f"CSS display width unexpectedly changed: css={css_w}, backing={zoomed_w}")
+    assert not console_errors, f"JS errors during zoom: {console_errors}"
