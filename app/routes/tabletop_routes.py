@@ -5702,6 +5702,36 @@ def _illumination_at_point(
     return level
 
 
+def _passive_perception(sheet: "dict | None") -> int:
+    """Phase 4 of vision-and-light: 10 + the creature's Perception skill
+    modifier (prof/expertise honored via `_resolve_stat_modifier`). Falls
+    back to 10 + raw WIS modifier when the sheet carries no Perception skill
+    entry (most monster templates). Defaults to 10 for an empty sheet."""
+    if not isinstance(sheet, dict):
+        return 10
+    mod, _ = _resolve_stat_modifier(sheet, "dnd5e", "Perception")
+    if mod == 0 and "Perception" not in (sheet.get("skills") or {}):
+        abilities = sheet.get("abilities") or {}
+        try:
+            mod = (int(abilities.get("WIS", 10)) - 10) // 2
+        except (TypeError, ValueError):
+            mod = 0
+    return 10 + mod
+
+
+def _combatant_hidden_score(buffs: list) -> "int | None":
+    """Phase 4: the Stealth score of a combatant's `hidden` buff (set by
+    `/hide`), or None if it isn't hidden."""
+    for b in buffs or []:
+        if (b or {}).get("key") == "hidden":
+            eff = (b or {}).get("effects") or {}
+            try:
+                return int(eff.get("stealth_score") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return None
+
+
 def _visibility_between(
     db: Session, campaign_id: int, attacker: "dict | None",
     target: "dict | None",
@@ -5750,6 +5780,18 @@ def _visibility_between(
     if senses["blindsight_ft"] >= rng and senses["blindsight_ft"] > 0:
         result["visibility"] = "seen"
         return result
+    # Phase 4 — Hide/Stealth: a hidden target is unseen unless the observer's
+    # passive Perception beats its Stealth score (truesight/blindsight already
+    # defeated hiding above). Independent of illumination — a creature hidden
+    # behind cover in bright light is still unseen.
+    hidden_score = _combatant_hidden_score(
+        _combatant_effective_buffs(db, campaign_id, target))
+    if hidden_score is not None:
+        atk_sheet = _combatant_sheet_for_vision(db, campaign_id, attacker)
+        if _passive_perception(atk_sheet) < hidden_score:
+            result["hidden"] = True
+            result["visibility"] = "unseen"
+            return result
     # Fog Cloud / heavy obscurement: no normal sense penetrates → unseen.
     if illum == "fog":
         result["visibility"] = "unseen"
@@ -5797,13 +5839,22 @@ def _compute_vision_edges(
         if not campaign or not campaign.active_map_id:
             return (False, False)
         map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
-        # Bright map + no spell emitters → nothing can produce an `unseen`
-        # (light only adds), so short-circuit the hot path. A darkness/fog/
-        # daylight emitter (Phase 3) defeats the fast path even on a bright map.
+        # Bright map + no spell emitters + nobody hidden → nothing can produce
+        # an `unseen` (light only adds), so short-circuit the hot path. A
+        # darkness/fog/daylight emitter (Phase 3) or a hidden combatant
+        # (Phase 4) defeats the fast path even on a bright map.
         if not map_row:
             return (False, False)
+        _hidden = (
+            _combatant_hidden_score(
+                _combatant_effective_buffs(db, campaign_id, attacker_combatant))
+            is not None
+            or _combatant_hidden_score(
+                _combatant_effective_buffs(db, campaign_id, target_combatant))
+            is not None
+        )
         if (getattr(map_row, "ambient_light", "bright") or "bright") == "bright" \
-                and not _light_emitters.get(campaign_id):
+                and not _light_emitters.get(campaign_id) and not _hidden:
             return (False, False)
         target_unseen = _visibility_between(
             db, campaign_id, attacker_combatant, target_combatant
@@ -20355,6 +20406,54 @@ async def remove_light_emitter(
     await hub.broadcast(campaign_id, {"type": "light_emitter_remove",
                                       "data": {"id": emitter_id}})
     return {"ok": True, "removed": removed}
+
+
+@router.post("/api/campaign/{campaign_id}/hide")
+async def take_hide_action(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.709.0 — Phase 4 of docs/plans/vision-and-light.md: a combatant takes
+    the Hide action. GM-only. Body: ``{combatant_id, stealth_score?}``. Rolls
+    a Stealth check (1d20 + the combatant's Stealth modifier) unless an
+    explicit ``stealth_score`` is given, then installs a ``hidden`` buff
+    carrying that score. The `_visibility_between` resolver then treats the
+    combatant as **unseen** to any observer whose passive Perception is lower
+    (so attacking from hidden gets advantage via the Phase-2 wiring). The
+    hider is revealed automatically the first time it attacks.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    body = await request.json()
+    combatant_id = str(body.get("combatant_id") or "").strip()
+    if not combatant_id:
+        raise HTTPException(400, "combatant_id required")
+    combatant = _lookup_combatant(campaign_id, combatant_id)
+    if combatant is None:
+        raise HTTPException(404, "combatant not found")
+    if body.get("stealth_score") is not None:
+        try:
+            score = int(body["stealth_score"])
+        except (TypeError, ValueError):
+            raise HTTPException(400, "stealth_score must be an integer")
+        roll_breakdown = f"(set) {score}"
+    else:
+        sheet = _combatant_sheet_for_vision(db, campaign_id, combatant)
+        mod, _ = _resolve_stat_modifier(sheet, "dnd5e", "Stealth")
+        r = dice_mod.roll(f"1d20{mod:+d}")
+        score = r.total
+        roll_breakdown = r.breakdown
+    ok = await _install_buff_on_combatant_id(campaign_id, combatant_id, {
+        "key": "hidden", "name": "Hidden",
+        "effects": {"stealth_score": score},
+    })
+    if not ok:
+        raise HTTPException(409, "no active battle / combatant not in init")
+    return {"ok": True, "combatant_id": combatant_id,
+            "stealth_score": score, "roll": roll_breakdown}
 
 
 @router.post("/api/campaign/{campaign_id}/tokens")
@@ -113394,6 +113493,13 @@ async def use_attack(
             attack_total = None
             attack_breakdown = ""
 
+    # v2.709.0 — Phase 4 of vision-and-light: attacking reveals a hidden
+    # attacker (RAW PHB p.177 "you give away your location"). The hidden
+    # advantage already applied above (`_vis_attacker_unseen`); clear the
+    # `hidden` buff now so subsequent swings don't keep the edge. Idempotent
+    # (no-op when the attacker wasn't hidden).
+    await _remove_buff(campaign_id, char.id, "hidden")
+
     # v2.24.0 Phase T.2: detect crit from the kept d20 value. Matches
     # both "1d20[20]" (single die) and "2d20[X,20]kh1=20" (advantage
     # whose kept high was 20). Disadvantage where the LOW kept value is
@@ -115129,6 +115235,11 @@ async def use_npc_attack(
     except dice_mod.DiceParseError:
         attack_total = None
         attack_breakdown = ""
+
+    # v2.709.0 — Phase 4 of vision-and-light: attacking reveals a hidden NPC
+    # attacker (the unseen advantage already applied via `_vis_attacker_unseen`
+    # above). Idempotent (no-op when the NPC wasn't hidden).
+    await _remove_buff_from_combatant_id(campaign_id, combatant_id, "hidden")
 
     # Crit detection from the kept d20 value (same regex pattern as
     # use_attack at the v2.24.0 Phase T.2 block).

@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.709.0] - 2026-06-27 — "The Held Breath"
+
+**Schema version:** 82
+
+**Commit summary:** Vision & Light Phase 4 — Hide / Stealth: a hidden creature is unseen, attacking from hidden gets advantage, and the attack reveals it.
+
+**Description:** Phase 4 of [`docs/plans/vision-and-light.md`](docs/plans/vision-and-light.md). Adds `POST /api/campaign/{cid}/hide` `{combatant_id, stealth_score?}` (GM-only) — it rolls a Stealth check (1d20 + the combatant's Stealth modifier, or accepts an explicit `stealth_score`) and installs a `hidden` buff carrying that score. `_visibility_between` now treats a hidden creature as **unseen** to any observer whose **passive Perception** (`_passive_perception` = 10 + Perception skill mod, WIS-fallback) is lower than the hider's Stealth — independent of illumination (hidden behind cover in bright light is still unseen), and defeated by truesight/blindsight in range. Because this rides the existing resolver, a hidden attacker automatically gets **advantage** (`advantage_unseen_attacker`) through the Phase-2 `/attack` + Phase-2-NPC `/npc_attack` wiring; both attack paths then **reveal** the attacker (clear the `hidden` buff) after the swing (RAW PHB p.177). The Phase-2 bright-map fast path now defers to the resolver whenever a combatant is hidden.
+
+### Added
+- `tests/harness/test_vision_light_phase4.py` (new, +8) — `/hide` installs the score; hidden target (Stealth 99) → unseen, poor hide (Stealth 1) → seen; truesight defeats hide; a hidden attacker → `advantage_unseen_attacker` then revealed (second swing has no unseen edge); plus error paths (unknown combatant 404, missing field 400, non-GM 403).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `_passive_perception` + `_combatant_hidden_score` helpers; `_visibility_between` hidden-vs-passive-Perception check; `_compute_vision_edges` fast path defers when hidden; `take_hide_action` endpoint; reveal-on-attack in both PC `/attack` and NPC `/npc_attack` (`_remove_buff` / `_remove_buff_from_combatant_id`).
+
+### Schema
+- No schema change (still v82) — the `hidden` state is an ephemeral combatant buff.
+
 ## [2.708.0] - 2026-06-27 — "The Conjured Night"
 
 **Schema version:** 82

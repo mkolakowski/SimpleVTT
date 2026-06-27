@@ -1,6 +1,6 @@
 # Vision & Light — server-side sight/obscurement engine
 
-**Status:** 🟢 Phases 0–3 shipped — combat automation (PC + NPC) + spell light/darkness emitters are live (v2.704.0 data model; v2.705.0 the `_visibility_between` resolver; v2.706.0 PC `/attack`; v2.707.0 NPC `/npc_attack`; v2.708.0 Darkness/Daylight/Fog emitters). Remaining: Phase 4 Hide/Stealth, Phase 5 client lighting. Plan authored v2.703.0.
+**Status:** 🟢 Phases 0–4 shipped — the entire server-side engine is live (v2.704.0 data model; v2.705.0 the `_visibility_between` resolver; v2.706.0 PC `/attack`; v2.707.0 NPC `/npc_attack`; v2.708.0 Darkness/Daylight/Fog emitters; v2.709.0 Hide/Stealth). Only **Phase 5 (client dynamic lighting — presentation)** remains. Plan authored v2.703.0.
 
 The one combat mechanic that is still **entirely GM-narrated** and is *not*
 buildable on an existing substrate: whether an attacker can **see** its
@@ -136,10 +136,13 @@ changes** — it can be validated in isolation before touching `/attack`.
    obscurement (only truesight/blindsight). `_illumination_at_point` reads
    them (precedence fog > daylight > darkness); composes with the Phase-2
    attack wiring. Harness: `test_vision_light_phase3.py`.
-4. **Phase 4 — Hide / Stealth & unseen-attacker advantage (M).** A hidden
-   token (passed Stealth vs passive Perception, or simply GM-flagged hidden)
-   is `unseen` → its first attack has advantage and reveals it. Pairs with
-   the Skulker / Mask of the Wild edges.
+4. **Phase 4 — Hide / Stealth & unseen-attacker advantage (M). ✅ shipped
+   v2.709.0.** `POST /hide` installs a `hidden` buff with a Stealth score;
+   `_visibility_between` treats the hider as `unseen` to observers whose
+   passive Perception (`_passive_perception`) is lower (truesight/blindsight
+   defeat it). Rides the Phase-2 wiring → hidden attacker gets advantage;
+   both `/attack` + `/npc_attack` reveal the attacker after the swing.
+   Harness: `test_vision_light_phase4.py`.
 5. **Phase 5 — client dynamic lighting / fog-of-war (L).** The big UI lift:
    render bright/dim/dark + light radii on the canvas, optionally per-player
    fog-of-war. Independent of the combat resolver (Phases 1–4 are
