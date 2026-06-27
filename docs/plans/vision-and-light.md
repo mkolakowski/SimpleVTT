@@ -160,7 +160,8 @@ GM-placed via `/light_emitter`; the follow-up wires spell casting to drop the
 emitter automatically (concentration-bound, cleared on concentration end):
 - **Fog Cloud** ✅ v2.711.0 — `/cast_fog_cloud` accepts a `center` and places
   a `fog` emitter at the slot-scaled radius (shared `_add_light_emitter`).
-- **Darkness** — pending a cast endpoint.
+- **Darkness** ✅ v2.712.0 — new `/cast_darkness` endpoint places a fixed
+  15-ft `darkness` (magical) emitter on a `center`.
 - **Daylight** — pending a cast endpoint.
 
 ---

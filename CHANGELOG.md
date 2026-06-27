@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.712.0] - 2026-06-27 — "The Smothered Torch"
+
+**Schema version:** 82
+
+**Commit summary:** New `/cast_darkness` endpoint — casts the Darkness spell + auto-places its magical-darkness vision-and-light emitter.
+
+**Description:** Second of the auto-place-on-cast commits (after Fog Cloud v2.711.0). Adds `POST /api/campaign/{cid}/cast_darkness` — RAW PHB p.230: L2 Evocation, 60 ft, Concentration up to 10 min, no save, a fixed 15-ft-radius sphere of *magical* darkness (the Phase-3 `darkness` emitter, which darkvision can't pierce — only Devil's Sight / truesight). Classes: Druid, Sorcerer, Warlock, Wizard. Mirrors `/cast_fog_cloud`: slot consume + action-economy gate + audit broadcasts, and when a `center: {x, y}` is supplied it auto-drops the `darkness` emitter (concentration-bound, cleared on concentration end via `_clear_caster_concentration_aoes`). Backward-compatible — no `center` places nothing.
+
+### Added
+- `POST /cast_darkness` endpoint.
+- `tests/harness/test_cast_darkness.py` (new, +7) — happy path (radius 15, range 60, concentration); cast with `center` → a `darkness` emitter at that point; no `center` → no emitter; error paths (missing character_id 400, slot < 2 400, wrong class 409, spell not known 409).
+
+### Schema
+- No schema change (still v82).
+
 ## [2.711.0] - 2026-06-27 — "The Rolling Fog"
 
 **Schema version:** 82
