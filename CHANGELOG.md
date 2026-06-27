@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.695.1] - 2026-06-26 — "The Honest Docstring"
+
+**Schema version:** 81
+
+**Commit summary:** Docstring accuracy — refresh 8 stale "v1 announce-only" docstrings on features that are actually mechanized, so they describe reality (and rescans stop re-flagging them).
+
+**Description:** Doc/comment-only. Several feature endpoints were mechanized in earlier commits (some this session via inline code comments) but their **docstrings** still opened with "v1 announce-only — the GM applies …", which is now false and caused repeated false-positives when scanning for un-mechanized features. Refreshed the 8 genuinely-stale docstrings to describe the server-side application that the code already performs: `use_protective_spirit` (self-heal, v2.99.458), `use_halo_of_spores` (CON save + necrotic, v2.676.0), `use_combat_inspiration` (BI-die damage apply, v2.144.0/.145.0), `use_whispers_psychic_blades` (psychic apply, v2.668.0), `use_blade_flourish` (damage half, v2.146.0), `use_mote_of_potential` (attack/save modes, v2.670.0), `use_grim_harvest` (caster self-heal, v2.99.457), and `use_rebuke_the_violent` (Wis save + psychic, v2.672.0). No behavior change. Three remaining "announce-only" docstrings are **correct** and left as-is: the two auto-fire helpers (`_apply_unwavering_mark_on_hit` / `_apply_ancestral_protectors_on_hit`) accurately reference their *separate* manual announce-only endpoints, and `use_fancy_footwork` is genuinely partial (the OA-suppression read site is still deferred).
+
+### Changed
+- `app/routes/tabletop_routes.py` — refreshed 8 stale feature docstrings to describe the already-shipped server-side application (no behavior change).
+
+### Schema
+- No schema change (still v81).
+
 ## [2.695.0] - 2026-06-26 — "The Spirit's Tale"
 
 **Schema version:** 81

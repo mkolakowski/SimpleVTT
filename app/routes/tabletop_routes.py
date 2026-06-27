@@ -82982,8 +82982,8 @@ async def use_protective_spirit(
 
     Body: ``{character_id, override?}``. No chip cost — passive
     end-of-turn trigger. Server rolls the heal die and
-    broadcasts the amount; v1 announce-only — the actual HP
-    application is GM-tracked (or a follow-up /heal call).
+    broadcasts the amount; the heal is applied server-side to the
+    caster via `_apply_heal_to_combatant` (v2.99.458).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -87195,8 +87195,10 @@ async def use_halo_of_spores(
     - Lv 14+: 1d10
 
     Body: ``{character_id, target_combatant_id?, override?}``.
-    Costs a reaction chip. v1 announce-only — actual CON
-    save + damage application is GM-tracked.
+    Costs a reaction chip. v2.676.0 (Phase 8): with a
+    `target_combatant_id` the CON save is rolled + the necrotic
+    applied server-side (save-OR-NOTHING); without one it stays
+    announce-only.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -94356,8 +94358,9 @@ async def use_combat_inspiration(
     Body: ``{character_id, mode?, override?}``. Mode:
     "damage" (default) or "ac". No chip cost — this endpoint
     declares the BI die holder's intent to use Combat
-    Inspiration. v1 announce-only; actual roll + application
-    is GM-tracked via the existing BI flow.
+    Inspiration. v2.144.0/.145.0: the damage mode rolls the BI die +
+    applies it to the target via `_apply_damage_to_combatant`; the AC
+    mode returns the boosted-AC calculation.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -94711,8 +94714,9 @@ async def use_whispers_psychic_blades(
 
     Body: ``{character_id, target_combatant_id?, override?}``.
     No chip — this is a damage rider on a successful weapon
-    attack. BI decrement via the existing flow. v1
-    announce-only.
+    attack. BI decrement via the existing flow. v2.668.0 (Phase 8):
+    with a `target_combatant_id` the level-scaled psychic is rolled +
+    applied server-side; without one it stays announce-only.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -94853,8 +94857,9 @@ async def use_blade_flourish(
     Body: ``{character_id, flourish?, target_combatant_id?,
     override?}``. flourish: "defensive" (default), "slashing",
     or "mobile". No chip — BI decrement via existing flow.
-    v1 announce-only — actual BI roll + applied bonus is
-    GM-tracked.
+    v2.146.0: the shared damage half rolls the BI die + applies it to
+    the target via `_apply_damage_to_combatant` (the Defensive /
+    Slashing / Mobile riders stay GM-narrated).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -95481,9 +95486,10 @@ async def use_mote_of_potential(
 
     Body: ``{character_id, mode?, target_combatant_id?,
     override?}``. mode "check" (default), "attack", or "save".
-    No chip — passive rider on existing BI use. v1
-    announce-only — actual Mote roll + effect application
-    GM-tracked.
+    No chip — passive rider on existing BI use. v2.670.0 (Phase 8):
+    with a `target_combatant_id` the attack mode applies 1d{die} force
+    + the save mode grants 1d{die}+CHA temp HP; check mode is
+    GM-narrated.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -96319,9 +96325,8 @@ async def use_grim_harvest(
     Doesn't apply to constructs or undead."
 
     Body: ``{character_id, spell_level, is_necromancy?,
-    override?}``. spell_level ≥ 1 required. v1 announce-only —
-    actual HP gain is GM-applied via existing /heal flow; this
-    endpoint announces the trigger.
+    override?}``. spell_level ≥ 1 required. v2.99.457: the HP gain is
+    applied to the caster server-side via `_apply_heal_to_combatant`.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -98696,9 +98701,9 @@ async def use_rebuke_the_violent(
     a `channel-divinity` entry with `current >= 1` + attacker
     in active battle + Phase 4 reaction chip. Decrements CD
     counter, marks chip, computes spell save DC, broadcasts
-    the save + damage announce. v1 ships announce-only — the
-    GM rolls the attacker's Wis save + applies the psychic
-    damage.
+    the save + damage announce. v2.672.0 (Phase 8): with an
+    `attacker_combatant_id` the attacker's Wis save is rolled + the
+    psychic applied server-side (full on fail, half on success).
 
     With this commit, Phase H.2 (5 non-Devotion Paladin oaths)
     is substantially complete.
