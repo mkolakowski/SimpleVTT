@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.694.0] - 2026-06-26 — "The Shared Wound"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — resolve Aura of the Guardian's damage redirection server-side (Redemption Paladin) — a new two-target redirection shape.
+
+**Description:** `use_aura_of_the_guardian` (XGE p.39) marked the reaction + announced, but the GM did the damage-redirection swap by hand. The endpoint now resolves it server-side when an `ally_combatant_id` + a positive `damage_amount` are supplied, on the trust-the-caller convention (the ally already took the damage): the ally is **healed back** by `damage_amount` via `_apply_heal_to_combatant` (undoing the hit — revives a downed ally), and the Paladin **takes that damage** via `_apply_damage_to_combatant` as **untyped, unreducible** damage (RAW: "this damage can't be reduced in any way" → untyped, no resistance match; other accompanying effects are not transferred). This is the first **two-target redirection** shape of the arc (heal one combatant + damage another in one call). The response gains `redirected` / `ally_healed` / `paladin_damage_applied` / `paladin_hp_after`. Backward-compatible: without the redirect args it stays announce-only.
+
+### Added
+- `tests/harness/test_aura_of_the_guardian.py` (+2) — `test_aotg_redirects_damage` (wounded NPC ally at 10/50 + Caelan at 50 HP, redirect 8 → `ally_healed == 8`, `paladin_damage_applied == 8`, `redirected is True`) + `test_aotg_no_redirect_announce_only` (no redirect args → `redirected is False`, fields None).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_aura_of_the_guardian` heals the ally back + applies the redirected damage to the Paladin; accepts `ally_combatant_id` / `damage_amount`; surfaces the redirect fields.
+- `docs/automation-coverage.md` — `use_aura_of_the_guardian` note updated (damage redirection resolved server-side).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Aura of the Guardian.
+- `docs/test-harness-coverage.md` — catalog the new tests.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.693.0] - 2026-06-26 — "The Refused Fall"
 
 **Schema version:** 81

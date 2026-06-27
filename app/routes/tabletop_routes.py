@@ -82219,15 +82219,30 @@ async def use_aura_of_the_guardian(
     damage, and this damage can't be reduced in any way. At
     18th level, the range of this aura increases to 30 feet."
 
-    Body: ``{character_id, override?}``. Costs a reaction chip.
-    v1 announce-only — the actual damage-redirection swap (HP
-    decrement on Paladin, HP restore on ally) is GM-tracked.
+    Body: ``{character_id, ally_combatant_id?, damage_amount?,
+    override?}``. Costs a reaction chip.
+
+    v2.694.0 (Phase 8): when an ``ally_combatant_id`` + a positive
+    ``damage_amount`` are supplied, the redirection is resolved
+    server-side on the trust-the-caller convention (the ally already
+    took the damage): the ally is **healed back** by ``damage_amount``
+    via `_apply_heal_to_combatant` (undoing the hit — revives a downed
+    ally) and the Paladin **takes that damage** via
+    `_apply_damage_to_combatant` as untyped, unreducible damage (RAW:
+    "this damage can't be reduced in any way" → untyped, no resistance
+    match). Other accompanying effects are not transferred (RAW).
+    Without the redirect args it stays announce-only.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
     override = bool(body.get("override"))
+    ally_combatant_id = (str(body.get("ally_combatant_id") or "")).strip()
+    try:
+        damage_amount = int(body.get("damage_amount") or 0)
+    except (TypeError, ValueError):
+        damage_amount = 0
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -82303,11 +82318,41 @@ async def use_aura_of_the_guardian(
         },
     })
 
+    # v2.694.0 — Phase 8: resolve the damage redirection server-side. The ally
+    # already took the damage (trust-the-caller), so heal them back by
+    # `damage_amount` (undoing the hit) and apply that same amount to the
+    # Paladin as untyped, unreducible damage. Backward-compatible: no
+    # ally_combatant_id / damage_amount → announce-only.
+    redirected = False
+    ally_healed = None
+    paladin_damage_applied = None
+    paladin_hp_after = None
+    if ally_combatant_id and damage_amount >= 1:
+        _ally = _lookup_combatant(campaign_id, ally_combatant_id)
+        if _ally is not None:
+            _ahr = await _apply_heal_to_combatant(
+                db, campaign_id, _ally, damage_amount,
+            )
+            ally_healed = int(_ahr.get("applied") or 0)
+            _pdr = await _apply_damage_to_combatant(
+                db, campaign_id, {"char_id": char.id, "name": char.name},
+                damage_amount, "", attacker_char_id=None,
+            )
+            paladin_damage_applied = int(_pdr.get("applied") or 0)
+            paladin_hp_after = int(_pdr.get("hp_after") or 0)
+            redirected = True
+
     return {
         "ok": True,
         "feature": "aura-of-the-guardian",
         "radius_ft": radius_ft,
         "paladin_level": pal_lv,
+        "ally_combatant_id": ally_combatant_id,
+        "damage_amount": damage_amount,
+        "redirected": redirected,
+        "ally_healed": ally_healed,
+        "paladin_damage_applied": paladin_damage_applied,
+        "paladin_hp_after": paladin_hp_after,
     }
 
 

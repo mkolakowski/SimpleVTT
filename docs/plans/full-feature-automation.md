@@ -675,6 +675,14 @@ composition. Batch by class, same cadence as the breadth sweep.
   (Relentless Endurance / Death Ward / Relentless Rage), avoiding a
   manual-decrement-vs-auto-fire conflict. Surfaces `hp_after`/`revived`.
   Harness: `test_undying_sentinel.py` (+1).
+- **v2.694.0 ("The Shared Wound") — Aura of the Guardian** (Redemption Paladin
+  Lv 7+): the first **two-target redirection** shape of the arc. With an
+  `ally_combatant_id` + `damage_amount` (trust-the-caller — the ally already
+  took the damage), the ally is healed back via `_apply_heal_to_combatant` and
+  the Paladin takes that damage via `_apply_damage_to_combatant` as untyped /
+  unreducible (RAW: "can't be reduced in any way"; other effects not
+  transferred). Surfaces `redirected`/`ally_healed`/`paladin_damage_applied`/
+  `paladin_hp_after`. Harness: `test_aura_of_the_guardian.py` (+2).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

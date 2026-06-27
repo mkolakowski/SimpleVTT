@@ -7,8 +7,11 @@ instead of that creature taking it. At Lv 18, the range
 increases to 30 ft. This feature doesn't transfer any other
 effects; this damage can't be reduced.
 
-v1 announce-only — the actual damage-redirection swap (HP
-decrement on Paladin, HP restore on ally) is GM-tracked.
+**v2.694.0 (Phase 8):** the damage-redirection swap is now applied
+server-side (trust-the-caller — the ally already took the damage):
+with `ally_combatant_id` + `damage_amount`, the ally is healed back by
+that amount and the Paladin takes it (untyped, unreducible). Response
+gains `redirected` / `ally_healed` / `paladin_damage_applied`.
 Costs a reaction chip.
 
 Caelan Lv 7 → radius 10. Tests PATCH his subclass to
@@ -16,6 +19,8 @@ Caelan Lv 7 → radius 10. Tests PATCH his subclass to
 
 Tests:
   - Lv 7 happy → radius 10, reaction chip marked.
+  - Redirect: wounded NPC ally healed back + Paladin takes the damage.
+  - Announce-only: no redirect args → redirected False.
   - Lv 18 happy → radius 30 (RAW upgrade).
   - Wrong subclass → 409.
   - Level gate (Lv 6) → 409.
@@ -81,6 +86,67 @@ async def test_use_aotg_happy_lv7(
     await asyncio.sleep(0.3)
     feats = _aotg_broadcasts(gm_ws, caelan["id"])
     assert feats
+
+
+async def test_aotg_redirects_damage(
+    gm_client, caelan_redemption_lv7,
+):
+    """v2.694.0 — Phase 8: the redirection heals the ally back + transfers the
+    damage to the Paladin. Seed Caelan + a wounded NPC ally (10/50, 40
+    headroom), set Caelan to a high known HP, then redirect 8 damage."""
+    caelan = caelan_redemption_lv7
+    # Give Caelan headroom so the redirected damage doesn't drop him to 0.
+    await _patch_sheet(
+        gm_client, caelan["id"], {"hp": {"current": 50}},
+    )
+    templates = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/templates")).json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": f"tok_aotg_{caelan['id']}", "char_id": caelan["id"],
+             "name": caelan["name"], "initiative": 12,
+             "hp_current": 50, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": "tok_aotg_ally", "char_id": None,
+             "token_template_id": bandit["id"], "name": "Wounded Ally",
+             "initiative": 8, "hp_current": 10, "hp_max": 50, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_aura_of_the_guardian",
+        json={"character_id": caelan["id"], "override": True,
+              "ally_combatant_id": "tok_aotg_ally", "damage_amount": 8},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["redirected"] is True, data
+    # Ally had 40 headroom → full heal-back; untyped → full damage to Caelan.
+    assert data["ally_healed"] == 8, data
+    assert data["paladin_damage_applied"] == 8, data
+
+
+async def test_aotg_no_redirect_announce_only(
+    gm_client, caelan_redemption_lv7,
+):
+    """v2.694.0 — no redirect args → backward-compatible announce-only."""
+    caelan = caelan_redemption_lv7
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_aura_of_the_guardian",
+        json={"character_id": caelan["id"], "override": True},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["redirected"] is False
+    assert data["ally_healed"] is None
+    assert data["paladin_damage_applied"] is None
 
 
 async def test_use_aotg_lv18_radius_upgrade(

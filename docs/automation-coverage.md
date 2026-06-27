@@ -167,7 +167,7 @@ or passive damage-boosters that already ride other code paths
 | `use_arms_of_the_astral_self` | ✅ tracked | A use/resource |
 | `use_aura_of_alacrity` | ✅ tracked | D buff-install |
 | `use_aura_of_conquest` | ✅ tracked | D buff-install, E aura |
-| `use_aura_of_the_guardian` | ✅ tracked | A use/resource |
+| `use_aura_of_the_guardian` | ✅ tracked | v2.694.0 — with `ally_combatant_id` + `damage_amount`, redirects the damage server-side: heals the ally back (`_apply_heal_to_combatant`) + applies it to the Paladin as untyped/unreducible (`_apply_damage_to_combatant`); announce-only without redirect args |
 | `use_avatar_of_battle` | ✅ tracked | D buff-install |
 | `use_avenging_angel` | ✅ tracked | D buff-install |
 | `use_balm_of_the_summer_court` | ✅ tracked | v2.679.0 — with `target_combatant_id`, applies the rolled heal (`_apply_heal_to_combatant`) AND the per-die temp HP (`_grant_temp_hp`) to the same ally; announce-only without a target |
