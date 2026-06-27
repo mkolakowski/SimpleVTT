@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.689.2] - 2026-06-26 — "The Status Refresh"
+
+**Schema version:** 81
+
+**Commit summary:** Docs — mark demo art as shipped across the guides now that all five leveled demos have token + map art (the guides still said tokens were plain coloured-ring placeholders).
+
+**Description:** Generating + wiring the demo art (v2.684.0–v2.689.0) left several reader-facing docs stale, claiming the demos render as placeholders / coloured rings / colour swatches. Refreshed them to reflect the shipped state (catalog 57/58, only the archived Sundered Vault `tavern.png` map outstanding): the `/wiki/demo-content` guide's Art-status block + all ten per-campaign `Art: ❌` markers flipped to ✅, the image-prompts intro, the `BUGS.md` M4 entry (token half now resolved; audio gap remains), and the `docs/plans/demo-mode.md` bundled-assets annotation. Doc-only; no code/schema/endpoint change.
+
+### Changed
+- `docs/wiki/demo-content.md` — Art-status block + 10 `Art: ❌`→✅ markers + Generation-prompts framing + the Sundered Tavern map note (now the lone placeholder).
+- `docs/demo/image-prompts.md` — intro no longer says the leveled demos are "waiting on art."
+- `BUGS.md` — M4 narrowed to the unshipped demo audio; the token-swatch claim is resolved.
+- `docs/plans/demo-mode.md` — dated update on the v2.3.0 bundled-assets line.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.689.1] - 2026-06-26 — "True to Form"
 
 **Schema version:** 81

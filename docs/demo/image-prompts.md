@@ -7,9 +7,10 @@ checklist** showing which tokens and maps still need art, the exact path to
 drop each file at, and a copy-paste prompt grounded in that character's
 race / class / subclass / weapons / personality.
 
-The flagship **Sundered Vault** demo already ships its tokens; the five
-leveled demos (L3 / L5 / L9 / L13 / L18) currently render every token as a
-plain coloured ring (`image_url=None`) and are waiting on art.
+The flagship **Sundered Vault** demo ships its tokens; the five leveled demos
+(L3 / L5 / L9 / L13 / L18) now ship full token **and** battle-map art too —
+generated via the ImagineArt MCP and background-removed to true alpha. The only
+remaining placeholder is the archived Sundered Vault's `tavern.png` map (57 / 58).
 
 > **Thumbnails appear automatically.** Each checklist row and each prompt
 > derives its thumbnail from the path shown for that entity (e.g.

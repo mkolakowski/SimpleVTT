@@ -11,11 +11,12 @@ level N?" tour. Each PC's sheet **Notes** carry three blocks: a one-line
 **Description**, a **Roleplay** hook, and **How to play** (tactics that lean on
 the showcase feature).
 
-> **Art status:** the battle maps, PC portraits, and NPC tokens are
-> **placeholders** today (blank grid / coloured token rings). Generation
-> prompts for every asset are in the collapsed **Generation prompts** section
-> at the bottom of this page; as art is added it's dropped under
-> `app/static/demo/...` and linked from each entry's *Art* note.
+> **Art status:** every leveled demo now ships **full art** — a painterly
+> battle map plus PC portraits and NPC tokens — generated from the prompts in
+> the collapsed **Generation prompts** section below (the same prompts live in
+> the demo image-prompts checklist). Art is dropped under
+> `app/static/demo/...` and wired in `app/demo_campaigns.py`. The only
+> remaining placeholder is the **archived Sundered Vault**'s `tavern.png` map.
 
 ## Accounts
 
@@ -38,7 +39,7 @@ hand-built L5 ("The Sundered Vault") is kept as an **archived** showcase
 (see the Level 5 section) — six campaigns seed in total, five active.
 
 ### Level 3 — The Goblin Warrens (Tier 1) · GM: demo-gm
-A goblin warband raids the trade road from a tunnel warren. *Art: ❌ map placeholder.*
+A goblin warband raids the trade road from a tunnel warren. *Art: ✅ battle map.*
 
 | PC | Class / subclass · race | Owner | Level-3 showcase |
 |---|---|---|---|
@@ -48,12 +49,12 @@ A goblin warband raids the trade road from a tunnel warren. *Art: ❌ map placeh
 | Aldric the Sudden | Wizard / Evocation · Forest Gnome | demo-gm | **Sculpt Spells** (carve allies out of his AoEs) |
 | Brisa Quickarrow | Ranger / Hunter · Lightfoot Halfling | demo-gm | **Colossus Slayer** (+1d6 vs. damaged) |
 
-NPCs: Goblin, Wolf, Bandit, Bandit-Captain "warlord" (SRD). *Art: ❌ token placeholders.*
+NPCs: Goblin, Wolf, Bandit, Bandit-Captain "warlord" (SRD). *Art: ✅ token art.*
 
 ### Level 5 — The Tide-Wracked Catacombs (Tier 2) · GM: demo-gm
 The remade Level-5 demo — a drowned crypt beneath a ruined lighthouse spills
 undead onto the coast at every high tide. Each PC shows off a feature their
-class gains at the level-5 power spike. *Art: ❌ map placeholder.*
+class gains at the level-5 power spike. *Art: ✅ battle map.*
 
 | PC | Class / subclass · race | Owner | Level-5 showcase |
 |---|---|---|---|
@@ -63,7 +64,7 @@ class gains at the level-5 power spike. *Art: ❌ map placeholder.*
 | Vesh Quillon | Rogue / Assassin · Wood Elf | alice | **Uncanny Dodge** (halve a hit) + Sneak Attack 3d6 |
 | Hrudd Saltmane | Barbarian / Berserker · Half-Orc | demo-gm | **Extra Attack** + Fast Movement + Frenzy |
 
-NPCs: Skeleton, Zombie, Ghoul, Wight "Captain of the Drowned" (SRD undead). *Art: ❌ token placeholders.*
+NPCs: Skeleton, Zombie, Ghoul, Wight "Captain of the Drowned" (SRD undead). *Art: ✅ token art.*
 
 > **Archived original — The Sundered Vault.** The flagship hand-built demo (a
 > full one-of-every-class party of 15 PCs in the **Tavern Brawl** — Pip
@@ -74,7 +75,7 @@ NPCs: Skeleton, Zombie, Ghoul, Wight "Captain of the Drowned" (SRD undead). *Art
 > reachable by URL and via the API. *Art: ✅ map `tavern.png` + some PC/NPC tokens.*
 
 ### Level 9 — Storm Over Saltmarsh (Tier 2→3) · GM: demo-gm2 *(the second GM)*
-Sahuagin raiders boil up from a storm-wracked reef. *Art: ❌ map placeholder.*
+Sahuagin raiders boil up from a storm-wracked reef. *Art: ✅ battle map.*
 
 | PC | Class / subclass · race | Owner | Level-9 showcase |
 |---|---|---|---|
@@ -84,10 +85,10 @@ Sahuagin raiders boil up from a storm-wracked reef. *Art: ❌ map placeholder.*
 | Ser Kadvan Tideward | Paladin / Vengeance · Human | demo-gm2 | **Aura of Courage** + Divine Smite |
 | Brother Tym | Monk / Open Hand · Water Genasi | demo-gm2 | **Unarmored Movement over water/walls** + Stunning Strike |
 
-NPCs: Sahuagin, Reef Shark, Water Elemental, a drag-spawn young dragon (SRD). *Art: ❌.*
+NPCs: Sahuagin, Reef Shark, Water Elemental, a drag-spawn young dragon (SRD). *Art: ✅ token art.*
 
 ### Level 13 — The Shadowfell Spire (Tier 3) · GM: demo-gm
-A spire of black glass bleeds the Shadowfell into the world. *Art: ❌ map placeholder.*
+A spire of black glass bleeds the Shadowfell into the world. *Art: ✅ battle map.*
 
 | PC | Class / subclass · race | Owner | Level-13 showcase |
 |---|---|---|---|
@@ -97,10 +98,10 @@ A spire of black glass bleeds the Shadowfell into the world. *Art: ❌ map place
 | Hruld Skullcleaver | Barbarian / Totem · Half-Orc | demo-gm | **Brutal Critical (2)** + Relentless Rage |
 | Wisp Underbough | Rogue / Arcane Trickster · Forest Gnome | demo-gm | **Magical Ambush** + Sneak Attack 7d6 |
 
-NPCs: Wraith, Vampire Spawn, Mind Flayer, Specter (SRD). *Art: ❌.*
+NPCs: Wraith, Vampire Spawn, Mind Flayer, Specter (SRD). *Art: ✅ token art.*
 
 ### Level 18 — The Dragon's Apotheosis (Tier 4) · GM: demo-gm
-An ancient red wyrm ascends to godhood atop a volcano. *Art: ❌ map placeholder.*
+An ancient red wyrm ascends to godhood atop a volcano. *Art: ✅ battle map.*
 
 | PC | Class / subclass · race | Owner | Level-18 showcase |
 |---|---|---|---|
@@ -110,12 +111,12 @@ An ancient red wyrm ascends to godhood atop a volcano. *Art: ❌ map placeholder
 | Bryn Ironwall | Fighter / Champion · Goliath | demo-gm | **Survivor** + 3 attacks + crit 18–20 |
 | Thornroot Elder | Druid / Moon · Firbolg | erin | **9th-level: Storm of Vengeance** + Archdruid |
 
-NPCs: Adult Red Dragon (Pyraxis), Fire Giants, Cult Archmage, Salamander (SRD). *Art: ❌.*
+NPCs: Adult Red Dragon (Pyraxis), Fire Giants, Cult Archmage, Salamander (SRD). *Art: ✅ token art.*
 
 ---
 
 <details>
-<summary><strong>Generation prompts</strong> (for the placeholder art — maps, PC portraits, NPC tokens)</summary>
+<summary><strong>Generation prompts</strong> (the prompts behind the now-shipped art — kept for reference & regeneration)</summary>
 
 All prompts target a consistent look: **painterly digital fantasy art, dramatic
 lighting, no text/watermark**. Battle maps are **top-down, grid-aligned,
@@ -126,7 +127,7 @@ background, centred**.
 
 - **The Goblin Warrens (entrance)** — top-down cave-mouth into a goblin tunnel warren: muddy entrance, crude wooden palisade, scattered bones and cookfires, tunnel openings, torchlight. ~20×14 squares.
 - **The Tide-Wracked Catacombs** — top-down flooded crypt beneath a ruined lighthouse: ankle-deep seawater pooling between barnacle-crusted sarcophagi, broken burial niches, kelp and bone debris, a collapsed lighthouse stair descending into the dark, faint phosphorescent glow at the water's edge. ~20×14 squares.
-- **The Sundered Tavern** *(art exists: `tavern.png`)* — top-down two-storey roadside tavern interior: bar to the east, door to the west, overturned tables, a brawl in progress.
+- **The Sundered Tavern** *(placeholder `tavern.png` — the lone un-regenerated map)* — top-down two-storey roadside tavern interior: bar to the east, door to the west, overturned tables, a brawl in progress.
 - **The Drowned Reef** — top-down storm-lashed coral reef at low tide: tide pools, jagged coral, a half-sunken shipwreck, sahuagin lair openings, churning surf at the edges. ~23×16 squares.
 - **The Shadowfell Spire (threshold)** — top-down obsidian plaza before a spire of black glass: cracked flagstones, drifting shadow-mist, guttering violet braziers, grasping dead hands at the margins. ~23×17 squares.
 - **The Caldera Throne** — top-down volcanic caldera rim: rivers of lava, basalt causeways, a central obsidian throne-dais, ember haze, a dragon-sized landing ledge. ~26×19 squares.
