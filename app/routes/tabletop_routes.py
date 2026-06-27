@@ -10884,12 +10884,15 @@ _light_emitter_seq: dict[int, int] = {}
 async def _add_light_emitter(
     campaign_id: int, kind: str, x: float, y: float, radius_ft: float,
     *, name: str = "", caster_char_id: "int | None" = None,
-    cast_id: "str | None" = None,
+    cast_id: "str | None" = None, concentration: bool = False,
 ) -> dict:
     """v2.711.0 — shared light-emitter creator (used by the GM
     `/light_emitter` endpoint AND the auto-place-on-cast spell paths).
-    Appends a `{id, kind, x, y, radius_ft, name, caster_char_id, cast_id}`
-    emitter to the campaign store and broadcasts ``light_emitter_add``.
+    Appends a `{id, kind, x, y, radius_ft, name, caster_char_id, cast_id,
+    concentration}` emitter to the campaign store and broadcasts
+    ``light_emitter_add``. ``concentration=True`` (Fog Cloud / Darkness) means
+    the emitter is dropped when the caster's concentration ends; non-
+    concentration emitters (Daylight, GM-placed) persist until cleared.
     Caller validates ``kind`` / ``radius_ft``."""
     _light_emitter_seq[campaign_id] = _light_emitter_seq.get(campaign_id, 0) + 1
     emitter = {
@@ -10901,6 +10904,7 @@ async def _add_light_emitter(
         "name": (name or kind.title())[:60],
         "caster_char_id": caster_char_id,
         "cast_id": cast_id,
+        "concentration": bool(concentration),
     }
     _light_emitters.setdefault(campaign_id, []).append(emitter)
     await hub.broadcast(campaign_id, {"type": "light_emitter_add",
@@ -10931,7 +10935,8 @@ async def _clear_caster_concentration_aoes(
     # damage AoE marker) still gets it cleared on concentration end.
     emitters = _light_emitters.get(campaign_id) or []
     kept_em = [e for e in emitters
-               if int(e.get("caster_char_id") or 0) != int(caster_char_id)]
+               if not (e.get("concentration")
+                       and int(e.get("caster_char_id") or 0) == int(caster_char_id))]
     if len(kept_em) != len(emitters):
         dropped = [e["id"] for e in emitters if e not in kept_em]
         _light_emitters[campaign_id] = kept_em
@@ -103979,7 +103984,8 @@ async def cast_fog_cloud(
         emitter_placed = await _add_light_emitter(
             campaign_id, "fog", float(center.get("x") or 0),
             float(center.get("y") or 0), float(radius_ft),
-            name="Fog Cloud", caster_char_id=char.id, cast_id=cast_id)
+            name="Fog Cloud", caster_char_id=char.id, cast_id=cast_id,
+            concentration=True)
 
     return {
         "ok": True,
@@ -104136,12 +104142,165 @@ async def cast_darkness(
         emitter_placed = await _add_light_emitter(
             campaign_id, "darkness", float(center.get("x") or 0),
             float(center.get("y") or 0), float(radius_ft),
-            name="Darkness", caster_char_id=char.id, cast_id=cast_id)
+            name="Darkness", caster_char_id=char.id, cast_id=cast_id,
+            concentration=True)
 
     return {
         "ok": True, "cast_id": cast_id, "slot_level": slot_level,
         "slot_used": used + 1, "slot_total": total, "class_slug": class_slug,
         "radius_ft": radius_ft, "range_ft": 60, "concentration": True,
+        "emitter_id": (emitter_placed or {}).get("id"),
+    }
+
+
+# ----------- API: cast Daylight (3rd-level Evocation, AoE light) -----------
+
+@router.post("/api/campaign/{campaign_id}/cast_daylight")
+async def cast_daylight(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.713.0 — Cast Daylight: slot consume + audit + auto-placed
+    vision-and-light `daylight` emitter. RAW (PHB p.230): L3 Evocation, 60 ft,
+    1 hour (NOT concentration), no save. Creates a 60-ft-radius sphere of
+    bright light (+60 ft dim beyond) that dispels magical darkness of 3rd
+    level or lower. Radius is fixed (no slot scaling). Classes: Cleric, Druid,
+    Ranger, Sorcerer.
+
+    Body: ``{character_id, class_slug, slot_level?, center?, override?}``. With
+    a ``center: {x, y}`` the spell drops a `daylight` emitter at that point.
+    Non-concentration → the emitter persists until cleared (GM via
+    `/light_emitter` DELETE); it is NOT dropped by concentration-end cleanup.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    class_slug = (body.get("class_slug") or "").strip().lower()
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw is not None else 3
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if slot_level < 3:
+        raise HTTPException(400, "slot_level must be >= 3 (Daylight is L3)")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    _DAYLIGHT_CLASSES = {"cleric", "druid", "ranger", "sorcerer"}
+    if class_slug not in _DAYLIGHT_CLASSES:
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class",
+            "expected": sorted(_DAYLIGHT_CLASSES),
+            "got": class_slug or "",
+        })
+    primary_class = (sheet.get("class") or "").strip().lower()
+    if primary_class != class_slug:
+        has_class = any(
+            (entry.get("class") or "").strip().lower() == class_slug
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_class:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class",
+                "expected": class_slug,
+                "got": primary_class or "",
+            })
+
+    spells = list(sheet.get("spells") or [])
+    has_spell = any(
+        (s.get("_slug") == "daylight") or
+        (str(s.get("name", "")).lower() == "daylight")
+        for s in spells
+    )
+    if not has_spell:
+        return JSONResponse(status_code=409, content={
+            "error": "spell_not_known", "spell": "daylight",
+        })
+
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get(class_slug) or {})
+    slot = dict(per_class.get(str(slot_level)) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot", "level": slot_level,
+            "class_slug": class_slug, "spell_name": "Daylight",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget", "slot": "action", "char_name": char.name,
+            "source": "daylight", "label": "Daylight", "strict": strict,
+        })
+
+    slot["used"] = used + 1
+    per_class[str(slot_level)] = slot
+    all_slots[class_slug] = per_class
+    sheet["spell_slots"] = all_slots
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    radius_ft = 60   # fixed bright-light radius (no slot scaling)
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    note = (
+        f"☀️ {char.name} casts Daylight (L{slot_level}) — 60 ft, "
+        f"{radius_ft}-ft-radius sphere of bright light (dispels magical dark)"
+    )
+    await hub.broadcast(campaign_id, {"type": "roll", "data": {
+        "expression": "", "total": 0, "breakdown": note, "note": note,
+        "user_name": char.name, "char_name": char.name,
+        "visibility": Visibility.PUBLIC.value,
+    }})
+    await hub.broadcast(campaign_id, {"type": "spell_slot_update", "data": {
+        "character_id": char.id, "class_slug": class_slug,
+        "level": slot_level, "total": total, "used": used + 1,
+    }})
+    await hub.broadcast(campaign_id, {"type": "feature_used", "data": {
+        "character_id": char.id, "character_name": char.name,
+        "feature_name": "☀️ Daylight",
+        "feature_desc": (
+            f"{char.name} fills a {radius_ft}-ft-radius sphere with bright "
+            f"light (+60 ft dim); dispels magical darkness of 3rd level or lower."
+        ),
+        "source": "daylight", "radius_ft": radius_ft, "range_ft": 60,
+    }})
+
+    cast_id = _log_spell_slot_spend(
+        campaign_id, char.id, class_slug, slot_level, used, "spell")
+
+    emitter_placed = None
+    center = body.get("center") or {}
+    if isinstance(center, dict) and center.get("x") is not None \
+            and center.get("y") is not None:
+        emitter_placed = await _add_light_emitter(
+            campaign_id, "daylight", float(center.get("x") or 0),
+            float(center.get("y") or 0), float(radius_ft),
+            name="Daylight", caster_char_id=char.id, cast_id=cast_id,
+            concentration=False)
+
+    return {
+        "ok": True, "cast_id": cast_id, "slot_level": slot_level,
+        "slot_used": used + 1, "slot_total": total, "class_slug": class_slug,
+        "radius_ft": radius_ft, "range_ft": 60, "concentration": False,
         "emitter_id": (emitter_placed or {}).get("id"),
     }
 

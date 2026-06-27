@@ -162,7 +162,13 @@ emitter automatically (concentration-bound, cleared on concentration end):
   a `fog` emitter at the slot-scaled radius (shared `_add_light_emitter`).
 - **Darkness** ✅ v2.712.0 — new `/cast_darkness` endpoint places a fixed
   15-ft `darkness` (magical) emitter on a `center`.
-- **Daylight** — pending a cast endpoint.
+- **Daylight** ✅ v2.713.0 — new `/cast_daylight` endpoint places a fixed
+  60-ft `daylight` (bright) emitter; non-concentration, so emitters now
+  carry a `concentration` flag and only concentration-bound ones are
+  auto-cleared on concentration end.
+
+All three light spells now auto-place their emitter on cast — the
+cast→lighting loop is closed.
 
 ---
 

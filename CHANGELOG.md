@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.713.0] - 2026-06-27 — "The Bottled Sun"
+
+**Schema version:** 82
+
+**Commit summary:** New `/cast_daylight` endpoint — casts Daylight + auto-places its bright-light vision-and-light emitter; emitters now carry a concentration flag so non-concentration light isn't wrongly cleared.
+
+**Description:** Third and final auto-place-on-cast commit (after Fog Cloud v2.711.0 + Darkness v2.712.0). Adds `POST /api/campaign/{cid}/cast_daylight` — RAW PHB p.230: L3 Evocation, 60 ft, **1 hour (not concentration)**, no save, a fixed 60-ft-radius sphere of bright light (the Phase-3 `daylight` emitter, which lights its area to bright and dispels magical darkness). Classes: Cleric, Druid, Ranger, Sorcerer. Mirrors the other two cast endpoints; a `center: {x, y}` auto-drops the emitter. Because Daylight is **non-concentration**, light emitters now carry a `concentration` flag: `_add_light_emitter` records it (Fog Cloud + Darkness set `True`, Daylight + GM-placed `False`), and `_clear_caster_concentration_aoes` only drops the caster's *concentration-bound* emitters — so a caster's later unrelated concentration-end no longer wrongly snuffs their hour-long Daylight (or a GM-placed emitter).
+
+### Added
+- `POST /cast_daylight` endpoint.
+- `tests/harness/test_cast_daylight.py` (new, +7) — happy path (radius 60, range 60, `concentration False`); cast with `center` → a non-concentration `daylight` emitter; no `center` → no emitter; error paths (missing character_id 400, slot < 3 400, wrong class 409, spell not known 409). Cast by Brother Tavik (Cleric).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `_add_light_emitter` gains a `concentration` flag; Fog Cloud + Darkness emitters marked concentration-bound; `_clear_caster_concentration_aoes` only clears concentration-bound emitters.
+
+### Schema
+- No schema change (still v82).
+
 ## [2.712.0] - 2026-06-27 — "The Smothered Torch"
 
 **Schema version:** 82
