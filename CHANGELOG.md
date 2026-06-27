@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.722.0] - 2026-06-27 — "The Town Crier"
+
+**Schema version:** 83
+
+**Commit summary:** Suggestion polish — emit an operator audit-log entry when a report is filed (admin notification).
+
+**Description:** Final commit of the suggestion polish set. Filing a report now emits a `suggestion.created` line to the canonical audit-log stream (via `record_admin_action`: `target="#<id> <title>"`, `notes=<kind> @ <page> — <excerpt>`), so operators have a durable, greppable trail of incoming feedback (and fail2ban / log monitors see it). This is the available notification channel — the stack has no SMTP/push infra; the **live in-app** signal is the v2.720.0 topnav admin badge, and the durable record is this audit entry + the admin Suggestions table. The emission is best-effort (wrapped) so it can never block a user's submission.
+
+### Added
+- `app/routes/suggestion_routes.py` — `record_admin_action(action="suggestion.created", …)` on create.
+- `tests/harness/test_suggestions.py` (+1) — create still returns 200 + a valid suggestion with the audit wired (verifies the trigger is non-blocking, per the audit-test convention; the line shape is covered by the audit module).
+
+### Schema
+- No schema change (still v83).
+
 ## [2.721.0] - 2026-06-27 — "The Paper Trail"
 
 **Schema version:** 83

@@ -48,6 +48,20 @@ async def test_create_suggestion_happy(gm_client):
     assert s["user_name"]
 
 
+async def test_create_emits_audit_non_blocking(gm_client):
+    """v2.722.0 — creating a report emits an operator audit-log entry
+    (`suggestion.created`). The emission is best-effort, so the create must
+    still return 200 + a valid suggestion with the audit wired in. (The audit
+    line shape itself is covered by the audit module's own tests, mirroring
+    test_api_audit_emission's 'verify the trigger, not the emission' rule.)"""
+    r = await gm_client.post(
+        "/api/suggestions",
+        json={"kind": "issue", "title": "Audit wiring report",
+              "body": "details", "page_url": "/campaign/1"})
+    assert r.status_code == 200, r.text
+    assert r.json()["suggestion"]["id"] > 0
+
+
 async def test_create_missing_title_400(gm_client):
     r = await gm_client.post(
         "/api/suggestions", json={"kind": "suggestion", "body": "no title"})

@@ -74,6 +74,21 @@ async def create_suggestion(
     db.add(s)
     db.commit()
     db.refresh(s)
+    # v2.722.0 — notify operators via the canonical audit-log stream (the
+    # available notification channel — no SMTP/push infra; the live in-app
+    # signal is the v2.720.0 topnav admin badge). Best-effort: an audit
+    # failure must never block a user's report.
+    try:
+        from ..admin_audit import record_admin_action
+        record_admin_action(
+            db, actor=user, action="suggestion.created",
+            target=f"#{s.id} {title}"[:120], request=request, scope="global",
+            notes=f"{kind}"
+            + (f" @ {page_url}" if page_url else "")
+            + (f" — {text_body[:160]}" if text_body else ""),
+        )
+    except Exception:
+        pass
     return {"ok": True, "suggestion": _suggestion_dict(s)}
 
 
