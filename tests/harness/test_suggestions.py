@@ -20,6 +20,19 @@ async def _is_admin(client) -> bool:
     return r.status_code == 200
 
 
+async def test_admin_home_renders_with_suggestions_section(gm_client):
+    """The admin portal must not 500 with the new Suggestions section. A
+    non-admin gets 403 before render; an admin (CI/flipped) renders 200 —
+    either way, never a render-time 500."""
+    # Seed at least one report so the section's table path is exercised.
+    await gm_client.post(
+        "/api/suggestions", json={"kind": "issue", "title": "Render-path seed"})
+    r = await gm_client.get("/admin")
+    assert r.status_code in (200, 403), r.text
+    if r.status_code == 200:
+        assert "Suggestions" in r.text
+
+
 async def test_create_suggestion_happy(gm_client):
     r = await gm_client.post(
         "/api/suggestions",

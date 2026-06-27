@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.717.0] - 2026-06-27 — "The Triage Desk"
+
+**Schema version:** 83
+
+**Commit summary:** Suggestion system — admin portal view: a Suggestions & issue-reports section with inline status change + delete.
+
+**Description:** Second of the suggestion-system arc (after the v2.716.0 backend). The admin portal (`/admin`) now renders a **Suggestions & issue reports** section listing every report newest-first (ID, type 🐞/💡, title + body + admin note, submitter, page URL, timestamp), with an open-count badge in the heading. Each row has an inline status `<select>` (new / in_progress / resolved / wont_fix) and a 🗑 delete button wired to the `PATCH` / `DELETE /api/admin/suggestions/{id}` endpoints via fetch. The in-app "Suggest / Report" buttons (tabletop Quick Links + global topnav) ship in the next commit.
+
+### Added
+- `app/routes/admin_routes.py` — `admin_home` passes `suggestions` + `open_suggestion_count` to the template.
+- `app/templates/admin_home.html` — Suggestions section (table + inline status/delete JS).
+- `tests/harness/test_suggestions.py::test_admin_home_renders_with_suggestions_section` (+1) — `/admin` returns 200 (admin) or 403 (non-admin), never a render-time 500, with a seeded report exercising the table path.
+
+### Schema
+- No schema change (still v83).
+
 ## [2.716.0] - 2026-06-27 — "The Suggestion Box"
 
 **Schema version:** 83

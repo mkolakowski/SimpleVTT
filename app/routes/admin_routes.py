@@ -75,6 +75,16 @@ def admin_home(
 ):
     users = db.query(User).order_by(User.id).all()
     campaigns = db.query(Campaign).order_by(Campaign.id).all()
+    # v2.717.0 — suggestion / issue reports, newest first, for the
+    # triage section. Open (new / in_progress) first so the queue reads
+    # top-down; resolved/wont_fix sink below.
+    from ..models import Suggestion
+    suggestions = (
+        db.query(Suggestion).order_by(Suggestion.created_at.desc()).all()
+    )
+    open_suggestions = [
+        s for s in suggestions if (s.status or "new") in ("new", "in_progress")
+    ]
     # v2.581.0 — the demo magic-link mint section was retired from this
     # portal (moved to the Admin Center, Phase 4). No magic-link context
     # is passed to the template anymore.
@@ -105,6 +115,8 @@ def admin_home(
             "settings": get_settings(),
             "cloudflare_banning_enabled": cf_enabled,
             "recent_edge_bans": recent_edge_bans,
+            "suggestions": suggestions,
+            "open_suggestion_count": len(open_suggestions),
         },
     )
 

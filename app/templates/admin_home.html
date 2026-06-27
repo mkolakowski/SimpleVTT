@@ -40,6 +40,47 @@
 </section>
 
 <section>
+    <h2>Suggestions &amp; issue reports{% if open_suggestion_count %} <span style="font-size:13px;font-weight:600;color:var(--accent);">({{ open_suggestion_count }} open)</span>{% endif %}</h2>
+    <p class="muted">User-submitted feedback from the in-app “Suggest / Report”
+        button (tabletop Quick Links + the topnav). Change the status or delete
+        a report inline.</p>
+    {% if suggestions %}
+    <table class="data" id="suggestions-table">
+        <thead><tr>
+            <th>ID</th><th>Type</th><th>Title &amp; details</th><th>From</th>
+            <th>Where</th><th>When</th><th>Status</th><th></th>
+        </tr></thead>
+        <tbody>
+            {% for s in suggestions %}
+            <tr data-sid="{{ s.id }}">
+                <td>{{ s.id }}</td>
+                <td>{{ "🐞 Issue" if s.kind == "issue" else "💡 Suggestion" }}</td>
+                <td>
+                    <strong>{{ s.title }}</strong>
+                    {% if s.body %}<br><small class="muted">{{ s.body }}</small>{% endif %}
+                    {% if s.admin_note %}<br><small style="color:var(--accent);">📝 {{ s.admin_note }}</small>{% endif %}
+                </td>
+                <td>{{ s.user_name or "—" }}</td>
+                <td>{% if s.page_url %}<a href="{{ s.page_url }}">{{ s.page_url }}</a>{% else %}—{% endif %}</td>
+                <td><small class="muted">{{ s.created_at.strftime("%Y-%m-%d %H:%M") if s.created_at else "" }}</small></td>
+                <td>
+                    <select class="sugg-status" data-sid="{{ s.id }}" aria-label="Status">
+                        {% for st in ["new", "in_progress", "resolved", "wont_fix"] %}
+                        <option value="{{ st }}" {% if (s.status or "new") == st %}selected{% endif %}>{{ st }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td><button type="button" class="sugg-del" data-sid="{{ s.id }}" title="Delete this report">🗑</button></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No reports yet.</p>
+    {% endif %}
+</section>
+
+<section>
     <h2>Content tools</h2>
     <ul class="cards">
         <li><a href="/admin/stubs"><strong>Local-features stubs</strong></a>
@@ -369,6 +410,42 @@
         document.addEventListener('DOMContentLoaded', function () {
             var tables = document.querySelectorAll('table.filterable');
             Array.prototype.forEach.call(tables, attachColumnFilters);
+        });
+    })();
+</script>
+
+<script>
+    // v2.717.0 — suggestion triage: inline status change + delete via the
+    // /api/admin/suggestions JSON endpoints (session-cookie auth).
+    (function () {
+        document.querySelectorAll('.sugg-status').forEach(function (sel) {
+            sel.addEventListener('change', async function () {
+                const sid = sel.dataset.sid;
+                try {
+                    const r = await fetch('/api/admin/suggestions/' + sid, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ status: sel.value }),
+                    });
+                    if (!r.ok) { alert('Status update failed (' + r.status + ')'); }
+                } catch (e) { alert('Status update failed'); }
+            });
+        });
+        document.querySelectorAll('.sugg-del').forEach(function (btn) {
+            btn.addEventListener('click', async function () {
+                if (!confirm('Delete this report permanently?')) return;
+                const sid = btn.dataset.sid;
+                try {
+                    const r = await fetch('/api/admin/suggestions/' + sid, {
+                        method: 'DELETE', credentials: 'include',
+                    });
+                    if (r.ok) {
+                        const row = document.querySelector('tr[data-sid="' + sid + '"]');
+                        if (row) row.remove();
+                    } else { alert('Delete failed (' + r.status + ')'); }
+                } catch (e) { alert('Delete failed'); }
+            });
         });
     })();
 </script>
