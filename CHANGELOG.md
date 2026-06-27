@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.710.0] - 2026-06-27 — "The Lantern's Reach"
+
+**Schema version:** 82
+
+**Commit summary:** Vision & Light Phase 5 — client dynamic lighting: render the ambient/light/darkness/fog model as a canvas overlay. Completes the plan.
+
+**Description:** The final phase of [`docs/plans/vision-and-light.md`](docs/plans/vision-and-light.md) — pure presentation, no new server surface. The tabletop canvas gains a `drawLighting()` overlay (drawn after tokens, before the gutter labels) that mirrors the server resolver's `_illumination_at_point` precedence: a `dim`/`dark` ambient veil is punched through by token light sources + Daylight emitters (a radial gradient — full clear to the bright radius, partial at the dim radius), then magical-`darkness` and `fog` emitters are painted on top. It's composited on an **offscreen canvas** so the `destination-out` light "punch" erases only the veil, never the map/tokens beneath. Lighting state (`mapAmbientLight` + `lightEmitters`) is bootstrapped from a `GET /tokens` fetch on load and kept live by the `map_ambient_light` / `light_emitter_add` / `light_emitter_remove` WS events (already shipped in Phases 0/3); `token_update` already re-renders for token light changes. Bright maps with no emitters are a no-op (exact status quo). The server stays authoritative for every sight verdict (Phases 1–4) — this is the visual layer that finally shows players what the engine has been computing.
+
+### Changed
+- `app/static/tabletop.js` — `drawLighting()` overlay + offscreen light canvas; `mapAmbientLight`/`lightEmitters` state + `GET /tokens` bootstrap; `render()` calls `drawLighting()`; WS handlers for `map_ambient_light` / `light_emitter_add` / `light_emitter_remove`.
+
+### Notes
+- **Presentation-only** — adds no HTTP endpoint and no new WS broadcast shape (it *consumes* the Phase-0/3 broadcasts, which are already harness-tested), so no new `tests/harness/` test. Covered by the existing `tests/harness_ui/test_tabletop_canvas.py` suite, which asserts the page loads with **no JavaScript console errors** (re-run green for this commit).
+
+### Schema
+- No schema change (still v82).
+
 ## [2.709.0] - 2026-06-27 — "The Held Breath"
 
 **Schema version:** 82

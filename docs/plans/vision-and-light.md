@@ -1,6 +1,6 @@
 # Vision & Light — server-side sight/obscurement engine
 
-**Status:** 🟢 Phases 0–4 shipped — the entire server-side engine is live (v2.704.0 data model; v2.705.0 the `_visibility_between` resolver; v2.706.0 PC `/attack`; v2.707.0 NPC `/npc_attack`; v2.708.0 Darkness/Daylight/Fog emitters; v2.709.0 Hide/Stealth). Only **Phase 5 (client dynamic lighting — presentation)** remains. Plan authored v2.703.0.
+**Status:** ✅ All phases shipped (v2.704.0–v2.710.0). The full engine is live: data model (v2.704.0), `_visibility_between` resolver (v2.705.0), PC `/attack` (v2.706.0), NPC `/npc_attack` (v2.707.0), Darkness/Daylight/Fog emitters (v2.708.0), Hide/Stealth (v2.709.0), and the client dynamic-lighting canvas overlay (v2.710.0). Plan authored v2.703.0; completed in one arc.
 
 The one combat mechanic that is still **entirely GM-narrated** and is *not*
 buildable on an existing substrate: whether an attacker can **see** its
@@ -143,10 +143,13 @@ changes** — it can be validated in isolation before touching `/attack`.
    defeat it). Rides the Phase-2 wiring → hidden attacker gets advantage;
    both `/attack` + `/npc_attack` reveal the attacker after the swing.
    Harness: `test_vision_light_phase4.py`.
-5. **Phase 5 — client dynamic lighting / fog-of-war (L).** The big UI lift:
-   render bright/dim/dark + light radii on the canvas, optionally per-player
-   fog-of-war. Independent of the combat resolver (Phases 1–4 are
-   server-authoritative and work headless); this is presentation.
+5. **Phase 5 — client dynamic lighting (L). ✅ shipped v2.710.0.** A
+   `drawLighting()` canvas overlay renders the ambient veil + light-source
+   punches + darkness/fog emitters (offscreen-composited so the light punch
+   erases only the veil). State bootstrapped from `GET /tokens` + kept live
+   by the `map_ambient_light` / `light_emitter_*` WS events. Presentation
+   only; covered by `tests/harness_ui/test_tabletop_canvas.py` (no-console-
+   errors load). Per-player fog-of-war secrecy remains an optional non-goal.
 
 Each phase is independently shippable. Phases 1–2 deliver the core
 "attacking what you can't see" automation; Phase 5 is the visual polish that

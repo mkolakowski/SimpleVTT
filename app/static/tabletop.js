@@ -64,6 +64,26 @@
 
     const initialData = JSON.parse(document.getElementById('initial-data').textContent);
     let tokens = initialData.tokens || [];
+    // v2.710.0 — Phase 5 of vision-and-light: client dynamic lighting state.
+    // The map ambient ("bright"/"dim"/"dark") + spell light/darkness/fog
+    // emitters drive a canvas overlay (`drawLighting`). Bootstrapped from a
+    // GET /tokens fetch on init (which carries both) and kept live by the
+    // map_ambient_light / light_emitter_add / light_emitter_remove WS events.
+    let mapAmbientLight = initialData.ambient_light || 'bright';
+    let lightEmitters = initialData.light_emitters || [];
+    // The server-rendered initial-data predates the vision fields, so pull
+    // the active map's ambient + placed emitters once on load. Deferred
+    // (async) so it runs after the sync init defines render() + CAMPAIGN_ID.
+    (async () => {
+        try {
+            const r = await fetch(`/api/campaign/${CAMPAIGN_ID}/tokens`);
+            if (!r.ok) return;
+            const d = await r.json();
+            if (d.ambient_light) mapAmbientLight = d.ambient_light;
+            if (Array.isArray(d.light_emitters)) lightEmitters = d.light_emitters;
+            try { render(); } catch (_) {}
+        } catch (_) { /* lighting is best-effort presentation */ }
+    })();
     const characters = initialData.characters || [];
     const charById = {};
     characters.forEach(c => { charById[c.id] = c; });
@@ -2783,6 +2803,11 @@
             }
         }
 
+        // v2.710.0 — Phase 5 of vision-and-light: dynamic lighting overlay.
+        // Drawn after tokens/markers (so darkness dims them) but before the
+        // gutter labels (which must stay readable as UI chrome).
+        drawLighting();
+
         // v2.50.0 — grid coordinate labels drawn LAST so the gutter
         // sits on top of every other rendered element. Tokens sliding
         // along the map edge will pass under the strip, which is
@@ -2791,6 +2816,83 @@
         if (showGrid) drawGridCoords();
 
         _updateGifOverlay();
+    }
+
+    // v2.710.0 — Phase 5 of vision-and-light: render the lighting model
+    // (map ambient + token light sources + spell darkness/daylight/fog
+    // emitters) as a composited overlay. Mirrors the server resolver's
+    // `_illumination_at_point` precedence visually: an ambient dim/dark
+    // veil punched through by bright/dim light radii (token sources +
+    // Daylight), then magical-darkness + fog emitters painted on top.
+    // Built on an offscreen canvas so the destination-out "punch" erases
+    // only the veil, never the map/tokens beneath. Bright maps with no
+    // emitters are a no-op (status quo). Presentation only — the server
+    // is already authoritative for every sight verdict (Phases 1–4).
+    let _lightCanvas = null;
+    function drawLighting() {
+        const dark = mapAmbientLight === 'dark';
+        const dim = mapAmbientLight === 'dim';
+        const darknessEm = lightEmitters.filter(e => e && e.kind === 'darkness');
+        const fogEm = lightEmitters.filter(e => e && e.kind === 'fog');
+        if (!dark && !dim && !darknessEm.length && !fogEm.length) return;
+        const pxPerFt = gridSize / 5;   // 70px = 5ft grid → ft→px
+        if (!_lightCanvas) _lightCanvas = document.createElement('canvas');
+        if (_lightCanvas.width !== MAP_W) _lightCanvas.width = MAP_W;
+        if (_lightCanvas.height !== MAP_H) _lightCanvas.height = MAP_H;
+        const lc = _lightCanvas.getContext('2d');
+        lc.clearRect(0, 0, MAP_W, MAP_H);
+        // 1. Ambient veil.
+        const veil = dark ? 0.8 : (dim ? 0.42 : 0);
+        if (veil > 0) {
+            lc.fillStyle = `rgba(3,6,18,${veil})`;
+            lc.fillRect(0, 0, MAP_W, MAP_H);
+        }
+        // 2. Punch light holes (token sources + Daylight emitters): full clear
+        //    out to the bright radius, fading to partial at the dim radius.
+        lc.globalCompositeOperation = 'destination-out';
+        function punch(cx, cy, brightFt, dimFt) {
+            const outerPx = Math.max(brightFt, dimFt) * pxPerFt;
+            if (outerPx <= 0) return;
+            const innerPx = Math.min(brightFt * pxPerFt, outerPx);
+            const g = lc.createRadialGradient(cx, cy, Math.max(1, innerPx), cx, cy, outerPx);
+            g.addColorStop(0, 'rgba(0,0,0,1)');      // bright → fully clear
+            g.addColorStop(1, 'rgba(0,0,0,0.35)');   // dim edge → partial
+            lc.fillStyle = g;
+            lc.beginPath();
+            lc.arc(cx, cy, outerPx, 0, Math.PI * 2);
+            lc.fill();
+        }
+        tokens.forEach(t => {
+            if (_isTokenHiddenFromMe(t)) return;
+            const b = Number(t.light_bright_ft || 0);
+            const d = Number(t.light_dim_ft || 0);
+            if (b <= 0 && d <= 0) return;
+            punch(t.x + gridSize / 2, t.y + gridSize / 2, b, d);
+        });
+        lightEmitters.forEach(e => {
+            if (!e || e.kind !== 'daylight') return;
+            const r = Number(e.radius_ft || 0);
+            punch(Number(e.x || 0), Number(e.y || 0), r, r);
+        });
+        // 3. Magical darkness + fog painted on top (override any light below).
+        lc.globalCompositeOperation = 'source-over';
+        darknessEm.forEach(e => {
+            const r = Number(e.radius_ft || 0) * pxPerFt;
+            if (r <= 0) return;
+            lc.fillStyle = 'rgba(1,2,9,0.92)';
+            lc.beginPath();
+            lc.arc(Number(e.x || 0), Number(e.y || 0), r, 0, Math.PI * 2);
+            lc.fill();
+        });
+        fogEm.forEach(e => {
+            const r = Number(e.radius_ft || 0) * pxPerFt;
+            if (r <= 0) return;
+            lc.fillStyle = 'rgba(201,206,216,0.72)';
+            lc.beginPath();
+            lc.arc(Number(e.x || 0), Number(e.y || 0), r, 0, Math.PI * 2);
+            lc.fill();
+        });
+        ctx.drawImage(_lightCanvas, 0, 0);
     }
 
     /* v2.8.1: movement breadcrumb. Drawn on top of tokens so the line
@@ -5023,6 +5125,18 @@
                     ? msg.data.markers : [];
                 try { render(); } catch (_) {}
                 try { _renderAoeMoveControls(); } catch (_) {}
+            } else if (msg.type === 'map_ambient_light') {
+                // v2.710.0 — Phase 5 vision & light: ambient changed.
+                mapAmbientLight = (msg.data && msg.data.ambient_light) || 'bright';
+                try { render(); } catch (_) {}
+            } else if (msg.type === 'light_emitter_add') {
+                // v2.710.0 — a Darkness/Daylight/Fog emitter was placed.
+                if (msg.data && msg.data.id) lightEmitters.push(msg.data);
+                try { render(); } catch (_) {}
+            } else if (msg.type === 'light_emitter_remove') {
+                lightEmitters = lightEmitters.filter(
+                    e => e && e.id !== (msg.data && msg.data.id));
+                try { render(); } catch (_) {}
             } else if (msg.type === 'aoe_pulse') {
                 // v2.111.0 — instantaneous AoE flash (Fireball etc.).
                 try { _addAoePulse(msg.data || {}); } catch (_) {}
