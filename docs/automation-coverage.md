@@ -283,7 +283,7 @@ or passive damage-boosters that already ride other code paths
 | `use_protective_spirit` | ✅ tracked | heal |
 | `use_psychic_blades` | ✅ tracked | A use/resource |
 | `use_purity_of_spirit` | ✅ tracked | D buff-install (permanent PFE&G effects) |
-| `use_pushing_attack` | ✅ tracked | G forced-move |
+| `use_pushing_attack` | ✅ tracked | G forced-move (save→15-ft push via `_force_move`, v2.99.433). v2.691.0 — the superiority die also lands as bonus damage via `_apply_damage_to_combatant`; size gate GM-tracked |
 | `use_radiant_sun_bolt` | ✅ tracked | A use/resource |
 | `use_rage` | ✅ tracked | D buff-install |
 | `use_rally` | ✅ tracked | F temp-HP |

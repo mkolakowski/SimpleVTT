@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.691.0] - 2026-06-26 — "The Driving Blow"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — apply Pushing Attack's superiority-die bonus damage server-side (Battle Master Fighter), closing the maneuver's last GM-tracked half.
+
+**Description:** `use_pushing_attack` (PHB p.74) already resolved the STR save → 15-ft push server-side (v2.99.433 via `_force_move`), but the superiority die was only rolled + broadcast — the GM added the **bonus damage** by hand. The die now lands as bonus weapon damage on the target via `_apply_damage_to_combatant` (`is_attack=True`, trust-the-caller — the triggering attack already hit; the die rides the attack's damage roll RAW), typed by the optional `damage_type` body field (defaults to untyped). With both halves now server-side (damage + push), Pushing Attack is fully mechanized but for the GM-tracked Large-or-smaller size gate. The response gains `damage_applied`.
+
+### Added
+- `tests/harness/test_pushing_attack.py::test_pa_applies_bonus_damage` (+1) — seeds Garrik + a real bandit *template* (untyped → no resistance) → `damage_applied == extra_damage`, `save_resolved is True`.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_pushing_attack` applies the superiority die as bonus damage; accepts `damage_type`; surfaces `damage_applied`.
+- `docs/automation-coverage.md` — `use_pushing_attack` note updated (bonus damage applied alongside the existing save→push).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Pushing Attack (bonus-damage half).
+- `docs/test-harness-coverage.md` — catalog the new test.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.690.0] - 2026-06-26 — "The Sweeping Leg"
 
 **Schema version:** 81

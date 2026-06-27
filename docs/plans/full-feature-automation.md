@@ -649,6 +649,13 @@ composition. Batch by class, same cadence as the breadth sweep.
   filed for, without core-path surgery (the one-click `/attack` `maneuver:`
   UX wiring remains a deferred follow-up). Surfaces `damage_applied` +
   `feature_save`. Harness: `test_trip_attack.py` (+2).
+- **v2.691.0 ("The Driving Blow") — Pushing Attack** (Battle Master Fighter Lv
+  3+): the STR save → 15-ft push was already wired (v2.99.433 via
+  `_force_move`); this closes the last GM-tracked half by applying the
+  superiority die as bonus weapon damage via `_apply_damage_to_combatant`
+  (`is_attack=True`, trust-the-caller). With both halves server-side, Pushing
+  Attack is fully mechanized but for the GM-tracked size gate. Surfaces
+  `damage_applied`. Harness: `test_pushing_attack.py` (+1).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

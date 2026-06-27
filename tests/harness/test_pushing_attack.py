@@ -8,8 +8,15 @@ to 15 ft away from attacker.
 Mirrors Trip / Disarming / Menacing. Size-gate (Large or
 smaller) is GM-tracked in v1.
 
+**v2.691.0 (Phase 8):** the superiority die now also lands as bonus
+weapon damage on the target via `_apply_damage_to_combatant` (the
+last GM-tracked half — the STR save → 15-ft push was already wired in
+v2.99.433). Response gains `damage_applied`.
+
 Tests:
   - Happy d8 → extra 1..8, DC 16, save STR, push 15.
+  - Apply: templated NPC → damage_applied == extra_damage.
+  - Push moves the target on a failed save (v2.99.433).
   - Out of dice → 409.
   - Wrong subclass → 409.
 """
@@ -94,6 +101,45 @@ async def test_use_pa_happy(
     await asyncio.sleep(0.3)
     feats = _pa_broadcasts(gm_ws, garrik["id"])
     assert feats
+
+
+async def test_pa_applies_bonus_damage(
+    gm_client, garrik_battle_master,
+):
+    """v2.691.0 — Phase 8: the superiority die lands as bonus damage on the
+    target. Seed Garrik + a real bandit template (untyped → no resistance) →
+    damage_applied == extra_damage."""
+    garrik = garrik_battle_master
+    templates = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/templates")).json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": f"tok_pad_{garrik['id']}", "char_id": garrik["id"],
+             "name": garrik["name"], "initiative": 14,
+             "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": "tok_pad_bandit", "char_id": None,
+             "token_template_id": bandit["id"], "name": bandit["name"],
+             "initiative": 8, "hp_current": 50, "hp_max": 50, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_pushing_attack",
+        json={"character_id": garrik["id"],
+              "target_combatant_id": "tok_pad_bandit"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["damage_applied"] == data["extra_damage"], data
+    assert data["save_resolved"] is True
 
 
 async def test_use_pa_out_of_dice(

@@ -65211,8 +65211,9 @@ async def use_pushing_attack(
     it must make a Strength saving throw. On a failed save, you
     push the target up to 15 feet away from you."
 
-    Body: ``{character_id, target_combatant_id?, override?}``. Mirrors
-    Trip / Disarming / Menacing Attack. Save ability is STR.
+    Body: ``{character_id, target_combatant_id?, damage_type?,
+    override?}``. Mirrors Trip / Disarming / Menacing Attack. Save
+    ability is STR.
 
     v2.99.433 — Phase 6.2 of docs/plans/movement-and-summons.md: when a
     ``target_combatant_id`` is supplied, the STR save is rolled
@@ -65222,12 +65223,19 @@ async def use_pushing_attack(
     gridded map with a token (off-grid → save resolves but no move). The
     size gate (Large-or-smaller) stays GM-tracked. Response gains
     `save_resolved` / `save_passed` / `push_applied`.
+
+    v2.691.0 — Phase 8: the superiority die now also lands as **bonus
+    weapon damage** on the target via `_apply_damage_to_combatant`
+    (`is_attack=True`, trust-the-caller — the triggering attack already
+    hit; the die rides the attack's damage roll RAW). Closes the
+    last GM-tracked half of the maneuver. Response gains `damage_applied`.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
     target_combatant_id = body.get("target_combatant_id") or None
+    damage_type = (str(body.get("damage_type") or "")).strip().lower()
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -65349,9 +65357,18 @@ async def use_pushing_attack(
     save_resolved = False
     save_passed = None
     push_applied = False
+    damage_applied = None
     if target_combatant_id:
         target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
         if target_combatant:
+            # v2.691.0 — Phase 8: apply the superiority die as bonus weapon
+            # damage (trust-the-caller — the hit already landed; the die rides
+            # the attack's damage roll RAW). The push half is resolved below.
+            _padr = await _apply_damage_to_combatant(
+                db, campaign_id, target_combatant, int(extra), damage_type,
+                is_attack=True, attacker_char_id=char.id,
+            )
+            damage_applied = int(_padr.get("applied") or 0)
             _tmod = None
             if target_combatant.get("char_id"):
                 _tchar = db.query(Character).filter(
@@ -65413,6 +65430,7 @@ async def use_pushing_attack(
         "save_resolved": save_resolved,
         "save_passed": save_passed,
         "push_applied": push_applied,
+        "damage_applied": damage_applied,
     }
 
 
