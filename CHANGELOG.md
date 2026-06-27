@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.719.0] - 2026-06-27 — "The Sorting Hat"
+
+**Schema version:** 83
+
+**Commit summary:** Suggestion admin polish — status + type filter chips on the reports table.
+
+**Description:** First of the suggestion-system polish set. The admin Suggestions table gains client-side filter chips — a status row (All / New / In progress / Resolved / Won't fix) and a type row (All / 💡 Suggestions / 🐞 Issues), ANDed — that show/hide the already-rendered rows with no round-trip (each `<tr>` now carries `data-status` / `data-kind`). The active chip is highlighted (`aria-pressed`), and an inline status change keeps the row's `data-status` in sync so the active filter re-applies correctly. (The `GET /api/admin/suggestions` endpoint already accepts `?status=&kind=` for API consumers; this is the matching UI.)
+
+### Changed
+- `app/templates/admin_home.html` — filter-chip bar + `data-status`/`data-kind` row attributes + `applySuggFilters()` JS; status-change handler now syncs the row attribute.
+
+### Schema
+- No schema change (still v83).
+
 ## [2.718.0] - 2026-06-27 — "The Open Door"
 
 **Schema version:** 83

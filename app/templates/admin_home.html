@@ -45,6 +45,25 @@
         button (tabletop Quick Links + the topnav). Change the status or delete
         a report inline.</p>
     {% if suggestions %}
+    <style>
+        #suggest-filters button { font-size:12px; padding:4px 10px; opacity:0.7; }
+        #suggest-filters button[aria-pressed="true"] {
+            opacity:1; border-color:var(--accent);
+            box-shadow:0 0 0 1px var(--accent) inset;
+        }
+    </style>
+    <div id="suggest-filters" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;align-items:center;">
+        <span class="muted" style="font-size:12px;">Status:</span>
+        <button type="button" class="sugg-filter" data-filter-status="all" aria-pressed="true">All</button>
+        <button type="button" class="sugg-filter" data-filter-status="new">New</button>
+        <button type="button" class="sugg-filter" data-filter-status="in_progress">In progress</button>
+        <button type="button" class="sugg-filter" data-filter-status="resolved">Resolved</button>
+        <button type="button" class="sugg-filter" data-filter-status="wont_fix">Won't fix</button>
+        <span class="muted" style="font-size:12px;margin-left:10px;">Type:</span>
+        <button type="button" class="sugg-filter-kind" data-filter-kind="all" aria-pressed="true">All</button>
+        <button type="button" class="sugg-filter-kind" data-filter-kind="suggestion">💡 Suggestions</button>
+        <button type="button" class="sugg-filter-kind" data-filter-kind="issue">🐞 Issues</button>
+    </div>
     <table class="data" id="suggestions-table">
         <thead><tr>
             <th>ID</th><th>Type</th><th>Title &amp; details</th><th>From</th>
@@ -52,7 +71,7 @@
         </tr></thead>
         <tbody>
             {% for s in suggestions %}
-            <tr data-sid="{{ s.id }}">
+            <tr data-sid="{{ s.id }}" data-status="{{ s.status or 'new' }}" data-kind="{{ s.kind or 'suggestion' }}">
                 <td>{{ s.id }}</td>
                 <td>{{ "🐞 Issue" if s.kind == "issue" else "💡 Suggestion" }}</td>
                 <td>
@@ -428,8 +447,42 @@
                         credentials: 'include',
                         body: JSON.stringify({ status: sel.value }),
                     });
-                    if (!r.ok) { alert('Status update failed (' + r.status + ')'); }
+                    if (r.ok) {
+                        // Keep the row's data-status in sync so the active
+                        // filter re-hides/-shows it correctly.
+                        const row = document.querySelector('tr[data-sid="' + sid + '"]');
+                        if (row) { row.dataset.status = sel.value; applySuggFilters(); }
+                    } else { alert('Status update failed (' + r.status + ')'); }
                 } catch (e) { alert('Status update failed'); }
+            });
+        });
+        // Client-side filter chips (the GET endpoint also supports
+        // ?status=&kind=; this filters the already-rendered rows with no
+        // round-trip). One active status + one active kind, ANDed.
+        let _fStatus = 'all', _fKind = 'all';
+        function applySuggFilters() {
+            document.querySelectorAll('#suggestions-table tbody tr').forEach(function (row) {
+                const okS = _fStatus === 'all' || row.dataset.status === _fStatus;
+                const okK = _fKind === 'all' || row.dataset.kind === _fKind;
+                row.style.display = (okS && okK) ? '' : 'none';
+            });
+        }
+        document.querySelectorAll('.sugg-filter').forEach(function (b) {
+            b.addEventListener('click', function () {
+                _fStatus = b.dataset.filterStatus;
+                document.querySelectorAll('.sugg-filter').forEach(function (x) {
+                    x.setAttribute('aria-pressed', x === b ? 'true' : 'false');
+                });
+                applySuggFilters();
+            });
+        });
+        document.querySelectorAll('.sugg-filter-kind').forEach(function (b) {
+            b.addEventListener('click', function () {
+                _fKind = b.dataset.filterKind;
+                document.querySelectorAll('.sugg-filter-kind').forEach(function (x) {
+                    x.setAttribute('aria-pressed', x === b ? 'true' : 'false');
+                });
+                applySuggFilters();
             });
         });
         document.querySelectorAll('.sugg-del').forEach(function (btn) {
