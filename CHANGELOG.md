@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.690.0] - 2026-06-26 — "The Sweeping Leg"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — resolve Trip Attack's bonus damage + STR save → Prone server-side (Battle Master Fighter).
+
+**Description:** `use_trip_attack` (PHB p.74) rolled the superiority die + computed the Maneuver DC but the GM added the damage and resolved the STR save by hand. It now resolves the maneuver server-side when a `target_combatant_id` is supplied, on the codebase's **trust-the-caller** convention (the Stunning Strike / Open Hand Technique shape — the attack that triggers Trip has already hit): the superiority die is applied as bonus weapon damage via `_apply_damage_to_combatant` (`is_attack=True` — RAW the die rides the attack's damage roll), and the target's Strength save → **Prone** is resolved via `_resolve_feature_save` (NPC inline, PC via RollRequest; `prone` is an engine condition, no end-of-turn re-save since Prone ends when the creature stands). The Large-or-smaller size gate stays GM-tracked. The optional `damage_type` body field types the bonus die (defaults to untyped). The response gains `damage_applied` + `feature_save`. Backward-compatible: no `target_combatant_id` stays announce-only.
+
+This is the first Battle Master **maneuver** mechanized on-target; it delivers the rules automation the "/attack maneuver field" was filed for, without surgery on the ~2000-line core `/attack` path. (The one-click `/attack` `maneuver:` UX wiring remains a deferred follow-up.)
+
+### Added
+- `tests/harness/test_trip_attack.py` (+2) — `test_ta_applies_damage_and_resolves_prone` (templated bandit → `damage_applied == extra_damage`, `feature_save.resolved`, `condition_installed == (not passed)` with `condition_key == "prone"` on a fail) + `test_ta_no_target_announce_only` (no target → `damage_applied`/`feature_save` stay None).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_trip_attack` applies the bonus damage + resolves the STR save → Prone; accepts `target_combatant_id` / `damage_type`; surfaces `damage_applied` / `feature_save`.
+- `docs/automation-coverage.md` — `use_trip_attack` note updated (bonus damage applied + Prone save resolved server-side).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Trip Attack.
+- `docs/test-harness-coverage.md` — catalog the new tests.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.689.2] - 2026-06-26 — "The Status Refresh"
 
 **Schema version:** 81

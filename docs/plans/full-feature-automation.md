@@ -638,6 +638,17 @@ composition. Batch by class, same cadence as the breadth sweep.
   turn" — so `repeated_save=False`). The free-form `target_name` label still
   drives the announce-only path. Surfaces `feature_save`. Harness:
   `test_berserker_path.py` (+1).
+- **v2.690.0 ("The Sweeping Leg") — Trip Attack** (Battle Master Fighter Lv
+  3+): the first Battle Master **maneuver** mechanized on-target. With a
+  `target_combatant_id` (trust-the-caller — the hit already landed),
+  `use_trip_attack` applies the superiority die as bonus damage via
+  `_apply_damage_to_combatant` (`is_attack=True`) and resolves the STR save →
+  Prone via `_resolve_feature_save` (NPC inline, PC via RollRequest; `prone`
+  engine condition, no re-save). The Large-or-smaller size gate stays
+  GM-tracked. Delivers the rules automation the "/attack maneuver field" was
+  filed for, without core-path surgery (the one-click `/attack` `maneuver:`
+  UX wiring remains a deferred follow-up). Surfaces `damage_applied` +
+  `feature_save`. Harness: `test_trip_attack.py` (+2).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

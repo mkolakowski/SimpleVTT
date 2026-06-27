@@ -325,7 +325,7 @@ or passive damage-boosters that already ride other code paths
 | `use_thunderwave` | ✅ tracked | G forced-move, damage |
 | `use_tides_of_chaos` | ✅ tracked | D buff-install |
 | `use_touch_of_death` | ✅ tracked | F temp-HP |
-| `use_trip_attack` | ✅ tracked | A use/resource |
+| `use_trip_attack` | ✅ tracked | v2.690.0 — with `target_combatant_id` (trust-the-caller), applies the superiority die as bonus damage (`_apply_damage_to_combatant`) + resolves the STR save → Prone (`_resolve_feature_save`; NPC inline, PC via RollRequest); size gate GM-tracked |
 | `use_turn_the_faithless` | ✅ tracked | v2.682.0 — resolves each target's WIS save via `_resolve_feature_save` (AoE loop; NPC inline, PC via RollRequest) + installs Turned (ends on damage) on a fail; fey/fiend filter GM-tracked |
 | `use_turn_the_unholy` | ✅ tracked | D buff-install, D/E buff-install |
 | `use_undying_sentinel` | ✅ tracked | A use/resource |

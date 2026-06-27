@@ -78568,21 +78568,28 @@ async def use_trip_attack(
     make a Strength saving throw. On a failed save, you knock
     the target prone."
 
-    Body: ``{character_id, override?}``.
+    Body: ``{character_id, target_combatant_id?, damage_type?,
+    override?}``.
 
     Validates Battle Master Lv 3+ + ``sheet.resources`` has a
     `superiority-dice` entry with `current >= 1`. Decrements the
     counter, rolls 1d<size> (size from `sheet.superiority_die_size`,
     default d8), computes Maneuver DC = 8 + prof + max(STR_mod,
-    DEX_mod), broadcasts.
+    DEX_mod).
 
-    v1 ships announce-only — the +damage and STR save are
-    announced for the GM to apply manually. /attack does not yet
-    accept a `maneuver: "trip"` body field. See
-    docs/plans/battle-master.md Phase 3.
+    v2.690.0 (Phase 8): when a ``target_combatant_id`` is supplied,
+    the maneuver resolves server-side on the trust-the-caller
+    convention (Stunning Strike / Open Hand Technique shape — the
+    caller has already hit): the superiority die is applied as bonus
+    weapon damage via `_apply_damage_to_combatant`, and the target's
+    STR save → Prone is resolved via `_resolve_feature_save` (NPC
+    inline, PC via RollRequest). The Large-or-smaller size gate stays
+    GM-tracked. Without a target it stays announce-only.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
+    target_combatant_id = (str(body.get("target_combatant_id") or "")).strip()
+    damage_type = (str(body.get("damage_type") or "")).strip().lower()
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
 
@@ -78700,6 +78707,55 @@ async def use_trip_attack(
         },
     })
 
+    # v2.690.0 — Phase 8: resolve the maneuver server-side when a target is
+    # supplied (trust-the-caller — the hit already landed). Apply the
+    # superiority die as bonus weapon damage via `_apply_damage_to_combatant`
+    # (is_attack=True; the bonus rides the attack's damage roll RAW), then
+    # resolve the STR save → Prone via `_resolve_feature_save` (prone is an
+    # engine condition; no end-of-turn re-save — Prone ends when the creature
+    # stands up). The Large-or-smaller gate stays GM-tracked. Backward-
+    # compatible: no target → announce-only.
+    damage_applied = None
+    feature_save = None
+    if target_combatant_id:
+        _ta_target = _lookup_combatant(campaign_id, target_combatant_id)
+        if _ta_target is not None:
+            _tadr = await _apply_damage_to_combatant(
+                db, campaign_id, _ta_target, int(extra), damage_type,
+                is_attack=True, attacker_char_id=char.id,
+            )
+            damage_applied = int(_tadr.get("applied") or 0)
+            prone_buff = {
+                "key": "prone",
+                "name": "Prone (Trip Attack)",
+                "icon": "🦵",
+                "duration_rounds": 10,
+                "duration_max": 10,
+                "concentration": False,
+                "source": "trip-attack",
+                "source_char_id": int(char.id),
+                "source_char_name": char.name,
+                "effects": [
+                    "disadvantage on attack rolls",
+                    "attackers within 5 ft have advantage; ranged "
+                    "attackers have disadvantage",
+                    "must spend half movement to stand up",
+                ],
+            }
+            feature_save = await _resolve_feature_save(
+                db, campaign_id,
+                caster_char_id=char.id, caster_char_name=char.name,
+                target_combatant=_ta_target,
+                save_ability="STR", dc=save_dc,
+                note_label=f"Trip Attack save (DC {save_dc})",
+                condition_buff=prone_buff,
+                repeated_save=False,
+                source="trip-attack",
+                campaign=campaign,
+                prompt_user=user,
+                feature_name="Trip Attack",
+            )
+
     return {
         "ok": True,
         "feature": "trip-attack",
@@ -78707,6 +78763,9 @@ async def use_trip_attack(
         "die_size": die_size,
         "save_dc": save_dc,
         "dice_remaining": new_sd,
+        "target_combatant_id": target_combatant_id,
+        "damage_applied": damage_applied,
+        "feature_save": feature_save,
     }
 
 
