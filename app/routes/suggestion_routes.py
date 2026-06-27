@@ -93,6 +93,21 @@ def list_suggestions(
     return {"ok": True, "suggestions": [_suggestion_dict(s) for s in rows]}
 
 
+@router.get("/api/admin/suggestions/count")
+def count_open_suggestions(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    """v2.720.0 — open-report count (status new / in_progress) for the topnav
+    admin badge. Cheap COUNT query, polled by the badge JS."""
+    n = (
+        db.query(Suggestion)
+        .filter(Suggestion.status.in_(("new", "in_progress")))
+        .count()
+    )
+    return {"ok": True, "open": n}
+
+
 @router.patch("/api/admin/suggestions/{suggestion_id}")
 async def update_suggestion(
     suggestion_id: int,

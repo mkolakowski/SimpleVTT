@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.720.0] - 2026-06-27 — "The Lit Beacon"
+
+**Schema version:** 83
+
+**Commit summary:** Suggestion admin polish — open-report count badge on the topnav Admin link.
+
+**Description:** Second of the suggestion polish set. Admins now see a "💡 N" badge next to the **Admin** topnav link showing the number of open reports (status `new` / `in_progress`), so new feedback is noticed without visiting `/admin`. Backed by a new lightweight `GET /api/admin/suggestions/count` (admin-only COUNT query) that a small admin-gated script in `base.html` polls on page load; the badge stays hidden when the count is zero or the fetch fails. (The tabletop suppresses the topnav, so the badge appears on the standard pages.)
+
+### Added
+- `app/routes/suggestion_routes.py` — `GET /api/admin/suggestions/count` → `{open: N}`.
+- `app/templates/base.html` — `#admin-suggest-badge` on the Admin link + the count-fetch script (admin-gated).
+- `tests/harness/test_suggestions.py` (+2) — count endpoint rejects non-admins (403); returns the open total (`>= 1` after seeding) when the client is a site admin.
+
+### Schema
+- No schema change (still v83).
+
 ## [2.719.0] - 2026-06-27 — "The Sorting Hat"
 
 **Schema version:** 83

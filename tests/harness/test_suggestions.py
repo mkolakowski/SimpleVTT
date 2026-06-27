@@ -74,6 +74,25 @@ async def test_admin_update_requires_admin(alice_client):
     assert r.status_code in (401, 403), r.text
 
 
+async def test_count_requires_admin(alice_client):
+    r = await alice_client.get("/api/admin/suggestions/count")
+    assert r.status_code in (401, 403), r.text
+
+
+async def test_count_returns_open_total_when_admin(gm_client):
+    """The topnav badge's count endpoint returns the open (new/in_progress)
+    total. Skipped when the client isn't a site admin."""
+    if not await _is_admin(gm_client):
+        pytest.skip("client is not a site admin (DEMO_GM_SITE_ADMIN=false)")
+    # File a fresh 'new' report → the open count must be >= 1.
+    await gm_client.post(
+        "/api/suggestions", json={"kind": "issue", "title": "Count seed"})
+    r = await gm_client.get("/api/admin/suggestions/count")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert isinstance(body["open"], int) and body["open"] >= 1
+
+
 async def test_admin_triage_flow(gm_client):
     """Admin-only happy path: list → the report appears; PATCH its status +
     note; DELETE it. Skipped when the client isn't a site admin."""
