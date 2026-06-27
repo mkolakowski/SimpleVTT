@@ -983,6 +983,14 @@ def _apply_inline_migrations() -> None:
                 "NOT NULL DEFAULT 0"
             ))
 
+    # ---- Schema v83 (2.716.0): suggestions table ----
+    # User-submitted suggestions / issue reports (the in-app "Suggest /
+    # Report" button), triaged in the admin portal. New table — created via
+    # the model's metadata so fresh + existing deployments pick it up. See
+    # models.Suggestion.
+    from .models import Suggestion
+    Suggestion.__table__.create(bind=engine, checkfirst=True)
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

@@ -1142,3 +1142,41 @@ class NoteEncryptionKey(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )
+
+
+class Suggestion(Base):
+    """v2.716.0 — a user-submitted suggestion or issue report, filed via the
+    in-app "Suggest / Report" button (tabletop Quick Links + the global
+    topnav) and triaged in the admin portal.
+
+    ``user_id`` is nullable + ON DELETE SET NULL so deleting a user doesn't
+    strand their reports; ``user_name`` snapshots the submitter for display.
+    ``kind`` is ``suggestion`` | ``issue``; ``status`` is ``new`` |
+    ``in_progress`` | ``resolved`` | ``wont_fix`` (plain strings, not a DB
+    enum, matching the codebase convention — no ALTER TYPE on new values).
+    ``page_url`` records where the reporter was for context.
+    """
+    __tablename__ = "suggestions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True,
+    )
+    user_name: Mapped[str] = mapped_column(String(120), default="")
+    kind: Mapped[str] = mapped_column(
+        String(16), default="suggestion", server_default="suggestion",
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(200), default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    page_url: Mapped[str] = mapped_column(String(500), default="")
+    status: Mapped[str] = mapped_column(
+        String(16), default="new", server_default="new", index=True,
+    )
+    admin_note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), index=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )

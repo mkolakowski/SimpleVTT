@@ -26,6 +26,7 @@ from .routes import (
     demo_magic_link_routes,
     homebrew_routes,
     notes_routes,
+    suggestion_routes,
     tabletop_routes,
     user_routes,
     wiki_routes,
@@ -135,6 +136,7 @@ app.include_router(audio_routes.router)
 app.include_router(user_routes.router)
 app.include_router(wiki_routes.router)
 app.include_router(notes_routes.router)
+app.include_router(suggestion_routes.router)
 
 # v2.425.0 — Phase 1 of docs/plans/demo-magic-link.md. The router
 # registers regardless of env-var state; every endpoint guards on

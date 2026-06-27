@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.716.0] - 2026-06-27 — "The Suggestion Box"
+
+**Schema version:** 83
+
+**Commit summary:** Suggestion / issue reporting — backend: `suggestions` table + submit/list/triage/delete endpoints. (Admin view + UI buttons follow.)
+
+**Description:** First of the suggestion-system arc. Adds a `suggestions` table (Schema v83) and the API to file + triage reports. `POST /api/suggestions` (any logged-in user) files a `{kind: "suggestion"|"issue", title, body, page_url}` report (title required; unknown kinds default to `suggestion`; the submitter's display name + id are snapshotted, `user_id` ON DELETE SET NULL so deleting a user doesn't strand reports). Admin-only triage: `GET /api/admin/suggestions` (newest-first, optional `status`/`kind` filters), `PATCH /api/admin/suggestions/{id}` (set `status` ∈ new/in_progress/resolved/wont_fix + `admin_note`), `DELETE /api/admin/suggestions/{id}`. New `app/routes/suggestion_routes.py` router. The admin portal view + the in-app "Suggest / Report" buttons (tabletop Quick Links + global topnav) ship in the following commits.
+
+### Added
+- `app/models.py` — `Suggestion` model.
+- `app/database.py` — Schema v83 migration (creates the `suggestions` table).
+- `app/routes/suggestion_routes.py` — submit/list/update/delete endpoints; registered in `app/main.py`.
+- `tests/harness/test_suggestions.py` (new, +6) — create happy path + shape; missing-title 400; unknown-kind defaults to suggestion; admin-list + admin-update reject non-admins (403); admin triage flow (list → PATCH status/note → bad-status 400 → DELETE → 404), which runs when the client is a site admin.
+
+### Schema
+- **v83** — new `suggestions` table (`id, user_id, user_name, kind, title, body, page_url, status, admin_note, created_at, updated_at`).
+
 ## [2.715.0] - 2026-06-27 — "The Way Home"
 
 **Schema version:** 82
