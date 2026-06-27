@@ -115,7 +115,7 @@ async def test_wiki_plans_page_renders():
         "plan-notes-and-handouts", "plan-app-wide-roles-and-storage",
         "plan-pending-resolution-state-machine", "plan-backup-export-overhaul",
         "plan-spell-upcasting", "plan-reactions-automation",
-        "plan-campaign-stats",
+        "plan-campaign-stats", "plan-vision-and-light",
     ):
         assert f"/wiki/doc/{slug}" in resp.text, f"plans page missing {slug}"
     # The styled status badges render (the table carries status spans).
@@ -407,6 +407,19 @@ async def test_wiki_doc_serves_spell_upcasting_plan():
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "up-casting" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_vision_plan():
+    """v2.703.0: GET /wiki/doc/plan-vision-and-light — 200 + body contains
+    the plan's H1 + the nav menu. Resolves through the _DOC_ALLOWLIST to
+    ``docs/plans/vision-and-light.md``.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-vision-and-light")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "vision" in resp.text.lower() and "light" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

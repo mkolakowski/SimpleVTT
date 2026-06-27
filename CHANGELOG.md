@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.703.0] - 2026-06-27 — "The Drawn Map"
+
+**Schema version:** 81
+
+**Commit summary:** Author the Vision & Light design plan (the sight/obscurement engine) — the first artifact of the next heavy substrate — and surface it through the wiki.
+
+**Description:** Docs/plumbing only — no engine code yet. With the Phase 8 feature tail complete, the remaining un-automated combat mechanic ("can the attacker see its target?", PHB p.194–195) needs a genuinely new **lighting model**, which is Maps-2.0-class work that the codebase convention starts with a design plan. This commit authors [`docs/plans/vision-and-light.md`](docs/plans/vision-and-light.md): it inventories what already exists (vision-sense flags — darkvision/truesight/blindsight/`sees_invisible`/Devil's Sight; the `/attack` disadvantage plumbing that already reads the manual `attacker_cant_see_target` flag; Corona of Light's light marker; distance geometry) and what's net-new (map ambient-light + token light-source state, a `_visibility_between` resolver), then phases the work: **0** data model + migration · **1** the resolver (no caller changes) · **2** wire into `/attack` (replace the manual flag with a computed verdict — the headline payoff) · **3** spell light/darkness emitters (Darkness/Daylight/Fog Cloud) · **4** Hide/Stealth unseen-attacker advantage · **5** client dynamic lighting / fog-of-war. Each phase ships an independent slice; line-of-sight/wall occlusion + per-player fog-of-war are explicit non-goals for the early phases.
+
+Surfaced through the wiki at `/wiki/doc/plan-vision-and-light` (allowlist + the `/wiki/plans` index table + `docs/wiki/README.md`), per the doc-surfacing rule.
+
+### Added
+- `docs/plans/vision-and-light.md` — the new design plan.
+- `tests/harness/test_wiki.py::test_wiki_doc_serves_vision_plan` — smoke test (slug serves 200 + H1 + nav). `test_wiki_plans_renders`'s representative-slug list += `plan-vision-and-light`.
+
+### Changed
+- `app/routes/wiki_routes.py` — `_DOC_ALLOWLIST` += `plan-vision-and-light`.
+- `app/templates/wiki_plans.html` + `docs/wiki/README.md` — design-plans table row (⚪ design only · Phase 0 unstarted).
+
+### Schema
+- No schema change (still v81; Phase 0 will bump it when the lighting columns land).
+
 ## [2.702.0] - 2026-06-27 — "The Searing Sun"
 
 **Schema version:** 81
