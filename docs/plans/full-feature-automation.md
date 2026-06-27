@@ -735,6 +735,14 @@ composition. Batch by class, same cadence as the breadth sweep.
   Lv 20 gate, recursive `is_attack=False`). The per-target "ends if you attack
   them" caveat stays GM-narrated. Surfaces `resistance_installed`. Harness:
   `test_emissary_of_redemption.py` (+1, end-to-end reflect-on-hit).
+- **v2.701.0 ("The Tactician's Nod") — Master of Tactics** (Mastermind Rogue
+  Lv 3+): RAW combat Help is target-specific, so it rides the existing
+  target-keyed advantage substrate — no new read site. With
+  `ally_combatant_id` + `target_combatant_id`, installs a 1-round buff on the
+  ally (`attack_advantage_vs_target_combatant_id` + `consume_on_attack`); the
+  ally's next attack vs that target rolls `2d20kh1` (the True Strike / Vow of
+  Enmity read) then drops. Surfaces `help_installed`; announce-only without
+  both ids. Harness: `test_master_of_tactics.py` (+1, end-to-end advantage).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

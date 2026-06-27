@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.701.0] - 2026-06-27 — "The Tactician's Nod"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — mechanize Master of Tactics (Mastermind Rogue) onto the existing target-keyed advantage substrate.
+
+**Description:** `use_master_of_tactics` (XGE p.46) was announce-only. RAW combat Help is **target-specific** (the aided ally gains advantage on its next attack *against the creature you helped against*), which means it rides the existing target-keyed advantage substrate — no new read site needed. When both `ally_combatant_id` and `target_combatant_id` are supplied, the endpoint installs a 1-round buff on the **ally's** combatant (via `_install_buff_on_combatant_id`) carrying `effects.attack_advantage_vs_target_combatant_id: <target>` + `consume_on_attack: True`. The ally's next `/attack` against that target reads the advantage through the same helper True Strike / Vow of Enmity use (`_attacker_has_vow_of_enmity_vs_target`) — rolling `2d20kh1` — then the consume-on-attack contract drops the buff. The bonus-action economy + the 30-ft range are surfaced as before. Response gains `help_installed`. Backward-compatible: without both ids it stays announce-only.
+
+### Added
+- `tests/harness/test_master_of_tactics.py` (+1) — `test_mt_grants_ally_advantage_vs_target` (Pip helps Garrik vs a bandit → `help_installed True`; Garrik's `/attack` vs the bandit has `2d20kh1` in the breakdown). `test_use_mt_happy_lv7` now asserts `help_installed is False` for the no-ids announce-only path.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_master_of_tactics` installs the target-keyed Help advantage on the ally; surfaces `help_installed`.
+- `docs/automation-coverage.md` — `use_master_of_tactics` note updated.
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Master of Tactics.
+- `docs/test-harness-coverage.md` — catalog the new test.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.700.0] - 2026-06-27 — "The Avatar of Peace"
 
 **Schema version:** 81

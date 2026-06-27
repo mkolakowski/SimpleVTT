@@ -86083,15 +86083,27 @@ async def use_master_of_tactics(
     that attack can be within 30 feet of you, rather than 5
     feet of you, if the target can see or hear you."
 
-    Body: ``{character_id, override?}``. Costs a bonus chip.
-    v1 announce-only — the actual Help action advantage on
-    ally's next attack is GM-tracked.
+    Body: ``{character_id, ally_combatant_id?, target_combatant_id?,
+    override?}``. Costs a bonus chip.
+
+    v2.701.0 (Phase 8): RAW combat Help is target-specific (the ally
+    gains advantage on its next attack *against the creature you
+    helped against*), so this rides the existing target-keyed
+    advantage substrate. When both ``ally_combatant_id`` and
+    ``target_combatant_id`` are supplied, it installs a 1-round buff on
+    the **ally's** combatant carrying
+    `effects.attack_advantage_vs_target_combatant_id` (the True Strike
+    / Vow of Enmity read site) + `consume_on_attack: True` — so the
+    ally's next `/attack` against that target rolls with advantage,
+    then the buff is consumed. Without both ids it stays announce-only.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
     override = bool(body.get("override"))
+    ally_combatant_id = (str(body.get("ally_combatant_id") or "")).strip()
+    target_combatant_id = (str(body.get("target_combatant_id") or "")).strip()
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -86132,6 +86144,34 @@ async def use_master_of_tactics(
 
     rogue_lv = _rogue_level_from_sheet(sheet)
 
+    # v2.701.0 — Phase 8: install the target-keyed Help advantage on the ally
+    # (rides the True Strike / Vow of Enmity read site + the consume-on-attack
+    # contract). The ally's next /attack vs the named target rolls with
+    # advantage, then the buff drops. Backward-compatible: no ids → announce.
+    help_installed = False
+    if ally_combatant_id and target_combatant_id:
+        help_installed = await _install_buff_on_combatant_id(
+            campaign_id, ally_combatant_id, {
+                "key": "master-of-tactics-help",
+                "name": "Helped (Master of Tactics)",
+                "icon": "🎯",
+                "duration_rounds": 1,
+                "duration_max": 1,
+                "concentration": False,
+                "source_char_id": char.id,
+                "effects": {
+                    "attack_advantage_vs_target_combatant_id":
+                        target_combatant_id,
+                    "consume_on_attack": True,
+                },
+                "desc": (
+                    "Advantage on the next attack against the helped target "
+                    "(Mastermind Rogue Master of Tactics; consumed on the "
+                    "first attack)."
+                ),
+            },
+        )
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -86162,6 +86202,9 @@ async def use_master_of_tactics(
             "source": "master-of-tactics",
             "help_action_economy": "bonus",
             "help_target_range_ft": 30,
+            "ally_combatant_id": ally_combatant_id,
+            "target_combatant_id": target_combatant_id,
+            "help_installed": help_installed,
             "rogue_level": rogue_lv,
         },
     })
@@ -86171,6 +86214,9 @@ async def use_master_of_tactics(
         "feature": "master-of-tactics",
         "help_action_economy": "bonus",
         "help_target_range_ft": 30,
+        "ally_combatant_id": ally_combatant_id,
+        "target_combatant_id": target_combatant_id,
+        "help_installed": help_installed,
         "rogue_level": rogue_lv,
     }
 

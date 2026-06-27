@@ -258,7 +258,7 @@ or passive damage-boosters that already ride other code paths
 | `use_manifest_echo` | ✅ tracked | A use/resource |
 | `use_mantle_of_inspiration` | ✅ tracked | v2.671.0 — applies `5 + bard_level` temp HP to each named ally (`target_combatant_ids`, capped at CHA-mod) via `_grant_temp_hp`; free reaction-move stays GM-narrated |
 | `use_master_of_nature` | ✅ tracked | A use/resource |
-| `use_master_of_tactics` | ✅ tracked | A use/resource |
+| `use_master_of_tactics` | ✅ tracked | v2.701.0 — with `ally_combatant_id` + `target_combatant_id`, installs a target-keyed Help advantage buff on the ally (`attack_advantage_vs_target_combatant_id` + `consume_on_attack`) → the ally's next attack vs that target rolls 2d20kh1 via the True Strike / Vow read; announce-only without both ids |
 | `use_menacing_attack` | ✅ tracked | C save-or-condition, D buff-install |
 | `use_metamagic_careful_spell` | ✅ tracked | D buff-install |
 | `use_metamagic_distant_spell` | ✅ tracked | D buff-install |
