@@ -1,6 +1,6 @@
 # Vision & Light — server-side sight/obscurement engine
 
-**Status:** 🟢 Phases 0–2 shipped — the core combat automation is live for **both** PC and NPC attacks (v2.704.0 data model; v2.705.0 the `_visibility_between` resolver; v2.706.0 wired into PC `/attack`; v2.707.0 mirrored into NPC `/npc_attack`: dark→disadvantage, unseen-attacker→advantage). Remaining: Phase 3 spell light/darkness emitters, Phase 4 Hide/Stealth, Phase 5 client lighting. Plan authored v2.703.0.
+**Status:** 🟢 Phases 0–3 shipped — combat automation (PC + NPC) + spell light/darkness emitters are live (v2.704.0 data model; v2.705.0 the `_visibility_between` resolver; v2.706.0 PC `/attack`; v2.707.0 NPC `/npc_attack`; v2.708.0 Darkness/Daylight/Fog emitters). Remaining: Phase 4 Hide/Stealth, Phase 5 client lighting. Plan authored v2.703.0.
 
 The one combat mechanic that is still **entirely GM-narrated** and is *not*
 buildable on an existing substrate: whether an attacker can **see** its
@@ -129,11 +129,13 @@ changes** — it can be validated in isolation before touching `/attack`.
    `test_vision_light_phase2.py`. **NPC `/npc_attack` mirror ✅ shipped
    v2.707.0** (`_compute_vision_edges` core + `_npc_attack_vision_edges`
    wrapper; harness `test_vision_light_npc_attack.py`).
-3. **Phase 3 — spell light/darkness emitters (M).** Darkness (magical dark
-   sphere — composes with Devil's Sight's `sees_in_darkness`), Daylight,
-   Fog Cloud (heavy obscurement = `unseen` inside). Reuse the
-   `_concentration_aoes` marker shape for placed/anchored emitters; the
-   resolver reads them as light/darkness sources.
+3. **Phase 3 — spell light/darkness emitters (M). ✅ shipped v2.708.0.**
+   `_light_emitters` store + `POST`/`DELETE /light_emitter` GM endpoints.
+   `darkness` → `magical_dark` (only Devil's Sight/truesight pierces, NOT
+   darkvision); `daylight` → bright (dispels darkness); `fog` → heavy
+   obscurement (only truesight/blindsight). `_illumination_at_point` reads
+   them (precedence fog > daylight > darkness); composes with the Phase-2
+   attack wiring. Harness: `test_vision_light_phase3.py`.
 4. **Phase 4 — Hide / Stealth & unseen-attacker advantage (M).** A hidden
    token (passed Stealth vs passive Perception, or simply GM-flagged hidden)
    is `unseen` → its first attack has advantage and reveals it. Pairs with

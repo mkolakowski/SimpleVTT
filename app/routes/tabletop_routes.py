@@ -5651,16 +5651,42 @@ def _brighter(a: str, b: str) -> str:
 def _illumination_at_point(
     db: Session, campaign_id: int, map_row, tx: float, ty: float,
 ) -> str:
-    """The illumination level (`bright`/`dim`/`dark`) at a map point: the
-    map ambient, upgraded by any token light source whose bright/dim radius
-    covers the point (bright wins, then dim)."""
+    """The effective sight condition at a map point. Returns `bright` / `dim`
+    / `dark` (natural illumination from the map ambient ∪ token light
+    sources) or, when a Phase-3 spell emitter covers the point, `magical_dark`
+    (Darkness — only Devil's Sight/truesight pierces) or `fog` (heavy
+    obscurement — only truesight/blindsight). Emitters take precedence over
+    natural light: fog > daylight > darkness."""
+    grid_px = int(map_row.grid_size_px or 70)
+    grid_type = getattr(map_row.grid_type, "value", map_row.grid_type) or "square"
+    # Phase 3 — spell-placed light/darkness/obscurement emitters override the
+    # natural illumination. A point may be covered by several; resolve by
+    # precedence (fog blocks sight even in daylight; Daylight dispels
+    # Darkness; Darkness overrides ambient + token light).
+    covering = set()
+    for e in (_light_emitters.get(campaign_id) or []):
+        try:
+            r_ft = float(e.get("radius_ft") or 0)
+            if r_ft <= 0:
+                continue
+            dist = _distance_ft_between_points(
+                grid_px, grid_type, float(e.get("x") or 0),
+                float(e.get("y") or 0), float(tx), float(ty))
+            if dist <= r_ft:
+                covering.add(str(e.get("kind") or "").lower())
+        except (TypeError, ValueError):
+            continue
+    if "fog" in covering:
+        return "fog"
+    if "daylight" in covering:
+        return "bright"
+    if "darkness" in covering:
+        return "magical_dark"
     level = (getattr(map_row, "ambient_light", "bright") or "bright")
     if level not in _LIGHT_RANK:
         level = "bright"
     if level == "bright":
-        return "bright"  # already max; no source can raise it
-    grid_px = int(map_row.grid_size_px or 70)
-    grid_type = getattr(map_row.grid_type, "value", map_row.grid_type) or "square"
+        return "bright"  # already max; no token source can raise it
     for t in db.query(Token).filter(Token.map_id == map_row.id).all():
         b = int(getattr(t, "light_bright_ft", 0) or 0)
         d = int(getattr(t, "light_dim_ft", 0) or 0)
@@ -5716,20 +5742,32 @@ def _visibility_between(
     illum = _illumination_at_point(
         db, campaign_id, map_row, float(tgt_tok.x or 0), float(tgt_tok.y or 0))
     result["illumination"] = illum
-    # Senses that grant sight regardless of light, within range.
+    # Senses that grant sight regardless of light/obscurement, within range.
+    # Truesight + blindsight pierce everything (incl. fog + magical dark).
     if senses["truesight_ft"] >= rng and senses["truesight_ft"] > 0:
         result["visibility"] = "seen"
         return result
     if senses["blindsight_ft"] >= rng and senses["blindsight_ft"] > 0:
         result["visibility"] = "seen"
         return result
-    # Devil's Sight: magical darkness reads as bright.
-    if illum == "dark" and senses["sees_in_darkness"]:
-        illum = "bright"
-    # Darkvision: darkness reads as dim within range.
-    elif illum == "dark" and senses["darkvision_ft"] >= rng \
-            and senses["darkvision_ft"] > 0:
-        illum = "dim"
+    # Fog Cloud / heavy obscurement: no normal sense penetrates → unseen.
+    if illum == "fog":
+        result["visibility"] = "unseen"
+        return result
+    # Magical darkness (Darkness spell): only Devil's Sight pierces it —
+    # darkvision explicitly does NOT (RAW PHB p.230).
+    if illum == "magical_dark":
+        if senses["sees_in_darkness"]:
+            illum = "bright"
+        else:
+            result["visibility"] = "unseen"
+            return result
+    # Natural darkness: Devil's Sight → bright; else darkvision → dim.
+    elif illum == "dark":
+        if senses["sees_in_darkness"]:
+            illum = "bright"
+        elif senses["darkvision_ft"] >= rng and senses["darkvision_ft"] > 0:
+            illum = "dim"
     result["illumination"] = illum
     result["visibility"] = (
         "seen" if illum == "bright"
@@ -5759,8 +5797,13 @@ def _compute_vision_edges(
         if not campaign or not campaign.active_map_id:
             return (False, False)
         map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
-        if not map_row or (getattr(map_row, "ambient_light", "bright")
-                           or "bright") == "bright":
+        # Bright map + no spell emitters → nothing can produce an `unseen`
+        # (light only adds), so short-circuit the hot path. A darkness/fog/
+        # daylight emitter (Phase 3) defeats the fast path even on a bright map.
+        if not map_row:
+            return (False, False)
+        if (getattr(map_row, "ambient_light", "bright") or "bright") == "bright" \
+                and not _light_emitters.get(campaign_id):
             return (False, False)
         target_unseen = _visibility_between(
             db, campaign_id, attacker_combatant, target_combatant
@@ -10772,6 +10815,19 @@ def _purge_pending_aoe_casts() -> None:
 # shapes) AND everything the future re-trigger-on-enter follow-up
 # will need (dc, damage_expr, damage_type, save_ability).
 _concentration_aoes: dict[int, list[dict]] = {}
+
+
+# v2.708.0 — Phase 3 of docs/plans/vision-and-light.md: spell-placed
+# light/darkness/obscurement emitters. Keyed by campaign_id; each emitter is
+# ``{id, kind, x, y, radius_ft, name, caster_char_id}`` where ``kind`` is
+# ``darkness`` (magical darkness — even darkvision can't pierce it; only
+# Devil's Sight does), ``daylight`` (bright light that dispels darkness),
+# or ``fog`` (heavy obscurement — only truesight/blindsight see through).
+# The `_illumination_at_point` resolver reads these alongside the ambient +
+# token light sources. GM-managed lifetime (placed + cleared explicitly),
+# mirroring how the GM narrates concentration today.
+_light_emitters: dict[int, list[dict]] = {}
+_light_emitter_seq: dict[int, int] = {}
 
 
 async def _broadcast_concentration_aoes(campaign_id: int) -> None:
@@ -20196,7 +20252,10 @@ def list_tokens(
             # v2.704.0 — Phase 0 vision & light: the active map's ambient
             # illumination ("bright" default). Surfaced for the Phase-1
             # resolver + future canvas lighting.
-            "ambient_light": getattr(map_row, "ambient_light", "bright") or "bright"}
+            "ambient_light": getattr(map_row, "ambient_light", "bright") or "bright",
+            # v2.708.0 — Phase 3 vision & light: the placed spell light/
+            # darkness/fog emitters (for the Phase-5 canvas + harness).
+            "light_emitters": list(_light_emitters.get(campaign_id) or [])}
 
 
 @router.get("/api/campaign/{campaign_id}/visibility")
@@ -20224,6 +20283,78 @@ def get_visibility(
         raise HTTPException(404, "attacker or target combatant not found")
     verdict = _visibility_between(db, campaign_id, attacker, target)
     return {"ok": True, **verdict}
+
+
+_LIGHT_EMITTER_KINDS = ("darkness", "daylight", "fog")
+
+
+@router.post("/api/campaign/{campaign_id}/light_emitter")
+async def place_light_emitter(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.708.0 — Phase 3 of docs/plans/vision-and-light.md: place a spell
+    light/darkness/obscurement emitter on the active map. GM-only. Body:
+    ``{kind: "darkness"|"daylight"|"fog", x, y, radius_ft, name?}``.
+    ``darkness`` = magical darkness (only Devil's Sight/truesight pierces);
+    ``daylight`` = bright light dispelling darkness; ``fog`` = heavy
+    obscurement (only truesight/blindsight). Returns the emitter dict +
+    broadcasts ``light_emitter_add``. The `_visibility_between` resolver
+    reads the emitter for the attack/`/visibility` sight verdict.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    body = await request.json()
+    kind = str(body.get("kind") or "").strip().lower()
+    if kind not in _LIGHT_EMITTER_KINDS:
+        raise HTTPException(400, f"kind must be one of {_LIGHT_EMITTER_KINDS}")
+    try:
+        radius_ft = float(body.get("radius_ft") or 0)
+    except (TypeError, ValueError):
+        radius_ft = 0.0
+    if radius_ft <= 0:
+        raise HTTPException(400, "radius_ft must be positive")
+    radius_ft = min(radius_ft, 1000.0)
+    _light_emitter_seq[campaign_id] = _light_emitter_seq.get(campaign_id, 0) + 1
+    emitter = {
+        "id": f"lem_{_light_emitter_seq[campaign_id]}",
+        "kind": kind,
+        "x": float(body.get("x") or 0),
+        "y": float(body.get("y") or 0),
+        "radius_ft": radius_ft,
+        "name": str(body.get("name") or kind.title())[:60],
+        "caster_char_id": body.get("caster_char_id"),
+    }
+    _light_emitters.setdefault(campaign_id, []).append(emitter)
+    await hub.broadcast(campaign_id, {"type": "light_emitter_add",
+                                      "data": emitter})
+    return {"ok": True, "emitter": emitter}
+
+
+@router.delete("/api/campaign/{campaign_id}/light_emitter/{emitter_id}")
+async def remove_light_emitter(
+    campaign_id: int,
+    emitter_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.708.0 — Phase 3: clear a placed light emitter (concentration ends /
+    spell dismissed). GM-only. Broadcasts ``light_emitter_remove``."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    lst = _light_emitters.get(campaign_id) or []
+    before = len(lst)
+    _light_emitters[campaign_id] = [e for e in lst if e.get("id") != emitter_id]
+    removed = before - len(_light_emitters[campaign_id])
+    if not removed:
+        raise HTTPException(404, "emitter not found")
+    await hub.broadcast(campaign_id, {"type": "light_emitter_remove",
+                                      "data": {"id": emitter_id}})
+    return {"ok": True, "removed": removed}
 
 
 @router.post("/api/campaign/{campaign_id}/tokens")

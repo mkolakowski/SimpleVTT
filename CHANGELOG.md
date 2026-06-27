@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.708.0] - 2026-06-27 — "The Conjured Night"
+
+**Schema version:** 82
+
+**Commit summary:** Vision & Light Phase 3 — spell-placed light/darkness/fog emitters that the sight resolver reads (Darkness, Daylight, Fog Cloud).
+
+**Description:** Phase 3 of [`docs/plans/vision-and-light.md`](docs/plans/vision-and-light.md). Adds a per-campaign `_light_emitters` store + two GM endpoints — `POST /api/campaign/{cid}/light_emitter` `{kind, x, y, radius_ft, name?}` (kind ∈ `darkness` / `daylight` / `fog`) and `DELETE …/light_emitter/{id}` — and teaches `_illumination_at_point` to read them with precedence **fog > daylight > darkness** over the natural ambient ∪ token-light illumination. `_visibility_between` gains two new conditions: **`magical_dark`** (the Darkness spell) — only Devil's Sight (`sees_in_darkness`) or truesight pierces it, **darkvision explicitly does not** (RAW PHB p.230) — and **`fog`** (Fog Cloud / heavy obscurement) — only truesight/blindsight see through. **Daylight** lights its radius to bright (dispelling darkness). The emitters compose with the Phase-2 attack wiring automatically (a creature in a Darkness sphere is `unseen` → attackers without Devil's Sight get disadvantage), and the bright-map fast path now defers to the resolver whenever any emitter exists. Emitters are surfaced on `GET /tokens` (`light_emitters`) + broadcast (`light_emitter_add` / `light_emitter_remove`) for the Phase-5 canvas. GM-managed lifetime (placed + cleared explicitly), matching how concentration is narrated today.
+
+### Added
+- `tests/harness/test_vision_light_phase3.py` (new, +9) — Darkness blocks darkvision (`magical_dark` → unseen) but Devil's Sight pierces; Daylight on a dark map → bright/seen; Fog blocks darkvision (`fog` → unseen) but truesight pierces; plus error paths (bad kind 400, bad radius 400, unknown-id delete 404, non-GM 403).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `_light_emitters`/`_light_emitter_seq` stores; `place_light_emitter` + `remove_light_emitter` endpoints; `_illumination_at_point` reads emitters (fog/daylight/darkness precedence); `_visibility_between` handles `magical_dark` + `fog`; `_compute_vision_edges` bright-map fast path defers when emitters exist; `GET /tokens` surfaces `light_emitters`.
+
+### Schema
+- No schema change (still v82) — emitters are ephemeral in-memory state, like the concentration-AoE markers.
+
 ## [2.707.0] - 2026-06-27 — "The Stalker's Edge"
 
 **Schema version:** 82
