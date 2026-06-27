@@ -215,6 +215,7 @@ or passive damage-boosters that already ride other code paths
 | `use_feinting_attack` | ✅ tracked | A use/resource |
 | `use_fey_presence` | ✅ tracked | C save-or-condition |
 | `use_fighting_spirit` | ✅ tracked | F temp-HP |
+| `use_misty_escape` | ✅ tracked | v2.699.0 — new endpoint (Archfey Warlock Lv 6+, once/short rest): installs an `invisible` buff (attack-edge substrate) + a `disengage` buff (so the 60-ft teleport rides the v2.698.0 OA-free move read); attack/cast-cancel of invisibility GM-narrated |
 | `use_flurry_of_blows` | ✅ tracked | D buff-install |
 | `use_foe_slayer` | ✅ tracked | D buff-install |
 | `use_form_of_the_beast` | ✅ tracked | D buff-install (10-round rage natural-weapon parameter flags) |

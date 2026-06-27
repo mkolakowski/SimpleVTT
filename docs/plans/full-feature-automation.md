@@ -718,6 +718,14 @@ composition. Batch by class, same cadence as the breadth sweep.
   unlike the single-use free-move budget). Makes the long-installed-but-unread
   disengage flag mechanical. Surfaces `disengage_applied`. Harness:
   `test_disengage_oa.py` (+3).
+- **v2.699.0 ("The Vanishing Mist") — Misty Escape** (The Archfey Warlock Lv
+  6+): new `/use_misty_escape` endpoint (the feature previously had only a
+  reactions-menu label). Once/short-rest reaction that **composes two
+  substrates** — installs an `invisible` buff (the attack-edge substrate) +
+  a `disengage` buff (so the 60-ft teleport rides the v2.698.0 OA-free move
+  read). Teleport destination is player-dragged; attack/cast-cancel of
+  invisibility GM-narrated. First reaction to compose invisible + disengage.
+  Harness: `test_misty_escape.py` (+4, incl. error paths).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

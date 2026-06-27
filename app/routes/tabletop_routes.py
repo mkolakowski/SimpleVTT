@@ -88227,6 +88227,195 @@ async def use_fey_presence(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_misty_escape")
+async def use_misty_escape(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.699.0 — Phase 8: Misty Escape (The Archfey Warlock Lv 6+,
+    PHB p.109): "When you take damage, you can use your reaction to
+    turn invisible and teleport up to 60 feet to an unoccupied space
+    you can see. You remain invisible until the start of your next
+    turn or until you attack or cast a spell." Once per short rest.
+
+    Body: ``{character_id, override?}``. Costs a reaction chip + a
+    `misty-escape` use (auto-bootstrapped, max=1, reset=short).
+
+    Mechanized server-side onto two existing substrates: installs an
+    `misty-escape-invisible` buff (`effects.invisible: True`) — the
+    attack-resolution invisibility edge (advantage for the invisible
+    attacker / disadvantage to attack them) reads it for free — and a
+    1-round `misty-escape-disengage` buff (`effects.disengage: True`)
+    so the 60-ft teleport, dragged via `/token/move`, provokes no
+    opportunity attacks (the v2.698.0 disengage read). The teleport's
+    destination is the player dragging the token (≤ 60 ft, GM-adjudged
+    line of sight); the "invisibility ends if you attack or cast"
+    cancellation stays GM-narrated (the buff also expires after ≈ 2
+    rounds). Response: ``{teleport_ft, invisible_installed,
+    disengage_installed, uses_remaining, warlock_level}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Warlock character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_archfey_warlock(sheet, 6):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "the archfey warlock lv 6+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _warlock_level_from_sheet(sheet),
+        })
+
+    # Once-per-short-rest resource (auto-bootstrap if missing).
+    resources = list(sheet.get("resources") or [])
+    me_row = None
+    me_idx = -1
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "misty-escape":
+            me_row = dict(r); me_idx = i; break
+    if me_row is None:
+        me_row = {
+            "key": "misty-escape", "label": "Misty Escape",
+            "current": 1, "max": 1, "reset": "short",
+        }
+        me_idx = len(resources)
+        resources.append(me_row)
+    me_cur = int(me_row.get("current") or 0)
+    me_max = int(me_row.get("max") or 1)
+    if me_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_uses_left",
+            "label": "Misty Escape",
+            "current": me_cur, "max": me_max,
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "reaction")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "reaction",
+            "char_name": char.name,
+            "source": "misty-escape",
+            "label": "Misty Escape",
+            "strict": strict,
+        })
+
+    me_row["current"] = me_cur - 1
+    resources[me_idx] = me_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    await _mark_battle_economy(campaign_id, char.id, "reaction")
+
+    warlock_lv = _warlock_level_from_sheet(sheet)
+
+    # Invisible until start of next turn (≈ 2 rounds). `effects.invisible`
+    # is the marker the attack-resolution edge reads; mirror to the sheet
+    # since the invisibility readers consult the DB sheet.
+    invisible_installed = await _install_buff(campaign_id, char.id, {
+        "key": "misty-escape-invisible",
+        "name": "Invisible (Misty Escape)",
+        "icon": "🌫",
+        "duration_rounds": 2,
+        "duration_max": 2,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {"invisible": True},
+        "desc": (
+            "Invisible until the start of your next turn (or until you "
+            "attack / cast — GM-narrated). (The Archfey Warlock Lv 6+ "
+            "Misty Escape.)"
+        ),
+    })
+    if invisible_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+    # Disengage so the 60-ft teleport drag provokes no OAs (v2.698.0 read).
+    disengage_installed = await _install_buff(campaign_id, char.id, {
+        "key": "misty-escape-disengage",
+        "name": "Misty Escape (teleport)",
+        "icon": "🌫",
+        "duration_rounds": 1,
+        "duration_max": 1,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {"disengage": True},
+        "desc": (
+            "Your teleport move provokes no opportunity attacks. (Misty "
+            "Escape; expires at turn end.)"
+        ),
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": "🌫 Misty Escape — teleport 60 ft + invisible",
+            "feature_desc": (
+                f"{char.name} vanishes in a puff of mist: teleports up to "
+                f"60 ft to a space they can see and turns invisible until "
+                f"the start of their next turn (or until they attack / "
+                f"cast). The teleport provokes no OAs. (The Archfey "
+                f"Warlock Lv 6+ PHB class feature; once per short rest.)"
+            ),
+            "source": "misty-escape",
+            "teleport_ft": 60,
+            "invisible_installed": invisible_installed,
+            "disengage_installed": disengage_installed,
+            "uses_remaining": me_cur - 1,
+            "warlock_level": warlock_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "misty-escape",
+        "teleport_ft": 60,
+        "invisible_installed": invisible_installed,
+        "disengage_installed": disengage_installed,
+        "uses_remaining": me_cur - 1,
+        "max_uses": me_max,
+        "warlock_level": warlock_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_hexblades_curse")
 async def use_hexblades_curse(
     campaign_id: int,

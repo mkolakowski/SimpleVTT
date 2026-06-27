@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.699.0] - 2026-06-26 — "The Vanishing Mist"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — new `/use_misty_escape` endpoint (Archfey Warlock), composing the invisible + disengage substrates.
+
+**Description:** Misty Escape (The Archfey Warlock Lv 6+, PHB p.109) existed only as a reactions-menu label with no resolving endpoint. This adds `POST /api/campaign/{id}/use_misty_escape`: it validates Archfey Warlock Lv 6+, gates a once-per-short-rest `misty-escape` resource (auto-bootstrapped, reset=short) + a reaction chip, then mechanizes the feature by **composing two existing substrates** — it installs a `misty-escape-invisible` buff (`effects.invisible: True`, mirrored to the sheet) that the attack-resolution invisibility edge reads (advantage for the invisible attacker / disadvantage to attack them), and a 1-round `misty-escape-disengage` buff (`effects.disengage: True`) so the 60-ft teleport, dragged via `/token/move`, provokes no opportunity attacks (the v2.698.0 disengage read). The teleport destination is the player dragging the token (≤ 60 ft, GM-adjudged LoS); the "invisibility ends if you attack or cast" cancellation stays GM-narrated (the buff also expires after ~2 rounds). Response: `{teleport_ft, invisible_installed, disengage_installed, uses_remaining, max_uses, warlock_level}`. First endpoint to compose the invisible + disengage substrates in one reaction.
+
+### Added
+- `tests/harness/test_misty_escape.py` (new, +4) — `test_use_me_happy` (battle-seeded Archfey Lv 6 → `teleport_ft == 60`, `invisible_installed`/`disengage_installed` True, `uses_remaining == 0`, broadcast), `test_use_me_out_of_uses` (second use → 409 `no_uses_left`), `test_use_me_wrong_subclass` (default The Fiend → 409), `test_use_me_level_gate` (Archfey Lv 5 → 409).
+
+### Changed
+- `app/routes/tabletop_routes.py` — added the `use_misty_escape` endpoint.
+- `docs/automation-coverage.md` — `use_misty_escape` row added.
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Misty Escape.
+- `docs/test-harness-coverage.md` — catalog the new test file.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.698.0] - 2026-06-26 — "The Nimble Exit"
 
 **Schema version:** 81
