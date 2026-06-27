@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.714.1] - 2026-06-27 — "The Steady Focus"
+
+**Schema version:** 82
+
+**Commit summary:** Tune supersample-on-zoom to sharpen *during* the zoom gesture, not just after it settles.
+
+**Description:** Follow-up to v2.714.0. The re-raster was a pure 180 ms trailing debounce, so the canvas stayed soft for the whole gesture and only snapped crisp at the end. It now throttles a re-raster **during** the gesture — a leading + throttled pass capped to ~1 per 90 ms (a synchronous resize+render, so no blank frame) — plus a short 110 ms trailing pass for the exact resting frame. Zoom now sharpens progressively as you scroll/pinch instead of catching up only at the end; the 90 ms cap bounds the cost on large maps and the 5% threshold keeps panning (unchanged scale) from churning.
+
+### Changed
+- `app/static/tabletop.js` — `scheduleRenderScaleUpdate()` reworked from a trailing-only debounce to a throttle (leading + mid-gesture, ~90 ms) plus a 110 ms trailing settle pass (`_applyRenderScaleForZoom` helper).
+
+### Schema
+- No schema change (still v82).
+
 ## [2.714.0] - 2026-06-27 — "The Sharper Lens"
 
 **Schema version:** 82

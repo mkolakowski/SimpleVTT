@@ -3109,16 +3109,34 @@
     // the live (bitmap-scaled) zoom and this debounced pass re-rasters ONCE
     // after the zoom settles — only when the target moves >5% from the
     // current renderScale, so panning (same scale) never triggers a re-raster.
+    // v2.714.1 — throttle DURING the gesture (not just on settle) so zoom
+    // sharpens progressively instead of staying soft until the end. A
+    // re-raster + render runs synchronously (no blank frame), capped to ~1
+    // per 90 ms to bound cost on large maps, plus a short trailing pass so
+    // the final resting frame is exactly right. The 5% threshold keeps pan
+    // (unchanged scale) and tiny notches from churning.
     let _renderScaleTimer = null;
+    let _rsThrottleTs = 0;
+    function _applyRenderScaleForZoom() {
+        const target = fittedRenderScale(DPR * Math.max(1, scale));
+        if (Math.abs(target - renderScale) / renderScale > 0.05) {
+            applyRenderScale(target);
+            try { render(); } catch (_) {}
+        }
+    }
     function scheduleRenderScaleUpdate() {
+        const now = (typeof performance !== 'undefined' && performance.now)
+            ? performance.now() : Date.now();
         clearTimeout(_renderScaleTimer);
-        _renderScaleTimer = setTimeout(() => {
-            const target = fittedRenderScale(DPR * Math.max(1, scale));
-            if (Math.abs(target - renderScale) / renderScale > 0.05) {
-                applyRenderScale(target);
-                try { render(); } catch (_) {}
-            }
-        }, 180);
+        if (now - _rsThrottleTs >= 90) {   // leading + throttled mid-gesture
+            _rsThrottleTs = now;
+            _applyRenderScaleForZoom();
+        }
+        _renderScaleTimer = setTimeout(() => {   // trailing settle pass
+            _rsThrottleTs = (typeof performance !== 'undefined' && performance.now)
+                ? performance.now() : Date.now();
+            _applyRenderScaleForZoom();
+        }, 110);
     }
 
     const mapTransform = document.getElementById('map-transform');
