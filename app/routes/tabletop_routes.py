@@ -25684,6 +25684,15 @@ async def cast_spell(
                         await _broadcast_heightened_consumed(
                             campaign_id, char, target_combatant.get("name") or "",
                         )
+                    # v2.702.0 — Corona of Light disadvantage at the single-
+                    # target NPC save site: a Light Cleric Lv 17+ with an
+                    # active corona casting a fire/radiant spell imposes
+                    # disadvantage on the enemy saver. `.replace` is a no-op
+                    # if a prior source already swapped to 2d20kl1.
+                    if _caster_corona_disadvantages_save(
+                        campaign_id, int(char.id), spell,
+                    ):
+                        expr = expr.replace("1d20", "2d20kl1", 1)
                     # v2.648.7 — Eldritch Strike at the NPC save site (EK
                     # Lv 10+, PHB p.74, Phase 3c). When the NPC saver
                     # carries an `eldritch-strike-target` buff naming THIS
@@ -26184,6 +26193,13 @@ async def cast_spell(
                 await _broadcast_heightened_consumed(
                     campaign_id, char, extra_name,
                 )
+            # v2.702.0 — Corona of Light disadvantage at the AoE NPC save
+            # site (Fireball / Flame Strike etc. from a corona-active Light
+            # Cleric). No-op if a prior source already swapped to 2d20kl1.
+            if _caster_corona_disadvantages_save(
+                campaign_id, int(char.id), spell,
+            ):
+                _expr = _expr.replace("1d20", "2d20kl1", 1)
             try:
                 _r = dice_mod.roll(_expr)
                 _rolled = int(_r.total)
@@ -45618,6 +45634,30 @@ def _save_damage_type_from_spell(spell: dict) -> str:
         if a.get("save_ability") and a.get("damage_type"):
             return (a.get("damage_type") or "").strip().lower()
     return ""
+
+
+def _caster_corona_disadvantages_save(
+    campaign_id: int, caster_char_id: "int | None", spell: dict,
+) -> bool:
+    """v2.702.0 — Corona of Light (Light Domain Cleric Lv 17+, PHB p.61):
+    "your enemies in the bright light have disadvantage on saving throws
+    against any spell that deals fire or radiant damage."
+
+    v1 trust-the-caller scope: returns True when the caster has an active
+    `corona-of-light` buff AND the spell deals fire or radiant damage —
+    used to swap the NPC saver's d20 → 2d20kl1 at the /cast_spell save
+    sites. The 60-ft "in the bright light" distance gate and the
+    "any spell" (non-caster's-own) clause stay GM-narrated (a Maps-2.0
+    distance pass would tighten this). Reads the caster's hub buffs.
+    """
+    if not caster_char_id:
+        return False
+    if _save_damage_type_from_spell(spell or {}) not in ("fire", "radiant"):
+        return False
+    for b in (_get_buffs(campaign_id, int(caster_char_id)) or []):
+        if (b or {}).get("key") == "corona-of-light":
+            return True
+    return False
 
 
 def _race_slug_from_sheet(sheet: dict) -> str:
@@ -84029,9 +84069,16 @@ async def use_corona_of_light(
     deals fire or radiant damage."
 
     Body: ``{character_id, override?}``. Costs an action chip.
-    No per-rest gate — at will per RAW. v1 announce-only —
-    bright light + dim light + disadvantage-on-fire/radiant-
-    save aura are GM-tracked.
+    No per-rest gate — at will per RAW.
+
+    v2.702.0 (Phase 8): installs a 1-minute `corona-of-light` buff;
+    while it's active, the cleric's **fire/radiant spell** saves impose
+    **disadvantage** on enemy NPC savers — wired at the single-target
+    and AoE NPC save sites in `/cast_spell` via
+    `_caster_corona_disadvantages_save` (swaps the saver's d20 →
+    2d20kl1). v1 trust-the-caller scope: the 60-ft "in the bright light"
+    distance gate + the "any spell" (non-caster's-own) clause + the
+    bright/dim-light emission stay GM-narrated.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -84078,6 +84125,29 @@ async def use_corona_of_light(
 
     cleric_lv = _cleric_level_from_sheet(sheet)
 
+    # v2.702.0 — install the corona buff so the fire/radiant save-disadvantage
+    # read (`_caster_corona_disadvantages_save`) has something to see. 1 min =
+    # 10 rounds; carries the radius for a future distance-gated tightening.
+    aura_installed = await _install_buff(campaign_id, char.id, {
+        "key": "corona-of-light",
+        "name": "Corona of Light",
+        "icon": "☀️",
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "corona_of_light": True,
+            "corona_bright_radius_ft": 60,
+            "save_disadvantage_damage_types": ["fire", "radiant"],
+        },
+        "desc": (
+            "Enemies in your 60-ft bright light have disadvantage on saves "
+            "vs your fire/radiant spells. (Light Domain Cleric Lv 17+; 1 "
+            "min.)"
+        ),
+    })
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -84111,6 +84181,7 @@ async def use_corona_of_light(
             "bright_light_radius_ft": 60,
             "dim_light_radius_ft": 90,
             "save_disadvantage_types": ["fire", "radiant"],
+            "aura_installed": aura_installed,
             "cleric_level": cleric_lv,
         },
     })
@@ -84122,6 +84193,7 @@ async def use_corona_of_light(
         "bright_light_radius_ft": 60,
         "dim_light_radius_ft": 90,
         "save_disadvantage_types": ["fire", "radiant"],
+        "aura_installed": aura_installed,
         "cleric_level": cleric_lv,
     }
 

@@ -743,6 +743,15 @@ composition. Batch by class, same cadence as the breadth sweep.
   ally's next attack vs that target rolls `2d20kh1` (the True Strike / Vow of
   Enmity read) then drops. Surfaces `help_installed`; announce-only without
   both ids. Harness: `test_master_of_tactics.py` (+1, end-to-end advantage).
+- **v2.702.0 ("The Searing Sun") — Corona of Light** (Light Domain Cleric Lv
+  17+): a genuinely new save-disadvantage substrate. The endpoint installs a
+  `corona-of-light` buff; `_caster_corona_disadvantages_save` is wired into
+  the single-target + AoE NPC save sites in `/cast_spell` — a corona-active
+  cleric casting a fire/radiant spell swaps the enemy NPC saver's d20 →
+  2d20kl1 (mirrors the Heightened Spell swap). v1 trust-the-caller scope (the
+  caster's own fire/radiant spells); the 60-ft distance gate + non-caster
+  spells + light emission stay GM-narrated. Surfaces `aura_installed`.
+  Harness: `test_corona_of_light.py` (+1, Sacred Flame disadvantage end-to-end).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

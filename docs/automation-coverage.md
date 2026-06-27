@@ -183,7 +183,7 @@ or passive damage-boosters that already ride other code paths
 | `use_commanders_strike` | ✅ tracked | A use/resource |
 | `use_conquering_presence` | ✅ tracked | C save-or-condition |
 | `use_control_undead` | ✅ tracked | C save-or-condition |
-| `use_corona_of_light` | ✅ tracked | A use/resource |
+| `use_corona_of_light` | ✅ tracked | v2.702.0 — installs a `corona-of-light` buff; `_caster_corona_disadvantages_save` swaps the enemy NPC saver's d20 → 2d20kl1 at the single-target + AoE `/cast_spell` save sites when the corona-active cleric casts a fire/radiant spell; distance gate + non-caster spells + light emission GM-narrated |
 | `use_countercharm` | ✅ tracked | D buff-install |
 | `use_cutting_words` | ✅ tracked | B on-hit-rider, C save-or-condition, D buff-install, D/E buff-install, G forced-move, damage, heal, heal/damage |
 | `use_dark_ones_blessing` | ✅ tracked | F temp-HP |

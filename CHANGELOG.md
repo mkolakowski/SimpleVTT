@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.702.0] - 2026-06-27 — "The Searing Sun"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — mechanize Corona of Light (Light Cleric L17) with a new fire/radiant save-disadvantage substrate.
+
+**Description:** `use_corona_of_light` (PHB p.61) was announce-only. It now installs a 1-minute `corona-of-light` buff, and a **new save-disadvantage read** — `_caster_corona_disadvantages_save` — is wired into the single-target and AoE NPC save sites in `/cast_spell`: when the caster has an active corona AND the spell deals **fire or radiant** damage (`_save_damage_type_from_spell`), the enemy NPC saver's d20 is swapped to `2d20kl1` (disadvantage), mirroring the existing Heightened Spell swap. `.replace` is a no-op if another source already imposed disadvantage. **v1 trust-the-caller scope:** the corona-active cleric's own fire/radiant spells impose the disadvantage; the 60-ft "in the bright light" distance gate, the "any spell" (non-caster's-own) clause, and the bright/dim-light emission stay GM-narrated (a Maps-2.0 distance pass would tighten the first two). Response gains `aura_installed`.
+
+### Added
+- `tests/harness/test_corona_of_light.py` (+1) — `test_col_imposes_disadvantage_on_fire_radiant_save` (Tavik L17 casts Sacred Flame — radiant, DEX save — at an NPC: control without corona → straight `1d20`; with corona active → the save roll's breakdown contains `2d20kl1`; spell index resolved via sheet-json, skips if absent). `test_use_col_happy_lv17` now seeds a battle + asserts `aura_installed is True`.
+
+### Changed
+- `app/routes/tabletop_routes.py` — added `_caster_corona_disadvantages_save`; wired it into the single-target + AoE NPC save sites; `use_corona_of_light` installs the corona buff + surfaces `aura_installed`.
+- `docs/automation-coverage.md` — `use_corona_of_light` note updated.
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Corona of Light.
+- `docs/test-harness-coverage.md` — catalog the new test.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.701.0] - 2026-06-27 — "The Tactician's Nod"
 
 **Schema version:** 81
