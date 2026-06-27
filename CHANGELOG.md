@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.711.0] - 2026-06-27 — "The Rolling Fog"
+
+**Schema version:** 82
+
+**Commit summary:** Casting Fog Cloud auto-places its vision-and-light `fog` emitter — closing the cast→lighting loop for the first light spell.
+
+**Description:** Follow-up to the Vision & Light arc ([`docs/plans/vision-and-light.md`](docs/plans/vision-and-light.md)): wires spell casting to the Phase-3 emitter model so the GM no longer hand-places the obscurement. `/cast_fog_cloud` now accepts an optional `center: {x, y}` and, when given, auto-drops a `fog` light emitter at that point with the slot-scaled radius (reusing a new shared `_add_light_emitter` helper, also now backing the GM `/light_emitter` endpoint). The emitter is concentration-bound: `_clear_caster_concentration_aoes` (the concentration-end cleanup) now also drops the caster's light emitters and broadcasts `light_emitter_remove`. Backward-compatible — a cast without `center` places nothing (existing behavior). This is the first of the per-spell auto-place commits; Darkness + Daylight (which lack cast endpoints) follow.
+
+### Added
+- `tests/harness/test_cast_fog_cloud.py` (+2) — cast with `center` → a `fog` emitter at that point with the scaled radius + `caster_char_id`; cast without `center` → no emitter (backward compat).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `_add_light_emitter` shared helper; `/cast_fog_cloud` auto-places the fog emitter on a `center`; `/light_emitter` endpoint refactored onto the helper; `_clear_caster_concentration_aoes` also clears the caster's emitters.
+
+### Schema
+- No schema change (still v82).
+
 ## [2.710.0] - 2026-06-27 — "The Lantern's Reach"
 
 **Schema version:** 82

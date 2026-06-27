@@ -10881,6 +10881,33 @@ _light_emitters: dict[int, list[dict]] = {}
 _light_emitter_seq: dict[int, int] = {}
 
 
+async def _add_light_emitter(
+    campaign_id: int, kind: str, x: float, y: float, radius_ft: float,
+    *, name: str = "", caster_char_id: "int | None" = None,
+    cast_id: "str | None" = None,
+) -> dict:
+    """v2.711.0 — shared light-emitter creator (used by the GM
+    `/light_emitter` endpoint AND the auto-place-on-cast spell paths).
+    Appends a `{id, kind, x, y, radius_ft, name, caster_char_id, cast_id}`
+    emitter to the campaign store and broadcasts ``light_emitter_add``.
+    Caller validates ``kind`` / ``radius_ft``."""
+    _light_emitter_seq[campaign_id] = _light_emitter_seq.get(campaign_id, 0) + 1
+    emitter = {
+        "id": f"lem_{_light_emitter_seq[campaign_id]}",
+        "kind": kind,
+        "x": float(x),
+        "y": float(y),
+        "radius_ft": float(radius_ft),
+        "name": (name or kind.title())[:60],
+        "caster_char_id": caster_char_id,
+        "cast_id": cast_id,
+    }
+    _light_emitters.setdefault(campaign_id, []).append(emitter)
+    await hub.broadcast(campaign_id, {"type": "light_emitter_add",
+                                      "data": emitter})
+    return emitter
+
+
 async def _broadcast_concentration_aoes(campaign_id: int) -> None:
     await hub.broadcast(campaign_id, {
         "type": "concentration_aoe_update",
@@ -10897,6 +10924,21 @@ async def _clear_caster_concentration_aoes(
     every client. Called from the concentration-cleanup paths when
     the caster's concentration ends (manually dropped, failed con
     save, dead, dual-cast another concentration spell)."""
+    # v2.711.0 — also drop any concentration-bound light/darkness/fog emitter
+    # this caster placed (Fog Cloud, Darkness — Daylight is non-concentration
+    # so it carries no caster cleanup hook here). Done first + independent of
+    # the marker early-return below so a caster with ONLY an emitter (no
+    # damage AoE marker) still gets it cleared on concentration end.
+    emitters = _light_emitters.get(campaign_id) or []
+    kept_em = [e for e in emitters
+               if int(e.get("caster_char_id") or 0) != int(caster_char_id)]
+    if len(kept_em) != len(emitters):
+        dropped = [e["id"] for e in emitters if e not in kept_em]
+        _light_emitters[campaign_id] = kept_em
+        for eid in dropped:
+            await hub.broadcast(campaign_id, {"type": "light_emitter_remove",
+                                              "data": {"id": eid}})
+
     markers = _concentration_aoes.get(campaign_id) or []
     kept = [m for m in markers if int(m.get("caster_char_id") or 0) != int(caster_char_id)]
     if len(kept) == len(markers):
@@ -20369,19 +20411,10 @@ async def place_light_emitter(
     if radius_ft <= 0:
         raise HTTPException(400, "radius_ft must be positive")
     radius_ft = min(radius_ft, 1000.0)
-    _light_emitter_seq[campaign_id] = _light_emitter_seq.get(campaign_id, 0) + 1
-    emitter = {
-        "id": f"lem_{_light_emitter_seq[campaign_id]}",
-        "kind": kind,
-        "x": float(body.get("x") or 0),
-        "y": float(body.get("y") or 0),
-        "radius_ft": radius_ft,
-        "name": str(body.get("name") or kind.title())[:60],
-        "caster_char_id": body.get("caster_char_id"),
-    }
-    _light_emitters.setdefault(campaign_id, []).append(emitter)
-    await hub.broadcast(campaign_id, {"type": "light_emitter_add",
-                                      "data": emitter})
+    emitter = await _add_light_emitter(
+        campaign_id, kind, float(body.get("x") or 0), float(body.get("y") or 0),
+        radius_ft, name=str(body.get("name") or ""),
+        caster_char_id=body.get("caster_char_id"))
     return {"ok": True, "emitter": emitter}
 
 
@@ -103933,6 +103966,21 @@ async def cast_fog_cloud(
 
     cast_id = _log_spell_slot_spend(
         campaign_id, char.id, class_slug, slot_level, used, "spell")
+
+    # v2.711.0 — Phase 3 vision-and-light auto-place: when the caller supplies
+    # a `center: {x, y}` placement point, drop a `fog` emitter so the heavy
+    # obscurement is live in the sight resolver (and rendered) immediately,
+    # instead of the GM hand-placing it. Concentration-bound: cleared when
+    # the caster's concentration ends (see `_clear_caster_concentration_aoes`).
+    emitter_placed = None
+    center = body.get("center") or {}
+    if isinstance(center, dict) and center.get("x") is not None \
+            and center.get("y") is not None:
+        emitter_placed = await _add_light_emitter(
+            campaign_id, "fog", float(center.get("x") or 0),
+            float(center.get("y") or 0), float(radius_ft),
+            name="Fog Cloud", caster_char_id=char.id, cast_id=cast_id)
+
     return {
         "ok": True,
         "cast_id": cast_id,
@@ -103943,6 +103991,7 @@ async def cast_fog_cloud(
         "radius_ft": radius_ft,
         "range_ft": 120,
         "concentration": True,
+        "emitter_id": (emitter_placed or {}).get("id"),
     }
 
 

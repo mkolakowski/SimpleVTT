@@ -119,6 +119,57 @@ async def test_fog_cloud_l9_routes_180ft(gm_client, thalindra_fog_cloud):
     assert resp.json()["radius_ft"] == 180, resp.text
 
 
+async def _clear_emitters(gm_client):
+    body = (await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/tokens")).json()
+    for e in body.get("light_emitters") or []:
+        await gm_client.delete(
+            f"/api/campaign/{CAMPAIGN_ID}/light_emitter/{e['id']}")
+
+
+async def test_fog_cloud_with_center_places_fog_emitter(
+    gm_client, thalindra_fog_cloud,
+):
+    """v2.711.0 — casting with a `center` auto-places a `fog` light emitter
+    (Phase-3 vision-and-light) at that point with the scaled radius."""
+    await _clear_emitters(gm_client)
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_fog_cloud",
+        json={"character_id": thalindra_fog_cloud["id"], "class_slug": "wizard",
+              "slot_level": 2, "override": True,
+              "center": {"x": 300.0, "y": 250.0}},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["radius_ft"] == 40, data
+    assert data.get("emitter_id"), data
+    try:
+        tk = (await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/tokens")).json()
+        ems = [e for e in (tk.get("light_emitters") or [])
+               if e["id"] == data["emitter_id"]]
+        assert ems, tk.get("light_emitters")
+        em = ems[0]
+        assert em["kind"] == "fog"
+        assert em["radius_ft"] == 40
+        assert em["x"] == 300.0 and em["y"] == 250.0
+        assert em["caster_char_id"] == thalindra_fog_cloud["id"]
+    finally:
+        await _clear_emitters(gm_client)
+
+
+async def test_fog_cloud_no_center_no_emitter(gm_client, thalindra_fog_cloud):
+    """Casting without a `center` is backward-compatible — no emitter placed."""
+    await _clear_emitters(gm_client)
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_fog_cloud",
+        json={"character_id": thalindra_fog_cloud["id"], "class_slug": "wizard",
+              "slot_level": 1, "override": True},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json().get("emitter_id") is None, resp.text
+    tk = (await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/tokens")).json()
+    assert not (tk.get("light_emitters") or []), tk.get("light_emitters")
+
+
 async def test_fog_cloud_missing_character_id_400(gm_client):
     """Missing character_id → 400."""
     resp = await gm_client.post(

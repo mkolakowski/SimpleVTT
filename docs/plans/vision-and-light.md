@@ -155,6 +155,14 @@ Each phase is independently shippable. Phases 1–2 deliver the core
 "attacking what you can't see" automation; Phase 5 is the visual polish that
 can lag.
 
+**Auto-place-on-cast follow-up (post-Phase-5).** The Phase-3 emitters were
+GM-placed via `/light_emitter`; the follow-up wires spell casting to drop the
+emitter automatically (concentration-bound, cleared on concentration end):
+- **Fog Cloud** ✅ v2.711.0 — `/cast_fog_cloud` accepts a `center` and places
+  a `fog` emitter at the slot-scaled radius (shared `_add_light_emitter`).
+- **Darkness** — pending a cast endpoint.
+- **Daylight** — pending a cast endpoint.
+
 ---
 
 ## Test contract (per phase)
