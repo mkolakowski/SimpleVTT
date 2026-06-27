@@ -95223,11 +95223,25 @@ async def use_tales_from_beyond(
     p.30): "Bonus action to roll on the Spirit Tales table.
     Action to choose a creature within 30 ft as the target."
 
-    Body: ``{character_id, override?, force_tale?}``.
-    `force_tale` (1-6) is a TEST_MODE escape hatch to
-    deterministically pick a tale; otherwise rolls 1d6. Costs
-    a bonus chip. v1 announce-only — actual tale effect
-    application is GM-tracked.
+    Body: ``{character_id, target_combatant_id?, override?,
+    force_tale?}``. `force_tale` (1-6) is a TEST_MODE escape hatch to
+    deterministically pick a tale; otherwise rolls 1d6. Costs a bonus
+    chip.
+
+    v2.695.0 (Phase 8): when a ``target_combatant_id`` is supplied,
+    the four mechanizable tales resolve server-side (trust-the-caller):
+      - **3 Beloved Friends** / **6 Traveler** → ``2d6 + bard_lv`` temp
+        HP via `_grant_temp_hp` (Beloved Friends' +5-ft second creature
+        and Traveler's +10-ft speed stay GM-narrated);
+      - **4 Brute** → STR save via `_resolve_feature_save` (install
+        Prone on a fail) + ``2d10`` force damage on the fail via
+        `_apply_damage_to_combatant`;
+      - **5 Tragic Romance** → WIS save → Charmed via
+        `_resolve_feature_save`.
+    Tales **1 Clever Animal** (advantage on next check/save) and **2
+    Renowned Duelist** (attack-roll bonus) stay GM-narrated. The save
+    DC is the spell save DC (8 + prof + CHA mod). Response gains
+    `applied`. Without a target it stays announce-only.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -95235,6 +95249,7 @@ async def use_tales_from_beyond(
         raise HTTPException(400, "character_id is required")
     override = bool(body.get("override"))
     force_tale = body.get("force_tale")
+    target_combatant_id = (str(body.get("target_combatant_id") or "")).strip()
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -95291,6 +95306,114 @@ async def use_tales_from_beyond(
     tale_name, tale_desc = _SPIRIT_TALES.get(tale_roll, _SPIRIT_TALES[1])
     bard_lv = _bard_level_from_sheet(sheet)
 
+    # v2.695.0 — Phase 8: resolve the mechanizable tales on the named target.
+    # Save DC = spell save DC (8 + prof + CHA mod). Tales 3/6 grant temp HP;
+    # 4 (Brute) is a STR save → Prone + 2d10 force on a fail; 5 (Tragic
+    # Romance) is a WIS save → Charmed. Tales 1/2 stay GM-narrated.
+    applied: "dict | None" = None
+    if target_combatant_id:
+        _tb_target = _lookup_combatant(campaign_id, target_combatant_id)
+        if _tb_target is not None:
+            _prof = int(sheet.get("proficiency_bonus") or 2)
+            _cha_mod = (
+                int((sheet.get("abilities") or {}).get("CHA") or 10) - 10
+            ) // 2
+            _save_dc = 8 + _prof + _cha_mod
+            if tale_roll in (3, 6):
+                try:
+                    _thp = int(dice_mod.roll("2d6").total) + bard_lv
+                except dice_mod.DiceParseError:
+                    _thp = 2 + bard_lv
+                _tr = await _grant_temp_hp(
+                    db, campaign_id, _tb_target, _thp,
+                    source="tales-from-beyond",
+                )
+                applied = {
+                    "kind": "temp_hp",
+                    "temp_hp_amount": _thp,
+                    "temp_hp_granted": int(_tr.get("applied") or 0),
+                }
+            elif tale_roll == 4:
+                prone_buff = {
+                    "key": "prone",
+                    "name": "Prone (Tale of the Brute)",
+                    "icon": "👻",
+                    "duration_rounds": 10,
+                    "duration_max": 10,
+                    "concentration": False,
+                    "source": "tales-from-beyond",
+                    "source_char_id": int(char.id),
+                    "source_char_name": char.name,
+                    "effects": [
+                        "disadvantage on attack rolls",
+                        "attackers within 5 ft have advantage; ranged "
+                        "attackers have disadvantage",
+                        "must spend half movement to stand up",
+                    ],
+                }
+                _fs = await _resolve_feature_save(
+                    db, campaign_id,
+                    caster_char_id=char.id, caster_char_name=char.name,
+                    target_combatant=_tb_target,
+                    save_ability="STR", dc=_save_dc,
+                    note_label=f"Tale of the Brute save (DC {_save_dc})",
+                    condition_buff=prone_buff,
+                    repeated_save=False,
+                    source="tales-from-beyond",
+                    campaign=campaign,
+                    prompt_user=user,
+                    feature_name="Tale of the Brute",
+                )
+                _force_applied = None
+                if _fs.get("passed") is False:
+                    try:
+                        _fd = int(dice_mod.roll("2d10").total)
+                    except dice_mod.DiceParseError:
+                        _fd = 2
+                    _fadr = await _apply_damage_to_combatant(
+                        db, campaign_id, _tb_target, _fd, "force",
+                        is_magical=True, attacker_char_id=char.id,
+                    )
+                    _force_applied = int(_fadr.get("applied") or 0)
+                applied = {
+                    "kind": "brute",
+                    "feature_save": _fs,
+                    "force_damage_applied": _force_applied,
+                }
+            elif tale_roll == 5:
+                charmed_buff = {
+                    "key": "charmed",
+                    "name": "Charmed (Tale of the Tragic Romance)",
+                    "icon": "👻",
+                    "duration_rounds": 10,
+                    "duration_max": 10,
+                    "concentration": False,
+                    "source": "tales-from-beyond",
+                    "source_char_id": int(char.id),
+                    "source_char_name": char.name,
+                    "effects": [
+                        "charmed by the bard — can't attack the charmer",
+                        "the charmer has advantage on social checks",
+                    ],
+                }
+                _fs = await _resolve_feature_save(
+                    db, campaign_id,
+                    caster_char_id=char.id, caster_char_name=char.name,
+                    target_combatant=_tb_target,
+                    save_ability="WIS", dc=_save_dc,
+                    note_label=f"Tale of the Tragic Romance save (DC {_save_dc})",
+                    condition_buff=charmed_buff,
+                    repeated_save=False,
+                    source="tales-from-beyond",
+                    campaign=campaign,
+                    prompt_user=user,
+                    feature_name="Tale of the Tragic Romance",
+                )
+                applied = {"kind": "charm", "feature_save": _fs}
+            else:
+                # Tales 1 (Clever Animal) + 2 (Renowned Duelist) — GM-narrated.
+                applied = {"kind": "gm_narrated"}
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -95321,6 +95444,8 @@ async def use_tales_from_beyond(
             "tale_name": tale_name,
             "tale_description": tale_desc,
             "bard_level": bard_lv,
+            "target_combatant_id": target_combatant_id,
+            "applied": applied,
         },
     })
 
@@ -95331,6 +95456,8 @@ async def use_tales_from_beyond(
         "tale_name": tale_name,
         "tale_description": tale_desc,
         "bard_level": bard_lv,
+        "target_combatant_id": target_combatant_id,
+        "applied": applied,
     }
 
 

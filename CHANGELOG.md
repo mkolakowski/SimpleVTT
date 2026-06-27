@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.695.0] - 2026-06-26 — "The Spirit's Tale"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — resolve the four mechanizable Tales from Beyond outcomes server-side (Spirits College Bard).
+
+**Description:** `use_tales_from_beyond` (TCE p.30) rolled the 1d6 Spirit Tale but the GM applied the chosen tale's effect by hand. When a `target_combatant_id` is supplied, the four mechanizable tales now resolve server-side (trust-the-caller), each riding a proven substrate keyed off the rolled tale:
+- **3 Beloved Friends** / **6 Traveler** → `2d6 + bard_level` temp HP via `_grant_temp_hp` (Beloved Friends' +5-ft second creature and Traveler's +10-ft walking speed stay GM-narrated);
+- **4 Brute** → STR save via `_resolve_feature_save` (install **Prone** on a fail) + `2d10` **force** damage on the fail via `_apply_damage_to_combatant`;
+- **5 Tragic Romance** → WIS save → **Charmed** via `_resolve_feature_save`.
+
+Tales **1 Clever Animal** (advantage on next check/save) and **2 Renowned Duelist** (attack-roll bonus) stay GM-narrated — no clean substrate. The save DC is the spell save DC (8 + prof + CHA mod). The response/broadcast gain an `applied` object (`kind` + the tale-specific result). Backward-compatible: no `target_combatant_id` stays announce-only.
+
+### Added
+- `tests/harness/test_tales_from_beyond.py` (+4) — `test_tb_tale3_grants_temp_hp` (force_tale 3 → `temp_hp_granted == temp_hp_amount`), `test_tb_tale4_brute_save_and_damage` (force_tale 4 → STR save resolved; on a fail 2d10 force + Prone), `test_tb_tale5_charm_save` (force_tale 5 → WIS save → Charmed on a fail), `test_tb_no_target_announce_only` (no target → `applied` None). The three force_tale apply tests `pytest.skip` when TEST_MODE is off (the deterministic tale pick needs it; CI runs TEST_MODE=true).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_tales_from_beyond` resolves the four mechanizable tales on `target_combatant_id`; surfaces `applied`.
+- `docs/automation-coverage.md` — `use_tales_from_beyond` note updated (per-tale effects resolved server-side).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Tales from Beyond.
+- `docs/test-harness-coverage.md` — catalog the new tests.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.694.0] - 2026-06-26 — "The Shared Wound"
 
 **Schema version:** 81

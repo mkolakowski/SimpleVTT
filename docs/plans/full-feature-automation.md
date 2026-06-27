@@ -683,6 +683,15 @@ composition. Batch by class, same cadence as the breadth sweep.
   unreducible (RAW: "can't be reduced in any way"; other effects not
   transferred). Surfaces `redirected`/`ally_healed`/`paladin_damage_applied`/
   `paladin_hp_after`. Harness: `test_aura_of_the_guardian.py` (+2).
+- **v2.695.0 ("The Spirit's Tale") — Tales from Beyond** (Spirits College Bard
+  Lv 3+): a branchy d6-table feature. With a `target_combatant_id`, the four
+  mechanizable tales resolve server-side keyed off the rolled tale — 3 Beloved
+  Friends / 6 Traveler grant `2d6+bard_lv` temp HP (`_grant_temp_hp`); 4 Brute
+  is a STR save → Prone + 2d10 force on a fail (`_resolve_feature_save` +
+  `_apply_damage_to_combatant`); 5 Tragic Romance is a WIS save → Charmed.
+  Tales 1 (Clever Animal) + 2 (Renowned Duelist) stay GM-narrated. Surfaces
+  `applied`. Harness: `test_tales_from_beyond.py` (+4, the force_tale apply
+  tests skip when TEST_MODE is off).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`
