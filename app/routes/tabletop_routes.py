@@ -17310,31 +17310,33 @@ async def move_token(
     )
 
     # v2.158.51 — Relentless Avenger (Vengeance Paladin Lv 7+, PHB
-    # p.88) Phase 2 read site. The v2.149.0 install lands a 1-round
-    # `relentless-avenger-bonus-move` buff carrying
-    # `free_movement_remaining_ft` (= half walking speed) +
-    # `oa_immune_during_move`. RAW: "When you hit a creature with an
-    # opportunity attack, you can move up to half your speed
-    # immediately after the attack ... This movement doesn't provoke
-    # opportunity attacks." This read (a) exempts up to
-    # `free_movement_remaining_ft` of this drag from the over-speed
-    # cap and (b) suppresses OA triggers for the move, then consumes
-    # the buff (single-use — the install desc says "consumed on next
-    # move"). Detected on the moving PC's combatant via `_get_buffs`.
+    # p.88) Phase 2 read site, generalized at v2.696.0 into a reusable
+    # **free-move substrate**. Any 1-round buff carrying
+    # `effects.oa_immune_during_move` (+ optional
+    # `free_movement_remaining_ft` = bonus distance exempt from the
+    # over-speed cap) makes this move (a) exempt up to that distance
+    # from the cap and (b) provoke no opportunity attacks, then the
+    # buff is consumed (single-use). Originally keyed to
+    # `relentless-avenger-bonus-move`; now effect-keyed so Skirmisher
+    # (Scout Rogue, v2.696.0) and future no-OA free-move features ride
+    # the same path. Detected on the moving PC's combatant via
+    # `_get_buffs`; the first matching buff wins.
     _ra_buff = None
     _ra_free_ft = 0.0
+    _ra_buff_key = ""
+    _ra_label = ""
     if token.character_id and distance_ft > 0:
         for _rb in _get_buffs(campaign_id, int(token.character_id)):
-            if (_rb or {}).get("key") != "relentless-avenger-bonus-move":
-                continue
-            _reff = _rb.get("effects") or {}
+            _reff = (_rb or {}).get("effects") or {}
             if _reff.get("oa_immune_during_move"):
                 _ra_buff = _rb
+                _ra_buff_key = (_rb or {}).get("key") or ""
+                _ra_label = (_rb or {}).get("name") or "Free movement"
                 try:
                     _ra_free_ft = float(_reff.get("free_movement_remaining_ft") or 0)
                 except (TypeError, ValueError):
                     _ra_free_ft = 0.0
-            break
+                break
 
     # v2.99.99 — server-side over-speed gate. Mirrors the OA 409
     # pattern: if this move would put the active combatant's
@@ -17531,22 +17533,21 @@ async def move_token(
     # the move and announce the OA-free movement. Removing the buff
     # broadcasts a `buff_update`; a `feature_used` advisory documents
     # the OA suppression so the table sees why no OA fired.
-    if _ra_applied:
+    if _ra_applied and _ra_buff_key:
         await _remove_buff(
-            campaign_id, int(token.character_id),
-            "relentless-avenger-bonus-move",
+            campaign_id, int(token.character_id), _ra_buff_key,
         )
         await hub.broadcast(campaign_id, {
             "type": "feature_used",
             "data": {
                 "character_id": token.character_id,
-                "character_name": token.label or "Paladin",
-                "feature_name": "🏃 Relentless Avenger",
+                "character_name": token.label or "",
+                "feature_name": f"🏃 {_ra_label}",
                 "feature_desc": (
                     f"Moved {round(distance_ft, 1)} ft without provoking "
-                    f"opportunity attacks (Vengeance Paladin, half speed)."
+                    f"opportunity attacks."
                 ),
-                "source": "relentless-avenger",
+                "source": _ra_buff_key,
             },
         })
 
@@ -86092,8 +86093,17 @@ async def use_skirmisher(
     doesn't provoke opportunity attacks."
 
     Body: ``{character_id, override?}``. Costs a reaction chip.
-    Computes `bonus_move_ft = base_speed // 2`. v1 announce-only —
-    actual half-speed-no-OA move is GM-tracked.
+    Computes `bonus_move_ft = base_speed // 2`.
+
+    v2.696.0 (Phase 8): installs a 1-round `skirmisher-bonus-move` buff
+    carrying `free_movement_remaining_ft` (= half speed) +
+    `oa_immune_during_move`, riding the generalized free-move substrate
+    in `/token/move` (the Relentless Avenger read site, made effect-
+    keyed in v2.696.0). The Rogue's next move is exempted from the
+    over-speed cap up to the budget AND provokes no opportunity
+    attacks; the buff is consumed on that move. The "enemy ended its
+    turn within 5 ft" trigger stays GM/player-driven (this endpoint is
+    the reaction).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -86142,6 +86152,32 @@ async def use_skirmisher(
     base_speed = int(sheet.get("speed_walk") or sheet.get("speed") or 30)
     bonus_move_ft = base_speed // 2
 
+    # v2.696.0 — Phase 8: install the free-move buff so the Rogue's next
+    # /token/move is exempt from the over-speed cap (up to bonus_move_ft) +
+    # provokes no OAs, riding the generalized free-move substrate (the
+    # Relentless Avenger read site, now effect-keyed). Single-use: consumed
+    # on the next move.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "skirmisher-bonus-move",
+        "name": "Skirmisher (free move)",
+        "icon": "🏃",
+        "duration_rounds": 1,
+        "duration_max": 1,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "free_movement_remaining_ft": int(bonus_move_ft),
+            "oa_immune_during_move": True,
+        },
+        "desc": (
+            f"+{bonus_move_ft} ft free movement (half walking speed) that "
+            f"doesn't provoke OAs. (Scout Rogue Lv 3+ Skirmisher; consumed "
+            f"on next move.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -86173,6 +86209,7 @@ async def use_skirmisher(
             "base_speed": base_speed,
             "no_oa": True,
             "rogue_level": rogue_lv,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -86183,6 +86220,7 @@ async def use_skirmisher(
         "base_speed": base_speed,
         "no_oa": True,
         "rogue_level": rogue_lv,
+        "buff_installed": buff_installed,
     }
 
 

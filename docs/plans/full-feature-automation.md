@@ -692,6 +692,16 @@ composition. Batch by class, same cadence as the breadth sweep.
   Tales 1 (Clever Animal) + 2 (Renowned Duelist) stay GM-narrated. Surfaces
   `applied`. Harness: `test_tales_from_beyond.py` (+4, the force_tale apply
   tests skip when TEST_MODE is off).
+- **v2.696.0 ("The Open Field") — Skirmisher + free-move substrate
+  generalization** (Scout Rogue Lv 3+): generalized the Relentless Avenger
+  `/token/move` read site (v2.158.51) from a hardcoded `relentless-avenger-
+  bonus-move` key into an **effect-keyed free-move substrate** — any buff with
+  `effects.oa_immune_during_move` (+ optional `free_movement_remaining_ft`)
+  now exempts the next move from the over-speed cap + suppresses OAs, then is
+  consumed. `use_skirmisher` mechanizes onto it: installs a 1-round
+  `skirmisher-bonus-move` buff (half-speed budget + OA-immune). Relentless
+  Avenger rides the same generalized path unchanged. Harness:
+  `test_skirmisher.py` (+1, end-to-end over-cap move proof).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

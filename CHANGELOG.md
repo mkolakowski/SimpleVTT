@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.696.0] - 2026-06-26 — "The Open Field"
+
+**Schema version:** 81
+
+**Commit summary:** Full-feature-automation Phase 8 — generalize the free-move substrate + mechanize Skirmisher (Scout Rogue) onto it.
+
+**Description:** Relentless Avenger's Phase-2 read site in `/token/move` (v2.158.51) honored a 1-round free-move buff — exempting up to `free_movement_remaining_ft` from the over-speed cap and suppressing opportunity attacks — but it was **hardcoded to the `relentless-avenger-bonus-move` key**. This commit **generalizes it into a reusable movement-grant substrate**: the read + consume now match any buff carrying `effects.oa_immune_during_move` (capturing the buff's key + name for the consume + advisory broadcast). Then **Skirmisher** (Scout Rogue Lv 3+, XGE p.46) is mechanized onto it — `use_skirmisher` installs a 1-round `skirmisher-bonus-move` buff with `free_movement_remaining_ft` (= half walking speed) + `oa_immune_during_move`, so the Rogue's next move is exempt from the cap up to the budget and provokes no OAs, then the buff is consumed. The "enemy ended its turn within 5 ft" trigger stays GM/player-driven (the endpoint *is* the reaction). Relentless Avenger continues to ride the same (now-generalized) path unchanged. Skirmisher's response gains `buff_installed`.
+
+### Added
+- `tests/harness/test_skirmisher.py` (+1) — `test_sk_buff_rides_generalized_free_move_substrate` (Pip at his 25-ft cap + the skirmisher buff → a +5-ft over-cap drag returns 200 with `relentless_avenger_applied == True`; the control without the buff 409s `over_speed_cap`), proving the read site is effect-keyed, not RA-specific. `test_use_sk_happy_lv7` also now asserts `buff_installed is True`.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `/token/move` free-move read + consume generalized to be effect-keyed (any `oa_immune_during_move` buff); `use_skirmisher` installs the free-move buff + surfaces `buff_installed`.
+- `docs/automation-coverage.md` — `use_skirmisher` note updated (rides the generalized free-move substrate).
+- `docs/plans/full-feature-automation.md` — Phase 8 shipped list += Skirmisher + the substrate generalization.
+- `docs/test-harness-coverage.md` — catalog the new test.
+
+### Schema
+- No schema change (still v81).
+
 ## [2.695.1] - 2026-06-26 — "The Honest Docstring"
 
 **Schema version:** 81

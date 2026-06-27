@@ -298,7 +298,7 @@ or passive damage-boosters that already ride other code paths
 | `use_second_wind` | ✅ tracked | heal/damage |
 | `use_shadow_arts` | ✅ tracked | A use/resource |
 | `use_silver_tongue` | ✅ tracked | D buff-install (d20-floor parameter flags) |
-| `use_skirmisher` | ✅ tracked | A use/resource |
+| `use_skirmisher` | ✅ tracked | v2.696.0 — installs a `skirmisher-bonus-move` free-move buff (`free_movement_remaining_ft` + `oa_immune_during_move`) that rides the generalized (effect-keyed) free-move read in `/token/move`: next move is cap-exempt + OA-free, then consumed |
 | `use_slayers_prey` | ✅ tracked | D buff-install |
 | `use_soul_of_vengeance` | ✅ tracked | A use/resource |
 | `use_spirit_totem` | ✅ tracked | D buff-install, F temp-HP |
