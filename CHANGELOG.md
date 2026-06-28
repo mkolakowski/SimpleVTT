@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.728.1] - 2026-06-28 — "The Loaded Stat Block"
+
+**Schema version:** 83
+
+**Commit summary:** Verify + regression-guard homebrew-monster attack buttons (already shipped) and slim the stale TODO to its one optional remainder.
+
+**Description:** Investigated the "Homebrew Monster Attack Fields → Rollable Attack Buttons" backlog item and found it **already fully shipped** (since v2.3.8). The homebrew-monster Actions editor (`campaign_settings.html` `data-row-mode="action"` + `features_editor.js`) exposes structured `attack_roll` / `attack_bonus` / `damage` / `damage_type` / `save_ability` / `save_dc` / `charges_max` fields; `_coalesce_monster_actions` persists them; and the **shared** monster stat-block read-view (`_monster_template_to_sheet` → `sheet["attacks"]` → `_tab_actions.html` → `renderActionButtons`) renders them as clickable 🎯/🎲/📋 buttons firing `/npc_attack` — identical to shipped SRD monsters. Rather than rebuild, this locks the persistence contract in with a regression test and reconciles the backlog (the core moves to `TODONE.md`; only the *optional* "Parse from description" auto-fill bonus stays in `TODO.md`). Test + docs only.
+
+### Added
+- `tests/harness/test_homebrew_monster_attack_fields.py` (new, +2) — a homebrew monster created via `/custom-monsters` with an **attack** action round-trips through `/api/content/monsters/{slug}` with `attack_roll`/`attack_bonus`/`damage`/`damage_type` intact; a **save** action keeps `save_ability`/`save_dc`/`damage`.
+
+### Changed
+- `TODO.md` / `TODONE.md` — archived the shipped core; slimmed the TODO to the optional parse-from-description bonus.
+
+### Schema
+- No schema change (still v83).
+
 ## [2.728.0] - 2026-06-28 — "The Fresh Face"
 
 **Schema version:** 83
