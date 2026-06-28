@@ -494,6 +494,13 @@
            out of place there). 35% accent mix keeps the card outline
            visible on dark themes too without flattening into the bg. */
         border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+        /* v2.723.0 (TODO #878): give roll + feature cards the same 3px
+           accent left-stripe the .spell-cast-card / .weapon-atk-card and
+           the roll-log popout (rolls_popout.html) already carry, so every
+           card in the log reads as one cohesive "spell card" family. The
+           visibility variants recolor the stripe below (mirroring the
+           popout). */
+        border-left: 3px solid var(--accent);
         /* v2.49.246: deeper frosted-glass — bg-mix dropped from 78%→55%
            so more of the map shows through; blur raised 10px→16px and
            saturate 140%→160% so the bleed-through reads as colored
@@ -539,6 +546,10 @@
     }
     .roll-card.vis-gm-only   .roll-card-total-col { background: color-mix(in srgb, var(--danger) 14%, var(--bg)); border-right-color: color-mix(in srgb, var(--danger) 30%, transparent); }
     .roll-card.vis-gm-roller .roll-card-total-col { background: rgba(200,150,42,.12); border-right-color: rgba(200,150,42,.28); }
+    /* v2.723.0 (TODO #878): recolor the accent left-stripe per visibility
+       variant, matching the roll-log popout + the spell card family. */
+    .roll-card.vis-gm-only   { border-left-color: var(--danger); }
+    .roll-card.vis-gm-roller { border-left-color: #c8962a; }
 
     /* Right content wrapper */
     .roll-card-right { flex: 1; min-width: 0; display: flex; flex-direction: column; }

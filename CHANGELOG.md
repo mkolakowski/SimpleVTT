@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.723.0] - 2026-06-27 — "The Matching Set"
+
+**Schema version:** 83
+
+**Commit summary:** Roll-log polish (TODO #878) — give roll + feature cards the spell card's accent left-stripe so the whole log is one cohesive family.
+
+**Description:** Completes the manually-added TODO "Update all of roll log to look like spells." The spell-cast cards (`.spell-cast-card`) and weapon-attack cards already carried a 3px accent left-stripe, and the **roll-log popout** (`rolls_popout.html`) already styled its roll cards that way — but the main tabletop roll cards + feature-used cards (`.roll-card`) didn't, so the log read as two visual families. They now carry the same `border-left: 3px solid var(--accent)` stripe (already on a frosted-glass base since v2.49.246), recolored per visibility variant (GM-only → danger red, GM+you → gold) to match the popout. Pure CSS; no markup or behavior change. Also reconciled the backlog: removed the already-shipped "logout pill hover animation" item (done v2.97.11) and moved both to `TODONE.md`.
+
+### Changed
+- `app/templates/tabletop.html` — `.roll-card` gains the accent left-stripe + per-visibility stripe colors.
+- `TODO.md` / `TODONE.md` — moved the two completed manually-added items to the archive.
+
+### Schema
+- No schema change (still v83).
+
 ## [2.722.0] - 2026-06-27 — "The Town Crier"
 
 **Schema version:** 83
