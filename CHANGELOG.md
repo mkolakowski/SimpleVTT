@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.731.0] - 2026-06-28 — "The Hero's Likeness"
+
+**Schema version:** 84
+
+**Commit summary:** Demo PCs now carry a sheet portrait — wire each PC's existing 1024×1024 token art as its `portrait_url` so the character sheet shows the full portrait instead of the initial-letter fallback.
+
+**Description:** The demo PCs' generated art was wired only to their battle-map **tokens** (`Token.image_url`); their `Character.portrait_url` was left NULL, so opening a demo PC's sheet showed just a coloured letter box. Now each PC's `portrait_url` points at the same art it already uses as a token, so the D&D 5e sheet renders the full portrait at 192×192 (the generic sheet at 90px) — the art is square 1024×1024 and crops cleanly. Covers all 25 leveled-demo PCs (`app/demo_campaigns.py`, reusing each party entry's `image` web-path) plus the three art'd archived Sundered Vault PCs — Pip Quickfingers, Thalindra Moonwhisper, Brother Tavik Stonebrow (`app/demo_seed.py`). PCs without art keep the initial-letter fallback; no new image files. Demo-seed data only; no schema/endpoint change.
+
+### Changed
+- `app/demo_campaigns.py` — set `portrait_url=pc.get("image")` when seeding each leveled-demo PC Character.
+- `app/demo_seed.py` — set `portrait_url` on Pip / Thalindra / Tavik (rogue/wizard/cleric token art).
+
+### Schema
+- No schema change (still v84).
+
 ## [2.730.0] - 2026-06-28 — "The After-Action Report"
 
 **Schema version:** 84

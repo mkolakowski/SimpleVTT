@@ -867,6 +867,9 @@ def _seed_one(db: Session, spec: dict, users: dict[str, User]) -> Campaign:
             campaign_id=camp.id, name=pc["name"], template="dnd5e",
             sheet=build_dnd5e_sheet(pc["name"], **pc["sheet"]),
             owner_user_id=users[pc["owner"]].id,
+            # Same 1024×1024 art as the PC's token doubles as the sheet portrait
+            # (rendered at 192px on the D&D 5e sheet). Absent → initial-letter fallback.
+            portrait_url=pc.get("image"),
         )
         db.add(ch)
         chars.append(ch)

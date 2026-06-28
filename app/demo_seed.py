@@ -7308,6 +7308,7 @@ def seed_characters(
         template="dnd5e",
         sheet=_rogue_sheet("Pip Quickfingers"),
         color="#6cb4ff",
+        portrait_url="/static/demo/tokens/rogue.jpg",
     )
     bob_pc = Character(
         campaign_id=camp.id,
@@ -7316,6 +7317,7 @@ def seed_characters(
         template="dnd5e",
         sheet=_wizard_sheet("Thalindra Moonwhisper"),
         color="#4ade80",
+        portrait_url="/static/demo/tokens/wizard.jpg",
     )
     # v2.3.25: GM gets a Cleric so the demo party has a divine healer
     # and the GM has a PC mini-sheet to demo alongside the player ones.
@@ -7328,6 +7330,7 @@ def seed_characters(
         template="dnd5e",
         sheet=_cleric_sheet("Brother Tavik Stonebrow"),
         color="#f5b75c",
+        portrait_url="/static/demo/tokens/cleric.jpg",
     )
     # v2.14.0: Phase A.1 — demo Paladin (Sir Caelan Lightbringer).
     # Adds a 4th PC to unlock harness happy-paths for Lay on Hands
