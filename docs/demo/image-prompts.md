@@ -10,7 +10,8 @@ race / class / subclass / weapons / personality.
 The flagship **Sundered Vault** demo ships its tokens; the five leveled demos
 (L3 / L5 / L9 / L13 / L18) now ship full token **and** battle-map art too —
 generated via the ImagineArt MCP and background-removed to true alpha. The only
-remaining placeholder is the archived Sundered Vault's `tavern.png` map (57 / 58).
+archived Sundered Vault ships its `tavern.png` map as final art too — the full
+catalog is complete (58 / 58).
 
 > **Thumbnails appear automatically.** Each checklist row and each prompt
 > derives its thumbnail from the path shown for that entity (e.g.
@@ -26,7 +27,7 @@ remaining placeholder is the archived Sundered Vault's `tavern.png` map (57 / 58
 > misalign. Each map prompt below already says "no grid lines"; if your model
 > adds one anyway, put `grid, grid lines, grid overlay` in the negative prompt.
 
-## Overall progress — 57 / 58 images
+## Overall progress — 58 / 58 images
 
 | Demo | Map | Tokens | Done |
 |---|---|---|---|
@@ -35,7 +36,7 @@ remaining placeholder is the archived Sundered Vault's `tavern.png` map (57 / 58
 | Level 9 : Storm Over Saltmarsh | ✅ | ✅ 9 / 9 | **10 / 10** |
 | Level 13 : The Shadowfell Spire | ✅ | ✅ 8 / 8 | **9 / 9** |
 | Level 18 : The Dragon's Apotheosis | ✅ | ✅ 8 / 8 | **9 / 9** |
-| ARCHIVE : The Sundered Vault *(flagship)* | 🟡 placeholder | ✅ 9 / 9 shipped | **10 / 10** |
+| ARCHIVE : The Sundered Vault *(flagship)* | ✅ | ✅ 9 / 9 shipped | **10 / 10** |
 
 <style>
 /* Client-side tab UI for the demo image-prompt sets. The page is plain
@@ -673,14 +674,13 @@ Negative prompt: `text, characters, tokens, UI overlay, modern objects`
 
 The original hand-built demo (`app/demo_seed.py`). All nine character tokens
 ship as jpgs at `app/static/demo/tokens/` and are wired into `seed_tokens`;
-the tavern map is a working placeholder you can regenerate for polish.
+the tavern map ships as final art too.
 
-**Progress: 10 / 10 shipped** — every token is live; the only optional
-regen is the placeholder battle map.
+**Progress: 10 / 10 shipped** — every token and the battle map are live.
 
 | Entity | File | Status |
 |---|---|---|
-| 🗺️ The Sundered Tavern (map) | `app/static/demo/maps/tavern.png` | 🟡 placeholder — regen optional |
+| 🗺️ The Sundered Tavern (map) | `app/static/demo/maps/tavern.png` | ✅ shipped + wired |
 | 🗡️ Pip Quickfingers | `app/static/demo/tokens/rogue.jpg` | ✅ shipped + wired |
 | ✨ Thalindra Moonwhisper | `app/static/demo/tokens/wizard.jpg` | ✅ shipped + wired |
 | ☀️ Brother Tavik Stonebrow | `app/static/demo/tokens/cleric.jpg` | ✅ shipped + wired |

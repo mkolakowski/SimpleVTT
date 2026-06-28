@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.732.1] - 2026-06-28 — "The Tavern Stands"
+
+**Schema version:** 84
+
+**Commit summary:** Docs — promote the archived Sundered Vault's `tavern.png` battle map from "placeholder / regen optional" to final shipped art; demo art catalog is now 58/58.
+
+**Description:** The `tavern.png` map (refreshed in the standalone "Update tavern.png" commit) is the art we're keeping — it's no longer a placeholder awaiting regeneration. Flipped its status across the docs: the image-prompts checklist (overall 57→**58 / 58**, the archive overall-table Map cell + the Sundered Tavern checklist row → ✅, and the archive intro/progress prose), the `/wiki/demo-content` guide (Art-status block + the Sundered Tavern generation-prompt note), `BUGS.md` M4, and the `docs/plans/demo-mode.md` v2.689.x annotation. Doc-only; no code/schema/asset change (the historical v2.1–2.3 plan references to "placeholder" assets are left as-is as a record of the original landing).
+
+### Changed
+- `docs/demo/image-prompts.md` — 58/58; Sundered Tavern map → ✅ shipped (table + checklist + prose).
+- `docs/wiki/demo-content.md` — Art-status block + Sundered Tavern note reflect the tavern map as final.
+- `BUGS.md` — M4 no longer flags the tavern map as an outstanding regen.
+- `docs/plans/demo-mode.md` — v2.689.x update note covers the tavern map as shipped.
+
+### Schema
+- No schema change (still v84).
+
 ## [2.732.0] - 2026-06-28 — "Faces in the Order"
 
 **Schema version:** 84

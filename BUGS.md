@@ -91,6 +91,6 @@ Skipped: `tests/encounter_sim/level_2_encounter/test_tavern_brawl_baseline.py::t
 ## Borderline (almost certainly resolved — verify before closing)
 
 - **M1 — CON max-HP recompute path.** Believed fully resolved by the permanent-ability-increase reconciliation (v2.312.0–v2.314.0). Verify no stale dual-path remains, then delete this line.
-- **M4 — Demo audio never shipped.** Some demo audio cues (`tavern.ogg` / `battle.ogg`) were planned but not seeded. (The token/map half is **resolved** as of v2.689.x — every leveled demo plus the Sundered Vault ships token + battle-map art; only the optional `tavern.png` map regen remains.) Cosmetic; low priority. (Tracked here, not in TODO, because it's "incomplete demo content," not a feature request.)
+- **M4 — Demo audio never shipped.** Some demo audio cues (`tavern.ogg` / `battle.ogg`) were planned but not seeded. (The token/map half is **resolved** — every leveled demo plus the Sundered Vault ships full token + battle-map art, including the `tavern.png` map.) Cosmetic; low priority. (Tracked here, not in TODO, because it's "incomplete demo content," not a feature request.)
 
 > **Not bugs (feature gaps tracked in [TODO.md](TODO.md)):** the magic-item content tail (116/239 items), spell upcast scaling on ~110 cast-and-broadcast-only spells, and the 24 ⚪ class-feature rows are *unbuilt automation*, not defects — they live in the [SRD audit](TODO.md#srd-5e-audit-v23150-refresh) priority list.

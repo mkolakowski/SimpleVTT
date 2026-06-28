@@ -15,8 +15,9 @@ the showcase feature).
 > battle map plus PC portraits and NPC tokens — generated from the prompts in
 > the collapsed **Generation prompts** section below (the same prompts live in
 > the demo image-prompts checklist). Art is dropped under
-> `app/static/demo/...` and wired in `app/demo_campaigns.py`. The only
-> remaining placeholder is the **archived Sundered Vault**'s `tavern.png` map.
+> `app/static/demo/...` and wired in `app/demo_campaigns.py`. The **archived
+> Sundered Vault** ships its `tavern.png` battle map as final art too — the
+> whole demo art catalog is complete.
 
 ## Accounts
 
@@ -127,7 +128,7 @@ background, centred**.
 
 - **The Goblin Warrens (entrance)** — top-down cave-mouth into a goblin tunnel warren: muddy entrance, crude wooden palisade, scattered bones and cookfires, tunnel openings, torchlight. ~20×14 squares.
 - **The Tide-Wracked Catacombs** — top-down flooded crypt beneath a ruined lighthouse: ankle-deep seawater pooling between barnacle-crusted sarcophagi, broken burial niches, kelp and bone debris, a collapsed lighthouse stair descending into the dark, faint phosphorescent glow at the water's edge. ~20×14 squares.
-- **The Sundered Tavern** *(placeholder `tavern.png` — the lone un-regenerated map)* — top-down two-storey roadside tavern interior: bar to the east, door to the west, overturned tables, a brawl in progress.
+- **The Sundered Tavern** *(art: `tavern.png`)* — top-down two-storey roadside tavern interior: bar to the east, door to the west, overturned tables, a brawl in progress.
 - **The Drowned Reef** — top-down storm-lashed coral reef at low tide: tide pools, jagged coral, a half-sunken shipwreck, sahuagin lair openings, churning surf at the edges. ~23×16 squares.
 - **The Shadowfell Spire (threshold)** — top-down obsidian plaza before a spire of black glass: cracked flagstones, drifting shadow-mist, guttering violet braziers, grasping dead hands at the margins. ~23×17 squares.
 - **The Caldera Throne** — top-down volcanic caldera rim: rivers of lava, basalt causeways, a central obsidian throne-dais, ember haze, a dragon-sized landing ledge. ~26×19 squares.
