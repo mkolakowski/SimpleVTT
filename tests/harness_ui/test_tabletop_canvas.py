@@ -351,29 +351,24 @@ def test_quick_links_has_home_button(gm_page: Page) -> None:
         f"Home pill label unexpected: {home.first.text_content()!r}")
 
 
-def test_suggest_modal_submits(gm_page: Page) -> None:
-    """v2.718.0 — the in-app Suggest / Report modal (base.html, opened from
-    the tabletop Quick Links pill + the topnav) posts to /api/suggestions.
-    Opens the modal, fills a title, submits, and asserts the success message
-    (the JS only shows it on a 2xx response, proving the POST succeeded)."""
+def test_feedback_page_files_and_lists_report(gm_page: Page) -> None:
+    """v2.727.0 — the combined Feedback page (/my-suggestions) carries BOTH
+    the file form and the reporter's own reports list. Files a report via the
+    form, then (after the success reload) asserts it appears in the list."""
     console_errors: list[str] = []
     gm_page.on("pageerror", lambda exc: console_errors.append(str(exc)))
-    gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}")
-    _wait_for_tabletop_ready(gm_page)
+    gm_page.goto(f"{BASE_URL}/my-suggestions")
+    expect(gm_page.locator("#file-suggestion-form")).to_be_visible()
 
-    # The modal markup must exist, and the opener must be defined.
-    assert gm_page.evaluate("() => typeof window.openSuggestModal === 'function'")
-    gm_page.evaluate("() => window.openSuggestModal()")
-    expect(gm_page.locator("#suggest-modal-overlay")).to_be_visible()
+    title = "UI combined-page report ZZZ"
+    gm_page.select_option("#fs-kind", "issue")
+    gm_page.fill("#fs-title", title)
+    gm_page.fill("#fs-body", "Filed by the harness.")
+    gm_page.click("#file-suggestion-form button[type='submit']")
 
-    gm_page.select_option("#suggest-kind", "issue")
-    gm_page.fill("#suggest-title", "UI harness suggestion")
-    gm_page.fill("#suggest-body", "Filed by the harness.")
-    gm_page.click("#suggest-form button[type='submit']")
-
-    # Success message appears on a 2xx; gives the POST a moment to round-trip.
-    expect(gm_page.locator("#suggest-msg")).to_contain_text("Thanks", timeout=4000)
-    assert not console_errors, f"JS errors during suggest flow: {console_errors}"
+    # The JS posts then reloads; the new report must show up in the list.
+    expect(gm_page.locator("table.data")).to_contain_text(title, timeout=6000)
+    assert not console_errors, f"JS errors during feedback flow: {console_errors}"
 
 
 def test_topbar_controls_layer_above_left_roll_log(gm_page: Page) -> None:

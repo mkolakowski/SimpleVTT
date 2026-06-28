@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.727.0] - 2026-06-27 — "The One-Stop Form"
+
+**Schema version:** 83
+
+**Commit summary:** Combine "Suggest" + "My reports" into a single Feedback page in the main VTT — file a report and track your own, in one place.
+
+**Description:** Per request, the two separate feedback surfaces — the "💡 Suggest" modal and the "My reports" page — are merged into one page at `/my-suggestions`: an inline **file form** (type / title / details, posting to `/api/suggestions` then reloading) sits above the reporter's **own reports list** (with each one's status + admin note). The global topnav now has a single **💡 Feedback** link (replacing the separate "Suggest" + "My reports" links), and the tabletop Quick Links **💡 Feedback** pill opens the page in a new tab (so a GM mid-session doesn't lose the live tabletop). The old base.html modal is removed (the page form replaces it); the `/api/suggestions` backend — and its audit-log + Discord notifications — are unchanged.
+
+### Changed
+- `app/templates/my_suggestions.html` — now the combined Feedback page (file form + list).
+- `app/templates/base.html` — single "💡 Feedback" topnav link; removed the Suggest/Report modal markup + JS.
+- `app/templates/tabletop.html` — Quick Links pill → `/my-suggestions` (new tab).
+- `tests/harness/test_suggestions.py` — page-render test now asserts the list + the inline file form.
+- `tests/harness_ui/test_tabletop_canvas.py` — replaced the modal-submit test with a combined-page file-and-list test.
+
+### Schema
+- No schema change (still v83).
+
 ## [2.726.0] - 2026-06-27 — "The Operator's Inbox"
 
 **Schema version:** 83

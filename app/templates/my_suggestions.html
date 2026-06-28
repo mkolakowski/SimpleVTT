@@ -1,14 +1,37 @@
 {% extends "base.html" %}
-{% block title %}My reports — SimpleVTT{% endblock %}
+{% block title %}Feedback — SimpleVTT{% endblock %}
 {% block content %}
-<h1>My suggestions &amp; reports</h1>
-<p class="muted">Suggestions and issues you've filed via the
-    “💡 Suggest” button, with their current status.
-    <a href="#" onclick="event.preventDefault(); window.openSuggestModal && window.openSuggestModal();">File a new one →</a>
-</p>
+<h1>💡 Suggestions &amp; issue reports</h1>
+<p class="muted">File a suggestion or bug report and track the ones you've
+    already sent — all in one place. The team triages these in the admin
+    portal.</p>
+
+{# v2.727.0 — the file form (was the old modal) + the reporter's own list,
+   combined onto one page. Posts to /api/suggestions, then reloads so the
+   new entry appears in the list below. #}
+<div class="card" style="margin-bottom:18px;max-width:640px;">
+    <h2 style="margin-top:0;">File a new one</h2>
+    <form id="file-suggestion-form">
+        <label for="fs-kind" style="display:block;font-size:13px;margin-bottom:4px;">Type</label>
+        <select id="fs-kind" style="width:100%;margin-bottom:10px;">
+            <option value="suggestion">💡 Suggestion</option>
+            <option value="issue">🐞 Issue / bug</option>
+        </select>
+        <label for="fs-title" style="display:block;font-size:13px;margin-bottom:4px;">Title</label>
+        <input id="fs-title" type="text" maxlength="200" required
+               placeholder="Short summary" style="width:100%;margin-bottom:10px;">
+        <label for="fs-body" style="display:block;font-size:13px;margin-bottom:4px;">Details (optional)</label>
+        <textarea id="fs-body" rows="4" maxlength="8000"
+                  placeholder="What happened, or what you'd like to see"
+                  style="width:100%;margin-bottom:12px;"></textarea>
+        <div id="fs-msg" style="font-size:13px;margin-bottom:10px;min-height:18px;"></div>
+        <button type="submit">Send</button>
+    </form>
+</div>
 
 {% set _status_label = {"new": "🆕 New", "in_progress": "🔧 In progress", "resolved": "✅ Resolved", "wont_fix": "🚫 Won't fix"} %}
 
+<h2>Your reports{% if suggestions %} ({{ suggestions|length }}){% endif %}</h2>
 {% if suggestions %}
 <table class="data">
     <thead><tr>
@@ -30,8 +53,47 @@
     </tbody>
 </table>
 {% else %}
-<p class="muted">You haven't filed any reports yet.
-    <a href="#" onclick="event.preventDefault(); window.openSuggestModal && window.openSuggestModal();">File your first →</a>
-</p>
+<p class="muted">You haven't filed any reports yet — use the form above.</p>
 {% endif %}
+
+<script>
+    (function () {
+        const form = document.getElementById('file-suggestion-form');
+        const msg = document.getElementById('fs-msg');
+        if (!form) return;
+        form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const title = (document.getElementById('fs-title').value || '').trim();
+            if (!title) {
+                msg.style.color = 'var(--danger, #c0392b)';
+                msg.textContent = 'Please add a title.';
+                return;
+            }
+            try {
+                const r = await fetch('/api/suggestions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        kind: document.getElementById('fs-kind').value,
+                        title: title,
+                        body: (document.getElementById('fs-body').value || '').trim(),
+                        page_url: '/my-suggestions',
+                    }),
+                });
+                if (r.ok) {
+                    msg.style.color = 'var(--accent)';
+                    msg.textContent = 'Thanks! Reloading…';
+                    setTimeout(function () { location.reload(); }, 600);
+                } else {
+                    msg.style.color = 'var(--danger, #c0392b)';
+                    msg.textContent = 'Could not send (' + r.status + ').';
+                }
+            } catch (err) {
+                msg.style.color = 'var(--danger, #c0392b)';
+                msg.textContent = 'Could not send.';
+            }
+        });
+    })();
+</script>
 {% endblock %}

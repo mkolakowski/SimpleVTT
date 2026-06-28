@@ -3985,8 +3985,9 @@
             </style>
             <div style="padding:8px 10px;display:grid;grid-template-columns:1fr 1fr;gap:6px;">
                 <a href="/" class="ql-pill" title="Back to the main page (campaign list)">🏠 Home</a>
-                {# v2.718.0 — opens the Suggest / Report modal defined in base.html #}
-                <a href="#" class="ql-pill" onclick="event.preventDefault(); window.openSuggestModal && window.openSuggestModal();" title="Suggest a feature or report an issue">💡 Suggest</a>
+                {# v2.727.0 — the combined Feedback page (file + track). Opens
+                   in a new tab so the GM doesn't lose the live tabletop. #}
+                <a href="/my-suggestions" target="_blank" rel="noopener noreferrer" class="ql-pill" title="Suggest a feature, report an issue, or track your reports">💡 Feedback</a>
                 <a href="/wiki" target="_blank" rel="noopener noreferrer" class="ql-pill" title="Open the wiki in a new tab">📖 Wiki</a>
                 <a href="/characters" class="ql-pill">🧝 Characters</a>
                 <a href="/campaign/{{ campaign.id }}/stats" class="ql-pill" title="Damage, healing, attacks & most-used spells for this campaign">📊 Stats</a>

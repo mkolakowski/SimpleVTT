@@ -125,13 +125,14 @@ async def test_my_suggestions_scoped_to_user(gm_client, alice_client):
 
 
 async def test_my_suggestions_page_renders(gm_client):
-    """The /my-suggestions page renders the caller's reports."""
+    """The combined Feedback page (/my-suggestions) renders the caller's
+    reports list AND the inline file form (v2.727.0)."""
     await gm_client.post(
         "/api/suggestions", json={"title": "Page render report QQQ"})
     r = await gm_client.get("/my-suggestions")
     assert r.status_code == 200, r.text
-    assert "Page render report QQQ" in r.text
-    assert "My suggestions" in r.text
+    assert "Page render report QQQ" in r.text          # the list
+    assert 'id="file-suggestion-form"' in r.text       # the combined file form
 
 
 async def test_count_requires_admin(alice_client):
