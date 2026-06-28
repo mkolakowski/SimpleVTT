@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.732.0] - 2026-06-28 — "Faces in the Order"
+
+**Schema version:** 84
+
+**Commit summary:** Initiative mini-sheet header now shows a small portrait thumbnail when the character has a `portrait_url`.
+
+**Description:** `_mini_sheet_card.html` already received `portrait_url` in its context but never rendered it — the initiative-tracker cards showed only the name + class/race. Added a 34×34 rounded thumbnail in the mini-header (after the favourite star, before the name block) for both the D&D 5e and generic card layouts, plus monster cards whose synthetic dict carries a `portrait_url`. The thumbnail is non-interactive (no 44px touch-target minimum applies) and `onerror`-hides itself if the image 404s, so cards without art are unchanged. Pairs with v2.731.0, which gave every demo PC a `portrait_url` — their faces now appear in the initiative order, not just on the full sheet.
+
+### Added
+- `.mini-header-portrait` CSS rule in `app/templates/tabletop.html` (34×34, rounded, `object-fit:cover`).
+- Portrait `<img>` in `app/templates/_mini_sheet_card.html` (both header layouts), gated on `c.portrait_url`.
+
+### Schema
+- No schema change (still v84).
+
 ## [2.731.0] - 2026-06-28 — "The Hero's Likeness"
 
 **Schema version:** 84

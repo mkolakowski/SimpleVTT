@@ -32,6 +32,7 @@
                 {# ── Card header — always visible, click to open/close ── #}
                 <div class="mini-header" data-char-id="{{ c.id }}">
                     <button class="char-fav" data-char-id="{{ c.id }}" title="Favourite" style="padding:4px;min-height:32px;min-width:24px;">☆</button>
+                    {% if c.portrait_url %}<img class="mini-header-portrait" src="{{ c.portrait_url }}" alt="" loading="lazy" onerror="this.style.display='none'">{% endif %}
                     <div class="mini-header-info">
                         <div class="mini-header-name">{{ c.name }} <span class="conc-dot" id="conc-dot-{{ c.id }}" style="display:none;" title="Concentrating">🧿</span></div>
                         <div class="mini-header-sub">{% if _mc_sorted %}{% for _cc in _mc_sorted %}{{ _cc.get('class','') }} {{ _cc.get('level',1) }}{% if not loop.last %} · {% endif %}{% endfor %}{% elif sh.get('class') %}{{ sh.get('class','') }} {{ sh.get('level',1) }}{% endif %}{% if sh.get('race') %} · {{ sh.get('race') }}{% endif %}</div>
@@ -327,6 +328,7 @@
                 {# Generic template card header #}
                 <div class="mini-header" data-char-id="{{ c.id }}">
                     <button class="char-fav" data-char-id="{{ c.id }}" title="Favourite" style="padding:4px;min-height:32px;min-width:24px;">☆</button>
+                    {% if c.portrait_url %}<img class="mini-header-portrait" src="{{ c.portrait_url }}" alt="" loading="lazy" onerror="this.style.display='none'">{% endif %}
                     <div class="mini-header-info">
                         <div class="mini-header-name">{{ c.name }} <span class="conc-dot" id="conc-dot-{{ c.id }}" style="display:none;" title="Concentrating">🧿</span></div>
                         <div class="mini-header-sub">{{ c.template or 'Generic' }}</div>
