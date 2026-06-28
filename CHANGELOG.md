@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.732.2] - 2026-06-28 — "A Bigger Face"
+
+**Schema version:** 84
+
+**Commit summary:** Enlarge the initiative/characters-panel mini-sheet portrait thumbnail from 34px to 48px so the PC faces read more clearly.
+
+**Description:** The mini-header portrait thumbnail added in v2.732.0 was 34×34 — readable but small in the tabletop's Characters panel. Bumped `.mini-header-portrait` to 48×48 (radius 7px) so each card's portrait is more legible at a glance in the turn order. Still non-interactive (no touch-target minimum) and `onerror`-hidden on 404; cards without a `portrait_url` are unchanged.
+
+### Changed
+- `app/templates/tabletop.html` — `.mini-header-portrait` 34×34 → 48×48.
+
+### Schema
+- No schema change (still v84).
+
 ## [2.732.1] - 2026-06-28 — "The Tavern Stands"
 
 **Schema version:** 84
