@@ -893,9 +893,6 @@ Review every D&D 5e class and subclass resource and surface the most commonly us
 
 Goal: a compact resource row below HP in the mini-sheet that auto-populates based on the character's class(es). Resources should persist server-side (stored in the character JSON) and broadcast updates via WebSocket so the GM can see resource consumption in real time.
 
-### Dynamic Character Art Updates
-When a player updates their character portrait on their sheet, the change should propagate in real time to the tabletop — updating the token image, the player list, and any other places the portrait is displayed — without requiring a page reload. Should use the existing WebSocket broadcast infrastructure so all connected clients (GM and other players) see the new art immediately.
-
 ---
 
 ## GM Tools

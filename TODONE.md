@@ -128,6 +128,10 @@ Nearly all 24 buttons share the same inline style (`font-size:11px; padding:2px 
 
 ---
 
+## Character Sheet — shipped
+
+- ✅ **DONE (v2.728.0 "The Fresh Face")** — **Dynamic Character Art Updates.** Uploading a new portrait (`POST /campaign/{cid}/character/{id}/portrait`) now propagates live over WebSocket with no reload: every linked token's `image_url` is updated + re-broadcast (`token_update` → canvas repaints), and a `character_portrait_update` event updates the client's `charById` + `USER_PORTRAITS` maps so roll-card / spell-card avatars pick up the new art. Harness: `test_portrait_live_update.py`.
+
 ## GM Tools — shipped
 
 - ✅ **DONE (already shipped; verified + regression-guarded v2.727.1)** — **GM Access to All Character Sheets.** Was filed as a GM-Tools ask but is already fully implemented: `GET /campaign/{cid}/character/{char_id}/sheet` (`character_sheet_page`) lets any campaign member view a character and the GM/owner edit it — no ownership gate on viewing (`can_edit = is_gm or owner`). The GM reaches it from three UI entry points: the Characters-drawer "Open full sheet →" link (`_mini_sheet_card.html`, shown for every PC since the panel renders all PCs for the GM), the init-tracker "📋 Sheet" link, and right-click-token. Locked in by `tests/harness/test_gm_view_character_sheet.py` (GM views any/player-owned sheet → 200; member can view; unknown → 404). Stale-in-backlog only — caught during the v2.727.x topic-feature sweep.

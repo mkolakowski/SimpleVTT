@@ -119026,6 +119026,30 @@ async def upload_portrait(
     (_PORTRAIT_DIR / fname).write_bytes(data)
     char.portrait_url = f"/static/uploads/portraits/{fname}"
     db.commit()
+    # v2.728.0 — propagate the new art live (no page reload). Tokens linked to
+    # this character snapshotted the OLD portrait into their image_url at
+    # place-time, so update + re-broadcast each (the canvas repaints with the
+    # new image), then emit character_portrait_update so roll-card / spell-card
+    # avatars (USER_PORTRAITS) + the in-memory char map pick it up too.
+    try:
+        linked = db.query(Token).filter(Token.character_id == char_id).all()
+        for t in linked:
+            t.image_url = char.portrait_url
+        if linked:
+            db.commit()
+        for t in linked:
+            await hub.broadcast(
+                campaign_id, {"type": "token_update", "data": _token_dict(t)})
+        await hub.broadcast(campaign_id, {
+            "type": "character_portrait_update",
+            "data": {
+                "char_id": char.id,
+                "owner_user_id": char.owner_user_id,
+                "portrait_url": char.portrait_url,
+            },
+        })
+    except Exception:
+        logging.exception("portrait live-propagate failed for char=%s", char_id)
     return {"ok": True, "portrait_url": char.portrait_url}
 
 

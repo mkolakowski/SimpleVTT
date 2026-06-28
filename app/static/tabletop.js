@@ -5154,6 +5154,20 @@
                     if (color) el.dataset.charColor = color;
                     else delete el.dataset.charColor;
                 });
+            } else if (msg.type === 'character_portrait_update') {
+                // v2.728.0 — a player changed their portrait. Update the
+                // in-memory maps so roll-card / spell-card avatars
+                // (USER_PORTRAITS) + anything reading charById pick up the new
+                // art; the linked tokens repaint via their own token_update
+                // broadcasts (the server updated their image_url).
+                const { char_id, owner_user_id, portrait_url } = msg.data || {};
+                if (char_id != null && charById[char_id]) {
+                    charById[char_id].portrait_url = portrait_url;
+                }
+                if (owner_user_id != null && portrait_url) {
+                    try { USER_PORTRAITS[owner_user_id] = portrait_url; } catch (_) {}
+                }
+                try { render(); } catch (_) {}
             } else if (msg.type === 'character_ring_update') {
                 const { char_id, color, ring_style } = msg.data;
                 const ch = charById[char_id];

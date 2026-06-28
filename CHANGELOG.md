@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.728.0] - 2026-06-28 — "The Fresh Face"
+
+**Schema version:** 83
+
+**Commit summary:** Dynamic character art — a new portrait propagates live to the token + roll-card avatars over WebSocket, no reload.
+
+**Description:** The GM-Tools backlog item "Dynamic Character Art Updates." `POST /campaign/{cid}/character/{id}/portrait` previously just saved the file + returned the URL, so the new art only appeared after a reload (tokens snapshot the portrait into their `image_url` at place-time). The endpoint now, after saving: updates the `image_url` of every token linked to the character and re-broadcasts each (`token_update` → the canvas repaints the token with the new image), and emits a `character_portrait_update` event `{char_id, owner_user_id, portrait_url}`. The tabletop client handles it by updating the in-memory `charById` + `USER_PORTRAITS` maps so roll-card / spell-card avatars (and anything reading the char map) pick up the new art immediately. Best-effort (wrapped) so a propagation hiccup never fails the upload.
+
+### Added
+- `tests/harness/test_portrait_live_update.py` (new, +2) — uploading a portrait updates the linked token's `image_url` + fires `character_portrait_update` + `token_update`; a bad extension → 400.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `upload_portrait` updates linked tokens + broadcasts `token_update` / `character_portrait_update`.
+- `app/static/tabletop.js` — `character_portrait_update` WS handler updates `charById` + `USER_PORTRAITS` and re-renders.
+
+### Schema
+- No schema change (still v83).
+
 ## [2.727.1] - 2026-06-28 — "The Open Ledger"
 
 **Schema version:** 83
