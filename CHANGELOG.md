@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.726.0] - 2026-06-27 — "The Operator's Inbox"
+
+**Schema version:** 83
+
+**Commit summary:** Add a Feedback tab to the standalone Admin Center (:8015) — view + triage the suggestion / issue reports from there too.
+
+**Description:** The suggestion system was triageable in the main app's `/admin` portal (v2.717.0); this surfaces it in the standalone **Admin Center** (`app.admin_center`, :8015) where operators do day-to-day admin. Adds a **💬 Feedback** nav tab (always available to authed operators, like Storage / Tests — not behind `ADMIN_CENTER_ADMIN_TOOLS`) and a `/feedback` page listing every report newest-first (type, title + body + admin note, submitter, page URL, timestamp) with an open-count badge. Per-row triage: a status `<select>` + admin-note field (`POST /feedback/{id}/update`) and a delete button (`POST /feedback/{id}/delete`), plus status/type filter chips (`?status=`/`?kind=`). Reads the same `suggestions` table via a new `feedback_admin` service module (session-taking helpers, mirroring `user_admin` / `campaign_admin`). Mutations are protected by the Admin Center's existing auth middleware + Origin/Referer CSRF check; triage is non-destructive so it isn't MFA-gated.
+
+### Added
+- `app/admin_center/feedback_admin.py` — `list_suggestions` / `open_count` / `update_suggestion` / `delete_suggestion`.
+- `app/admin_center/main.py` — `GET /feedback` + `POST /feedback/{id}/update` + `POST /feedback/{id}/delete`.
+- `app/admin_center/templates/feedback.html` + a `💬 Feedback` tab in `_nav.html`.
+- `tests/harness/test_admin_center.py` (+2) — `/feedback` + its triage POSTs require auth (303→/login); authed, the dashboard nav shows the Feedback tab and `/feedback` renders its table + filter chips.
+
+### Schema
+- No schema change (still v83).
+
 ## [2.725.0] - 2026-06-27 — "The Clear Header"
 
 **Schema version:** 83

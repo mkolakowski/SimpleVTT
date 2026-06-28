@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feedback — SimpleVTT Admin Center</title>
+<link rel="icon" href="/favicon.svg">
+{% include "_theme.html" %}
+<style>
+  .fb-filters { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:0 0 14px; }
+  .fb-filters .muted { font-size:12px; opacity:.6; }
+  .fb-filters a.chip { min-height:32px; display:inline-flex; align-items:center;
+    padding:0 11px; border:1px solid var(--line); border-radius:999px;
+    color:var(--fg); text-decoration:none; font-size:12px; opacity:.75; }
+  .fb-filters a.chip:hover { background:var(--panel2); }
+  .fb-filters a.chip.active { opacity:1; border-color:var(--accent); color:var(--accent); }
+  td.fb-title strong { display:block; }
+  td.fb-title .body { font-size:12px; opacity:.7; margin-top:3px; white-space:pre-wrap; }
+  td.fb-title .note { font-size:12px; color:var(--accent); margin-top:3px; }
+  form.fb-update { display:flex; flex-wrap:wrap; gap:5px; margin:0; align-items:center; }
+  form.fb-update select { min-height:32px; font-size:12px; padding:4px 6px; }
+  form.fb-update input { min-height:32px; font-size:12px; padding:4px 6px; flex:1; min-width:120px; }
+  form.fb-update button { min-height:32px; font-size:12px; padding:4px 10px; }
+  form.fb-delete { margin:0; }
+  form.fb-delete button { min-height:32px; font-size:12px; padding:4px 10px;
+    background:#5a1f1f; border-color:#7a2a2a; color:#f3c0c0; }
+  .fb-kind { white-space:nowrap; }
+  .fb-status-new { color:#6ea8fe; } .fb-status-in_progress { color:#e0a85a; }
+  .fb-status-resolved { color:#7bd88f; } .fb-status-wont_fix { color:#9aa4b2; }
+</style>
+</head>
+<body>
+{% set nav_active = "feedback" %}{% include "_nav.html" %}
+<main>
+  <h1 style="font-size:18px;margin:0 0 14px">💬 Feedback
+    {% if open_count %}<span style="font-size:13px;color:var(--accent);">({{ open_count }} open)</span>{% endif %}
+  </h1>
+  {% if done %}<div class="banner ok">✅ {{ done }}</div>{% endif %}
+
+  <div class="card">
+    <div class="fb-filters">
+      <span class="muted">Status:</span>
+      <a class="chip {% if not filter_status %}active{% endif %}" href="/feedback{% if filter_kind %}?kind={{ filter_kind }}{% endif %}">All</a>
+      {% for st in statuses %}
+      <a class="chip {% if filter_status == st %}active{% endif %}" href="/feedback?status={{ st }}{% if filter_kind %}&kind={{ filter_kind }}{% endif %}">{{ st }}</a>
+      {% endfor %}
+      <span class="muted" style="margin-left:10px;">Type:</span>
+      <a class="chip {% if not filter_kind %}active{% endif %}" href="/feedback{% if filter_status %}?status={{ filter_status }}{% endif %}">All</a>
+      <a class="chip {% if filter_kind == 'suggestion' %}active{% endif %}" href="/feedback?kind=suggestion{% if filter_status %}&status={{ filter_status }}{% endif %}">💡 Suggestions</a>
+      <a class="chip {% if filter_kind == 'issue' %}active{% endif %}" href="/feedback?kind=issue{% if filter_status %}&status={{ filter_status }}{% endif %}">🐞 Issues</a>
+    </div>
+
+    <h2>Reports ({{ suggestions|length }})</h2>
+    {% if suggestions %}
+    <table>
+      <thead><tr>
+        <th>Type</th><th>Title &amp; details</th><th>From</th><th>Where</th>
+        <th>Filed</th><th>Status</th><th>Triage</th><th></th>
+      </tr></thead>
+      <tbody>
+        {% for s in suggestions %}
+        <tr>
+          <td class="fb-kind">{{ "🐞 Issue" if s.kind == "issue" else "💡 Suggestion" }}</td>
+          <td class="fb-title">
+            <strong>{{ s.title }}</strong>
+            {% if s.body %}<div class="body">{{ s.body }}</div>{% endif %}
+            {% if s.admin_note %}<div class="note">📝 {{ s.admin_note }}</div>{% endif %}
+          </td>
+          <td>{{ s.user_name }}</td>
+          <td>{% if s.page_url %}<a href="{{ s.page_url }}">{{ s.page_url }}</a>{% else %}—{% endif %}</td>
+          <td><span class="muted" style="font-size:12px;">{{ s.created_at.strftime("%Y-%m-%d %H:%M") if s.created_at else "" }}</span></td>
+          <td><span class="fb-status-{{ s.status }}">{{ s.status }}</span></td>
+          <td>
+            <form class="fb-update" method="post" action="/feedback/{{ s.id }}/update">
+              <select name="status" aria-label="Status">
+                {% for st in statuses %}
+                <option value="{{ st }}" {% if s.status == st %}selected{% endif %}>{{ st }}</option>
+                {% endfor %}
+              </select>
+              <input type="text" name="admin_note" value="{{ s.admin_note }}" placeholder="Admin note" maxlength="4000">
+              <button type="submit">Save</button>
+            </form>
+          </td>
+          <td>
+            <form class="fb-delete" method="post" action="/feedback/{{ s.id }}/delete"
+                  onsubmit="return confirm('Delete this report permanently?');">
+              <button type="submit" title="Delete report">🗑</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No reports{% if filter_status or filter_kind %} match this filter{% endif %}.</p>
+    {% endif %}
+  </div>
+</main>
+</body>
+</html>

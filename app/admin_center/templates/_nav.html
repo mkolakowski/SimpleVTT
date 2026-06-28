@@ -31,6 +31,10 @@
   {% endif %}
   <a class="link {% if nav_active == 'storage' %}active{% endif %}" href="/storage">💾 Storage</a>
   <a class="link {% if nav_active == 'tests' %}active{% endif %}" href="/tests">🧪 Tests</a>
+  {# v2.726.0 — user-submitted suggestion / issue reports (the in-app
+     "💡 Suggest" button). Always available to authed operators, like
+     Storage / Tests. #}
+  <a class="link {% if nav_active == 'feedback' %}active{% endif %}" href="/feedback">💬 Feedback</a>
   {% if admin_user %}<span class="who">{{ admin_user }}</span>{% endif %}
   <a class="link" href="/logout">Log out</a>
 </header>

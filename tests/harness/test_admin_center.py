@@ -1932,3 +1932,37 @@ def test_campaign_storage_limit_enforced_end_to_end():
         assert ok.status_code == 303 and "done=" in ok.headers.get("location", "")
     finally:
         c.close()
+
+
+# ── Feedback (suggestion / issue reports) tab — v2.726.0 ──
+
+@_LIVE
+def test_feedback_requires_auth():
+    """The Feedback page + its triage POSTs bounce unauthenticated callers to
+    the login page (auth middleware)."""
+    get = httpx.get(f"{ADMIN_BASE_URL}/feedback", timeout=5.0, follow_redirects=False)
+    assert get.status_code == 303
+    assert "/login" in get.headers.get("location", "")
+    post = httpx.post(
+        f"{ADMIN_BASE_URL}/feedback/1/update", data={"status": "resolved"},
+        timeout=5.0, follow_redirects=False)
+    assert post.status_code in (303, 401)
+    assert "/login" in post.headers.get("location", "") or post.status_code == 401
+
+
+@_LIVE
+def test_feedback_page_renders_and_nav_tab_present():
+    """Authed: the dashboard nav carries a Feedback tab, and /feedback renders
+    its table shell + filter chips."""
+    with httpx.Client(base_url=ADMIN_BASE_URL, timeout=10.0, follow_redirects=False) as c:
+        r = c.post("/login", data={
+            "username": _ADMIN_USER, "password": _ADMIN_PASS, "next": "/"})
+        _complete_mfa_if_pending(c, r)
+        dash = c.get("/", follow_redirects=False)
+        assert dash.status_code == 200
+        assert 'href="/feedback"' in dash.text, "no Feedback nav tab on dashboard"
+        page = c.get("/feedback", follow_redirects=False)
+        assert page.status_code == 200
+        assert "Feedback" in page.text
+        assert "Reports (" in page.text          # the table header
+        assert 'href="/feedback?kind=issue"' in page.text  # a filter chip

@@ -631,6 +631,70 @@ def storage_dashboard(request: Request):
     )
 
 
+@app.get("/feedback", response_class=HTMLResponse)
+def admin_feedback(request: Request, status: str = "", kind: str = "", done: str = ""):
+    """v2.726.0 — user-submitted suggestions / issue reports (the in-app
+    "💡 Suggest" button), with inline triage. Read + light triage available
+    to any authed operator (auto-gated by the auth middleware); not behind
+    ADMIN_CENTER_ADMIN_TOOLS, like Storage / Tests. Optional ?status= / ?kind=
+    filters."""
+    from . import feedback_admin
+    from ..database import SessionLocal
+    db = SessionLocal()
+    try:
+        rows = feedback_admin.list_suggestions(
+            db, status=status or None, kind=kind or None)
+        open_n = feedback_admin.open_count(db)
+    finally:
+        db.close()
+    return templates.TemplateResponse(
+        "feedback.html",
+        {
+            "request": request,
+            "app_version": APP_VERSION,
+            "admin_user": request.session.get("admin_user", ""),
+            "suggestions": rows,
+            "open_count": open_n,
+            "filter_status": status,
+            "filter_kind": kind,
+            "done": done,
+            "statuses": ["new", "in_progress", "resolved", "wont_fix"],
+        },
+    )
+
+
+@app.post("/feedback/{suggestion_id}/update")
+def admin_feedback_update(
+    request: Request, suggestion_id: int,
+    status: str = Form(""), admin_note: str = Form(""),
+):
+    """Set a report's status + admin note. Authed-operator gated (middleware);
+    no MFA gate — triage is non-destructive."""
+    from . import feedback_admin
+    from ..database import SessionLocal
+    db = SessionLocal()
+    try:
+        feedback_admin.update_suggestion(
+            db, suggestion_id,
+            status=status or None, admin_note=admin_note)
+    finally:
+        db.close()
+    return RedirectResponse("/feedback?done=updated", status_code=303)
+
+
+@app.post("/feedback/{suggestion_id}/delete")
+def admin_feedback_delete(request: Request, suggestion_id: int):
+    """Delete a report. Authed-operator gated (middleware)."""
+    from . import feedback_admin
+    from ..database import SessionLocal
+    db = SessionLocal()
+    try:
+        feedback_admin.delete_suggestion(db, suggestion_id)
+    finally:
+        db.close()
+    return RedirectResponse("/feedback?done=deleted", status_code=303)
+
+
 @app.get("/tools", response_class=HTMLResponse)
 def admin_tools(request: Request, minted: str = "", reset: str = "", err: str = ""):
     """Operator tools page: demo reset + demo magic-link minting, moved here
