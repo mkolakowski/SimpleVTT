@@ -991,6 +991,18 @@ def _apply_inline_migrations() -> None:
     from .models import Suggestion
     Suggestion.__table__.create(bind=engine, checkfirst=True)
 
+    # ---- Schema v84 (2.729.0): roll_requests.initiative_combatant_id ----
+    # Initiative-prompt roll requests carry the battle combatant id so the
+    # responder's total is written back as that combatant's initiative. Additive
+    # nullable column; existing roll-requests behave exactly as before.
+    rr_cols_v84 = _column_names("roll_requests")
+    with engine.begin() as conn:
+        if rr_cols_v84 and "initiative_combatant_id" not in rr_cols_v84:
+            conn.execute(text(
+                "ALTER TABLE roll_requests ADD COLUMN "
+                "initiative_combatant_id VARCHAR(64)"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

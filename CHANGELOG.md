@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.729.0] - 2026-06-28 — "The Called Initiative"
+
+**Schema version:** 84
+
+**Commit summary:** Initiative-tracker "🎲 Prompt" — the GM asks a player to roll initiative for a combatant; the player's roll writes back as that combatant's initiative.
+
+**Description:** Builds the "Initiative Tracker Roll Prompt" GM-Tools backlog item on the existing roll-request substrate. Each PC combatant in the init tracker that hasn't rolled yet (initiative falsy) gets a GM-only **🎲 Prompt** button. Clicking it sends the combatant's owner a roll-request (`stat_key: "initiative"` — `_resolve_stat_modifier` now resolves DEX mod + the sheet's `initiative_bonus`) carrying a new `RollRequest.initiative_combatant_id` linkage. When the player (or GM) responds, the rolled total is written back as that combatant's `initiative` in the battle state, the tracker re-sorts, and a `battle_update` broadcasts — so the prompt button disappears (the combatant now has an initiative). Plain roll-requests are unaffected (no linkage → no battle write).
+
+### Added
+- `app/models.py` — `RollRequest.initiative_combatant_id` (Schema v84).
+- `app/database.py` — Schema v84 migration (additive nullable column).
+- `tests/harness/test_initiative_prompt.py` (new, +2) — create echoes the linkage; responding writes the total back as the combatant's initiative (GET /battle); a plain roll-request leaves initiative untouched.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `create_roll_request` accepts/stores/echoes `initiative_combatant_id`; `respond_roll_request` applies the total to the linked combatant + re-sorts + broadcasts `battle_update`; `_resolve_stat_modifier` handles `"initiative"`.
+- `app/templates/tabletop.html` — the init-tracker 🎲 Prompt button (GM-only, PC combatants without initiative) + its roll-request wiring.
+
+### Schema
+- **v84** — `roll_requests.initiative_combatant_id` (nullable). Additive; existing rows unaffected.
+
 ## [2.728.1] - 2026-06-28 — "The Loaded Stat Block"
 
 **Schema version:** 83

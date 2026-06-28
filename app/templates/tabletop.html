@@ -7598,6 +7598,19 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         data-monster-name="${c.name}"
                         title="Open ${c.name}'s stat block">📋 Sheet</a>`;
                 }
+                // v2.729.0 — "🎲 Prompt" button (GM only) for a PC combatant
+                // that hasn't rolled initiative yet. Sends the owner a roll
+                // request; their response is written back as this combatant's
+                // initiative (the button then disappears since c.initiative is
+                // set). Falsy initiative (0 / undefined) → not yet rolled.
+                let promptBtn = '';
+                if (IS_GM && c.char_id && !c.initiative) {
+                    const _owner = (charById[c.char_id] || {}).owner_user_id;
+                    promptBtn = `<button type="button" class="init-sheet-btn init-prompt-btn"
+                        data-combatant-id="${c.id}" data-owner-id="${_owner || ''}"
+                        data-char-name="${c.name}"
+                        title="Ask ${c.name}'s player to roll initiative">🎲 Prompt</button>`;
+                }
                 // v2.4.31: action-economy chip strip. Per-combatant slots
                 // for Action / Bonus action / Reaction. Click to toggle
                 // used / available. Reset at start of each combatant's
@@ -7796,7 +7809,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                             ${buffChips}
                             ${legendaryStrip}
                         </div>
-                        ${sheetBtn}
+                        ${sheetBtn}${promptBtn}
                     </div>
                     <div class="init-card-sheet">
                         ${editRow}${staticSheet}
@@ -7841,6 +7854,40 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             list.querySelectorAll('.init-hp-max').forEach(inp => inp.addEventListener('change', () => {
                 battle.combatants[+inp.dataset.idx].hp_max = Math.max(0, parseInt(inp.value) || 0);
                 pushBattle(); renderBattle();
+            }));
+            // v2.729.0 — "🎲 Prompt" → send the owner an initiative roll
+            // request (server writes their total back as this combatant's
+            // initiative via the initiative_combatant_id linkage).
+            list.querySelectorAll('.init-prompt-btn').forEach(btn => btn.addEventListener('click', async () => {
+                const cid = btn.dataset.combatantId;
+                const ownerId = btn.dataset.ownerId;
+                const nm = btn.dataset.charName || 'this character';
+                btn.disabled = true;
+                const _toast = window.showToast || function () {};
+                try {
+                    const reqBody = {
+                        label: `Roll initiative — ${nm}`,
+                        stat_key: 'initiative',
+                        base_expression: '1d20',
+                        initiative_combatant_id: cid,
+                    };
+                    if (ownerId) reqBody.target_user_ids = [parseInt(ownerId, 10)];
+                    const r = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll_request`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify(reqBody),
+                    });
+                    if (r.ok) {
+                        _toast(`Initiative prompt sent for ${nm}.`, 'info');
+                    } else {
+                        btn.disabled = false;
+                        _toast(`Prompt failed (${r.status}).`, 'error');
+                    }
+                } catch (e) {
+                    btn.disabled = false;
+                    _toast('Prompt failed.', 'error');
+                }
             }));
             list.querySelectorAll('.init-rm').forEach(btn => btn.addEventListener('click', () => {
                 const idx = +btn.dataset.idx;

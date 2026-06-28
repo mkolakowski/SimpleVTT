@@ -774,6 +774,14 @@ class RollRequest(Base):
     visibility: Mapped[Visibility] = mapped_column(
         Enum(Visibility), default=Visibility.PUBLIC
     )
+    # v2.729.0 — when set, this roll-request is an INITIATIVE prompt: the
+    # responder's total is written back as the named battle combatant's
+    # initiative (and the tracker re-sorts), instead of just landing in the
+    # roll log. Carries the battle-state combatant id (a string like
+    # "char_7_1719…" or "tok_…"), not a Character FK.
+    initiative_combatant_id: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     creator: Mapped["User"] = relationship(foreign_keys=[created_by_user_id])

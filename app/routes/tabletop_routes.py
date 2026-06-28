@@ -23082,6 +23082,15 @@ def _resolve_stat_modifier(sheet: dict, template: str, stat_key: str) -> tuple[i
     def ab_mod(ab: str) -> int:
         return (int(abilities.get(ab, 10)) - 10) // 2
 
+    # v2.729.0 — initiative: DEX modifier + the sheet's initiative_bonus
+    # (Alert feat, etc.). Used by the init-tracker "🎲 Prompt" roll requests.
+    if stat_key == "initiative":
+        try:
+            bonus = int(sheet.get("initiative_bonus") or 0)
+        except (TypeError, ValueError):
+            bonus = 0
+        return ab_mod("DEX") + bonus, "Initiative"
+
     # Saving throw: "str_save", "con_save", …
     for short, long in _AB_LONG.items():
         if stat_key == f"{short}_save":
@@ -23132,6 +23141,11 @@ async def create_roll_request(
 
     stat_key = str(body.get("stat_key", "") or "").strip()[:60] or None
     base_expr = str(body.get("base_expression", "1d20") or "1d20").strip()[:60] or "1d20"
+    # v2.729.0 — initiative-prompt linkage: when present, the responder's total
+    # is written back as this battle combatant's initiative (see respond).
+    initiative_combatant_id = (
+        str(body.get("initiative_combatant_id") or "").strip()[:64] or None
+    )
     dc_raw = body.get("dc")
     dc = int(dc_raw) if dc_raw is not None and str(dc_raw).strip() else None
     visibility_str = str(body.get("visibility", "public")).lower()
@@ -23180,6 +23194,7 @@ async def create_roll_request(
         stat_key=stat_key,
         dc=dc,
         visibility=visibility,
+        initiative_combatant_id=initiative_combatant_id,
     )
     db.add(req)
     db.commit()
@@ -23200,10 +23215,12 @@ async def create_roll_request(
                 "created_by_user_id": user.id,
                 "target_user_ids": target_user_ids,
                 "target_user_names": target_user_names,
+                "initiative_combatant_id": req.initiative_combatant_id,
             },
         },
     )
-    return {"ok": True, "id": req.id}
+    return {"ok": True, "id": req.id,
+            "initiative_combatant_id": req.initiative_combatant_id}
 
 
 async def _resolve_save_failure(db, campaign_id, roll_req, ctx) -> str:
@@ -23750,6 +23767,35 @@ async def respond_roll_request(
             },
         },
     )
+
+    # v2.729.0 — initiative-prompt: if this roll-request was a "Prompt Roll"
+    # for a battle combatant, write the responder's total back as that
+    # combatant's initiative, re-sort the tracker, and broadcast the updated
+    # battle state (force_gm_sync so the GM's local-authoritative state also
+    # picks it up). The "🎲 Prompt" button then disappears (the combatant now
+    # has an initiative). Best-effort: a failure here never fails the roll.
+    if roll_req.initiative_combatant_id:
+        try:
+            _state = hub.get_battle(campaign_id)
+            if _state and _state.get("combatants"):
+                _hit = False
+                for _c in _state["combatants"]:
+                    if _c.get("id") == roll_req.initiative_combatant_id:
+                        _c["initiative"] = int(result.total)
+                        _hit = True
+                        break
+                if _hit:
+                    _state["combatants"].sort(
+                        key=lambda c: c.get("initiative") or 0, reverse=True)
+                    hub.set_battle(campaign_id, _state)
+                    await hub.broadcast(campaign_id, {
+                        "type": "battle_update",
+                        "data": _state,
+                        "force_gm_sync": True,
+                    })
+        except Exception:
+            logging.exception(
+                "initiative-prompt apply failed for req=%s", req_id)
 
     # v2.99.13 — Halfling Lucky feature_used broadcast. Fires only
     # when the reroll actually happened (natural 1 detected upstream).
