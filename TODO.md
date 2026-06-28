@@ -900,9 +900,6 @@ When a player updates their character portrait on their sheet, the change should
 
 ## GM Tools
 
-### GM Access to All Character Sheets
-GMs should be able to open and read any player's character sheet in the campaign directly from the tabletop or campaign settings, without needing to be assigned as the character's owner. Read-only access is the minimum; optionally allow the GM to make edits (e.g. to update HP after a session or correct a mistake). Needs a clear UI entry point — likely a "View Sheet" button next to each character in the GM's player list.
-
 ### Reporting Page
 Admin/GM dashboard showing campaign activity: session count, token move history, roll statistics, active players over time. Useful for GMs who want a post-session summary.
 

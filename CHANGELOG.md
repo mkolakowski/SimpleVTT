@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.727.1] - 2026-06-28 — "The Open Ledger"
+
+**Schema version:** 83
+
+**Commit summary:** Verify + regression-guard "GM access to all character sheets" (already shipped) and reconcile the stale TODO.
+
+**Description:** Investigated the "GM Access to All Character Sheets" GM-Tools backlog item and found it **already fully implemented** — `GET /campaign/{cid}/character/{char_id}/sheet` (`character_sheet_page`) gates viewing on campaign membership (not ownership) and sets `can_edit = is_gm or owner`, so the GM can open + edit any player's sheet. The GM reaches it from three UI entry points already in place: the Characters-drawer "Open full sheet →" link (rendered for every PC when `is_gm`), the init-tracker "📋 Sheet" link, and right-click-on-token. Rather than rebuild, this locks the access contract in with a regression test and moves the item to `TODONE.md`. Test-only + docs (no app code change).
+
+### Added
+- `tests/harness/test_gm_view_character_sheet.py` (new, +3) — the GM loads any (incl. player-owned) character's full sheet → 200; a non-GM member can view a teammate's sheet → 200; an unknown character id → 404.
+
+### Changed
+- `TODO.md` / `TODONE.md` — moved "GM Access to All Character Sheets" to the archive (already shipped).
+
+### Schema
+- No schema change (still v83).
+
 ## [2.727.0] - 2026-06-27 — "The One-Stop Form"
 
 **Schema version:** 83
