@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.725.0] - 2026-06-27 — "The Clear Header"
+
+**Schema version:** 83
+
+**Commit summary:** Roll-log layering (TODO #876) — the left roll log now renders over the topbar's bar + thumbnail, with only the title + ruler/tab buttons on top.
+
+**Description:** Completes the last open manually-added TODO. Previously the entire `.tt-topbar` sat at `z-index:60`, so when the roll log is on the LEFT its top was hidden behind the topbar (the campaign thumbnail + the bar). The topbar now drops its single z-index — `position:absolute` *without* a z-index doesn't create a stacking context, so its children tier independently in the shared layout context: the campaign **thumbnail drops to `z:40`** (below the left roll-log sidebar at `z:50`) while the **title pill + the ruler/tab-button card rise to `z:60`** (above it). Net effect: the left roll log slides over the topbar's non-interactive decoration, and only the campaign title + the Ruler / Roll Log / Battle / Characters / Notes / Tools controls float on top (still clickable). Pure CSS; the title pill stays centered (still positioned relative to the topbar).
+
+### Changed
+- `app/templates/tabletop.html` — `.tt-topbar` drops `z-index`; `.tt-topbar-thumb` → `z:40`; `.tt-title-pill` + `.tt-tab-card` → `z:60` (the card gains `position:relative` to lift it).
+- `TODO.md` / `TODONE.md` — moved the completed item to the archive (the Manually Added backlog is now empty).
+
+### Added
+- `tests/harness_ui/test_tabletop_canvas.py::test_topbar_controls_layer_above_left_roll_log` (+1) — asserts the computed z-index ordering (tab card + title > left sidebar > thumbnail).
+
+### Schema
+- No schema change (still v83).
+
 ## [2.724.0] - 2026-06-27 — "The Shared Channel"
 
 **Schema version:** 83

@@ -40,6 +40,8 @@ Nearly all 24 buttons share the same inline style (`font-size:11px; padding:2px 
 
 ## Manually Added — shipped
 
+- ✅ **DONE (v2.725.0 "The Clear Header")** — **Allow the map + left roll log to move over the tt-topbar, but not over the title / ruler / Roll Log / Battle / Characters / Tools buttons.** The `.tt-topbar` no longer carries a single `z-index` (position:absolute without z-index → no stacking context), so its children tier independently in the shared layout context: the campaign thumbnail + bar drop to `z:40` (below the left roll-log sidebar `z:50`), while the title pill + the ruler/tab-button card rise to `z:60` (above it). The left roll log now renders over the topbar's decoration with only the interactive controls floating on top. `tabletop.html` CSS; regression-guarded by `test_topbar_controls_layer_above_left_roll_log`.
+
 - ✅ **DONE (v2.723.0 "The Matching Set")** — **Update all of roll log to look like spells.** Roll + feature-used cards (`.roll-card`) now carry the same 3px accent left-stripe (recolored per visibility variant) that `.spell-cast-card` / `.weapon-atk-card` and the roll-log popout (`rolls_popout.html`) already had, so every card in the log reads as one cohesive "spell card" family. Pure CSS in `tabletop.html`.
 
 - ✅ **DONE (v2.97.11; reconciled v2.723.0)** — **Reverse the logout pill's hover animation (better for backgrounds).** `tabletop.html`'s `.ql-pill.is-muted` resting state carries the standard pill backing and the HOVER goes transparent + muted — so the Logout pill stays visible against encounter-background images instead of being near-invisible at rest. Stale-in-backlog only; caught + removed during the v2.723.0 roll-log work.

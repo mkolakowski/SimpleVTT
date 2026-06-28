@@ -374,3 +374,34 @@ def test_suggest_modal_submits(gm_page: Page) -> None:
     # Success message appears on a 2xx; gives the POST a moment to round-trip.
     expect(gm_page.locator("#suggest-msg")).to_contain_text("Thanks", timeout=4000)
     assert not console_errors, f"JS errors during suggest flow: {console_errors}"
+
+
+def test_topbar_controls_layer_above_left_roll_log(gm_page: Page) -> None:
+    """v2.725.0 (TODO #876) — the left roll-log sidebar renders ABOVE the
+    topbar's non-interactive bits (bar + campaign thumbnail) but BELOW the
+    interactive controls (title pill + the ruler/tab-button card). Asserts
+    the computed z-index ordering that encodes that contract."""
+    gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}")
+    _wait_for_tabletop_ready(gm_page)
+    z = gm_page.evaluate(
+        """() => {
+            const g = sel => {
+                const el = document.querySelector(sel);
+                if (!el) return null;
+                const v = parseInt(getComputedStyle(el).zIndex, 10);
+                return Number.isNaN(v) ? 0 : v;
+            };
+            return {
+                tab: g('.tt-tab-card'),
+                title: g('.tt-title-pill'),
+                thumb: g('.tt-topbar-thumb'),
+                left: g('.drawer-sidebar--left'),
+            };
+        }"""
+    )
+    assert z["left"] is not None, "left sidebar missing"
+    assert z["tab"] is not None and z["tab"] > z["left"], z
+    assert z["title"] is not None and z["title"] > z["left"], z
+    # The thumbnail (decoration) renders BELOW the roll log when present.
+    if z["thumb"] is not None:
+        assert z["thumb"] < z["left"], z

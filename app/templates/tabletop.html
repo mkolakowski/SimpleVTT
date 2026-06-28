@@ -95,13 +95,24 @@
     .tt-topbar {
         position: absolute;
         top: 8px; left: 12px; right: 12px;
-        z-index: 60;
+        /* v2.725.0 (TODO #876): the topbar no longer carries a single
+           z-index. Position-absolute WITHOUT z-index means it does NOT
+           create a stacking context, so its children's individual
+           z-indexes (set below) escape into the shared layout context.
+           That lets the left roll-log sidebar (z:50) render ABOVE the
+           non-interactive topbar bits (the bar + .tt-topbar-thumb, z:40)
+           while the campaign title pill + the ruler/tab-button card
+           (z:60) stay ON TOP of the roll log. Pre-v2.725.0 the whole bar
+           sat at z:60, so the roll-log's top was hidden behind it. */
         pointer-events: none;
         display: flex; align-items: center; gap: 12px;
         flex-wrap: wrap; row-gap: 6px; margin: 0;
     }
     .tt-topbar > * { pointer-events: auto; }
-    .tt-topbar-thumb { width: 48px; height: 48px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
+    /* v2.725.0 (TODO #876): the thumbnail is non-interactive decoration —
+       keep it BELOW the left roll-log (z:50) so the roll log can slide over
+       it, while staying above the canvas. */
+    .tt-topbar-thumb { width: 48px; height: 48px; border-radius: 6px; object-fit: cover; flex-shrink: 0; position: relative; z-index: 40; }
     /* v2.91.0 — Campaign title as a large glass pill, centered above
        the canvas. Uses position:absolute + left:50% + translateX so it
        stays centered regardless of the other topbar items' widths.
@@ -114,6 +125,9 @@
         position: absolute;
         left: 50%;
         top: 0;
+        /* v2.725.0 (TODO #876): the title is interactive/anchor chrome —
+           stay ABOVE the roll log (z:50). */
+        z-index: 60;
         transform: translateX(-50%);
         margin: 0;
         padding: 8px 28px;
@@ -162,6 +176,12 @@
        border inside the 480 px footprint. */
     .tt-tab-card {
         margin-left: auto;
+        /* v2.725.0 (TODO #876): the ruler + Roll Log / Battle / Characters /
+           Notes / Tools buttons must stay clickable ON TOP of the roll log
+           (z:50) + the right drawer (z:50). position:relative lifts the
+           z-index out of flex flow without moving the card. */
+        position: relative;
+        z-index: 60;
         display: flex;
         align-items: center;
         justify-content: flex-end;

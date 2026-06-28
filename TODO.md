@@ -873,7 +873,7 @@ Setting-specific subclasses (Tasha's: Beast Barbarian Phase 1 shipped v2.158.20 
 
 ## Manually Added
 
-- 🟢 **P3** — Allow the map and roll log (when on the left) to move over the tt-topbar but not over the title of the campaign or the ruler, roll log, battle, characters, tools buttons
+_(No open manually-added items — all moved to [`TODONE.md`](TODONE.md).)_
 
 ---
 
