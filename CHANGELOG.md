@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.729.1] - 2026-06-28 — "The Carbon Copy"
+
+**Schema version:** 84
+
+**Commit summary:** Verify + regression-guard Homebrew Clone (already shipped) and reconcile the stale TODO.
+
+**Description:** Investigated the "Homebrew Clone" GM-Tools backlog item and found it **already fully shipped** (v2.3.37): all six file-based homebrew types (feats / backgrounds / races / subclasses / monsters / classes) have a `POST /campaign/{cid}/custom-<type>/{slug}/clone` endpoint + a 📋 Clone button in the campaign-settings homebrew menu, and `_clone_homebrew_record` + `_unique_clone_slug` write a fresh `copy-of-<slug>` record with a "Copy of …" name. Rather than rebuild, this locks the contract in with a regression test and moves the item to `TODONE.md`. Test + docs only.
+
+### Added
+- `tests/harness/test_homebrew_clone.py` (new, +2) — create a homebrew monster (with an attack action) → clone it → the `copy-of-…` record exists with a "Copy of" name and the source action preserved; cloning an unknown source → 404.
+
+### Changed
+- `TODO.md` / `TODONE.md` — archived the shipped item.
+
+### Schema
+- No schema change (still v84).
+
 ## [2.729.0] - 2026-06-28 — "The Called Initiative"
 
 **Schema version:** 84

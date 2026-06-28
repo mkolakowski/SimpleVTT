@@ -900,9 +900,6 @@ Goal: a compact resource row below HP in the mini-sheet that auto-populates base
 ### Reporting Page
 Admin/GM dashboard showing campaign activity: session count, token move history, roll statistics, active players over time. Useful for GMs who want a post-session summary.
 
-### Homebrew Clone
-Add a "Clone" button on every homebrew entry in the campaign settings homebrew menu — feats, backgrounds, races, subclasses, monsters, and classes (the six file-based homebrew types as of v2.0.0). Clicking it duplicates the source record as a new homebrew JSON file with a name pre-populated to "Copy of \<original\>" and a fresh auto-generated slug, then opens the new entry in the editor for the GM to tweak. Makes it trivial to spin off variants (e.g. clone "Bandit" → tweak HP / abilities → save as "Veteran Bandit") without retyping every field. Behaviour: server-side endpoint reads the source JSON, mutates the `slug`/`name` fields, writes a new file in the same campaign scope, redirects to the edit form. Existing-slug guard already applies (the existing `_existing_*` check in `homebrew/import` rejects duplicates). No clone for shipped SRD content — that lives in `app/data/local/dnd5e/` and is read-only; cloning shipped → homebrew would be a separate feature.
-
 ### Homebrew Monster "Parse from description" helper (optional bonus)
 The core "homebrew monster attack fields → rollable buttons" feature shipped (v2.3.8; verified + regression-guarded v2.728.1 — see [`TODONE.md`](TODONE.md)). The one remaining *optional* bonus from that item: a "Parse from description" button in the homebrew-monster Actions editor that regex-extracts `+N to hit` / `NdM <type>` from a pasted SRD-style description and auto-fills the structured attack fields, so importing a homebrew monster doesn't require typing every field by hand. Nice-to-have, not blocking — the fields can be filled manually today.
 
