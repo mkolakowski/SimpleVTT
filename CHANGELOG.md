@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.732.3] - 2026-06-28 — "The Framed Portrait"
+
+**Schema version:** 84
+
+**Commit summary:** Enlarge the characters-panel mini-sheet portrait to 92px and give it an accent-coloured border.
+
+**Description:** Bumped `.mini-header-portrait` from 48×48 to **92×92** and added a **2px solid accent border** (radius 8px) so the PC portrait reads as a framed headshot at the top of each Characters-panel / initiative card. Still non-interactive and `onerror`-hidden on 404; cards without a `portrait_url` are unchanged.
+
+### Changed
+- `app/templates/tabletop.html` — `.mini-header-portrait` 48×48 → 92×92 + `border: 2px solid var(--accent)`.
+
+### Schema
+- No schema change (still v84).
+
 ## [2.732.2] - 2026-06-28 — "A Bigger Face"
 
 **Schema version:** 84
