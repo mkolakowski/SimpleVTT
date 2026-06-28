@@ -105,6 +105,14 @@ services:
       # v2.531.1 — deploy-time edge-cache purge (purge Cloudflare's cache
       # on boot so a new APP_VERSION isn't served stale). Default false.
       SIMPLEVTT_CLOUDFLARE_CACHE_PURGE_ENABLED: ${SIMPLEVTT_CLOUDFLARE_CACHE_PURGE_ENABLED:-false}
+      # v2.724.0 — Discord webhook for in-app notifications (new
+      # suggestion / issue reports). Reuses the SAME webhook the fail2ban
+      # discord-notify action uses (FAIL2BAN_DISCORD_WEBHOOK_URL), so one
+      # channel receives both ban alerts and feedback pings. Empty URL →
+      # the app posts nothing (graceful no-op). FAIL2BAN_DISCORD_USERNAME
+      # (default "SimpleVTT fail2ban") is reused as the display name.
+      FAIL2BAN_DISCORD_WEBHOOK_URL: ${FAIL2BAN_DISCORD_WEBHOOK_URL:-}
+      FAIL2BAN_DISCORD_USERNAME: ${FAIL2BAN_DISCORD_USERNAME:-SimpleVTT fail2ban}
       # v2.49.12: test-suite knobs (encounter-sim plan, Phase 1).
       # TEST_MODE conditionally mounts /api/test/* endpoints — leave
       # OFF in production. DICE_SEED, when an integer, makes every

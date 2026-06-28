@@ -12,13 +12,14 @@ Endpoints:
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from ..auth import require_admin, require_user
 from ..database import get_db
+from ..integrations.discord import post_discord
 from ..models import Suggestion, User
 from ..templates import templates
 
@@ -47,6 +48,7 @@ def _suggestion_dict(s: Suggestion) -> dict:
 @router.post("/api/suggestions")
 async def create_suggestion(
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
@@ -89,6 +91,19 @@ async def create_suggestion(
         )
     except Exception:
         pass
+    # v2.724.0 — also ping the Discord channel webhook (the SAME one the
+    # fail2ban discord-notify action uses), so operators get a live feed of
+    # incoming feedback alongside ban alerts. Runs as a background task so a
+    # slow/unreachable webhook never delays the user's submission; no-ops
+    # gracefully when no webhook URL is configured.
+    icon = "🐞" if kind == "issue" else "💡"
+    msg = (
+        f"{icon} New {kind} from **{s.user_name or 'a user'}**: "
+        f"**{title}**"
+        + (f"\n{text_body[:500]}" if text_body else "")
+        + (f"\n_page: {page_url}_" if page_url else "")
+    )
+    background_tasks.add_task(post_discord, msg)
     return {"ok": True, "suggestion": _suggestion_dict(s)}
 
 

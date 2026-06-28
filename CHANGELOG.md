@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.724.0] - 2026-06-27 — "The Shared Channel"
+
+**Schema version:** 83
+
+**Commit summary:** Suggestion notifications now also ping the **same Discord webhook** the fail2ban `discord-notify` action uses — one channel for ban alerts + feedback.
+
+**Description:** Extends the v2.722.0 suggestion notification (which logged to the operator audit stream) to also POST to a Discord channel webhook on each new report. It reuses the **existing** `FAIL2BAN_DISCORD_WEBHOOK_URL` (the webhook the fail2ban `discord-notify` action already uses), so operators who set it up for ban alerts get feedback pings in the same channel with zero new config. New `app/integrations/discord.py` helper (`post_discord`) mirrors the cloudflare-integration conventions: graceful **no-op when no webhook is configured** (the default), and network failures are swallowed so a slow/unreachable webhook never blocks or fails a user's submission. The post runs as a FastAPI **background task** (fires after the response is sent). `docker-compose.yml` now passes the webhook (+ `FAIL2BAN_DISCORD_USERNAME` display name) to the `app` service; an app-only `DISCORD_WEBHOOK_URL` override is supported for sending feedback to a different channel than bans. The message reads e.g. `💡 New suggestion from **Alice**: **Token blur** … _page: /campaign/1_`.
+
+### Added
+- `app/integrations/discord.py` — `post_discord()` best-effort webhook poster (reuses `FAIL2BAN_DISCORD_WEBHOOK_URL`, optional `DISCORD_WEBHOOK_URL` override).
+- `tests/harness/test_suggestions.py::test_discord_notification_app_wiring` (+1) — asserts the plumbing (compose passes the webhook to the app; helper no-ops gracefully; create wires it as a non-blocking background task). No live POST (operator-secret webhook, no in-repo mock — consistent with the fail2ban action + cloudflare bouncer).
+
+### Changed
+- `app/routes/suggestion_routes.py` — `create_suggestion` queues a `post_discord` background task alongside the audit entry.
+- `docker-compose.yml` — `app` service env now carries `FAIL2BAN_DISCORD_WEBHOOK_URL` + `FAIL2BAN_DISCORD_USERNAME`.
+- `.env.example` — documents the app's reuse of the fail2ban webhook + the `DISCORD_WEBHOOK_URL` app-only override.
+
+### Schema
+- No schema change (still v83).
+
 ## [2.723.0] - 2026-06-27 — "The Matching Set"
 
 **Schema version:** 83

@@ -10,9 +10,31 @@ admin-happy-path assertions run only when the client actually has admin
 rights (CI / flipped env); the admin gate (403 for a non-admin) is always
 asserted. The create + error paths run for any user.
 """
+from pathlib import Path
+
 import pytest
 
 from .conftest import CAMPAIGN_ID
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def test_discord_notification_app_wiring():
+    """v2.724.0 — the app reuses the fail2ban Discord webhook to ping the
+    channel on new reports. No live POST is asserted (the webhook is an
+    operator secret with no in-repo mock, like the fail2ban action); instead
+    verify the plumbing is in place: compose passes the webhook to the app,
+    the helper no-ops gracefully when unset, and create wires it as a
+    non-blocking background task."""
+    compose = (_REPO_ROOT / "docker-compose.yml").read_text()
+    assert "FAIL2BAN_DISCORD_WEBHOOK_URL: ${FAIL2BAN_DISCORD_WEBHOOK_URL:-}" in compose
+    helper = (_REPO_ROOT / "app" / "integrations" / "discord.py").read_text()
+    assert "async def post_discord" in helper
+    assert "FAIL2BAN_DISCORD_WEBHOOK_URL" in helper
+    assert "if not url:" in helper          # graceful no-op when unconfigured
+    routes = (_REPO_ROOT / "app" / "routes" / "suggestion_routes.py").read_text()
+    assert "post_discord" in routes
+    assert "background_tasks.add_task" in routes
 
 
 async def _is_admin(client) -> bool:
