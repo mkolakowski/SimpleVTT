@@ -123518,6 +123518,40 @@ async def settings_map_ambient_light(
     return {"ok": True, "ambient_light": m.ambient_light}
 
 
+@router.post("/campaign/{campaign_id}/settings/maps/{map_id}/letterbox_color")
+async def settings_map_letterbox_color(
+    campaign_id: int,
+    map_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.733.0 — toggle whether the canvas surround (letterbox gutter +
+    #map-pane) is painted the map image's average colour instead of the
+    default dark overlay. GM-only. Body: ``{enabled: bool}``. On enable the
+    map image's average colour is computed and stored as ``#rrggbb``; on
+    disable it's cleared. Broadcasts a ``map_letterbox_color`` event so open
+    tabletops recolour live. If ``enabled`` but the colour can't be computed
+    (no/unreadable image) the field stays NULL → the toggle reads as off.
+    """
+    from ..image_utils import average_image_color
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404)
+    body = await request.json()
+    enabled = bool(body.get("enabled"))
+    m.letterbox_color = average_image_color(m.image_url) if enabled else None
+    db.commit()
+    await hub.broadcast(campaign_id, {
+        "type": "map_letterbox_color",
+        "data": {"map_id": m.id, "letterbox_color": m.letterbox_color},
+    })
+    return {"ok": True, "letterbox_color": m.letterbox_color}
+
+
 @router.post("/campaign/{campaign_id}/settings/maps/{map_id}/tags")
 async def settings_set_map_tags(
     campaign_id: int,

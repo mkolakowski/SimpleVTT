@@ -2343,6 +2343,7 @@
                     data-grid-type="{{ active_map.grid_type.value }}"
                     data-grid-size="{{ active_map.grid_size_px }}"
                     data-show-grid="{{ '1' if active_map.show_grid else '0' }}"
+                    data-letterbox-color="{{ active_map.letterbox_color or '' }}"
                     data-strip-h="{{ _strip_h }}"
                     style="position:absolute;top:-{{ _strip_h }}px;left:-{{ _strip_h }}px;z-index:1;"
                     {% if active_map.image_url %}data-bg="{{ active_map.image_url }}"{% endif %}></canvas>

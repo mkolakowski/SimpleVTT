@@ -347,6 +347,12 @@ class Map(Base):
     ambient_light: Mapped[str] = mapped_column(
         String(10), default="bright", server_default="bright",
     )
+    # v2.733.0 — when set, the canvas letterbox/surround (the gutter strips
+    # around the map + the #map-pane behind it) is painted this colour
+    # instead of the default dark overlay. The GM toggle computes the map
+    # image's average colour and stores it here as ``#rrggbb``; NULL = the
+    # pre-feature dark letterbox. See ``/settings/maps/{id}/letterbox_color``.
+    letterbox_color: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     # Per-character session-prep spawn points. JSON dict keyed by
     # character id (as a string, since JSON dict keys must be strings)
     # to ``{x, y}``. The GM sets these ahead of a session so they can

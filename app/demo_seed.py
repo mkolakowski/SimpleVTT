@@ -42,6 +42,7 @@ from sqlalchemy.orm import Session
 from .auth import hash_password
 from .campaign_wipe import wipe_campaign_children
 from .character_presets import _prof_bonus
+from .image_utils import average_image_color
 from .local_content import HOMEBREW_ROOT, write_homebrew
 from .sheet_templates import get_template
 from .models import (
@@ -412,6 +413,8 @@ def seed_map(db: Session, camp: Campaign) -> Map:
         width_px=1254,
         height_px=1254,
         show_grid=True,
+        # v2.733.0 — ship with the "match surround to map" toggle ON.
+        letterbox_color=average_image_color("/static/demo/maps/tavern.png"),
     )
     db.add(m)
     db.flush()

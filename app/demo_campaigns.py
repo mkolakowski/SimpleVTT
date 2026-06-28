@@ -26,6 +26,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from .demo_seed import _npc_sheet, build_dnd5e_sheet
+from .image_utils import average_image_color
 from .models import (
     Campaign,
     CampaignMembership,
@@ -855,6 +856,9 @@ def _seed_one(db: Session, spec: dict, users: dict[str, User]) -> Campaign:
         campaign_id=camp.id, name=mp["name"], image_url=mp.get("image"),
         grid_size_px=70, width_px=mp.get("width", 1400),
         height_px=mp.get("height", 1000), show_grid=True,
+        # v2.733.0 — ship every demo with the "match surround to map" toggle
+        # ON: paint the canvas background the map image's average colour.
+        letterbox_color=average_image_color(mp.get("image")),
     )
     db.add(m)
     db.flush()

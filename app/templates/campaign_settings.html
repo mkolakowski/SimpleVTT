@@ -562,6 +562,17 @@
                                {% if m.show_grid %}checked{% endif %}
                                style="margin:0;min-height:0;min-width:0;width:14px;height:14px;">overlay
                     </label>
+                    {# v2.733.0 — per-map "match surround to map" toggle. Paints the
+                       canvas background around the map with the map image's average
+                       colour. Dense row-based panel → 32px target exception per
+                       CLAUDE.md (same as the overlay toggle above). #}
+                    <label style="margin-left:8px;font-size:12px;display:inline-flex;align-items:center;gap:4px;cursor:pointer;"
+                           title="Paint the canvas background around the map with the map image's average colour, instead of the default dark surround.">
+                        <input class="map-letterbox-input" type="checkbox"
+                               data-map-id="{{ m.id }}"
+                               {% if m.letterbox_color %}checked{% endif %}
+                               style="margin:0;min-height:0;min-width:0;width:14px;height:14px;">avg bg
+                    </label>
                 </td>
                 <td>{% if m.id == campaign.active_map_id %}<strong style="color:#6cb;">Active</strong>{% else %}<span class="muted">Inactive</span>{% endif %}</td>
                 <td style="display:flex;gap:4px;flex-wrap:wrap;">
@@ -3135,6 +3146,22 @@ document.querySelectorAll('.map-show-grid-input').forEach(input => {
             body: JSON.stringify({ show_grid: next }),
         });
         if (!resp.ok) { alert('Failed to save grid-overlay setting'); input.checked = !next; }
+    });
+});
+// v2.733.0: per-map "match surround to map" checkbox — paints the canvas
+// background the map image's average colour. Enabling computes the colour
+// server-side; if the image can't be read the server returns a null colour
+// and we reflect the toggle back to off.
+document.querySelectorAll('.map-letterbox-input').forEach(input => {
+    input.addEventListener('change', async () => {
+        const next = input.checked;
+        const resp = await fetch(`/campaign/${CAMPAIGN_ID}/settings/maps/${input.dataset.mapId}/letterbox_color`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: next }),
+        });
+        if (!resp.ok) { alert('Failed to save background-colour setting'); input.checked = !next; return; }
+        try { const d = await resp.json(); if (next && !d.letterbox_color) input.checked = false; } catch (_) {}
     });
 });
 

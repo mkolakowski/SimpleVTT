@@ -1003,6 +1003,18 @@ def _apply_inline_migrations() -> None:
                 "initiative_combatant_id VARCHAR(64)"
             ))
 
+    # ---- Schema v85 (2.733.0): maps.letterbox_color ----
+    # Optional per-map canvas surround colour. When set (``#rrggbb``), the
+    # tabletop paints the letterbox gutter + #map-pane this colour instead of
+    # the default dark overlay; the GM toggle stores the map image's average
+    # colour. Additive nullable column; NULL = pre-feature dark letterbox.
+    maps_cols_v85 = _column_names("maps")
+    with engine.begin() as conn:
+        if maps_cols_v85 and "letterbox_color" not in maps_cols_v85:
+            conn.execute(text(
+                "ALTER TABLE maps ADD COLUMN letterbox_color VARCHAR(16)"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

@@ -134,6 +134,16 @@
     // placement — turning the overlay off does NOT disable snapping.
     const showGrid = canvas.dataset.showGrid !== '0';
     const bgLayer = document.getElementById('map-bg-layer');
+    // v2.733.0 — optional per-map letterbox/surround colour (the map image's
+    // average colour). Empty → the default dark overlay. Painted onto both the
+    // canvas gutter strips (in render) and the #map-pane behind the map; kept
+    // live by the map_letterbox_color WS event.
+    let mapLetterboxColor = canvas.dataset.letterboxColor || '';
+    function applyLetterboxBg() {
+        const pane = document.getElementById('map-pane');
+        if (pane) pane.style.background = mapLetterboxColor || '';
+    }
+    applyLetterboxBg();
 
     // ---------- Hex helpers (pointy-top) ----------
     // Hex height = gridSize. Width = sqrt(3)/2 * height.
@@ -285,7 +295,9 @@
         // negative logical coords lands in the outer halo around the
         // bg image — so the labels and frame sit entirely OUTSIDE the
         // map bounds (per GM request, v2.87.3 → v2.88.0).
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+        // v2.733.0 — use the map's average-colour surround when set, else the
+        // default semi-transparent dark overlay.
+        ctx.fillStyle = mapLetterboxColor || 'rgba(0, 0, 0, 0.55)';
         // Top + bottom gutters (full width, stripH tall) at y = -stripH
         // and y = MAP_H. Both extend left/right by stripH so the four
         // corners are filled exactly once.
@@ -5208,6 +5220,11 @@
             } else if (msg.type === 'map_ambient_light') {
                 // v2.710.0 — Phase 5 vision & light: ambient changed.
                 mapAmbientLight = (msg.data && msg.data.ambient_light) || 'bright';
+                try { render(); } catch (_) {}
+            } else if (msg.type === 'map_letterbox_color') {
+                // v2.733.0 — GM toggled the map's average-colour surround.
+                mapLetterboxColor = (msg.data && msg.data.letterbox_color) || '';
+                applyLetterboxBg();
                 try { render(); } catch (_) {}
             } else if (msg.type === 'light_emitter_add') {
                 // v2.710.0 — a Darkness/Daylight/Fog emitter was placed.

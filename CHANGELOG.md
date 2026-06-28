@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.733.0] - 2026-06-28 — "The Painted Margin"
+
+**Schema version:** 85
+
+**Commit summary:** Add a per-map "match surround to map" toggle that paints the canvas background (letterbox gutter + #map-pane) the map image's average colour — and turn it on for every demo.
+
+**Description:** Previously the area around a battle map was always a fixed semi-transparent dark overlay. New per-map toggle (campaign settings → Maps, beside the grid-overlay checkbox) computes the map image's **average colour** server-side (Pillow) and stores it on the Map as `letterbox_color` (`#rrggbb`); the tabletop then paints both the canvas gutter strips and the `#map-pane` behind the map that colour, so the surround blends with the scene instead of a flat black border. Toggling off clears it back to the default dark overlay. Changes broadcast a `map_letterbox_color` WS event so open tabletops recolour live (mirrors the `map_ambient_light` pattern). Enabled on **all six demo maps** (the five leveled battle maps + the Sundered Vault's `tavern.png`) by computing their averages at seed time. New shared helper `app/image_utils.py::average_image_color` (used by both the endpoint and demo seeding) only resolves local `/static/...` paths, guards against path-escape, and returns `None` (→ default surround) on any missing/unreadable image.
+
+### Added
+- `POST /campaign/{cid}/settings/maps/{mid}/letterbox_color` (GM-only, body `{enabled: bool}`) → computes/stores the average colour or clears it; broadcasts `map_letterbox_color`.
+- `app/image_utils.py` — `average_image_color(image_url)` helper.
+- Per-map "avg bg" checkbox in `campaign_settings.html` Maps list + its JS handler.
+- `tests/harness/test_map_letterbox_color.py` (+3) — enable/disable happy path (200 + `#rrggbb` + WS broadcast + null on disable), 404 unknown map, 403 non-GM.
+
+### Changed
+- `app/models.py` — `Map.letterbox_color` (nullable `String(16)`).
+- `app/static/tabletop.js` — paint the gutter + `#map-pane` with `letterbox_color` when set; live `map_letterbox_color` WS handler; `data-letterbox-color` canvas attr in `tabletop.html`.
+- `app/demo_campaigns.py` + `app/demo_seed.py` — seed every demo map with its computed average colour (toggle ON).
+- `docs/test-harness-coverage.md` — catalog the new test (total 4482 → 4485).
+
+### Schema
+- **v85** — `ALTER TABLE maps ADD COLUMN letterbox_color VARCHAR(16)` (additive, nullable; NULL = pre-feature dark letterbox).
+
 ## [2.732.3] - 2026-06-28 — "The Framed Portrait"
 
 **Schema version:** 84
