@@ -3991,6 +3991,7 @@
                 <a href="/wiki" target="_blank" rel="noopener noreferrer" class="ql-pill" title="Open the wiki in a new tab">📖 Wiki</a>
                 <a href="/characters" class="ql-pill">🧝 Characters</a>
                 <a href="/campaign/{{ campaign.id }}/stats" class="ql-pill" title="Damage, healing, attacks & most-used spells for this campaign">📊 Stats</a>
+                {% if is_gm %}<a href="/campaign/{{ campaign.id }}/report" class="ql-pill" title="Campaign activity report: sessions, event volume, most-active actors (GM only)">📈 Report</a>{% endif %}
                 <a href="/settings" class="ql-pill">⚙ Settings</a>
                 {% if is_gm %}
                 <a href="/campaign/{{ campaign.id }}/settings" class="ql-pill" title="Open this campaign's settings (GM only)">🛠 Campaign Settings</a>

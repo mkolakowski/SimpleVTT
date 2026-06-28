@@ -897,9 +897,6 @@ Goal: a compact resource row below HP in the mini-sheet that auto-populates base
 
 ## GM Tools
 
-### Reporting Page
-Admin/GM dashboard showing campaign activity: session count, token move history, roll statistics, active players over time. Useful for GMs who want a post-session summary.
-
 ### Homebrew Monster "Parse from description" helper (optional bonus)
 The core "homebrew monster attack fields → rollable buttons" feature shipped (v2.3.8; verified + regression-guarded v2.728.1 — see [`TODONE.md`](TODONE.md)). The one remaining *optional* bonus from that item: a "Parse from description" button in the homebrew-monster Actions editor that regex-extracts `+N to hit` / `NdM <type>` from a pasted SRD-style description and auto-fills the structured attack fields, so importing a homebrew monster doesn't require typing every field by hand. Nice-to-have, not blocking — the fields can be filled manually today.
 

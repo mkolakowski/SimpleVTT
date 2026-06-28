@@ -141,6 +141,82 @@ def character_block(
     }
 
 
+def campaign_activity_report(db: Session, campaign_id: int) -> dict:
+    """v2.730.0 — campaign-wide ACTIVITY summary for the GM Reporting page
+    (docs: the "Reporting Page" GM-Tools item). Distinct from the per-character
+    combat stats page — this answers "how much has happened, across how many
+    sessions, and who's been most active." Derived entirely from the existing
+    `campaign_stat_events` log (no new capture).
+
+    Returns ``{session_count, total_events, events_by_type, per_session,
+    top_actors}``.
+    """
+    base = db.query(_Ev).filter(_Ev.campaign_id == campaign_id)
+    total_events = base.count()
+    session_count = (
+        db.query(func.count(func.distinct(_Ev.session_key)))
+        .filter(_Ev.campaign_id == campaign_id)
+        .scalar()
+    ) or 0
+
+    # Event counts by type (the engagement mix).
+    type_rows = (
+        db.query(_Ev.event_type, func.count().label("n"))
+        .filter(_Ev.campaign_id == campaign_id)
+        .group_by(_Ev.event_type)
+        .all()
+    )
+    events_by_type = {r.event_type: int(r.n) for r in type_rows}
+
+    # Per-session activity timeline (event volume + headline damage/heal).
+    sess_rows = (
+        db.query(
+            _Ev.session_key,
+            func.count().label("events"),
+            _coalesce_sum("damage_dealt").label("dd"),
+            _coalesce_sum("heal_done").label("hd"),
+            func.min(_Ev.created_at).label("first"),
+        )
+        .filter(_Ev.campaign_id == campaign_id)
+        .group_by(_Ev.session_key)
+        .order_by(func.min(_Ev.created_at))
+        .all()
+    )
+    per_session = [
+        {
+            "session_key": r.session_key,
+            "events": int(r.events or 0),
+            "damage_dealt": int(r.dd or 0),
+            "heal_done": int(r.hd or 0),
+            "first": r.first.isoformat() if r.first else None,
+        }
+        for r in sess_rows
+    ]
+
+    # Most active actors (by recorded event count) — "active players over time".
+    actor_rows = (
+        db.query(_Ev.actor_name, func.count().label("n"))
+        .filter(
+            _Ev.campaign_id == campaign_id,
+            _Ev.actor_name.isnot(None),
+            _Ev.actor_name != "",
+        )
+        .group_by(_Ev.actor_name)
+        .order_by(func.count().desc())
+        .limit(15)
+        .all()
+    )
+    top_actors = [{"name": r.actor_name, "events": int(r.n)} for r in actor_rows]
+
+    return {
+        "session_count": int(session_count),
+        "total_events": int(total_events),
+        "events_by_type": events_by_type,
+        "per_session": per_session,
+        "top_actors": top_actors,
+    }
+
+
 def actor_char_ids(db: Session, campaign_id: int) -> list[int]:
     """Distinct non-null actor character ids that have any stat events in
     the campaign — the GM-view roster of who has recorded stats."""

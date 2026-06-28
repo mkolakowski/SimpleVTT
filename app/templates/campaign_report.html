@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}{{ campaign.name }} — Activity Report{% endblock %}
+{% block content %}
+<div style="max-width:1000px;margin:0 auto;padding:0 28px;">
+<style>
+  .rep-head { display:flex; align-items:baseline; justify-content:space-between;
+    flex-wrap:wrap; gap:12px; margin:18px 0 14px; }
+  .rep-head h1 { margin:0; font-size:22px; }
+  .rep-head a { font-size:13px; }
+  .rep-card { border:1px solid var(--border); border-radius:8px; background:var(--bg-2);
+    padding:16px 18px; margin-bottom:18px; }
+  .rep-card h2 { margin:0 0 12px; font-size:17px; }
+  .rep-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+  .rep-tile { border:1px solid var(--border); border-radius:8px; padding:12px 14px; text-align:center; }
+  .rep-tile .n { font-size:28px; font-weight:800; color:var(--accent); line-height:1; }
+  .rep-tile .l { font-size:12px; color:var(--fg-mute); margin-top:6px; }
+  .rep-card table { width:100%; border-collapse:collapse; font-size:13px; }
+  .rep-card th, .rep-card td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); }
+  .rep-card th { color:var(--fg-mute); font-weight:600; }
+  .muted { color:var(--fg-mute); }
+</style>
+
+<div class="rep-head">
+  <h1>📈 Activity report — {{ campaign.name }}</h1>
+  <a href="/campaign/{{ campaign.id }}/stats">Combat stats →</a>
+</div>
+<p class="muted" style="font-size:13px;margin-top:-6px;">Campaign-wide activity from the gameplay event log (sessions, event volume, and most-active actors). GM-only.</p>
+
+<div class="rep-card">
+  <h2>Overview</h2>
+  <div class="rep-grid">
+    <div class="rep-tile"><div class="n">{{ report.session_count }}</div><div class="l">Sessions</div></div>
+    <div class="rep-tile"><div class="n">{{ report.total_events }}</div><div class="l">Logged events</div></div>
+    <div class="rep-tile"><div class="n">{{ report.events_by_type.get('attack', 0) }}</div><div class="l">Attacks</div></div>
+    <div class="rep-tile"><div class="n">{{ report.events_by_type.get('spell_cast', 0) }}</div><div class="l">Spells cast</div></div>
+    <div class="rep-tile"><div class="n">{{ report.events_by_type.get('ko', 0) }}</div><div class="l">KOs</div></div>
+  </div>
+</div>
+
+<div class="rep-card">
+  <h2>Event mix</h2>
+  {% if report.events_by_type %}
+  <table>
+    <thead><tr><th>Event type</th><th>Count</th></tr></thead>
+    <tbody>
+      {% for et, n in report.events_by_type.items() | sort(attribute='1', reverse=true) %}
+      <tr><td>{{ et }}</td><td>{{ n }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">No events logged yet.</p>{% endif %}
+</div>
+
+<div class="rep-card">
+  <h2>Most active</h2>
+  {% if report.top_actors %}
+  <table>
+    <thead><tr><th>Actor</th><th>Events</th></tr></thead>
+    <tbody>
+      {% for a in report.top_actors %}
+      <tr><td>{{ a.name }}</td><td>{{ a.events }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">No recorded actors yet.</p>{% endif %}
+</div>
+
+<div class="rep-card">
+  <h2>Per-session activity</h2>
+  {% if report.per_session %}
+  <table>
+    <thead><tr><th>Session</th><th>First event</th><th>Events</th><th>Damage</th><th>Healing</th></tr></thead>
+    <tbody>
+      {% for s in report.per_session %}
+      <tr>
+        <td>{{ s.session_key or '—' }}</td>
+        <td><span class="muted">{{ (s.first[:16] | replace('T', ' ')) if s.first else '' }}</span></td>
+        <td>{{ s.events }}</td>
+        <td>{{ s.damage_dealt }}</td>
+        <td>{{ s.heal_done }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">No sessions with logged activity yet.</p>{% endif %}
+</div>
+</div>
+{% endblock %}

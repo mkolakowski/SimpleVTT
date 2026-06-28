@@ -17290,6 +17290,50 @@ def rolls_popout(
     )
 
 
+@router.get("/campaign/{campaign_id}/report", response_class=HTMLResponse)
+def campaign_report_page(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.730.0 — GM Reporting page: a campaign ACTIVITY summary (session
+    count, per-session activity timeline, event mix, most-active actors)
+    derived from the stat-event log. Complements the per-character combat
+    stats page. GM-only (404 to non-members; 403 to non-GM members)."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(404, "Not found")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    report = stats_service.campaign_activity_report(db, campaign_id)
+    return templates.TemplateResponse(
+        "campaign_report.html",
+        {
+            "request": request,
+            "user": user,
+            "campaign": campaign,
+            "is_gm": True,
+            "report": report,
+        },
+    )
+
+
+@router.get("/api/campaign/{campaign_id}/report")
+def campaign_report(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.730.0 — JSON campaign activity report (GM-only)."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    return {"ok": True, **stats_service.campaign_activity_report(db, campaign_id)}
+
+
 @router.get("/campaign/{campaign_id}/stats", response_class=HTMLResponse)
 def campaign_stats_page(
     campaign_id: int,

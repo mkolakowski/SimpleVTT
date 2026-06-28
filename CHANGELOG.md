@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.730.0] - 2026-06-28 — "The After-Action Report"
+
+**Schema version:** 84
+
+**Commit summary:** GM Reporting page — a campaign activity summary (sessions, event mix, per-session timeline, most-active actors) complementing the combat stats page.
+
+**Description:** Builds the "Reporting Page" GM-Tools backlog item. The existing `/campaign/{cid}/stats` page covers per-character **combat** numbers (damage/heal/attacks/spells); this adds a GM-only **activity** report at `/campaign/{cid}/report` answering "how much has happened, across how many sessions, and who's been most active." `stats_service.campaign_activity_report` aggregates the existing `campaign_stat_events` log into `{session_count, total_events, events_by_type, per_session, top_actors}` (no new event capture). The page renders an overview tile row + an event-mix table + a most-active-actors table + a per-session activity timeline; it's reachable from a GM-only **📈 Report** Quick Links pill on the tabletop (next to 📊 Stats). A JSON `GET /api/campaign/{cid}/report` backs it. GM-only (404 to non-members, 403 to non-GM members). (Token-move history from the original ask is omitted — token moves aren't logged as events; everything here derives from the existing stat-event log.)
+
+### Added
+- `app/stats_service.py` — `campaign_activity_report()`.
+- `app/routes/tabletop_routes.py` — `GET /campaign/{cid}/report` (page) + `GET /api/campaign/{cid}/report` (JSON).
+- `app/templates/campaign_report.html` + a GM-only 📈 Report Quick Links pill (`tabletop.html`).
+- `tests/harness/test_campaign_report.py` (new, +3) — JSON report shape; page renders for the GM; non-GM member → 403 (JSON + page).
+
+### Schema
+- No schema change (still v84).
+
 ## [2.729.1] - 2026-06-28 — "The Carbon Copy"
 
 **Schema version:** 84
