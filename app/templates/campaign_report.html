@@ -88,7 +88,7 @@
     <tbody>
       {% for s in report.per_session %}
       <tr>
-        <td><a href="/campaign/{{ campaign.id }}/report/session?key={{ s.session_key | urlencode }}">{{ s.session_key or '—' }}</a></td>
+        <td><a href="/campaign/{{ campaign.id }}/report/session?key={{ s.session_key | urlencode }}{% if filter_start %}&start={{ filter_start }}{% endif %}{% if filter_end %}&end={{ filter_end }}{% endif %}">{{ s.session_key or '—' }}</a></td>
         <td><span class="muted">{{ (s.first[:16] | replace('T', ' ')) if s.first else '' }}</span></td>
         <td>{{ s.events }}</td>
         <td>{{ s.damage_dealt }}</td>

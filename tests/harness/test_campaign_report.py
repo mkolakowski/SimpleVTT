@@ -95,6 +95,17 @@ async def test_session_detail_page_renders(gm_client):
     assert "Session report" in r.text
 
 
+async def test_session_detail_carries_date_filter_back_link(gm_client):
+    """v2.740.0 — the session page's '← All sessions' link returns to the
+    filtered report when start/end are supplied."""
+    key = await _a_session_key(gm_client)
+    r = await gm_client.get(
+        f"/campaign/{CAMPAIGN_ID}/report/session",
+        params={"key": key, "start": "2024-01-01", "end": "2024-12-31"})
+    assert r.status_code == 200, r.text
+    assert "start=2024-01-01" in r.text and "end=2024-12-31" in r.text
+
+
 async def test_session_detail_requires_gm(alice_client):
     j = await alice_client.get(
         f"/api/campaign/{CAMPAIGN_ID}/report/session", params={"key": "x"})

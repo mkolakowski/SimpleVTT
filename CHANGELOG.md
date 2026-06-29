@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.740.0] - 2026-06-29 — "The Persistent Window"
+
+**Schema version:** 85
+
+**Commit summary:** Carry the report's date filter through the per-session drill-down (and back).
+
+**Description:** Polish on the v2.739.0 date filter. The activity report's per-session links now include the active `start` / `end` window, and the session-detail page threads them through so its "← All sessions" link returns to the **filtered** report instead of the unfiltered one — the chosen window persists across the drill-down round-trip. (The session detail itself is always scoped to its one session; the params only drive the back link.)
+
+### Added
+- `tests/harness/test_campaign_report.py` (+1) — the session page's back link carries `start` / `end` when supplied.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `campaign_report_session_page` accepts `start` / `end` for the back link.
+- `app/templates/campaign_report.html` — per-session links carry the active window.
+- `app/templates/campaign_report_session.html` — "← All sessions" preserves the filter.
+
+### Schema
+- No schema change (still v85).
+
 ## [2.739.0] - 2026-06-29 — "The Chosen Window"
 
 **Schema version:** 85

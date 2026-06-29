@@ -17418,12 +17418,16 @@ def campaign_report_session_page(
     campaign_id: int,
     request: Request,
     key: str = "",
+    start: str = "",
+    end: str = "",
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
     """v2.735.0 — per-session drill-down from the activity report. `key` is
     the (URL-encoded) session_key, passed as a query param since session keys
-    are ISO timestamps (with `:` / `+`). GM-only."""
+    are ISO timestamps (with `:` / `+`). GM-only. v2.740.0 — `start` / `end`
+    are threaded through only so the "← All sessions" link returns to the
+    filtered report (the session detail itself is for one session)."""
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
         raise HTTPException(404, "Not found")
@@ -17438,6 +17442,8 @@ def campaign_report_session_page(
             "campaign": campaign,
             "is_gm": True,
             "detail": detail,
+            "filter_start": start,
+            "filter_end": end,
         },
     )
 
