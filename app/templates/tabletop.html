@@ -2251,6 +2251,20 @@
                 title="Toggle player movement lock">
             {% if campaign.movement_locked %}🔒 Locked{% else %}🔓 Unlocked{% endif %}
         </button>
+        {# v2.754.0 — GM-only wall editor toggle (Maps 2.0). Enters draw mode:
+           click two points to add a wall, click a segment to delete it. The
+           "door" box makes the next segment an openable door. #}
+        <button type="button"
+                id="wall-edit-btn"
+                class="canvas-tool-btn"
+                aria-pressed="false"
+                title="Wall editor: draw walls/doors (click two points; click a wall to delete)"
+                {% if not active_map %}aria-disabled="true" disabled{% endif %}>
+            🧱 Walls
+        </button>
+        <label id="wall-door-toggle" style="display:none;align-items:center;gap:4px;font-size:12px;color:var(--fg-mute);">
+            <input type="checkbox" id="wall-door-cb"> door
+        </label>
         {% endif %}
     </div>
     <div class="drawer-tab-bar">
@@ -2365,11 +2379,134 @@
                positions inside this overlay are in map coords (matching
                bg-layer's (0,0)), so this stays at top:0;left:0. #}
             <div id="gif-token-overlay" style="position:absolute;top:0;left:0;z-index:2;pointer-events:none;"></div>
+            {# v2.754.0 — Maps 2.0 wall overlay. Lives inside #map-transform so
+               it pans/zooms with the map; SVG coords == map-pixel coords. Walls
+               render as solid lines, doors as dashed (green when open). Pointer
+               events are off except in GM wall-edit mode. #}
+            <svg id="wall-overlay" width="{{ active_map.width_px }}" height="{{ active_map.height_px }}"
+                 viewBox="0 0 {{ active_map.width_px }} {{ active_map.height_px }}"
+                 style="position:absolute;top:0;left:0;z-index:3;pointer-events:none;overflow:visible;"></svg>
             </div>
         {% else %}
             <p class="muted" style="padding: 20px;">No active map. {% if is_gm %}Upload one in <a href="/admin/campaign/{{ campaign.id }}">campaign settings</a>.{% endif %}</p>
         {% endif %}
     </div>
+
+    {% if active_map %}
+    <script>
+    /* v2.754.0 — Maps 2.0 wall editor. Renders the active map's walls/doors as
+       an SVG overlay inside #map-transform (so it pans/zooms with the map) and,
+       for the GM, a draw mode: click two points to add a wall, click a wall to
+       delete it; the "door" box makes the next segment an openable door. Saves
+       via PUT /map/{id}/walls; the walls_update WS re-renders every client. */
+    (function () {
+        var CID = {{ campaign.id }};
+        var IS_GM = {{ 'true' if is_gm else 'false' }};
+        var svg = document.getElementById('wall-overlay');
+        if (!svg) return;
+        var NS = 'http://www.w3.org/2000/svg';
+        var mapId = null, walls = [], editMode = false, pending = null, seq = 0;
+
+        function mkLine(w, hit) {
+            var ln = document.createElementNS(NS, 'line');
+            ln.setAttribute('x1', w.x1); ln.setAttribute('y1', w.y1);
+            ln.setAttribute('x2', w.x2); ln.setAttribute('y2', w.y2);
+            if (hit) {
+                ln.setAttribute('stroke', 'transparent');
+                ln.setAttribute('stroke-width', '16');
+                ln.style.pointerEvents = editMode ? 'stroke' : 'none';
+                ln.style.cursor = editMode ? 'pointer' : 'default';
+            } else {
+                var open = w.door && w.open;
+                ln.setAttribute('stroke', open ? '#46c46a' : (w.door ? '#d9a441' : '#e05a4a'));
+                ln.setAttribute('stroke-width', '4');
+                ln.setAttribute('stroke-linecap', 'round');
+                if (w.door) ln.setAttribute('stroke-dasharray', '10 8');
+                ln.style.pointerEvents = 'none';
+            }
+            return ln;
+        }
+        function render() {
+            while (svg.firstChild) svg.removeChild(svg.firstChild);
+            walls.forEach(function (w) {
+                svg.appendChild(mkLine(w, false));
+                var hit = mkLine(w, true);
+                hit.addEventListener('click', function (e) {
+                    if (!editMode) return;
+                    e.stopPropagation();
+                    walls = walls.filter(function (x) { return x.id !== w.id; });
+                    save();
+                });
+                svg.appendChild(hit);
+            });
+            if (pending) {
+                var c = document.createElementNS(NS, 'circle');
+                c.setAttribute('cx', pending.x); c.setAttribute('cy', pending.y);
+                c.setAttribute('r', '6'); c.setAttribute('fill', '#e05a4a');
+                c.style.pointerEvents = 'none';
+                svg.appendChild(c);
+            }
+        }
+        function toMap(e) {
+            var pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+            var ctm = svg.getScreenCTM();
+            if (!ctm) return null;
+            var loc = pt.matrixTransform(ctm.inverse());
+            return { x: Math.round(loc.x), y: Math.round(loc.y) };
+        }
+        async function load() {
+            try {
+                var r = await fetch('/api/campaign/' + CID + '/active-map');
+                if (!r.ok) return;
+                var d = await r.json();
+                mapId = d.map_id; walls = d.walls || []; render();
+            } catch (e) {}
+        }
+        async function save() {
+            if (!mapId) { render(); return; }
+            try {
+                await fetch('/api/campaign/' + CID + '/map/' + mapId + '/walls', {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ walls: walls }),
+                });
+            } catch (e) {}
+            render();  // optimistic; the walls_update WS will reconcile
+        }
+        // Called by the walls_update WS handler in tabletop.js.
+        window._onWallsUpdate = function (data) {
+            if (!data) return;
+            walls = data.walls || []; render();
+        };
+
+        if (IS_GM) {
+            var btn = document.getElementById('wall-edit-btn');
+            var doorToggle = document.getElementById('wall-door-toggle');
+            var doorCb = document.getElementById('wall-door-cb');
+            if (btn) btn.addEventListener('click', function () {
+                editMode = !editMode;
+                btn.setAttribute('aria-pressed', editMode ? 'true' : 'false');
+                if (doorToggle) doorToggle.style.display = editMode ? 'inline-flex' : 'none';
+                svg.style.pointerEvents = editMode ? 'auto' : 'none';
+                svg.style.cursor = editMode ? 'crosshair' : 'default';
+                pending = null; render();
+            });
+            svg.addEventListener('click', function (e) {
+                if (!editMode) return;
+                var p = toMap(e);
+                if (!p) return;
+                if (!pending) { pending = p; render(); return; }
+                walls.push({
+                    id: 'w' + Date.now() + '_' + (seq++),
+                    x1: pending.x, y1: pending.y, x2: p.x, y2: p.y,
+                    door: !!(doorCb && doorCb.checked), open: false,
+                });
+                pending = null; save();
+            });
+        }
+        load();
+    })();
+    </script>
+    {% endif %}
 
     {# v2.49.244: when the user's roll_log_position preference is "left",
        render a second independent sidebar on the left edge and rehome the

@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.754.0] - 2026-06-29 — "The Stonemason's Hand"
+
+**Schema version:** 87
+
+**Commit summary:** Maps 2.0 GM wall editor — draw walls/doors on the map (the in-game UI for the walls arc).
+
+**Description:** Third slice of the walls arc — the GM editor + the client overlay, making walls usable in play. A new `#wall-overlay` SVG lives inside `#map-transform`, so it pans/zooms with the map (SVG coords == map-pixel coords); every client renders the active map's walls as solid red lines and doors as dashed amber (green when open), loaded from `GET /active-map` and kept live by the `walls_update` WS. The GM gets a **🧱 Walls** toggle in the canvas-tools cluster: in edit mode the overlay becomes interactive — click two points to add a wall segment, click an existing segment to delete it, and tick the **door** box to make the next segment an openable door. Edits save via `PUT /map/{id}/walls`; the broadcast re-renders every client. Clicks convert to map coords via `getScreenCTM()`, so drawing is correct at any pan/zoom. Combined with v2.753.0 occlusion, a GM-drawn wall now blocks line of sight at the table. Follow-ups: segment drag-to-move, a player-facing door open/close toggle, wall-shadow rendering in the lighting overlay, and clickable hotspots.
+
+### Added
+- `app/templates/tabletop.html` — the `#wall-overlay` SVG, the GM 🧱 Walls toggle + door checkbox, and the self-contained editor script (`window._onWallsUpdate`).
+- `app/static/tabletop.js` — `walls_update` WS handler → `window._onWallsUpdate`.
+- `tests/harness_ui/test_wall_editor.py` (new, +1) — the toggle flips edit mode + reveals the door box + arms the overlay; a `walls_update` renders wall + dashed-door lines; leaving edit mode locks it.
+
+### Schema
+- No schema change (still v87).
+
 ## [2.753.0] - 2026-06-29 — "The Sightless Wall"
 
 **Schema version:** 87
