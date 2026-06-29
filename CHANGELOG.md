@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.744.1] - 2026-06-29 — "The Standing Reconciliation"
+
+**Schema version:** 86
+
+**Commit summary:** Doc reconciliation — the Rage "active" toggle the backlog asked for is already shipped + tested (no code change).
+
+**Description:** Verify-before-build: the v2.744.0 TODONE entry for "Class Resource Tracking in Mini-Sheet" listed a Rage-specific "active" toggle as an optional *unbuilt* nicety. That was inaccurate — the active-rage mechanic is fully shipped and regression-covered. The mini-sheet's Features-tab Rage button routes to `POST /use_rage`, which installs the active rage buff (bludgeoning/piercing/slashing resistance + damage bonus + STR-check/save advantage), spends a use, and broadcasts `feature_used` + `resource_update` + `buff_update`; the player ends it via the buff badge × (`/end_buff`) and it auto-ends on KO or a turn with no attack. Asserted by `test_use_rage.py` (incl. the end-buff path) plus `test_persistent_rage.py`, `test_mindless_rage.py`, `test_relentless_rage.py`, and `test_frenzy_exhaustion.py`. This commit corrects the TODONE note; no behavior change.
+
+### Changed
+- `TODONE.md` — corrected the v2.744.0 "Class Resource Tracking" entry to record that the Rage active toggle is already shipped (with its test coverage), not pending.
+
+### Schema
+- No schema change (still v86).
+
 ## [2.744.0] - 2026-06-29 — "The Pip Counter"
 
 **Schema version:** 86
