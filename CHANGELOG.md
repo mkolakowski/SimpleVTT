@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.752.0] - 2026-06-29 — "The Mason's Ledger"
+
+**Schema version:** 87
+
+**Commit summary:** Maps 2.0 walls & doors — the storage substrate (map-level wall segments + GET/PUT endpoints), first slice of the walls arc.
+
+**Description:** Begins the Maps 2.0 walls & doors feature with its persistence layer. New `Map.walls` JSON column (Schema v87) stores a list of `{id, x1, y1, x2, y2, door, open}` line segments at the map level, so a map always reloads with its walls intact; doors are segments with `door: true` whose `open` state can toggle. Endpoints: `GET /api/campaign/{cid}/map/{map_id}/walls` (any member — the client needs them to render doors + compute line-of-sight), `PUT …/walls` (GM-only — the wall editor sends the full list on save; sanitised via `_sanitize_wall_segments`, broadcasts `walls_update`), and a `GET /api/campaign/{cid}/active-map` convenience endpoint returning the active map's id + key render fields (grid size, ambient light, walls) so the client can bootstrap the overlay in one call. The wall editor UI, vision-occlusion integration (`_visibility_between` treating a closed segment as a sight-blocker), and door toggling are the follow-up slices.
+
+### Added
+- `app/models.py` + `app/database.py` — `Map.walls` JSON column (Schema v87 migration).
+- `app/routes/tabletop_routes.py` — `GET /active-map`, `GET /map/{id}/walls`, `PUT /map/{id}/walls` (+ `_sanitize_wall_segments`); `walls_update` broadcast.
+- `tests/harness/test_map_walls.py` (new, +3) — set/get round-trip + sanitisation + `walls_update` broadcast; non-GM write → 403; unknown map → 404.
+
+### Schema
+- **v87** — `maps.walls` (JSON, default `[]`). Additive.
+
 ## [2.751.2] - 2026-06-29 — "The Surveyor's Pass"
 
 **Schema version:** 86

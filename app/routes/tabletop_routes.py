@@ -123968,6 +123968,103 @@ async def settings_map_ambient_light(
     return {"ok": True, "ambient_light": m.ambient_light}
 
 
+def _sanitize_wall_segments(raw) -> list:
+    """v2.752.0 — coerce a client-supplied wall list into the stored shape:
+    a list of ``{id, x1, y1, x2, y2, door, open}`` segments in map-pixel
+    coords. Drops anything that isn't a dict with four numeric endpoints."""
+    out = []
+    if not isinstance(raw, list):
+        return out
+    for i, seg in enumerate(raw):
+        if not isinstance(seg, dict):
+            continue
+        try:
+            x1 = float(seg.get("x1")); y1 = float(seg.get("y1"))
+            x2 = float(seg.get("x2")); y2 = float(seg.get("y2"))
+        except (TypeError, ValueError):
+            continue
+        out.append({
+            "id": (str(seg.get("id") or "").strip()[:40] or f"w{i}"),
+            "x1": x1, "y1": y1, "x2": x2, "y2": y2,
+            "door": bool(seg.get("door")),
+            "open": bool(seg.get("open")),
+        })
+    return out
+
+
+@router.get("/api/campaign/{campaign_id}/active-map")
+def get_active_map(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.752.0 — the campaign's active map's id + key render fields (incl.
+    Maps 2.0 ``walls``), so the client can bootstrap the map overlay in one
+    call. Any campaign member. ``map_id`` is null when no map is active."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    m = (db.query(Map).filter(Map.id == campaign.active_map_id).first()
+         if campaign.active_map_id else None)
+    if not m:
+        return {"ok": True, "map_id": None}
+    return {
+        "ok": True, "map_id": m.id, "name": m.name,
+        "grid_size_px": m.grid_size_px,
+        "ambient_light": m.ambient_light,
+        "walls": list(m.walls or []),
+    }
+
+
+@router.get("/api/campaign/{campaign_id}/map/{map_id}/walls")
+def get_map_walls(
+    campaign_id: int,
+    map_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.752.0 — Maps 2.0: read a map's wall/door segments. Any campaign
+    member (the client needs them to render doors + compute line-of-sight)."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    m = db.query(Map).filter(
+        Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404, "Map not found")
+    return {"ok": True, "map_id": m.id, "walls": list(m.walls or [])}
+
+
+@router.put("/api/campaign/{campaign_id}/map/{map_id}/walls")
+async def set_map_walls(
+    campaign_id: int,
+    map_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.752.0 — Maps 2.0: replace a map's wall/door segments (GM-only).
+    The wall editor sends the full list on save. Broadcasts ``walls_update``
+    so every client re-renders. Body: ``{walls: [{x1,y1,x2,y2,door?,open?}]}``.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(
+        Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404, "Map not found")
+    body = await request.json()
+    walls = _sanitize_wall_segments(body.get("walls"))
+    m.walls = walls
+    db.commit()
+    await hub.broadcast(campaign_id, {
+        "type": "walls_update",
+        "data": {"map_id": m.id, "walls": walls},
+    })
+    return {"ok": True, "map_id": m.id, "walls": walls}
+
+
 @router.post("/campaign/{campaign_id}/settings/maps/{map_id}/letterbox_color")
 async def settings_map_letterbox_color(
     campaign_id: int,

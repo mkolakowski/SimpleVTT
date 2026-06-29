@@ -373,6 +373,13 @@ class Map(Base):
     # Free-form GM-side tags for library organisation. Same shape as
     # Encounter.tags and Playlist.tags.
     tags: Mapped[list] = mapped_column(JSON, default=list)
+    # v2.752.0 — Maps 2.0 walls & doors. A JSON list of line segments saved
+    # at the map level (so a map always reloads with its walls). Each entry:
+    # ``{"id": str, "x1": float, "y1": float, "x2": float, "y2": float,
+    #    "door": bool, "open": bool}`` in map-image pixel coords. Doors are
+    # wall segments with ``door: true`` whose ``open`` state can toggle. The
+    # vision engine will treat a closed segment as a sight-blocker (follow-up).
+    walls: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     folder: Mapped[Optional[str]] = mapped_column(String(120), nullable=True, default="", server_default="")
     thumbnail_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

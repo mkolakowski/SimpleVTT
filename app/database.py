@@ -1026,6 +1026,16 @@ def _apply_inline_migrations() -> None:
                 "BOOLEAN NOT NULL DEFAULT FALSE"
             ))
 
+    # ---- Schema v87 (2.752.0): maps.walls ----
+    # Maps 2.0 walls & doors — a JSON list of wall/door line segments stored
+    # at the map level. Additive; default empty list = no walls.
+    maps_cols_v87 = _column_names("maps")
+    with engine.begin() as conn:
+        if maps_cols_v87 and "walls" not in maps_cols_v87:
+            conn.execute(text(
+                "ALTER TABLE maps ADD COLUMN walls JSON NOT NULL DEFAULT '[]'"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""
