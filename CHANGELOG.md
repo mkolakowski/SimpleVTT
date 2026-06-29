@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.751.0] - 2026-06-29 — "The Owl and the Raven"
+
+**Schema version:** 86
+
+**Commit summary:** Find Familiar form picker — completes the Summon cast-flow arc.
+
+**Description:** The final follow-up of the Summon cast-flow arc: a picker for Find Familiar's form. Unlike the conjure spells, Find Familiar's `form` is a fixed cosmetic RAW list (PHB p.240 — bat / cat / crab / frog / hawk / lizard / octopus / owl / poisonous snake / quipper / rat / raven / sea horse / spider / weasel), not a catalog-CR choice. `/summon-options` gains a `forms` mode (spell `find-familiar`) returning `_FIND_FAMILIAR_FORMS`, and `window.openSummonPicker` renders them with a "choose your familiar's form" caption (no count tiers, no CR), POSTing the chosen `form` to `/cast_find_familiar`. Also fixed an empty `slot_level=` query-param 422 in the picker fetch (now omitted when absent). With this, every summon spell — all six conjures + Find Familiar — has a working creature/form picker, closing the arc (#1 picker, #2 auto-control, #3 auto-init all shipped).
+
+### Added
+- `app/routes/tabletop_routes.py` — `_FIND_FAMILIAR_FORMS` + the `forms` mode in `_SUMMON_PICKER_SPECS` / `/summon-options`.
+- `app/templates/tabletop.html` — `find-familiar` in `window._SUMMON_SPELLS`; the picker handles `forms` mode (caption + null-CR option rows) and omits empty `slot_level`.
+- `tests/harness/test_summon_options.py` (+1) — forms mode returns the RAW list with null CR.
+- `tests/harness_ui/test_summon_picker.py` (+1) — the familiar-form picker renders the list with no count tiers.
+
+### Schema
+- No schema change (still v86).
+
 ## [2.750.0] - 2026-06-29 — "The Conjurer's Writ"
 
 **Schema version:** 86

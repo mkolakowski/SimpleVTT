@@ -89,3 +89,36 @@ def test_summon_picker_single_mode(gm_page: Page) -> None:
     ).to_be_visible(timeout=5000)
 
     assert not errors, f"JS errors: {errors}"
+
+
+def test_summon_picker_familiar_forms(gm_page: Page) -> None:
+    """v2.751.0 — Find Familiar shows the fixed RAW form list (no count tiers,
+    no CR), e.g. Owl / Cat / Raven."""
+    mid = _mira_id()
+    assert mid, "Mira not found"
+    errors: list[str] = []
+    gm_page.on("pageerror", lambda e: errors.append(str(e)))
+    gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}")
+    gm_page.wait_for_function(
+        "() => typeof window.openSummonPicker === 'function'", timeout=8000)
+
+    gm_page.evaluate(
+        """([cid]) => window.openSummonPicker({
+            spell: 'find-familiar', endpoint: 'cast_find_familiar',
+            slugField: 'form', mode: 'forms', charId: cid,
+            spellName: 'Find Familiar' })""",
+        [mid],
+    )
+    expect(gm_page.locator(".summon-picker-modal")).to_be_visible()
+    assert gm_page.locator(".summon-picker-modal button", has_text="CR ¼").count() == 0
+    expect(
+        gm_page.locator(".summon-picker-modal", has_text="familiar's form")
+    ).to_be_visible()
+    # The fixed RAW form list renders (15 forms).
+    opts = gm_page.locator(".summon-picker-option")
+    expect(opts.first).to_be_visible(timeout=5000)
+    assert opts.count() >= 10, opts.count()
+    labels = opts.all_inner_texts()
+    assert any("Owl" in t for t in labels), labels
+
+    assert not errors, f"JS errors: {errors}"

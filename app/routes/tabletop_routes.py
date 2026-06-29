@@ -6158,7 +6158,19 @@ _SUMMON_PICKER_SPECS = {
                     "base_slot": 6, "default_cr": 6, "cr_kind": "linear"},
     "conjure-celestial": {"type": "celestial", "mode": "single",
                           "base_slot": 7, "default_cr": 4, "cr_kind": "tier"},
+    # v2.751.0 — Find Familiar's form is a fixed cosmetic RAW list (PHB
+    # p.240), not a catalog-CR choice; mode "forms" returns `_FIND_FAMILIAR_FORMS`.
+    "find-familiar": {"type": None, "mode": "forms"},
 }
+
+# RAW PHB p.240 — the familiar forms Find Familiar may take. Cosmetic: all
+# share the ``familiar`` companion template; the chosen form rides the
+# display name. Picker source for the `find-familiar` `forms` mode.
+_FIND_FAMILIAR_FORMS = [
+    "bat", "cat", "crab", "frog", "hawk", "lizard", "octopus", "owl",
+    "poisonous snake", "quipper", "rat", "raven", "sea horse", "spider",
+    "weasel",
+]
 
 
 def _conjure_catalog_summon_template(
@@ -67678,6 +67690,17 @@ async def summon_options(
         raise HTTPException(400, "unknown or unsupported summon spell")
     req_type = spec["type"]
     mode = spec["mode"]
+    if mode == "forms":
+        # Fixed cosmetic list (Find Familiar) — no catalog / CR.
+        return {
+            "ok": True, "spell": (spell or "").strip().lower(),
+            "type": None, "mode": "forms", "count": 1,
+            "slot_level": None, "max_cr": None,
+            "options": [
+                {"slug": f, "name": f.title(), "cr": None, "hp": None, "ac": None}
+                for f in _FIND_FAMILIAR_FORMS
+            ],
+        }
     if mode == "count":
         try:
             count = int(count)

@@ -7,7 +7,7 @@
 - **Auto-init behind caster — shipped v2.746.0.** `_summon_initiative_for_body(campaign_id, caster_char_id, body)` defaults a summon's initiative to the **caster's** initiative (so it slots right after the caster per RAW PHB p.193), generalising the v2.113.0 Spiritual Weapon pattern across all seven conjure-family endpoints. An explicit body `initiative` still wins; out-of-combat casts fall back to 0. Test: `test_conjure_animals_inherits_caster_initiative`.
 - **Auto-assign control to the casting player — shipped v2.750.0.** `_summon_companion` now stamps the summon **Token**'s `controller_user_id` with the summoning character's owner, so the casting player can move + act with their summon via the existing `_user_can_move_token` hook — no GM hand-off. Applies to every summon (conjure family, familiars, spiritual weapon, wildfire spirit, …); a GM-cast NPC summon (owner None) stays GM-controlled. Test: `test_conjure_animals_grants_caster_control`.
 
-**Arc status:** the three headline behaviors (#1 picker for all six conjures, #2 auto-control, #3 auto-init behind caster) are shipped. *Remaining (minor):* a Find Familiar `form` picker (fixed RAW list, not catalog-CR).
+**Arc status:** ✅ complete. #1 picker (all six conjures + Find Familiar's RAW `form` list, v2.751.0), #2 auto-control (v2.750.0), #3 auto-init behind caster (v2.746.0) all shipped. The Find Familiar form picker (`mode: forms` in `_SUMMON_PICKER_SPECS` + `_FIND_FAMILIAR_FORMS`) closed the last follow-up.
 **Parent:** [full-feature-automation.md](full-feature-automation.md) Phase 6 (P6 movement + P7 summons).
 **Goal:** Build the two heaviest remaining primitives — **server-side
 forced movement** (`_force_move`) + **speed buffs**, and a

@@ -892,37 +892,8 @@ Today the initiative tracker opens a read-only stat-block popover for monster en
 
 _Advantage & Disadvantage Tracking, Death Saving Throws, and Combat 2.0 Action Economy all shipped — see [`TODONE.md`](TODONE.md) → Combat (reconciled v2.745.1). Only the deferred death-saves Phase 3c (stable countdown) + Phase 4 (NPC death saves) remain, tracked in [`death-saves.md`](docs/plans/death-saves.md)._
 
-### Summon Spells — Creature Picker + Auto-Control + Init Placement
-
-> **Progress (v2.746.0–v2.748.0):** Behavior **#3 (auto-init behind caster)** shipped (`_summon_initiative_for_body`, all 7 conjure endpoints). Behavior **#1 (creature picker)** shipped for all six conjure spells (count-based + single-summon Elemental/Fey/Celestial, v2.749.0) — backend (`beast_slug`/`creature_slug`), `GET /summon-options`, and the `window.openSummonPicker` modal wired into the mini-sheet cast flow (v2.748.0). Behavior **#2 (auto-assign control to the casting player)** shipped (v2.750.0 — `_summon_companion` stamps the summon token's `controller_user_id`). All three headline behaviors are done. Remaining (minor): a Find Familiar `form` picker (fixed RAW list, not catalog-CR). See `docs/plans/movement-and-summons.md`.
-
-Unify the **cast-flow UX** for every spell that summons a creature onto the battle field. Today each summon endpoint (`/cast_conjure_animals`, `/cast_conjure_woodland_beings`, `/cast_conjure_minor_elementals`, `/cast_animate_dead`, `/cast_conjure_elemental`, `/cast_conjure_fey`, `/cast_conjure_celestial`, `/find_familiar`, plus any future summon ship) takes the chosen creature as an opaque server-side default (Conjure Animals always spawns wolves; Find Familiar always spawns a generic familiar) or as a free-form body field with no UI affordance. The player has no in-game picker for the RAW choices and the GM has to manually assign control + reorder initiative.
-
-**Three changes wrapped into one feature:**
-
-1. **Per-spell creature picker.** When a player casts a summon spell with RAW choice, surface a picker UI (modal or sheet-side popover) showing the valid summoning options for the chosen slot level. Examples:
-    - **Conjure Animals** — picker shows wolf / boar / brown bear / giant eagle / etc. filtered by CR matching the `count` summoning option (8×CR¼, 4×CR½, 2×CR1, 1×CR2).
-    - **Conjure Woodland Beings** — same shape: pixie / sprite / satyr / dryad scaled by CR.
-    - **Conjure Minor Elementals** — magmin / mephit / azer / etc.
-    - **Animate Dead** — zombie / skeleton (RAW two choices).
-    - **Conjure Elemental** — fire / water / earth / air elemental (caster picks element).
-    - **Conjure Fey / Celestial** — RAW caster picks; surface known creature options.
-    - **Find Familiar** — bat / cat / crab / frog / hawk / lizard / octopus / owl / poisonous snake / fish (quipper) / rat / raven / sea horse / spider / weasel (RAW PHB p.240 list).
-    - **Bag of Tricks** (magic item) — colored bag rolls a random animal per RAW DMG p.154; picker collapses to "Pull a creature" with the random-table dispatch happening server-side.
-
-   Backend: extend each summon endpoint with a `creature_key` body field (defaulting to the current opaque choice if missing); the player UI surfaces a picker before the cast goes through. The catalog of valid options per spell lives next to the existing `_SPELL_SUMMON_MAP` substrate or in a sibling `_SPELL_SUMMON_OPTIONS_MAP`. Each option carries the matching `companion_key` for `_summon_companion` (or a new template if needed).
-
-2. **Auto-assign control to the casting player.** Today summons spawn with `is_summon: True, summoned_by: <caster_id>` but the owning player isn't automatically granted move/attack control over the new token. Wire the existing per-token ownership/control hook so the casting player's user_id is stamped on the summon's combatant entry (similar to how PC tokens carry `owner_user_id`). The GM retains override (any combatant is GM-controllable), but the casting player no longer has to ask the GM to move the wolf pack.
-
-3. **Auto-insert summons behind caster in initiative.** Per RAW PHB p.193 (and several DMG calls), summoned creatures "act on the caster's turn" — i.e. the caster decides when they act, and they typically act immediately after the caster's turn. Today summon endpoints take an `initiative: int` body field that has to be set manually. Change the default behavior: when the body omits `initiative`, compute it as `caster_initiative - 0.001 × N` where N is the summon index in the cast, placing every summon **immediately after** the caster in the turn order without disturbing other combatants' positions. The GM can still manually reorder via the existing initiative tracker.
-
-   Edge case: if the caster isn't in the initiative tracker (out-of-combat summon, e.g. Find Familiar during a rest), skip the auto-placement and add the summon at the end of any active battle, or omit from initiative entirely.
-
-**Why this matters.** The v2.404.x–v2.420.0 Phase 3 work shipped 7 summon endpoints + the cap-extension substrate, but each cast still requires GM-side hand-holding (assigning control, reordering initiative, picking the creature for the player). This feature closes the cast-flow UX gap so summoning is one-click-per-cast for the player and zero-GM-effort to set up.
-
-**Includes familiars.** Find Familiar (Wizard L1 ritual) is the lightest summon mechanically (it's not even a real combatant in v1) but it's the most common one at low levels — and the RAW creature list is the longest. Bringing familiars into the same picker+control+init flow means a player Find Familiar cast spawns the actual chosen creature (owl vs cat vs raven) under player control, in the turn order behind the wizard, with one cast. Same shape for Pact of the Chain (Warlock) and any other familiar-style summon.
-
-Scope sketch: (1) a single `_SPELL_SUMMON_OPTIONS_MAP` covering all 8+ summon endpoints with RAW creature lists; (2) sheet-side picker JS that lights up when a summon-spell button is clicked; (3) endpoint extensions to read `creature_key` + auto-stamp `owner_user_id` + auto-compute initiative; (4) harness coverage for all three behaviors (picker choice persists, owner stamp matches caster, initiative places summon immediately after caster). Likely a v2.5x arc — substantial enough to merit its own `docs/plans/summon-cast-flow.md`.
+### Summon Spells — Creature Picker + Auto-Control + Init Placement ✅ (shipped v2.746.0–v2.751.0)
+Shipped end-to-end — see [`TODONE.md`](TODONE.md) → Combat. Creature picker for all six conjure spells + Find Familiar (`/summon-options` + `window.openSummonPicker`), auto-control (summon token `controller_user_id`), and auto-init behind the caster (`_summon_initiative_for_body`). Design record: [`movement-and-summons.md`](docs/plans/movement-and-summons.md).
 
 ---
 

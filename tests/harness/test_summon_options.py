@@ -83,6 +83,20 @@ async def test_conjure_celestial_tier_cr(gm_client):
     assert "unicorn" in {o["slug"] for o in r9.json()["options"]}
 
 
+async def test_find_familiar_forms_mode(gm_client):
+    """v2.751.0 — Find Familiar returns the fixed RAW form list (no CR /
+    catalog); options carry null cr/hp/ac."""
+    r = await gm_client.get(_URL, params={"spell": "find-familiar"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["mode"] == "forms"
+    slugs = {o["slug"] for o in body["options"]}
+    # A representative slice of the PHB p.240 list.
+    assert {"owl", "cat", "raven", "bat"} <= slugs
+    for o in body["options"]:
+        assert o["cr"] is None and o["hp"] is None
+
+
 async def test_unknown_spell_400(gm_client):
     r = await gm_client.get(_URL, params={"spell": "fireball", "count": 8})
     assert r.status_code == 400, r.text

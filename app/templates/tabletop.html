@@ -5477,6 +5477,8 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             'conjure elemental': { spell: 'conjure-elemental', endpoint: 'cast_conjure_elemental', slugField: 'creature_slug', mode: 'single' },
             'conjure fey': { spell: 'conjure-fey', endpoint: 'cast_conjure_fey', slugField: 'creature_slug', mode: 'single' },
             'conjure celestial': { spell: 'conjure-celestial', endpoint: 'cast_conjure_celestial', slugField: 'creature_slug', mode: 'single' },
+            // v2.751.0 — Find Familiar: fixed RAW form list (cosmetic).
+            'find familiar': { spell: 'find-familiar', endpoint: 'cast_find_familiar', slugField: 'form', mode: 'forms' },
         };
         // RAW count↔CR summoning options (PHB p.225): N creatures of max CR.
         const _SUMMON_COUNT_OPTIONS = [
@@ -5514,8 +5516,11 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 listWrap.innerHTML = '<p class="muted" style="font-size:12px;">Loading…</p>';
                 try {
                     // Pass both axes; the endpoint uses the one its mode needs
-                    // (count tier vs slot-scaled CR).
-                    const r = await fetch(`/api/campaign/${CAMPAIGN_ID}/summon-options?spell=${encodeURIComponent(spell)}&count=${count}&slot_level=${slotLevel || ''}`);
+                    // (count tier vs slot-scaled CR). Omit slot_level when
+                    // absent — an empty `slot_level=` fails int validation (422).
+                    let _q = `spell=${encodeURIComponent(spell)}&count=${count}`;
+                    if (slotLevel) _q += `&slot_level=${slotLevel}`;
+                    const r = await fetch(`/api/campaign/${CAMPAIGN_ID}/summon-options?${_q}`);
                     if (!r.ok) { listWrap.innerHTML = '<p class="muted">Could not load creatures.</p>'; return; }
                     const data = await r.json();
                     const options = data.options || [];
@@ -5530,7 +5535,10 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         b.className = 'sheet-section-btn summon-picker-option';
                         b.dataset.slug = o.slug;
                         b.style.cssText = 'display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;';
-                        b.innerHTML = `<span>${o.name}</span><span class="muted" style="font-size:11px;">CR ${o.cr} · ${o.hp} HP · AC ${o.ac}</span>`;
+                        const meta = (o.cr != null)
+                            ? `<span class="muted" style="font-size:11px;">CR ${o.cr} · ${o.hp} HP · AC ${o.ac}</span>`
+                            : '';
+                        b.innerHTML = `<span>${o.name}</span>${meta}`;
                         b.addEventListener('click', () => pick(o.slug));
                         listWrap.appendChild(b);
                     });
@@ -5590,6 +5598,10 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             document.body.appendChild(back);
             if (mode === 'count') {
                 renderOptRow();  // 8×CR¼ … 1×CR2 summoning-option selector
+            } else if (mode === 'forms') {
+                // Find Familiar: pick a cosmetic form (no CR / count).
+                optRow.innerHTML = '<span class="muted" style="font-size:12px;">'
+                    + 'Choose your familiar\'s form.</span>';
             } else {
                 // Single-summon: one creature, CR fixed by the slot level.
                 optRow.innerHTML = '<span class="muted" style="font-size:12px;">'
