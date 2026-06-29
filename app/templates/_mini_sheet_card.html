@@ -96,6 +96,24 @@
                         <button type="button" class="mini-rest-btn mini-long-rest-btn" data-char-id="{{ c.id }}" data-char-name="{{ c.name }}" title="Long rest: restore HP, HD, spell slots">💤 Long</button>
                         {% endif %}
                     </div>
+                    {# v2.744.0 — class-resource trackers (Rage / Ki / Sorcery /
+                       Bardic Inspiration / Channel Divinity / …). Countable
+                       entries only (max > 0); spend/restore wired to the
+                       existing POST /resource endpoint + resource_update WS. #}
+                    {% set _res_countable = [] %}
+                    {% for _r in (sh.get('resources') or []) %}{% if (_r.get('max') or 0)|int > 0 %}{% set _ = _res_countable.append(_r) %}{% endif %}{% endfor %}
+                    {% if _res_countable %}
+                    <div class="msb-resources" data-char-id="{{ c.id }}">
+                        {% for _r in _res_countable %}
+                        <span class="msb-res" title="{{ _r.get('name','') }}">
+                            <span class="msb-res-name">{{ _r.get('name','') }}</span>
+                            {% if _is_owner %}<button type="button" class="msb-res-step" data-char-id="{{ c.id }}" data-res-key="{{ _r.get('key','') }}" data-delta="-1" title="Spend 1 {{ _r.get('name','') }}">−</button>{% endif %}
+                            <span class="msb-res-cur" data-char-id="{{ c.id }}" data-res-key="{{ _r.get('key','') }}">{{ (_r.get('current') or 0)|int }}</span><span class="msb-res-sep">/</span><span class="msb-res-max">{{ (_r.get('max') or 0)|int }}</span>
+                            {% if _is_owner %}<button type="button" class="msb-res-step" data-char-id="{{ c.id }}" data-res-key="{{ _r.get('key','') }}" data-delta="1" title="Restore 1 {{ _r.get('name','') }}">+</button>{% endif %}
+                        </span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
                 </div>
                 {# v2.4.21: Roll-state pill + Death-saves tracker share a single
                    horizontal row instead of stacking vertically. ``.mini-meta-row``

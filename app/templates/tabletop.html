@@ -1224,6 +1224,19 @@
     .msb-hd { font-size: 11px; color: var(--fg-mute); flex: 1; min-width: 0; }
     .msb-hd em { font-style: normal; color: var(--fg); font-weight: 600; }
     .msb-rest .mini-rest-btn { font-size: 11px; padding: 2px 8px; min-height: 32px; }
+    /* v2.744.0 — class-resource trackers in the mini-sheet. Dense panel:
+       chips wrap; the +/- steppers use the 32px dense-UI minimum (per the
+       CLAUDE.md compact-panel exception, not the global 44px). */
+    .msb-resources { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 10px 6px; }
+    .msb-res { display: inline-flex; align-items: center; gap: 3px; font-size: 11px;
+      color: var(--fg-mute); background: var(--bg-1); border: 1px solid var(--border);
+      border-radius: 6px; padding: 1px 5px; }
+    .msb-res-name { font-weight: 600; color: var(--fg); }
+    .msb-res-cur { font-weight: 700; color: var(--accent); }
+    .msb-res-sep, .msb-res-max { color: var(--fg-mute); }
+    .msb-res-step { min-height: 32px; min-width: 22px; padding: 0 4px; font-size: 14px;
+      line-height: 1; border-radius: 5px; }
+    .msb-res-step:disabled { opacity: 0.5; cursor: not-allowed; }
     /* HP step buttons: compact circles. v2.4.21 trimmed 26→22px to match
        the slimmer status row. */
     .mini-hp-step { width: 22px; height: 22px; min-height: 22px; border-radius: 50%; font-size: 13px; font-weight: 700;
@@ -5571,6 +5584,38 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             } catch { /* silent — display already updated */ }
         }
 
+        // v2.744.0 — spend/restore a class resource from the mini-sheet.
+        // POSTs to /resource; the resource_update WS broadcast (handled below)
+        // re-renders the pip count on every client, including this one.
+        async function _miniResStep(charId, key, delta) {
+            try {
+                const r = await fetch(
+                    `/api/campaign/${CAMPAIGN_ID}/character/${charId}/resource`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key, delta }),
+                });
+                if (r.status === 409) {
+                    const j = await r.json().catch(() => ({}));
+                    (window.showToast || function (m) { /* no-op */ })(
+                        `No ${j.name || 'uses'} left`, 'warn');
+                    return;
+                }
+                if (r.ok) {
+                    const d = await r.json().catch(() => null);
+                    if (d && typeof d.current === 'number') {
+                        window._updateMiniResource(charId, key, d.current);
+                    }
+                }
+            } catch { /* silent — the WS update will catch up if it lands */ }
+        }
+        // Update a mini-sheet resource pip count (called by the step handler +
+        // the resource_update WS branch).
+        window._updateMiniResource = function (charId, key, current) {
+            const sel = `.msb-res-cur[data-char-id="${charId}"][data-res-key="${(window.CSS && CSS.escape) ? CSS.escape(key) : key}"]`;
+            document.querySelectorAll(sel).forEach(el => { el.textContent = current; });
+        };
+
         function _setMiniTab(charId, tab) {
             const tabsEl = document.querySelector(`.mini-tabs[data-char-id="${charId}"]`);
             if (!tabsEl) return;
@@ -5677,6 +5722,15 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 const field  = hpBtn.dataset.field;
                 const delta  = hpBtn.classList.contains('mini-hp-plus') ? 1 : -1;
                 _miniHpStep(charId, field, delta);
+                return;
+            }
+            // v2.744.0 — class-resource +/- steppers.
+            const resBtn = ev.target.closest('.msb-res-step');
+            if (resBtn) {
+                _miniResStep(
+                    parseInt(resBtn.dataset.charId, 10),
+                    resBtn.dataset.resKey,
+                    parseInt(resBtn.dataset.delta, 10) || -1);
                 return;
             }
             // Section tab switching

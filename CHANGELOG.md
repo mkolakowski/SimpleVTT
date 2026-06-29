@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.744.0] - 2026-06-29 — "The Pip Counter"
+
+**Schema version:** 86
+
+**Commit summary:** Class-resource trackers in the tabletop mini-sheet — a compact Rage / Ki / Bardic Inspiration / … row below HP with live +/- steppers.
+
+**Description:** Surfaces every countable class/subclass resource in the per-character mini-sheet (the Characters drawer / initiative cards), closing the "Class Resource Tracking in Mini-Sheet" backlog item. Below the rest row, `_mini_sheet_card.html` now renders a `.msb-resources` row — one chip per resource with `max > 0` (Rage, Ki, Sorcery points, Bardic Inspiration, Channel Divinity, Second Wind, Action Surge, Lay on Hands pool, Wild Shape, Arcane Recovery, magic-item charges, …), drawn from the sheet's already-seeded `resources` list. Each chip shows `name current/max`; the owner (and GM) get − / + steppers that call the existing `POST /resource` endpoint. The `resource_update` WS broadcast — which the endpoint already emitted but no client consumed — is now handled in `tabletop.js` to re-render the pip count on every connected client, so resource consumption is visible at the table in real time. A 409 "no uses" surfaces as a non-blocking toast. No new endpoint, no schema change.
+
+### Added
+- `app/templates/_mini_sheet_card.html` — `.msb-resources` row (countable resources, owner-gated steppers).
+- `app/templates/tabletop.html` — `.msb-res*` styles (32px dense-panel steppers), `_miniResStep` + `window._updateMiniResource` helpers, and the `.msb-res-step` click branch.
+- `app/static/tabletop.js` — `resource_update` WS handler → `window._updateMiniResource`.
+- `tests/harness/test_mini_sheet_resources.py` (new, +3) — tabletop page renders the `.msb-res*` markup + data attributes; the spend (delta -1) / restore (reset) round-trip the steppers call; unknown key → 404.
+
+### Schema
+- No schema change (still v86).
+
 ## [2.743.0] - 2026-06-29 — "The Locked Dice"
 
 **Schema version:** 86

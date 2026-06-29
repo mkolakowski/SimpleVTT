@@ -879,15 +879,6 @@ _(No open manually-added items — all moved to [`TODONE.md`](TODONE.md).)_
 
 ## Character Sheet
 
-### Class Resource Tracking in Mini-Sheet
-Review every D&D 5e class and subclass resource and surface the most commonly used ones in the mini-sheet panel. Current mini-sheet only shows HP and basic rolls. Resources to audit and add:
-- **Rage** (Barbarian) — uses per long rest; toggle button to mark active (grants resistance, damage bonus) with a use counter
-- **Ki points** (Monk), **Sorcery points** (Sorcerer), **Superiority dice** (Battle Master Fighter), **Bardic Inspiration** — numeric trackers with per-rest reset
-- **Channel Divinity**, **Second Wind**, **Action Surge**, **Lay on Hands** pool — binary or pool trackers
-- **Wild Shape** uses (Druid), **Arcane Recovery** (Wizard) — per-rest binary toggles
-
-Goal: a compact resource row below HP in the mini-sheet that auto-populates based on the character's class(es). Resources should persist server-side (stored in the character JSON) and broadcast updates via WebSocket so the GM can see resource consumption in real time.
-
 ---
 
 ## GM Tools

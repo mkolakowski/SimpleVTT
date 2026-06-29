@@ -5266,6 +5266,15 @@
                 _renderPresence(msg.data);
             } else if (msg.type === 'character_hp_update') {
                 _onCharacterHpUpdate(msg.data);
+            } else if (msg.type === 'resource_update') {
+                // v2.744.0 — keep the mini-sheet class-resource pip counts in
+                // sync when any client spends/restores a resource.
+                if (msg.data && typeof window._updateMiniResource === 'function') {
+                    try {
+                        window._updateMiniResource(
+                            msg.data.character_id, msg.data.key, msg.data.current);
+                    } catch (_) { /* mini-sheet may not be rendered */ }
+                }
             } else if (msg.type === 'character_death_save') {
                 _onCharacterDeathSave(msg.data);
             } else if (msg.type === 'character_roll_state') {
