@@ -627,6 +627,17 @@
                            style="width:54px;text-align:center;font-size:18px;font-weight:700;padding:4px 2px;">
                 </div>
                 {% endfor %}
+                {# v2.741.0 — 4d6-drop-lowest roller. Rolls server-side (audit +
+                   DICE_SEED), shows the six results with their dice, and fills
+                   STR..CHA in order (the player can then swap values + Save). #}
+                {% if char.campaign_id %}
+                <div style="flex-basis:100%;display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:4px;">
+                    <button type="button" id="ab-roll-4d6-btn" class="sheet-section-btn"
+                            data-url="/api/campaign/{{ char.campaign_id }}/character/{{ char.id }}/roll-abilities"
+                            title="Roll six scores with 4d6 drop lowest, then fill STR–CHA in order">🎲 Roll 4d6 (drop lowest)</button>
+                    <div id="ab-roll-4d6-result" style="font-size:12px;color:var(--s-mute);text-align:center;"></div>
+                </div>
+                {% endif %}
             </div>
             {% else %}
             {# View-only: hidden inputs so readField() still works for rolls #}
@@ -635,6 +646,43 @@
             {% endfor %}
             {% endif %}
         </fieldset>
+
+        {% if can_edit and char.campaign_id %}
+        <script>
+        (function () {
+            var btn = document.getElementById('ab-roll-4d6-btn');
+            if (!btn) return;
+            var ORDER = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+            btn.addEventListener('click', async function () {
+                var out = document.getElementById('ab-roll-4d6-result');
+                btn.disabled = true;
+                try {
+                    var r = await fetch(btn.dataset.url, {
+                        method: 'POST', credentials: 'include',
+                    });
+                    if (!r.ok) {
+                        if (out) out.textContent = 'Roll failed (' + r.status + ').';
+                        return;
+                    }
+                    var d = await r.json();
+                    var res = d.results || [];
+                    res.forEach(function (rr, i) {
+                        var inp = document.getElementById('ab-input-' + ORDER[i]);
+                        if (inp) inp.value = rr.score;
+                    });
+                    if (out) out.innerHTML = 'Rolled: ' + res.map(function (rr) {
+                        return '<strong>' + rr.score + '</strong> ('
+                            + rr.dice.join(',') + ' drop ' + rr.dropped + ')';
+                    }).join(' · ') + ' — assigned STR→CHA; reorder + Save.';
+                } catch (e) {
+                    if (out) out.textContent = 'Roll failed.';
+                } finally {
+                    btn.disabled = false;
+                }
+            });
+        })();
+        </script>
+        {% endif %}
 
         <fieldset>
             <legend>Saving Throws

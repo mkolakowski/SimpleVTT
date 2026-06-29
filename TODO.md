@@ -879,10 +879,8 @@ _(No open manually-added items — all moved to [`TODONE.md`](TODONE.md).)_
 
 ## Character Sheet
 
-### Ability Score Generation
-Two methods for players to generate ability scores during character creation:
-- **Point buy** — players spend a fixed pool of points (standard D&D 5e: 27 points, scores 8–15 before racial bonuses) with an interactive cost table shown in the sheet UI. Should enforce the budget in real time and show remaining points.
-- **Dice rolling** — roll 4d6 drop lowest for each attribute, with an in-sheet button per score and a "Re-roll all" option. Should show the individual dice results before committing. Optionally allow the GM to lock or unlock rerolls per campaign.
+### Ability Score Generation — point buy (dice rolling shipped v2.741.0)
+The **dice-rolling** method shipped in v2.741.0: the abilities edit view has a "🎲 Roll 4d6 (drop lowest)" button that rolls six scores server-side (via the dice engine, so DICE_SEED-reproducible), shows each score with its dice + dropped die, and fills STR→CHA for the player to reorder + Save (`POST /api/campaign/{cid}/character/{id}/roll-abilities`). **Remaining: point buy** — players spend a fixed 27-point pool (scores 8–15, standard cost table) with an interactive real-time budget in the sheet UI. Optional extra: a GM lock/unlock-rerolls campaign toggle.
 
 ### Class Resource Tracking in Mini-Sheet
 Review every D&D 5e class and subclass resource and surface the most commonly used ones in the mini-sheet panel. Current mini-sheet only shows HP and basic rolls. Resources to audit and add:

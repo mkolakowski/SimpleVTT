@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.741.0] - 2026-06-29 — "The Rolled Hero"
+
+**Schema version:** 85
+
+**Commit summary:** Ability-score dice roller — a "🎲 Roll 4d6 (drop lowest)" button on the sheet (the dice half of the Ability Score Generation backlog item).
+
+**Description:** Builds the dice-rolling method of the "Ability Score Generation" backlog item (point-buy remains). `POST /api/campaign/{cid}/character/{char_id}/roll-abilities` (GM or owner) rolls six ability scores via 4d6-drop-lowest through the shared dice engine (so `DICE_SEED` makes it reproducible) and returns each score with its four dice + the dropped die. It does **not** write the sheet — the abilities edit view's new **🎲 Roll 4d6 (drop lowest)** button calls it, shows each result (`15 (6,5,4 drop 2) · …`), and fills STR→CHA so the player can reorder the values and Save via the existing sheet-fields path (review-before-commit). Gated to `can_edit` + a campaign-scoped character.
+
+### Added
+- `app/routes/tabletop_routes.py` — `POST /api/campaign/{cid}/character/{char_id}/roll-abilities`.
+- `app/templates/sheet_dnd5e.html` — the Roll-4d6 button + results line + inline wiring in the abilities edit view.
+- `tests/harness/test_roll_abilities.py` (new, +2) — six 4d6-drop-lowest results (dice in 1–6, dropped = min, score = top-3 sum, 3–18) that don't mutate the sheet; unknown character → 404.
+
+### Schema
+- No schema change (still v85).
+
 ## [2.740.0] - 2026-06-29 — "The Persistent Window"
 
 **Schema version:** 85

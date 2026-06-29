@@ -119283,6 +119283,38 @@ async def upload_portrait(
     return {"ok": True, "portrait_url": char.portrait_url}
 
 
+@router.post("/api/campaign/{campaign_id}/character/{char_id}/roll-abilities")
+def roll_ability_scores(
+    campaign_id: int,
+    char_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.741.0 — roll a set of six ability scores via 4d6-drop-lowest (the
+    classic D&D method) through the shared dice engine (so DICE_SEED makes it
+    reproducible). Returns the six results with their individual dice + the
+    dropped die, for the sheet's "Roll abilities" tool — it does NOT write the
+    sheet; the player reviews + assigns, then saves via the existing
+    sheet-fields path. GM or the character's owner only.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    char = db.query(Character).filter(Character.id == char_id).first()
+    if not campaign or not char or char.campaign_id != campaign_id:
+        raise HTTPException(404, "Not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Cannot roll for this character")
+    results = []
+    for _ in range(6):
+        dice = [dice_mod.roll("1d6").total for _ in range(4)]
+        dropped = min(dice)
+        results.append({
+            "dice": sorted(dice, reverse=True),
+            "dropped": dropped,
+            "score": sum(dice) - dropped,
+        })
+    return {"ok": True, "method": "4d6-drop-lowest", "results": results}
+
+
 # ----------- API: token templates -----------
 
 _TMPL_IMG_DIR = Path(__file__).resolve().parent.parent / "static" / "uploads" / "token_templates"
