@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.755.0] - 2026-06-29 — "The Opening Door"
+
+**Schema version:** 87
+
+**Commit summary:** Maps 2.0 door open/close toggle — players + GM click a door to open or shut it, changing line of sight live.
+
+**Description:** Fourth slice of the walls arc, making doors interactive. New `POST /api/campaign/{cid}/map/{map_id}/door/{door_id}/toggle` (any campaign member — doors are for everyone, not just the GM) flips the matching door segment's `open` flag, persists (with `flag_modified` so the JSON column is tracked), and broadcasts `walls_update`. On the tabletop, a door segment is now clickable in normal play mode (not just GM edit mode): clicking it posts the toggle, and because `_walls_block_sight` treats a closed door as a sight-blocker but lets an open one pass, opening a door restores line of sight for everyone in real time. Wall segments stay non-interactive in play mode (only the GM deletes them in edit mode); doors re-enable hit-testing via their own `pointer-events` even though the overlay `<svg>` is `pointer-events:none`, so the rest of the canvas (pan / token drag) is unaffected.
+
+### Added
+- `app/routes/tabletop_routes.py` — `POST /map/{id}/door/{door_id}/toggle`.
+- `app/templates/tabletop.html` — door segments clickable in play mode → `toggleDoor` (the editor's delete-click stays GM-edit-mode only).
+- `tests/harness/test_door_toggle.py` (new, +3) — toggling a door flips line of sight (unseen↔seen) end-to-end; a non-GM player can toggle; unknown door → 404.
+
+### Schema
+- No schema change (still v87).
+
 ## [2.754.0] - 2026-06-29 — "The Stonemason's Hand"
 
 **Schema version:** 87

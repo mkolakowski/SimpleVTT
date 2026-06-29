@@ -124106,6 +124106,49 @@ async def set_map_walls(
     return {"ok": True, "map_id": m.id, "walls": walls}
 
 
+@router.post("/api/campaign/{campaign_id}/map/{map_id}/door/{door_id}/toggle")
+async def toggle_map_door(
+    campaign_id: int,
+    map_id: int,
+    door_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.755.0 — Maps 2.0: open/close a door segment. Any campaign member —
+    doors are interactive for players + GM (a closed door blocks line of sight
+    via `_walls_block_sight`; opening it restores it). Flips the matching
+    segment's ``open`` flag, persists, and broadcasts ``walls_update`` so every
+    client re-renders + the vision resolver sees the change. 404 if the id
+    isn't a door on this map."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    m = db.query(Map).filter(
+        Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404, "Map not found")
+    walls = list(m.walls or [])
+    did = str(door_id).strip()
+    target = next(
+        (w for w in walls
+         if isinstance(w, dict) and str(w.get("id")) == did and w.get("door")),
+        None)
+    if target is None:
+        raise HTTPException(404, "Door not found")
+    target["open"] = not bool(target.get("open"))
+    m.walls = walls
+    # Flag the JSON column dirty (in-place mutation of a JSON list isn't
+    # always tracked by SQLAlchemy).
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(m, "walls")
+    db.commit()
+    await hub.broadcast(campaign_id, {
+        "type": "walls_update",
+        "data": {"map_id": m.id, "walls": walls},
+    })
+    return {"ok": True, "door_id": did, "open": target["open"]}
+
+
 @router.post("/campaign/{campaign_id}/settings/maps/{map_id}/letterbox_color")
 async def settings_map_letterbox_color(
     campaign_id: int,

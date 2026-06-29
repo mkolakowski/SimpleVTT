@@ -2414,8 +2414,13 @@
             if (hit) {
                 ln.setAttribute('stroke', 'transparent');
                 ln.setAttribute('stroke-width', '16');
-                ln.style.pointerEvents = editMode ? 'stroke' : 'none';
-                ln.style.cursor = editMode ? 'pointer' : 'default';
+                // v2.755.0 — doors stay clickable in play mode (toggle open/
+                // close) for everyone; walls only in GM edit mode (delete).
+                // A pointer-events value on the line re-enables hit-testing
+                // even though the overlay <svg> is pointer-events:none.
+                var clickable = editMode || w.door;
+                ln.style.pointerEvents = clickable ? 'stroke' : 'none';
+                ln.style.cursor = clickable ? 'pointer' : 'default';
             } else {
                 var open = w.door && w.open;
                 ln.setAttribute('stroke', open ? '#46c46a' : (w.door ? '#d9a441' : '#e05a4a'));
@@ -2432,10 +2437,16 @@
                 svg.appendChild(mkLine(w, false));
                 var hit = mkLine(w, true);
                 hit.addEventListener('click', function (e) {
-                    if (!editMode) return;
-                    e.stopPropagation();
-                    walls = walls.filter(function (x) { return x.id !== w.id; });
-                    save();
+                    if (editMode) {
+                        // GM edit mode → delete the segment.
+                        e.stopPropagation();
+                        walls = walls.filter(function (x) { return x.id !== w.id; });
+                        save();
+                    } else if (w.door) {
+                        // Play mode → toggle the door open/closed (any member).
+                        e.stopPropagation();
+                        toggleDoor(w);
+                    }
                 });
                 svg.appendChild(hit);
             });
@@ -2471,6 +2482,15 @@
                 });
             } catch (e) {}
             render();  // optimistic; the walls_update WS will reconcile
+        }
+        async function toggleDoor(w) {
+            if (!mapId || !w || !w.id) return;
+            try {
+                await fetch('/api/campaign/' + CID + '/map/' + mapId
+                    + '/door/' + encodeURIComponent(w.id) + '/toggle',
+                    { method: 'POST' });
+                // walls_update WS re-renders for everyone.
+            } catch (e) {}
         }
         // Called by the walls_update WS handler in tabletop.js.
         window._onWallsUpdate = function (data) {
