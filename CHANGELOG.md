@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.737.0] - 2026-06-29 — "The Operator's Lens"
+
+**Schema version:** 85
+
+**Commit summary:** Surface the campaign activity report in the standalone Admin Center's campaign-detail page.
+
+**Description:** Brings the GM Reporting data (v2.730.0+) into the Admin Center (`:8015`) so operators can see per-campaign engagement without the tabletop. The campaign-detail page (`/campaigns/{id}`, admin-tools-gated) now renders an **Activity report** card — a one-line overview (sessions · events · attacks · spells · token moves + distance), a Most-active table, and a per-session table — reusing the same `stats_service.campaign_activity_report` aggregation the main app's report page uses (no duplication).
+
+### Added
+- `app/admin_center/main.py` — `admin_campaign_detail` passes `report` (from `stats_service.campaign_activity_report`) to the template.
+- `app/admin_center/templates/campaign_detail.html` — Activity report card.
+- `tests/harness/test_admin_center.py` (+1) — the campaign-detail page renders the Activity report card (authed, admin-tools on).
+
+### Schema
+- No schema change (still v85).
+
 ## [2.736.0] - 2026-06-29 — "The Named Hand"
 
 **Schema version:** 85

@@ -162,6 +162,36 @@
     {% endif %}
   </div>
 
+  {# v2.737.0 — campaign activity report (same aggregation as the main
+     app's GM Reporting page). Read-only; always shown. #}
+  <div class="card">
+    <h2>Activity report</h2>
+    <p class="muted" style="font-size:13px;">
+      {{ report.session_count }} session(s) · {{ report.total_events }} logged events ·
+      {{ report.events_by_type.get('attack', 0) }} attacks ·
+      {{ report.events_by_type.get('spell_cast', 0) }} spells ·
+      {{ report.total_moves }} token moves ({{ report.total_distance_ft }} ft)
+    </p>
+    {% if report.top_actors %}
+    <h3 style="font-size:14px;margin:10px 0 6px;">Most active</h3>
+    <table>
+      <thead><tr><th>Actor</th><th>Events</th></tr></thead>
+      <tbody>
+        {% for a in report.top_actors %}<tr><td>{{ a.name }}</td><td>{{ a.events }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    {% if report.per_session %}
+    <h3 style="font-size:14px;margin:12px 0 6px;">Per session</h3>
+    <table>
+      <thead><tr><th>Session</th><th>Events</th><th>Damage</th><th>Healing</th></tr></thead>
+      <tbody>
+        {% for s in report.per_session %}<tr><td>{{ s.session_key or '—' }}</td><td>{{ s.events }}</td><td>{{ s.damage_dealt }}</td><td>{{ s.heal_done }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted">No logged activity yet.</p>{% endif %}
+  </div>
+
   <div class="card danger">
     <h2>Delete campaign</h2>
     {% if mfa_verified %}

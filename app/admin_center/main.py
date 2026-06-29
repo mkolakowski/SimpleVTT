@@ -1267,12 +1267,17 @@ def admin_campaign_detail(request: Request, campaign_id: int, done: str = "", er
     from . import campaign_admin
     from ..database import SessionLocal
     from ..game_systems import system_choices
+    from .. import stats_service
     db = SessionLocal()
     try:
         try:
             detail = campaign_admin.get_campaign_detail(db, campaign_id)
         except campaign_admin.CampaignAdminError as exc:
             return RedirectResponse(f"/campaigns?err={quote(str(exc))}", status_code=303)
+        # v2.737.0 — campaign activity report (same data as the main app's
+        # GM Reporting page), surfaced here so operators can see per-campaign
+        # engagement without the tabletop.
+        report = stats_service.campaign_activity_report(db, campaign_id)
         return templates.TemplateResponse(
             "campaign_detail.html",
             {
@@ -1289,6 +1294,7 @@ def admin_campaign_detail(request: Request, campaign_id: int, done: str = "", er
                 "system_choices": system_choices(),
                 "mfa_verified": _mfa_verified(request),
                 "mfa_enabled": mfa.mfa_enabled(),
+                "report": report,
                 "done": done,
                 "err": err,
             },

@@ -1966,3 +1966,21 @@ def test_feedback_page_renders_and_nav_tab_present():
         assert "Feedback" in page.text
         assert "Reports (" in page.text          # the table header
         assert 'href="/feedback?kind=issue"' in page.text  # a filter chip
+
+
+# ── Campaign activity report on the detail page — v2.737.0 ──
+
+@_LIVE
+def test_campaign_detail_shows_activity_report():
+    """Authed (admin-tools on): the Admin Center campaign-detail page renders
+    the Activity report card. Skipped if admin tools are disabled."""
+    with httpx.Client(base_url=ADMIN_BASE_URL, timeout=10.0, follow_redirects=False) as c:
+        r = c.post("/login", data={
+            "username": _ADMIN_USER, "password": _ADMIN_PASS, "next": "/"})
+        _complete_mfa_if_pending(c, r)
+        detail = c.get("/campaigns/1", follow_redirects=False)
+        if detail.status_code != 200:
+            pytest.skip("admin tools disabled or campaign 1 absent")
+        assert "Activity report" in detail.text
+        # The report's overview line is present (sessions / events summary).
+        assert "logged events" in detail.text
