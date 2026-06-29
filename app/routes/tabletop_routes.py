@@ -17334,6 +17334,51 @@ def campaign_report(
     return {"ok": True, **stats_service.campaign_activity_report(db, campaign_id)}
 
 
+@router.get("/campaign/{campaign_id}/report/session", response_class=HTMLResponse)
+def campaign_report_session_page(
+    campaign_id: int,
+    request: Request,
+    key: str = "",
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.735.0 — per-session drill-down from the activity report. `key` is
+    the (URL-encoded) session_key, passed as a query param since session keys
+    are ISO timestamps (with `:` / `+`). GM-only."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(404, "Not found")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    detail = stats_service.session_detail(db, campaign_id, key)
+    return templates.TemplateResponse(
+        "campaign_report_session.html",
+        {
+            "request": request,
+            "user": user,
+            "campaign": campaign,
+            "is_gm": True,
+            "detail": detail,
+        },
+    )
+
+
+@router.get("/api/campaign/{campaign_id}/report/session")
+def campaign_report_session(
+    campaign_id: int,
+    key: str = "",
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.735.0 — JSON per-session drill-down (GM-only)."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    return {"ok": True, **stats_service.session_detail(db, campaign_id, key)}
+
+
 @router.get("/campaign/{campaign_id}/stats", response_class=HTMLResponse)
 def campaign_stats_page(
     campaign_id: int,

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}{{ campaign.name }} — Session report{% endblock %}
+{% block content %}
+<div style="max-width:1000px;margin:0 auto;padding:0 28px;">
+<style>
+  .rep-head { display:flex; align-items:baseline; justify-content:space-between;
+    flex-wrap:wrap; gap:12px; margin:18px 0 14px; }
+  .rep-head h1 { margin:0; font-size:20px; }
+  .rep-head a { font-size:13px; }
+  .rep-card { border:1px solid var(--border); border-radius:8px; background:var(--bg-2);
+    padding:16px 18px; margin-bottom:18px; }
+  .rep-card h2 { margin:0 0 12px; font-size:16px; }
+  .rep-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; }
+  .rep-tile { border:1px solid var(--border); border-radius:8px; padding:12px 14px; text-align:center; }
+  .rep-tile .n { font-size:26px; font-weight:800; color:var(--accent); line-height:1; }
+  .rep-tile .l { font-size:12px; color:var(--fg-mute); margin-top:6px; }
+  .rep-card table { width:100%; border-collapse:collapse; font-size:13px; }
+  .rep-card th, .rep-card td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); }
+  .rep-card th { color:var(--fg-mute); font-weight:600; }
+  .muted { color:var(--fg-mute); }
+</style>
+
+<div class="rep-head">
+  <h1>🗓 Session report <span class="muted" style="font-size:14px;">{{ detail.session_key or '—' }}</span></h1>
+  <a href="/campaign/{{ campaign.id }}/report">← All sessions</a>
+</div>
+
+<div class="rep-card">
+  <h2>Totals</h2>
+  <div class="rep-grid">
+    <div class="rep-tile"><div class="n">{{ detail.total_events }}</div><div class="l">Events</div></div>
+    <div class="rep-tile"><div class="n">{{ detail.total_damage_dealt }}</div><div class="l">Damage dealt</div></div>
+    <div class="rep-tile"><div class="n">{{ detail.total_heal_done }}</div><div class="l">Healing done</div></div>
+    <div class="rep-tile"><div class="n">{{ detail.total_moves }}</div><div class="l">Token moves</div></div>
+    <div class="rep-tile"><div class="n">{{ detail.total_distance_ft }} ft</div><div class="l">Distance moved</div></div>
+  </div>
+</div>
+
+<div class="rep-card">
+  <h2>Most active</h2>
+  {% if detail.top_actors %}
+  <table>
+    <thead><tr><th>Actor</th><th>Events</th></tr></thead>
+    <tbody>
+      {% for a in detail.top_actors %}<tr><td>{{ a.name }}</td><td>{{ a.events }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">No actors recorded for this session.</p>{% endif %}
+</div>
+
+<div class="rep-card">
+  <h2>Recent events{% if detail.recent_events %} ({{ detail.recent_events | length }}){% endif %}</h2>
+  {% if detail.recent_events %}
+  <table>
+    <thead><tr><th>When</th><th>Actor</th><th>Event</th><th>Amount</th><th>Target</th></tr></thead>
+    <tbody>
+      {% for e in detail.recent_events %}
+      <tr>
+        <td><span class="muted">{{ (e.created_at[:16] | replace('T', ' ')) if e.created_at else '' }}</span></td>
+        <td>{{ e.actor_name }}</td>
+        <td>{{ e.event_type }}</td>
+        <td>{{ e.amount if e.amount is not none else '' }}</td>
+        <td>{{ e.target_name }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">No events logged in this session.</p>{% endif %}
+</div>
+</div>
+{% endblock %}

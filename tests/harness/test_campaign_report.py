@@ -64,6 +64,42 @@ async def test_token_move_is_logged_in_report(gm_client):
             f"/api/campaign/{CAMPAIGN_ID}/tokens/{tok['id']}")
 
 
+async def _a_session_key(gm_client):
+    rep = (await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/report")).json()
+    sess = rep.get("per_session") or []
+    return sess[0]["session_key"] if sess else "1970-01-01"
+
+
+async def test_session_detail_json(gm_client):
+    """v2.735.0 — the per-session drill-down JSON (GM-only)."""
+    key = await _a_session_key(gm_client)
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/report/session", params={"key": key})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert {"session_key", "total_events", "events_by_type", "top_actors",
+            "recent_events", "total_moves", "total_distance_ft"}.issubset(body)
+    assert body["session_key"] == key
+    assert isinstance(body["recent_events"], list)
+
+
+async def test_session_detail_page_renders(gm_client):
+    key = await _a_session_key(gm_client)
+    r = await gm_client.get(
+        f"/campaign/{CAMPAIGN_ID}/report/session", params={"key": key})
+    assert r.status_code == 200, r.text
+    assert "Session report" in r.text
+
+
+async def test_session_detail_requires_gm(alice_client):
+    j = await alice_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/report/session", params={"key": "x"})
+    assert j.status_code == 403, j.text
+    p = await alice_client.get(
+        f"/campaign/{CAMPAIGN_ID}/report/session", params={"key": "x"})
+    assert p.status_code == 403, p.text
+
+
 async def test_report_requires_gm(alice_client):
     """A non-GM campaign member can't read the report (JSON or page)."""
     j = await alice_client.get(f"/api/campaign/{CAMPAIGN_ID}/report")

@@ -235,6 +235,81 @@ def campaign_activity_report(db: Session, campaign_id: int) -> dict:
     }
 
 
+def session_detail(db: Session, campaign_id: int, session_key: str) -> dict:
+    """v2.735.0 — drill-down detail for one session: its event mix, most-active
+    actors, headline totals (damage/heal/moves/distance), and a recent-events
+    list. Backs the per-session view linked from the activity report."""
+    scope = (
+        db.query(_Ev)
+        .filter(_Ev.campaign_id == campaign_id, _Ev.session_key == session_key)
+    )
+    total_events = scope.count()
+
+    type_rows = (
+        db.query(_Ev.event_type, func.count().label("n"))
+        .filter(_Ev.campaign_id == campaign_id, _Ev.session_key == session_key)
+        .group_by(_Ev.event_type)
+        .all()
+    )
+    events_by_type = {r.event_type: int(r.n) for r in type_rows}
+
+    actor_rows = (
+        db.query(_Ev.actor_name, func.count().label("n"))
+        .filter(
+            _Ev.campaign_id == campaign_id, _Ev.session_key == session_key,
+            _Ev.actor_name.isnot(None), _Ev.actor_name != "",
+        )
+        .group_by(_Ev.actor_name)
+        .order_by(func.count().desc())
+        .limit(15)
+        .all()
+    )
+    top_actors = [{"name": r.actor_name, "events": int(r.n)} for r in actor_rows]
+
+    tot = (
+        db.query(
+            _coalesce_sum("damage_dealt").label("dd"),
+            _coalesce_sum("heal_done").label("hd"),
+            func.count().filter(_Ev.event_type == "token_move").label("moves"),
+            func.coalesce(
+                func.sum(_Ev.amount).filter(_Ev.event_type == "token_move"), 0
+            ).label("dist"),
+        )
+        .filter(_Ev.campaign_id == campaign_id, _Ev.session_key == session_key)
+        .first()
+    )
+
+    recent = (
+        db.query(_Ev)
+        .filter(_Ev.campaign_id == campaign_id, _Ev.session_key == session_key)
+        .order_by(_Ev.created_at.desc())
+        .limit(150)
+        .all()
+    )
+    recent_events = [
+        {
+            "actor_name": e.actor_name or "—",
+            "event_type": e.event_type,
+            "amount": e.amount,
+            "target_name": e.target_name or "",
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+        }
+        for e in recent
+    ]
+
+    return {
+        "session_key": session_key,
+        "total_events": int(total_events),
+        "events_by_type": events_by_type,
+        "top_actors": top_actors,
+        "total_damage_dealt": int(tot.dd or 0) if tot else 0,
+        "total_heal_done": int(tot.hd or 0) if tot else 0,
+        "total_moves": int(tot.moves or 0) if tot else 0,
+        "total_distance_ft": int(tot.dist or 0) if tot else 0,
+        "recent_events": recent_events,
+    }
+
+
 def actor_char_ids(db: Session, campaign_id: int) -> list[int]:
     """Distinct non-null actor character ids that have any stat events in
     the campaign — the GM-view roster of who has recorded stats."""

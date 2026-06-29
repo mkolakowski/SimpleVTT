@@ -75,7 +75,7 @@
     <tbody>
       {% for s in report.per_session %}
       <tr>
-        <td>{{ s.session_key or '—' }}</td>
+        <td><a href="/campaign/{{ campaign.id }}/report/session?key={{ s.session_key | urlencode }}">{{ s.session_key or '—' }}</a></td>
         <td><span class="muted">{{ (s.first[:16] | replace('T', ' ')) if s.first else '' }}</span></td>
         <td>{{ s.events }}</td>
         <td>{{ s.damage_dealt }}</td>

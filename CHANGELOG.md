@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.735.0] - 2026-06-29 — "The Session Ledger"
+
+**Schema version:** 85
+
+**Commit summary:** Per-session drill-down on the GM activity report — each session row links to its own detail page (totals, most-active, recent events).
+
+**Description:** Extends the v2.730.0 GM Reporting page. Each per-session row in the activity report is now a link to `/campaign/{cid}/report/session?key=<session_key>` — a session detail view showing that session's totals (events / damage / healing / token moves / distance), its most-active actors, and a recent-events table (actor · event · amount · target · time, newest 150). Backed by `stats_service.session_detail` + a JSON `GET /api/campaign/{cid}/report/session`. The session key is passed as a query param (session keys are ISO timestamps with `:`/`+`, unsafe in a path). GM-only (404 to non-members, 403 to non-GM).
+
+### Added
+- `app/stats_service.py` — `session_detail()`.
+- `app/routes/tabletop_routes.py` — `GET /campaign/{cid}/report/session` (page) + `GET /api/campaign/{cid}/report/session` (JSON).
+- `app/templates/campaign_report_session.html`; per-session rows in `campaign_report.html` now link to it.
+- `tests/harness/test_campaign_report.py` (+3) — session-detail JSON shape (echoes the key); page renders; non-GM → 403 (JSON + page).
+
+### Schema
+- No schema change (still v85).
+
 ## [2.734.0] - 2026-06-28 — "The Paper Trail Walks"
 
 **Schema version:** 85
