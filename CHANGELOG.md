@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.751.1] - 2026-06-29 — "The Standing Roster"
+
+**Schema version:** 86
+
+**Commit summary:** Doc reconciliation — three more shipped backlog items (User Presence, Aura of Courage, Indomitable) moved to TODONE (no code change).
+
+**Description:** A verify-before-build sweep of the Player Features + Class Features backlog sections, mirroring the v2.745.1 Combat sweep. Three items were still listed as pending/in-progress but are fully shipped and (where applicable) test-covered: **User Presence on the Tabletop** (`presence_update` broadcast in `realtime.py` + the `_renderPresence` presence pills, v2.9.1 — core scope done, cursor/idle stretch deferred), **Paladin Aura of Courage** (`_ally_has_aura_of_courage` frightened-immunity gate + `test_aura_of_courage.py`), and **Fighter Indomitable** (`/use_indomitable` + the `2d20kh1` save hook + three tests; the "IN PROGRESS as v2.56.0" marker was stale). Moved all three to `TODONE.md` with their evidence and trimmed the `TODO.md` entries to one-line pointers; demo-roster level bumps (Caelan→10, Garrik→9) are noted as separate content tasks, and the Indomitable RAW-divergence stays tracked as B10. No behavior change.
+
+### Changed
+- `TODONE.md` — new "Player Features — shipped" section (User Presence) + two class-feature reconciliation bullets (Aura of Courage, Indomitable).
+- `TODO.md` — the three entries trimmed to shipped pointers.
+
+### Schema
+- No schema change (still v86).
+
 ## [2.751.0] - 2026-06-29 — "The Owl and the Raven"
 
 **Schema version:** 86

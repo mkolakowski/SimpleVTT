@@ -947,15 +947,8 @@ Allow GMs to create playlists from tracks already uploaded to the campaign rathe
 
 ## Player Features
 
-### User Presence on the Tabletop
-Show who is currently connected to the session in real time. All connected users (GM and players) should be able to see at a glance which other players are online, idle, or have disconnected. Planned scope:
-
-- **Presence indicators** — a small online/offline dot (or avatar badge) next to each player's name in the player list and/or initiative tracker. Green = connected, grey = disconnected. Optional: amber = connected but idle (no interaction for N minutes).
-- **WebSocket lifecycle hooks** — on connect, broadcast a `presence_join` message to all clients; on disconnect (or WebSocket close), broadcast `presence_leave`. Clients maintain a local presence map and update the UI reactively.
-- **Cursor / active-token highlight** (stretch) — show a faint coloured ring or name label on the token currently being hovered or dragged by another user, similar to Google Docs cursor presence.
-- **GM view** — the GM's player list should show presence state for every campaign member, including those who haven't joined the current session yet (shown as offline).
-
-Backend: presence state is ephemeral (in-memory in `realtime.py`, not persisted to the database) — it resets when the server restarts, which is acceptable.
+### User Presence on the Tabletop ✅ (core shipped v2.9.1)
+Core shipped — `realtime.py` broadcasts `presence_update` on connect/disconnect + the tabletop renders live presence pills (`_renderPresence`). See [`TODONE.md`](TODONE.md) → Player Features. *Remaining stretch:* Google-Docs-style cursor / hovered-token presence + an amber idle state.
 
 ---
 
@@ -1029,15 +1022,7 @@ Performance note from v2.49.139: each `backdrop-filter` element triggers a compo
 
 ## Class Features (next cycle)
 
-### Paladin Aura of Courage (Lv 10)
-Same shape as Aura of Protection (v2.53.0) and Aura of Devotion (v2.55.0) — `_ally_has_aura_of_courage(db, campaign_id, saving_char_id)` walks init for any Paladin Lv 10+ in any oath. RAW: "you and friendly creatures within 10 feet of you can't be frightened while you are conscious." This is a **condition-install immunity** gate matching the Aura of Devotion pattern, just with "frightened" as the blocked condition key (instead of "charmed"). Wire the same way: gate at `/roll_request/{id}/respond`'s PC-failed-save condition-install block, skip install + broadcast `feature_used(source=aura-of-courage)` when `cond.key == "frightened"` and a Paladin Lv 10+ is in init.
-
-**Caelan bump**: 7 → 10. **Three levels** of cascading changes — prof bonus +3 → +4 (changes at Lv 9), HP +24, Lay on Hands pool 35 → 50, spell slots gain L3 (4/3/2 instead of 4/3/0). The prof bump breaks existing attack-bonus assertions in `test_attack.py::test_attack_divine_smite_spends_slot` (Longsword +6 → +7 because STR +3 + prof +4 = +7) — needs an audit-and-fix pass; this latent test-coupling hazard is tracked as **B9 in [`BUGS.md`](BUGS.md)**. **Recommended scope**: bundle Aura of Courage with the Caelan bump so the slot-pool / damage-die scaling lands once. Defer Aura of Devotion's Lv 18 30-ft radius expansion — same helper, larger gate, different commit.
-
-Filed by v2.55.0 when the user picked Indomitable as the next implementation target. Pick this up after Indomitable ships.
-
-### Fighter Indomitable (Lv 9+) — IN PROGRESS as v2.56.0 "Iron Will"
-Garrik bump 7 → 9 (prof +3 → +4, HP +14, Second Wind 1d10+9). New `/use_indomitable` endpoint installs a single-use `indomitable-armed` self-buff; the save-roll construction hook reads the buff, swaps `1d20 → 2d20kh1`, and removes the buff from the combatant so the consumption is per-save (RAW: one specific reroll). RAW-bent v1: advantage on the next save rather than reroll-on-failure, since the post-roll reroll flow needs an undo-and-reapply path for installed conditions which is its own substantial commit. The accepted divergence + the precise post-roll reroll follow-up is tracked as **B10 in [`BUGS.md`](BUGS.md)**.
+_**Aura of Courage** + **Indomitable** feature automation both shipped — see [`TODONE.md`](TODONE.md) → Full Class-Feature Automation. (`_ally_has_aura_of_courage` + `test_aura_of_courage.py`; `/use_indomitable` + `test_use_indomitable*.py`.) The accepted Indomitable RAW-divergence (advantage vs. post-roll reroll) is tracked as **B10 in [`BUGS.md`](BUGS.md)**; any demo-roster level bumps (Caelan→10, Garrik→9) are separate content tasks._
 
 ---
 
