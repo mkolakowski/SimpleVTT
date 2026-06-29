@@ -119343,6 +119343,76 @@ async def set_ability_rolls_lock(
     return {"ok": True, "locked": campaign.ability_rolls_locked}
 
 
+def _parse_monster_action_desc(desc: str) -> dict:
+    """v2.745.0 — regex-extract structured attack fields from a pasted
+    SRD-style action description, for the homebrew-monster Actions editor's
+    "Parse from description" helper. Best-effort: every field is optional and
+    blank when not found. Mirrors the to-hit regex already used at
+    projection time in ``_monster_template_to_sheet``.
+
+    Recognises the canonical stat-block phrasing, e.g.:
+        "Melee Weapon Attack: +5 to hit, reach 5 ft., one target.
+         Hit: 7 (1d8 + 3) slashing damage."
+        "DC 15 Dexterity saving throw, taking 22 (5d8) fire damage ..."
+    """
+    import re as _re
+    out = {
+        "attack_roll": False, "attack_bonus": "", "damage": "",
+        "damage_type": "", "save_dc": None, "save_ability": "",
+        "reach": "", "range": "",
+    }
+    text = (desc or "").strip()
+    if not text:
+        return out
+
+    m = _re.search(r"([+-]\d+)\s*to hit", text, _re.I)
+    if m:
+        out["attack_bonus"] = m.group(1)
+        out["attack_roll"] = True
+
+    # Damage: prefer the parenthesised "(NdM + K)" average form, else a bare
+    # "NdM + K <type> damage" phrase.
+    dmg = _re.search(
+        r"\(\s*(\d+d\d+(?:\s*[+-]\s*\d+)?)\s*\)\s*(\w+)\s+damage", text, _re.I)
+    if not dmg:
+        dmg = _re.search(
+            r"(\d+d\d+(?:\s*[+-]\s*\d+)?)\s+(\w+)\s+damage", text, _re.I)
+    if dmg:
+        out["damage"] = _re.sub(r"\s+", "", dmg.group(1))
+        out["damage_type"] = dmg.group(2).lower()
+
+    sv = _re.search(
+        r"DC\s+(\d+)\s+([A-Za-z]+)\s+(?:saving throw|save)", text, _re.I)
+    if sv:
+        out["save_dc"] = int(sv.group(1))
+        out["save_ability"] = sv.group(2)[:3].upper()
+
+    rch = _re.search(r"reach\s+(\d+)\s*ft", text, _re.I)
+    if rch:
+        out["reach"] = f"{rch.group(1)} ft."
+    rng = _re.search(r"range\s+(\d+(?:/\d+)?)\s*ft", text, _re.I)
+    if rng:
+        out["range"] = f"{rng.group(1)} ft."
+    return out
+
+
+@router.post("/api/parse-monster-action")
+async def parse_monster_action(
+    request: Request,
+    user: User = Depends(require_user),
+):
+    """v2.745.0 — GM authoring helper: turn a pasted SRD-style action
+    description into structured attack fields (to-hit, damage, damage type,
+    save DC/ability, reach/range). Stateless text parsing — no campaign data —
+    so the homebrew-monster Actions editor's "Parse from description" button
+    can pre-fill the form. Body: ``{"desc": "<text>"}``."""
+    body = await request.json()
+    desc = str(body.get("desc") or "").strip()
+    if not desc:
+        raise HTTPException(400, "desc is required")
+    return {"ok": True, "parsed": _parse_monster_action_desc(desc)}
+
+
 # ----------- API: token templates -----------
 
 _TMPL_IMG_DIR = Path(__file__).resolve().parent.parent / "static" / "uploads" / "token_templates"

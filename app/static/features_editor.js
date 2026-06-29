@@ -186,6 +186,52 @@
             inputs.saveAbilitySel = saveAbilitySel.select;
             inputs.saveDcInput = saveDcInput.input;
             inputs.chargesInput = chargesInput.input;
+
+            // v2.745.0 — "Parse from description" helper. Regex-extracts the
+            // structured attack fields from the row's pasted SRD-style desc
+            // (server-side via /api/parse-monster-action) so authoring a
+            // homebrew monster's attacks doesn't mean retyping every field.
+            const parseWrap = document.createElement('label');
+            parseWrap.style.cssText = 'grid-column:1 / span 3;display:flex;align-items:center;gap:8px;margin-top:4px;';
+            const parseBtn = document.createElement('button');
+            parseBtn.type = 'button';
+            parseBtn.className = 'sheet-section-btn';
+            parseBtn.textContent = '✨ Parse from description';
+            parseBtn.title = 'Fill To-hit / Damage / Type / Save from the description text above';
+            const parseStatus = document.createElement('span');
+            parseStatus.style.cssText = 'font-size:11px;color:var(--fg-mute);';
+            parseBtn.addEventListener('click', async () => {
+                const desc = (descTa.value || '').trim();
+                if (!desc) { parseStatus.textContent = 'Add a description first.'; return; }
+                parseBtn.disabled = true;
+                try {
+                    const r = await fetch('/api/parse-monster-action', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ desc }),
+                    });
+                    if (!r.ok) { parseStatus.textContent = 'Parse failed (' + r.status + ').'; return; }
+                    const p = (await r.json()).parsed || {};
+                    const filled = [];
+                    if (p.attack_roll) { attackRollCb.checked = true; }
+                    if (p.attack_bonus) { attackBonusInput.input.value = p.attack_bonus; filled.push('to-hit'); }
+                    if (p.damage) { damageInput.input.value = p.damage; filled.push('damage'); }
+                    if (p.damage_type) { damageTypeSel.select.value = p.damage_type; filled.push('type'); }
+                    if (p.save_ability) { saveAbilitySel.select.value = p.save_ability; filled.push('save'); }
+                    if (p.save_dc) { saveDcInput.input.value = p.save_dc; filled.push('DC'); }
+                    parseStatus.textContent = filled.length
+                        ? 'Filled: ' + filled.join(', ') + '. Review + Save.'
+                        : 'Nothing recognized — fill the fields manually.';
+                } catch (e) {
+                    parseStatus.textContent = 'Parse failed.';
+                } finally {
+                    parseBtn.disabled = false;
+                }
+            });
+            parseWrap.appendChild(parseBtn);
+            parseWrap.appendChild(parseStatus);
+            row.appendChild(parseWrap);
         }
 
         row._inputs = inputs;

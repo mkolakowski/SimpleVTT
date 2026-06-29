@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.745.0] - 2026-06-29 — "The Stat-Block Whisperer"
+
+**Schema version:** 86
+
+**Commit summary:** Homebrew-monster "Parse from description" helper — a ✨ button that fills the structured attack fields from a pasted SRD-style action description.
+
+**Description:** Closes the optional bonus on the homebrew-monster-attack-fields backlog item. The structured-action editor (`features_editor.js`, used to author homebrew monster Actions + class features) gains a **✨ Parse from description** button on each attack row. It posts the row's description to the new stateless `POST /api/parse-monster-action` (authed), which regex-extracts the structured fields: `+N to hit` → To-hit (and ticks the Attack-roll box), `(NdM + K) <type> damage` → Damage + Type, `DC N <ability> saving throw` → Save DC + ability, plus reach/range. The parsed values pre-fill the form for review before Save, so importing a homebrew monster no longer means retyping every field by hand. Recognises melee/ranged weapon attacks and save-based effects (breath weapons, etc.).
+
+### Added
+- `app/routes/tabletop_routes.py` — `_parse_monster_action_desc()` + `POST /api/parse-monster-action`.
+- `app/static/features_editor.js` — ✨ Parse-from-description button on each action row, fills To-hit / Damage / Type / Save.
+- `tests/harness/test_parse_monster_action.py` (new, +4) — melee attack, save-based breath weapon, ranged `range` field, empty desc → 400.
+
+### Schema
+- No schema change (still v86).
+
 ## [2.744.1] - 2026-06-29 — "The Standing Reconciliation"
 
 **Schema version:** 86
