@@ -916,6 +916,8 @@ Licensing requirements: CC0 or CC BY with attribution in a bundled `CREDITS.md`.
 ### Maps 2.0 — Advanced Map Features
 Extends the existing battle map canvas with GM-controlled environmental features. Builds on the Map Editor Framework groundwork below; these items represent the prioritised feature set for a Maps 2.0 milestone.
 
+> **Partial:** **Combat movement locking** shipped (the `/token/{id}/move` speed cap — `over_speed_cap` 409 + `_effective_speed_walk`, integrated with the action economy). **Fog of war** shipped at a token-visibility level (v2.64.0 F2 per-user hidden filter + the v2.704.0+ Vision & Light line-of-sight overlay). **Still open:** GM-placed **walls & doors** + the **dedicated wall editor** (vision edges currently come from the lighting model, not stored wall segments) and **clickable map items / hotspots**.
+
 - **Combat movement locking** — when a combat encounter is active, token movement is capped at the character's speed (in feet). Each move broadcasts the distance consumed; the token becomes unmovable once the movement budget is exhausted for that turn. Requires grid scale (ft per square/hex) to be set on the map. Integrates with Combat 2.0 action economy tracking.
 - **Fog of war** — GM-controlled per-cell reveal overlay. Players see black/obscured cells until the GM reveals them. Two modes: manual brush reveal (GM paints explored areas) and auto-reveal based on token line-of-sight. GM always sees the full map.
 - **Walls & doors** — the GM places wall segments (line tools) directly on the battle map. Wall data is saved at the map level (not per-encounter) so the same map always loads with its walls intact. Doors are interactive wall segments: players and GMs can toggle them open/closed, which updates the fog-of-war LOS calculation in real time.
@@ -930,8 +932,8 @@ Groundwork for in-browser map authoring tools. Planned capabilities:
 - **Clickable items** — hotspots on the map that trigger a description popup or roll prompt
 - **Multi-map encounters** — link multiple maps into a single encounter (e.g. interior/exterior transitions) without switching the active map for the whole campaign
 
-### Lighting
-GM can place different kinds of light sources on the map — torches, lanterns, campfires, magical lights — each with their own radius, colour, and behaviour. Flicker animation for fire-based sources (gentle brightness/radius oscillation), steady glow for magical lights, etc. Integrates with fog of war and player vision: tokens illuminate the area around them based on attached lights, and players only see what their token's light source(s) cover (plus any GM-revealed fog area). The GM has full visibility regardless. Stretch goals: ambient map-wide lighting (day/night/dim), per-token vision types (darkvision out to N ft as dim light, blindsight ignoring lighting entirely), and "extinguish" interaction on placed lights. Builds on the Maps 2.0 / Map Editor Framework groundwork above — both fog-of-war LOS and wall segments need to land first so lighting can compute shadows correctly.
+### Lighting ✅ (shipped v2.704.0–v2.710.0)
+Shipped as the Vision & Light engine — light emitters (radius/colour/falloff), magical Darkness/Daylight/Fog, per-token vision senses (darkvision/blindsight/truesight), ambient levels, and the client dynamic-lighting overlay. See [`TODONE.md`](TODONE.md) → Maps & Map Editor + [`vision-and-light.md`](docs/plans/vision-and-light.md). *Not done:* wall-occlusion shadows (vision edges come from the lighting model, not GM-placed walls — see the Maps 2.0 walls item) + fire flicker animation.
 
 ---
 
@@ -940,8 +942,8 @@ GM can place different kinds of light sources on the map — torches, lanterns, 
 ### Resources
 A dedicated section for GMs and admins to upload documents (PDFs, images, handouts) that players can view directly in the browser — inline PDF rendering, no download required. Needs access control so GMs can choose whether a resource is visible to all players or GM-only.
 
-### Playlist Builder with Existing Songs
-Allow GMs to create playlists from tracks already uploaded to the campaign rather than re-uploading. UI: a picker listing existing campaign audio tracks, drag-to-reorder, save as a named playlist. Backend: new playlist model + endpoints; guard file deletion to prevent removing audio that is still referenced by a playlist.
+### Playlist Builder with Existing Songs ✅ (shipped)
+Shipped — `Playlist` + `PlaylistTrack` models + campaign playlist endpoints (`create_playlist`, rename, tags, description, track ordering) in `audio_routes.py`, built from already-uploaded tracks, with referenced-track deletion guarded. See [`TODONE.md`](TODONE.md) → Media & Content.
 
 ---
 

@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.751.2] - 2026-06-29 — "The Surveyor's Pass"
+
+**Schema version:** 86
+
+**Commit summary:** Doc reconciliation — Maps/Media backlog: Lighting + Playlist Builder shipped; Maps 2.0 partial state recorded (no code change).
+
+**Description:** Continues the verify-before-build sweep into the Maps & Map Editor + Media & Content sections. Two items are fully shipped and were moved to `TODONE.md`: **Lighting** (the Vision & Light engine, v2.704.0–v2.710.0 — emitters, magical Darkness/Daylight/Fog, per-token senses, ambient levels, client overlay) and **Playlist Builder with Existing Songs** (`Playlist`/`PlaylistTrack` models + the `audio_routes.py` playlist endpoints). The **Maps 2.0** entry was annotated with its real partial state rather than reconciled wholesale: **combat movement locking** (the move-endpoint speed cap) and **fog of war** (v2.64.0 + the Vision & Light LOS overlay) shipped, while GM-placed **walls & doors**, the **wall editor**, and **clickable map items** are genuinely still open (vision edges come from the lighting model, not stored wall segments — verified, not assumed). No behavior change.
+
+### Changed
+- `TODONE.md` — new "Maps & Map Editor — shipped" (Lighting) + "Media & Content — shipped" (Playlist Builder) sections.
+- `TODO.md` — Lighting + Playlist Builder trimmed to shipped pointers; Maps 2.0 annotated with its partial (shipped vs. open) breakdown.
+
+### Schema
+- No schema change (still v86).
+
 ## [2.751.1] - 2026-06-29 — "The Standing Roster"
 
 **Schema version:** 86

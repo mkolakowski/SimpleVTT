@@ -150,6 +150,14 @@ Nearly all 24 buttons share the same inline style (`font-size:11px; padding:2px 
 
 - ✅ **DONE (already shipped; verified + regression-guarded v2.727.1)** — **GM Access to All Character Sheets.** Was filed as a GM-Tools ask but is already fully implemented: `GET /campaign/{cid}/character/{char_id}/sheet` (`character_sheet_page`) lets any campaign member view a character and the GM/owner edit it — no ownership gate on viewing (`can_edit = is_gm or owner`). The GM reaches it from three UI entry points: the Characters-drawer "Open full sheet →" link (`_mini_sheet_card.html`, shown for every PC since the panel renders all PCs for the GM), the init-tracker "📋 Sheet" link, and right-click-token. Locked in by `tests/harness/test_gm_view_character_sheet.py` (GM views any/player-owned sheet → 200; member can view; unknown → 404). Stale-in-backlog only — caught during the v2.727.x topic-feature sweep.
 
+## Maps & Map Editor — shipped
+
+- ✅ **DONE (v2.704.0–v2.710.0)** — **Lighting.** The Vision & Light engine ships GM-placed light emitters (radius + colour + bright/dim falloff), magical Darkness / Daylight / Fog emitters, per-token vision senses (darkvision/blindsight/truesight), ambient bright/dim/dark levels, and the client dynamic-lighting canvas overlay — players see only what their token's senses + light reach; the GM sees all. Plan: [`vision-and-light.md`](docs/plans/vision-and-light.md). Tests: `test_vision_light_phase0-4.py`, `test_cast_darkness.py`, `test_cast_daylight.py`, `test_cast_darkvision.py`, et al. (Wall-occlusion shadows are out of scope — edges come from the lighting model, not GM-placed walls; see the still-open Maps 2.0 walls item.)
+
+## Media & Content — shipped
+
+- ✅ **DONE** — **Playlist Builder with Existing Songs.** `Playlist` + `PlaylistTrack` models with campaign-scoped playlist endpoints in `audio_routes.py` (`create_playlist`, rename, description, tags, track ordering) built from already-uploaded campaign tracks, plus `auto_play_playlist_id` for session-start autoplay. Deletion of referenced tracks is guarded.
+
 ## Player Features — shipped
 
 - ✅ **DONE (reconciled v2.751.1)** — **User Presence on the Tabletop.** The hub (`realtime.py`) broadcasts `presence_update` on connect/disconnect with the campaign's connected users (id + display name + color + is_gm); the tabletop renders live presence pills in `#presence-bubbles` (`_renderPresence`, v2.9.1). Core scope (presence indicators + WS lifecycle + GM view) shipped; the stretch goals (Google-Docs-style cursor / hovered-token presence, amber idle state) remain unbuilt.
