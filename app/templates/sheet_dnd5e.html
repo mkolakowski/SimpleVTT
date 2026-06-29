@@ -630,14 +630,22 @@
                 {# v2.741.0 — 4d6-drop-lowest roller. Rolls server-side (audit +
                    DICE_SEED), shows the six results with their dice, and fills
                    STR..CHA in order (the player can then swap values + Save). #}
-                {% if char.campaign_id %}
+                {# v2.742.0 — point buy: 27-point budget, scores 8–15, live
+                   remaining + over-budget clamp. Pure client math; works for
+                   standalone characters too. #}
                 <div style="flex-basis:100%;display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:4px;">
-                    <button type="button" id="ab-roll-4d6-btn" class="sheet-section-btn"
-                            data-url="/api/campaign/{{ char.campaign_id }}/character/{{ char.id }}/roll-abilities"
-                            title="Roll six scores with 4d6 drop lowest, then fill STR–CHA in order">🎲 Roll 4d6 (drop lowest)</button>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+                        {% if char.campaign_id %}
+                        <button type="button" id="ab-roll-4d6-btn" class="sheet-section-btn"
+                                data-url="/api/campaign/{{ char.campaign_id }}/character/{{ char.id }}/roll-abilities"
+                                title="Roll six scores with 4d6 drop lowest, then fill STR–CHA in order">🎲 Roll 4d6 (drop lowest)</button>
+                        {% endif %}
+                        <button type="button" id="ab-pointbuy-btn" class="sheet-section-btn"
+                                title="Point buy: 27-point budget, scores 8–15 (resets all six to 8)">📊 Point buy</button>
+                    </div>
                     <div id="ab-roll-4d6-result" style="font-size:12px;color:var(--s-mute);text-align:center;"></div>
+                    <div id="ab-pb-budget" style="display:none;font-size:13px;font-weight:600;color:var(--s-mute);"></div>
                 </div>
-                {% endif %}
             </div>
             {% else %}
             {# View-only: hidden inputs so readField() still works for rolls #}
@@ -679,6 +687,62 @@
                 } finally {
                     btn.disabled = false;
                 }
+            });
+        })();
+        </script>
+        {% endif %}
+
+        {% if can_edit %}
+        <script>
+        (function () {
+            var pbBtn = document.getElementById('ab-pointbuy-btn');
+            if (!pbBtn) return;
+            var ORDER = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+            var COST = {8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9};
+            var BUDGET = 27;
+            var budgetEl = document.getElementById('ab-pb-budget');
+            function inputs() {
+                return ORDER.map(function (a) {
+                    return document.getElementById('ab-input-' + a);
+                }).filter(Boolean);
+            }
+            function recalc() {
+                var spent = 0;
+                inputs().forEach(function (inp) {
+                    var v = parseInt(inp.value, 10);
+                    if (isNaN(v) || v < 8) v = 8;
+                    if (v > 15) v = 15;
+                    spent += COST[v] || 0;
+                });
+                var rem = BUDGET - spent;
+                if (budgetEl) {
+                    budgetEl.textContent = 'Point buy: ' + rem + ' / ' + BUDGET
+                        + ' points remaining (scores 8–15)';
+                    budgetEl.style.color = rem < 0
+                        ? 'var(--danger, #c0392b)' : 'var(--s-mute)';
+                }
+                return rem;
+            }
+            function onInput(e) {
+                var inp = e.target;
+                var v = parseInt(inp.value, 10);
+                if (isNaN(v) || v < 8) v = 8;
+                if (v > 15) v = 15;
+                inp.value = v;
+                // Step this input back down until the budget is non-negative.
+                while (recalc() < 0 && parseInt(inp.value, 10) > 8) {
+                    inp.value = parseInt(inp.value, 10) - 1;
+                }
+            }
+            pbBtn.addEventListener('click', function () {
+                inputs().forEach(function (inp) {
+                    inp.min = 8; inp.max = 15;
+                    inp.value = 8;  // point-buy starts every score at 8
+                    inp.removeEventListener('input', onInput);
+                    inp.addEventListener('input', onInput);
+                });
+                if (budgetEl) budgetEl.style.display = '';
+                recalc();
             });
         })();
         </script>

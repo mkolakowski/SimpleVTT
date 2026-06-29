@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.742.0] - 2026-06-29 — "The Measured Hero"
+
+**Schema version:** 85
+
+**Commit summary:** Point-buy ability-score calculator — the other half of Ability Score Generation (now complete).
+
+**Description:** Adds the point-buy method alongside the v2.741.0 dice roller, completing the "Ability Score Generation" backlog item. The abilities edit view gains a **📊 Point buy** button: clicking it resets all six scores to 8 and shows a live budget (`Point buy: 27 / 27 points remaining (scores 8–15)`). As the player raises scores, the standard 5e cost table (8→0, 9→1, 10→2, 11→3, 12→4, 13→5, 14→7, 15→9) is summed against the 27-point pool; the remaining count updates live (red when negative), entries clamp to 8–15, and a change that would overspend steps that score back down until it fits. Pure client math — no endpoint, works for standalone characters too. The chosen scores live in the existing ability inputs, saved via the normal sheet-fields path.
+
+### Added
+- `app/templates/sheet_dnd5e.html` — 📊 Point buy button + budget readout + inline calculator JS in the abilities edit view.
+- `tests/harness_ui/test_pointbuy.py` (new, +1) — drives the widget: 27/27 on reset, STR 15 → 18/27, an over-15 entry clamps to 15; no JS errors.
+
+### Schema
+- No schema change (still v85).
+
 ## [2.741.0] - 2026-06-29 — "The Rolled Hero"
 
 **Schema version:** 85
