@@ -17334,6 +17334,48 @@ def campaign_report(
     return {"ok": True, **stats_service.campaign_activity_report(db, campaign_id)}
 
 
+@router.get("/campaign/{campaign_id}/report.csv")
+def campaign_report_csv(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.738.0 — download the activity report's per-session timeline as CSV
+    (a savable/shareable post-session summary). GM-only."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    rep = stats_service.campaign_activity_report(db, campaign_id)
+    import csv as _csv
+    import io as _io
+    buf = _io.StringIO()
+    w = _csv.writer(buf)
+    w.writerow(["session_key", "first_event", "events",
+                "damage_dealt", "heal_done"])
+    for s in rep.get("per_session", []):
+        w.writerow([
+            s.get("session_key") or "",
+            (s.get("first") or "")[:19].replace("T", " "),
+            s.get("events", 0),
+            s.get("damage_dealt", 0),
+            s.get("heal_done", 0),
+        ])
+    # Trailing totals row for a quick at-a-glance summary.
+    w.writerow([])
+    w.writerow(["TOTAL", f"{rep.get('session_count', 0)} sessions",
+                rep.get("total_events", 0), "",
+                f"{rep.get('total_moves', 0)} moves / "
+                f"{rep.get('total_distance_ft', 0)} ft"])
+    fname = f"campaign-{campaign_id}-activity.csv"
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
 @router.get("/campaign/{campaign_id}/report/session", response_class=HTMLResponse)
 def campaign_report_session_page(
     campaign_id: int,

@@ -104,6 +104,22 @@ async def test_session_detail_requires_gm(alice_client):
     assert p.status_code == 403, p.text
 
 
+async def test_report_csv_export(gm_client):
+    """v2.738.0 — the per-session timeline downloads as CSV (GM-only)."""
+    r = await gm_client.get(f"/campaign/{CAMPAIGN_ID}/report.csv")
+    assert r.status_code == 200, r.text
+    assert "text/csv" in r.headers.get("content-type", "")
+    assert "attachment" in r.headers.get("content-disposition", "")
+    body = r.text
+    assert "session_key,first_event,events,damage_dealt,heal_done" in body
+    assert "TOTAL" in body
+
+
+async def test_report_csv_requires_gm(alice_client):
+    r = await alice_client.get(f"/campaign/{CAMPAIGN_ID}/report.csv")
+    assert r.status_code == 403, r.text
+
+
 async def test_report_requires_gm(alice_client):
     """A non-GM campaign member can't read the report (JSON or page)."""
     j = await alice_client.get(f"/api/campaign/{CAMPAIGN_ID}/report")

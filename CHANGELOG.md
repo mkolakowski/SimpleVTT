@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.738.0] - 2026-06-29 — "The Takeaway Sheet"
+
+**Schema version:** 85
+
+**Commit summary:** CSV export of the GM activity report's per-session timeline — a savable/shareable post-session summary.
+
+**Description:** Reporting polish. `GET /campaign/{cid}/report.csv` (GM-only) streams the activity report's per-session timeline as a CSV download (`session_key, first_event, events, damage_dealt, heal_done`, plus a trailing TOTAL row with session count, total events, and total moves/distance), served as a `text/csv` attachment. A **⬇ CSV** link sits next to "Combat stats →" in the report header. Reuses `stats_service.campaign_activity_report` (no new aggregation).
+
+### Added
+- `app/routes/tabletop_routes.py` — `GET /campaign/{cid}/report.csv`.
+- `app/templates/campaign_report.html` — ⬇ CSV download link.
+- `tests/harness/test_campaign_report.py` (+2) — CSV export returns a `text/csv` attachment with the header row + TOTAL; non-GM → 403.
+
+### Schema
+- No schema change (still v85).
+
 ## [2.737.0] - 2026-06-29 — "The Operator's Lens"
 
 **Schema version:** 85

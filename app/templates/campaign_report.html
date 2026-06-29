@@ -22,7 +22,10 @@
 
 <div class="rep-head">
   <h1>📈 Activity report — {{ campaign.name }}</h1>
-  <a href="/campaign/{{ campaign.id }}/stats">Combat stats →</a>
+  <span style="display:flex;gap:14px;align-items:baseline;">
+    <a href="/campaign/{{ campaign.id }}/report.csv">⬇ CSV</a>
+    <a href="/campaign/{{ campaign.id }}/stats">Combat stats →</a>
+  </span>
 </div>
 <p class="muted" style="font-size:13px;margin-top:-6px;">Campaign-wide activity from the gameplay event log (sessions, event volume, and most-active actors). GM-only.</p>
 
