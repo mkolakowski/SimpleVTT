@@ -17991,6 +17991,16 @@ async def move_token(
             "token_template_id": token.token_template_id,
         }},
     )
+    # v2.734.0 — log the move as a stat event so the GM activity report
+    # (v2.730.0) can surface token-move history / total distance. Only real
+    # moves (distance > 0); amount carries the distance in feet. Best-effort.
+    if distance_ft > 0:
+        _log_stat_event(
+            campaign_id, event_type="token_move",
+            actor_char_id=token.character_id,
+            actor_name=(token.label or "") if not token.character_id else "",
+            amount=int(round(distance_ft)),
+        )
 
     # v2.520.0 — Antilife Shell "forced through" clause (RAW PHB p.213).
     # If the mover holds an Antilife Shell and this move swept the moving

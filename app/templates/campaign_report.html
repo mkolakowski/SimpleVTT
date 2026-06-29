@@ -34,6 +34,8 @@
     <div class="rep-tile"><div class="n">{{ report.events_by_type.get('attack', 0) }}</div><div class="l">Attacks</div></div>
     <div class="rep-tile"><div class="n">{{ report.events_by_type.get('spell_cast', 0) }}</div><div class="l">Spells cast</div></div>
     <div class="rep-tile"><div class="n">{{ report.events_by_type.get('ko', 0) }}</div><div class="l">KOs</div></div>
+    <div class="rep-tile"><div class="n">{{ report.total_moves }}</div><div class="l">Token moves</div></div>
+    <div class="rep-tile"><div class="n">{{ report.total_distance_ft }} ft</div><div class="l">Distance moved</div></div>
   </div>
 </div>
 

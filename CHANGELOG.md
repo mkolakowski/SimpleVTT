@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.734.0] - 2026-06-28 — "The Paper Trail Walks"
+
+**Schema version:** 85
+
+**Commit summary:** Log token moves as stat events so the GM Reporting page (v2.730.0) shows token-move count + total distance — the part omitted there.
+
+**Description:** Completes the Reporting Page's "token move history" slice. A successful `/token/move` now logs a `token_move` stat event (no schema change — `event_type` is a freeform string on the existing `campaign_stat_events`), with the moved distance in `amount` and the actor resolved from the token's character (or its label for NPC tokens). `stats_service.campaign_activity_report` aggregates these into `total_moves` + `total_distance_ft`, surfaced as two new overview tiles (Token moves / Distance moved) on the `/campaign/{cid}/report` page. Best-effort logging (wrapped) — a stats failure never affects the move; it runs only after the move has committed + broadcast, so it can't gate a move.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_log_stat_event(event_type="token_move", …)` after a successful move.
+- `app/stats_service.py` — `total_moves` + `total_distance_ft` in `campaign_activity_report`.
+- `app/templates/campaign_report.html` — Token moves + Distance moved tiles.
+- `tests/harness/test_campaign_report.py` (+1) — moving a token raises `total_moves` + `total_distance_ft` + the `token_move` event count.
+
+### Schema
+- No schema change (still v85) — `token_move` rides the existing freeform `campaign_stat_events.event_type`.
+
 ## [2.733.0] - 2026-06-28 — "The Painted Margin"
 
 **Schema version:** 85

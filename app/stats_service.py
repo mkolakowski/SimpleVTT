@@ -208,12 +208,30 @@ def campaign_activity_report(db: Session, campaign_id: int) -> dict:
     )
     top_actors = [{"name": r.actor_name, "events": int(r.n)} for r in actor_rows]
 
+    # v2.734.0 — token-movement summary (the "token move history" slice of the
+    # Reporting Page). token_move events carry the distance in `amount`.
+    move_row = (
+        db.query(
+            func.count().label("moves"),
+            func.coalesce(func.sum(_Ev.amount), 0).label("dist"),
+        )
+        .filter(
+            _Ev.campaign_id == campaign_id,
+            _Ev.event_type == "token_move",
+        )
+        .first()
+    )
+    total_moves = int(move_row.moves or 0) if move_row else 0
+    total_distance_ft = int(move_row.dist or 0) if move_row else 0
+
     return {
         "session_count": int(session_count),
         "total_events": int(total_events),
         "events_by_type": events_by_type,
         "per_session": per_session,
         "top_actors": top_actors,
+        "total_moves": total_moves,
+        "total_distance_ft": total_distance_ft,
     }
 
 
