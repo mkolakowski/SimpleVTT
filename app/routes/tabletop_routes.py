@@ -119301,8 +119301,15 @@ def roll_ability_scores(
     char = db.query(Character).filter(Character.id == char_id).first()
     if not campaign or not char or char.campaign_id != campaign_id:
         raise HTTPException(404, "Not found")
-    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+    _is_gm = _user_is_gm(user, campaign, db)
+    if not (_is_gm or char.owner_user_id == user.id):
         raise HTTPException(403, "Cannot roll for this character")
+    # v2.743.0 — GM reroll lock: when set, only the GM may roll.
+    if getattr(campaign, "ability_rolls_locked", False) and not _is_gm:
+        return JSONResponse(status_code=409, content={
+            "error": "ability_rolls_locked",
+            "message": "The GM has locked ability-score rerolls.",
+        })
     results = []
     for _ in range(6):
         dice = [dice_mod.roll("1d6").total for _ in range(4)]
@@ -119313,6 +119320,27 @@ def roll_ability_scores(
             "score": sum(dice) - dropped,
         })
     return {"ok": True, "method": "4d6-drop-lowest", "results": results}
+
+
+@router.post("/api/campaign/{campaign_id}/ability-rolls-lock")
+async def set_ability_rolls_lock(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.743.0 — GM toggles the ability-score reroll lock. Body:
+    ``{locked: bool}``. GM-only. When locked, non-GM players get a 409 from
+    the 4d6 roller (point-buy is unaffected)."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    body = await request.json()
+    campaign.ability_rolls_locked = bool(body.get("locked"))
+    db.commit()
+    return {"ok": True, "locked": campaign.ability_rolls_locked}
 
 
 # ----------- API: token templates -----------
@@ -122707,6 +122735,7 @@ def character_sheet_page(
             "sheet": page_sheet,
             "can_edit": can_edit,
             "is_gm": is_gm,
+            "ability_rolls_locked": bool(getattr(campaign, "ability_rolls_locked", False)),
             "sheet_template": sheet_template,
             "system": get_system(campaign.game_system),
             "class_roster": class_levels_summary(page_sheet) if char.template == "dnd5e" else [],

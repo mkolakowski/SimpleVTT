@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.743.0] - 2026-06-29 — "The Locked Dice"
+
+**Schema version:** 86
+
+**Commit summary:** GM reroll-lock toggle — the GM can lock the 4d6 ability roller for players (the optional extra from Ability Score Generation).
+
+**Description:** Adds the per-campaign GM lock for the v2.741.0 ability-score roller. New `Campaign.ability_rolls_locked` (Schema v86, default off) + `POST /api/campaign/{cid}/ability-rolls-lock` `{locked}` (GM-only). When locked, the `roll-abilities` endpoint returns **409 `ability_rolls_locked`** for non-GM callers (the GM can always roll; point-buy is unaffected). On the sheet's abilities edit view: the GM sees a **🔒 Lock / 🔓 Unlock 4d6 rolls** toggle; non-GM players see the 🎲 button replaced by a muted "🔒 4d6 rolls locked by the GM" when locked. This lets a GM run rolled-stat creation, then freeze the dice so players can't re-roll.
+
+### Added
+- `app/models.py` + `app/database.py` — `Campaign.ability_rolls_locked` (Schema v86 migration).
+- `app/routes/tabletop_routes.py` — `POST /ability-rolls-lock` setter; `roll-abilities` 409s for locked non-GM; sheet context carries the flag.
+- `app/templates/sheet_dnd5e.html` — GM lock toggle + locked-state note + lock-aware roll button.
+- `tests/harness/test_ability_rolls_lock.py` (new, +2) — lock → owner (Alice) 409, GM still 200, unlock → owner 200; non-GM toggle → 403.
+
+### Schema
+- **v86** — `campaigns.ability_rolls_locked` (default false). Additive.
+
 ## [2.742.0] - 2026-06-29 — "The Measured Hero"
 
 **Schema version:** 85

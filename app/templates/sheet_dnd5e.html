@@ -634,11 +634,22 @@
                    remaining + over-budget clamp. Pure client math; works for
                    standalone characters too. #}
                 <div style="flex-basis:100%;display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:4px;">
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center;">
                         {% if char.campaign_id %}
-                        <button type="button" id="ab-roll-4d6-btn" class="sheet-section-btn"
-                                data-url="/api/campaign/{{ char.campaign_id }}/character/{{ char.id }}/roll-abilities"
-                                title="Roll six scores with 4d6 drop lowest, then fill STR–CHA in order">🎲 Roll 4d6 (drop lowest)</button>
+                            {% if is_gm or not ability_rolls_locked %}
+                            <button type="button" id="ab-roll-4d6-btn" class="sheet-section-btn"
+                                    data-url="/api/campaign/{{ char.campaign_id }}/character/{{ char.id }}/roll-abilities"
+                                    title="Roll six scores with 4d6 drop lowest, then fill STR–CHA in order">🎲 Roll 4d6 (drop lowest)</button>
+                            {% else %}
+                            <span class="muted" style="font-size:12px;">🔒 4d6 rolls locked by the GM</span>
+                            {% endif %}
+                            {# v2.743.0 — GM toggle to lock/unlock the 4d6 roller for players. #}
+                            {% if is_gm %}
+                            <button type="button" id="ab-rolllock-btn" class="sheet-section-btn"
+                                    data-url="/api/campaign/{{ char.campaign_id }}/ability-rolls-lock"
+                                    data-locked="{{ 'true' if ability_rolls_locked else 'false' }}"
+                                    title="Lock or unlock the 4d6 ability roller for non-GM players">{{ '🔓 Unlock 4d6 rolls' if ability_rolls_locked else '🔒 Lock 4d6 rolls' }}</button>
+                            {% endif %}
                         {% endif %}
                         <button type="button" id="ab-pointbuy-btn" class="sheet-section-btn"
                                 title="Point buy: 27-point budget, scores 8–15 (resets all six to 8)">📊 Point buy</button>
@@ -687,6 +698,22 @@
                 } finally {
                     btn.disabled = false;
                 }
+            });
+            // v2.743.0 — GM lock/unlock toggle for the 4d6 roller.
+            var lockBtn = document.getElementById('ab-rolllock-btn');
+            if (lockBtn) lockBtn.addEventListener('click', async function () {
+                lockBtn.disabled = true;
+                var next = lockBtn.dataset.locked !== 'true';
+                try {
+                    var r = await fetch(lockBtn.dataset.url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ locked: next }),
+                    });
+                    if (r.ok) { location.reload(); }
+                    else { lockBtn.disabled = false; }
+                } catch (e) { lockBtn.disabled = false; }
             });
         })();
         </script>

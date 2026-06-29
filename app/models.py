@@ -291,6 +291,11 @@ class Campaign(Base):
         Boolean, default=False, server_default="false")
     movement_lock_default: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false")
+    # v2.743.0 — when True, non-GM players can't use the sheet's 4d6
+    # ability-score roller (the GM "locks" rerolls during/after character
+    # creation). The GM can always roll; point-buy is unaffected.
+    ability_rolls_locked: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false")
     # GM-assigned color for the primary GM in the roll log
     gm_color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     # Tint color for the GM Tools tab in the tabletop sidebar

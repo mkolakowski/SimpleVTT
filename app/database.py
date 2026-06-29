@@ -1015,6 +1015,17 @@ def _apply_inline_migrations() -> None:
                 "ALTER TABLE maps ADD COLUMN letterbox_color VARCHAR(16)"
             ))
 
+    # ---- Schema v86 (2.743.0): campaigns.ability_rolls_locked ----
+    # GM toggle that blocks non-GM players from the sheet's 4d6 ability-score
+    # roller (point-buy unaffected). Additive; default false = unlocked.
+    camp_cols_v86 = _column_names("campaigns")
+    with engine.begin() as conn:
+        if camp_cols_v86 and "ability_rolls_locked" not in camp_cols_v86:
+            conn.execute(text(
+                "ALTER TABLE campaigns ADD COLUMN ability_rolls_locked "
+                "BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""
