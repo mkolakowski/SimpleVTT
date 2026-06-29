@@ -890,21 +890,7 @@ Today the initiative tracker opens a read-only stat-block popover for monster en
 
 ## Combat
 
-### Advantage & Disadvantage Tracking
-Per-character roll-state toggle (adv / normal / dis) that the server applies to d20 rolls automatically, with the existing manual `adv` / `dis` dice buttons preserved as one-shot overrides. Three phases: manual toggle, condition automation, context-aware rolls. See [`docs/plans/advantage-disadvantage.md`](docs/plans/advantage-disadvantage.md) for the full design.
-
-### Death Saving Throws
-Triggered automatically when a character hits 0 HP. Mini-sheet + full sheet show success/failure pips; "Roll Death Save" button rolls a 1d20 through the regular roll pipeline (so it honors the adv/dis roll-state toggle). Healing wakes the character up; damage at 0 HP ticks failures (with crit and massive-damage rules per 5e RAW). GM gets override + stabilize controls. See [`docs/plans/death-saves.md`](docs/plans/death-saves.md) for the full design.
-
-### Combat 2.0 — Action Economy Tracking
-Full per-turn action economy tracker surfaced in the initiative tracker and each player's mini-sheet. Tracks the four action types defined by D&D 5e:
-
-- **Action** — one per turn; used for attacks, casting most spells, Dash/Disengage/Dodge/Help/Hide/Ready
-- **Bonus action** — one per turn; class features, certain spells, off-hand attacks
-- **Movement** — up to the character's speed (in feet); partially consumed by moving between tokens (requires Maps 2.0 grid distance awareness)
-- **Free action / Reaction** — one reaction per round; tracked separately, auto-resets at the start of the character's next turn
-
-UI: a compact row of four icons in the initiative tracker entry and mini-sheet. Clicking an icon marks it spent (greyed out). At the start of a character's turn the GM can click "New Turn" to reset all four. The GM can also manually mark/unmark any action for any combatant. State is broadcast over WebSocket so all clients stay in sync.
+_Advantage & Disadvantage Tracking, Death Saving Throws, and Combat 2.0 Action Economy all shipped — see [`TODONE.md`](TODONE.md) → Combat (reconciled v2.745.1). Only the deferred death-saves Phase 3c (stable countdown) + Phase 4 (NPC death saves) remain, tracked in [`death-saves.md`](docs/plans/death-saves.md)._
 
 ### Summon Spells — Creature Picker + Auto-Control + Init Placement
 

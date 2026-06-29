@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.745.1] - 2026-06-29 — "The Roll Call"
+
+**Schema version:** 86
+
+**Commit summary:** Doc reconciliation — three big Combat backlog items (Advantage/Disadvantage, Death Saves, Action Economy) are already shipped; moved to TODONE (no code change).
+
+**Description:** Verify-before-build sweep of the Combat backlog. All three flagship items are fully shipped and regression-covered, but were still listed as pending in `TODO.md`: **Advantage & Disadvantage Tracking** (manual `/roll-state` toggle v2.2.0 + condition automation Phase 2a–2e v2.152.0–v2.156.0 + context-aware composition), **Death Saving Throws** (state machine + `/death-save`/`/death-save/override`/`/stabilize` + pips + turn-start prompt v2.150.0 + Medicine stabilize v2.151.0; only Phase 3c/4 deferred per the plan doc), and **Combat 2.0 — Action Economy Tracking** (the `.econ-chips` action/bonus/reaction/movement strip with auto-marking via `_mark_battle_economy` + WS sync). This commit moves all three to `TODONE.md` with their shipped versions + test coverage and trims the `TODO.md` Combat section to just the genuinely-unbuilt Summon Spells arc. No behavior change.
+
+### Changed
+- `TODONE.md` — three new Combat "shipped (reconciled)" entries.
+- `TODO.md` — Combat section trimmed; the shipped trio replaced by a pointer line (deferred death-saves phases noted).
+
+### Schema
+- No schema change (still v86).
+
 ## [2.745.0] - 2026-06-29 — "The Stat-Block Whisperer"
 
 **Schema version:** 86
