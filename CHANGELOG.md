@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.736.0] - 2026-06-29 — "The Named Hand"
+
+**Schema version:** 85
+
+**Commit summary:** Link the GM report's "Most active" actor names to their character sheets.
+
+**Description:** Small polish tying the activity report into the existing sheet view. The `top_actors` aggregation (on both the campaign report and the per-session detail) now also returns `char_id` (max-per-name, since a name maps to one character; NULL for NPC actors), and the "Most active" tables render each PC actor's name as a link to `/campaign/{cid}/character/{char_id}/sheet`. NPC actors (no char_id) stay plain text.
+
+### Added
+- `tests/harness/test_campaign_report.py` — asserts each `top_actors` entry carries `char_id` / `name` / `events`.
+
+### Changed
+- `app/stats_service.py` — `top_actors` in `campaign_activity_report` + `session_detail` includes `char_id`.
+- `app/templates/campaign_report.html` + `campaign_report_session.html` — actor names link to the character sheet when `char_id` is set.
+
+### Schema
+- No schema change (still v85).
+
 ## [2.735.0] - 2026-06-29 — "The Session Ledger"
 
 **Schema version:** 85

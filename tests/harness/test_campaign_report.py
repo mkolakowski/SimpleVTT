@@ -24,6 +24,10 @@ async def test_report_json_shape(gm_client):
     assert isinstance(body["events_by_type"], dict)
     assert isinstance(body["per_session"], list)
     assert isinstance(body["top_actors"], list)
+    # v2.736.0 — each top-actor entry carries char_id (None for NPC actors)
+    # so the report can link PC actors to their sheet.
+    for a in body["top_actors"]:
+        assert "char_id" in a and "name" in a and "events" in a, a
 
 
 async def test_report_page_renders_for_gm(gm_client):

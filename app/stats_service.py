@@ -194,8 +194,15 @@ def campaign_activity_report(db: Session, campaign_id: int) -> dict:
     ]
 
     # Most active actors (by recorded event count) — "active players over time".
+    # v2.736.0 — also surface actor_char_id (max-per-name; a name maps to one
+    # character) so the report can link PC actors to their sheet. NPC actors
+    # have NULL char_id → name-only.
     actor_rows = (
-        db.query(_Ev.actor_name, func.count().label("n"))
+        db.query(
+            _Ev.actor_name,
+            func.max(_Ev.actor_char_id).label("cid"),
+            func.count().label("n"),
+        )
         .filter(
             _Ev.campaign_id == campaign_id,
             _Ev.actor_name.isnot(None),
@@ -206,7 +213,10 @@ def campaign_activity_report(db: Session, campaign_id: int) -> dict:
         .limit(15)
         .all()
     )
-    top_actors = [{"name": r.actor_name, "events": int(r.n)} for r in actor_rows]
+    top_actors = [
+        {"name": r.actor_name, "char_id": r.cid, "events": int(r.n)}
+        for r in actor_rows
+    ]
 
     # v2.734.0 — token-movement summary (the "token move history" slice of the
     # Reporting Page). token_move events carry the distance in `amount`.
@@ -254,7 +264,11 @@ def session_detail(db: Session, campaign_id: int, session_key: str) -> dict:
     events_by_type = {r.event_type: int(r.n) for r in type_rows}
 
     actor_rows = (
-        db.query(_Ev.actor_name, func.count().label("n"))
+        db.query(
+            _Ev.actor_name,
+            func.max(_Ev.actor_char_id).label("cid"),
+            func.count().label("n"),
+        )
         .filter(
             _Ev.campaign_id == campaign_id, _Ev.session_key == session_key,
             _Ev.actor_name.isnot(None), _Ev.actor_name != "",
@@ -264,7 +278,10 @@ def session_detail(db: Session, campaign_id: int, session_key: str) -> dict:
         .limit(15)
         .all()
     )
-    top_actors = [{"name": r.actor_name, "events": int(r.n)} for r in actor_rows]
+    top_actors = [
+        {"name": r.actor_name, "char_id": r.cid, "events": int(r.n)}
+        for r in actor_rows
+    ]
 
     tot = (
         db.query(
