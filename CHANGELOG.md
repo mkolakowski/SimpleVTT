@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.739.0] - 2026-06-29 — "The Chosen Window"
+
+**Schema version:** 85
+
+**Commit summary:** Date-range filter on the GM activity report (page + JSON + CSV) — narrow the timeline to a window.
+
+**Description:** Reporting polish. `campaign_activity_report` now accepts optional `date_from` / `date_to` datetime bounds applied to every aggregation (events / sessions / event-mix / per-session / top-actors / moves). The report page gains a **From / To** date form (`start` / `end` YYYY-MM-DD query params; `end` inclusive — parsed to `[from, to+1day)`), with the active window carried into the ⬇ CSV link so the export matches the view. The JSON + CSV endpoints honor the same params and echo the applied bounds (`date_from` / `date_to`). Empty = all time.
+
+### Added
+- `tests/harness/test_campaign_report.py` (+1) — a filtered window echoes the bounds (end → +1 day exclusive), a pre-history window yields zero events, and the CSV honors the filter.
+
+### Changed
+- `app/stats_service.py` — `campaign_activity_report(date_from=, date_to=)` filters every query.
+- `app/routes/tabletop_routes.py` — `_parse_report_date_bounds` helper; the report page / JSON / CSV routes accept `start` / `end`.
+- `app/templates/campaign_report.html` — From/To date filter form + filter-aware CSV link.
+
+### Schema
+- No schema change (still v85).
+
 ## [2.738.0] - 2026-06-29 — "The Takeaway Sheet"
 
 **Schema version:** 85

@@ -3,5 +3,5 @@
 Single source of truth. See CHANGELOG.md for the bump rules.
 """
 
-APP_VERSION = "2.738.0"
+APP_VERSION = "2.739.0"
 SCHEMA_VERSION = 85

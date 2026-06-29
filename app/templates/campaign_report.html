@@ -23,11 +23,21 @@
 <div class="rep-head">
   <h1>📈 Activity report — {{ campaign.name }}</h1>
   <span style="display:flex;gap:14px;align-items:baseline;">
-    <a href="/campaign/{{ campaign.id }}/report.csv">⬇ CSV</a>
+    <a href="/campaign/{{ campaign.id }}/report.csv{% if filter_start or filter_end %}?start={{ filter_start }}&end={{ filter_end }}{% endif %}">⬇ CSV</a>
     <a href="/campaign/{{ campaign.id }}/stats">Combat stats →</a>
   </span>
 </div>
 <p class="muted" style="font-size:13px;margin-top:-6px;">Campaign-wide activity from the gameplay event log (sessions, event volume, and most-active actors). GM-only.</p>
+
+{# v2.739.0 — date-range filter. Narrows every aggregation (and the CSV) to
+   events in [start, end]. Empty = all time. #}
+<form method="get" action="/campaign/{{ campaign.id }}/report"
+      style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 14px;font-size:13px;">
+  <label>From <input type="date" name="start" value="{{ filter_start or '' }}"></label>
+  <label>To <input type="date" name="end" value="{{ filter_end or '' }}"></label>
+  <button type="submit">Filter</button>
+  {% if filter_start or filter_end %}<a href="/campaign/{{ campaign.id }}/report" style="font-size:12px;">clear</a>{% endif %}
+</form>
 
 <div class="rep-card">
   <h2>Overview</h2>

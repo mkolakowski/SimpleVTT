@@ -17290,23 +17290,48 @@ def rolls_popout(
     )
 
 
+def _parse_report_date_bounds(start: str, end: str):
+    """v2.739.0 — parse the report's ``start`` / ``end`` (YYYY-MM-DD) query
+    params into [date_from, date_to) datetime bounds. ``end`` is inclusive
+    (we add a day). Bad/empty values → None (unbounded). Returns
+    ``(date_from, date_to)``."""
+    from datetime import datetime as _dt, timedelta as _td
+    df = dt = None
+    try:
+        if start:
+            df = _dt.strptime(start[:10], "%Y-%m-%d")
+    except ValueError:
+        df = None
+    try:
+        if end:
+            dt = _dt.strptime(end[:10], "%Y-%m-%d") + _td(days=1)
+    except ValueError:
+        dt = None
+    return df, dt
+
+
 @router.get("/campaign/{campaign_id}/report", response_class=HTMLResponse)
 def campaign_report_page(
     campaign_id: int,
     request: Request,
+    start: str = "",
+    end: str = "",
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
     """v2.730.0 — GM Reporting page: a campaign ACTIVITY summary (session
     count, per-session activity timeline, event mix, most-active actors)
     derived from the stat-event log. Complements the per-character combat
-    stats page. GM-only (404 to non-members; 403 to non-GM members)."""
+    stats page. GM-only (404 to non-members; 403 to non-GM members).
+    v2.739.0 — optional ``start`` / ``end`` (YYYY-MM-DD) date filter."""
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
         raise HTTPException(404, "Not found")
     if not _user_is_gm(user, campaign, db):
         raise HTTPException(403, "GM only")
-    report = stats_service.campaign_activity_report(db, campaign_id)
+    df, dt = _parse_report_date_bounds(start, end)
+    report = stats_service.campaign_activity_report(
+        db, campaign_id, date_from=df, date_to=dt)
     return templates.TemplateResponse(
         "campaign_report.html",
         {
@@ -17315,6 +17340,8 @@ def campaign_report_page(
             "campaign": campaign,
             "is_gm": True,
             "report": report,
+            "filter_start": start,
+            "filter_end": end,
         },
     )
 
@@ -17322,32 +17349,42 @@ def campaign_report_page(
 @router.get("/api/campaign/{campaign_id}/report")
 def campaign_report(
     campaign_id: int,
+    start: str = "",
+    end: str = "",
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """v2.730.0 — JSON campaign activity report (GM-only)."""
+    """v2.730.0 — JSON campaign activity report (GM-only). v2.739.0 — optional
+    ``start`` / ``end`` (YYYY-MM-DD) date filter."""
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
         raise HTTPException(403, "Not a member")
     if not _user_is_gm(user, campaign, db):
         raise HTTPException(403, "GM only")
-    return {"ok": True, **stats_service.campaign_activity_report(db, campaign_id)}
+    df, dt = _parse_report_date_bounds(start, end)
+    return {"ok": True, **stats_service.campaign_activity_report(
+        db, campaign_id, date_from=df, date_to=dt)}
 
 
 @router.get("/campaign/{campaign_id}/report.csv")
 def campaign_report_csv(
     campaign_id: int,
+    start: str = "",
+    end: str = "",
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
     """v2.738.0 — download the activity report's per-session timeline as CSV
-    (a savable/shareable post-session summary). GM-only."""
+    (a savable/shareable post-session summary). GM-only. v2.739.0 — honors the
+    same ``start`` / ``end`` date filter as the report page."""
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
         raise HTTPException(403, "Not a member")
     if not _user_is_gm(user, campaign, db):
         raise HTTPException(403, "GM only")
-    rep = stats_service.campaign_activity_report(db, campaign_id)
+    df, dt = _parse_report_date_bounds(start, end)
+    rep = stats_service.campaign_activity_report(
+        db, campaign_id, date_from=df, date_to=dt)
     import csv as _csv
     import io as _io
     buf = _io.StringIO()

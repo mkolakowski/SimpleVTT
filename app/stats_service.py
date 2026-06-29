@@ -141,28 +141,38 @@ def character_block(
     }
 
 
-def campaign_activity_report(db: Session, campaign_id: int) -> dict:
+def campaign_activity_report(
+    db: Session, campaign_id: int, *, date_from=None, date_to=None,
+) -> dict:
     """v2.730.0 — campaign-wide ACTIVITY summary for the GM Reporting page
     (docs: the "Reporting Page" GM-Tools item). Distinct from the per-character
     combat stats page — this answers "how much has happened, across how many
     sessions, and who's been most active." Derived entirely from the existing
     `campaign_stat_events` log (no new capture).
 
+    v2.739.0 — optional ``date_from`` / ``date_to`` (datetimes) narrow every
+    aggregation to events whose ``created_at`` falls in [from, to).
+
     Returns ``{session_count, total_events, events_by_type, per_session,
-    top_actors}``.
+    top_actors, total_moves, total_distance_ft}``.
     """
-    base = db.query(_Ev).filter(_Ev.campaign_id == campaign_id)
-    total_events = base.count()
+    conds = [_Ev.campaign_id == campaign_id]
+    if date_from is not None:
+        conds.append(_Ev.created_at >= date_from)
+    if date_to is not None:
+        conds.append(_Ev.created_at < date_to)
+
+    total_events = db.query(_Ev).filter(*conds).count()
     session_count = (
         db.query(func.count(func.distinct(_Ev.session_key)))
-        .filter(_Ev.campaign_id == campaign_id)
+        .filter(*conds)
         .scalar()
     ) or 0
 
     # Event counts by type (the engagement mix).
     type_rows = (
         db.query(_Ev.event_type, func.count().label("n"))
-        .filter(_Ev.campaign_id == campaign_id)
+        .filter(*conds)
         .group_by(_Ev.event_type)
         .all()
     )
@@ -177,7 +187,7 @@ def campaign_activity_report(db: Session, campaign_id: int) -> dict:
             _coalesce_sum("heal_done").label("hd"),
             func.min(_Ev.created_at).label("first"),
         )
-        .filter(_Ev.campaign_id == campaign_id)
+        .filter(*conds)
         .group_by(_Ev.session_key)
         .order_by(func.min(_Ev.created_at))
         .all()
@@ -204,7 +214,7 @@ def campaign_activity_report(db: Session, campaign_id: int) -> dict:
             func.count().label("n"),
         )
         .filter(
-            _Ev.campaign_id == campaign_id,
+            *conds,
             _Ev.actor_name.isnot(None),
             _Ev.actor_name != "",
         )
@@ -226,7 +236,7 @@ def campaign_activity_report(db: Session, campaign_id: int) -> dict:
             func.coalesce(func.sum(_Ev.amount), 0).label("dist"),
         )
         .filter(
-            _Ev.campaign_id == campaign_id,
+            *conds,
             _Ev.event_type == "token_move",
         )
         .first()
@@ -242,6 +252,8 @@ def campaign_activity_report(db: Session, campaign_id: int) -> dict:
         "top_actors": top_actors,
         "total_moves": total_moves,
         "total_distance_ft": total_distance_ft,
+        "date_from": date_from.isoformat() if date_from else None,
+        "date_to": date_to.isoformat() if date_to else None,
     }
 
 

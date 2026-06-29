@@ -104,6 +104,29 @@ async def test_session_detail_requires_gm(alice_client):
     assert p.status_code == 403, p.text
 
 
+async def test_report_date_filter(gm_client):
+    """v2.739.0 — start/end narrow the report; the bounds are echoed, and a
+    far-future window yields zero events."""
+    # Echo: the applied date_to is exclusive (end + 1 day), date_from as given.
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/report",
+        params={"start": "2020-01-01", "end": "2020-01-31"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["date_from"].startswith("2020-01-01")
+    assert body["date_to"].startswith("2020-02-01")  # end inclusive → +1 day
+    # A window before any events → empty.
+    assert body["total_events"] == 0
+    assert body["per_session"] == []
+
+    # The CSV honors the same filter (still a valid attachment).
+    c = await gm_client.get(
+        f"/campaign/{CAMPAIGN_ID}/report.csv",
+        params={"start": "2020-01-01", "end": "2020-01-31"})
+    assert c.status_code == 200, c.text
+    assert "text/csv" in c.headers.get("content-type", "")
+
+
 async def test_report_csv_export(gm_client):
     """v2.738.0 — the per-session timeline downloads as CSV (GM-only)."""
     r = await gm_client.get(f"/campaign/{CAMPAIGN_ID}/report.csv")
