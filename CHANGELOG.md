@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.749.0] - 2026-06-29 — "The Elemental Roster"
+
+**Schema version:** 86
+
+**Commit summary:** Extend the summon picker to the single-summon conjures (Elemental / Fey / Celestial), whose CR scales with the slot.
+
+**Description:** Continues behaviour #1 of the Summon cast-flow arc. The `/summon-options` endpoint + the `window.openSummonPicker` modal now also serve the **single-summon** conjure spells — Conjure Elemental, Conjure Fey, Conjure Celestial — which summon one creature whose CR scales with the cast slot (not the count↔CR tier the conjure-animals family uses). `_SUMMON_PICKER_SPECS` gains a per-spell `mode` (`count` vs `single`) + the slot→CR formula (`_spell_summon_cr_for_slot` for Elemental/Fey, the non-linear `_spell_summon_cr_tier_for_slot` for Celestial) — the same caps `_conjure_catalog_single_template` enforces on the cast. In single mode the picker drops the count-tier selector and shows the creatures available at the cast slot's CR cap (e.g. Conjure Elemental @5th → CR ≤ 5 elementals; @7th raises the cap; Conjure Celestial → CR 4 at L7/L8, CR 5 at L9 where a unicorn becomes available). All six conjure spells now have a working picker.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_SUMMON_PICKER_SPECS` (replaces `_SUMMON_PICKER_TYPES`) with count/single modes; `/summon-options` handles slot-scaled single summons (`slot_level` query).
+- `app/templates/tabletop.html` — the three single-summon spells in `window._SUMMON_SPELLS`; the picker hides the count selector + shows a CR-by-slot caption in single mode.
+- `tests/harness/test_summon_options.py` (+2) — Elemental slot 5/7 CR scaling; Celestial tier CR 4→5 (unicorn at L9).
+- `tests/harness_ui/test_summon_picker.py` (+1) — single mode shows no count tiers + lists the elementals.
+
+### Schema
+- No schema change (still v86).
+
 ## [2.748.0] - 2026-06-29 — "The Conjurer's Catalog"
 
 **Schema version:** 86

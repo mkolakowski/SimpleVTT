@@ -5454,8 +5454,8 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 if (_sumSpec && typeof window.openSummonPicker === 'function') {
                     window.openSummonPicker({
                         spell: _sumSpec.spell, endpoint: _sumSpec.endpoint,
-                        slugField: _sumSpec.slugField, charId: charId,
-                        slotLevel: lvl, spellName: spellName,
+                        slugField: _sumSpec.slugField, mode: _sumSpec.mode,
+                        charId: charId, slotLevel: lvl, spellName: spellName,
                     });
                 }
             } finally {
@@ -5470,9 +5470,13 @@ let CONC_DATA = {{ conc_by_char | tojson }};
            Exposed on window so the cast hook above + the harness can drive
            it. */
         window._SUMMON_SPELLS = {
-            'conjure animals': { spell: 'conjure-animals', endpoint: 'cast_conjure_animals', slugField: 'beast_slug' },
-            'conjure woodland beings': { spell: 'conjure-woodland-beings', endpoint: 'cast_conjure_woodland_beings', slugField: 'creature_slug' },
-            'conjure minor elementals': { spell: 'conjure-minor-elementals', endpoint: 'cast_conjure_minor_elementals', slugField: 'creature_slug' },
+            'conjure animals': { spell: 'conjure-animals', endpoint: 'cast_conjure_animals', slugField: 'beast_slug', mode: 'count' },
+            'conjure woodland beings': { spell: 'conjure-woodland-beings', endpoint: 'cast_conjure_woodland_beings', slugField: 'creature_slug', mode: 'count' },
+            'conjure minor elementals': { spell: 'conjure-minor-elementals', endpoint: 'cast_conjure_minor_elementals', slugField: 'creature_slug', mode: 'count' },
+            // v2.749.0 — single-summon conjures (one creature, CR scales with slot).
+            'conjure elemental': { spell: 'conjure-elemental', endpoint: 'cast_conjure_elemental', slugField: 'creature_slug', mode: 'single' },
+            'conjure fey': { spell: 'conjure-fey', endpoint: 'cast_conjure_fey', slugField: 'creature_slug', mode: 'single' },
+            'conjure celestial': { spell: 'conjure-celestial', endpoint: 'cast_conjure_celestial', slugField: 'creature_slug', mode: 'single' },
         };
         // RAW count↔CR summoning options (PHB p.225): N creatures of max CR.
         const _SUMMON_COUNT_OPTIONS = [
@@ -5483,8 +5487,9 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         ];
         window.openSummonPicker = function (opts) {
             const { spell, endpoint, slugField, charId, slotLevel, spellName } = opts || {};
+            const mode = (opts && opts.mode) || 'count';
             if (!spell || !endpoint || !charId) return;
-            let count = 8;  // default summoning option
+            let count = 8;  // default summoning option (count mode only)
             // Backdrop + modal shell.
             const back = document.createElement('div');
             back.className = 'summon-picker-backdrop';
@@ -5508,7 +5513,9 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             async function loadOptions() {
                 listWrap.innerHTML = '<p class="muted" style="font-size:12px;">Loading…</p>';
                 try {
-                    const r = await fetch(`/api/campaign/${CAMPAIGN_ID}/summon-options?spell=${encodeURIComponent(spell)}&count=${count}`);
+                    // Pass both axes; the endpoint uses the one its mode needs
+                    // (count tier vs slot-scaled CR).
+                    const r = await fetch(`/api/campaign/${CAMPAIGN_ID}/summon-options?spell=${encodeURIComponent(spell)}&count=${count}&slot_level=${slotLevel || ''}`);
                     if (!r.ok) { listWrap.innerHTML = '<p class="muted">Could not load creatures.</p>'; return; }
                     const data = await r.json();
                     const options = data.options || [];
@@ -5581,7 +5588,13 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             back.appendChild(modal);
             back.addEventListener('click', (e) => { if (e.target === back) close(); });
             document.body.appendChild(back);
-            renderOptRow();
+            if (mode === 'count') {
+                renderOptRow();  // 8×CR¼ … 1×CR2 summoning-option selector
+            } else {
+                // Single-summon: one creature, CR fixed by the slot level.
+                optRow.innerHTML = '<span class="muted" style="font-size:12px;">'
+                    + 'One creature, CR scales with the slot you cast at.</span>';
+            }
             loadOptions();
         };
 

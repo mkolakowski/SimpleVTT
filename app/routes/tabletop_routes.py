@@ -6140,15 +6140,24 @@ def _monster_summon_template(
 # Used by the catalog-backed summon override to gate the chosen slug.
 _CONJURE_COUNT_CR_TIERS = {1: 2.0, 2: 1.0, 4: 0.5, 8: 0.25}
 
-# v2.747.0 — sheet-side summon-picker substrate. Maps each count-based
-# conjure spell to the creature `type` its RAW list draws from; the
-# `/summon-options` endpoint lists catalog creatures of that type within
-# the count↔CR tier so the player picks a creature instead of
-# hand-crafting the `beast_slug` / `creature_slug` cast-body field.
-_SUMMON_PICKER_TYPES = {
-    "conjure-animals": "beast",
-    "conjure-woodland-beings": "fey",
-    "conjure-minor-elementals": "elemental",
+# v2.747.0 — sheet-side summon-picker substrate. Maps each conjure spell to
+# the creature ``type`` its RAW list draws from + how its CR cap is computed,
+# so the `/summon-options` endpoint can list catalog creatures the player may
+# pick instead of hand-crafting the `beast_slug` / `creature_slug` cast field.
+#   mode "count"  — N creatures, CR cap from the count↔CR tier (Conjure
+#                   Animals / Woodland Beings / Minor Elementals).
+#   mode "single" — one creature, CR cap scales with the slot level
+#                   (Conjure Elemental / Fey / Celestial). v2.749.0.
+_SUMMON_PICKER_SPECS = {
+    "conjure-animals": {"type": "beast", "mode": "count"},
+    "conjure-woodland-beings": {"type": "fey", "mode": "count"},
+    "conjure-minor-elementals": {"type": "elemental", "mode": "count"},
+    "conjure-elemental": {"type": "elemental", "mode": "single",
+                          "base_slot": 5, "default_cr": 5, "cr_kind": "linear"},
+    "conjure-fey": {"type": "fey", "mode": "single",
+                    "base_slot": 6, "default_cr": 6, "cr_kind": "linear"},
+    "conjure-celestial": {"type": "celestial", "mode": "single",
+                          "base_slot": 7, "default_cr": 4, "cr_kind": "tier"},
 }
 
 
@@ -67632,34 +67641,56 @@ async def summon_options(
     campaign_id: int,
     spell: str,
     count: int = 8,
+    slot_level: "int | None" = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """v2.747.0 — list the creatures a player may pick for a count-based
-    conjure spell, for the sheet-side summon picker. Filters the monster
-    catalog by the spell's creature ``type`` (`_SUMMON_PICKER_TYPES`) and
-    the count↔CR tier (`_CONJURE_COUNT_CR_TIERS`) — the SAME gate
-    `_conjure_catalog_summon_template` enforces on the cast — so every
-    option the picker shows is guaranteed to validate when its slug rides
-    the `beast_slug` / `creature_slug` body field.
+    """v2.747.0 — list the creatures a player may pick for a conjure spell,
+    for the sheet-side summon picker. Filters the monster catalog by the
+    spell's creature ``type`` (`_SUMMON_PICKER_SPECS`) and its CR cap — the
+    SAME gate the cast endpoints enforce — so every option the picker shows
+    is guaranteed to validate when its slug rides the `beast_slug` /
+    `creature_slug` body field.
 
-    Query: ``spell`` (e.g. ``conjure-animals``), ``count`` (1/2/4/8).
-    Returns ``{ok, spell, type, count, max_cr, options:[{slug, name, cr,
-    hp, ac}]}`` sorted by CR desc then name.
+    CR cap by spell mode:
+      - **count** (Conjure Animals / Woodland Beings / Minor Elementals) —
+        from the count↔CR tier (`_CONJURE_COUNT_CR_TIERS`); query ``count``.
+      - **single** (Conjure Elemental / Fey / Celestial) — v2.749.0 — one
+        creature whose CR scales with the slot; query ``slot_level``.
+
+    Returns ``{ok, spell, type, mode, count, slot_level, max_cr,
+    options:[{slug, name, cr, hp, ac}]}`` sorted by CR desc then name.
     """
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
         raise HTTPException(403, "Not a member")
-    req_type = _SUMMON_PICKER_TYPES.get((spell or "").strip().lower())
-    if not req_type:
+    spec = _SUMMON_PICKER_SPECS.get((spell or "").strip().lower())
+    if not spec:
         raise HTTPException(400, "unknown or unsupported summon spell")
-    try:
-        count = int(count)
-    except (TypeError, ValueError):
-        count = 8
-    if count not in _CONJURE_COUNT_CR_TIERS:
-        raise HTTPException(400, "count must be one of 1, 2, 4, 8")
-    max_cr = _CONJURE_COUNT_CR_TIERS[count]
+    req_type = spec["type"]
+    mode = spec["mode"]
+    if mode == "count":
+        try:
+            count = int(count)
+        except (TypeError, ValueError):
+            count = 8
+        if count not in _CONJURE_COUNT_CR_TIERS:
+            raise HTTPException(400, "count must be one of 1, 2, 4, 8")
+        max_cr = _CONJURE_COUNT_CR_TIERS[count]
+    else:  # single — CR scales with the slot level
+        try:
+            sl = int(slot_level) if slot_level not in (None, "") else spec["base_slot"]
+        except (TypeError, ValueError):
+            sl = spec["base_slot"]
+        sl = max(spec["base_slot"], sl)
+        if spec["cr_kind"] == "tier":
+            max_cr = _spell_summon_cr_tier_for_slot(
+                spell, sl, default_cr=spec["default_cr"])
+        else:
+            max_cr = _spell_summon_cr_for_slot(
+                spell, sl, default_cr=spec["default_cr"])
+        count = 1
+        slot_level = sl
 
     records, _ = local_content.search(
         type="monsters", campaign_id=campaign_id, limit=2000)
@@ -67693,7 +67724,8 @@ async def summon_options(
     options.sort(key=lambda o: (-o["cr"], o["name"]))
     return {
         "ok": True, "spell": (spell or "").strip().lower(),
-        "type": req_type, "count": count, "max_cr": max_cr,
+        "type": req_type, "mode": mode, "count": count,
+        "slot_level": slot_level, "max_cr": max_cr,
         "options": options,
     }
 

@@ -57,3 +57,35 @@ def test_summon_picker_opens_and_lists_creatures(gm_page: Page) -> None:
     ).to_be_visible(timeout=5000)
 
     assert not errors, f"JS errors: {errors}"
+
+
+def test_summon_picker_single_mode(gm_page: Page) -> None:
+    """v2.749.0 — a single-summon conjure (Conjure Elemental) shows no count
+    selector, just the CR-by-slot caption + the elementals for that slot."""
+    mid = _mira_id()
+    assert mid, "Mira not found"
+    errors: list[str] = []
+    gm_page.on("pageerror", lambda e: errors.append(str(e)))
+    gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}")
+    gm_page.wait_for_function(
+        "() => typeof window.openSummonPicker === 'function'", timeout=8000)
+
+    gm_page.evaluate(
+        """([cid]) => window.openSummonPicker({
+            spell: 'conjure-elemental', endpoint: 'cast_conjure_elemental',
+            slugField: 'creature_slug', mode: 'single', charId: cid,
+            slotLevel: 5, spellName: 'Conjure Elemental' })""",
+        [mid],
+    )
+    expect(gm_page.locator(".summon-picker-modal")).to_be_visible()
+    # No count-tier buttons in single mode.
+    assert gm_page.locator(".summon-picker-modal button", has_text="CR ¼").count() == 0
+    expect(
+        gm_page.locator(".summon-picker-modal", has_text="CR scales with the slot")
+    ).to_be_visible()
+    # The elementals list renders.
+    expect(
+        gm_page.locator(".summon-picker-option", has_text="Fire Elemental")
+    ).to_be_visible(timeout=5000)
+
+    assert not errors, f"JS errors: {errors}"
