@@ -5732,6 +5732,37 @@ def _combatant_hidden_score(buffs: list) -> "int | None":
     return None
 
 
+def _segments_intersect(ax, ay, bx, by, cx, cy, dx, dy) -> bool:
+    """v2.753.0 — True if segment AB crosses segment CD (orientation test).
+    Used for wall line-of-sight occlusion."""
+    def _ccw(px, py, qx, qy, rx, ry):
+        return (ry - py) * (qx - px) - (qy - py) * (rx - px)
+    d1 = _ccw(cx, cy, dx, dy, ax, ay)
+    d2 = _ccw(cx, cy, dx, dy, bx, by)
+    d3 = _ccw(ax, ay, bx, by, cx, cy)
+    d4 = _ccw(ax, ay, bx, by, dx, dy)
+    return ((d1 > 0) != (d2 > 0)) and ((d3 > 0) != (d4 > 0))
+
+
+def _walls_block_sight(map_row, ax, ay, bx, by) -> bool:
+    """v2.753.0 — Maps 2.0 wall occlusion: does any solid wall / closed door
+    segment on ``map_row`` cross the sight line from (ax,ay) to (bx,by)? An
+    open door (``door`` and ``open``) doesn't block."""
+    for w in (getattr(map_row, "walls", None) or []):
+        if not isinstance(w, dict):
+            continue
+        if w.get("door") and w.get("open"):
+            continue  # open door — sight passes
+        try:
+            wx1 = float(w["x1"]); wy1 = float(w["y1"])
+            wx2 = float(w["x2"]); wy2 = float(w["y2"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if _segments_intersect(ax, ay, bx, by, wx1, wy1, wx2, wy2):
+            return True
+    return False
+
+
 def _visibility_between(
     db: Session, campaign_id: int, attacker: "dict | None",
     target: "dict | None",
@@ -5769,6 +5800,16 @@ def _visibility_between(
         grid_px, grid_type, float(atk_tok.x or 0), float(atk_tok.y or 0),
         float(tgt_tok.x or 0), float(tgt_tok.y or 0))
     result["range_ft"] = rng
+    # v2.753.0 — Maps 2.0 wall occlusion. A solid wall / closed door between
+    # the two tokens is total cover: it blocks all sight, including truesight
+    # and blindsight (which see through magical darkness / invisibility, not
+    # through physical barriers). Checked before the sense + light logic.
+    if _walls_block_sight(
+            map_row, float(atk_tok.x or 0), float(atk_tok.y or 0),
+            float(tgt_tok.x or 0), float(tgt_tok.y or 0)):
+        result["visibility"] = "unseen"
+        result["blocked_by_wall"] = True
+        return result
     illum = _illumination_at_point(
         db, campaign_id, map_row, float(tgt_tok.x or 0), float(tgt_tok.y or 0))
     result["illumination"] = illum

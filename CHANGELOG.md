@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.753.0] - 2026-06-29 — "The Sightless Wall"
+
+**Schema version:** 87
+
+**Commit summary:** Maps 2.0 wall occlusion — solid walls / closed doors block line of sight in the vision resolver.
+
+**Description:** Second slice of the walls arc: server-side line-of-sight occlusion. `_visibility_between` now checks whether any solid wall — or closed door — segment on the active map crosses the sight line between the two tokens; if so it returns `visibility: "unseen"` + `blocked_by_wall: true` **before** the senses/illumination logic, so a wall is total cover that even truesight and blindsight can't pierce (they see through magical darkness / invisibility, not physical barriers). An **open** door (`door` + `open`) doesn't block. New geometry helpers `_segments_intersect` (orientation test) + `_walls_block_sight` (scans the map's `walls`). This flows through everywhere the resolver is consumed — the `/visibility` query and the `/attack` + `/npc_attack` vision edges — so attacking through a wall is now correctly gated. The GM wall-editor UI, a door-toggle interaction, and the client lighting overlay honoring walls (wall-shadow rendering) remain follow-ups.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_segments_intersect` + `_walls_block_sight`; the wall-occlusion gate in `_visibility_between` (`blocked_by_wall` in the verdict).
+- `tests/harness/test_vision_wall_occlusion.py` (new, +3) — a wall blocks (unseen + `blocked_by_wall`); a closed door blocks while an open door passes; an offset wall doesn't block.
+
+### Schema
+- No schema change (still v87).
+
 ## [2.752.0] - 2026-06-29 — "The Mason's Ledger"
 
 **Schema version:** 87
