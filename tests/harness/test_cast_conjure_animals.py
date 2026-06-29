@@ -243,6 +243,32 @@ async def test_conjure_animals_out_of_combat_initiative_zero(gm_client, roster):
         await _dismiss_all(gm_client, ids)
 
 
+async def test_conjure_animals_grants_caster_control(gm_client, roster):
+    """v2.750.0 — behavior #2: each summon token is stamped with the casting
+    character's owner as ``controller_user_id``, so the player can move + act
+    with their summon (the existing `_user_can_move_token` hook) without GM
+    hand-off."""
+    mira = roster["Mira Greenleaf"]
+    owner = mira.get("owner_user_id")
+    assert owner, "Mira should have a player owner"
+    await _seed_battle(gm_client, [_pc_cb(mira)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_animals",
+        json={"character_id": mira["id"], "count": 2, "x": 700.0, "y": 700.0})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    ids = [c["id"] for c in body["combatants"]]
+    token_ids = set(body["token_ids"])
+    try:
+        toks = {t["id"]: t for t in await _tokens(gm_client)}
+        assert token_ids, "expected summon tokens"
+        for tid in token_ids:
+            assert tid in toks, tid
+            assert toks[tid]["controller_user_id"] == owner, toks[tid]
+    finally:
+        await _dismiss_all(gm_client, ids)
+
+
 async def test_conjure_animals_cannot_cast(gm_client, roster):
     """Krieger (Barbarian) → 409 cannot_cast."""
     krieger = roster["Krieger Stonefist"]

@@ -6276,12 +6276,21 @@ async def _summon_companion(
     disp_name = (name or entry["name"])[:120]
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    # v2.750.0 — behavior #2 of the Summon cast-flow arc: grant the summoning
+    # character's owner control of the summon token via the existing
+    # ``controller_user_id`` hook (honoured by ``_user_can_move_token``), so
+    # the casting player can move + act with their summon without GM hand-off.
+    # A GM-cast NPC summon (owner None) stays GM-controlled, as before.
+    _owner_char = db.query(Character).filter(
+        Character.id == owner_char_id).first()
+    _summon_controller_uid = _owner_char.owner_user_id if _owner_char else None
     token_id = None
     if campaign and campaign.active_map_id:
         t = Token(
             map_id=campaign.active_map_id,
             character_id=None,
             token_template_id=None,
+            controller_user_id=_summon_controller_uid,
             label=disp_name,
             color=entry.get("color", "#888888"),
             image_url=entry.get("image_url"),

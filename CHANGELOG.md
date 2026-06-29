@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.750.0] - 2026-06-29 — "The Conjurer's Writ"
+
+**Schema version:** 86
+
+**Commit summary:** Summoned creatures are auto-assigned to the casting player's control — behavior #2 of the Summon cast-flow arc.
+
+**Description:** Closes the last headline gap of the "Summon Spells — Creature Picker + Auto-Control + Init Placement" arc. `_summon_companion` now stamps the summon **Token**'s `controller_user_id` with the summoning character's owner (`char.owner_user_id`), so the casting player can move and act with their summon through the existing `_user_can_move_token` control hook — no GM hand-off required. Because the stamp lives in the shared summon primitive, it applies to **every** summon (the conjure family, Find Familiar, Spiritual Weapon, Wildfire Spirit, Pact of the Chain, …), not just one spell. A GM-cast NPC summon whose character has no player owner stays GM-controlled, exactly as before. No schema change — `controller_user_id` is the same column the player-token-create endpoints already use. Combined with v2.746.0 (auto-init behind caster) + v2.747.0–v2.749.0 (creature picker for all six conjures), summoning is now one player flow: cast → pick → the creature spawns under the caster's control, on the caster's turn.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_summon_companion` stamps the summon token's `controller_user_id` from the summoning character's owner.
+- `tests/harness/test_cast_conjure_animals.py` (+1) — summon tokens carry the caster-owner's `controller_user_id`.
+
+### Schema
+- No schema change (still v86).
+
 ## [2.749.0] - 2026-06-29 — "The Elemental Roster"
 
 **Schema version:** 86
