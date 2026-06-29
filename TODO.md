@@ -894,6 +894,8 @@ _Advantage & Disadvantage Tracking, Death Saving Throws, and Combat 2.0 Action E
 
 ### Summon Spells — Creature Picker + Auto-Control + Init Placement
 
+> **Progress (v2.746.0):** Behavior **#3 (auto-init behind caster)** shipped — `_summon_initiative_for_body` defaults a summon to the caster's initiative across all 7 conjure-family endpoints (`docs/plans/movement-and-summons.md`). Behavior **#1 (creature picker)** is already shipped on the **backend** (`beast_slug`/`creature_slug` via `_conjure_catalog_summon_template`; `find_familiar` `form`) — only the **sheet-side picker UI** remains. Behavior **#2 (auto-assign control to the casting player)** is still open. Remaining work below is the picker UI + #2.
+
 Unify the **cast-flow UX** for every spell that summons a creature onto the battle field. Today each summon endpoint (`/cast_conjure_animals`, `/cast_conjure_woodland_beings`, `/cast_conjure_minor_elementals`, `/cast_animate_dead`, `/cast_conjure_elemental`, `/cast_conjure_fey`, `/cast_conjure_celestial`, `/find_familiar`, plus any future summon ship) takes the chosen creature as an opaque server-side default (Conjure Animals always spawns wolves; Find Familiar always spawns a generic familiar) or as a free-form body field with no UI affordance. The player has no in-game picker for the RAW choices and the GM has to manually assign control + reorder initiative.
 
 **Three changes wrapped into one feature:**

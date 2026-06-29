@@ -1,6 +1,11 @@
 # Forced movement, speed buffs & summons — Phase 6 sub-plan
 
 **Status:** ✅ shipped (v2.99.431–.446). The `_force_move` forced-movement primitive and `_summon_companion` summon-token primitive both shipped and live in `app/routes/tabletop_routes.py`; this doc is retained as the design record.
+
+**Summon cast-flow UX (the TODO "Summon Spells — Creature Picker + Auto-Control + Init Placement" arc).** Verified state as of v2.746.0:
+- **Creature picker (backend) — largely shipped.** The conjure family already accepts a per-cast creature choice: `cast_conjure_animals` (`beast_slug`), `cast_conjure_woodland_beings` / `cast_conjure_fey` (`creature_slug` → fey), `cast_conjure_minor_elementals` / `cast_conjure_elemental` (`creature_slug` → elemental), all CR-gated via `_conjure_catalog_summon_template`; `cast_find_familiar` takes a `form` field. *Remaining:* a sheet-side **picker UI** so the player chooses without hand-crafting the body field.
+- **Auto-init behind caster — shipped v2.746.0.** `_summon_initiative_for_body(campaign_id, caster_char_id, body)` defaults a summon's initiative to the **caster's** initiative (so it slots right after the caster per RAW PHB p.193), generalising the v2.113.0 Spiritual Weapon pattern across all seven conjure-family endpoints. An explicit body `initiative` still wins; out-of-combat casts fall back to 0. Test: `test_conjure_animals_inherits_caster_initiative`.
+- **Auto-assign control to the casting player — still open.** Summon combatants carry `summoned_by: <caster_char_id>` but no player `owner_user_id`; granting the caster move/attack control is the remaining gap.
 **Parent:** [full-feature-automation.md](full-feature-automation.md) Phase 6 (P6 movement + P7 summons).
 **Goal:** Build the two heaviest remaining primitives — **server-side
 forced movement** (`_force_move`) + **speed buffs**, and a

@@ -6313,6 +6313,39 @@ async def _summon_companion(
             "companion_key": combatant["companion_key"]}
 
 
+def _summon_initiative_for_body(
+    campaign_id: int, caster_char_id: int, body: dict,
+) -> int:
+    """v2.746.0 — pick the initiative slot for a summoned creature.
+
+    An explicit body ``initiative`` always wins (GM override). Otherwise
+    default to the **caster's own initiative**, so the summon is appended
+    right after the caster's entry and the client's descending init sort
+    renders it on the caster's turn — RAW PHB p.193 ("summoned creatures
+    act on your turn"). This generalises the v2.113.0 Spiritual Weapon
+    "right after the caster" pattern to the whole summon family; before
+    this the conjure endpoints defaulted to ``0`` (summon sorted to the
+    bottom of the tracker, forcing a manual GM reorder).
+
+    Returns 0 when the caster isn't in an active battle (an out-of-combat
+    summon, e.g. Find Familiar during a rest) — the prior behaviour.
+    """
+    override = body.get("initiative")
+    if override not in (None, ""):
+        try:
+            return int(override)
+        except (TypeError, ValueError):
+            return 0
+    state = hub.get_battle(campaign_id) or {}
+    for c in (state.get("combatants") or []):
+        if c.get("char_id") == caster_char_id:
+            try:
+                return int(c.get("initiative") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
 async def _dismiss_companion(
     db: Session, campaign_id: int, combatant_id: str,
 ) -> dict:
@@ -67688,7 +67721,7 @@ async def cast_conjure_animals(
 
     base_x = float(body.get("x") or 0)
     base_y = float(body.get("y") or 0)
-    initiative = int(body.get("initiative") or 0)
+    initiative = _summon_initiative_for_body(campaign_id, char.id, body)
     combatants = []
     token_ids = []
     for i in range(count):
@@ -67847,7 +67880,7 @@ async def cast_conjure_woodland_beings(
 
     base_x = float(body.get("x") or 0)
     base_y = float(body.get("y") or 0)
-    initiative = int(body.get("initiative") or 0)
+    initiative = _summon_initiative_for_body(campaign_id, char.id, body)
     combatants = []
     token_ids = []
     for i in range(count):
@@ -68006,7 +68039,7 @@ async def cast_conjure_minor_elementals(
 
     base_x = float(body.get("x") or 0)
     base_y = float(body.get("y") or 0)
-    initiative = int(body.get("initiative") or 0)
+    initiative = _summon_initiative_for_body(campaign_id, char.id, body)
     combatants = []
     token_ids = []
     for i in range(count):
@@ -68144,7 +68177,7 @@ async def cast_animate_dead(
 
     base_x = float(body.get("x") or 0)
     base_y = float(body.get("y") or 0)
-    initiative = int(body.get("initiative") or 0)
+    initiative = _summon_initiative_for_body(campaign_id, char.id, body)
     combatants = []
     token_ids = []
     for i in range(count):
@@ -68291,7 +68324,7 @@ async def cast_conjure_elemental(
 
     base_x = float(body.get("x") or 0)
     base_y = float(body.get("y") or 0)
-    initiative = int(body.get("initiative") or 0)
+    initiative = _summon_initiative_for_body(campaign_id, char.id, body)
     combatants = []
     token_ids = []
     res = await _summon_companion(
@@ -68437,7 +68470,7 @@ async def cast_conjure_fey(
 
     base_x = float(body.get("x") or 0)
     base_y = float(body.get("y") or 0)
-    initiative = int(body.get("initiative") or 0)
+    initiative = _summon_initiative_for_body(campaign_id, char.id, body)
     combatants = []
     token_ids = []
     res = await _summon_companion(
@@ -68587,7 +68620,7 @@ async def cast_conjure_celestial(
 
     base_x = float(body.get("x") or 0)
     base_y = float(body.get("y") or 0)
-    initiative = int(body.get("initiative") or 0)
+    initiative = _summon_initiative_for_body(campaign_id, char.id, body)
     combatants = []
     token_ids = []
     res = await _summon_companion(

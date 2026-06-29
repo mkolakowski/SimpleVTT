@@ -189,6 +189,60 @@ async def test_conjure_animals_l9_quadruples(gm_client, roster):
         await _dismiss_all(gm_client, ids)
 
 
+async def test_conjure_animals_inherits_caster_initiative(gm_client, roster):
+    """v2.746.0 — with no body ``initiative``, summons inherit the caster's
+    initiative so they slot right after the caster in the tracker (RAW PHB
+    p.193: summoned creatures act on your turn). Before this the conjure
+    endpoints defaulted to 0, dropping the pack to the bottom of the order.
+    An explicit body initiative still wins (GM override)."""
+    mira = roster["Mira Greenleaf"]
+    # _pc_cb seeds Mira at initiative 10.
+    await _seed_battle(gm_client, [_pc_cb(mira)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_animals",
+        json={"character_id": mira["id"], "count": 1, "x": 700.0, "y": 700.0})
+    assert r.status_code == 200, r.text
+    ids = [c["id"] for c in r.json()["combatants"]]
+    try:
+        assert r.json()["combatants"], "expected a summon"
+        for c in r.json()["combatants"]:
+            assert c["initiative"] == 10, c  # Mira's init, not 0
+    finally:
+        await _dismiss_all(gm_client, ids)
+
+    # Explicit override still wins.
+    await _seed_battle(gm_client, [_pc_cb(mira)])
+    r2 = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_animals",
+        json={"character_id": mira["id"], "count": 1, "initiative": 99,
+              "x": 700.0, "y": 700.0})
+    assert r2.status_code == 200, r2.text
+    ids2 = [c["id"] for c in r2.json()["combatants"]]
+    try:
+        for c in r2.json()["combatants"]:
+            assert c["initiative"] == 99, c
+    finally:
+        await _dismiss_all(gm_client, ids2)
+
+
+async def test_conjure_animals_out_of_combat_initiative_zero(gm_client, roster):
+    """When the caster isn't in an active battle, the summon falls back to
+    initiative 0 (the prior out-of-combat behaviour)."""
+    mira = roster["Mira Greenleaf"]
+    # Clear the battle so Mira isn't a combatant.
+    await _seed_battle(gm_client, [])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_conjure_animals",
+        json={"character_id": mira["id"], "count": 1, "x": 700.0, "y": 700.0})
+    assert r.status_code == 200, r.text
+    ids = [c["id"] for c in r.json()["combatants"]]
+    try:
+        for c in r.json()["combatants"]:
+            assert c["initiative"] == 0, c
+    finally:
+        await _dismiss_all(gm_client, ids)
+
+
 async def test_conjure_animals_cannot_cast(gm_client, roster):
     """Krieger (Barbarian) → 409 cannot_cast."""
     krieger = roster["Krieger Stonefist"]

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.746.0] - 2026-06-29 — "The Turn-Order Familiar"
+
+**Schema version:** 86
+
+**Commit summary:** Summoned creatures auto-slot behind the caster in initiative — first slice of the Summon cast-flow arc.
+
+**Description:** Behaviour #3 of the "Summon Spells — Creature Picker + Auto-Control + Init Placement" backlog item. New `_summon_initiative_for_body(campaign_id, caster_char_id, body)` helper: when a summon cast omits an explicit `initiative`, the summoned creature now inherits the **caster's** initiative — so it's appended right after the caster's entry and the client's descending init sort renders it on the caster's turn (RAW PHB p.193, "summoned creatures act on your turn"). This generalises the v2.113.0 Spiritual Weapon "right after the caster" pattern across all seven conjure-family endpoints (`cast_conjure_animals`, `cast_conjure_woodland_beings`, `cast_conjure_minor_elementals`, `cast_animate_dead`, `cast_conjure_elemental`, `cast_conjure_fey`, `cast_conjure_celestial`), which previously defaulted summons to initiative 0 (dropping the pack to the bottom of the tracker, forcing a manual GM reorder). An explicit body `initiative` still wins (GM override); an out-of-combat cast (caster not in the battle) falls back to 0. Verified the broader arc state while here: the per-cast **creature picker is already shipped on the backend** (`beast_slug`/`creature_slug` via `_conjure_catalog_summon_template`; `find_familiar` `form`) — only the picker UI + auto-player-control remain (recorded in the plan doc).
+
+### Added
+- `app/routes/tabletop_routes.py` — `_summon_initiative_for_body()` helper; applied to the 7 conjure-family endpoints.
+- `tests/harness/test_cast_conjure_animals.py` (+2) — summon inherits the caster's initiative (and an explicit override wins); out-of-combat cast falls back to 0.
+
+### Changed
+- `docs/plans/movement-and-summons.md` — recorded the verified Summon cast-flow arc state (picker backend shipped, auto-init shipped here, auto-control open).
+
+### Schema
+- No schema change (still v86).
+
 ## [2.745.1] - 2026-06-29 — "The Roll Call"
 
 **Schema version:** 86
