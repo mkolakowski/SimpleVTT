@@ -5446,10 +5446,144 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     const combatant = window._findCombatant({ charId: rawCharId });
                     if (combatant) window._markCombatantEconomy(combatant, slot);
                 }
+                // v2.748.0 — summon spells: the cast above consumed the slot
+                // + announced normally; now open the creature picker to spawn
+                // the chosen creatures (the picker POSTs to /cast_conjure_*).
+                const _sumSpec = window._SUMMON_SPELLS
+                    && window._SUMMON_SPELLS[(spellName || '').toLowerCase()];
+                if (_sumSpec && typeof window.openSummonPicker === 'function') {
+                    window.openSummonPicker({
+                        spell: _sumSpec.spell, endpoint: _sumSpec.endpoint,
+                        slugField: _sumSpec.slugField, charId: charId,
+                        slotLevel: lvl, spellName: spellName,
+                    });
+                }
             } finally {
                 btn.disabled = false;
             }
         });
+
+        /* v2.748.0 — Summon creature picker. Behavior #1 of the Summon
+           cast-flow arc: a modal that lists the catalog creatures valid for a
+           count-based conjure spell (via GET /summon-options) and, on pick,
+           POSTs to the matching /cast_conjure_* endpoint with the chosen slug.
+           Exposed on window so the cast hook above + the harness can drive
+           it. */
+        window._SUMMON_SPELLS = {
+            'conjure animals': { spell: 'conjure-animals', endpoint: 'cast_conjure_animals', slugField: 'beast_slug' },
+            'conjure woodland beings': { spell: 'conjure-woodland-beings', endpoint: 'cast_conjure_woodland_beings', slugField: 'creature_slug' },
+            'conjure minor elementals': { spell: 'conjure-minor-elementals', endpoint: 'cast_conjure_minor_elementals', slugField: 'creature_slug' },
+        };
+        // RAW count↔CR summoning options (PHB p.225): N creatures of max CR.
+        const _SUMMON_COUNT_OPTIONS = [
+            { count: 8, label: '8 × CR ¼' },
+            { count: 4, label: '4 × CR ½' },
+            { count: 2, label: '2 × CR 1' },
+            { count: 1, label: '1 × CR 2' },
+        ];
+        window.openSummonPicker = function (opts) {
+            const { spell, endpoint, slugField, charId, slotLevel, spellName } = opts || {};
+            if (!spell || !endpoint || !charId) return;
+            let count = 8;  // default summoning option
+            // Backdrop + modal shell.
+            const back = document.createElement('div');
+            back.className = 'summon-picker-backdrop';
+            back.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center;';
+            const modal = document.createElement('div');
+            modal.className = 'summon-picker-modal';
+            modal.style.cssText = 'background:var(--bg-1,#1b1d27);border:1px solid var(--border,#333);border-radius:10px;max-width:520px;width:92%;max-height:80vh;overflow:auto;padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.5);';
+            const close = () => back.remove();
+            const title = document.createElement('h3');
+            title.style.cssText = 'margin:0 0 10px;font-size:16px;';
+            title.textContent = '🔮 ' + (spellName || 'Summon') + ' — choose a creature';
+            modal.appendChild(title);
+
+            // Count-option selector (only meaningful for count-based spells).
+            const optRow = document.createElement('div');
+            optRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;';
+            const listWrap = document.createElement('div');
+            listWrap.className = 'summon-picker-list';
+            listWrap.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
+
+            async function loadOptions() {
+                listWrap.innerHTML = '<p class="muted" style="font-size:12px;">Loading…</p>';
+                try {
+                    const r = await fetch(`/api/campaign/${CAMPAIGN_ID}/summon-options?spell=${encodeURIComponent(spell)}&count=${count}`);
+                    if (!r.ok) { listWrap.innerHTML = '<p class="muted">Could not load creatures.</p>'; return; }
+                    const data = await r.json();
+                    const options = data.options || [];
+                    listWrap.innerHTML = '';
+                    if (!options.length) {
+                        listWrap.innerHTML = '<p class="muted" style="font-size:12px;">No catalog creatures at this CR tier.</p>';
+                        return;
+                    }
+                    options.forEach(o => {
+                        const b = document.createElement('button');
+                        b.type = 'button';
+                        b.className = 'sheet-section-btn summon-picker-option';
+                        b.dataset.slug = o.slug;
+                        b.style.cssText = 'display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;';
+                        b.innerHTML = `<span>${o.name}</span><span class="muted" style="font-size:11px;">CR ${o.cr} · ${o.hp} HP · AC ${o.ac}</span>`;
+                        b.addEventListener('click', () => pick(o.slug));
+                        listWrap.appendChild(b);
+                    });
+                } catch (e) {
+                    listWrap.innerHTML = '<p class="muted">Could not load creatures.</p>';
+                }
+            }
+            function renderOptRow() {
+                optRow.innerHTML = '';
+                _SUMMON_COUNT_OPTIONS.forEach(co => {
+                    const b = document.createElement('button');
+                    b.type = 'button';
+                    b.className = 'sheet-section-btn';
+                    b.textContent = co.label;
+                    b.style.opacity = (co.count === count) ? '1' : '.55';
+                    b.addEventListener('click', () => { count = co.count; renderOptRow(); loadOptions(); });
+                    optRow.appendChild(b);
+                });
+            }
+            async function pick(slug) {
+                const body = {
+                    character_id: charId, count: count, slot_level: slotLevel || 3,
+                    x: 700, y: 700, spacing: 70,
+                };
+                body[slugField] = slug;
+                try {
+                    const r = await fetch(`/api/campaign/${CAMPAIGN_ID}/${endpoint}`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body),
+                    });
+                    const d = await r.json().catch(() => ({}));
+                    if (r.ok) {
+                        (window.showToast || function () {})(`Summoned ${d.count || count} creature(s).`, 'success');
+                    } else {
+                        (window.showToast || function (m) { alert(m); })('Summon failed: ' + (d.detail || d.error || r.status), 'error');
+                    }
+                } catch (e) {
+                    (window.showToast || function (m) { alert(m); })('Summon failed.', 'error');
+                }
+                close();
+            }
+
+            const btnRow = document.createElement('div');
+            btnRow.style.cssText = 'margin-top:12px;display:flex;justify-content:flex-end;';
+            const cancel = document.createElement('button');
+            cancel.type = 'button';
+            cancel.className = 'sheet-section-btn';
+            cancel.textContent = 'Cancel';
+            cancel.addEventListener('click', close);
+            btnRow.appendChild(cancel);
+
+            modal.appendChild(optRow);
+            modal.appendChild(listWrap);
+            modal.appendChild(btnRow);
+            back.appendChild(modal);
+            back.addEventListener('click', (e) => { if (e.target === back) close(); });
+            document.body.appendChild(back);
+            renderOptRow();
+            loadOptions();
+        };
 
         /* Mini-sheet collapsible sections (Skills, Spells) — state persists
            per character in localStorage under

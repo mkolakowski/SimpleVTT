@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.748.0] - 2026-06-29 — "The Conjurer's Catalog"
+
+**Schema version:** 86
+
+**Commit summary:** Summon creature-picker UI — a modal that lets players choose which creature a count-based conjure spell summons.
+
+**Description:** Completes behaviour #1 of the Summon cast-flow arc (for the count-based conjure spells) and adds the first UI entry point for the summon endpoints, which were previously API/harness-only. New `window.openSummonPicker` modal: after a count-based conjure spell (Conjure Animals / Woodland Beings / Minor Elementals) is cast from the mini-sheet — so the spell slot is consumed + the cast announced normally — a picker opens listing the valid creatures from `GET /summon-options`. The player chooses the summoning option (8 × CR¼, 4 × CR½, 2 × CR1, 1 × CR2 — which re-loads the creature list at the new CR tier) and the creature; the picker then POSTs to the matching `/cast_conjure_*` endpoint with the chosen `beast_slug` / `creature_slug`. The cast hook (`window._SUMMON_SPELLS`) matches summon spells by name in the existing PC cast path's success branch, so non-summon casts are completely unaffected. Combined with v2.746.0 (auto-init behind caster), summoning a chosen creature pack is now one player flow.
+
+### Added
+- `app/templates/tabletop.html` — `window.openSummonPicker` modal + `window._SUMMON_SPELLS` map + the post-cast hook in the mini-sheet PC cast path.
+- `tests/harness_ui/test_summon_picker.py` (new, +1) — the picker opens, lists CR¼ beasts (no Brown Bear), and switching to the CR-1 option reloads with Brown Bear; no JS errors.
+
+### Schema
+- No schema change (still v86).
+
 ## [2.747.0] - 2026-06-29 — "The Bestiary Menu"
 
 **Schema version:** 86
