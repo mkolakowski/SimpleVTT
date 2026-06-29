@@ -6140,6 +6140,17 @@ def _monster_summon_template(
 # Used by the catalog-backed summon override to gate the chosen slug.
 _CONJURE_COUNT_CR_TIERS = {1: 2.0, 2: 1.0, 4: 0.5, 8: 0.25}
 
+# v2.747.0 — sheet-side summon-picker substrate. Maps each count-based
+# conjure spell to the creature `type` its RAW list draws from; the
+# `/summon-options` endpoint lists catalog creatures of that type within
+# the count↔CR tier so the player picks a creature instead of
+# hand-crafting the `beast_slug` / `creature_slug` cast-body field.
+_SUMMON_PICKER_TYPES = {
+    "conjure-animals": "beast",
+    "conjure-woodland-beings": "fey",
+    "conjure-minor-elementals": "elemental",
+}
+
 
 def _conjure_catalog_summon_template(
     body: dict, campaign_id: "int | None",
@@ -67613,6 +67624,77 @@ async def use_steel_defender(
         "damage_rolled": damage_rolled,
         "damage_applied": damage_applied,
         "damage_type": damage_type,
+    }
+
+
+@router.get("/api/campaign/{campaign_id}/summon-options")
+async def summon_options(
+    campaign_id: int,
+    spell: str,
+    count: int = 8,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.747.0 — list the creatures a player may pick for a count-based
+    conjure spell, for the sheet-side summon picker. Filters the monster
+    catalog by the spell's creature ``type`` (`_SUMMON_PICKER_TYPES`) and
+    the count↔CR tier (`_CONJURE_COUNT_CR_TIERS`) — the SAME gate
+    `_conjure_catalog_summon_template` enforces on the cast — so every
+    option the picker shows is guaranteed to validate when its slug rides
+    the `beast_slug` / `creature_slug` body field.
+
+    Query: ``spell`` (e.g. ``conjure-animals``), ``count`` (1/2/4/8).
+    Returns ``{ok, spell, type, count, max_cr, options:[{slug, name, cr,
+    hp, ac}]}`` sorted by CR desc then name.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    req_type = _SUMMON_PICKER_TYPES.get((spell or "").strip().lower())
+    if not req_type:
+        raise HTTPException(400, "unknown or unsupported summon spell")
+    try:
+        count = int(count)
+    except (TypeError, ValueError):
+        count = 8
+    if count not in _CONJURE_COUNT_CR_TIERS:
+        raise HTTPException(400, "count must be one of 1, 2, 4, 8")
+    max_cr = _CONJURE_COUNT_CR_TIERS[count]
+
+    records, _ = local_content.search(
+        type="monsters", campaign_id=campaign_id, limit=2000)
+    options = []
+    for rec in records:
+        if req_type not in (rec.get("type") or "").strip().lower():
+            continue
+        cr = _cr_to_float(rec.get("challenge_rating"))
+        if cr > max_cr:
+            continue
+        slug = (rec.get("slug") or "").strip().lower()
+        if not slug:
+            continue
+        ac_raw = rec.get("armor_class")
+        if isinstance(ac_raw, list) and ac_raw:
+            ac_raw = ac_raw[0]
+        if isinstance(ac_raw, dict):
+            ac_raw = ac_raw.get("value")
+        try:
+            ac = int(ac_raw)
+        except (TypeError, ValueError):
+            ac = 10
+        try:
+            hp = int(rec.get("hit_points") or 1)
+        except (TypeError, ValueError):
+            hp = 1
+        options.append({
+            "slug": slug, "name": rec.get("name") or slug,
+            "cr": cr, "hp": max(1, hp), "ac": ac,
+        })
+    options.sort(key=lambda o: (-o["cr"], o["name"]))
+    return {
+        "ok": True, "spell": (spell or "").strip().lower(),
+        "type": req_type, "count": count, "max_cr": max_cr,
+        "options": options,
     }
 
 

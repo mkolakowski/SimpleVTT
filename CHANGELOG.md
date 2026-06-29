@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.747.0] - 2026-06-29 — "The Bestiary Menu"
+
+**Schema version:** 86
+
+**Commit summary:** Summon-picker options endpoint — lists the valid creatures for a count-based conjure spell (data layer for the sheet-side picker).
+
+**Description:** Behaviour #1 of the Summon cast-flow arc — the data layer the sheet-side creature picker needs. New `GET /api/campaign/{cid}/summon-options?spell=&count=` lists every catalog creature a player may pick for a count-based conjure spell, filtered by the spell's creature `type` (`_SUMMON_PICKER_TYPES`: conjure-animals→beast, conjure-woodland-beings→fey, conjure-minor-elementals→elemental) and the count↔CR tier (`_CONJURE_COUNT_CR_TIERS`: 8→CR¼, 4→CR½, 2→CR1, 1→CR2). This is the **same gate** `_conjure_catalog_summon_template` already enforces on the cast, so every option the picker shows is guaranteed to validate when its slug rides the `beast_slug` / `creature_slug` body field. Returns `{ok, spell, type, count, max_cr, options:[{slug, name, cr, hp, ac}]}` sorted by CR desc then name. (The picker UI that consumes this is the next slice; the cast body already accepts the chosen slug today.)
+
+### Added
+- `app/routes/tabletop_routes.py` — `_SUMMON_PICKER_TYPES` map + `GET /summon-options`.
+- `tests/harness/test_summon_options.py` (new, +5) — CR¼ tier excludes CR-1 beasts; count=2 raises the cap to include brown-bear; woodland-beings → fey; unknown spell / bad count → 400.
+
+### Schema
+- No schema change (still v86).
+
 ## [2.746.0] - 2026-06-29 — "The Turn-Order Familiar"
 
 **Schema version:** 86
