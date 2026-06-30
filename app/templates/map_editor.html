@@ -78,11 +78,19 @@
       </select>
     </label>
   </div>
-  <div class="me-group" role="group" aria-label="Fog of war">
-    <span class="me-grp-lbl">Fog</span>
+  <div class="me-group" role="group" aria-label="Fog of war and lighting">
+    <span class="me-grp-lbl">Fog &amp; Light</span>
     <button type="button" id="me-fog-btn" class="me-tool-btn" aria-pressed="false"
             title="Fog of war: drag to reveal an area; click a revealed area to re-hide it">🌫 Fog</button>
     <label id="me-fog-on-lbl" style="display:none;"><input type="checkbox" id="me-fog-on-cb"> fog on</label>
+    {# v2.783.1 — ambient lighting lives with fog (both govern what players see). #}
+    <label style="gap:4px;">Ambient
+      <select id="me-ambient" style="min-height:32px;">
+        {% for lvl in ['bright','dim','dark'] %}
+        <option value="{{ lvl }}" {% if map.ambient_light == lvl %}selected{% endif %}>{{ lvl }}</option>
+        {% endfor %}
+      </select>
+    </label>
   </div>
   <div class="me-group" role="group" aria-label="Tokens">
     <span class="me-grp-lbl">Tokens</span>
@@ -102,16 +110,6 @@
     <label style="gap:3px;">px<input type="number" id="me-grid" min="20" max="300" value="{{ map.grid_size_px }}" style="width:58px;min-height:32px;" title="Grid cell size in pixels"></label>
     <label style="gap:3px;">x<input type="number" id="me-grid-offx" min="0" value="{{ map.grid_offset_x }}" style="width:48px;min-height:32px;" title="Grid offset X (align the grid to the image)"></label>
     <label style="gap:3px;">y<input type="number" id="me-grid-offy" min="0" value="{{ map.grid_offset_y }}" style="width:48px;min-height:32px;" title="Grid offset Y"></label>
-  </div>
-  <div class="me-group" role="group" aria-label="Lighting">
-    <span class="me-grp-lbl">Lighting</span>
-    <label style="gap:4px;">Ambient
-      <select id="me-ambient" style="min-height:32px;">
-        {% for lvl in ['bright','dim','dark'] %}
-        <option value="{{ lvl }}" {% if map.ambient_light == lvl %}selected{% endif %}>{{ lvl }}</option>
-        {% endfor %}
-      </select>
-    </label>
   </div>
   <div class="me-group" role="group" aria-label="View">
     <span class="me-grp-lbl">View</span>

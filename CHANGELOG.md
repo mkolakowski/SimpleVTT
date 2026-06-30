@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.783.1] - 2026-06-30 — "The Shared Shadow"
+
+**Schema version:** 91
+
+**Commit summary:** Move the Ambient lighting control into the Fog group (now "Fog & Light").
+
+**Description:** The **Ambient** lighting select now lives alongside the Fog of War controls — the standalone "Lighting" group is gone and the Fog group is relabelled **Fog & Light**. Fog and ambient lighting both govern what players can see, so they sit together. Pure layout; the `#me-ambient` control and its behaviour (lighting preview + token-perspective darkness) are unchanged.
+
+### Changed
+- `app/templates/map_editor.html` — Ambient select moved into the Fog group; group relabelled "Fog & Light"; empty "Lighting" group removed.
+- `tests/harness_ui/test_map_editor_toolbar.py` — expected group labels updated (seven groups; "Fog & Light").
+
+### Schema
+- No schema change (still v91).
+
 ## [2.783.0] - 2026-06-30 — "The Sorted Workbench"
 
 **Schema version:** 91
