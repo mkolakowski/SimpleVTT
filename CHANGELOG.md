@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.771.0] - 2026-06-29 — "The Cartographer's Shortcut"
+
+**Schema version:** 91
+
+**Commit summary:** Encounters link to the map editor — each encounter with a bound map gets a 🗺 Edit-map link.
+
+**Description:** In the campaign-settings encounter library, every encounter that binds a map now shows a **🗺 Edit map** link in its card header, jumping straight to that map's editor (`/campaign/{cid}/map/{map_id}/edit`) to author walls / doors / lights / fog / grid. Saves hunting through the Maps table to find the right map before a session.
+
+### Added
+- `app/templates/campaign_settings.html` — 🗺 Edit-map link per encounter card (shown when `e.map_id` is set).
+- `tests/harness_ui/test_encounter_linked_maps.py` — asserts the link renders.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.770.1] - 2026-06-29 — "The Bigger Canvas"
 
 **Schema version:** 91

@@ -1437,6 +1437,17 @@
         titleRow.appendChild(name);
         titleRow.appendChild(meta);
         titleRow.appendChild(date);
+        // v2.771.0 — quick link to the map editor for this encounter's bound
+        // map (walls / doors / lights / fog / grid).
+        if (e.map_id) {
+            const mapEditLink = document.createElement('a');
+            mapEditLink.href = '/campaign/' + CAMPAIGN_ID + '/map/' + e.map_id + '/edit';
+            mapEditLink.textContent = '🗺 Edit map';
+            mapEditLink.title = 'Open the map editor for this encounter’s map';
+            mapEditLink.className = 'btn-link';
+            mapEditLink.style.cssText = 'font-size:11px;padding:3px 8px;text-decoration:none;';
+            titleRow.appendChild(mapEditLink);
+        }
         titleRow.appendChild(dupBtn);
         titleRow.appendChild(editBtn);
         titleRow.appendChild(delBtn);

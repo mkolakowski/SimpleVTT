@@ -30,6 +30,12 @@ def test_encounter_editor_has_linked_maps_picker(gm_page: Page) -> None:
         "() => document.querySelectorAll('#enc-library details')"
         ".forEach(d => { d.open = true; })")
 
+    # v2.771.0 — an encounter with a bound map shows a 🗺 Edit-map link to the
+    # dedicated map editor.
+    expect(
+        gm_page.locator("#enc-library a", has_text="Edit map").first
+    ).to_be_visible()
+
     edit_btn = gm_page.locator("#enc-library button", has_text="Edit").first
     expect(edit_btn).to_be_visible(timeout=5000)
     edit_btn.click()
