@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.785.8] - 2026-06-30 — "The Stable Anchor"
+
+**Schema version:** 91
+
+**Commit summary:** After re-login, a dead `/campaign/{cid}/…` deep link lands on the campaign instead of the home page.
+
+**Description:** Follow-up to v2.785.0's return-to-URL. The redirect itself works (verified end-to-end in a real browser), but on the **public demo** the hourly reseed regenerates nested map/scene IDs, so the exact URL you were on (old map ID) is a 404 by the time you log back in — and authenticated 404s previously dumped you on the **home page**. Now an authenticated user who hits a dead deep link under `/campaign/{cid}/…` is sent to the **parent campaign** (`/campaign/{cid}`, whose ID is stable across reseeds), so you land back in the right campaign and can reopen the current map. On non-demo deployments (stable IDs) re-login already returns you to the exact page. (The campaign path itself, if missing, still falls through to home — no redirect loop.)
+
+### Changed
+- `app/main.py` — the authenticated-404 HTML handler redirects `^/campaign/(\d+)/.+` to `/campaign/{cid}` before falling back to `/`.
+
+### Added
+- `tests/harness/test_relogin_redirect.py` (+1) — a dead `/campaign/1/map/<gone>/edit` lands an authenticated user on `/campaign/1`.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.785.7] - 2026-06-30 — "The Level Row"
 
 **Schema version:** 91
