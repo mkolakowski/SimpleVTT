@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.784.3] - 2026-06-30 — "The Two-Up Bench"
+
+**Schema version:** 91
+
+**Commit summary:** Toolbar groups lay controls two-per-row so tall groups are shorter.
+
+**Description:** Within each map-editor toolbar group, controls now flow **up to two per row** (label header spanning the top) instead of one tall single-file column — so multi-control groups (Markers, Grid, View) are about half as tall while staying grouped. A lone or odd-one-out control grows to fill its row.
+
+### Changed
+- `app/templates/map_editor.html` — `.me-group` is a wrapping flex with controls at `flex:1 1 calc(50% - 4px)` (two-up); label spans the full width.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.784.2] - 2026-06-30 — "The Stacked Bench"
 
 **Schema version:** 91

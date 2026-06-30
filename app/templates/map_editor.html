@@ -16,16 +16,17 @@
     align-items:center; gap:5px; }
   .me-tool-btn[aria-pressed="true"] { background:var(--accent); color:#fff; }
   /* v2.783.0 — controls grouped into labelled sub-groups.
-     v2.784.2 — buttons stack vertically within each group. */
-  .me-group { display:flex; flex-direction:column; align-items:stretch; gap:6px;
+     v2.784.2 — controls stack within each group.
+     v2.784.3 — up to TWO controls per row so tall groups are shorter. */
+  .me-group { display:flex; flex-wrap:wrap; align-items:stretch; gap:6px;
     padding:5px 9px; border:1px solid var(--border); border-radius:8px;
     flex:0 0 auto;
     background:color-mix(in srgb, var(--bg) 55%, transparent); }
-  .me-grp-lbl { font-size:9px; font-weight:700;
+  .me-grp-lbl { flex-basis:100%; font-size:9px; font-weight:700;
     text-transform:uppercase; letter-spacing:.6px; color:var(--fg-mute);
     opacity:.75; user-select:none; text-align:center; margin-bottom:2px; }
-  /* stacked controls fill the group width for a tidy column */
-  .me-group > .me-tool-btn, .me-group > label { width:100%; }
+  /* two-up: each control takes ~half the group; a lone/odd one grows to fill */
+  .me-group > .me-tool-btn, .me-group > label { flex:1 1 calc(50% - 4px); min-width:76px; }
   .me-group > label { justify-content:center; }
   .me-stage { position:relative; display:block; width:100%; box-sizing:border-box;
     border:1px solid var(--border); border-radius:6px; overflow:auto;
