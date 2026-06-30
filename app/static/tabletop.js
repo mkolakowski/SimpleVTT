@@ -108,6 +108,14 @@
         mapWalls = Array.isArray(w) ? w : [];
         try { render(); } catch (_) {}  // full redraw (map+tokens+lighting)
     };
+    // v2.765.0 — placeable map light sources (torches/lanterns). Fed by the
+    // wall editor's /active-map bootstrap + the lights_update WS; punched into
+    // the lighting overlay (with wall shadows) like token lights.
+    let mapLights = [];
+    window._setMapLights = function (l) {
+        mapLights = Array.isArray(l) ? l : [];
+        try { render(); } catch (_) {}
+    };
     // The server-rendered initial-data predates the vision fields, so pull
     // the active map's ambient + placed emitters once on load. Deferred
     // (async) so it runs after the sync init defines render() + CAMPAIGN_ID.
@@ -2980,6 +2988,13 @@
             const r = Number(e.radius_ft || 0);
             punch(Number(e.x || 0), Number(e.y || 0), r, r);
         });
+        // v2.765.0 — placeable map light sources (bright/dim radius in ft).
+        mapLights.forEach(L => {
+            if (!L) return;
+            const b = Number(L.bright_ft || 0), d = Number(L.dim_ft || 0);
+            if (b <= 0 && d <= 0) return;
+            punch(Number(L.x || 0), Number(L.y || 0), b, d);
+        });
         // 3. Magical darkness + fog painted on top (override any light below).
         lc.globalCompositeOperation = 'source-over';
         darknessEm.forEach(e => {
@@ -5364,6 +5379,11 @@
                 // v2.756.0 — Maps 2.0: re-render clickable hotspots.
                 if (msg.data && typeof window._onHotspotsUpdate === 'function') {
                     try { window._onHotspotsUpdate(msg.data); } catch (_) {}
+                }
+            } else if (msg.type === 'lights_update') {
+                // v2.765.0 — Maps 2.0: re-render placeable map light sources.
+                if (msg.data && typeof window._setMapLights === 'function') {
+                    try { window._setMapLights(msg.data.lights || []); } catch (_) {}
                 }
             } else if (msg.type === 'character_death_save') {
                 _onCharacterDeathSave(msg.data);

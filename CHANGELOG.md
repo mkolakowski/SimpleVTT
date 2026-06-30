@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.765.0] - 2026-06-29 — "The Lantern Keeper"
+
+**Schema version:** 90
+
+**Commit summary:** Placeable map light sources — drop torches/lanterns with a bright/dim range in ft; they light the dark tabletop (with wall shadows).
+
+**Description:** Second requested map-editor enhancement: persistent light sources on a map. New `Map.lights` JSON column (Schema v90) stores `{id, x, y, bright_ft, dim_ft, color}` emitters. Endpoints mirror walls/hotspots: `GET /map/{id}/lights` (any member), `PUT …/lights` (GM-only, sanitised — radii clamped ≥ 0, broadcasts `lights_update`), and they're surfaced in `/active-map`. In the map editor, a **💡 Lights** tool drops a light where you click (prompting for the bright + dim radius in feet) and draws its bright ring (solid) + dim ring (dashed) with a `bright/dim ft` label so you can see exactly how far it reaches; click a light to delete. On the tabletop, the lighting overlay now punches each map light's bright/dim radius into the ambient veil — composited with the v2.757.0 wall shadows — so a placed torch actually illuminates a dark room (and is occluded by walls). Lights only matter on dim/dark maps, as expected.
+
+### Added
+- `app/models.py` + `app/database.py` — `Map.lights` JSON column (Schema v90 migration).
+- `app/routes/tabletop_routes.py` — `_sanitize_lights`, `GET/PUT /map/{id}/lights`, lights in `/active-map` + the editor route; `lights_update` broadcast.
+- `app/templates/map_editor.html` — 💡 Lights tool (place/delete) + bright/dim ring rendering with the ft label.
+- `app/static/tabletop.js` — `mapLights` + `window._setMapLights`, punched in `drawLighting`; `lights_update` WS handler.
+- `app/templates/tabletop.html` — feed `lights` from the `/active-map` bootstrap.
+- `tests/harness/test_map_lights.py` (new, +4) + `tests/harness_ui/test_map_lights_editor.py` (new, +1).
+
+### Schema
+- **v90** — `maps.lights` (JSON, default `[]`). Additive.
+
 ## [2.764.0] - 2026-06-29 — "The Magnet's Pull"
 
 **Schema version:** 89

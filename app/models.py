@@ -386,6 +386,12 @@ class Map(Base):
     # the tabletop opens a description popup (any player); the GM places +
     # edits them in the wall/hotspot editor.
     hotspots: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
+    # v2.765.0 — Maps 2.0 placeable light sources (torches/lanterns/etc). A JSON
+    # list of ``{"id": str, "x": float, "y": float, "bright_ft": float,
+    # "dim_ft": float, "color": str}`` in map-pixel coords. The tabletop
+    # lighting overlay punches a bright/dim hole at each (with wall shadows);
+    # the GM places + tunes them in the map editor.
+    lights: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     folder: Mapped[Optional[str]] = mapped_column(String(120), nullable=True, default="", server_default="")
     thumbnail_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

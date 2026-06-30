@@ -1057,6 +1057,16 @@ def _apply_inline_migrations() -> None:
                 "JSON NOT NULL DEFAULT '[]'"
             ))
 
+    # ---- Schema v90 (2.765.0): maps.lights ----
+    # Maps 2.0 placeable light sources — a JSON list of bright/dim emitters.
+    # Additive; default empty list.
+    maps_cols_v90 = _column_names("maps")
+    with engine.begin() as conn:
+        if maps_cols_v90 and "lights" not in maps_cols_v90:
+            conn.execute(text(
+                "ALTER TABLE maps ADD COLUMN lights JSON NOT NULL DEFAULT '[]'"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

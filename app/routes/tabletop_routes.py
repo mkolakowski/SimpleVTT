@@ -124080,6 +124080,7 @@ def get_active_map(
         "ambient_light": m.ambient_light,
         "walls": list(m.walls or []),
         "hotspots": list(getattr(m, "hotspots", None) or []),
+        "lights": list(getattr(m, "lights", None) or []),
     }
 
 
@@ -124206,6 +124207,82 @@ async def set_map_hotspots(
     return {"ok": True, "map_id": m.id, "hotspots": hotspots}
 
 
+def _sanitize_lights(raw) -> list:
+    """v2.765.0 — coerce a client light list into the stored shape: a list of
+    ``{id, x, y, bright_ft, dim_ft, color}`` in map-pixel coords. Drops
+    anything without numeric x/y; clamps radii to >= 0."""
+    out = []
+    if not isinstance(raw, list):
+        return out
+    for i, h in enumerate(raw):
+        if not isinstance(h, dict):
+            continue
+        try:
+            x = float(h.get("x")); y = float(h.get("y"))
+        except (TypeError, ValueError):
+            continue
+        def _ft(key):
+            try:
+                return max(0.0, float(h.get(key) or 0))
+            except (TypeError, ValueError):
+                return 0.0
+        out.append({
+            "id": (str(h.get("id") or "").strip()[:40] or f"l{i}"),
+            "x": x, "y": y,
+            "bright_ft": _ft("bright_ft"),
+            "dim_ft": _ft("dim_ft"),
+            "color": str(h.get("color") or "").strip()[:16],
+        })
+    return out
+
+
+@router.get("/api/campaign/{campaign_id}/map/{map_id}/lights")
+def get_map_lights(
+    campaign_id: int,
+    map_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.765.0 — read a map's placeable light sources (any member)."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    m = db.query(Map).filter(
+        Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404, "Map not found")
+    return {"ok": True, "map_id": m.id,
+            "lights": list(getattr(m, "lights", None) or [])}
+
+
+@router.put("/api/campaign/{campaign_id}/map/{map_id}/lights")
+async def set_map_lights(
+    campaign_id: int,
+    map_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.765.0 — replace a map's light sources (GM-only). Broadcasts
+    ``lights_update``. Body: ``{lights: [{x,y,bright_ft,dim_ft,color?}]}``."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(
+        Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404, "Map not found")
+    body = await request.json()
+    lights = _sanitize_lights(body.get("lights"))
+    m.lights = lights
+    db.commit()
+    await hub.broadcast(campaign_id, {
+        "type": "lights_update",
+        "data": {"map_id": m.id, "lights": lights},
+    })
+    return {"ok": True, "map_id": m.id, "lights": lights}
+
+
 @router.post("/api/campaign/{campaign_id}/map/{map_id}/door/{door_id}/toggle")
 async def toggle_map_door(
     campaign_id: int,
@@ -124277,6 +124354,7 @@ def map_editor_page(
         "map": m,
         "walls": list(m.walls or []),
         "hotspots": list(getattr(m, "hotspots", None) or []),
+        "lights": list(getattr(m, "lights", None) or []),
         "is_active": m.id == campaign.active_map_id,
     })
 

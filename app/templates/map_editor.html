@@ -32,6 +32,8 @@
   <label id="me-door-lbl" style="display:none;"><input type="checkbox" id="me-door-cb"> door</label>
   <button type="button" id="me-spot-btn" class="me-tool-btn" aria-pressed="false"
           title="Click the map to place a description hotspot; click a hotspot to delete">📍 Hotspots</button>
+  <button type="button" id="me-light-btn" class="me-tool-btn" aria-pressed="false"
+          title="Click the map to place a light source (set its bright/dim range in ft); click a light to delete">💡 Lights</button>
   <button type="button" id="me-snap-btn" class="me-tool-btn" aria-pressed="true"
           title="Snap wall/door endpoints to the grid + to nearby wall ends">🧲 Snap</button>
   <label>Grid px
@@ -66,7 +68,9 @@
   var statusEl = document.getElementById('me-status');
   var walls = {{ walls | tojson }};
   var hotspots = {{ hotspots | tojson }};
-  var wallMode = false, spotMode = false, pending = null, seq = 0;
+  var lights = {{ lights | tojson }};
+  var wallMode = false, spotMode = false, lightMode = false, pending = null, seq = 0;
+  var pxPerFt = (({{ map.grid_size_px }} || 70) / 5);  // ft → px
   var grab = null, suppressClick = false;
   var gridPx = {{ map.grid_size_px }} || 70;
   var snapOn = true;
@@ -162,6 +166,42 @@
       });
       svg.appendChild(mk);
     });
+    // v2.765.0 — light sources: bright + dim radius rings (in ft → px) + a
+    // range label; click the center to delete (in light-edit mode).
+    lights.forEach(function (L) {
+      var bpx = (L.bright_ft || 0) * pxPerFt, dpx = (L.dim_ft || 0) * pxPerFt;
+      var col = L.color || '#ffd27f';
+      function ring(r, dash) {
+        if (r <= 0) return;
+        var c = document.createElementNS(NS, 'circle');
+        c.setAttribute('cx', L.x); c.setAttribute('cy', L.y); c.setAttribute('r', r);
+        c.setAttribute('fill', 'none'); c.setAttribute('stroke', col);
+        c.setAttribute('stroke-width', '2'); c.setAttribute('opacity', '0.8');
+        if (dash) c.setAttribute('stroke-dasharray', '8 8');
+        c.style.pointerEvents = 'none';
+        svg.appendChild(c);
+      }
+      ring(Math.max(bpx, dpx), true);   // dim edge (dashed)
+      ring(bpx, false);                 // bright edge (solid)
+      var lbl = document.createElementNS(NS, 'text');
+      lbl.setAttribute('x', L.x + 6); lbl.setAttribute('y', L.y - 6);
+      lbl.setAttribute('fill', col); lbl.setAttribute('font-size', '13');
+      lbl.setAttribute('font-weight', '700'); lbl.style.pointerEvents = 'none';
+      lbl.textContent = (L.bright_ft || 0) + '/' + (L.dim_ft || 0) + ' ft';
+      svg.appendChild(lbl);
+      var dot = document.createElementNS(NS, 'circle');
+      dot.setAttribute('cx', L.x); dot.setAttribute('cy', L.y); dot.setAttribute('r', '8');
+      dot.setAttribute('fill', col); dot.classList.add('me-light');
+      dot.style.pointerEvents = 'all'; dot.style.cursor = 'pointer';
+      dot.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (lightMode) {
+          lights = lights.filter(function (x) { return x.id !== L.id; });
+          saveLights();
+        }
+      });
+      svg.appendChild(dot);
+    });
   }
   function toMap(e) {
     var pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
@@ -192,6 +232,17 @@
     } catch (e) { setStatus('Save failed.'); }
     render();
   }
+  async function saveLights() {
+    setStatus('Saving…');
+    try {
+      await fetch('/api/campaign/' + CID + '/map/' + MID + '/lights', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lights: lights }),
+      });
+      setStatus('Saved.');
+    } catch (e) { setStatus('Save failed.'); }
+    render();
+  }
 
   // Toolbar wiring.
   var wallBtn = document.getElementById('me-wall-btn');
@@ -203,21 +254,24 @@
     snapOn = !snapOn;
     snapBtn.setAttribute('aria-pressed', snapOn ? 'true' : 'false');
   });
-  function syncStageCursor() { svg.style.pointerEvents = (wallMode || spotMode) ? 'auto' : 'none';
-    svg.style.cursor = (wallMode || spotMode) ? 'crosshair' : 'default'; }
-  wallBtn.addEventListener('click', function () {
-    wallMode = !wallMode;
-    if (wallMode && spotMode) { spotMode = false; spotBtn.setAttribute('aria-pressed', 'false'); }
+  var lightBtn = document.getElementById('me-light-btn');
+  function syncStageCursor() {
+    var on = wallMode || spotMode || lightMode;
+    svg.style.pointerEvents = on ? 'auto' : 'none';
+    svg.style.cursor = on ? 'crosshair' : 'default';
+  }
+  // One edit mode at a time (wall / spot / light), or null for view.
+  function setMode(mode) {
+    wallMode = (mode === 'wall'); spotMode = (mode === 'spot'); lightMode = (mode === 'light');
     wallBtn.setAttribute('aria-pressed', wallMode ? 'true' : 'false');
+    spotBtn.setAttribute('aria-pressed', spotMode ? 'true' : 'false');
+    if (lightBtn) lightBtn.setAttribute('aria-pressed', lightMode ? 'true' : 'false');
     doorLbl.style.display = wallMode ? 'inline-flex' : 'none';
     pending = null; syncStageCursor(); render();
-  });
-  spotBtn.addEventListener('click', function () {
-    spotMode = !spotMode;
-    if (spotMode && wallMode) { wallMode = false; wallBtn.setAttribute('aria-pressed', 'false'); doorLbl.style.display = 'none'; pending = null; }
-    spotBtn.setAttribute('aria-pressed', spotMode ? 'true' : 'false');
-    syncStageCursor(); render();
-  });
+  }
+  wallBtn.addEventListener('click', function () { setMode(wallMode ? null : 'wall'); });
+  spotBtn.addEventListener('click', function () { setMode(spotMode ? null : 'spot'); });
+  if (lightBtn) lightBtn.addEventListener('click', function () { setMode(lightMode ? null : 'light'); });
   svg.addEventListener('pointermove', function (e) {
     if (!grab) return;
     var p = toMap(e); if (!p) return;
@@ -258,6 +312,14 @@
         label: (label || 'Hotspot').slice(0, 120), description: desc.slice(0, 2000),
         roll: roll.trim().slice(0, 60) });
       saveHotspots();
+    } else if (lightMode) {
+      var bright = window.prompt('Bright light radius (ft):', '20');
+      if (bright === null) return;
+      var dim = window.prompt('Dim light radius (ft, ≥ bright):', '40') || '0';
+      lights.push({ id: 'l' + Date.now() + '_' + (seq++), x: p.x, y: p.y,
+        bright_ft: Math.max(0, parseFloat(bright) || 0),
+        dim_ft: Math.max(0, parseFloat(dim) || 0), color: '#ffd27f' });
+      saveLights();
     }
   });
 

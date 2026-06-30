@@ -2529,6 +2529,7 @@
                 mapId = d.map_id; walls = d.walls || [];
                 hotspots = d.hotspots || []; render();
                 if (window._setMapWalls) window._setMapWalls(walls);
+                if (window._setMapLights) window._setMapLights(d.lights || []);
             } catch (e) {}
         }
         async function saveHotspots() {
