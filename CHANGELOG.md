@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.781.0] - 2026-06-30 — "The Committed Cartographer"
+
+**Schema version:** 91
+
+**Commit summary:** Explicit 💾 Save button (+ ⌘/Ctrl+S) in the map editor that commits every layer in one click.
+
+**Description:** The map editor gets a prominent **💾 Save map** button in the header. Edits already auto-save as you make them, but the button is the explicit "commit now" affordance: it writes every layer — walls, doors, hotspots, lights, fog, and the grid size/offset — to the server in one batched action and reports **"All changes saved ✓"** (or a clear failure message). **⌘/Ctrl+S** triggers the same save (and suppresses the browser's save-page dialog).
+
+### Added
+- `app/templates/map_editor.html` — `#me-save-btn` (accent header button), `saveAll()` (parallel PUTs across all map layers), and a ⌘/Ctrl+S keyboard handler.
+- `tests/harness_ui/test_map_editor_save.py` (new, +1) — draws a wall, clicks Save, asserts the confirmation status + that the wall persists.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.780.0] - 2026-06-30 — "The Pawn's Eye"
 
 **Schema version:** 91

@@ -24,7 +24,13 @@
 <div class="me-head">
   <h1>🗺 Edit map <span class="muted" style="font-size:14px;">{{ map.name }}</span>
     {% if is_active %}<span style="color:#6cb;font-size:13px;">· Active</span>{% endif %}</h1>
-  <a href="/campaign/{{ campaign.id }}/settings#maps">← Back to settings</a>
+  <span style="display:inline-flex;gap:12px;align-items:center;">
+    {# v2.781.0 — explicit Save (edits also auto-save; this commits everything
+       in one click + Cmd/Ctrl+S). #}
+    <button type="button" id="me-save-btn" style="background:var(--accent);color:#fff;font-weight:600;"
+            title="Commit all map changes now (⌘/Ctrl+S) — edits also save automatically">💾 Save map</button>
+    <a href="/campaign/{{ campaign.id }}/settings#maps">← Back to settings</a>
+  </span>
 </div>
 
 <div class="me-toolbar">
@@ -691,6 +697,25 @@
     } catch (e) { setStatus('Save failed.'); }
     render();
   }
+  // v2.781.0 — commit every layer of the map in one click. Edits already
+  // auto-save as you go; this is the explicit "save now" affordance (+ ⌘/Ctrl+S).
+  async function saveAll() {
+    setStatus('Saving…');
+    var base = '/api/campaign/' + CID + '/map/' + MID;
+    var J = { 'Content-Type': 'application/json' };
+    try {
+      await Promise.all([
+        fetch(base + '/walls', { method: 'PUT', headers: J, body: JSON.stringify({ walls: walls }) }),
+        fetch(base + '/hotspots', { method: 'PUT', headers: J, body: JSON.stringify({ hotspots: hotspots }) }),
+        fetch(base + '/lights', { method: 'PUT', headers: J, body: JSON.stringify({ lights: lights }) }),
+        fetch(base + '/fog', { method: 'PUT', headers: J, body: JSON.stringify({ enabled: fogEnabled, revealed: fogRevealed }) }),
+        fetch('/campaign/' + CID + '/settings/maps/' + MID + '/grid_size', {
+          method: 'POST', headers: J,
+          body: JSON.stringify({ grid_size_px: gridPx, grid_offset_x: gridOffX, grid_offset_y: gridOffY }) }),
+      ]);
+      setStatus('All changes saved ✓');
+    } catch (e) { setStatus('Save failed — check your connection.'); }
+  }
   // v2.770.0 — object delete + move (via erase mode / right-click menu).
   function deleteWall(w) { walls = walls.filter(function (x) { return x.id !== w.id; }); saveWalls(); }
   function deleteHotspot(h) { hotspots = hotspots.filter(function (x) { return x.id !== h.id; }); saveHotspots(); }
@@ -822,6 +847,14 @@
     sampleTokens.push({ id: 'st' + (seq++), x: s.x, y: s.y, label: 'T' + n });
     setStatus('Sample token placed — drag it to test the map (preview only, not saved).');
     render();
+  });
+  // v2.781.0 — explicit Save button + ⌘/Ctrl+S.
+  var saveBtn = document.getElementById('me-save-btn');
+  if (saveBtn) saveBtn.addEventListener('click', saveAll);
+  document.addEventListener('keydown', function (e) {
+    if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
+      e.preventDefault(); saveAll();
+    }
   });
   // One edit mode at a time (wall / door / spot / light / fog), or null.
   function setMode(mode) {
