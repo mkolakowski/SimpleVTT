@@ -16,7 +16,6 @@
     border:1px solid var(--border); border-radius:6px; overflow:auto;
     max-height:86vh; background:#0b0d16; }
   .me-stage img { display:block; }
-  .me-stage img { display:block; }
   #me-overlay { position:absolute; top:0; left:0; overflow:visible; }
   .me-status { font-size:12px; color:var(--fg-mute); margin-left:auto; }
   .m4hint { font-size:12px; color:var(--fg-mute); margin:8px 0 0; }
@@ -112,7 +111,8 @@
   function wallStyle(w) { return WALL_STYLES[w && w.style] || WALL_STYLES.stone; }
   var fogDrag = null;
   var eraseMode = false;       // v2.770.0 — click an object to delete
-  var relocating = null;       // {kind, obj} — next map click relocates it
+  var relocating = null;       // {kind, obj} — being repositioned (drag)
+  var relocDragging = false;   // v2.775.0 — true while dragging the held object
 
   // v2.770.0 — right-click context menu for map objects.
   function hideMenu() {
@@ -187,7 +187,9 @@
     ln.setAttribute('x2', w.x2); ln.setAttribute('y2', w.y2);
     ln.setAttribute('stroke', 'transparent');
     ln.setAttribute('stroke-width', '18');
-    ln.style.pointerEvents = 'stroke';
+    // v2.775.0 — during a move-drag, objects are inert so the drag isn't
+    // hijacked + you can't toggle a door mid-move.
+    ln.style.pointerEvents = relocating ? 'none' : 'stroke';
     ln.style.cursor = eraseMode ? 'pointer'
       : ((wallMode || doorMode) ? 'move' : 'context-menu');
     return ln;
@@ -312,12 +314,22 @@
         try { svg.setPointerCapture(e.pointerId); } catch (_) {}
       });
       hit.addEventListener('click', function (e) {
-        if (eraseMode) { e.stopPropagation(); deleteWall(w); }
+        if (eraseMode) { e.stopPropagation(); deleteWall(w); return; }
+        // v2.775.0 — outside erase/draw modes, clicking a door previews the
+        // player interaction: toggle it open/closed (left-click no longer
+        // deletes, so this is now safe).
+        if (w.door && !wallMode && !doorMode && !relocating) {
+          e.stopPropagation();
+          w.open = !w.open;
+          saveWalls();
+        }
       });
       hit.addEventListener('contextmenu', function (e) {
         e.preventDefault(); e.stopPropagation();
         showMenu(e.clientX, e.clientY, [
           { label: (w.door ? '🚪 Door' : '🧱 Wall') + ' — ↔ Move', fn: function () { startMove('wall', w); } },
+          { label: '✎ Edit (material)', fn: function () { editWall(w); } },
+          { label: '📋 Copy', fn: function () { copyObj('wall', w); } },
           { label: '🗑 Delete', fn: function () { deleteWall(w); } },
         ]);
       });
@@ -335,7 +347,7 @@
       mk.setAttribute('r', '11');
       mk.setAttribute('fill', 'rgba(108,180,255,.35)');
       mk.setAttribute('stroke', '#6cb4ff'); mk.setAttribute('stroke-width', '2');
-      mk.style.pointerEvents = 'all'; mk.style.cursor = 'pointer';
+      mk.style.pointerEvents = relocating ? 'none' : 'all'; mk.style.cursor = 'pointer';
       mk.classList.add('me-hotspot');
       if (h.label) { var t = document.createElementNS(NS, 'title'); t.textContent = h.label; mk.appendChild(t); }
       mk.addEventListener('click', function (e) {
@@ -348,6 +360,8 @@
         e.preventDefault(); e.stopPropagation();
         showMenu(e.clientX, e.clientY, [
           { label: '📍 Hotspot — ↔ Move', fn: function () { startMove('hotspot', h); } },
+          { label: '✎ Edit', fn: function () { editHotspot(h); } },
+          { label: '📋 Copy', fn: function () { copyObj('hotspot', h); } },
           { label: '🗑 Delete', fn: function () { deleteHotspot(h); } },
         ]);
       });
@@ -379,7 +393,7 @@
       var dot = document.createElementNS(NS, 'circle');
       dot.setAttribute('cx', L.x); dot.setAttribute('cy', L.y); dot.setAttribute('r', '8');
       dot.setAttribute('fill', col); dot.classList.add('me-light');
-      dot.style.pointerEvents = 'all'; dot.style.cursor = 'pointer';
+      dot.style.pointerEvents = relocating ? 'none' : 'all'; dot.style.cursor = 'pointer';
       dot.addEventListener('click', function (e) {
         e.stopPropagation();
         if (eraseMode) deleteLight(L);
@@ -388,6 +402,8 @@
         e.preventDefault(); e.stopPropagation();
         showMenu(e.clientX, e.clientY, [
           { label: '💡 Light — ↔ Move', fn: function () { startMove('light', L); } },
+          { label: '✎ Edit (range)', fn: function () { editLight(L); } },
+          { label: '📋 Copy', fn: function () { copyObj('light', L); } },
           { label: '🗑 Delete', fn: function () { deleteLight(L); } },
         ]);
       });
@@ -489,9 +505,80 @@
   function deleteHotspot(h) { hotspots = hotspots.filter(function (x) { return x.id !== h.id; }); saveHotspots(); }
   function deleteLight(L) { lights = lights.filter(function (x) { return x.id !== L.id; }); saveLights(); }
   function startMove(kind, obj) {
+    // v2.775.0 — drag to reposition: while relocating, other objects are
+    // non-interactive (render() drops their pointer-events) so you can't
+    // accidentally toggle a door / open a hotspot mid-move.
     relocating = { kind: kind, obj: obj };
-    setStatus('Click the new position…');
-    syncStageCursor();
+    setStatus('Drag to move — release to drop.');
+    syncStageCursor(); render();
+  }
+  function moveObjTo(r, p) {
+    if (r.kind === 'wall') {
+      var mx = (r.obj.x1 + r.obj.x2) / 2, my = (r.obj.y1 + r.obj.y2) / 2;
+      var dx = p.x - mx, dy = p.y - my;
+      r.obj.x1 += dx; r.obj.y1 += dy; r.obj.x2 += dx; r.obj.y2 += dy;
+    } else { r.obj.x = p.x; r.obj.y = p.y; }
+  }
+  function saveReloc(r) {
+    if (r.kind === 'wall') saveWalls();
+    else if (r.kind === 'hotspot') saveHotspots();
+    else if (r.kind === 'light') saveLights();
+  }
+  // v2.775.0 — copy/paste objects via the right-click menu.
+  var clipboard = null;
+  function newId(prefix) { return prefix + Date.now() + '_' + (seq++); }
+  function copyObj(kind, obj) {
+    clipboard = { kind: kind, data: JSON.parse(JSON.stringify(obj)) };
+    setStatus((kind === 'wall' ? (obj.door ? 'Door' : 'Wall') : kind)
+      + ' copied — right-click the map to paste.');
+  }
+  function pasteAt(p) {
+    if (!clipboard) return;
+    var d = clipboard.data;
+    if (clipboard.kind === 'wall') {
+      var mx = (d.x1 + d.x2) / 2, my = (d.y1 + d.y2) / 2;
+      var dx = p.x - mx, dy = p.y - my;
+      walls.push({ id: newId('w'), x1: d.x1 + dx, y1: d.y1 + dy,
+        x2: d.x2 + dx, y2: d.y2 + dy, door: !!d.door, open: !!d.open,
+        style: d.style || 'stone' });
+      saveWalls();
+    } else if (clipboard.kind === 'hotspot') {
+      hotspots.push({ id: newId('h'), x: p.x, y: p.y,
+        label: d.label || 'Hotspot', description: d.description || '', roll: d.roll || '' });
+      saveHotspots();
+    } else if (clipboard.kind === 'light') {
+      lights.push({ id: newId('l'), x: p.x, y: p.y,
+        bright_ft: d.bright_ft || 0, dim_ft: d.dim_ft || 0, color: d.color || '#ffd27f' });
+      saveLights();
+    }
+  }
+  // v2.775.0 — edit an object's properties from the right-click menu.
+  function editWall(w) {
+    var s = window.prompt('Material (stone / wood / brick / metal / cave):', w.style || 'stone');
+    if (s === null) return;
+    w.style = (s || 'stone').trim().toLowerCase().slice(0, 20) || 'stone';
+    saveWalls();
+  }
+  function editHotspot(h) {
+    var label = window.prompt('Hotspot label:', h.label || '');
+    if (label === null) return;
+    var desc = window.prompt('Description (shown on click):', h.description || '');
+    if (desc === null) return;
+    var roll = window.prompt('Optional roll (e.g. 1d20+5, blank for none):', h.roll || '');
+    if (roll === null) return;
+    h.label = (label || 'Hotspot').slice(0, 120);
+    h.description = desc.slice(0, 2000);
+    h.roll = roll.trim().slice(0, 60);
+    saveHotspots();
+  }
+  function editLight(L) {
+    var b = window.prompt('Bright light radius (ft):', L.bright_ft || 0);
+    if (b === null) return;
+    var d = window.prompt('Dim light radius (ft):', L.dim_ft || 0);
+    if (d === null) return;
+    L.bright_ft = Math.max(0, parseFloat(b) || 0);
+    L.dim_ft = Math.max(0, parseFloat(d) || 0);
+    saveLights();
   }
 
   // Toolbar wiring.
@@ -550,6 +637,14 @@
   });
   // Fog reveal painting: drag a rectangle on the overlay.
   svg.addEventListener('pointerdown', function (e) {
+    if (relocating) {  // v2.775.0 — drag the held object to its new spot
+      e.preventDefault();
+      relocDragging = true;
+      moveObjTo(relocating, snapPoint(toMap(e)));
+      try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+      render();
+      return;
+    }
     if (!fogMode) return;
     var p = toMap(e); if (!p) return;
     e.preventDefault();
@@ -557,6 +652,10 @@
     try { svg.setPointerCapture(e.pointerId); } catch (_) {}
   });
   svg.addEventListener('pointermove', function (e) {
+    if (relocDragging && relocating) {
+      var rp = toMap(e); if (rp) { moveObjTo(relocating, snapPoint(rp)); render(); }
+      return;
+    }
     if (fogDrag) {
       var fp = toMap(e); if (fp) { fogDrag.cx = fp.x; fogDrag.cy = fp.y; render(); }
       return;
@@ -574,6 +673,13 @@
     render();
   });
   svg.addEventListener('pointerup', function (e) {
+    if (relocDragging && relocating) {
+      var r = relocating; relocating = null; relocDragging = false;
+      try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
+      saveReloc(r); setStatus(''); syncStageCursor();
+      suppressClick = true; setTimeout(function () { suppressClick = false; }, 0);
+      return;
+    }
     if (fogDrag) {
       var fd = fogDrag; fogDrag = null;
       try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
@@ -596,23 +702,6 @@
   svg.addEventListener('click', function (e) {
     if (suppressClick) return;
     var p = toMap(e); if (!p) return;
-    if (relocating) {
-      // v2.770.0 — drop the held object at the clicked point.
-      var r = relocating; relocating = null;
-      var sp = snapPoint(p);
-      if (r.kind === 'wall') {
-        var mx = (r.obj.x1 + r.obj.x2) / 2, my = (r.obj.y1 + r.obj.y2) / 2;
-        var dx = sp.x - mx, dy = sp.y - my;
-        r.obj.x1 += dx; r.obj.y1 += dy; r.obj.x2 += dx; r.obj.y2 += dy;
-        saveWalls();
-      } else if (r.kind === 'hotspot') {
-        r.obj.x = sp.x; r.obj.y = sp.y; saveHotspots();
-      } else if (r.kind === 'light') {
-        r.obj.x = sp.x; r.obj.y = sp.y; saveLights();
-      }
-      setStatus(''); syncStageCursor();
-      return;
-    }
     if (wallMode || doorMode) {
       p = snapPoint(p);
       if (!pending) { pending = p; render(); return; }
@@ -712,6 +801,16 @@
     e.preventDefault();
     setZoom(zoom * (e.deltaY < 0 ? 1.1 : 0.9));
   }, { passive: false });
+  // v2.775.0 — right-click the empty map to paste a copied object. (Object
+  // right-clicks stopPropagation, so this only fires on the background.)
+  stage.addEventListener('contextmenu', function (e) {
+    if (!clipboard) return;
+    e.preventDefault(); e.stopPropagation();
+    var p = toMap(e); if (!p) return;
+    showMenu(e.clientX, e.clientY, [
+      { label: '📋 Paste here', fn: function () { pasteAt(snapPoint(p)); } },
+    ]);
+  });
 
   // Show the whole map on load.
   if (img.complete) fitContain(); else img.addEventListener('load', fitContain);

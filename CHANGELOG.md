@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.775.0] - 2026-06-30 — "The Right-Click Workbench"
+
+**Schema version:** 91
+
+**Commit summary:** Map editor — door click-toggle, right-click Copy/Paste/Edit, and Move via click-and-drag.
+
+**Description:** A pass over map-editor object interactions now that left-click no longer deletes:
+- **Clickable objects.** Outside erase/draw modes, **left-clicking a door** toggles it open/closed (previewing the player interaction), and hotspots still open their info popup — so you can test what players will do.
+- **Right-click menu: Copy / Paste / Edit.** Every wall, door, hotspot, and light's right-click menu gains **✎ Edit** (wall/door → material; hotspot → label/description/roll; light → bright/dim ft) and **📋 Copy**; right-clicking the empty map offers **📋 Paste here** to drop the copy at the click (snapped).
+- **Move = click-and-drag.** The menu's **↔ Move** now lets you press-drag the object to its new spot and release to drop (instead of a separate click-to-place), and while moving, all other objects are inert so the drag can't be hijacked or accidentally toggle a door.
+
+### Added
+- `app/templates/map_editor.html` — door left-click toggle; `copyObj`/`pasteAt`/`editWall`/`editHotspot`/`editLight`; Copy/Paste/Edit menu items + the empty-map Paste contextmenu; drag-to-move (`moveObjTo`/`saveReloc` + pointer handlers) with objects inert during a move.
+- `tests/harness_ui/test_map_editor_interactions.py` (new, +4) — door click toggles; copy→paste duplicates a wall; Edit changes a wall's material; Move drags an object to a new position.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.774.0] - 2026-06-30 — "The Lit Workshop"
 
 **Schema version:** 91
