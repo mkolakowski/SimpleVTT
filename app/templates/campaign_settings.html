@@ -1535,6 +1535,25 @@
         stopAudioLabel.appendChild(editStopAudio);
         stopAudioLabel.appendChild(document.createTextNode('Stop audio on load (when no playlist is selected)'));
         editGrid.appendChild(stopAudioLabel);
+        // v2.763.0 — multi-map encounters: pick extra maps this encounter
+        // groups (beyond the bound map) so the tabletop quick-switcher can
+        // flip between them mid-session. Multi-select of campaign maps,
+        // preselected to the encounter's current linked_map_ids.
+        const editLinkedLabel = document.createElement('label');
+        editLinkedLabel.style.cssText = 'display:block;font-size:11px;color:var(--fg-mute);margin:0 0 4px;';
+        editLinkedLabel.textContent = 'Linked maps (multi-map encounter — ⌘/Ctrl-click to pick several)';
+        const editLinked = document.createElement('select');
+        editLinked.multiple = true;
+        editLinked.size = Math.min(4, Math.max(2, ENC_MAPS.length));
+        editLinked.style.cssText = 'width:100%;box-sizing:border-box;font-size:12px;padding:4px 6px;margin-bottom:8px;';
+        const _linked = (e.linked_map_ids || []).map(Number);
+        ENC_MAPS.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = String(m.id);
+            opt.textContent = m.name;
+            if (_linked.indexOf(m.id) !== -1) opt.selected = true;
+            editLinked.appendChild(opt);
+        });
         const editBtns = document.createElement('div');
         editBtns.style.cssText = 'display:flex;gap:8px;';
         const saveEditBtn = document.createElement('button');
@@ -1552,6 +1571,8 @@
         edit.appendChild(editTags);
         edit.appendChild(editFolder);
         edit.appendChild(editGrid);
+        edit.appendChild(editLinkedLabel);
+        edit.appendChild(editLinked);
         edit.appendChild(editBtns);
 
         card.appendChild(view);
@@ -1584,6 +1605,8 @@
                         tags: editTags.value,
                         folder: (editFolder.value || '').trim(),
                         map_id: editMap.value || null,
+                        linked_map_ids: Array.from(editLinked.selectedOptions)
+                            .map(o => parseInt(o.value, 10)),
                         auto_play_playlist_id: editPlaylist.value || null,
                         auto_play_mode: editMode.value,
                         stop_audio_on_load: !!editStopAudio.checked,

@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.763.0] - 2026-06-29 — "The Atlas Binding"
+
+**Schema version:** 89
+
+**Commit summary:** Settings linked-maps picker — choose an encounter's linked maps in the editor (completes multi-map encounters + the Map Editor Framework).
+
+**Description:** The encounter editor in campaign settings (World tab) gains a **Linked maps** multi-select listing the campaign's maps, preselected to the encounter's current `linked_map_ids`; saving PATCHes the chosen ids (the server still filters invalid/dupe/primary). This is the GM-facing way to build a multi-map encounter — pair an exterior with its interior — without hand-editing the API; the tabletop quick-switcher (v2.762.0) then flips between them mid-session. With this, **multi-map encounters** are complete (data + switcher + picker), and so is the long-standing **Map Editor Framework** backlog item (walls, doors, occlusion, hotspots, the dedicated editor, fog/LOS, and multi-map all shipped).
+
+### Added
+- `app/templates/campaign_settings.html` — the Linked-maps multi-select in the encounter editor; `linked_map_ids` added to the save PATCH.
+- `tests/harness_ui/test_encounter_linked_maps.py` (new, +1) — opening an encounter editor shows the linked-maps picker with the campaign's map options.
+
+### Schema
+- No schema change (still v89).
+
 ## [2.762.0] - 2026-06-29 — "The Turning Page"
 
 **Schema version:** 89

@@ -927,14 +927,14 @@ Extends the existing battle map canvas with GM-controlled environmental features
 ### Map Editor Framework
 Groundwork for in-browser map authoring tools.
 
-> **Largely shipped (v2.760.0):** a **dedicated map editor** at `/campaign/{cid}/map/{map_id}/edit` (✏ Edit per map row in campaign settings) lets the GM author **walls / doors** (draw, delete, drag), **clickable hotspots** (description + optional roll), and **grid / ambient light** on the map image itself — for any map, without going live. **Fog of war** ships separately (per-user hidden filter + the Vision & Light LOS overlay). **Still open:** **multi-map encounters** (link several maps into one encounter without switching the campaign's active map).
+> ✅ **Shipped (v2.752.0–v2.763.0).** A **dedicated map editor** at `/campaign/{cid}/map/{map_id}/edit` (✏ Edit per map row in settings) authors **walls / doors** (draw, delete, drag), **clickable hotspots** (description + optional roll), and **grid / ambient light** on any map without going live. **Fog of war** + line-of-sight ship via the Vision & Light engine. **Multi-map encounters** ship via `Encounter.linked_map_ids` + the tabletop quick-switcher + the settings picker. See [`TODONE.md`](TODONE.md).
 
 Planned capabilities:
 - ✅ **Walls** — line segments that block token line-of-sight (server occlusion + GM editor).
 - ✅ **Doors** — interactive wall segments players/GMs open or close.
 - ✅ **Clickable items** — hotspots that trigger a description popup or roll prompt.
 - ✅ **Fog of war** — shipped (token-visibility filter + LOS overlay).
-- 🟠 **Multi-map encounters** — data layer (v2.761.0: `Encounter.linked_map_ids`) + the **tabletop quick-switcher** (v2.762.0: `GET /map-group` + `POST /switch-map/{id}` + a GM toolbar control that flips the active map among the running encounter's linked maps, broadcasting `map_change`). **Still open:** a settings UI to *pick* an encounter's linked maps (currently set via the `linked_map_ids` PATCH field directly).
+- ✅ **Multi-map encounters** — data layer (v2.761.0: `Encounter.linked_map_ids`), the **tabletop quick-switcher** (v2.762.0: `GET /map-group` + `POST /switch-map/{id}` + a GM toolbar control flipping the active map among the encounter's linked maps), and the **settings linked-maps picker** (v2.763.0: a multi-select in the encounter editor). See [`TODONE.md`](TODONE.md).
 
 ### Lighting ✅ (shipped v2.704.0–v2.710.0)
 Shipped as the Vision & Light engine — light emitters (radius/colour/falloff), magical Darkness/Daylight/Fog, per-token vision senses (darkvision/blindsight/truesight), ambient levels, and the client dynamic-lighting overlay. See [`TODONE.md`](TODONE.md) → Maps & Map Editor + [`vision-and-light.md`](docs/plans/vision-and-light.md). *Not done:* wall-occlusion shadows (vision edges come from the lighting model, not GM-placed walls — see the Maps 2.0 walls item) + fire flicker animation.
