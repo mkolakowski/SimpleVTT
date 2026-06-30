@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.761.0] - 2026-06-29 — "The Linked Realms"
+
+**Schema version:** 89
+
+**Commit summary:** Multi-map encounters — data layer: an encounter can group additional maps (`Encounter.linked_map_ids`).
+
+**Description:** First slice of the last Map Editor Framework item. New `Encounter.linked_map_ids` JSON column (Schema v89) lets an encounter group additional campaign maps beyond its primary `map_id` — e.g. an exterior + its interior — so the GM can flip the campaign's active map among them during a session without re-binding the encounter. `PATCH /api/campaign/{cid}/encounters/{id}` now accepts `linked_map_ids`: it keeps only valid maps in the campaign, deduped + in order, and drops both invalid/non-int ids and the encounter's own primary `map_id` (that's the base map, not an extra). The list surfaces in the encounter dict (`_encounter_to_dict`). Switching reuses the existing `/settings/maps/{id}/activate`. The settings picker (choose an encounter's linked maps) + a tabletop quick-switcher are the follow-up UI slices.
+
+### Added
+- `app/models.py` + `app/database.py` — `Encounter.linked_map_ids` JSON column (Schema v89 migration).
+- `app/routes/tabletop_routes.py` — `linked_map_ids` accepted in `update_encounter_meta` (validated/filtered) + returned in `_encounter_to_dict`.
+- `tests/harness/test_multi_map_encounter.py` (new, +2) — link/filter/dedup/clear + primary-drop round-trip; non-GM PATCH → 403.
+
+### Schema
+- **v89** — `encounters.linked_map_ids` (JSON, default `[]`). Additive.
+
 ## [2.760.0] - 2026-06-29 — "The Cartographer's Desk"
 
 **Schema version:** 88

@@ -20999,6 +20999,8 @@ def _encounter_to_dict(e: Encounter) -> dict:
         "map_name": e.map.name if e.map else None,
         "map_image_url": e.map.image_url if e.map else None,
         "map_thumbnail_url": e.map.thumbnail_url if e.map else None,
+        # v2.761.0 — multi-map encounters: extra maps grouped for quick switching.
+        "linked_map_ids": list(getattr(e, "linked_map_ids", None) or []),
         "auto_play_playlist_id": e.auto_play_playlist_id,
         "auto_play_mode": e.auto_play_mode or "order",
         "auto_play_playlist_name": (
@@ -21307,6 +21309,29 @@ async def update_encounter_meta(
             if not m:
                 raise HTTPException(404, "Map not found in this campaign")
             enc.map_id = m.id
+    if "linked_map_ids" in body:
+        # v2.761.0 — multi-map encounters. Keep only valid map ids in this
+        # campaign, deduped + in order; drop the primary map_id (it's the
+        # base map, not an "extra"). Empty/non-list → clears the group.
+        raw = body.get("linked_map_ids")
+        ids = []
+        if isinstance(raw, list):
+            valid = {
+                m.id for m in db.query(Map.id).filter(
+                    Map.campaign_id == campaign_id).all()
+            }
+            # ``db.query(Map.id)`` rows are tuples; normalise to a set of ints.
+            valid = {int(r[0]) if isinstance(r, tuple) else int(r) for r in valid}
+            seen = set()
+            for v in raw:
+                try:
+                    mid = int(v)
+                except (TypeError, ValueError):
+                    continue
+                if mid in valid and mid != enc.map_id and mid not in seen:
+                    seen.add(mid)
+                    ids.append(mid)
+        enc.linked_map_ids = ids
     if "auto_play_playlist_id" in body:
         v = body.get("auto_play_playlist_id")
         if v is None or v == "":

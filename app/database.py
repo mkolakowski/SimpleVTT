@@ -1046,6 +1046,17 @@ def _apply_inline_migrations() -> None:
                 "ALTER TABLE maps ADD COLUMN hotspots JSON NOT NULL DEFAULT '[]'"
             ))
 
+    # ---- Schema v89 (2.761.0): encounters.linked_map_ids ----
+    # Maps 2.0 multi-map encounters — a JSON list of additional map ids the
+    # encounter groups for quick active-map switching. Additive; default [].
+    enc_cols_v89 = _column_names("encounters")
+    with engine.begin() as conn:
+        if enc_cols_v89 and "linked_map_ids" not in enc_cols_v89:
+            conn.execute(text(
+                "ALTER TABLE encounters ADD COLUMN linked_map_ids "
+                "JSON NOT NULL DEFAULT '[]'"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

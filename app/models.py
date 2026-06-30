@@ -882,6 +882,12 @@ class Encounter(Base):
     # "random", "set-piece"). Stored as a JSON list of short strings;
     # rendering and filtering happen client-side.
     tags: Mapped[list] = mapped_column(JSON, default=list)
+    # v2.761.0 — Maps 2.0 multi-map encounters. A JSON list of additional
+    # map ids this encounter groups (beyond the primary ``map_id``), so the GM
+    # can flip the campaign's active map between e.g. an exterior + interior
+    # without re-binding the encounter. Quick-switch UI reads this list.
+    linked_map_ids: Mapped[list] = mapped_column(
+        JSON, default=list, server_default="[]")
     # Per-encounter player spawn points. When ``use_spawn_points`` is
     # true the load flow places each player at the matching coord in
     # ``spawn_points`` (dict keyed by character id as a string) instead
