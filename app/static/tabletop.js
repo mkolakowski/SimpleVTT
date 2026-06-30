@@ -100,6 +100,14 @@
     // map_ambient_light / light_emitter_add / light_emitter_remove WS events.
     let mapAmbientLight = initialData.ambient_light || 'bright';
     let lightEmitters = initialData.light_emitters || [];
+    // v2.757.0 — Maps 2.0 walls feed the lighting overlay's shadow pass.
+    // Owned here so drawLighting() can cast wall shadows; the inline wall
+    // editor (tabletop.html) keeps it fresh via window._setMapWalls.
+    let mapWalls = [];
+    window._setMapWalls = function (w) {
+        mapWalls = Array.isArray(w) ? w : [];
+        try { render(); } catch (_) {}  // full redraw (map+tokens+lighting)
+    };
     // The server-rendered initial-data predates the vision fields, so pull
     // the active map's ambient + placed emitters once on load. Deferred
     // (async) so it runs after the sync init defines render() + CAMPAIGN_ID.
@@ -2890,18 +2898,75 @@
         }
         // 2. Punch light holes (token sources + Daylight emitters): full clear
         //    out to the bright radius, fading to partial at the dim radius.
+        // v2.757.0 — Maps 2.0 wall shadows: a solid wall / closed door between
+        // the source and a point blocks that light. Each source's light is
+        // built on a temp canvas, the wall shadows are erased from it, then
+        // it's punched into the veil — so shadows are per-source (one light's
+        // shadow doesn't darken an area another light reaches).
+        const solidWalls = (mapWalls || []).filter(
+            w => w && !(w.door && w.open) &&
+                 [w.x1, w.y1, w.x2, w.y2].every(n => typeof n === 'number'));
+        let _srcCanvas = null;
+        function _eraseWallShadows(sctx, sx, sy) {
+            if (!solidWalls.length) return;
+            const ext = (MAP_W + MAP_H) * 2;  // project past the map edge
+            sctx.save();
+            sctx.globalCompositeOperation = 'destination-out';
+            sctx.fillStyle = 'rgba(0,0,0,1)';
+            solidWalls.forEach(w => {
+                const proj = (px, py) => {
+                    const dx = px - sx, dy = py - sy;
+                    const len = Math.hypot(dx, dy) || 1;
+                    return [px + dx / len * ext, py + dy / len * ext];
+                };
+                const f1 = proj(w.x1, w.y1), f2 = proj(w.x2, w.y2);
+                sctx.beginPath();
+                sctx.moveTo(w.x1, w.y1);
+                sctx.lineTo(f1[0], f1[1]);
+                sctx.lineTo(f2[0], f2[1]);
+                sctx.lineTo(w.x2, w.y2);
+                sctx.closePath();
+                sctx.fill();
+            });
+            sctx.restore();
+        }
         lc.globalCompositeOperation = 'destination-out';
         function punch(cx, cy, brightFt, dimFt) {
             const outerPx = Math.max(brightFt, dimFt) * pxPerFt;
             if (outerPx <= 0) return;
-            const innerPx = Math.min(brightFt * pxPerFt, outerPx);
-            const g = lc.createRadialGradient(cx, cy, Math.max(1, innerPx), cx, cy, outerPx);
-            g.addColorStop(0, 'rgba(0,0,0,1)');      // bright → fully clear
-            g.addColorStop(1, 'rgba(0,0,0,0.35)');   // dim edge → partial
-            lc.fillStyle = g;
-            lc.beginPath();
-            lc.arc(cx, cy, outerPx, 0, Math.PI * 2);
-            lc.fill();
+            // v2.757.0 — keep the bright core strictly inside the outer radius.
+            // Equal bright/dim radii (e.g. a Daylight emitter) would otherwise
+            // make innerPx === outerPx → a degenerate radial gradient that
+            // paints nothing (daylight never cleared the veil). Clamp so a
+            // near-solid bright disc is always drawn.
+            const innerPx = Math.min(brightFt * pxPerFt, outerPx * 0.95);
+            const mkGrad = (c) => {
+                const g = c.createRadialGradient(cx, cy, Math.max(1, innerPx), cx, cy, outerPx);
+                g.addColorStop(0, 'rgba(0,0,0,1)');     // bright → fully clear
+                g.addColorStop(1, 'rgba(0,0,0,0.35)');  // dim edge → partial
+                return g;
+            };
+            if (!solidWalls.length) {
+                // Fast path: no walls → punch straight into the veil.
+                lc.fillStyle = mkGrad(lc);
+                lc.beginPath();
+                lc.arc(cx, cy, outerPx, 0, Math.PI * 2);
+                lc.fill();
+                return;
+            }
+            // Walled path: build this source's light on a temp canvas, erase
+            // wall shadows, then punch the result into the veil.
+            if (!_srcCanvas) _srcCanvas = document.createElement('canvas');
+            if (_srcCanvas.width !== MAP_W) _srcCanvas.width = MAP_W;
+            if (_srcCanvas.height !== MAP_H) _srcCanvas.height = MAP_H;
+            const sctx = _srcCanvas.getContext('2d');
+            sctx.clearRect(0, 0, MAP_W, MAP_H);
+            sctx.fillStyle = mkGrad(sctx);
+            sctx.beginPath();
+            sctx.arc(cx, cy, outerPx, 0, Math.PI * 2);
+            sctx.fill();
+            _eraseWallShadows(sctx, cx, cy);
+            lc.drawImage(_srcCanvas, 0, 0);  // lc is in destination-out mode
         }
         tokens.forEach(t => {
             if (_isTokenHiddenFromMe(t)) return;
@@ -2934,7 +2999,21 @@
             lc.fill();
         });
         ctx.drawImage(_lightCanvas, 0, 0);
+        // v2.757.0 — expose the composited lighting layer (pure map coords,
+        // no pan/zoom transform) so a harness can sample veil vs. lit/shadow
+        // pixels without the canvas strip offset.
+        window.__lightCanvasForTest = _lightCanvas;
     }
+    // v2.757.0 — deterministic harness hook: drive drawLighting with a known
+    // ambient / emitter / wall set (bypasses async bootstrap + WS timing) and
+    // leave the composited layer on window.__lightCanvasForTest to sample.
+    window.__testDrawLighting = function (amb, emitters, wallSegs) {
+        mapAmbientLight = amb || 'dark';
+        lightEmitters = emitters || [];
+        mapWalls = wallSegs || [];
+        try { drawLighting(); } catch (e) { return String(e); }
+        return true;
+    };
 
     /* v2.8.1: movement breadcrumb. Drawn on top of tokens so the line
      * stays visible when a token sits on a waypoint. Reads

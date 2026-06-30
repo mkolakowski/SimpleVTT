@@ -1,6 +1,6 @@
 # Vision & Light — server-side sight/obscurement engine
 
-**Status:** ✅ All phases shipped (v2.704.0–v2.710.0). The full engine is live: data model (v2.704.0), `_visibility_between` resolver (v2.705.0), PC `/attack` (v2.706.0), NPC `/npc_attack` (v2.707.0), Darkness/Daylight/Fog emitters (v2.708.0), Hide/Stealth (v2.709.0), and the client dynamic-lighting canvas overlay (v2.710.0). Plan authored v2.703.0; completed in one arc. **v2.753.0** added Maps 2.0 wall occlusion: `_visibility_between` treats a solid wall / closed door crossing the sight line as total cover (`blocked_by_wall`), composing with the lighting model.
+**Status:** ✅ All phases shipped (v2.704.0–v2.710.0). The full engine is live: data model (v2.704.0), `_visibility_between` resolver (v2.705.0), PC `/attack` (v2.706.0), NPC `/npc_attack` (v2.707.0), Darkness/Daylight/Fog emitters (v2.708.0), Hide/Stealth (v2.709.0), and the client dynamic-lighting canvas overlay (v2.710.0). Plan authored v2.703.0; completed in one arc. **v2.753.0** added Maps 2.0 wall occlusion: `_visibility_between` treats a solid wall / closed door crossing the sight line as total cover (`blocked_by_wall`), composing with the lighting model. **v2.757.0** added client-side wall shadows to the lighting overlay (per-light shadow polygons) + fixed a degenerate-gradient bug so Daylight emitters clear the veil.
 
 The one combat mechanic that is still **entirely GM-narrated** and is *not*
 buildable on an existing substrate: whether an attacker can **see** its

@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.757.0] - 2026-06-29 — "The Cast Shadow"
+
+**Schema version:** 88
+
+**Commit summary:** Maps 2.0 wall shadows in the lighting overlay — walls now block light, not just sight.
+
+**Description:** The walls↔lighting integration. The client dynamic-lighting overlay (`drawLighting`) now casts per-light wall shadows: each light source's contribution is built on a temp canvas, the shadow cast by every solid wall / closed door is erased from it (project the wall's endpoints away from the light to form a shadow polygon), then the result is punched into the ambient veil — so a point behind a wall (relative to the light) stays dark while the light's reach is cleared. Shadows are per-source (one light's shadow doesn't darken an area another light reaches), and an open door casts none. Walls feed the overlay via `window._setMapWalls`, kept fresh by the wall editor + the `walls_update` WS. **Also fixes a latent bug**: a light whose bright radius equalled its outer radius (every Daylight emitter) produced a degenerate radial gradient that painted nothing — the bright core is now clamped strictly inside the outer radius, so Daylight (and any equal-radius light) actually clears the veil. Presentation only — the server remains authoritative for sight verdicts (the v2.753.0 occlusion).
+
+### Added
+- `app/static/tabletop.js` — per-light wall-shadow pass in `drawLighting` (`_eraseWallShadows` + temp-canvas punch); `window._setMapWalls`; the degenerate-gradient clamp; `window.__lightCanvasForTest` + `window.__testDrawLighting` harness hooks.
+- `app/templates/tabletop.html` — the wall editor feeds walls to the overlay via `window._setMapWalls` on load + `walls_update`.
+- `tests/harness_ui/test_wall_lighting_shadow.py` (new, +1) — a point behind a wall is veiled while the lit side + the light's core are cleared; removing the wall lights the far point.
+
+### Fixed
+- Daylight (and any bright==outer-radius) light emitters now clear the lighting veil instead of rendering a degenerate (empty) gradient.
+
+### Schema
+- No schema change (still v88).
+
 ## [2.756.0] - 2026-06-29 — "The Marked Map"
 
 **Schema version:** 88

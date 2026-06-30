@@ -2508,6 +2508,7 @@
                 var d = await r.json();
                 mapId = d.map_id; walls = d.walls || [];
                 hotspots = d.hotspots || []; render();
+                if (window._setMapWalls) window._setMapWalls(walls);
             } catch (e) {}
         }
         async function saveHotspots() {
@@ -2564,6 +2565,7 @@
         window._onWallsUpdate = function (data) {
             if (!data) return;
             walls = data.walls || []; render();
+            if (window._setMapWalls) window._setMapWalls(walls);
         };
         window._onHotspotsUpdate = function (data) {
             if (!data) return;
