@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.785.7] - 2026-06-30 — "The Level Row"
+
+**Schema version:** 91
+
+**Commit summary:** Make every map-editor toolbar control the same 32 px height.
+
+**Description:** Buttons, selects, and number inputs in the editor toolbar are now all the same **32 px** height (with `box-sizing:border-box`), so a row of mixed controls lines up cleanly instead of differing by a pixel or two.
+
+### Changed
+- `app/templates/map_editor.html` — uniform `height:32px` on `.me-tool-btn`, `.me-toolbar select`, and `.me-toolbar input[type=number]`.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.785.6] - 2026-06-30 — "The Paired Markers"
 
 **Schema version:** 91

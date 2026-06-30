@@ -21,6 +21,11 @@
   /* small buttons: tight padding; min-height at the 32px dense-panel floor */
   .me-tool-btn { min-height:32px; padding:2px 8px; font-size:13px; white-space:nowrap; }
   .me-tool-btn[aria-pressed="true"] { background:var(--accent); color:#fff; }
+  /* v2.785.7 — every toolbar control (button / select / number input) is the
+     same 32px height. */
+  .me-toolbar .me-tool-btn,
+  .me-toolbar select,
+  .me-toolbar input[type=number] { height:32px; min-height:32px; box-sizing:border-box; }
   /* v2.783.0 — labelled sub-groups, stacked + width-equalised to the widest. */
   .me-group { display:flex; flex-direction:column; align-items:stretch; gap:4px;
     padding:3px 6px 5px; border:1px solid var(--border); border-radius:7px;
