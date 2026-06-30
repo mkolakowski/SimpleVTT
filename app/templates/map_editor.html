@@ -9,34 +9,30 @@
   /* v2.783.3 — keep every group on ONE horizontal line; groups themselves
      can be multiple rows tall (label header + controls that wrap below).
      Horizontal scroll is the safety valve on very narrow viewports. */
-  /* v2.785.1 — compact toolbar: tighter padding/gaps, smaller dense-panel
-     buttons (34px > the 32px dense-panel floor). */
+  /* v2.785.1 — compact toolbar: tighter padding/gaps.
+     v2.785.3 — each group is a vertical stack stretched to its widest control,
+     so every button is small (tight padding) but no narrower than the widest
+     text in its group. */
   .me-toolbar { display:flex; align-items:flex-start; gap:6px; flex-wrap:nowrap;
     padding:6px 8px; border:1px solid var(--border); border-radius:8px;
     background:var(--bg-2); margin-bottom:10px; overflow-x:auto; }
   .me-toolbar label { font-size:12px; color:var(--fg-mute); display:inline-flex;
     align-items:center; gap:4px; }
-  .me-tool-btn { min-height:34px; padding:3px 8px; font-size:13px; }
+  /* small buttons: tight padding; min-height at the 32px dense-panel floor */
+  .me-tool-btn { min-height:32px; padding:2px 8px; font-size:13px; white-space:nowrap; }
   .me-tool-btn[aria-pressed="true"] { background:var(--accent); color:#fff; }
-  /* v2.783.0 — labelled sub-groups; v2.784.3 — up to two controls per row. */
-  .me-group { display:flex; flex-wrap:wrap; align-items:stretch; gap:4px;
+  /* v2.783.0 — labelled sub-groups, stacked + width-equalised to the widest. */
+  .me-group { display:flex; flex-direction:column; align-items:stretch; gap:4px;
     padding:3px 6px 5px; border:1px solid var(--border); border-radius:7px;
     flex:0 0 auto;
     background:color-mix(in srgb, var(--bg) 55%, transparent); }
-  .me-grp-lbl { flex-basis:100%; font-size:9px; font-weight:700;
-    text-transform:uppercase; letter-spacing:.5px; color:var(--fg-mute);
-    opacity:.75; user-select:none; text-align:center; margin-bottom:1px; }
-  /* two-up: each control takes ~half the group; a lone/odd one grows to fill */
-  .me-group > .me-tool-btn, .me-group > label { flex:1 1 calc(50% - 4px); min-width:64px; }
+  .me-grp-lbl { font-size:9px; font-weight:700; text-transform:uppercase;
+    letter-spacing:.5px; color:var(--fg-mute); opacity:.75; user-select:none;
+    text-align:center; margin-bottom:1px; }
   .me-group > label { justify-content:center; }
-  /* a control (or sub-row) that should own a full row */
-  .me-fullrow { flex-basis:100% !important; }
   /* a sub-row that keeps several controls together on one line */
-  .me-sub { flex-basis:100%; display:flex; align-items:center; gap:4px; }
+  .me-sub { display:flex; align-items:center; gap:4px; }
   .me-sub > label { flex:0 0 auto; }
-  /* a group whose controls each take a full row (vertical stack) */
-  .me-group--stack > .me-tool-btn, .me-group--stack > label,
-  .me-group--stack > .me-sub { flex-basis:100%; }
   .me-stage { position:relative; display:block; width:100%; box-sizing:border-box;
     border:1px solid var(--border); border-radius:6px; overflow:auto;
     max-height:86vh; background:#0b0d16; }

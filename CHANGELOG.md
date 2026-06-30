@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.785.3] - 2026-06-30 — "The Trim Buttons"
+
+**Schema version:** 91
+
+**Commit summary:** Editor toolbar buttons are small (tight padding) and uniform per group — each no narrower than the widest control in its group.
+
+**Description:** Applies the requested sizing rule to the map-editor toolbar: every button now has **small padding** and is **no smaller than the widest text in its group**. Each group is a vertical stack stretched to its widest control, so a group's buttons all share one tidy width (the widest label/sub-row) instead of stretching to fill arbitrary space. Buttons sit at the 32 px dense-panel height floor.
+
+### Changed
+- `app/templates/map_editor.html` — `.me-tool-btn` uses tight `2px 8px` padding + `white-space:nowrap`; `.me-group` is `flex-direction:column; align-items:stretch` (width-equalised to the widest child); dropped the prior two-up / `--stack` / `--fullrow` width rules (the stack handles them). Control IDs unchanged.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.785.2] - 2026-06-30 — "The Second Pawn"
 
 **Schema version:** 91
