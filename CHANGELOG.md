@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.759.0] - 2026-06-29 — "The Shifting Stone"
+
+**Schema version:** 88
+
+**Commit summary:** Maps 2.0 wall segment drag-to-move — the last walls-editor polish, completing Maps 2.0.
+
+**Description:** In GM wall-edit mode, a wall or door segment can now be dragged to reposition it: pressing on a segment and dragging translates both endpoints rigidly (live preview), and releasing saves via `PUT /map/{id}/walls`. A press-and-release without movement (a tap) still deletes the segment, as before. Implemented with pointer capture on the overlay so the drag survives the segment re-rendering mid-move, and a one-tick click-suppression so the pointer-up doesn't also start drawing a new wall. No new endpoint — the drag reuses the existing walls PUT + `walls_update` broadcast. With this, Maps 2.0 is complete.
+
+### Added
+- `app/templates/tabletop.html` — segment `pointerdown` (grab) + overlay `pointermove`/`pointerup` (translate + save / tap-delete) with click suppression.
+- `tests/harness_ui/test_wall_drag.py` (new, +1) — a real pointer drag moves both endpoints right (rigid, vertical unchanged) and persists server-side.
+
+### Schema
+- No schema change (still v88).
+
 ## [2.758.0] - 2026-06-29 — "The Trapped Tile"
 
 **Schema version:** 88

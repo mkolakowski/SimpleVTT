@@ -2418,6 +2418,7 @@
         var NS = 'http://www.w3.org/2000/svg';
         var mapId = null, walls = [], editMode = false, pending = null, seq = 0;
         var hotspots = [], spotMode = false;  // v2.756.0 — clickable hotspots
+        var grab = null, suppressClick = false;  // v2.759.0 — drag-to-move
 
         function mkLine(w, hit) {
             var ln = document.createElementNS(NS, 'line');
@@ -2449,16 +2450,23 @@
                 svg.appendChild(mkLine(w, false));
                 var hit = mkLine(w, true);
                 hit.addEventListener('click', function (e) {
-                    if (editMode) {
-                        // GM edit mode → delete the segment.
-                        e.stopPropagation();
-                        walls = walls.filter(function (x) { return x.id !== w.id; });
-                        save();
-                    } else if (w.door) {
-                        // Play mode → toggle the door open/closed (any member).
+                    // Play mode: a door toggles open/closed. (Edit-mode
+                    // delete/move is handled by the pointer drag below.)
+                    if (!editMode && w.door) {
                         e.stopPropagation();
                         toggleDoor(w);
                     }
+                });
+                // v2.759.0 — GM edit mode: drag a segment to move it; a tap
+                // (no drag) deletes it.
+                hit.addEventListener('pointerdown', function (e) {
+                    if (!editMode) return;
+                    e.stopPropagation(); e.preventDefault();
+                    var p = toMap(e);
+                    if (!p) return;
+                    grab = { w: w, ox1: w.x1, oy1: w.y1, ox2: w.x2, oy2: w.y2,
+                             sx: p.x, sy: p.y, moved: false };
+                    try { svg.setPointerCapture(e.pointerId); } catch (_) {}
                 });
                 svg.appendChild(hit);
             });
@@ -2625,7 +2633,32 @@
                 spotBtn.setAttribute('aria-pressed', spotMode ? 'true' : 'false');
                 syncOverlay(); render();
             });
+            // v2.759.0 — segment drag-to-move (and tap-to-delete) in edit mode.
+            svg.addEventListener('pointermove', function (e) {
+                if (!grab) return;
+                var p = toMap(e); if (!p) return;
+                var dx = p.x - grab.sx, dy = p.y - grab.sy;
+                if (Math.abs(dx) > 3 || Math.abs(dy) > 3) grab.moved = true;
+                grab.w.x1 = grab.ox1 + dx; grab.w.y1 = grab.oy1 + dy;
+                grab.w.x2 = grab.ox2 + dx; grab.w.y2 = grab.oy2 + dy;
+                render();
+            });
+            svg.addEventListener('pointerup', function (e) {
+                if (!grab) return;
+                var g = grab; grab = null;
+                try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
+                if (!g.moved) {
+                    // A tap (no drag) → delete the segment.
+                    walls = walls.filter(function (x) { return x.id !== g.w.id; });
+                }
+                save();  // persist the move or the delete
+                // Suppress the click that follows this pointer sequence so it
+                // doesn't start drawing a new wall.
+                suppressClick = true;
+                setTimeout(function () { suppressClick = false; }, 0);
+            });
             svg.addEventListener('click', function (e) {
+                if (suppressClick) return;
                 var p = toMap(e);
                 if (!p) return;
                 if (editMode) {
