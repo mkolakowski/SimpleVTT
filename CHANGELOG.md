@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.772.0] - 2026-06-30 — "The Mason's Palette"
+
+**Schema version:** 91
+
+**Commit summary:** Walls/doors look like walls/doors — material styles, a dedicated 🚪 Door button, and richer rendering.
+
+**Description:** Three wall/door editor improvements:
+- **They look the part.** Walls now render as a dark casing under a material face with a faint top sheen (a solid, beveled wall) instead of a thin red line; doors render as a framed panel with a knob (green when open) instead of a dashed amber line. The look is identical in the editor and on the tabletop.
+- **A selection of looks.** A new material picker — **Stone / Wood / Brick / Metal / Cave** — sets the colour/thickness of newly drawn walls and doors; the choice is stored per segment (`style`) and rendered everywhere. Occlusion ignores it (presentation only).
+- **Door is its own button.** The old "door" checkbox is replaced by a dedicated **🚪 Door** draw tool alongside **🧱 Wall**, so drawing a door is one click of mode rather than ticking a box.
+
+### Added
+- `app/routes/tabletop_routes.py` — `style` field in the wall sanitizer.
+- `app/templates/map_editor.html` — 🚪 Door tool + material `<select>`; `WALL_STYLES` + casing/face/sheen wall rendering + door panel/knob rendering.
+- `app/templates/tabletop.html` — the same `WALL_STYLES` + rendering so walls/doors look identical at the table.
+- `tests/harness_ui/test_map_editor_door_style.py` (new, +1) — draw a wooden door via the Door tool → persists `door:true` + `style:wood` + a knob renders.
+
+### Changed
+- `tests/harness_ui/test_wall_editor.py` + `test_map_editor.py` — updated for the multi-line wall/door rendering + the door button (no more door checkbox / dashed door).
+
+### Schema
+- No schema change (still v91).
+
 ## [2.771.0] - 2026-06-29 — "The Cartographer's Shortcut"
 
 **Schema version:** 91

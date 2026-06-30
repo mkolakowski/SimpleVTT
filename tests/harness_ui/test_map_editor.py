@@ -23,11 +23,10 @@ def test_editor_draws_wall(gm_page: Page) -> None:
             overlay = gm_page.locator("#me-overlay")
             expect(overlay).to_be_visible()
 
-            # Enter wall mode → door checkbox appears, overlay armed.
+            # Enter wall mode (doors are now a separate 🚪 Door button).
             wall_btn = gm_page.locator("#me-wall-btn")
             wall_btn.click()
             assert wall_btn.get_attribute("aria-pressed") == "true"
-            expect(gm_page.locator("#me-door-lbl")).to_be_visible()
 
             # Click two points on the overlay to draw a segment.
             box = overlay.bounding_box()

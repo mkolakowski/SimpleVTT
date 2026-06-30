@@ -124064,6 +124064,10 @@ def _sanitize_wall_segments(raw) -> list:
             "x1": x1, "y1": y1, "x2": x2, "y2": y2,
             "door": bool(seg.get("door")),
             "open": bool(seg.get("open")),
+            # v2.772.0 — visual material (stone/wood/brick/metal/cave/…); a
+            # short style key the client maps to a wall/door look. Presentation
+            # only — occlusion ignores it.
+            "style": str(seg.get("style") or "").strip()[:20],
         })
     return out
 

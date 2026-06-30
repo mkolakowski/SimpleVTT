@@ -27,16 +27,17 @@ def test_tabletop_renders_walls_no_edit_toggle(gm_page: Page) -> None:
     # …replaced by a quick link to the dedicated editor.
     expect(gm_page.locator('.canvas-tools a', has_text="Edit map")).to_be_visible()
 
-    # The overlay still renders walls + doors pushed over the WS.
+    # The overlay still renders walls + doors pushed over the WS. v2.772.0:
+    # each segment renders as several styled lines (casing/face/sheen, or a
+    # door frame/panel/grain + a knob circle), plus its transparent hit line.
     gm_page.evaluate("""() => window._onWallsUpdate({ walls: [
-        { id: 'a', x1: 10, y1: 10, x2: 200, y2: 10, door: false, open: false },
-        { id: 'b', x1: 200, y1: 10, x2: 200, y2: 200, door: true, open: false }
+        { id: 'a', x1: 10, y1: 10, x2: 200, y2: 10, door: false, open: false, style: 'stone' },
+        { id: 'b', x1: 200, y1: 10, x2: 200, y2: 200, door: true, open: false, style: 'wood' }
     ]})""")
-    lines = gm_page.locator("#wall-overlay line")
-    assert lines.count() == 4, lines.count()  # 2 visible + 2 hit
-    dashed = gm_page.eval_on_selector_all(
-        "#wall-overlay line",
-        "els => els.filter(e => e.getAttribute('stroke-dasharray')).length")
-    assert dashed >= 1  # the door is dashed
+    assert gm_page.locator("#wall-overlay line").count() >= 6, "multi-line wall/door look"
+    # 2 hit lines (one per segment).
+    assert gm_page.locator('#wall-overlay line[stroke="transparent"]').count() == 2
+    # The door renders a knob (circle).
+    assert gm_page.locator("#wall-overlay circle").count() >= 1
 
     assert not errors, f"JS errors: {errors}"

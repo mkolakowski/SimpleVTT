@@ -30,8 +30,18 @@
 
 <div class="me-toolbar">
   <button type="button" id="me-wall-btn" class="me-tool-btn" aria-pressed="false"
-          title="Draw walls/doors: click two points; click a wall to delete; drag to move">🧱 Walls</button>
-  <label id="me-door-lbl" style="display:none;"><input type="checkbox" id="me-door-cb"> door</label>
+          title="Draw a wall: click two points (right-click a wall for Move/Delete)">🧱 Wall</button>
+  <button type="button" id="me-door-btn" class="me-tool-btn" aria-pressed="false"
+          title="Draw a door: click two points (players can open/close it at the table)">🚪 Door</button>
+  <label style="gap:3px;" title="Material/look for new walls + doors">
+    <select id="me-wall-style" style="min-height:32px;font-size:12px;">
+      <option value="stone">Stone</option>
+      <option value="wood">Wood</option>
+      <option value="brick">Brick</option>
+      <option value="metal">Metal</option>
+      <option value="cave">Cave</option>
+    </select>
+  </label>
   <button type="button" id="me-spot-btn" class="me-tool-btn" aria-pressed="false"
           title="Click the map to place a description hotspot; click a hotspot to delete">📍 Hotspots</button>
   <button type="button" id="me-light-btn" class="me-tool-btn" aria-pressed="false"
@@ -86,7 +96,17 @@
   var lights = {{ lights | tojson }};
   var fogEnabled = {{ 'true' if fog_enabled else 'false' }};
   var fogRevealed = {{ fog_revealed | tojson }};
-  var wallMode = false, spotMode = false, lightMode = false, fogMode = false, pending = null, seq = 0;
+  var wallMode = false, doorMode = false, spotMode = false, lightMode = false, fogMode = false, pending = null, seq = 0;
+  // v2.772.0 — wall/door material looks. Walls draw as a thick casing + face
+  // line; doors draw as a panel + knob (open = ajar/green).
+  var WALL_STYLES = {
+    stone: { color: '#aab0b8', casing: '#3a3f47', width: 7 },
+    wood:  { color: '#9a6633', casing: '#3a2510', width: 7 },
+    brick: { color: '#b05547', casing: '#41201b', width: 7 },
+    metal: { color: '#8b97a6', casing: '#2b323c', width: 6 },
+    cave:  { color: '#6f6658', casing: '#241f18', width: 9 },
+  };
+  function wallStyle(w) { return WALL_STYLES[w && w.style] || WALL_STYLES.stone; }
   var fogDrag = null;
   var eraseMode = false;       // v2.770.0 — click an object to delete
   var relocating = null;       // {kind, obj} — next map click relocates it
@@ -155,26 +175,47 @@
     svg.style.height = img.clientHeight + 'px';
   }
 
-  function mkLine(w, hit) {
+  // v2.772.0 — transparent wide hit-line (the click/drag/right-click target).
+  function mkHitLine(w) {
     var ln = document.createElementNS(NS, 'line');
     ln.setAttribute('x1', w.x1); ln.setAttribute('y1', w.y1);
     ln.setAttribute('x2', w.x2); ln.setAttribute('y2', w.y2);
-    if (hit) {
-      ln.setAttribute('stroke', 'transparent');
-      ln.setAttribute('stroke-width', '16');
-      // v2.770.0 — always interactive so right-click (Move/Delete) + erase
-      // work without entering wall mode; left-click only acts in erase mode.
-      ln.style.pointerEvents = 'stroke';
-      ln.style.cursor = eraseMode ? 'pointer' : (wallMode ? 'move' : 'context-menu');
-    } else {
-      var open = w.door && w.open;
-      ln.setAttribute('stroke', open ? '#46c46a' : (w.door ? '#d9a441' : '#e05a4a'));
-      ln.setAttribute('stroke-width', '4');
-      ln.setAttribute('stroke-linecap', 'round');
-      if (w.door) ln.setAttribute('stroke-dasharray', '10 8');
-      ln.style.pointerEvents = 'none';
-    }
+    ln.setAttribute('stroke', 'transparent');
+    ln.setAttribute('stroke-width', '18');
+    ln.style.pointerEvents = 'stroke';
+    ln.style.cursor = eraseMode ? 'pointer'
+      : ((wallMode || doorMode) ? 'move' : 'context-menu');
     return ln;
+  }
+  // v2.772.0 — the visible look. Walls: a dark casing under a material face +
+  // a faint top sheen (a solid, beveled wall). Doors: a framed panel + a knob,
+  // green when open. Appends each piece to the svg.
+  function drawWallVisual(w) {
+    var st = wallStyle(w);
+    function seg(color, width, cap) {
+      var ln = document.createElementNS(NS, 'line');
+      ln.setAttribute('x1', w.x1); ln.setAttribute('y1', w.y1);
+      ln.setAttribute('x2', w.x2); ln.setAttribute('y2', w.y2);
+      ln.setAttribute('stroke', color); ln.setAttribute('stroke-width', width);
+      ln.setAttribute('stroke-linecap', cap || 'round');
+      ln.style.pointerEvents = 'none';
+      svg.appendChild(ln);
+    }
+    if (w.door) {
+      var open = !!w.open;
+      seg(st.casing, st.width + 5, 'butt');                       // frame
+      seg(open ? '#46c46a' : st.color, st.width + 1, 'butt');     // door panel
+      seg(open ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.25)', 2, 'butt'); // grain
+      var knob = document.createElementNS(NS, 'circle');
+      knob.setAttribute('cx', (w.x1 + w.x2) / 2); knob.setAttribute('cy', (w.y1 + w.y2) / 2);
+      knob.setAttribute('r', '3.5'); knob.setAttribute('fill', '#f0d060');
+      knob.style.pointerEvents = 'none';
+      svg.appendChild(knob);
+    } else {
+      seg(st.casing, st.width + 4);                       // casing (depth)
+      seg(st.color, st.width);                            // wall face
+      seg('rgba(255,255,255,0.18)', Math.max(1, st.width - 4)); // top sheen
+    }
   }
   function render() {
     while (svg.firstChild) svg.removeChild(svg.firstChild);
@@ -198,10 +239,10 @@
       svg.appendChild(g);
     }
     walls.forEach(function (w) {
-      svg.appendChild(mkLine(w, false));
-      var hit = mkLine(w, true);
+      drawWallVisual(w);
+      var hit = mkHitLine(w);
       hit.addEventListener('pointerdown', function (e) {
-        if (!wallMode || eraseMode) return;  // drag-to-move only in wall mode
+        if (eraseMode || !(wallMode || doorMode)) return;  // drag-move only in a draw mode
         e.stopPropagation(); e.preventDefault();
         var p = toMap(e); if (!p) return;
         grab = { w: w, ox1: w.x1, oy1: w.y1, ox2: w.x2, oy2: w.y2,
@@ -392,9 +433,9 @@
 
   // Toolbar wiring.
   var wallBtn = document.getElementById('me-wall-btn');
+  var doorBtn = document.getElementById('me-door-btn');
+  var styleSel = document.getElementById('me-wall-style');
   var spotBtn = document.getElementById('me-spot-btn');
-  var doorLbl = document.getElementById('me-door-lbl');
-  var doorCb = document.getElementById('me-door-cb');
   var snapBtn = document.getElementById('me-snap-btn');
   if (snapBtn) snapBtn.addEventListener('click', function () {
     snapOn = !snapOn;
@@ -405,7 +446,7 @@
   function syncStageCursor() {
     // The overlay captures empty-area clicks when placing/painting/relocating.
     // (Objects stay individually clickable for erase/right-click regardless.)
-    var on = wallMode || spotMode || lightMode || fogMode || relocating;
+    var on = wallMode || doorMode || spotMode || lightMode || fogMode || relocating;
     svg.style.pointerEvents = on ? 'auto' : 'none';
     svg.style.cursor = on ? 'crosshair' : 'default';
   }
@@ -416,15 +457,15 @@
     setStatus(eraseMode ? 'Erase mode: click an object to delete it.' : '');
     render();  // re-render so object cursors reflect erase mode
   });
-  // One edit mode at a time (wall / spot / light / fog), or null for view.
+  // One edit mode at a time (wall / door / spot / light / fog), or null.
   function setMode(mode) {
-    wallMode = (mode === 'wall'); spotMode = (mode === 'spot');
-    lightMode = (mode === 'light'); fogMode = (mode === 'fog');
+    wallMode = (mode === 'wall'); doorMode = (mode === 'door');
+    spotMode = (mode === 'spot'); lightMode = (mode === 'light'); fogMode = (mode === 'fog');
     wallBtn.setAttribute('aria-pressed', wallMode ? 'true' : 'false');
+    if (doorBtn) doorBtn.setAttribute('aria-pressed', doorMode ? 'true' : 'false');
     spotBtn.setAttribute('aria-pressed', spotMode ? 'true' : 'false');
     if (lightBtn) lightBtn.setAttribute('aria-pressed', lightMode ? 'true' : 'false');
     if (fogBtn) fogBtn.setAttribute('aria-pressed', fogMode ? 'true' : 'false');
-    doorLbl.style.display = wallMode ? 'inline-flex' : 'none';
     if (fogOnLbl) fogOnLbl.style.display = fogMode ? 'inline-flex' : 'none';
     pending = null; fogDrag = null; syncStageCursor(); render();
   }
@@ -432,6 +473,7 @@
   var fogOnCb = document.getElementById('me-fog-on-cb');
   if (fogOnCb) fogOnCb.checked = fogEnabled;
   wallBtn.addEventListener('click', function () { setMode(wallMode ? null : 'wall'); });
+  if (doorBtn) doorBtn.addEventListener('click', function () { setMode(doorMode ? null : 'door'); });
   spotBtn.addEventListener('click', function () { setMode(spotMode ? null : 'spot'); });
   if (lightBtn) lightBtn.addEventListener('click', function () { setMode(lightMode ? null : 'light'); });
   if (fogBtn) fogBtn.addEventListener('click', function () {
@@ -508,12 +550,13 @@
       setStatus(''); syncStageCursor();
       return;
     }
-    if (wallMode) {
+    if (wallMode || doorMode) {
       p = snapPoint(p);
       if (!pending) { pending = p; render(); return; }
       walls.push({ id: 'w' + Date.now() + '_' + (seq++),
         x1: pending.x, y1: pending.y, x2: p.x, y2: p.y,
-        door: !!(doorCb && doorCb.checked), open: false });
+        door: doorMode, open: false,
+        style: (styleSel && styleSel.value) || 'stone' });
       pending = null; saveWalls();
     } else if (spotMode) {
       var label = window.prompt('Hotspot label:', '');

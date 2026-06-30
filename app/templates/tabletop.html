@@ -2416,35 +2416,60 @@
         var hotspots = [], spotMode = false;  // v2.756.0 — clickable hotspots
         var grab = null, suppressClick = false;  // v2.759.0 — drag-to-move
 
-        function mkLine(w, hit) {
+        // v2.772.0 — wall/door material looks (kept in sync with the map editor).
+        var WALL_STYLES = {
+            stone: { color: '#aab0b8', casing: '#3a3f47', width: 7 },
+            wood:  { color: '#9a6633', casing: '#3a2510', width: 7 },
+            brick: { color: '#b05547', casing: '#41201b', width: 7 },
+            metal: { color: '#8b97a6', casing: '#2b323c', width: 6 },
+            cave:  { color: '#6f6658', casing: '#241f18', width: 9 },
+        };
+        function wallStyle(w) { return WALL_STYLES[w && w.style] || WALL_STYLES.stone; }
+        function mkHitLine(w) {
             var ln = document.createElementNS(NS, 'line');
             ln.setAttribute('x1', w.x1); ln.setAttribute('y1', w.y1);
             ln.setAttribute('x2', w.x2); ln.setAttribute('y2', w.y2);
-            if (hit) {
-                ln.setAttribute('stroke', 'transparent');
-                ln.setAttribute('stroke-width', '16');
-                // v2.755.0 — doors stay clickable in play mode (toggle open/
-                // close) for everyone; walls only in GM edit mode (delete).
-                // A pointer-events value on the line re-enables hit-testing
-                // even though the overlay <svg> is pointer-events:none.
-                var clickable = editMode || w.door;
-                ln.style.pointerEvents = clickable ? 'stroke' : 'none';
-                ln.style.cursor = clickable ? 'pointer' : 'default';
-            } else {
-                var open = w.door && w.open;
-                ln.setAttribute('stroke', open ? '#46c46a' : (w.door ? '#d9a441' : '#e05a4a'));
-                ln.setAttribute('stroke-width', '4');
-                ln.setAttribute('stroke-linecap', 'round');
-                if (w.door) ln.setAttribute('stroke-dasharray', '10 8');
-                ln.style.pointerEvents = 'none';
-            }
+            ln.setAttribute('stroke', 'transparent');
+            ln.setAttribute('stroke-width', '16');
+            // Doors stay clickable in play mode (toggle open/close); the value
+            // re-enables hit-testing even though the overlay svg is none.
+            var clickable = editMode || w.door;
+            ln.style.pointerEvents = clickable ? 'stroke' : 'none';
+            ln.style.cursor = clickable ? 'pointer' : 'default';
             return ln;
+        }
+        function drawWallVisual(w) {
+            var st = wallStyle(w);
+            function seg(color, width, cap) {
+                var ln = document.createElementNS(NS, 'line');
+                ln.setAttribute('x1', w.x1); ln.setAttribute('y1', w.y1);
+                ln.setAttribute('x2', w.x2); ln.setAttribute('y2', w.y2);
+                ln.setAttribute('stroke', color); ln.setAttribute('stroke-width', width);
+                ln.setAttribute('stroke-linecap', cap || 'round');
+                ln.style.pointerEvents = 'none';
+                svg.appendChild(ln);
+            }
+            if (w.door) {
+                var open = !!w.open;
+                seg(st.casing, st.width + 5, 'butt');
+                seg(open ? '#46c46a' : st.color, st.width + 1, 'butt');
+                seg(open ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.25)', 2, 'butt');
+                var knob = document.createElementNS(NS, 'circle');
+                knob.setAttribute('cx', (w.x1 + w.x2) / 2); knob.setAttribute('cy', (w.y1 + w.y2) / 2);
+                knob.setAttribute('r', '3.5'); knob.setAttribute('fill', '#f0d060');
+                knob.style.pointerEvents = 'none';
+                svg.appendChild(knob);
+            } else {
+                seg(st.casing, st.width + 4);
+                seg(st.color, st.width);
+                seg('rgba(255,255,255,0.18)', Math.max(1, st.width - 4));
+            }
         }
         function render() {
             while (svg.firstChild) svg.removeChild(svg.firstChild);
             walls.forEach(function (w) {
-                svg.appendChild(mkLine(w, false));
-                var hit = mkLine(w, true);
+                drawWallVisual(w);
+                var hit = mkHitLine(w);
                 hit.addEventListener('click', function (e) {
                     // Play mode: a door toggles open/closed. (Edit-mode
                     // delete/move is handled by the pointer drag below.)
