@@ -6,19 +6,23 @@
   .me-head { display:flex; align-items:center; justify-content:space-between;
     flex-wrap:wrap; gap:12px; margin:16px 0 12px; }
   .me-head h1 { margin:0; font-size:20px; }
-  .me-toolbar { display:flex; align-items:stretch; gap:10px; flex-wrap:wrap;
+  /* v2.783.3 — keep every group on ONE horizontal line; groups themselves
+     can be multiple rows tall (label header + controls that wrap below).
+     Horizontal scroll is the safety valve on very narrow viewports. */
+  .me-toolbar { display:flex; align-items:flex-start; gap:10px; flex-wrap:nowrap;
     padding:10px 12px; border:1px solid var(--border); border-radius:8px;
-    background:var(--bg-2); margin-bottom:12px; }
+    background:var(--bg-2); margin-bottom:12px; overflow-x:auto; }
   .me-toolbar label { font-size:13px; color:var(--fg-mute); display:inline-flex;
     align-items:center; gap:5px; }
   .me-tool-btn[aria-pressed="true"] { background:var(--accent); color:#fff; }
   /* v2.783.0 — controls grouped into labelled sub-groups. */
-  .me-group { display:inline-flex; align-items:center; gap:6px; padding:4px 9px;
-    border:1px solid var(--border); border-radius:8px;
+  .me-group { display:flex; flex-wrap:wrap; align-items:center; gap:6px;
+    padding:5px 9px; border:1px solid var(--border); border-radius:8px;
+    flex:0 0 auto;
     background:color-mix(in srgb, var(--bg) 55%, transparent); }
-  .me-grp-lbl { font-size:9px; font-weight:700; text-transform:uppercase;
-    letter-spacing:.6px; color:var(--fg-mute); opacity:.75; user-select:none;
-    margin-right:1px; }
+  .me-grp-lbl { flex-basis:100%; width:100%; font-size:9px; font-weight:700;
+    text-transform:uppercase; letter-spacing:.6px; color:var(--fg-mute);
+    opacity:.75; user-select:none; margin-bottom:1px; }
   .me-stage { position:relative; display:block; width:100%; box-sizing:border-box;
     border:1px solid var(--border); border-radius:6px; overflow:auto;
     max-height:86vh; background:#0b0d16; }

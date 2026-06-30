@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.783.3] - 2026-06-30 — "The One-Line Bench"
+
+**Schema version:** 91
+
+**Commit summary:** Map-editor toolbar keeps every group on a single horizontal line; groups stack their controls into multiple rows instead.
+
+**Description:** The toolbar no longer wraps whole groups onto new lines. All eight sub-groups now sit on **one horizontal line**, and each group is a little card with its **label as a header row** and its controls **wrapping into rows beneath** — so a group can be multiple rows tall while the toolbar stays a single row of groups. On very narrow viewports the toolbar scrolls horizontally rather than reflowing groups.
+
+### Changed
+- `app/templates/map_editor.html` — `.me-toolbar` is `flex-wrap:nowrap` with `overflow-x:auto`; `.me-group` is a wrapping flex card (`flex:0 0 auto`) with the `.me-grp-lbl` label spanning a full header row.
+
+### Fixed
+- `tests/harness_ui/test_map_editor_tokens.py` — the perspective-toggle test re-targets the token via its locator each click (robust to the taller toolbar's layout shift).
+
+### Schema
+- No schema change (still v91).
+
 ## [2.783.2] - 2026-06-30 — "The Harmless Tap"
 
 **Schema version:** 91

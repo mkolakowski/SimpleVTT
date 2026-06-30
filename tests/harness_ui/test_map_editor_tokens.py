@@ -72,12 +72,11 @@ def test_token_snaps_to_grid(gm_page: Page) -> None:
 def test_token_perspective_toggles(gm_page: Page) -> None:
     _open_editor(gm_page)
     gm_page.locator("#me-token-btn").click()
-    box = gm_page.locator(".me-token").first.bounding_box()
-    cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
-    gm_page.mouse.click(cx, cy)  # select → show line of sight
+    tok = gm_page.locator(".me-token").first
+    tok.click()  # select → show line of sight (re-targets each click)
     gm_page.wait_for_timeout(150)
     assert gm_page.evaluate("() => window.__meVisionActive") is True
-    gm_page.mouse.click(cx, cy)  # click again → clear
+    tok.click()  # click again → clear
     gm_page.wait_for_timeout(150)
     assert gm_page.evaluate("() => window.__meVisionActive") is False
 
