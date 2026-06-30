@@ -123972,8 +123972,18 @@ async def settings_map_grid_size(
     body = await request.json()
     val = max(20, min(300, int(body.get("grid_size_px", 70))))
     m.grid_size_px = val
+    # v2.769.0 — optional grid offset (align the overlay to a map image whose
+    # grid doesn't start at 0,0). Each clamps to [0, grid_size).
+    for fld in ("grid_offset_x", "grid_offset_y"):
+        if fld in body:
+            try:
+                off = int(body.get(fld) or 0)
+            except (TypeError, ValueError):
+                off = 0
+            setattr(m, fld, max(0, min(val - 1, off)))
     db.commit()
-    return {"ok": True, "grid_size_px": m.grid_size_px}
+    return {"ok": True, "grid_size_px": m.grid_size_px,
+            "grid_offset_x": m.grid_offset_x, "grid_offset_y": m.grid_offset_y}
 
 
 @router.post("/campaign/{campaign_id}/settings/maps/{map_id}/show_grid")

@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.769.0] - 2026-06-29 — "The Surveyor's Grid"
+
+**Schema version:** 91
+
+**Commit summary:** Map editor — show the grid overlay + grid controls (show/size/offset), and fix the grid-size save.
+
+**Description:** The map editor now draws the **grid overlay** (faint lines at `grid_size_px`, offset by the per-map grid offset) so you can align walls/lights/fog to the grid, and the toolbar's grid controls are fleshed out: a **grid** show/hide toggle (persists `show_grid`), the **px** size input, and **x/y offset** inputs to nudge the grid onto a map image whose squares don't start at 0,0. Changing the size re-renders the overlay live (and snapping uses the new size). The grid_size endpoint gained optional `grid_offset_x`/`grid_offset_y` (clamped to `[0, size)`). **Also fixes a bug**: the editor's grid-size input was posting `grid_size` while the endpoint reads `grid_size_px`, so resizing the grid silently did nothing — now sent correctly.
+
+### Added
+- `app/routes/tabletop_routes.py` — `grid_size` endpoint accepts + returns `grid_offset_x`/`grid_offset_y`.
+- `app/templates/map_editor.html` — grid overlay rendering + the grid show/size/offset controls; grid-size posts `grid_size_px` (fix).
+- `tests/harness/test_map_grid.py` (new, +2) + `tests/harness_ui/test_map_editor_grid.py` (new, +1).
+
+### Fixed
+- Editor grid-size input now persists (it posted the wrong body key before).
+
+### Schema
+- No schema change (still v91).
+
 ## [2.768.0] - 2026-06-29 — "The Cleared Table"
 
 **Schema version:** 91

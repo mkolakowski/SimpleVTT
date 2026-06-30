@@ -39,10 +39,12 @@
   <label id="me-fog-on-lbl" style="display:none;"><input type="checkbox" id="me-fog-on-cb"> fog on</label>
   <button type="button" id="me-snap-btn" class="me-tool-btn" aria-pressed="true"
           title="Snap wall/door endpoints to the grid + to nearby wall ends">🧲 Snap</button>
-  <label>Grid px
-    <input type="number" id="me-grid" min="20" max="300" value="{{ map.grid_size_px }}"
-           style="width:64px;min-height:32px;">
-  </label>
+  <span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:6px;padding:3px 8px;">
+    <label style="gap:4px;"><input type="checkbox" id="me-grid-show" {% if map.show_grid %}checked{% endif %}> grid</label>
+    <label style="gap:3px;">px<input type="number" id="me-grid" min="20" max="300" value="{{ map.grid_size_px }}" style="width:58px;min-height:32px;" title="Grid cell size in pixels"></label>
+    <label style="gap:3px;">x<input type="number" id="me-grid-offx" min="0" value="{{ map.grid_offset_x }}" style="width:48px;min-height:32px;" title="Grid offset X (align the grid to the image)"></label>
+    <label style="gap:3px;">y<input type="number" id="me-grid-offy" min="0" value="{{ map.grid_offset_y }}" style="width:48px;min-height:32px;" title="Grid offset Y"></label>
+  </span>
   <label>Ambient
     <select id="me-ambient" style="min-height:32px;">
       {% for lvl in ['bright','dim','dark'] %}
@@ -85,6 +87,8 @@
   var pxPerFt = (({{ map.grid_size_px }} || 70) / 5);  // ft → px
   var grab = null, suppressClick = false;
   var gridPx = {{ map.grid_size_px }} || 70;
+  var gridShow = {{ 'true' if map.show_grid else 'false' }};
+  var gridOffX = {{ map.grid_offset_x }} || 0, gridOffY = {{ map.grid_offset_y }} || 0;
   var snapOn = true;
 
   // v2.764.0 — snap a point to a nearby existing wall endpoint (so segments
@@ -138,6 +142,25 @@
   }
   function render() {
     while (svg.firstChild) svg.removeChild(svg.firstChild);
+    // v2.769.0 — grid overlay (behind walls/lights/fog), at grid_size_px with
+    // the per-map offset. Faint lines so the map image still reads through.
+    if (gridShow && gridPx > 0) {
+      var W = img.naturalWidth || img.width || 2000;
+      var H = img.naturalHeight || img.height || 2000;
+      var g = document.createElementNS(NS, 'g');
+      g.style.pointerEvents = 'none';
+      function gridLine(x1, y1, x2, y2) {
+        var ln = document.createElementNS(NS, 'line');
+        ln.setAttribute('x1', x1); ln.setAttribute('y1', y1);
+        ln.setAttribute('x2', x2); ln.setAttribute('y2', y2);
+        ln.setAttribute('stroke', 'rgba(255,255,255,0.18)');
+        ln.setAttribute('stroke-width', '1');
+        g.appendChild(ln);
+      }
+      for (var gx = (gridOffX % gridPx); gx <= W; gx += gridPx) gridLine(gx, 0, gx, H);
+      for (var gy = (gridOffY % gridPx); gy <= H; gy += gridPx) gridLine(0, gy, W, gy);
+      svg.appendChild(g);
+    }
     walls.forEach(function (w) {
       svg.appendChild(mkLine(w, false));
       var hit = mkLine(w, true);
@@ -425,13 +448,33 @@
   });
 
   // Grid + ambient quick-save (reuse the settings endpoints).
-  document.getElementById('me-grid').addEventListener('change', function (e) {
-    var v = parseInt(e.target.value, 10) || 70;
+  function saveGrid() {
     setStatus('Saving…');
+    // NB: the endpoint reads grid_size_px (the old code sent grid_size and
+    // silently no-op'd — fixed v2.769.0).
     fetch('/campaign/' + CID + '/settings/maps/' + MID + '/grid_size', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ grid_size: v }),
-    }).then(function () { setStatus('Saved.'); render(); }).catch(function () { setStatus('Save failed.'); });
+      body: JSON.stringify({ grid_size_px: gridPx,
+        grid_offset_x: gridOffX, grid_offset_y: gridOffY }),
+    }).then(function () { setStatus('Saved.'); }).catch(function () { setStatus('Save failed.'); });
+  }
+  document.getElementById('me-grid').addEventListener('change', function (e) {
+    gridPx = Math.max(20, Math.min(300, parseInt(e.target.value, 10) || 70));
+    e.target.value = gridPx; pxPerFt = gridPx / 5; render(); saveGrid();
+  });
+  document.getElementById('me-grid-offx').addEventListener('change', function (e) {
+    gridOffX = Math.max(0, parseInt(e.target.value, 10) || 0); render(); saveGrid();
+  });
+  document.getElementById('me-grid-offy').addEventListener('change', function (e) {
+    gridOffY = Math.max(0, parseInt(e.target.value, 10) || 0); render(); saveGrid();
+  });
+  document.getElementById('me-grid-show').addEventListener('change', function (e) {
+    gridShow = e.target.checked; render();
+    setStatus('Saving…');
+    fetch('/campaign/' + CID + '/settings/maps/' + MID + '/show_grid', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ show_grid: gridShow }),
+    }).then(function () { setStatus('Saved.'); }).catch(function () { setStatus('Save failed.'); });
   });
   document.getElementById('me-ambient').addEventListener('change', function (e) {
     setStatus('Saving…');
