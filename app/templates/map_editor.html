@@ -48,6 +48,8 @@
   <button type="button" id="me-fog-btn" class="me-tool-btn" aria-pressed="false"
           title="Fog of war: drag to reveal an area; click a revealed area to re-hide it">🌫 Fog</button>
   <label id="me-fog-on-lbl" style="display:none;"><input type="checkbox" id="me-fog-on-cb"> fog on</label>
+  <button type="button" id="me-token-btn" class="me-tool-btn"
+          title="Drop a sample token you can drag around to test the map (preview only — not saved; right-click a token to remove)">🎭 Token</button>
   <button type="button" id="me-erase-btn" class="me-tool-btn" aria-pressed="false"
           title="Erase mode: click any wall / door / hotspot / light to delete it (right-click an object for Move/Delete anytime)">🗑 Erase</button>
   <button type="button" id="me-snap-btn" class="me-tool-btn" aria-pressed="true"
@@ -113,6 +115,7 @@
   var eraseMode = false;       // v2.770.0 — click an object to delete
   var relocating = null;       // {kind, obj} — being repositioned (drag)
   var relocDragging = false;   // v2.775.0 — true while dragging the held object
+  var sampleTokens = [];       // v2.777.0 — ephemeral preview tokens (not saved)
 
   // v2.770.0 — right-click context menu for map objects.
   function hideMenu() {
@@ -448,6 +451,8 @@
       }
     }
     drawEditorLighting();  // v2.774.0 — refresh the lighting preview
+    // v2.777.0 — sample tokens render last so they sit above everything.
+    sampleTokens.forEach(function (t) { svg.appendChild(mkToken(t)); });
   }
   function toMap(e) {
     var pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
@@ -456,6 +461,59 @@
     var loc = pt.matrixTransform(ctm.inverse());
     return { x: Math.round(loc.x), y: Math.round(loc.y) };
   }
+  // v2.777.0 — a draggable sample token for testing the map. Ephemeral
+  // (never persisted); rendered above the lighting veil so it's always
+  // visible. Drag to move; right-click (or erase mode) to remove.
+  function mkToken(t) {
+    var r = Math.max(11, (gridPx || 70) / 2 * 0.85);
+    var g = document.createElementNS(NS, 'g');
+    g.classList.add('me-token');
+    g.style.pointerEvents = relocating ? 'none' : 'all';
+    g.style.cursor = 'grab';
+    var c = document.createElementNS(NS, 'circle');
+    c.setAttribute('cx', t.x); c.setAttribute('cy', t.y); c.setAttribute('r', r);
+    c.setAttribute('fill', 'rgba(80,150,255,0.85)');
+    c.setAttribute('stroke', '#fff'); c.setAttribute('stroke-width', '3');
+    g.appendChild(c);
+    var lbl = document.createElementNS(NS, 'text');
+    lbl.setAttribute('x', t.x); lbl.setAttribute('y', t.y);
+    lbl.setAttribute('text-anchor', 'middle'); lbl.setAttribute('dominant-baseline', 'central');
+    lbl.setAttribute('fill', '#fff'); lbl.setAttribute('font-size', Math.round(r * 0.8));
+    lbl.setAttribute('font-weight', '700'); lbl.style.pointerEvents = 'none';
+    lbl.textContent = t.label;
+    g.appendChild(lbl);
+    g.addEventListener('pointerdown', function (e) {
+      if (eraseMode) { e.stopPropagation(); removeToken(t); return; }
+      e.stopPropagation(); e.preventDefault();
+      var p = toMap(e); if (!p) return;
+      var dx = t.x - p.x, dy = t.y - p.y;
+      g.style.cursor = 'grabbing';
+      // Track on window so moves arrive even though the svg is pointer-events
+      // :none in view mode (SVG <g> pointer-capture is unreliable here).
+      function mv(ev) {
+        var q = toMap(ev); if (!q) return;
+        t.x = q.x + dx; t.y = q.y + dy;
+        c.setAttribute('cx', t.x); c.setAttribute('cy', t.y);
+        lbl.setAttribute('x', t.x); lbl.setAttribute('y', t.y);
+      }
+      function up() {
+        window.removeEventListener('pointermove', mv);
+        window.removeEventListener('pointerup', up);
+        g.style.cursor = 'grab';
+      }
+      window.addEventListener('pointermove', mv);
+      window.addEventListener('pointerup', up);
+    });
+    g.addEventListener('contextmenu', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      showMenu(e.clientX, e.clientY, [
+        { label: '🎭 ' + t.label + ' — 🗑 Remove', fn: function () { removeToken(t); } },
+        { label: '🧹 Clear all sample tokens', fn: function () { sampleTokens = []; render(); } },
+      ]);
+    });
+    return g;
+  }
+  function removeToken(t) { sampleTokens = sampleTokens.filter(function (x) { return x.id !== t.id; }); render(); }
   async function saveWalls() {
     setStatus('Saving…');
     try {
@@ -606,6 +664,20 @@
     eraseBtn.setAttribute('aria-pressed', eraseMode ? 'true' : 'false');
     setStatus(eraseMode ? 'Erase mode: click an object to delete it.' : '');
     render();  // re-render so object cursors reflect erase mode
+  });
+  // v2.777.0 — drop a sample token at the centre of the current view; each
+  // click adds another (slightly offset so they don't perfectly stack).
+  var tokenBtn = document.getElementById('me-token-btn');
+  if (tokenBtn) tokenBtn.addEventListener('click', function () {
+    var st = document.getElementById('me-stage');
+    var rect = st.getBoundingClientRect();
+    var p = toMap({ clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 });
+    if (!p) p = { x: (img.naturalWidth || 1000) / 2, y: (img.naturalHeight || 1000) / 2 };
+    var n = sampleTokens.length + 1;
+    var off = (n % 5) * 22;
+    sampleTokens.push({ id: 'st' + (seq++), x: p.x + off, y: p.y + off, label: 'T' + n });
+    setStatus('Sample token placed — drag it to test the map (preview only, not saved).');
+    render();
   });
   // One edit mode at a time (wall / door / spot / light / fog), or null.
   function setMode(mode) {

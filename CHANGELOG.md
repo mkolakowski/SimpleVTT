@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.777.0] - 2026-06-30 — "The Practice Pawn"
+
+**Schema version:** 91
+
+**Commit summary:** Map editor — a 🎭 Token button that drops draggable sample tokens for testing the map.
+
+**Description:** The map editor gains a **🎭 Token** button that drops a sample token at the centre of the current view. Sample tokens are **drag-to-move** (grab and reposition anywhere, in any tool mode) so you can rehearse movement, sight-lines, and spacing against the walls/lighting you've placed. They're **preview only** — purely client-side, never saved to the map or broadcast — and render above the lighting veil so they stay visible on dark maps. Each click adds another (T1, T2, …); right-click a token to **Remove** it or **Clear all**, or use Erase mode to click them away.
+
+### Added
+- `app/templates/map_editor.html` — `#me-token-btn`, ephemeral `sampleTokens` state, `mkToken()` (draggable token via window-level pointer tracking), and render-on-top wiring.
+- `tests/harness_ui/test_map_editor_tokens.py` (new, +3) — the button places multiple tokens, a token drags to a new position, and right-click → Remove deletes it.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.776.0] - 2026-06-30 — "The Signed Masthead"
 
 **Schema version:** 91
