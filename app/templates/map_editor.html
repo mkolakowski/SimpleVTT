@@ -121,7 +121,9 @@
   <div class="me-group" role="group" aria-label="Tokens">
     <span class="me-grp-lbl">Tokens</span>
     <button type="button" id="me-token-btn" class="me-tool-btn"
-            title="Drop a sample token you can drag around to test the map (preview only — not saved; right-click a token to remove)">🎭 Token</button>
+            title="Drop a blue sample token; left-click it for its line of sight, drag to move, right-click to remove (preview only — not saved)">🔵 Token</button>
+    <button type="button" id="me-token2-btn" class="me-tool-btn"
+            title="Drop a second (orange) sample token so you can compare two vantage points">🟠 Token</button>
   </div>
   <div class="me-group me-group--stack" role="group" aria-label="Tools">
     <span class="me-grp-lbl">Tools</span>
@@ -479,7 +481,7 @@
     setStatus(selectedTokenId
       ? 'Showing ' + t.label + '’s line of sight — click it again to clear.'
       : '');
-    drawTokenVision();
+    render();  // v2.785.2 — redraw so the active-token ring updates
   }
   function render() {
     while (svg.firstChild) svg.removeChild(svg.firstChild);
@@ -706,13 +708,24 @@
   // visible. Drag to move; right-click (or erase mode) to remove.
   function mkToken(t) {
     var r = Math.max(11, (gridPx || 70) / 2 * 0.85);
+    var active = (selectedTokenId === t.id);  // v2.785.2 — perspective active?
     var g = document.createElementNS(NS, 'g');
     g.classList.add('me-token');
+    if (active) g.classList.add('me-token--active');
     g.style.pointerEvents = relocating ? 'none' : 'all';
     g.style.cursor = 'grab';
+    // v2.785.2 — bright ring around the token whose line-of-sight is showing.
+    if (active) {
+      var ring = document.createElementNS(NS, 'circle');
+      ring.setAttribute('cx', t.x); ring.setAttribute('cy', t.y);
+      ring.setAttribute('r', r + 6);
+      ring.setAttribute('fill', 'none'); ring.setAttribute('stroke', '#ffe06a');
+      ring.setAttribute('stroke-width', '3'); ring.style.pointerEvents = 'none';
+      g.appendChild(ring);
+    }
     var c = document.createElementNS(NS, 'circle');
     c.setAttribute('cx', t.x); c.setAttribute('cy', t.y); c.setAttribute('r', r);
-    c.setAttribute('fill', 'rgba(80,150,255,0.85)');
+    c.setAttribute('fill', t.color || '#5096ff');
     c.setAttribute('stroke', '#fff'); c.setAttribute('stroke-width', '3');
     g.appendChild(c);
     var lbl = document.createElementNS(NS, 'text');
@@ -738,6 +751,7 @@
         t.x = s.x; t.y = s.y;
         c.setAttribute('cx', t.x); c.setAttribute('cy', t.y);
         lbl.setAttribute('x', t.x); lbl.setAttribute('y', t.y);
+        if (typeof ring !== 'undefined' && ring) { ring.setAttribute('cx', t.x); ring.setAttribute('cy', t.y); }
         if (selectedTokenId === t.id) drawTokenVision();  // follow the eye
       }
       function up() {
@@ -745,7 +759,8 @@
         window.removeEventListener('pointerup', up);
         g.style.cursor = 'grab';
         // v2.780.0 — a click (no drag) selects the token + shows its sight.
-        if (!moved) selectToken(t);
+        if (!moved) { selectToken(t); }
+        else if (selectedTokenId === t.id) { render(); }  // resync the ring
       }
       window.addEventListener('pointermove', mv);
       window.addEventListener('pointerup', up);
@@ -963,8 +978,8 @@
   });
   // v2.777.0 — drop a sample token at the centre of the current view; each
   // click adds another (slightly offset so they don't perfectly stack).
-  var tokenBtn = document.getElementById('me-token-btn');
-  if (tokenBtn) tokenBtn.addEventListener('click', function () {
+  // v2.785.2 — two coloured token buttons so you can place + compare two.
+  function addSampleToken(color) {
     var st = document.getElementById('me-stage');
     var rect = st.getBoundingClientRect();
     // v2.784.2 — drop at the centre of the VISIBLE part of the stage (clamped
@@ -980,10 +995,15 @@
     var col = (n - 1) % 3, row = Math.floor((n - 1) / 3) % 3;
     var s = snapTokenToGrid({ x: p.x + col * g, y: p.y + row * g });
     // darkvision_ft default 60 — the most common SRD range; right-click to change.
-    sampleTokens.push({ id: 'st' + (seq++), x: s.x, y: s.y, label: 'T' + n, darkvision_ft: 60 });
-    setStatus('Sample token placed — drag it to test the map (preview only, not saved).');
+    sampleTokens.push({ id: 'st' + (seq++), x: s.x, y: s.y, label: 'T' + n,
+      darkvision_ft: 60, color: color || '#5096ff' });
+    setStatus('Sample token placed — left-click it for its perspective; drag to move.');
     render();
-  });
+  }
+  var tokenBtn = document.getElementById('me-token-btn');
+  if (tokenBtn) tokenBtn.addEventListener('click', function () { addSampleToken('#5096ff'); });
+  var tokenBtn2 = document.getElementById('me-token2-btn');
+  if (tokenBtn2) tokenBtn2.addEventListener('click', function () { addSampleToken('#ff9b42'); });
   // v2.781.0 — explicit Save button + ⌘/Ctrl+S.
   var saveBtn = document.getElementById('me-save-btn');
   if (saveBtn) saveBtn.addEventListener('click', saveAll);

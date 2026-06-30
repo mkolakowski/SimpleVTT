@@ -156,6 +156,26 @@ def test_token_darkvision_limits_dark_sight(gm_page: Page) -> None:
                    json={"ambient_light": "bright"})
 
 
+def test_two_token_buttons_and_active_ring(gm_page: Page) -> None:
+    # v2.785.2 — two coloured token buttons; left-clicking a token shows its
+    # perspective and rings it as the active vantage.
+    _open_editor(gm_page)
+    gm_page.locator("#me-token-btn").click()    # blue
+    gm_page.locator("#me-token2-btn").click()   # orange
+    expect(gm_page.locator(".me-token")).to_have_count(2)
+    fills = set(gm_page.eval_on_selector_all(
+        '.me-token circle[stroke="#fff"]',
+        "els => els.map(e => e.getAttribute('fill'))"))
+    assert fills == {"#5096ff", "#ff9b42"}, fills
+    # Left-click one → perspective active + a ring marks it.
+    tok = gm_page.locator(".me-token").first
+    tok.click()
+    expect(gm_page.locator(".me-token--active")).to_have_count(1)
+    assert gm_page.evaluate("() => window.__meVisionActive") is True
+    tok.click()  # toggle off
+    expect(gm_page.locator(".me-token--active")).to_have_count(0)
+
+
 def test_token_right_click_remove(gm_page: Page) -> None:
     _open_editor(gm_page)
     gm_page.locator("#me-token-btn").click()

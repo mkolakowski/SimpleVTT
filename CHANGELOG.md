@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.785.2] - 2026-06-30 — "The Second Pawn"
+
+**Schema version:** 91
+
+**Commit summary:** A second (orange) sample-token button + a bright ring around the token whose perspective is active.
+
+**Description:** The Tokens group now has **two buttons** — 🔵 Token (blue) and 🟠 Token (orange) — so you can drop two distinctly-coloured sample tokens and compare vantage points. **Left-clicking a token** shows its line of sight (as before) and now draws a **bright ring around it** so it's obvious which token's perspective is active; clicking it again clears both. The ring follows the token as you drag it.
+
+### Added
+- `app/templates/map_editor.html` — `#me-token2-btn`; `addSampleToken(color)` (tokens carry a `color`); active-token highlight ring (`.me-token--active` + a ring circle) that tracks drags.
+- `tests/harness_ui/test_map_editor_tokens.py` (+1) — two buttons drop differently-coloured tokens; left-click rings the active one + activates its perspective; clicking again clears it.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.785.1] - 2026-06-30 — "The Tightened Bench"
 
 **Schema version:** 91
