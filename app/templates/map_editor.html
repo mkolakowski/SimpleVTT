@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Edit map — {{ map.name }}{% endblock %}
 {% block content %}
-<div style="max-width:1200px;margin:0 auto;padding:0 20px;">
+<div style="max-width:1700px;margin:0 auto;padding:0 14px;">
 <style>
   .me-head { display:flex; align-items:center; justify-content:space-between;
     flex-wrap:wrap; gap:12px; margin:16px 0 12px; }
@@ -14,7 +14,7 @@
   .me-tool-btn[aria-pressed="true"] { background:var(--accent); color:#fff; }
   .me-stage { position:relative; display:block; width:100%; box-sizing:border-box;
     border:1px solid var(--border); border-radius:6px; overflow:auto;
-    max-height:72vh; background:#0b0d16; }
+    max-height:86vh; background:#0b0d16; }
   .me-stage img { display:block; }
   .me-stage img { display:block; }
   #me-overlay { position:absolute; top:0; left:0; overflow:visible; }
@@ -594,7 +594,7 @@
     var nw = img.naturalWidth || img.width, nh = img.naturalHeight || img.height;
     if (!nw || !nh) { setZoom(1); return; }
     var availW = (stage.clientWidth || 800) - 6;
-    var availH = Math.max(220, window.innerHeight * 0.72) - 6;
+    var availH = Math.max(240, window.innerHeight * 0.86) - 6;
     setZoom(Math.min(availW / nw, availH / nh));
   }
   document.getElementById('me-zoom-fit').addEventListener('click', fitContain);

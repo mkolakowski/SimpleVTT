@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.770.1] - 2026-06-29 — "The Bigger Canvas"
+
+**Schema version:** 91
+
+**Commit summary:** Map editor — give the map more of the screen (wider container + taller stage).
+
+**Description:** The map editor stage now uses much more of the display: the page container widened (1200 → 1700px max), the stage's max height grew (72vh → 86vh), and the fit-contain calculation matches (≈86 % of the viewport height), so the whole map renders larger by default. CSS/layout only.
+
+### Changed
+- `app/templates/map_editor.html` — wider container, taller `.me-stage`, fit-contain uses ~86vh.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.770.0] - 2026-06-29 — "The Whole Picture"
 
 **Schema version:** 91
