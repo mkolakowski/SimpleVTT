@@ -2282,6 +2282,13 @@
             📍 Spots
         </button>
         {% endif %}
+        {# v2.762.0 — multi-map quick-switcher (GM-only). Hidden unless the
+           running encounter links >1 map; populated by the script below. #}
+        {% if is_gm %}
+        <span id="map-switcher" style="display:none;align-items:center;gap:4px;">
+            <span style="font-size:12px;color:var(--fg-mute);">🗺</span>
+        </span>
+        {% endif %}
     </div>
     <div class="drawer-tab-bar">
         <button class="drawer-tab-btn" data-target="roll-log-drawer">Roll Log</button>
@@ -2691,6 +2698,51 @@
             });
         }
         load();
+    })();
+    </script>
+    {% endif %}
+
+    {% if is_gm %}
+    <script>
+    /* v2.762.0 — multi-map quick-switcher. When the running encounter links
+       more than one map, show a button per map in the canvas toolbar; clicking
+       one flips the campaign's active map (POST /switch-map/{id}), which
+       broadcasts map_change → every client reloads onto the new map. */
+    (function () {
+        var CID = {{ campaign.id }};
+        var box = document.getElementById('map-switcher');
+        if (!box) return;
+        (async function () {
+            try {
+                var r = await fetch('/api/campaign/' + CID + '/map-group');
+                if (!r.ok) return;
+                var d = await r.json();
+                var maps = d.maps || [];
+                if (maps.length < 2) return;  // nothing to switch between
+                maps.forEach(function (m) {
+                    var b = document.createElement('button');
+                    b.type = 'button';
+                    b.className = 'canvas-tool-btn';
+                    b.textContent = m.name;
+                    b.title = 'Switch the table to ' + m.name;
+                    if (m.is_active) {
+                        b.setAttribute('aria-pressed', 'true');
+                        b.disabled = true;
+                    }
+                    b.addEventListener('click', function () {
+                        b.disabled = true;
+                        fetch('/api/campaign/' + CID + '/switch-map/' + m.id, {
+                            method: 'POST',
+                        }).then(function (resp) {
+                            if (!resp.ok) { b.disabled = false; }
+                            // On success the map_change broadcast reloads us.
+                        }).catch(function () { b.disabled = false; });
+                    });
+                    box.appendChild(b);
+                });
+                box.style.display = 'inline-flex';
+            } catch (e) { /* switcher is best-effort */ }
+        })();
     })();
     </script>
     {% endif %}

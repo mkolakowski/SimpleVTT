@@ -934,7 +934,7 @@ Planned capabilities:
 - ✅ **Doors** — interactive wall segments players/GMs open or close.
 - ✅ **Clickable items** — hotspots that trigger a description popup or roll prompt.
 - ✅ **Fog of war** — shipped (token-visibility filter + LOS overlay).
-- 🟠 **Multi-map encounters** — data layer shipped v2.761.0 (`Encounter.linked_map_ids` JSON + `PATCH /encounters/{id}` accepts it, filtering invalid/dupe/primary ids; surfaced in the encounter dict). **Still open:** the settings UI to pick an encounter's linked maps + a tabletop quick-switcher that flips the active map among them during play (switching reuses the existing `/settings/maps/{id}/activate`).
+- 🟠 **Multi-map encounters** — data layer (v2.761.0: `Encounter.linked_map_ids`) + the **tabletop quick-switcher** (v2.762.0: `GET /map-group` + `POST /switch-map/{id}` + a GM toolbar control that flips the active map among the running encounter's linked maps, broadcasting `map_change`). **Still open:** a settings UI to *pick* an encounter's linked maps (currently set via the `linked_map_ids` PATCH field directly).
 
 ### Lighting ✅ (shipped v2.704.0–v2.710.0)
 Shipped as the Vision & Light engine — light emitters (radius/colour/falloff), magical Darkness/Daylight/Fog, per-token vision senses (darkvision/blindsight/truesight), ambient levels, and the client dynamic-lighting overlay. See [`TODONE.md`](TODONE.md) → Maps & Map Editor + [`vision-and-light.md`](docs/plans/vision-and-light.md). *Not done:* wall-occlusion shadows (vision edges come from the lighting model, not GM-placed walls — see the Maps 2.0 walls item) + fire flicker animation.

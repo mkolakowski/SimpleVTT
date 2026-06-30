@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.762.0] - 2026-06-29 — "The Turning Page"
+
+**Schema version:** 89
+
+**Commit summary:** Multi-map encounters — the tabletop quick-switcher: flip the active map among a running encounter's linked maps mid-play.
+
+**Description:** The player-facing payoff of multi-map encounters. New `GET /api/campaign/{cid}/map-group` returns the current map group — the running encounter's (`campaign.current_encounter_id`) primary map + its `linked_map_ids`, active map first — and `POST /api/campaign/{cid}/switch-map/{map_id}` (GM-only) flips the campaign's active map to any map in that group, broadcasting `map_change` so every client reloads onto the new map (the same path the encounter-load map switch uses). On the tabletop, a GM-only quick-switcher in the canvas toolbar shows a button per linked map (the active one highlighted) when the running encounter links more than one map — so the GM flips exterior↔interior in one click without touching settings. A switch to a map outside the group is rejected (400).
+
+### Added
+- `app/routes/tabletop_routes.py` — `_current_map_group` helper, `GET /map-group`, `POST /switch-map/{id}` (`map_change` broadcast).
+- `app/templates/tabletop.html` — GM-only `#map-switcher` toolbar control + the script that populates it from `/map-group`.
+- `tests/harness/test_map_switcher.py` (new, +4) — group shape (one active flagged); switch broadcasts `map_change`; non-group map → 400; non-GM → 403.
+
+### Schema
+- No schema change (still v89).
+
 ## [2.761.0] - 2026-06-29 — "The Linked Realms"
 
 **Schema version:** 89

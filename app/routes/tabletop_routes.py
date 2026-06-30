@@ -124281,6 +124281,89 @@ def map_editor_page(
     })
 
 
+def _current_map_group(db: Session, campaign: "Campaign") -> list:
+    """v2.762.0 — the maps in the campaign's current map group, in order: the
+    running encounter's primary map + its ``linked_map_ids``, with the active
+    map first. Returns ``Map`` rows (campaign-scoped). Just the active map when
+    no encounter is running or it has no linked maps."""
+    ids: list[int] = []
+    enc = (
+        db.query(Encounter).filter(
+            Encounter.id == campaign.current_encounter_id).first()
+        if campaign.current_encounter_id else None
+    )
+    if enc:
+        if enc.map_id:
+            ids.append(int(enc.map_id))
+        for mid in (enc.linked_map_ids or []):
+            try:
+                mid = int(mid)
+            except (TypeError, ValueError):
+                continue
+            if mid not in ids:
+                ids.append(mid)
+    if campaign.active_map_id and int(campaign.active_map_id) not in ids:
+        ids.insert(0, int(campaign.active_map_id))
+    if not ids:
+        return []
+    rows = {
+        m.id: m for m in db.query(Map).filter(
+            Map.campaign_id == campaign.id, Map.id.in_(ids)).all()
+    }
+    return [rows[i] for i in ids if i in rows]
+
+
+@router.get("/api/campaign/{campaign_id}/map-group")
+def get_map_group(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.762.0 — the current encounter's map group (for the tabletop
+    quick-switcher). Any member. ``maps`` has >1 entry only when a running
+    encounter links extra maps."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    grp = _current_map_group(db, campaign)
+    return {
+        "ok": True, "active_map_id": campaign.active_map_id,
+        "maps": [
+            {"id": m.id, "name": m.name, "thumbnail_url": m.thumbnail_url,
+             "is_active": m.id == campaign.active_map_id}
+            for m in grp
+        ],
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/switch-map/{map_id}")
+async def switch_active_map(
+    campaign_id: int,
+    map_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.762.0 — flip the campaign's active map to another map in the current
+    encounter's group (GM-only). Broadcasts ``map_change`` so every client
+    reloads onto the new map (same path the encounter-load map switch uses)."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    group_ids = {m.id for m in _current_map_group(db, campaign)}
+    if map_id not in group_ids:
+        raise HTTPException(400, "Map is not in the current map group")
+    m = db.query(Map).filter(
+        Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404, "Map not found")
+    campaign.active_map_id = m.id
+    db.commit()
+    await hub.broadcast(campaign_id, {
+        "type": "map_change", "data": {"map_id": m.id},
+    })
+    return {"ok": True, "active_map_id": m.id}
+
+
 @router.post("/campaign/{campaign_id}/settings/maps/{map_id}/letterbox_color")
 async def settings_map_letterbox_color(
     campaign_id: int,
