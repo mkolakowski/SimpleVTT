@@ -12,8 +12,10 @@
   .me-toolbar label { font-size:13px; color:var(--fg-mute); display:inline-flex;
     align-items:center; gap:5px; }
   .me-tool-btn[aria-pressed="true"] { background:var(--accent); color:#fff; }
-  .me-stage { position:relative; display:inline-block; border:1px solid var(--border);
-    border-radius:6px; overflow:auto; max-width:100%; max-height:72vh; background:#0b0d16; }
+  .me-stage { position:relative; display:block; width:100%; box-sizing:border-box;
+    border:1px solid var(--border); border-radius:6px; overflow:auto;
+    max-height:72vh; background:#0b0d16; }
+  .me-stage img { display:block; }
   .me-stage img { display:block; }
   #me-overlay { position:absolute; top:0; left:0; overflow:visible; }
   .me-status { font-size:12px; color:var(--fg-mute); margin-left:auto; }
@@ -37,6 +39,8 @@
   <button type="button" id="me-fog-btn" class="me-tool-btn" aria-pressed="false"
           title="Fog of war: drag to reveal an area; click a revealed area to re-hide it">🌫 Fog</button>
   <label id="me-fog-on-lbl" style="display:none;"><input type="checkbox" id="me-fog-on-cb"> fog on</label>
+  <button type="button" id="me-erase-btn" class="me-tool-btn" aria-pressed="false"
+          title="Erase mode: click any wall / door / hotspot / light to delete it (right-click an object for Move/Delete anytime)">🗑 Erase</button>
   <button type="button" id="me-snap-btn" class="me-tool-btn" aria-pressed="true"
           title="Snap wall/door endpoints to the grid + to nearby wall ends">🧲 Snap</button>
   <span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:6px;padding:3px 8px;">
@@ -84,6 +88,36 @@
   var fogRevealed = {{ fog_revealed | tojson }};
   var wallMode = false, spotMode = false, lightMode = false, fogMode = false, pending = null, seq = 0;
   var fogDrag = null;
+  var eraseMode = false;       // v2.770.0 — click an object to delete
+  var relocating = null;       // {kind, obj} — next map click relocates it
+
+  // v2.770.0 — right-click context menu for map objects.
+  function hideMenu() {
+    var ex = document.getElementById('me-ctx-menu');
+    if (ex) ex.remove();
+  }
+  function showMenu(clientX, clientY, items) {
+    hideMenu();
+    var menu = document.createElement('div');
+    menu.id = 'me-ctx-menu';
+    menu.style.cssText = 'position:fixed;z-index:9600;left:' + clientX + 'px;top:' + clientY
+      + 'px;background:var(--bg-1,#1b1d27);border:1px solid var(--border,#333);'
+      + 'border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,.5);padding:4px;min-width:120px;';
+    items.forEach(function (it) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'sheet-section-btn';
+      b.textContent = it.label;
+      b.style.cssText = 'display:block;width:100%;text-align:left;margin:1px 0;';
+      b.addEventListener('click', function (e) { e.stopPropagation(); hideMenu(); it.fn(); });
+      menu.appendChild(b);
+    });
+    document.body.appendChild(menu);
+  }
+  document.addEventListener('click', hideMenu);
+  document.addEventListener('contextmenu', function (e) {
+    // Close the menu on a right-click that isn't on a map object.
+    if (!e.target.closest || !e.target.closest('#me-overlay')) hideMenu();
+  });
   var pxPerFt = (({{ map.grid_size_px }} || 70) / 5);  // ft → px
   var grab = null, suppressClick = false;
   var gridPx = {{ map.grid_size_px }} || 70;
@@ -128,8 +162,10 @@
     if (hit) {
       ln.setAttribute('stroke', 'transparent');
       ln.setAttribute('stroke-width', '16');
-      ln.style.pointerEvents = wallMode ? 'stroke' : 'none';
-      ln.style.cursor = wallMode ? 'move' : 'default';
+      // v2.770.0 — always interactive so right-click (Move/Delete) + erase
+      // work without entering wall mode; left-click only acts in erase mode.
+      ln.style.pointerEvents = 'stroke';
+      ln.style.cursor = eraseMode ? 'pointer' : (wallMode ? 'move' : 'context-menu');
     } else {
       var open = w.door && w.open;
       ln.setAttribute('stroke', open ? '#46c46a' : (w.door ? '#d9a441' : '#e05a4a'));
@@ -165,12 +201,22 @@
       svg.appendChild(mkLine(w, false));
       var hit = mkLine(w, true);
       hit.addEventListener('pointerdown', function (e) {
-        if (!wallMode) return;
+        if (!wallMode || eraseMode) return;  // drag-to-move only in wall mode
         e.stopPropagation(); e.preventDefault();
         var p = toMap(e); if (!p) return;
         grab = { w: w, ox1: w.x1, oy1: w.y1, ox2: w.x2, oy2: w.y2,
                  sx: p.x, sy: p.y, moved: false };
         try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+      });
+      hit.addEventListener('click', function (e) {
+        if (eraseMode) { e.stopPropagation(); deleteWall(w); }
+      });
+      hit.addEventListener('contextmenu', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        showMenu(e.clientX, e.clientY, [
+          { label: (w.door ? '🚪 Door' : '🧱 Wall') + ' — ↔ Move', fn: function () { startMove('wall', w); } },
+          { label: '🗑 Delete', fn: function () { deleteWall(w); } },
+        ]);
       });
       svg.appendChild(hit);
     });
@@ -191,13 +237,16 @@
       if (h.label) { var t = document.createElementNS(NS, 'title'); t.textContent = h.label; mk.appendChild(t); }
       mk.addEventListener('click', function (e) {
         e.stopPropagation();
-        if (spotMode) {
-          hotspots = hotspots.filter(function (x) { return x.id !== h.id; });
-          saveHotspots();
-        } else {
-          alert('📍 ' + (h.label || 'Hotspot') + (h.description ? '\n\n' + h.description : '')
-            + (h.roll ? '\n\n🎲 ' + h.roll : ''));
-        }
+        if (eraseMode) { deleteHotspot(h); return; }
+        alert('📍 ' + (h.label || 'Hotspot') + (h.description ? '\n\n' + h.description : '')
+          + (h.roll ? '\n\n🎲 ' + h.roll : ''));
+      });
+      mk.addEventListener('contextmenu', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        showMenu(e.clientX, e.clientY, [
+          { label: '📍 Hotspot — ↔ Move', fn: function () { startMove('hotspot', h); } },
+          { label: '🗑 Delete', fn: function () { deleteHotspot(h); } },
+        ]);
       });
       svg.appendChild(mk);
     });
@@ -230,10 +279,14 @@
       dot.style.pointerEvents = 'all'; dot.style.cursor = 'pointer';
       dot.addEventListener('click', function (e) {
         e.stopPropagation();
-        if (lightMode) {
-          lights = lights.filter(function (x) { return x.id !== L.id; });
-          saveLights();
-        }
+        if (eraseMode) deleteLight(L);
+      });
+      dot.addEventListener('contextmenu', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        showMenu(e.clientX, e.clientY, [
+          { label: '💡 Light — ↔ Move', fn: function () { startMove('light', L); } },
+          { label: '🗑 Delete', fn: function () { deleteLight(L); } },
+        ]);
       });
       svg.appendChild(dot);
     });
@@ -327,6 +380,15 @@
     } catch (e) { setStatus('Save failed.'); }
     render();
   }
+  // v2.770.0 — object delete + move (via erase mode / right-click menu).
+  function deleteWall(w) { walls = walls.filter(function (x) { return x.id !== w.id; }); saveWalls(); }
+  function deleteHotspot(h) { hotspots = hotspots.filter(function (x) { return x.id !== h.id; }); saveHotspots(); }
+  function deleteLight(L) { lights = lights.filter(function (x) { return x.id !== L.id; }); saveLights(); }
+  function startMove(kind, obj) {
+    relocating = { kind: kind, obj: obj };
+    setStatus('Click the new position…');
+    syncStageCursor();
+  }
 
   // Toolbar wiring.
   var wallBtn = document.getElementById('me-wall-btn');
@@ -341,10 +403,19 @@
   var lightBtn = document.getElementById('me-light-btn');
   var fogBtn = document.getElementById('me-fog-btn');
   function syncStageCursor() {
-    var on = wallMode || spotMode || lightMode || fogMode;
+    // The overlay captures empty-area clicks when placing/painting/relocating.
+    // (Objects stay individually clickable for erase/right-click regardless.)
+    var on = wallMode || spotMode || lightMode || fogMode || relocating;
     svg.style.pointerEvents = on ? 'auto' : 'none';
     svg.style.cursor = on ? 'crosshair' : 'default';
   }
+  var eraseBtn = document.getElementById('me-erase-btn');
+  if (eraseBtn) eraseBtn.addEventListener('click', function () {
+    eraseMode = !eraseMode;
+    eraseBtn.setAttribute('aria-pressed', eraseMode ? 'true' : 'false');
+    setStatus(eraseMode ? 'Erase mode: click an object to delete it.' : '');
+    render();  // re-render so object cursors reflect erase mode
+  });
   // One edit mode at a time (wall / spot / light / fog), or null for view.
   function setMode(mode) {
     wallMode = (mode === 'wall'); spotMode = (mode === 'spot');
@@ -420,6 +491,23 @@
   svg.addEventListener('click', function (e) {
     if (suppressClick) return;
     var p = toMap(e); if (!p) return;
+    if (relocating) {
+      // v2.770.0 — drop the held object at the clicked point.
+      var r = relocating; relocating = null;
+      var sp = snapPoint(p);
+      if (r.kind === 'wall') {
+        var mx = (r.obj.x1 + r.obj.x2) / 2, my = (r.obj.y1 + r.obj.y2) / 2;
+        var dx = sp.x - mx, dy = sp.y - my;
+        r.obj.x1 += dx; r.obj.y1 += dy; r.obj.x2 += dx; r.obj.y2 += dy;
+        saveWalls();
+      } else if (r.kind === 'hotspot') {
+        r.obj.x = sp.x; r.obj.y = sp.y; saveHotspots();
+      } else if (r.kind === 'light') {
+        r.obj.x = sp.x; r.obj.y = sp.y; saveLights();
+      }
+      setStatus(''); syncStageCursor();
+      return;
+    }
     if (wallMode) {
       p = snapPoint(p);
       if (!pending) { pending = p; render(); return; }
@@ -500,10 +588,16 @@
   function setZoom(z) { zoom = Math.max(0.2, Math.min(5, z)); applyZoom(); }
   document.getElementById('me-zoom-in').addEventListener('click', function () { setZoom(zoom * 1.25); });
   document.getElementById('me-zoom-out').addEventListener('click', function () { setZoom(zoom / 1.25); });
-  document.getElementById('me-zoom-fit').addEventListener('click', function () {
-    var nw = img.naturalWidth || img.width;
-    setZoom(nw ? Math.min(1, (stage.clientWidth - 4) / nw) : 1);
-  });
+  // v2.770.0 — "Fit" now contains the WHOLE map (width AND height) in the
+  // stage so you see it all at once, instead of fitting to width only.
+  function fitContain() {
+    var nw = img.naturalWidth || img.width, nh = img.naturalHeight || img.height;
+    if (!nw || !nh) { setZoom(1); return; }
+    var availW = (stage.clientWidth || 800) - 6;
+    var availH = Math.max(220, window.innerHeight * 0.72) - 6;
+    setZoom(Math.min(availW / nw, availH / nh));
+  }
+  document.getElementById('me-zoom-fit').addEventListener('click', fitContain);
   var stage = document.getElementById('me-stage');
   stage.addEventListener('wheel', function (e) {
     if (!e.ctrlKey && !e.metaKey) return;  // plain wheel = scroll/pan
@@ -511,7 +605,8 @@
     setZoom(zoom * (e.deltaY < 0 ? 1.1 : 0.9));
   }, { passive: false });
 
-  if (img.complete) applyZoom(); else img.addEventListener('load', applyZoom);
+  // Show the whole map on load.
+  if (img.complete) fitContain(); else img.addEventListener('load', fitContain);
   window.addEventListener('resize', syncOverlay);
   render();
 })();

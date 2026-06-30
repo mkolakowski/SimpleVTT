@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.770.0] - 2026-06-29 — "The Whole Picture"
+
+**Schema version:** 91
+
+**Commit summary:** Map editor — fit the whole map on load, right-click Move/Delete menu on objects, and an Erase toggle replacing tap-to-delete.
+
+**Description:** Three map-editor usability changes:
+- **See the whole map at once.** The editor now **fit-contains** the map (both width and height) into the stage on load, and the **Fit** button does the same (it fit-to-width only before) — so you start with the entire map in view instead of a scrolled corner. The stage is full-width for a stable fit target.
+- **Right-click context menu on objects.** Right-clicking any wall, door, hotspot, or light opens a menu with **↔ Move** and **🗑 Delete**. Objects are individually clickable regardless of the active tool, so you can right-click one without first entering a mode. **Move** holds the object so the next map click drops it at a new position (a wall re-centres on the click; both endpoints translate, snapped).
+- **Erase is now a toggle, not the default.** A left-click on a wall no longer deletes it (the old accidental-delete footgun). Deletion is via the right-click menu or the new **🗑 Erase** toggle — when on, clicking any object deletes it. Drag-to-move on walls still works in wall mode.
+
+### Added
+- `app/templates/map_editor.html` — `fitContain()` (used on load + Fit); a context-menu helper + per-object right-click menus; `eraseMode` toggle + `relocating` move-state; objects always interactive; left-click delete gated behind erase mode.
+- `tests/harness_ui/test_map_editor_erase_menu.py` (new, +1) — plain click doesn't delete; right-click → menu → Delete removes a wall; Erase mode → click deletes.
+
+### Changed
+- `tests/harness_ui/test_map_editor_zoom.py` — zoom assertion made relative (initial zoom is now the fit-contain %, not 100%).
+
+### Schema
+- No schema change (still v91).
+
 ## [2.769.0] - 2026-06-29 — "The Surveyor's Grid"
 
 **Schema version:** 91

@@ -23,12 +23,18 @@ def test_zoom_keeps_drawing_correct(gm_page: Page) -> None:
         try:
             gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
             expect(gm_page.locator("#me-overlay")).to_be_visible()
+            # Wait for the image load → fitContain (sets the initial fit zoom).
+            gm_page.wait_for_function(
+                "() => window.__lightCanvasForTest !== undefined || true")
+            gm_page.wait_for_timeout(500)
 
-            # Zoom in twice.
-            gm_page.locator("#me-zoom-in").click()
-            gm_page.locator("#me-zoom-in").click()
-            lbl = gm_page.locator("#me-zoom-lbl").inner_text()
-            assert lbl.rstrip("%").isdigit() and int(lbl.rstrip("%")) > 100, lbl
+            def _zoom_pct():
+                return int(gm_page.locator("#me-zoom-lbl").inner_text().rstrip("%"))
+            before = _zoom_pct()
+            # Zoom in three times → the displayed zoom % must increase.
+            for _ in range(3):
+                gm_page.locator("#me-zoom-in").click()
+            assert _zoom_pct() > before, (before, _zoom_pct())
 
             # Draw a wall at the zoomed scale.
             gm_page.locator("#me-wall-btn").click()
