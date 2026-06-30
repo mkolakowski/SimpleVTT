@@ -426,6 +426,7 @@
       drawWallVisual(w);
       var hit = mkHitLine(w);
       hit.addEventListener('pointerdown', function (e) {
+        if (e.button !== 0) return;  // v2.781.1 — leave right-click for the menu
         if (eraseMode || !(wallMode || doorMode)) return;  // drag-move only in a draw mode
         e.stopPropagation(); e.preventDefault();
         var p = toMap(e); if (!p) return;
@@ -611,6 +612,7 @@
     lbl.textContent = t.label;
     g.appendChild(lbl);
     g.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;  // v2.781.1 — right-click opens the menu, not a drag
       if (eraseMode) { e.stopPropagation(); removeToken(t); return; }
       e.stopPropagation(); e.preventDefault();
       var p = toMap(e); if (!p) return;
@@ -886,6 +888,7 @@
   });
   // Fog reveal painting: drag a rectangle on the overlay.
   svg.addEventListener('pointerdown', function (e) {
+    if (e.button !== 0) return;  // v2.781.1 — right-click is reserved for menus
     if (relocating) {  // v2.775.0 — drag the held object to its new spot
       e.preventDefault();
       relocDragging = true;

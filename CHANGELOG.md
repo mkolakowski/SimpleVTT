@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.781.1] - 2026-06-30 — "The Steady Right-Click"
+
+**Schema version:** 91
+
+**Commit summary:** Right-click always opens the context menu on editor objects — even while a draw/move tool is active.
+
+**Description:** Fixes a bug where right-clicking a wall, door, or token **while a draw tool was active** started a drag-grab (the pointerdown handlers fired for any mouse button) — and on release a no-move grab would *delete* the wall, while a token would toggle its perspective, instead of just opening the menu. The drag handlers now ignore non-primary buttons, so right-click is reserved for the context menu on every object in every mode; left-click drag/move is unchanged.
+
+### Fixed
+- `app/templates/map_editor.html` — the wall hit-line, sample-token, and overlay (relocate/fog) `pointerdown` handlers bail on `e.button !== 0`.
+
+### Added
+- `tests/harness_ui/test_map_editor_interactions.py` (+1) — right-clicking a wall in draw mode opens the menu and doesn't delete the wall.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.781.0] - 2026-06-30 — "The Committed Cartographer"
 
 **Schema version:** 91

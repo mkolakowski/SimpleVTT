@@ -89,6 +89,29 @@ def test_edit_wall_material(gm_page: Page) -> None:
             c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
 
 
+def test_right_click_works_in_draw_mode(gm_page: Page) -> None:
+    # v2.781.1 — right-clicking an object while a draw tool is active must open
+    # the menu, not start a drag that deletes the object on release.
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
+        c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
+        c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
+            {"id": "w", "x1": 150, "y1": 150, "x2": 320, "y2": 150, "style": "stone"}]})
+        try:
+            _open_editor(gm_page, mid)
+            gm_page.locator("#me-wall-btn").click()   # enter wall (draw) mode
+            box = _hit_box(gm_page)
+            gm_page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2,
+                                button="right")
+            # Menu opens…
+            expect(gm_page.locator("#me-ctx-menu")).to_be_visible()
+            assert gm_page.locator("#me-ctx-menu button", has_text="Delete").count() == 1
+            # …and the wall was NOT deleted by a spurious grab.
+            assert len(_walls(c, mid)) == 1, _walls(c, mid)
+        finally:
+            c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
+
+
 def test_move_drags_object(gm_page: Page) -> None:
     with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
