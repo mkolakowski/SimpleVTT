@@ -50,6 +50,12 @@
       {% endfor %}
     </select>
   </label>
+  <span style="display:inline-flex;align-items:center;gap:3px;">
+    <button type="button" id="me-zoom-out" class="me-tool-btn" title="Zoom out">🔍−</button>
+    <span id="me-zoom-lbl" style="font-size:12px;color:var(--fg-mute);min-width:3em;text-align:center;">100%</span>
+    <button type="button" id="me-zoom-in" class="me-tool-btn" title="Zoom in">🔍+</button>
+    <button type="button" id="me-zoom-fit" class="me-tool-btn" title="Fit the map to the view">Fit</button>
+  </span>
   <span class="me-status" id="me-status"></span>
 </div>
 
@@ -435,7 +441,34 @@
     }).then(function () { setStatus('Saved.'); }).catch(function () { setStatus('Save failed.'); });
   });
 
-  if (img.complete) syncOverlay(); else img.addEventListener('load', syncOverlay);
+  // v2.767.0 — zoom. The image is displayed at naturalWidth × zoom; the SVG
+  // overlay follows via syncOverlay, and getScreenCTM keeps click→map coords
+  // correct at any zoom. Plain wheel scrolls (pans) the overflow:auto stage;
+  // ⌘/Ctrl-wheel zooms.
+  var zoom = 1;
+  function applyZoom() {
+    var nw = img.naturalWidth || img.width, nh = img.naturalHeight || img.height;
+    if (nw) { img.style.width = Math.round(nw * zoom) + 'px';
+              img.style.height = Math.round(nh * zoom) + 'px'; }
+    var lbl = document.getElementById('me-zoom-lbl');
+    if (lbl) lbl.textContent = Math.round(zoom * 100) + '%';
+    syncOverlay();
+  }
+  function setZoom(z) { zoom = Math.max(0.2, Math.min(5, z)); applyZoom(); }
+  document.getElementById('me-zoom-in').addEventListener('click', function () { setZoom(zoom * 1.25); });
+  document.getElementById('me-zoom-out').addEventListener('click', function () { setZoom(zoom / 1.25); });
+  document.getElementById('me-zoom-fit').addEventListener('click', function () {
+    var nw = img.naturalWidth || img.width;
+    setZoom(nw ? Math.min(1, (stage.clientWidth - 4) / nw) : 1);
+  });
+  var stage = document.getElementById('me-stage');
+  stage.addEventListener('wheel', function (e) {
+    if (!e.ctrlKey && !e.metaKey) return;  // plain wheel = scroll/pan
+    e.preventDefault();
+    setZoom(zoom * (e.deltaY < 0 ? 1.1 : 0.9));
+  }, { passive: false });
+
+  if (img.complete) applyZoom(); else img.addEventListener('load', applyZoom);
   window.addEventListener('resize', syncOverlay);
   render();
 })();

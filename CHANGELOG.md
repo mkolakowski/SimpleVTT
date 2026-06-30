@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.767.0] - 2026-06-29 — "The Magnifying Glass"
+
+**Schema version:** 91
+
+**Commit summary:** Map-editor zoom — zoom in for precise wall/light/fog placement on large maps.
+
+**Description:** Polish for the map editor: zoom. The toolbar gains **🔍− / 🔍+ / Fit** controls + a percentage readout, and **⌘/Ctrl-wheel** zooms (plain wheel still scrolls/pans the stage). The map image is displayed at `naturalWidth × zoom` with the SVG overlay following, and because `getScreenCTM` reads the live transform, click→map coordinates stay correct at any zoom — so drawing a wall while zoomed in still lands on the right (and grid-snapped) map coords. Fit scales the map down to the stage width; zoom clamps to 20 %–500 %. Makes authoring walls/doors/lights/hotspots/fog practical on large battle maps.
+
+### Added
+- `app/templates/map_editor.html` — zoom controls (buttons + ⌘/Ctrl-wheel) + `applyZoom`/`setZoom`; image sized by zoom with the overlay synced.
+- `tests/harness_ui/test_map_editor_zoom.py` (new, +1) — after zooming in, a drawn wall persists with grid-aligned map coords.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.766.0] - 2026-06-29 — "The Drawn Veil"
 
 **Schema version:** 91
