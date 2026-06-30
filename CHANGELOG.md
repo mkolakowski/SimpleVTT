@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.779.0] - 2026-06-30 — "The Aligned Pawn"
+
+**Schema version:** 91
+
+**Commit summary:** Sample tokens snap to the map grid (cell centre) on placement + drag, like the tabletop.
+
+**Description:** The editor's 🎭 sample tokens now snap to the **centre of the grid cell** they land in — both when dropped and while dragging — respecting the per-map grid size + offset, exactly like token movement on the live tabletop. Snapping honours the 🧲 Snap toggle, so turning it off restores free placement. Successive drops spread across a 3×3 block of cells so they don't pile onto one centre.
+
+### Changed
+- `app/templates/map_editor.html` — `snapTokenToGrid()` (offset-aware cell-centre snap) applied to token placement + drag; placement spreads across nearby cells; `window.__meTokens` / `window.__meGrid` harness hooks.
+
+### Added
+- `tests/harness_ui/test_map_editor_tokens.py` (+1) — a dragged token lands on a grid cell centre.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.778.0] - 2026-06-30 — "The Torchbearer's Kit"
 
 **Schema version:** 91

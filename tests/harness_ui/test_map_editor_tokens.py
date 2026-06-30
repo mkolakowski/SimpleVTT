@@ -46,6 +46,29 @@ def test_token_drags(gm_page: Page) -> None:
     assert abs(after["x"] - box["x"]) > 30 or abs(after["y"] - box["y"]) > 30, (box, after)
 
 
+def test_token_snaps_to_grid(gm_page: Page) -> None:
+    _open_editor(gm_page)
+    gm_page.locator("#me-token-btn").click()
+    expect(gm_page.locator(".me-token")).to_have_count(1)
+    box = gm_page.locator(".me-token").first.bounding_box()
+    cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    # Drag to an arbitrary off-grid spot.
+    gm_page.mouse.move(cx, cy)
+    gm_page.mouse.down()
+    gm_page.mouse.move(cx + 97, cy + 53, steps=5)
+    gm_page.mouse.up()
+    gm_page.wait_for_timeout(150)
+    # The token's map coords must land on a grid CELL CENTRE.
+    res = gm_page.evaluate("""() => {
+        const t = window.__meTokens[0], g = window.__meGrid;
+        const fx = (((t.x - g.offX) % g.px) + g.px) % g.px;
+        const fy = (((t.y - g.offY) % g.px) + g.px) % g.px;
+        return { fx, fy, half: g.px / 2 };
+    }""")
+    assert abs(res["fx"] - res["half"]) < 0.6, res
+    assert abs(res["fy"] - res["half"]) < 0.6, res
+
+
 def test_token_right_click_remove(gm_page: Page) -> None:
     _open_editor(gm_page)
     gm_page.locator("#me-token-btn").click()
