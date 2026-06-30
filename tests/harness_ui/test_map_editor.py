@@ -38,7 +38,12 @@ def test_editor_draws_wall(gm_page: Page) -> None:
 
             walls = c.get(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls").json()["walls"]
             assert len(walls) == 1, walls
-            assert {"x1", "y1", "x2", "y2"} <= walls[0].keys()
+            w = walls[0]
+            assert {"x1", "y1", "x2", "y2"} <= w.keys()
+            # v2.764.0 — snap is on by default, so endpoints land on the grid.
+            grid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json().get("grid_size_px") or 70
+            for k in ("x1", "y1", "x2", "y2"):
+                assert w[k] % grid == 0, (k, w[k], grid)
         finally:
             c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
 

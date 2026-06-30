@@ -32,6 +32,8 @@
   <label id="me-door-lbl" style="display:none;"><input type="checkbox" id="me-door-cb"> door</label>
   <button type="button" id="me-spot-btn" class="me-tool-btn" aria-pressed="false"
           title="Click the map to place a description hotspot; click a hotspot to delete">📍 Hotspots</button>
+  <button type="button" id="me-snap-btn" class="me-tool-btn" aria-pressed="true"
+          title="Snap wall/door endpoints to the grid + to nearby wall ends">🧲 Snap</button>
   <label>Grid px
     <input type="number" id="me-grid" min="20" max="300" value="{{ map.grid_size_px }}"
            style="width:64px;min-height:32px;">
@@ -66,6 +68,24 @@
   var hotspots = {{ hotspots | tojson }};
   var wallMode = false, spotMode = false, pending = null, seq = 0;
   var grab = null, suppressClick = false;
+  var gridPx = {{ map.grid_size_px }} || 70;
+  var snapOn = true;
+
+  // v2.764.0 — snap a point to a nearby existing wall endpoint (so segments
+  // connect cleanly) or, failing that, to the nearest grid intersection.
+  function snapPoint(p) {
+    if (!snapOn) return p;
+    var best = null, bestD = gridPx * 0.5;
+    walls.forEach(function (w) {
+      [[w.x1, w.y1], [w.x2, w.y2]].forEach(function (pt) {
+        var d = Math.hypot(pt[0] - p.x, pt[1] - p.y);
+        if (d < bestD) { bestD = d; best = { x: pt[0], y: pt[1] }; }
+      });
+    });
+    if (best) return best;
+    var g = gridPx || 70;
+    return { x: Math.round(p.x / g) * g, y: Math.round(p.y / g) * g };
+  }
 
   function setStatus(t) { statusEl.textContent = t || ''; }
 
@@ -178,6 +198,11 @@
   var spotBtn = document.getElementById('me-spot-btn');
   var doorLbl = document.getElementById('me-door-lbl');
   var doorCb = document.getElementById('me-door-cb');
+  var snapBtn = document.getElementById('me-snap-btn');
+  if (snapBtn) snapBtn.addEventListener('click', function () {
+    snapOn = !snapOn;
+    snapBtn.setAttribute('aria-pressed', snapOn ? 'true' : 'false');
+  });
   function syncStageCursor() { svg.style.pointerEvents = (wallMode || spotMode) ? 'auto' : 'none';
     svg.style.cursor = (wallMode || spotMode) ? 'crosshair' : 'default'; }
   wallBtn.addEventListener('click', function () {
@@ -197,6 +222,10 @@
     if (!grab) return;
     var p = toMap(e); if (!p) return;
     var dx = p.x - grab.sx, dy = p.y - grab.sy;
+    if (snapOn) {  // move in whole grid steps so the segment stays aligned
+      var g = gridPx || 70;
+      dx = Math.round(dx / g) * g; dy = Math.round(dy / g) * g;
+    }
     if (Math.abs(dx) > 3 || Math.abs(dy) > 3) grab.moved = true;
     grab.w.x1 = grab.ox1 + dx; grab.w.y1 = grab.oy1 + dy;
     grab.w.x2 = grab.ox2 + dx; grab.w.y2 = grab.oy2 + dy;
@@ -214,6 +243,7 @@
     if (suppressClick) return;
     var p = toMap(e); if (!p) return;
     if (wallMode) {
+      p = snapPoint(p);
       if (!pending) { pending = p; render(); return; }
       walls.push({ id: 'w' + Date.now() + '_' + (seq++),
         x1: pending.x, y1: pending.y, x2: p.x, y2: p.y,

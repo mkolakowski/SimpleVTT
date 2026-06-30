@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.764.0] - 2026-06-29 — "The Magnet's Pull"
+
+**Schema version:** 89
+
+**Commit summary:** Map editor — wall/door endpoint snapping (to the grid + to nearby wall ends).
+
+**Description:** First of the requested map-editor enhancements: snapping, so walls and doors connect cleanly. The editor gains a **🧲 Snap** toggle (on by default). When drawing, each clicked endpoint snaps to a nearby existing wall endpoint (within half a grid cell — so segments join at shared corners) or, failing that, to the nearest grid intersection. When dragging a segment, the move is quantised to whole grid steps so the wall stays aligned. Toggling Snap off restores free placement. Uses the map's `grid_size_px` as the snap unit.
+
+### Added
+- `app/templates/map_editor.html` — 🧲 Snap toggle + `snapPoint()` (endpoint-then-grid snap) applied to wall draw + drag.
+- `tests/harness_ui/test_map_editor.py` — asserts a drawn wall's endpoints are grid-aligned with snap on.
+
+### Schema
+- No schema change (still v89).
+
 ## [2.763.0] - 2026-06-29 — "The Atlas Binding"
 
 **Schema version:** 89
