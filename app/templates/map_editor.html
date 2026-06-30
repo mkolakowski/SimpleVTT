@@ -94,6 +94,8 @@
   {# v2.774.0 — lighting preview canvas (veil + light punches + wall shadows),
      mirrors the tabletop. Sits above the image, below the editing overlay. #}
   <canvas id="me-light-canvas" style="position:absolute;top:0;left:0;pointer-events:none;"></canvas>
+  {# v2.780.0 — token line-of-sight preview (veils what a clicked token can't see). #}
+  <canvas id="me-vision-canvas" style="position:absolute;top:0;left:0;pointer-events:none;"></canvas>
   <svg id="me-overlay" width="{{ map.width_px }}" height="{{ map.height_px }}"
        viewBox="0 0 {{ map.width_px }} {{ map.height_px }}"></svg>
 </div>
@@ -331,6 +333,68 @@
     lc.globalCompositeOperation = 'source-over';
     window.__meLightCanvas = cv;  // harness hook
   }
+  // v2.780.0 — token line-of-sight preview. Clicking a sample token veils the
+  // whole map and reveals what that token can see (walls/closed doors block
+  // sight), so the GM can preview a player's vantage from a square.
+  var selectedTokenId = null;
+  var _meVisSrc = null;
+  function drawTokenVision() {
+    var cv = document.getElementById('me-vision-canvas');
+    if (!cv) return;
+    var W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
+    if (!W || !H) return;
+    if (cv.width !== W) cv.width = W;
+    if (cv.height !== H) cv.height = H;
+    cv.style.width = (img.clientWidth || W) + 'px';
+    cv.style.height = (img.clientHeight || H) + 'px';
+    var vc = cv.getContext('2d');
+    vc.clearRect(0, 0, W, H);
+    var t = null;
+    for (var i = 0; i < sampleTokens.length; i++) if (sampleTokens[i].id === selectedTokenId) t = sampleTokens[i];
+    if (!t) { window.__meVisionActive = false; window.__meVisionCanvas = cv; return; }
+    // Veil everything the token can't see…
+    vc.fillStyle = 'rgba(2,4,12,0.72)';
+    vc.fillRect(0, 0, W, H);
+    var solid = (walls || []).filter(function (w) {
+      return w && !(w.door && w.open) &&
+        [w.x1, w.y1, w.x2, w.y2].every(function (n) { return typeof n === 'number'; });
+    });
+    if (!_meVisSrc) _meVisSrc = document.createElement('canvas');
+    if (_meVisSrc.width !== W) _meVisSrc.width = W;
+    if (_meVisSrc.height !== H) _meVisSrc.height = H;
+    var sc = _meVisSrc.getContext('2d'); sc.clearRect(0, 0, W, H);
+    // …then reveal the line of sight: a full-map disk minus wall shadows.
+    var R = Math.hypot(W, H);
+    sc.fillStyle = 'rgba(0,0,0,1)';
+    sc.beginPath(); sc.arc(t.x, t.y, R, 0, Math.PI * 2); sc.fill();
+    if (solid.length) {
+      var ext = (W + H) * 2;
+      sc.globalCompositeOperation = 'destination-out';
+      sc.fillStyle = 'rgba(0,0,0,1)';
+      solid.forEach(function (w) {
+        function proj(px, py) { var dx = px - t.x, dy = py - t.y; var len = Math.hypot(dx, dy) || 1; return [px + dx / len * ext, py + dy / len * ext]; }
+        var f1 = proj(w.x1, w.y1), f2 = proj(w.x2, w.y2);
+        sc.beginPath(); sc.moveTo(w.x1, w.y1); sc.lineTo(f1[0], f1[1]);
+        sc.lineTo(f2[0], f2[1]); sc.lineTo(w.x2, w.y2); sc.closePath(); sc.fill();
+      });
+      sc.globalCompositeOperation = 'source-over';
+    }
+    vc.globalCompositeOperation = 'destination-out';
+    vc.drawImage(_meVisSrc, 0, 0);
+    vc.globalCompositeOperation = 'source-over';
+    // Eye marker at the token.
+    vc.strokeStyle = 'rgba(120,200,255,0.95)'; vc.lineWidth = 3;
+    vc.beginPath(); vc.arc(t.x, t.y, Math.max(9, (gridPx || 70) / 2 * 0.55), 0, Math.PI * 2); vc.stroke();
+    window.__meVisionActive = true;
+    window.__meVisionCanvas = cv;
+  }
+  function selectToken(t) {
+    selectedTokenId = (selectedTokenId === t.id) ? null : t.id;
+    setStatus(selectedTokenId
+      ? 'Showing ' + t.label + '’s line of sight — click it again to clear.'
+      : '');
+    drawTokenVision();
+  }
   function render() {
     while (svg.firstChild) svg.removeChild(svg.firstChild);
     // v2.769.0 — grid overlay (behind walls/lights/fog), at grid_size_px with
@@ -510,6 +574,7 @@
     // live map-pixels; grid params can change via the toolbar).
     window.__meTokens = sampleTokens;
     window.__meGrid = { px: gridPx, offX: gridOffX, offY: gridOffY };
+    drawTokenVision();  // v2.780.0 — refresh the selected token's line of sight
   }
   function toMap(e) {
     var pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
@@ -543,21 +608,25 @@
       if (eraseMode) { e.stopPropagation(); removeToken(t); return; }
       e.stopPropagation(); e.preventDefault();
       var p = toMap(e); if (!p) return;
-      var dx = t.x - p.x, dy = t.y - p.y;
+      var dx = t.x - p.x, dy = t.y - p.y, moved = false;
       g.style.cursor = 'grabbing';
       // Track on window so moves arrive even though the svg is pointer-events
       // :none in view mode (SVG <g> pointer-capture is unreliable here).
       function mv(ev) {
         var q = toMap(ev); if (!q) return;
         var s = snapTokenToGrid({ x: q.x + dx, y: q.y + dy });
+        if (s.x !== t.x || s.y !== t.y) moved = true;
         t.x = s.x; t.y = s.y;
         c.setAttribute('cx', t.x); c.setAttribute('cy', t.y);
         lbl.setAttribute('x', t.x); lbl.setAttribute('y', t.y);
+        if (selectedTokenId === t.id) drawTokenVision();  // follow the eye
       }
       function up() {
         window.removeEventListener('pointermove', mv);
         window.removeEventListener('pointerup', up);
         g.style.cursor = 'grab';
+        // v2.780.0 — a click (no drag) selects the token + shows its sight.
+        if (!moved) selectToken(t);
       }
       window.addEventListener('pointermove', mv);
       window.addEventListener('pointerup', up);
@@ -565,13 +634,19 @@
     g.addEventListener('contextmenu', function (e) {
       e.preventDefault(); e.stopPropagation();
       showMenu(e.clientX, e.clientY, [
+        { label: (selectedTokenId === t.id ? '🙈 Hide line of sight' : '👁 Show line of sight'),
+          fn: function () { selectToken(t); } },
         { label: '🎭 ' + t.label + ' — 🗑 Remove', fn: function () { removeToken(t); } },
-        { label: '🧹 Clear all sample tokens', fn: function () { sampleTokens = []; render(); } },
+        { label: '🧹 Clear all sample tokens', fn: function () { sampleTokens = []; selectedTokenId = null; render(); } },
       ]);
     });
     return g;
   }
-  function removeToken(t) { sampleTokens = sampleTokens.filter(function (x) { return x.id !== t.id; }); render(); }
+  function removeToken(t) {
+    if (selectedTokenId === t.id) selectedTokenId = null;
+    sampleTokens = sampleTokens.filter(function (x) { return x.id !== t.id; });
+    render();
+  }
   async function saveWalls() {
     setStatus('Saving…');
     try {

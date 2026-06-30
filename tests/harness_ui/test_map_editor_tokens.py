@@ -69,6 +69,50 @@ def test_token_snaps_to_grid(gm_page: Page) -> None:
     assert abs(res["fy"] - res["half"]) < 0.6, res
 
 
+def test_token_perspective_toggles(gm_page: Page) -> None:
+    _open_editor(gm_page)
+    gm_page.locator("#me-token-btn").click()
+    box = gm_page.locator(".me-token").first.bounding_box()
+    cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    gm_page.mouse.click(cx, cy)  # select → show line of sight
+    gm_page.wait_for_timeout(150)
+    assert gm_page.evaluate("() => window.__meVisionActive") is True
+    gm_page.mouse.click(cx, cy)  # click again → clear
+    gm_page.wait_for_timeout(150)
+    assert gm_page.evaluate("() => window.__meVisionActive") is False
+
+
+def test_token_perspective_occludes_behind_wall(gm_page: Page) -> None:
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
+        c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
+        # A full-height wall near the left edge; the centred token sits to its
+        # right, so the thin strip left of x=40 is in shadow (can't be seen).
+        c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
+            {"id": "w", "x1": 40, "y1": 0, "x2": 40, "y2": 5000, "style": "stone"}]})
+        try:
+            gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
+            expect(gm_page.locator("#me-overlay")).to_be_visible()
+            gm_page.wait_for_timeout(400)
+            gm_page.locator("#me-token-btn").click()
+            box = gm_page.locator(".me-token").first.bounding_box()
+            gm_page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+            gm_page.wait_for_timeout(200)
+            res = gm_page.evaluate("""() => {
+                const t = window.__meTokens[0];
+                const cx = window.__meVisionCanvas.getContext('2d');
+                const a = (x, y) => cx.getImageData(Math.round(x), Math.round(y), 1, 1).data[3];
+                return { active: window.__meVisionActive, tx: t.x, ty: t.y,
+                         eye: a(t.x, t.y), behind: a(12, t.y) };
+            }""")
+            assert res["active"] is True, res
+            assert res["tx"] > 40, res                 # token is right of the wall
+            assert res["eye"] < 40, res                # the token's square is visible
+            assert res["behind"] > 150, res            # strip behind the wall is veiled
+        finally:
+            c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
+
+
 def test_token_right_click_remove(gm_page: Page) -> None:
     _open_editor(gm_page)
     gm_page.locator("#me-token-btn").click()

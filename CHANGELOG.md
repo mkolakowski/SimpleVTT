@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.780.0] - 2026-06-30 — "The Pawn's Eye"
+
+**Schema version:** 91
+
+**Commit summary:** Click a sample token in the map editor to preview its line of sight (walls/closed doors occlude).
+
+**Description:** Clicking a 🎭 sample token now shows the map **from that token's perspective** — the editor veils the whole map and reveals only what the token can see, with walls and closed doors casting shadows that block sight (open doors don't). It's the GM's preview of a player's vantage from a square: drag the selected token and the sight area follows live; click it again (or right-click → 🙈 Hide line of sight) to clear. A click selects/toggles; a drag still just moves, so the two never collide.
+
+### Added
+- `app/templates/map_editor.html` — `#me-vision-canvas` + `drawTokenVision()` (veil + full-map line-of-sight reveal minus wall shadows, eye marker), `selectToken()`, click-to-select (vs drag-to-move) wiring, a Show/Hide line-of-sight context-menu entry, and `window.__meVisionActive` / `__meVisionCanvas` harness hooks.
+- `tests/harness_ui/test_map_editor_tokens.py` (+2) — clicking a token toggles the perspective on/off; a strip behind a wall is veiled while the token's own square stays visible.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.779.0] - 2026-06-30 — "The Aligned Pawn"
 
 **Schema version:** 91
