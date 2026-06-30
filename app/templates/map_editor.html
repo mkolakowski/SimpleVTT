@@ -78,6 +78,9 @@
 <div class="me-stage" id="me-stage">
   <img id="me-img" src="{{ map.image_url }}" alt="{{ map.name }}"
        width="{{ map.width_px }}" height="{{ map.height_px }}">
+  {# v2.774.0 — lighting preview canvas (veil + light punches + wall shadows),
+     mirrors the tabletop. Sits above the image, below the editing overlay. #}
+  <canvas id="me-light-canvas" style="position:absolute;top:0;left:0;pointer-events:none;"></canvas>
   <svg id="me-overlay" width="{{ map.width_px }}" height="{{ map.height_px }}"
        viewBox="0 0 {{ map.width_px }} {{ map.height_px }}"></svg>
 </div>
@@ -143,6 +146,7 @@
   var gridPx = {{ map.grid_size_px }} || 70;
   var gridShow = {{ 'true' if map.show_grid else 'false' }};
   var gridOffX = {{ map.grid_offset_x }} || 0, gridOffY = {{ map.grid_offset_y }} || 0;
+  var ambient = {{ map.ambient_light | tojson }} || 'bright';  // v2.774.0 lighting preview
   var snapOn = true;
 
   // v2.764.0 — snap a point to a nearby existing wall endpoint (so segments
@@ -173,6 +177,7 @@
     // Match the displayed image box (it may be scaled to fit the stage).
     svg.style.width = img.clientWidth + 'px';
     svg.style.height = img.clientHeight + 'px';
+    drawEditorLighting();  // v2.774.0 — rescale the lighting canvas to match
   }
 
   // v2.772.0 — transparent wide hit-line (the click/drag/right-click target).
@@ -216,6 +221,63 @@
       seg(st.color, st.width);                            // wall face
       seg('rgba(255,255,255,0.18)', Math.max(1, st.width - 4)); // top sheen
     }
+  }
+  // v2.774.0 — lighting preview: veil for dim/dark ambient, punched by each
+  // light's bright/dim radius with wall shadows (mirrors the tabletop).
+  var _meSrcCanvas = null;
+  function drawEditorLighting() {
+    var cv = document.getElementById('me-light-canvas');
+    if (!cv) return;
+    var W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
+    if (!W || !H) return;
+    if (cv.width !== W) cv.width = W;
+    if (cv.height !== H) cv.height = H;
+    cv.style.width = (img.clientWidth || W) + 'px';
+    cv.style.height = (img.clientHeight || H) + 'px';
+    var lc = cv.getContext('2d');
+    lc.clearRect(0, 0, W, H);
+    var dark = ambient === 'dark', dim = ambient === 'dim';
+    if (!dark && !dim) return;  // bright map → nothing to veil
+    var pxPerFt = (gridPx || 70) / 5;
+    lc.fillStyle = 'rgba(3,6,18,' + (dark ? 0.8 : 0.42) + ')';
+    lc.fillRect(0, 0, W, H);
+    var solid = (walls || []).filter(function (w) {
+      return w && !(w.door && w.open) &&
+        [w.x1, w.y1, w.x2, w.y2].every(function (n) { return typeof n === 'number'; });
+    });
+    function eraseShadows(sctx, sx, sy) {
+      if (!solid.length) return;
+      var ext = (W + H) * 2;
+      sctx.save(); sctx.globalCompositeOperation = 'destination-out';
+      sctx.fillStyle = 'rgba(0,0,0,1)';
+      solid.forEach(function (w) {
+        function proj(px, py) { var dx = px - sx, dy = py - sy; var len = Math.hypot(dx, dy) || 1; return [px + dx / len * ext, py + dy / len * ext]; }
+        var f1 = proj(w.x1, w.y1), f2 = proj(w.x2, w.y2);
+        sctx.beginPath(); sctx.moveTo(w.x1, w.y1); sctx.lineTo(f1[0], f1[1]);
+        sctx.lineTo(f2[0], f2[1]); sctx.lineTo(w.x2, w.y2); sctx.closePath(); sctx.fill();
+      });
+      sctx.restore();
+    }
+    lc.globalCompositeOperation = 'destination-out';
+    function punch(cx, cy, brightFt, dimFt) {
+      var outer = Math.max(brightFt, dimFt) * pxPerFt; if (outer <= 0) return;
+      var inner = Math.min(brightFt * pxPerFt, outer * 0.95);
+      function mk(c) { var g = c.createRadialGradient(cx, cy, Math.max(1, inner), cx, cy, outer); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0.35)'); return g; }
+      if (!solid.length) { lc.fillStyle = mk(lc); lc.beginPath(); lc.arc(cx, cy, outer, 0, Math.PI * 2); lc.fill(); return; }
+      if (!_meSrcCanvas) _meSrcCanvas = document.createElement('canvas');
+      if (_meSrcCanvas.width !== W) _meSrcCanvas.width = W;
+      if (_meSrcCanvas.height !== H) _meSrcCanvas.height = H;
+      var sctx = _meSrcCanvas.getContext('2d'); sctx.clearRect(0, 0, W, H);
+      sctx.fillStyle = mk(sctx); sctx.beginPath(); sctx.arc(cx, cy, outer, 0, Math.PI * 2); sctx.fill();
+      eraseShadows(sctx, cx, cy);
+      lc.drawImage(_meSrcCanvas, 0, 0);
+    }
+    (lights || []).forEach(function (L) {
+      var b = Number(L.bright_ft || 0), d = Number(L.dim_ft || 0);
+      if (b > 0 || d > 0) punch(L.x, L.y, b, d);
+    });
+    lc.globalCompositeOperation = 'source-over';
+    window.__meLightCanvas = cv;  // harness hook
   }
   function render() {
     while (svg.firstChild) svg.removeChild(svg.firstChild);
@@ -369,6 +431,7 @@
         svg.appendChild(pv);
       }
     }
+    drawEditorLighting();  // v2.774.0 — refresh the lighting preview
   }
   function toMap(e) {
     var pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
@@ -608,6 +671,8 @@
     }).then(function () { setStatus('Saved.'); }).catch(function () { setStatus('Save failed.'); });
   });
   document.getElementById('me-ambient').addEventListener('change', function (e) {
+    ambient = e.target.value;            // v2.774.0 — update the lighting preview
+    drawEditorLighting();
     setStatus('Saving…');
     fetch('/campaign/' + CID + '/settings/maps/' + MID + '/ambient_light', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },

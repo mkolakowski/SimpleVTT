@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.774.0] - 2026-06-30 — "The Lit Workshop"
+
+**Schema version:** 91
+
+**Commit summary:** Map editor renders the actual light illumination (veil + light punches + wall shadows), not just the radius rings.
+
+**Description:** The map editor now previews lighting the same way the tabletop does. A new lighting canvas sits over the map image (below the editing overlay): on a **dim/dark** map it paints the ambient veil and punches each placed light's bright/dim radius out of it — with wall shadows cast from the light past solid walls / closed doors — so the GM sees exactly what each torch illuminates while authoring, instead of just the radius rings. It refreshes on every edit (light placed/moved/deleted, wall change) and when the ambient select changes, and rescales with zoom. On a bright map it's a no-op (nothing to veil), matching the table.
+
+### Added
+- `app/templates/map_editor.html` — `#me-light-canvas` + `drawEditorLighting()` (ambient veil + per-light radial punch + per-light wall-shadow erase), wired into `render()`, `syncOverlay()` (zoom), and the ambient change; `window.__meLightCanvas` harness hook.
+- `tests/harness_ui/test_map_editor_lighting.py` (new, +1) — on a dark map with a small light, a point by the light is cleared while a far point stays veiled.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.773.0] - 2026-06-30 — "The Tidy Toolbar"
 
 **Schema version:** 91
