@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.785.1] - 2026-06-30 — "The Tightened Bench"
+
+**Schema version:** 91
+
+**Commit summary:** Compact the editor toolbar + reflow Markers, Fog & Light, Tools, and View groups.
+
+**Description:** Tightens the map-editor toolbar (smaller padding/gaps, 34 px dense-panel buttons) so it wastes less space, and reflows four groups:
+- **Markers** — the light-type select and the `B`/`D` (bright/dim) radius fields now sit on **one line**.
+- **Fog & Light** — the **Ambient** select moved **above** the Fog button.
+- **Tools** — Erase / Snap now **stack** vertically.
+- **View** — controls **stack** with **Fit on top** and the zoom stepper (−/%/+) on one row beneath.
+
+### Changed
+- `app/templates/map_editor.html` — compact toolbar CSS; `.me-sub` (same-line sub-row), `.me-fullrow`, and `.me-group--stack` helpers; Markers/Fog&Light/Tools/View markup reflowed. All control IDs unchanged.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.785.0] - 2026-06-30 — "The Way Back"
 
 **Schema version:** 91

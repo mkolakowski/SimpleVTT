@@ -9,25 +9,34 @@
   /* v2.783.3 — keep every group on ONE horizontal line; groups themselves
      can be multiple rows tall (label header + controls that wrap below).
      Horizontal scroll is the safety valve on very narrow viewports. */
-  .me-toolbar { display:flex; align-items:flex-start; gap:10px; flex-wrap:nowrap;
-    padding:10px 12px; border:1px solid var(--border); border-radius:8px;
-    background:var(--bg-2); margin-bottom:12px; overflow-x:auto; }
-  .me-toolbar label { font-size:13px; color:var(--fg-mute); display:inline-flex;
-    align-items:center; gap:5px; }
+  /* v2.785.1 — compact toolbar: tighter padding/gaps, smaller dense-panel
+     buttons (34px > the 32px dense-panel floor). */
+  .me-toolbar { display:flex; align-items:flex-start; gap:6px; flex-wrap:nowrap;
+    padding:6px 8px; border:1px solid var(--border); border-radius:8px;
+    background:var(--bg-2); margin-bottom:10px; overflow-x:auto; }
+  .me-toolbar label { font-size:12px; color:var(--fg-mute); display:inline-flex;
+    align-items:center; gap:4px; }
+  .me-tool-btn { min-height:34px; padding:3px 8px; font-size:13px; }
   .me-tool-btn[aria-pressed="true"] { background:var(--accent); color:#fff; }
-  /* v2.783.0 — controls grouped into labelled sub-groups.
-     v2.784.2 — controls stack within each group.
-     v2.784.3 — up to TWO controls per row so tall groups are shorter. */
-  .me-group { display:flex; flex-wrap:wrap; align-items:stretch; gap:6px;
-    padding:5px 9px; border:1px solid var(--border); border-radius:8px;
+  /* v2.783.0 — labelled sub-groups; v2.784.3 — up to two controls per row. */
+  .me-group { display:flex; flex-wrap:wrap; align-items:stretch; gap:4px;
+    padding:3px 6px 5px; border:1px solid var(--border); border-radius:7px;
     flex:0 0 auto;
     background:color-mix(in srgb, var(--bg) 55%, transparent); }
   .me-grp-lbl { flex-basis:100%; font-size:9px; font-weight:700;
-    text-transform:uppercase; letter-spacing:.6px; color:var(--fg-mute);
-    opacity:.75; user-select:none; text-align:center; margin-bottom:2px; }
+    text-transform:uppercase; letter-spacing:.5px; color:var(--fg-mute);
+    opacity:.75; user-select:none; text-align:center; margin-bottom:1px; }
   /* two-up: each control takes ~half the group; a lone/odd one grows to fill */
-  .me-group > .me-tool-btn, .me-group > label { flex:1 1 calc(50% - 4px); min-width:76px; }
+  .me-group > .me-tool-btn, .me-group > label { flex:1 1 calc(50% - 4px); min-width:64px; }
   .me-group > label { justify-content:center; }
+  /* a control (or sub-row) that should own a full row */
+  .me-fullrow { flex-basis:100% !important; }
+  /* a sub-row that keeps several controls together on one line */
+  .me-sub { flex-basis:100%; display:flex; align-items:center; gap:4px; }
+  .me-sub > label { flex:0 0 auto; }
+  /* a group whose controls each take a full row (vertical stack) */
+  .me-group--stack > .me-tool-btn, .me-group--stack > label,
+  .me-group--stack > .me-sub { flex-basis:100%; }
   .me-stage { position:relative; display:block; width:100%; box-sizing:border-box;
     border:1px solid var(--border); border-radius:6px; overflow:auto;
     max-height:86vh; background:#0b0d16; }
@@ -74,45 +83,47 @@
             title="Click the map to place a description hotspot; click a hotspot to delete">📍 Hotspots</button>
     <button type="button" id="me-light-btn" class="me-tool-btn" aria-pressed="false"
             title="Click the map to place a light source of the chosen type; click a light to delete">💡 Lights</button>
-    <label style="gap:3px;" title="Light type for new lights (sets its look + flicker; right-click a light to change it)">
-      <select id="me-light-type" style="min-height:32px;font-size:12px;">
-        <option value="candle">🕯 Candle</option>
-        <option value="torch" selected>🔥 Torch</option>
-        <option value="lamp">💡 Lamp</option>
-        <option value="lantern">🏮 Hooded lantern</option>
-        <option value="bullseye">🔦 Bullseye</option>
-        <option value="light">✨ Light cantrip</option>
-        <option value="daylight">☀ Daylight</option>
-      </select>
-    </label>
-    {# v2.784.0 — radii are their own field now, decoupled from the type. #}
-    <label style="gap:2px;" title="Bright light radius (ft) for new lights">bright<input
-        type="number" id="me-light-bright" min="0" max="500" value="20"
-        style="width:48px;min-height:32px;"></label>
-    <label style="gap:2px;" title="Dim light radius (ft) for new lights">dim<input
-        type="number" id="me-light-dim" min="0" max="500" value="20"
-        style="width:48px;min-height:32px;"></label>
+    {# v2.785.1 — light type + bright + dim share one line. #}
+    <div class="me-sub">
+      <label style="gap:3px;flex:1 1 auto;" title="Light type for new lights (sets its look + flicker; right-click a light to change it)">
+        <select id="me-light-type" style="min-height:32px;font-size:12px;width:100%;">
+          <option value="candle">🕯 Candle</option>
+          <option value="torch" selected>🔥 Torch</option>
+          <option value="lamp">💡 Lamp</option>
+          <option value="lantern">🏮 Hooded lantern</option>
+          <option value="bullseye">🔦 Bullseye</option>
+          <option value="light">✨ Light cantrip</option>
+          <option value="daylight">☀ Daylight</option>
+        </select>
+      </label>
+      <label style="gap:2px;" title="Bright light radius (ft) for new lights">B<input
+          type="number" id="me-light-bright" min="0" max="500" value="20"
+          style="width:42px;min-height:32px;"></label>
+      <label style="gap:2px;" title="Dim light radius (ft) for new lights">D<input
+          type="number" id="me-light-dim" min="0" max="500" value="20"
+          style="width:42px;min-height:32px;"></label>
+    </div>
   </div>
   <div class="me-group" role="group" aria-label="Fog of war and lighting">
     <span class="me-grp-lbl">Fog &amp; Light</span>
-    <button type="button" id="me-fog-btn" class="me-tool-btn" aria-pressed="false"
-            title="Fog of war: drag to reveal an area; click a revealed area to re-hide it">🌫 Fog</button>
-    <label id="me-fog-on-lbl" style="display:none;"><input type="checkbox" id="me-fog-on-cb"> fog on</label>
-    {# v2.783.1 — ambient lighting lives with fog (both govern what players see). #}
-    <label style="gap:4px;">Ambient
-      <select id="me-ambient" style="min-height:32px;">
+    {# v2.785.1 — ambient lighting select sits above the Fog button. #}
+    <label class="me-fullrow" style="gap:4px;">Ambient
+      <select id="me-ambient" style="min-height:32px;flex:1 1 auto;">
         {% for lvl in ['bright','dim','dark'] %}
         <option value="{{ lvl }}" {% if map.ambient_light == lvl %}selected{% endif %}>{{ lvl }}</option>
         {% endfor %}
       </select>
     </label>
+    <button type="button" id="me-fog-btn" class="me-tool-btn" aria-pressed="false"
+            title="Fog of war: drag to reveal an area; click a revealed area to re-hide it">🌫 Fog</button>
+    <label id="me-fog-on-lbl" style="display:none;"><input type="checkbox" id="me-fog-on-cb"> fog on</label>
   </div>
   <div class="me-group" role="group" aria-label="Tokens">
     <span class="me-grp-lbl">Tokens</span>
     <button type="button" id="me-token-btn" class="me-tool-btn"
             title="Drop a sample token you can drag around to test the map (preview only — not saved; right-click a token to remove)">🎭 Token</button>
   </div>
-  <div class="me-group" role="group" aria-label="Tools">
+  <div class="me-group me-group--stack" role="group" aria-label="Tools">
     <span class="me-grp-lbl">Tools</span>
     <button type="button" id="me-erase-btn" class="me-tool-btn" aria-pressed="false"
             title="Erase mode: click any wall / door / hotspot / light to delete it (right-click an object for Move/Delete anytime)">🗑 Erase</button>
@@ -126,12 +137,15 @@
     <label style="gap:3px;">x<input type="number" id="me-grid-offx" min="0" value="{{ map.grid_offset_x }}" style="width:48px;min-height:32px;" title="Grid offset X (align the grid to the image)"></label>
     <label style="gap:3px;">y<input type="number" id="me-grid-offy" min="0" value="{{ map.grid_offset_y }}" style="width:48px;min-height:32px;" title="Grid offset Y"></label>
   </div>
-  <div class="me-group" role="group" aria-label="View">
+  <div class="me-group me-group--stack" role="group" aria-label="View">
     <span class="me-grp-lbl">View</span>
-    <button type="button" id="me-zoom-out" class="me-tool-btn" title="Zoom out">🔍−</button>
-    <span id="me-zoom-lbl" style="font-size:12px;color:var(--fg-mute);min-width:3em;text-align:center;">100%</span>
-    <button type="button" id="me-zoom-in" class="me-tool-btn" title="Zoom in">🔍+</button>
+    {# v2.785.1 — Fit on top, zoom stepper below as one row. #}
     <button type="button" id="me-zoom-fit" class="me-tool-btn" title="Fit the map to the view">Fit</button>
+    <div class="me-sub" style="justify-content:center;">
+      <button type="button" id="me-zoom-out" class="me-tool-btn" title="Zoom out">🔍−</button>
+      <span id="me-zoom-lbl" style="font-size:12px;color:var(--fg-mute);min-width:3em;text-align:center;">100%</span>
+      <button type="button" id="me-zoom-in" class="me-tool-btn" title="Zoom in">🔍+</button>
+    </div>
   </div>
   <span class="me-status" id="me-status"></span>
 </div>
