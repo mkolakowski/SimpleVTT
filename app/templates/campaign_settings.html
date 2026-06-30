@@ -576,6 +576,10 @@
                 </td>
                 <td>{% if m.id == campaign.active_map_id %}<strong style="color:#6cb;">Active</strong>{% else %}<span class="muted">Inactive</span>{% endif %}</td>
                 <td style="display:flex;gap:4px;flex-wrap:wrap;">
+                    {# v2.760.0 — dedicated map editor (walls / doors / hotspots /
+                       grid / ambient on the map image, without going live). #}
+                    <a href="/campaign/{{ campaign.id }}/map/{{ m.id }}/edit" class="btn-link"
+                       style="display:inline-flex;align-items:center;">✏ Edit</a>
                     {% if m.id != campaign.active_map_id %}
                     <form method="post" action="/campaign/{{ campaign.id }}/settings/maps/{{ m.id }}/activate" style="display:inline;">
                         <button type="submit">Activate</button>

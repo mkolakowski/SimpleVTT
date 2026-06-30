@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.760.0] - 2026-06-29 — "The Cartographer's Desk"
+
+**Schema version:** 88
+
+**Commit summary:** Dedicated map editor — a GM page to author walls / doors / hotspots / grid / ambient on any map without going live.
+
+**Description:** A standalone map-authoring page at `GET /campaign/{cid}/map/{map_id}/edit` (GM-only), reachable via a new **✏ Edit** button on each map row in campaign settings. It renders the map image with a wall/hotspot SVG overlay (coords mapped to the image's natural pixel space via `getScreenCTM`, so editing is correct regardless of display scale) and a toolbar: **🧱 Walls** (click two points to draw; click to delete; drag to move; a "door" box for openable doors), **📍 Hotspots** (click to place a labelled description marker with an optional roll; click to delete), plus **grid-size** and **ambient-light** quick controls. Everything saves automatically by reusing the existing per-map endpoints (`PUT /map/{id}/walls`, `PUT /map/{id}/hotspots`, `/settings/maps/{id}/grid_size`, `.../ambient_light`) — all keyed by `map_id`, so the GM can prep **any** map (not just the live one) ahead of a session. This is the in-browser map-authoring surface from the "Map Editor Framework" backlog item (only multi-map encounters remain there).
+
+### Added
+- `app/routes/tabletop_routes.py` — `GET /campaign/{cid}/map/{map_id}/edit` (GM-only) rendering the editor.
+- `app/templates/map_editor.html` (new) — the editor page: image + wall/hotspot overlay + grid/ambient toolbar + self-contained editor script.
+- `app/templates/campaign_settings.html` — ✏ Edit link per map row.
+- `tests/harness/test_map_editor.py` (new, +3) — page renders for the GM (overlay + tools present); non-GM → 403; unknown map → 404.
+- `tests/harness_ui/test_map_editor.py` (new, +1) — enter wall mode + click two points → a wall persists server-side.
+
+### Schema
+- No schema change (still v88).
+
 ## [2.759.2] - 2026-06-29 — "The Last Pane"
 
 **Schema version:** 88

@@ -925,12 +925,16 @@ Extends the existing battle map canvas with GM-controlled environmental features
 - **Clickable map items** — hotspots placed by the GM that trigger a description popup or roll prompt when a token moves onto or a player clicks them.
 
 ### Map Editor Framework
-Groundwork for in-browser map authoring tools. Planned capabilities:
-- **Fog of war** — GM-controlled reveal of map regions; players see only explored areas
-- **Walls** — line segments that block token line-of-sight
-- **Doors** — interactive wall segments that players/GMs can open or close
-- **Clickable items** — hotspots on the map that trigger a description popup or roll prompt
-- **Multi-map encounters** — link multiple maps into a single encounter (e.g. interior/exterior transitions) without switching the active map for the whole campaign
+Groundwork for in-browser map authoring tools.
+
+> **Largely shipped (v2.760.0):** a **dedicated map editor** at `/campaign/{cid}/map/{map_id}/edit` (✏ Edit per map row in campaign settings) lets the GM author **walls / doors** (draw, delete, drag), **clickable hotspots** (description + optional roll), and **grid / ambient light** on the map image itself — for any map, without going live. **Fog of war** ships separately (per-user hidden filter + the Vision & Light LOS overlay). **Still open:** **multi-map encounters** (link several maps into one encounter without switching the campaign's active map).
+
+Planned capabilities:
+- ✅ **Walls** — line segments that block token line-of-sight (server occlusion + GM editor).
+- ✅ **Doors** — interactive wall segments players/GMs open or close.
+- ✅ **Clickable items** — hotspots that trigger a description popup or roll prompt.
+- ✅ **Fog of war** — shipped (token-visibility filter + LOS overlay).
+- ⬜ **Multi-map encounters** — link multiple maps into a single encounter (e.g. interior/exterior transitions) without switching the active map for the whole campaign.
 
 ### Lighting ✅ (shipped v2.704.0–v2.710.0)
 Shipped as the Vision & Light engine — light emitters (radius/colour/falloff), magical Darkness/Daylight/Fog, per-token vision senses (darkvision/blindsight/truesight), ambient levels, and the client dynamic-lighting overlay. See [`TODONE.md`](TODONE.md) → Maps & Map Editor + [`vision-and-light.md`](docs/plans/vision-and-light.md). *Not done:* wall-occlusion shadows (vision edges come from the lighting model, not GM-placed walls — see the Maps 2.0 walls item) + fire flicker animation.

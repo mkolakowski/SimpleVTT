@@ -124224,6 +124224,38 @@ async def toggle_map_door(
     return {"ok": True, "door_id": did, "open": target["open"]}
 
 
+@router.get("/campaign/{campaign_id}/map/{map_id}/edit", response_class=HTMLResponse)
+def map_editor_page(
+    campaign_id: int,
+    map_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.760.0 — dedicated map editor (GM-only). Edit a map's grid, ambient
+    light, walls/doors, and clickable hotspots on the map image itself —
+    without making it the active live map. Reuses the existing
+    `/map/{id}/walls`, `/map/{id}/hotspots`, `/settings/maps/{id}/grid_size`
+    + `.../ambient_light` endpoints (all keyed by map_id)."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(
+        Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404, "Map not found")
+    return templates.TemplateResponse("map_editor.html", {
+        "request": request,
+        "campaign": campaign,
+        "map": m,
+        "walls": list(m.walls or []),
+        "hotspots": list(getattr(m, "hotspots", None) or []),
+        "is_active": m.id == campaign.active_map_id,
+    })
+
+
 @router.post("/campaign/{campaign_id}/settings/maps/{map_id}/letterbox_color")
 async def settings_map_letterbox_color(
     campaign_id: int,

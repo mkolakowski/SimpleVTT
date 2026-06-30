@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% block title %}Edit map — {{ map.name }}{% endblock %}
+{% block content %}
+<div style="max-width:1200px;margin:0 auto;padding:0 20px;">
+<style>
+  .me-head { display:flex; align-items:center; justify-content:space-between;
+    flex-wrap:wrap; gap:12px; margin:16px 0 12px; }
+  .me-head h1 { margin:0; font-size:20px; }
+  .me-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:10px 12px; border:1px solid var(--border); border-radius:8px;
+    background:var(--bg-2); margin-bottom:12px; }
+  .me-toolbar label { font-size:13px; color:var(--fg-mute); display:inline-flex;
+    align-items:center; gap:5px; }
+  .me-tool-btn[aria-pressed="true"] { background:var(--accent); color:#fff; }
+  .me-stage { position:relative; display:inline-block; border:1px solid var(--border);
+    border-radius:6px; overflow:auto; max-width:100%; max-height:72vh; background:#0b0d16; }
+  .me-stage img { display:block; }
+  #me-overlay { position:absolute; top:0; left:0; overflow:visible; }
+  .me-status { font-size:12px; color:var(--fg-mute); margin-left:auto; }
+  .m4hint { font-size:12px; color:var(--fg-mute); margin:8px 0 0; }
+</style>
+
+<div class="me-head">
+  <h1>🗺 Edit map <span class="muted" style="font-size:14px;">{{ map.name }}</span>
+    {% if is_active %}<span style="color:#6cb;font-size:13px;">· Active</span>{% endif %}</h1>
+  <a href="/campaign/{{ campaign.id }}/settings#maps">← Back to settings</a>
+</div>
+
+<div class="me-toolbar">
+  <button type="button" id="me-wall-btn" class="me-tool-btn" aria-pressed="false"
+          title="Draw walls/doors: click two points; click a wall to delete; drag to move">🧱 Walls</button>
+  <label id="me-door-lbl" style="display:none;"><input type="checkbox" id="me-door-cb"> door</label>
+  <button type="button" id="me-spot-btn" class="me-tool-btn" aria-pressed="false"
+          title="Click the map to place a description hotspot; click a hotspot to delete">📍 Hotspots</button>
+  <label>Grid px
+    <input type="number" id="me-grid" min="20" max="300" value="{{ map.grid_size_px }}"
+           style="width:64px;min-height:32px;">
+  </label>
+  <label>Ambient
+    <select id="me-ambient" style="min-height:32px;">
+      {% for lvl in ['bright','dim','dark'] %}
+      <option value="{{ lvl }}" {% if map.ambient_light == lvl %}selected{% endif %}>{{ lvl }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <span class="me-status" id="me-status"></span>
+</div>
+
+<div class="me-stage" id="me-stage">
+  <img id="me-img" src="{{ map.image_url }}" alt="{{ map.name }}"
+       width="{{ map.width_px }}" height="{{ map.height_px }}">
+  <svg id="me-overlay" width="{{ map.width_px }}" height="{{ map.height_px }}"
+       viewBox="0 0 {{ map.width_px }} {{ map.height_px }}"></svg>
+</div>
+<p class="m4hint">Walls block line of sight on the live tabletop; doors (dashed) can be opened/closed in play. Hotspots show a description popup when a player clicks them. Changes save automatically.</p>
+
+<script>
+(function () {
+  var CID = {{ campaign.id }};
+  var MID = {{ map.id }};
+  var NS = 'http://www.w3.org/2000/svg';
+  var svg = document.getElementById('me-overlay');
+  var img = document.getElementById('me-img');
+  var statusEl = document.getElementById('me-status');
+  var walls = {{ walls | tojson }};
+  var hotspots = {{ hotspots | tojson }};
+  var wallMode = false, spotMode = false, pending = null, seq = 0;
+  var grab = null, suppressClick = false;
+
+  function setStatus(t) { statusEl.textContent = t || ''; }
+
+  // Size the overlay to the rendered image so SVG coords map to the image's
+  // natural pixel space (the same space walls/hotspots are stored in).
+  function syncOverlay() {
+    svg.setAttribute('width', img.naturalWidth || img.width);
+    svg.setAttribute('height', img.naturalHeight || img.height);
+    svg.setAttribute('viewBox', '0 0 ' + (img.naturalWidth || img.width)
+      + ' ' + (img.naturalHeight || img.height));
+    // Match the displayed image box (it may be scaled to fit the stage).
+    svg.style.width = img.clientWidth + 'px';
+    svg.style.height = img.clientHeight + 'px';
+  }
+
+  function mkLine(w, hit) {
+    var ln = document.createElementNS(NS, 'line');
+    ln.setAttribute('x1', w.x1); ln.setAttribute('y1', w.y1);
+    ln.setAttribute('x2', w.x2); ln.setAttribute('y2', w.y2);
+    if (hit) {
+      ln.setAttribute('stroke', 'transparent');
+      ln.setAttribute('stroke-width', '16');
+      ln.style.pointerEvents = wallMode ? 'stroke' : 'none';
+      ln.style.cursor = wallMode ? 'move' : 'default';
+    } else {
+      var open = w.door && w.open;
+      ln.setAttribute('stroke', open ? '#46c46a' : (w.door ? '#d9a441' : '#e05a4a'));
+      ln.setAttribute('stroke-width', '4');
+      ln.setAttribute('stroke-linecap', 'round');
+      if (w.door) ln.setAttribute('stroke-dasharray', '10 8');
+      ln.style.pointerEvents = 'none';
+    }
+    return ln;
+  }
+  function render() {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    walls.forEach(function (w) {
+      svg.appendChild(mkLine(w, false));
+      var hit = mkLine(w, true);
+      hit.addEventListener('pointerdown', function (e) {
+        if (!wallMode) return;
+        e.stopPropagation(); e.preventDefault();
+        var p = toMap(e); if (!p) return;
+        grab = { w: w, ox1: w.x1, oy1: w.y1, ox2: w.x2, oy2: w.y2,
+                 sx: p.x, sy: p.y, moved: false };
+        try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+      });
+      svg.appendChild(hit);
+    });
+    if (pending) {
+      var c = document.createElementNS(NS, 'circle');
+      c.setAttribute('cx', pending.x); c.setAttribute('cy', pending.y);
+      c.setAttribute('r', '6'); c.setAttribute('fill', '#e05a4a');
+      c.style.pointerEvents = 'none'; svg.appendChild(c);
+    }
+    hotspots.forEach(function (h) {
+      var mk = document.createElementNS(NS, 'circle');
+      mk.setAttribute('cx', h.x); mk.setAttribute('cy', h.y);
+      mk.setAttribute('r', '11');
+      mk.setAttribute('fill', 'rgba(108,180,255,.35)');
+      mk.setAttribute('stroke', '#6cb4ff'); mk.setAttribute('stroke-width', '2');
+      mk.style.pointerEvents = 'all'; mk.style.cursor = 'pointer';
+      mk.classList.add('me-hotspot');
+      if (h.label) { var t = document.createElementNS(NS, 'title'); t.textContent = h.label; mk.appendChild(t); }
+      mk.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (spotMode) {
+          hotspots = hotspots.filter(function (x) { return x.id !== h.id; });
+          saveHotspots();
+        } else {
+          alert('📍 ' + (h.label || 'Hotspot') + (h.description ? '\n\n' + h.description : '')
+            + (h.roll ? '\n\n🎲 ' + h.roll : ''));
+        }
+      });
+      svg.appendChild(mk);
+    });
+  }
+  function toMap(e) {
+    var pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    var ctm = svg.getScreenCTM();
+    if (!ctm) return null;
+    var loc = pt.matrixTransform(ctm.inverse());
+    return { x: Math.round(loc.x), y: Math.round(loc.y) };
+  }
+  async function saveWalls() {
+    setStatus('Saving…');
+    try {
+      await fetch('/api/campaign/' + CID + '/map/' + MID + '/walls', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walls: walls }),
+      });
+      setStatus('Saved.');
+    } catch (e) { setStatus('Save failed.'); }
+    render();
+  }
+  async function saveHotspots() {
+    setStatus('Saving…');
+    try {
+      await fetch('/api/campaign/' + CID + '/map/' + MID + '/hotspots', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hotspots: hotspots }),
+      });
+      setStatus('Saved.');
+    } catch (e) { setStatus('Save failed.'); }
+    render();
+  }
+
+  // Toolbar wiring.
+  var wallBtn = document.getElementById('me-wall-btn');
+  var spotBtn = document.getElementById('me-spot-btn');
+  var doorLbl = document.getElementById('me-door-lbl');
+  var doorCb = document.getElementById('me-door-cb');
+  function syncStageCursor() { svg.style.pointerEvents = (wallMode || spotMode) ? 'auto' : 'none';
+    svg.style.cursor = (wallMode || spotMode) ? 'crosshair' : 'default'; }
+  wallBtn.addEventListener('click', function () {
+    wallMode = !wallMode;
+    if (wallMode && spotMode) { spotMode = false; spotBtn.setAttribute('aria-pressed', 'false'); }
+    wallBtn.setAttribute('aria-pressed', wallMode ? 'true' : 'false');
+    doorLbl.style.display = wallMode ? 'inline-flex' : 'none';
+    pending = null; syncStageCursor(); render();
+  });
+  spotBtn.addEventListener('click', function () {
+    spotMode = !spotMode;
+    if (spotMode && wallMode) { wallMode = false; wallBtn.setAttribute('aria-pressed', 'false'); doorLbl.style.display = 'none'; pending = null; }
+    spotBtn.setAttribute('aria-pressed', spotMode ? 'true' : 'false');
+    syncStageCursor(); render();
+  });
+  svg.addEventListener('pointermove', function (e) {
+    if (!grab) return;
+    var p = toMap(e); if (!p) return;
+    var dx = p.x - grab.sx, dy = p.y - grab.sy;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) grab.moved = true;
+    grab.w.x1 = grab.ox1 + dx; grab.w.y1 = grab.oy1 + dy;
+    grab.w.x2 = grab.ox2 + dx; grab.w.y2 = grab.oy2 + dy;
+    render();
+  });
+  svg.addEventListener('pointerup', function (e) {
+    if (!grab) return;
+    var g = grab; grab = null;
+    try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
+    if (!g.moved) { walls = walls.filter(function (x) { return x.id !== g.w.id; }); }
+    saveWalls();
+    suppressClick = true; setTimeout(function () { suppressClick = false; }, 0);
+  });
+  svg.addEventListener('click', function (e) {
+    if (suppressClick) return;
+    var p = toMap(e); if (!p) return;
+    if (wallMode) {
+      if (!pending) { pending = p; render(); return; }
+      walls.push({ id: 'w' + Date.now() + '_' + (seq++),
+        x1: pending.x, y1: pending.y, x2: p.x, y2: p.y,
+        door: !!(doorCb && doorCb.checked), open: false });
+      pending = null; saveWalls();
+    } else if (spotMode) {
+      var label = window.prompt('Hotspot label:', '');
+      if (label === null) return;
+      var desc = window.prompt('Description (shown on click):', '') || '';
+      var roll = window.prompt('Optional roll (e.g. 1d20+5, blank for none):', '') || '';
+      hotspots.push({ id: 'h' + Date.now() + '_' + (seq++), x: p.x, y: p.y,
+        label: (label || 'Hotspot').slice(0, 120), description: desc.slice(0, 2000),
+        roll: roll.trim().slice(0, 60) });
+      saveHotspots();
+    }
+  });
+
+  // Grid + ambient quick-save (reuse the settings endpoints).
+  document.getElementById('me-grid').addEventListener('change', function (e) {
+    var v = parseInt(e.target.value, 10) || 70;
+    setStatus('Saving…');
+    fetch('/campaign/' + CID + '/settings/maps/' + MID + '/grid_size', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grid_size: v }),
+    }).then(function () { setStatus('Saved.'); render(); }).catch(function () { setStatus('Save failed.'); });
+  });
+  document.getElementById('me-ambient').addEventListener('change', function (e) {
+    setStatus('Saving…');
+    fetch('/campaign/' + CID + '/settings/maps/' + MID + '/ambient_light', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ambient_light: e.target.value }),
+    }).then(function () { setStatus('Saved.'); }).catch(function () { setStatus('Save failed.'); });
+  });
+
+  if (img.complete) syncOverlay(); else img.addEventListener('load', syncOverlay);
+  window.addEventListener('resize', syncOverlay);
+  render();
+})();
+</script>
+</div>
+{% endblock %}
