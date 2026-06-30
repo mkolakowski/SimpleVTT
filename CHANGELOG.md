@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.759.2] - 2026-06-29 — "The Last Pane"
+
+**Schema version:** 88
+
+**Commit summary:** Frosted-glass on the ruler + AoE-picker hints — closes the frosted-glass sweep.
+
+**Description:** Completes the "frosted-glass treatment across the whole tabletop interface" item (annotated largely-shipped in v2.759.1). A per-surface audit found the floating `.ruler-picker-hint` banner (also reused by `#aoe-picker-hint`) was the last surface without the glass recipe — every other listed surface (init cards, `.gm-panel`, the targeting chip, drawer cards, topbar) already had it. Added the translucent `color-mix(var(--bg-2) 70%)` backing + `backdrop-filter: blur(20px) saturate(170%)` (+ `-webkit-`) so the map reads through the ruler / AoE-placement hint too. All backings stay theme-coherent (`color-mix` + `var(--accent)`). The item is now closed; the only residual is an optional ops "low-detail" blur toggle for very long sessions. CSS-only.
+
+### Changed
+- `app/templates/tabletop.html` — `.ruler-picker-hint` gains the frosted-glass backing + blur.
+- `TODO.md` / `TODONE.md` — Frosted-glass item closed (moved to TODONE → Visual — shipped).
+
+### Schema
+- No schema change (still v88).
+
 ## [2.759.1] - 2026-06-29 — "The Clouded Glass"
 
 **Schema version:** 88

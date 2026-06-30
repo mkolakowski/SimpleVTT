@@ -430,7 +430,12 @@
         position: absolute; top: 24px; left: 50%; transform: translateX(-50%);
         z-index: 210;
         padding: 8px 16px;
-        background: color-mix(in srgb, var(--bg-2) 92%, transparent);
+        /* v2.759.2 — frosted-glass parity with the rest of the tabletop:
+           translucent backing + blur so the map reads through the ruler /
+           AoE-picker hint (#aoe-picker-hint reuses this class). */
+        background: color-mix(in srgb, var(--bg-2) 70%, transparent);
+        -webkit-backdrop-filter: blur(20px) saturate(170%);
+        backdrop-filter: blur(20px) saturate(170%);
         border: 1px solid var(--accent); border-radius: 999px;
         color: var(--fg); font-size: 14px; font-weight: 600;
         box-shadow: 0 4px 14px rgba(0,0,0,0.3);
