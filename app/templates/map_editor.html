@@ -369,11 +369,17 @@
     if (_meVisSrc.width !== W) _meVisSrc.width = W;
     if (_meVisSrc.height !== H) _meVisSrc.height = H;
     var sc = _meVisSrc.getContext('2d'); sc.clearRect(0, 0, W, H);
-    // …then reveal the line of sight: a full-map disk minus wall shadows.
-    var R = Math.hypot(W, H);
-    sc.fillStyle = 'rgba(0,0,0,1)';
-    sc.beginPath(); sc.arc(t.x, t.y, R, 0, Math.PI * 2); sc.fill();
-    if (solid.length) {
+    // …then reveal the line of sight: a disk (minus wall shadows). In pitch
+    // dark, sight reaches only as far as the token's darkvision (SRD); in
+    // bright/dim light it sees across the map (walls permitting).
+    var pxPerFt = (gridPx || 70) / 5;
+    var dvFt = Number(t.darkvision_ft || 0);
+    var R = (ambient === 'dark') ? dvFt * pxPerFt : Math.hypot(W, H);
+    if (R > 0) {
+      sc.fillStyle = 'rgba(0,0,0,1)';
+      sc.beginPath(); sc.arc(t.x, t.y, R, 0, Math.PI * 2); sc.fill();
+    }
+    if (R > 0 && solid.length) {
       var ext = (W + H) * 2;
       sc.globalCompositeOperation = 'destination-out';
       sc.fillStyle = 'rgba(0,0,0,1)';
@@ -391,7 +397,13 @@
     // Eye marker at the token.
     vc.strokeStyle = 'rgba(120,200,255,0.95)'; vc.lineWidth = 3;
     vc.beginPath(); vc.arc(t.x, t.y, Math.max(9, (gridPx || 70) / 2 * 0.55), 0, Math.PI * 2); vc.stroke();
+    if (ambient === 'dark') {  // surface the darkvision reach in the dark
+      vc.fillStyle = 'rgba(150,210,255,0.97)';
+      vc.font = 'bold ' + Math.max(12, Math.round((gridPx || 70) * 0.22)) + 'px sans-serif';
+      vc.fillText('👁 ' + (dvFt ? dvFt + ' ft darkvision' : 'blind in the dark'), t.x + 12, t.y - 12);
+    }
     window.__meVisionActive = true;
+    window.__meVisionDark = (ambient === 'dark') ? dvFt : null;  // harness hook
     window.__meVisionCanvas = cv;
   }
   function selectToken(t) {
@@ -641,12 +653,23 @@
     });
     g.addEventListener('contextmenu', function (e) {
       e.preventDefault(); e.stopPropagation();
+      var cur = Number(t.darkvision_ft || 0);
+      var dvItems = [0, 60, 120].map(function (ft) {
+        return { label: (cur === ft ? '✓ ' : '  ') + '🌑 Darkvision: '
+                   + (ft ? ft + ' ft' : 'None'),
+                 fn: function () { setDarkvision(t, ft); } };
+      });
+      dvItems.push({ label: '  🌑 Darkvision: Custom…', fn: function () {
+        var v = window.prompt('Darkvision range in the dark (ft, 0 = none):', cur);
+        if (v === null) return; setDarkvision(t, Math.max(0, parseFloat(v) || 0));
+      } });
       showMenu(e.clientX, e.clientY, [
         { label: (selectedTokenId === t.id ? '🙈 Hide line of sight' : '👁 Show line of sight'),
           fn: function () { selectToken(t); } },
+      ].concat(dvItems).concat([
         { label: '🎭 ' + t.label + ' — 🗑 Remove', fn: function () { removeToken(t); } },
         { label: '🧹 Clear all sample tokens', fn: function () { sampleTokens = []; selectedTokenId = null; render(); } },
-      ]);
+      ]));
     });
     return g;
   }
@@ -654,6 +677,13 @@
     if (selectedTokenId === t.id) selectedTokenId = null;
     sampleTokens = sampleTokens.filter(function (x) { return x.id !== t.id; });
     render();
+  }
+  // v2.782.0 — set a token's darkvision range; refresh its sight if selected.
+  function setDarkvision(t, ft) {
+    t.darkvision_ft = Math.max(0, ft || 0);
+    setStatus(t.label + ' darkvision: ' + (t.darkvision_ft ? t.darkvision_ft + ' ft' : 'none')
+      + ' (matters in the dark).');
+    if (selectedTokenId === t.id) drawTokenVision();
   }
   async function saveWalls() {
     setStatus('Saving…');
@@ -846,7 +876,8 @@
     var g = gridPx || 70;
     var col = (n - 1) % 3, row = Math.floor((n - 1) / 3) % 3;
     var s = snapTokenToGrid({ x: p.x + col * g, y: p.y + row * g });
-    sampleTokens.push({ id: 'st' + (seq++), x: s.x, y: s.y, label: 'T' + n });
+    // darkvision_ft default 60 — the most common SRD range; right-click to change.
+    sampleTokens.push({ id: 'st' + (seq++), x: s.x, y: s.y, label: 'T' + n, darkvision_ft: 60 });
     setStatus('Sample token placed — drag it to test the map (preview only, not saved).');
     render();
   });

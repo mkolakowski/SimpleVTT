@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.782.0] - 2026-06-30 — "The Darkvision Dial"
+
+**Schema version:** 91
+
+**Commit summary:** Token right-click sets darkvision range (SRD none/60/120 ft + custom); the dark-ambient line-of-sight preview honours it.
+
+**Description:** A sample token's right-click menu now lets you set its **darkvision range** — SRD presets **None / 60 ft / 120 ft** plus **Custom…** (the current value is check-marked). It feeds the token-perspective preview: on a **dark** map, the token's line of sight now reaches only as far as its darkvision (a creature with no darkvision is blind in the dark; 60 ft sees a 60-ft bubble, etc.), still clipped by walls. In **bright/dim** light it sees across the map as before. The overlay labels the reach (e.g. *"👁 60 ft darkvision"* or *"blind in the dark"*). New tokens default to 60 ft (the most common SRD range).
+
+### Added
+- `app/templates/map_editor.html` — `darkvision_ft` on sample tokens (default 60), darkvision presets + Custom in the token right-click menu, `setDarkvision()`, dark-ambient sight clamped to the darkvision radius in `drawTokenVision()` with a reach label, `window.__meVisionDark` harness hook.
+- `tests/harness_ui/test_map_editor_tokens.py` (+1) — on a dark map, Darkvision None blinds the token (own square veiled) while 60 ft reveals it.
+
+### Schema
+- No schema change (still v91; darkvision is a client-only property of the ephemeral sample tokens).
+
 ## [2.781.1] - 2026-06-30 — "The Steady Right-Click"
 
 **Schema version:** 91

@@ -113,6 +113,52 @@ def test_token_perspective_occludes_behind_wall(gm_page: Page) -> None:
             c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
 
 
+def test_token_darkvision_limits_dark_sight(gm_page: Page) -> None:
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
+        c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
+        c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
+        c.post(f"/campaign/{CAMPAIGN_ID}/settings/maps/{mid}/ambient_light",
+               json={"ambient_light": "dark"})
+        try:
+            gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
+            expect(gm_page.locator("#me-overlay")).to_be_visible()
+            gm_page.wait_for_timeout(400)
+            gm_page.locator("#me-token-btn").click()
+            tok = gm_page.locator(".me-token").first
+            box = tok.bounding_box()
+            cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+            gm_page.mouse.click(cx, cy)  # show line of sight
+
+            def eye_alpha():
+                return gm_page.evaluate("""() => {
+                    const t = window.__meTokens[0];
+                    const g = window.__meVisionCanvas.getContext('2d');
+                    return { dark: window.__meVisionDark,
+                             eye: g.getImageData(t.x, t.y, 1, 1).data[3] };
+                }""")
+
+            # Darkvision: None → blind in the dark; the token's own square is veiled.
+            gm_page.mouse.click(cx, cy, button="right")
+            gm_page.locator("#me-ctx-menu button", has_text="None").click()
+            gm_page.wait_for_timeout(150)
+            r0 = eye_alpha()
+            assert r0["dark"] == 0, r0
+            assert r0["eye"] > 150, r0
+
+            # Darkvision: 60 ft → it can now see (a lit bubble at its position).
+            gm_page.mouse.click(cx, cy, button="right")
+            gm_page.locator("#me-ctx-menu button", has_text="60 ft").click()
+            gm_page.wait_for_timeout(150)
+            r60 = eye_alpha()
+            assert r60["dark"] == 60, r60
+            assert r60["eye"] < 40, r60
+        finally:
+            c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lights", json={"lights": []})
+            c.post(f"/campaign/{CAMPAIGN_ID}/settings/maps/{mid}/ambient_light",
+                   json={"ambient_light": "bright"})
+
+
 def test_token_right_click_remove(gm_page: Page) -> None:
     _open_editor(gm_page)
     gm_page.locator("#me-token-btn").click()
