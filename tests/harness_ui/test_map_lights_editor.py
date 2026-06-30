@@ -1,7 +1,9 @@
 """v2.765.0 — placing a light source in the map editor.
 
-Enters light mode, clicks the map (answering the bright/dim prompts), and
-asserts a light persists server-side with the chosen radii + a ring renders.
+Enters light mode, picks the "Custom…" light type, clicks the map (answering
+the bright/dim prompts), and asserts a light persists server-side with the
+chosen radii + a ring renders. (Preset types are covered by
+``test_map_light_types.py``.)
 """
 from __future__ import annotations
 
@@ -26,6 +28,7 @@ def test_editor_places_light(gm_page: Page) -> None:
             overlay = gm_page.locator("#me-overlay")
             expect(overlay).to_be_visible()
             gm_page.locator("#me-light-btn").click()
+            gm_page.select_option("#me-light-type", "custom")  # prompt path
             box = overlay.bounding_box()
             gm_page.mouse.click(box["x"] + 120, box["y"] + 120)
             gm_page.wait_for_timeout(400)

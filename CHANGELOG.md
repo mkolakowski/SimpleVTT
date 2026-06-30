@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.778.0] - 2026-06-30 — "The Torchbearer's Kit"
+
+**Schema version:** 91
+
+**Commit summary:** Light-source presets (candle/torch/lamp/lantern/bullseye/light/daylight) for placing + re-typing lights in the map editor.
+
+**Description:** Placing lights is no longer a bare radius prompt. The editor's 💡 Lights tool gets a **light-type select** with SRD-aligned presets — 🕯 Candle (5/5), 🔥 Torch (20/20), 💡 Lamp (15/45), 🏮 Hooded lantern (30/30), 🔦 Bullseye (60/60), ✨ Light cantrip (20/20), ☀ Daylight (60/60), plus **Custom…** (the old bright/dim prompt). Clicking the map drops a light of the chosen type (its bright/dim radii + warm/white tint). A placed light's **right-click menu** lists every preset so you can re-type it in one click (or pick *Custom range…*), and the map label shows the type. The preset key is stored as an optional `type` tag on the light (cosmetic) and surfaced in the right-click menu.
+
+### Added
+- `app/templates/map_editor.html` — `LIGHT_TYPES` presets, `#me-light-type` toolbar select driving placement, `applyLightType()` + preset entries in the light right-click menu, type shown on the light label. Context menu now clamps on-screen (it got taller).
+- `tests/harness_ui/test_map_light_types.py` (new, +2) — placing a daylight preset persists 60/60 + `type`; right-click → Daylight re-types a candle.
+- `tests/harness/test_map_lights.py` (+1) — the `type` tag round-trips through PUT/GET.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `_sanitize_lights` preserves an optional `type` tag.
+- `tests/harness_ui/test_map_lights_editor.py` — exercises the Custom… prompt path.
+
+### Schema
+- No schema change (still v91; `type` is an additive field in the existing `lights` JSON).
+
 ## [2.777.0] - 2026-06-30 — "The Practice Pawn"
 
 **Schema version:** 91

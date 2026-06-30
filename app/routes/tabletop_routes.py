@@ -124226,7 +124226,11 @@ async def set_map_hotspots(
 def _sanitize_lights(raw) -> list:
     """v2.765.0 — coerce a client light list into the stored shape: a list of
     ``{id, x, y, bright_ft, dim_ft, color}`` in map-pixel coords. Drops
-    anything without numeric x/y; clamps radii to >= 0."""
+    anything without numeric x/y; clamps radii to >= 0.
+
+    v2.778.0 — also preserves an optional ``type`` tag (the light-source
+    preset key, e.g. ``torch`` / ``daylight``) for the editor's right-click
+    menu; purely cosmetic, defaults to empty."""
     out = []
     if not isinstance(raw, list):
         return out
@@ -124248,6 +124252,7 @@ def _sanitize_lights(raw) -> list:
             "bright_ft": _ft("bright_ft"),
             "dim_ft": _ft("dim_ft"),
             "color": str(h.get("color") or "").strip()[:16],
+            "type": str(h.get("type") or "").strip()[:20],
         })
     return out
 

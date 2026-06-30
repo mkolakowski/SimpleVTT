@@ -44,7 +44,19 @@
   <button type="button" id="me-spot-btn" class="me-tool-btn" aria-pressed="false"
           title="Click the map to place a description hotspot; click a hotspot to delete">📍 Hotspots</button>
   <button type="button" id="me-light-btn" class="me-tool-btn" aria-pressed="false"
-          title="Click the map to place a light source (set its bright/dim range in ft); click a light to delete">💡 Lights</button>
+          title="Click the map to place a light source of the chosen type; click a light to delete">💡 Lights</button>
+  <label style="gap:3px;" title="Light type for new lights (right-click a light to change it)">
+    <select id="me-light-type" style="min-height:32px;font-size:12px;">
+      <option value="candle">🕯 Candle 5/5</option>
+      <option value="torch" selected>🔥 Torch 20/20</option>
+      <option value="lamp">💡 Lamp 15/45</option>
+      <option value="lantern">🏮 Hooded lantern 30/30</option>
+      <option value="bullseye">🔦 Bullseye 60/60</option>
+      <option value="light">✨ Light cantrip 20/20</option>
+      <option value="daylight">☀ Daylight 60/60</option>
+      <option value="custom">Custom…</option>
+    </select>
+  </label>
   <button type="button" id="me-fog-btn" class="me-tool-btn" aria-pressed="false"
           title="Fog of war: drag to reveal an area; click a revealed area to re-hide it">🌫 Fog</button>
   <label id="me-fog-on-lbl" style="display:none;"><input type="checkbox" id="me-fog-on-cb"> fog on</label>
@@ -111,6 +123,21 @@
     cave:  { color: '#6f6658', casing: '#241f18', width: 9 },
   };
   function wallStyle(w) { return WALL_STYLES[w && w.style] || WALL_STYLES.stone; }
+  // v2.778.0 — light-source presets (SRD radii + a warm/white tint). Used for
+  // placement (the toolbar select) + the light right-click menu.
+  var LIGHT_TYPES = [
+    { key: 'candle',   label: '🕯 Candle',          bright: 5,  dim: 5,  color: '#ffcf8a' },
+    { key: 'torch',    label: '🔥 Torch',           bright: 20, dim: 20, color: '#ffb347' },
+    { key: 'lamp',     label: '💡 Lamp',            bright: 15, dim: 45, color: '#ffd27f' },
+    { key: 'lantern',  label: '🏮 Hooded lantern',  bright: 30, dim: 30, color: '#ffd27f' },
+    { key: 'bullseye', label: '🔦 Bullseye lantern', bright: 60, dim: 60, color: '#fff0c2' },
+    { key: 'light',    label: '✨ Light cantrip',   bright: 20, dim: 20, color: '#fff4cc' },
+    { key: 'daylight', label: '☀ Daylight',         bright: 60, dim: 60, color: '#ffffff' },
+  ];
+  function lightType(key) {
+    for (var i = 0; i < LIGHT_TYPES.length; i++) if (LIGHT_TYPES[i].key === key) return LIGHT_TYPES[i];
+    return null;
+  }
   var fogDrag = null;
   var eraseMode = false;       // v2.770.0 — click an object to delete
   var relocating = null;       // {kind, obj} — being repositioned (drag)
@@ -138,6 +165,15 @@
       menu.appendChild(b);
     });
     document.body.appendChild(menu);
+    // v2.778.0 — keep the (now taller) menu on-screen: flip up / left when it
+    // would overflow the viewport.
+    var mh = menu.offsetHeight, mw = menu.offsetWidth;
+    if (clientY + mh > window.innerHeight) {
+      menu.style.top = Math.max(4, window.innerHeight - mh - 4) + 'px';
+    }
+    if (clientX + mw > window.innerWidth) {
+      menu.style.left = Math.max(4, window.innerWidth - mw - 4) + 'px';
+    }
   }
   document.addEventListener('click', hideMenu);
   document.addEventListener('contextmenu', function (e) {
@@ -391,7 +427,8 @@
       lbl.setAttribute('x', L.x + 6); lbl.setAttribute('y', L.y - 6);
       lbl.setAttribute('fill', col); lbl.setAttribute('font-size', '13');
       lbl.setAttribute('font-weight', '700'); lbl.style.pointerEvents = 'none';
-      lbl.textContent = (L.bright_ft || 0) + '/' + (L.dim_ft || 0) + ' ft';
+      var lt = lightType(L.type);
+      lbl.textContent = (lt ? lt.label + ' · ' : '') + (L.bright_ft || 0) + '/' + (L.dim_ft || 0) + ' ft';
       svg.appendChild(lbl);
       var dot = document.createElementNS(NS, 'circle');
       dot.setAttribute('cx', L.x); dot.setAttribute('cy', L.y); dot.setAttribute('r', '8');
@@ -403,12 +440,17 @@
       });
       dot.addEventListener('contextmenu', function (e) {
         e.preventDefault(); e.stopPropagation();
+        var typeItems = LIGHT_TYPES.map(function (t) {
+          return { label: t.label + ' (' + t.bright + '/' + t.dim + ')',
+                   fn: function () { applyLightType(L, t); } };
+        });
         showMenu(e.clientX, e.clientY, [
           { label: '💡 Light — ↔ Move', fn: function () { startMove('light', L); } },
-          { label: '✎ Edit (range)', fn: function () { editLight(L); } },
+          { label: '✎ Custom range…', fn: function () { editLight(L); } },
+        ].concat(typeItems).concat([
           { label: '📋 Copy', fn: function () { copyObj('light', L); } },
           { label: '🗑 Delete', fn: function () { deleteLight(L); } },
-        ]);
+        ]));
       });
       svg.appendChild(dot);
     });
@@ -606,7 +648,8 @@
       saveHotspots();
     } else if (clipboard.kind === 'light') {
       lights.push({ id: newId('l'), x: p.x, y: p.y,
-        bright_ft: d.bright_ft || 0, dim_ft: d.dim_ft || 0, color: d.color || '#ffd27f' });
+        bright_ft: d.bright_ft || 0, dim_ft: d.dim_ft || 0,
+        color: d.color || '#ffd27f', type: d.type || '' });
       saveLights();
     }
   }
@@ -636,6 +679,12 @@
     if (d === null) return;
     L.bright_ft = Math.max(0, parseFloat(b) || 0);
     L.dim_ft = Math.max(0, parseFloat(d) || 0);
+    L.type = 'custom';
+    saveLights();
+  }
+  // v2.778.0 — set a placed light to a preset type from the right-click menu.
+  function applyLightType(L, t) {
+    L.bright_ft = t.bright; L.dim_ft = t.dim; L.color = t.color; L.type = t.key;
     saveLights();
   }
 
@@ -792,12 +841,19 @@
         roll: roll.trim().slice(0, 60) });
       saveHotspots();
     } else if (lightMode) {
-      var bright = window.prompt('Bright light radius (ft):', '20');
-      if (bright === null) return;
-      var dim = window.prompt('Dim light radius (ft, ≥ bright):', '40') || '0';
-      lights.push({ id: 'l' + Date.now() + '_' + (seq++), x: p.x, y: p.y,
-        bright_ft: Math.max(0, parseFloat(bright) || 0),
-        dim_ft: Math.max(0, parseFloat(dim) || 0), color: '#ffd27f' });
+      var sel = (document.getElementById('me-light-type') || {}).value || 'torch';
+      if (sel === 'custom') {
+        var bright = window.prompt('Bright light radius (ft):', '20');
+        if (bright === null) return;
+        var dim = window.prompt('Dim light radius (ft, ≥ bright):', '40') || '0';
+        lights.push({ id: 'l' + Date.now() + '_' + (seq++), x: p.x, y: p.y,
+          bright_ft: Math.max(0, parseFloat(bright) || 0),
+          dim_ft: Math.max(0, parseFloat(dim) || 0), color: '#ffd27f', type: 'custom' });
+      } else {
+        var t = lightType(sel) || lightType('torch');
+        lights.push({ id: 'l' + Date.now() + '_' + (seq++), x: p.x, y: p.y,
+          bright_ft: t.bright, dim_ft: t.dim, color: t.color, type: t.key });
+      }
       saveLights();
     }
   });

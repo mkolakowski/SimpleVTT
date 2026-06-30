@@ -58,6 +58,25 @@ async def test_negative_radius_clamped(gm_client):
             f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lights", json={"lights": []})
 
 
+async def test_light_type_round_trips(gm_client):
+    # v2.778.0 — the optional light-source preset tag persists.
+    mid = await _active_map_id(gm_client)
+    try:
+        r = await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lights",
+            json={"lights": [
+                {"x": 10, "y": 10, "bright_ft": 60, "dim_ft": 60,
+                 "color": "#ffffff", "type": "daylight"},
+                {"x": 20, "y": 20, "bright_ft": 20, "dim_ft": 20},  # no type
+            ]})
+        ls = r.json()["lights"]
+        assert ls[0]["type"] == "daylight", ls
+        assert ls[1]["type"] == "", ls  # absent → empty string
+    finally:
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lights", json={"lights": []})
+
+
 async def test_set_lights_requires_gm(gm_client, alice_client):
     mid = await _active_map_id(gm_client)
     assert (await alice_client.get(
