@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.784.1] - 2026-06-30 — "The Living Flame"
+
+**Schema version:** 91
+
+**Commit summary:** Light markers render a per-type flickering glow, with a larger right-click target that matches the effect.
+
+**Description:** Each light type now shows a distinct **flickering glow** on the editor map — a soft, blurred, type-coloured halo whose brightness animates per a per-type profile: 🕯 candle jitters fast and hard, 🔥 torch flickers, 💡 lamp / 🏮 hooded lantern breathe gently, 🔦 bullseye is near-steady, ✨ light cantrip pulses magically, and ☀ daylight glows steady and bright. The marker's **right-click hit target is now larger** (≥24 px / scaled to the grid) and sits over the glowing core, so the clickable area matches the visible effect. Re-typing a light from its right-click menu swaps the flicker to the new type.
+
+### Added
+- `app/templates/map_editor.html` — `LIGHT_FX` per-type flicker table + `lightFx()`; light marker rebuilt as a blurred animated glow (SMIL opacity) + solid core + larger transparent `me-light` hit circle; shared `me-glowblur` SVG filter.
+- `tests/harness_ui/test_map_light_types.py` (+1) — the marker's hit radius is ≥24 and its flicker `dur` matches the type (torch 0.7s → candle 0.45s after re-typing).
+
+### Schema
+- No schema change (still v91).
+
 ## [2.784.0] - 2026-06-30 — "The Measured Glow"
 
 **Schema version:** 91

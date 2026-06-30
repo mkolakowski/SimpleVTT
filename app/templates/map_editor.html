@@ -183,6 +183,18 @@
     for (var i = 0; i < LIGHT_TYPES.length; i++) if (LIGHT_TYPES[i].key === key) return LIGHT_TYPES[i];
     return null;
   }
+  // v2.784.1 — per-type glow flicker (SMIL opacity animation on the marker's
+  // soft glow): flame sources jitter, magical/steady sources breathe slowly.
+  var LIGHT_FX = {
+    candle:   { dur: 0.45, op: '0.30;0.78;0.24;0.66;0.34;0.72;0.30', glow: 22 },
+    torch:    { dur: 0.7,  op: '0.45;0.88;0.40;0.72;0.50;0.84;0.45', glow: 28 },
+    lamp:     { dur: 2.2,  op: '0.58;0.74;0.60;0.70;0.58',           glow: 24 },
+    lantern:  { dur: 2.8,  op: '0.60;0.72;0.62;0.70;0.60',           glow: 26 },
+    bullseye: { dur: 4.5,  op: '0.70;0.80;0.72;0.78;0.70',           glow: 22 },
+    light:    { dur: 2.4,  op: '0.50;0.92;0.55;0.88;0.50',           glow: 30 },
+    daylight: { dur: 6,    op: '0.85;0.95;0.86;0.93;0.85',           glow: 36 },
+  };
+  function lightFx(key) { return LIGHT_FX[key] || LIGHT_FX.torch; }
   var fogDrag = null;
   var eraseMode = false;       // v2.770.0 — click an object to delete
   var relocating = null;       // {kind, obj} — being repositioned (drag)
@@ -537,6 +549,16 @@
       });
       svg.appendChild(mk);
     });
+    // v2.784.1 — shared soft-glow blur filter for light markers.
+    if (lights.length) {
+      var ldefs = document.createElementNS(NS, 'defs');
+      var filt = document.createElementNS(NS, 'filter');
+      filt.setAttribute('id', 'me-glowblur');
+      filt.setAttribute('x', '-60%'); filt.setAttribute('y', '-60%');
+      filt.setAttribute('width', '220%'); filt.setAttribute('height', '220%');
+      var fb = document.createElementNS(NS, 'feGaussianBlur'); fb.setAttribute('stdDeviation', '5');
+      filt.appendChild(fb); ldefs.appendChild(filt); svg.appendChild(ldefs);
+    }
     // v2.765.0 — light sources: bright + dim radius rings (in ft → px) + a
     // range label; click the center to delete (in light-edit mode).
     lights.forEach(function (L) {
@@ -561,15 +583,35 @@
       var lt = lightType(L.type);
       lbl.textContent = (lt ? lt.label + ' · ' : '') + (L.bright_ft || 0) + '/' + (L.dim_ft || 0) + ' ft';
       svg.appendChild(lbl);
-      var dot = document.createElementNS(NS, 'circle');
-      dot.setAttribute('cx', L.x); dot.setAttribute('cy', L.y); dot.setAttribute('r', '8');
-      dot.setAttribute('fill', col); dot.classList.add('me-light');
-      dot.style.pointerEvents = relocating ? 'none' : 'all'; dot.style.cursor = 'pointer';
-      dot.addEventListener('click', function (e) {
+      // v2.784.1 — marker: a soft glow that flickers per the light type + a
+      // solid core, with a larger transparent hit target for right-click.
+      var fx = lightFx(L.type);
+      var glowR = Math.max(fx.glow, (gridPx || 70) * 0.32);
+      var hitR = Math.max(24, (gridPx || 70) * 0.42);
+      var g = document.createElementNS(NS, 'g');
+      var glow = document.createElementNS(NS, 'circle');
+      glow.setAttribute('cx', L.x); glow.setAttribute('cy', L.y); glow.setAttribute('r', glowR);
+      glow.setAttribute('fill', col); glow.setAttribute('filter', 'url(#me-glowblur)');
+      glow.setAttribute('opacity', '0.6'); glow.style.pointerEvents = 'none';
+      var an = document.createElementNS(NS, 'animate');
+      an.setAttribute('attributeName', 'opacity'); an.setAttribute('values', fx.op);
+      an.setAttribute('dur', fx.dur + 's'); an.setAttribute('repeatCount', 'indefinite');
+      glow.appendChild(an);
+      g.appendChild(glow);
+      var core = document.createElementNS(NS, 'circle');
+      core.setAttribute('cx', L.x); core.setAttribute('cy', L.y); core.setAttribute('r', '9');
+      core.setAttribute('fill', col); core.setAttribute('stroke', '#fff'); core.setAttribute('stroke-width', '2');
+      core.style.pointerEvents = 'none';
+      g.appendChild(core);
+      var hit = document.createElementNS(NS, 'circle');
+      hit.setAttribute('cx', L.x); hit.setAttribute('cy', L.y); hit.setAttribute('r', hitR);
+      hit.setAttribute('fill', 'transparent'); hit.classList.add('me-light');
+      hit.style.pointerEvents = relocating ? 'none' : 'all'; hit.style.cursor = 'pointer';
+      hit.addEventListener('click', function (e) {
         e.stopPropagation();
         if (eraseMode) deleteLight(L);
       });
-      dot.addEventListener('contextmenu', function (e) {
+      hit.addEventListener('contextmenu', function (e) {
         e.preventDefault(); e.stopPropagation();
         var typeItems = LIGHT_TYPES.map(function (t) {
           return { label: t.label + ' (' + t.bright + '/' + t.dim + ')',
@@ -583,7 +625,8 @@
           { label: '🗑 Delete', fn: function () { deleteLight(L); } },
         ]));
       });
-      svg.appendChild(dot);
+      g.appendChild(hit);
+      svg.appendChild(g);
     });
     // v2.766.0 — fog-of-war editor preview: a faint dark veil over the whole
     // map with the revealed rectangles cut out (lighter); click a reveal (in
