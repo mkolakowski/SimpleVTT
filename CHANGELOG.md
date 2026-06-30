@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.785.0] - 2026-06-30 — "The Way Back"
+
+**Schema version:** 91
+
+**Commit summary:** After a session expires, re-login returns you to the exact page you were on — across all login methods.
+
+**Description:** If your sign-in runs out and you refresh (e.g. while editing a specific map), you now land back on **that page** after logging in, not the home screen. The 401 bounce already round-tripped `?next=` through the password form; this also **stashes the destination in the session**, so the passwordless paths that previously dropped it — the **demo magic-link** (`/demo-login`) and **Google SSO** callback — return you to the original URL too. Targets are scrubbed to same-origin paths (no open-redirect).
+
+### Added
+- `app/auth.py` — `safe_next_path()` + `pop_login_next()` helpers (session-stashed, scrubbed destination).
+- `tests/harness/test_relogin_redirect.py` (new, +4) — the bounce carries `next`; re-login follows the session-stashed destination; the form `next` is honoured; an external `next` is scrubbed to `/`.
+
+### Changed
+- `app/main.py` — the 401 browser-bounce stashes `login_next` in the session.
+- `app/routes/auth_routes.py` — GET `/login` stashes the safe `next`; password login falls back to the session destination; Google SSO callback returns to it.
+- `app/routes/demo_magic_link_routes.py` — `/demo-login` returns to the session destination.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.784.3] - 2026-06-30 — "The Two-Up Bench"
 
 **Schema version:** 91

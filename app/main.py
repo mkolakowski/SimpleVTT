@@ -251,6 +251,13 @@ async def _auth_redirect_handler(request: Request, exc: StarletteHTTPException):
         next_path = request.url.path
         if request.url.query:
             next_path += "?" + request.url.query
+        # v2.785.0 — also stash the destination in the session so login
+        # methods that don't round-trip the form ``next`` (demo magic-link,
+        # Google SSO) can still return the user to where they were.
+        try:
+            request.session["login_next"] = next_path
+        except (AttributeError, AssertionError):
+            pass
         return RedirectResponse(
             f"/login?next={next_path}", status_code=303,
         )

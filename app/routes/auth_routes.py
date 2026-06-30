@@ -17,6 +17,7 @@ from ..auth import (
     login_user,
     logout_user,
     oauth,
+    pop_login_next,
 )
 from ..config import get_settings
 from ..database import get_db
@@ -52,6 +53,14 @@ def login_page(
     next: Optional[str] = None,
 ):
     settings = get_settings()
+    safe_next = _safe_next_path(next)
+    # v2.785.0 — also stash in the session so passwordless paths (demo
+    # magic-link, Google SSO) can return to the same destination.
+    if safe_next and safe_next != "/":
+        try:
+            request.session["login_next"] = safe_next
+        except (AttributeError, AssertionError):
+            pass
     return templates.TemplateResponse(
         "login.html",
         {
@@ -61,7 +70,7 @@ def login_page(
             "google_enabled": settings.google_sso.enabled and bool(settings.google_sso.client_id),
             # v2.3.28: round-trip the safe-validated ``next`` so the form
             # carries it through to the POST handler.
-            "next_path": _safe_next_path(next),
+            "next_path": safe_next,
         },
     )
 
@@ -100,7 +109,15 @@ def login_submit(
         db.commit()
     login_user(request, user, db)
     audit("auth.login_ok", request=request, user_id=user.id)
-    return RedirectResponse(_safe_next_path(next), status_code=303)
+    # Prefer the form ``next``; fall back to the session-stashed one. Clear it.
+    dest = _safe_next_path(next)
+    try:
+        stashed = request.session.pop("login_next", None)
+    except (AttributeError, AssertionError):
+        stashed = None
+    if dest == "/" and stashed:
+        dest = _safe_next_path(stashed)
+    return RedirectResponse(dest, status_code=303)
 
 
 @router.get("/register", response_class=HTMLResponse)
@@ -205,4 +222,6 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
     if user.is_disabled:
         return RedirectResponse("/login?error=disabled", status_code=303)
     login_user(request, user, db)
-    return RedirectResponse("/", status_code=303)
+    # v2.785.0 — return to where the session expired (stashed on the 401
+    # bounce / GET /login), else home.
+    return RedirectResponse(pop_login_next(request), status_code=303)

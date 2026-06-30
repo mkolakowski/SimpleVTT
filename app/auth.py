@@ -143,3 +143,31 @@ def require_gm(
     if not (user.is_gm or user.is_admin):
         raise HTTPException(status_code=403, detail="GM access required")
     return user
+
+
+def safe_next_path(raw: Optional[str]) -> str:
+    """v2.785.0 — scrub a post-login redirect target to a same-origin path
+    (no scheme, no protocol-relative ``//``). Falls back to ``/``. Shared by
+    the login form, the 401 bounce, and the magic-link / SSO callbacks so
+    every login method can return the user to where they were."""
+    if not raw or not isinstance(raw, str):
+        return "/"
+    c = raw.strip()
+    if not c.startswith("/") or c.startswith("//"):
+        return "/"
+    parts = c.split("/", 2)
+    if len(parts) > 1 and ":" in parts[1]:
+        return "/"
+    return c
+
+
+def pop_login_next(request: Request) -> str:
+    """v2.785.0 — consume the session-stashed post-login destination (set on
+    the 401 bounce / GET ``/login``), returning a safe same-origin path and
+    clearing it. Used by login paths that don't carry ``next`` themselves
+    (demo magic-link, Google SSO)."""
+    try:
+        raw = request.session.pop("login_next", None)
+    except (AttributeError, AssertionError):
+        raw = None
+    return safe_next_path(raw)

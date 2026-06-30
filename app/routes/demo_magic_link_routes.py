@@ -35,7 +35,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..audit_log import audit
-from ..auth import login_user
+from ..auth import login_user, pop_login_next
 from ..database import get_db
 from ..demo_magic_link import magic_link_enabled, verify_token
 from ..demo_seed import DEMO_EMAILS
@@ -146,4 +146,6 @@ def demo_login(
         jti=result.jti,
         user_id=user.id,
     )
-    return RedirectResponse("/", status_code=303)
+    # v2.785.0 — return to where the session expired (stashed on the 401
+    # bounce / GET /login), else home.
+    return RedirectResponse(pop_login_next(request), status_code=303)
