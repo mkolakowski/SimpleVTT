@@ -5281,6 +5281,11 @@
                 if (msg.data && typeof window._onWallsUpdate === 'function') {
                     try { window._onWallsUpdate(msg.data); } catch (_) {}
                 }
+            } else if (msg.type === 'hotspots_update') {
+                // v2.756.0 — Maps 2.0: re-render clickable hotspots.
+                if (msg.data && typeof window._onHotspotsUpdate === 'function') {
+                    try { window._onHotspotsUpdate(msg.data); } catch (_) {}
+                }
             } else if (msg.type === 'character_death_save') {
                 _onCharacterDeathSave(msg.data);
             } else if (msg.type === 'character_roll_state') {

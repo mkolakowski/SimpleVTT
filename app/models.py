@@ -380,6 +380,12 @@ class Map(Base):
     # wall segments with ``door: true`` whose ``open`` state can toggle. The
     # vision engine will treat a closed segment as a sight-blocker (follow-up).
     walls: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
+    # v2.756.0 — Maps 2.0 clickable hotspots. A JSON list of GM-placed map
+    # markers, each ``{"id": str, "x": float, "y": float, "label": str,
+    # "description": str}`` in map-image pixel coords. Clicking a hotspot on
+    # the tabletop opens a description popup (any player); the GM places +
+    # edits them in the wall/hotspot editor.
+    hotspots: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     folder: Mapped[Optional[str]] = mapped_column(String(120), nullable=True, default="", server_default="")
     thumbnail_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

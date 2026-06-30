@@ -124054,6 +124054,7 @@ def get_active_map(
         "grid_size_px": m.grid_size_px,
         "ambient_light": m.ambient_light,
         "walls": list(m.walls or []),
+        "hotspots": list(getattr(m, "hotspots", None) or []),
     }
 
 
@@ -124104,6 +124105,76 @@ async def set_map_walls(
         "data": {"map_id": m.id, "walls": walls},
     })
     return {"ok": True, "map_id": m.id, "walls": walls}
+
+
+def _sanitize_hotspots(raw) -> list:
+    """v2.756.0 — coerce a client hotspot list into the stored shape: a list
+    of ``{id, x, y, label, description}`` in map-pixel coords. Drops anything
+    without numeric x/y."""
+    out = []
+    if not isinstance(raw, list):
+        return out
+    for i, h in enumerate(raw):
+        if not isinstance(h, dict):
+            continue
+        try:
+            x = float(h.get("x")); y = float(h.get("y"))
+        except (TypeError, ValueError):
+            continue
+        out.append({
+            "id": (str(h.get("id") or "").strip()[:40] or f"h{i}"),
+            "x": x, "y": y,
+            "label": str(h.get("label") or "").strip()[:120],
+            "description": str(h.get("description") or "").strip()[:2000],
+        })
+    return out
+
+
+@router.get("/api/campaign/{campaign_id}/map/{map_id}/hotspots")
+def get_map_hotspots(
+    campaign_id: int,
+    map_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.756.0 — Maps 2.0: read a map's clickable hotspots (any member)."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    m = db.query(Map).filter(
+        Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404, "Map not found")
+    return {"ok": True, "map_id": m.id,
+            "hotspots": list(getattr(m, "hotspots", None) or [])}
+
+
+@router.put("/api/campaign/{campaign_id}/map/{map_id}/hotspots")
+async def set_map_hotspots(
+    campaign_id: int,
+    map_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.756.0 — Maps 2.0: replace a map's clickable hotspots (GM-only).
+    Broadcasts ``hotspots_update``. Body: ``{hotspots: [{x,y,label,description}]}``."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(
+        Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404, "Map not found")
+    body = await request.json()
+    hotspots = _sanitize_hotspots(body.get("hotspots"))
+    m.hotspots = hotspots
+    db.commit()
+    await hub.broadcast(campaign_id, {
+        "type": "hotspots_update",
+        "data": {"map_id": m.id, "hotspots": hotspots},
+    })
+    return {"ok": True, "map_id": m.id, "hotspots": hotspots}
 
 
 @router.post("/api/campaign/{campaign_id}/map/{map_id}/door/{door_id}/toggle")

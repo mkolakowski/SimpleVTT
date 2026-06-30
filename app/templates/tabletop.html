@@ -2265,6 +2265,17 @@
         <label id="wall-door-toggle" style="display:none;align-items:center;gap:4px;font-size:12px;color:var(--fg-mute);">
             <input type="checkbox" id="wall-door-cb"> door
         </label>
+        {# v2.756.0 — GM-only clickable-hotspot editor toggle. Click empty map
+           to place a marker (prompts for label + description); click a marker
+           to delete. Players click markers to read the description popup. #}
+        <button type="button"
+                id="hotspot-edit-btn"
+                class="canvas-tool-btn"
+                aria-pressed="false"
+                title="Hotspot editor: click the map to place a description marker"
+                {% if not active_map %}aria-disabled="true" disabled{% endif %}>
+            📍 Spots
+        </button>
         {% endif %}
     </div>
     <div class="drawer-tab-bar">
@@ -2406,6 +2417,7 @@
         if (!svg) return;
         var NS = 'http://www.w3.org/2000/svg';
         var mapId = null, walls = [], editMode = false, pending = null, seq = 0;
+        var hotspots = [], spotMode = false;  // v2.756.0 — clickable hotspots
 
         function mkLine(w, hit) {
             var ln = document.createElementNS(NS, 'line');
@@ -2457,6 +2469,30 @@
                 c.style.pointerEvents = 'none';
                 svg.appendChild(c);
             }
+            // v2.756.0 — hotspot markers (clickable for the description popup
+            // in play mode; click-to-delete in GM spot-edit mode).
+            hotspots.forEach(function (h) {
+                var mk = document.createElementNS(NS, 'circle');
+                mk.setAttribute('cx', h.x); mk.setAttribute('cy', h.y);
+                mk.setAttribute('r', '11');
+                mk.setAttribute('fill', 'rgba(108,180,255,.35)');
+                mk.setAttribute('stroke', '#6cb4ff');
+                mk.setAttribute('stroke-width', '2');
+                mk.style.pointerEvents = 'all';
+                mk.style.cursor = 'pointer';
+                mk.classList.add('map-hotspot');
+                if (h.label) { var t = document.createElementNS(NS, 'title'); t.textContent = h.label; mk.appendChild(t); }
+                mk.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    if (spotMode) {
+                        hotspots = hotspots.filter(function (x) { return x.id !== h.id; });
+                        saveHotspots();
+                    } else {
+                        showHotspotPopup(h);
+                    }
+                });
+                svg.appendChild(mk);
+            });
         }
         function toMap(e) {
             var pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
@@ -2470,8 +2506,40 @@
                 var r = await fetch('/api/campaign/' + CID + '/active-map');
                 if (!r.ok) return;
                 var d = await r.json();
-                mapId = d.map_id; walls = d.walls || []; render();
+                mapId = d.map_id; walls = d.walls || [];
+                hotspots = d.hotspots || []; render();
             } catch (e) {}
+        }
+        async function saveHotspots() {
+            if (!mapId) { render(); return; }
+            try {
+                await fetch('/api/campaign/' + CID + '/map/' + mapId + '/hotspots', {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ hotspots: hotspots }),
+                });
+            } catch (e) {}
+            render();
+        }
+        function showHotspotPopup(h) {
+            var existing = document.getElementById('hotspot-popup');
+            if (existing) existing.remove();
+            var box = document.createElement('div');
+            box.id = 'hotspot-popup';
+            box.style.cssText = 'position:fixed;z-index:9500;max-width:320px;left:50%;top:80px;'
+                + 'transform:translateX(-50%);background:var(--bg-1,#1b1d27);border:1px solid var(--border,#333);'
+                + 'border-radius:8px;padding:12px 14px;box-shadow:0 8px 30px rgba(0,0,0,.5);';
+            var title = document.createElement('div');
+            title.style.cssText = 'font-weight:700;margin-bottom:6px;';
+            title.textContent = '📍 ' + (h.label || 'Hotspot');
+            var body = document.createElement('div');
+            body.style.cssText = 'font-size:13px;color:var(--fg-mute);white-space:pre-wrap;';
+            body.textContent = h.description || '';
+            var close = document.createElement('button');
+            close.type = 'button'; close.className = 'sheet-section-btn';
+            close.textContent = 'Close'; close.style.cssText = 'margin-top:10px;';
+            close.addEventListener('click', function () { box.remove(); });
+            box.appendChild(title); box.appendChild(body); box.appendChild(close);
+            document.body.appendChild(box);
         }
         async function save() {
             if (!mapId) { render(); return; }
@@ -2492,35 +2560,72 @@
                 // walls_update WS re-renders for everyone.
             } catch (e) {}
         }
-        // Called by the walls_update WS handler in tabletop.js.
+        // Called by the walls_update / hotspots_update WS handlers in tabletop.js.
         window._onWallsUpdate = function (data) {
             if (!data) return;
             walls = data.walls || []; render();
+        };
+        window._onHotspotsUpdate = function (data) {
+            if (!data) return;
+            hotspots = data.hotspots || []; render();
         };
 
         if (IS_GM) {
             var btn = document.getElementById('wall-edit-btn');
             var doorToggle = document.getElementById('wall-door-toggle');
             var doorCb = document.getElementById('wall-door-cb');
+            var spotBtn = document.getElementById('hotspot-edit-btn');
+            function syncOverlay() {
+                // Either GM edit mode arms the overlay; otherwise it's
+                // click-through (doors + hotspots stay clickable via their
+                // own pointer-events).
+                svg.style.pointerEvents = (editMode || spotMode) ? 'auto' : 'none';
+                svg.style.cursor = (editMode || spotMode) ? 'crosshair' : 'default';
+            }
             if (btn) btn.addEventListener('click', function () {
                 editMode = !editMode;
+                if (editMode && spotMode) {  // modes are mutually exclusive
+                    spotMode = false;
+                    if (spotBtn) spotBtn.setAttribute('aria-pressed', 'false');
+                }
                 btn.setAttribute('aria-pressed', editMode ? 'true' : 'false');
                 if (doorToggle) doorToggle.style.display = editMode ? 'inline-flex' : 'none';
-                svg.style.pointerEvents = editMode ? 'auto' : 'none';
-                svg.style.cursor = editMode ? 'crosshair' : 'default';
-                pending = null; render();
+                pending = null; syncOverlay(); render();
+            });
+            if (spotBtn) spotBtn.addEventListener('click', function () {
+                spotMode = !spotMode;
+                if (spotMode && editMode) {
+                    editMode = false;
+                    if (btn) btn.setAttribute('aria-pressed', 'false');
+                    if (doorToggle) doorToggle.style.display = 'none';
+                    pending = null;
+                }
+                spotBtn.setAttribute('aria-pressed', spotMode ? 'true' : 'false');
+                syncOverlay(); render();
             });
             svg.addEventListener('click', function (e) {
-                if (!editMode) return;
                 var p = toMap(e);
                 if (!p) return;
-                if (!pending) { pending = p; render(); return; }
-                walls.push({
-                    id: 'w' + Date.now() + '_' + (seq++),
-                    x1: pending.x, y1: pending.y, x2: p.x, y2: p.y,
-                    door: !!(doorCb && doorCb.checked), open: false,
-                });
-                pending = null; save();
+                if (editMode) {
+                    if (!pending) { pending = p; render(); return; }
+                    walls.push({
+                        id: 'w' + Date.now() + '_' + (seq++),
+                        x1: pending.x, y1: pending.y, x2: p.x, y2: p.y,
+                        door: !!(doorCb && doorCb.checked), open: false,
+                    });
+                    pending = null; save();
+                } else if (spotMode) {
+                    var label = window.prompt('Hotspot label (short name):', '');
+                    if (label === null) return;  // cancelled
+                    var desc = window.prompt('Description (shown on click):', '') || '';
+                    hotspots.push({
+                        id: 'h' + Date.now() + '_' + (seq++),
+                        x: p.x, y: p.y,
+                        label: (label || 'Hotspot').slice(0, 120),
+                        description: desc.slice(0, 2000),
+                    });
+                    saveHotspots();
+                }
             });
         }
         load();

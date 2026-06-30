@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.756.0] - 2026-06-29 — "The Marked Map"
+
+**Schema version:** 88
+
+**Commit summary:** Maps 2.0 clickable hotspots — GM-placed description markers players click on the map.
+
+**Description:** Fifth slice of the Maps 2.0 work (the last open Maps 2.0 item). New `Map.hotspots` JSON column (Schema v88) stores GM-placed markers `{id, x, y, label, description}` in map-pixel coords. Endpoints mirror the walls pattern: `GET /map/{id}/hotspots` (any member), `PUT …/hotspots` (GM-only, sanitised via `_sanitize_hotspots`, broadcasts `hotspots_update`), and `GET /active-map` now surfaces hotspots alongside walls. On the tabletop, hotspots render as blue marker circles in the `#wall-overlay`; a **📍 Spots** GM toggle (mutually exclusive with the 🧱 Walls editor) enters placement mode — click the map to drop a marker (prompts for label + description), click a marker to delete it. In normal play, any player clicks a marker to open its `#hotspot-popup` (label + description). Markers stay clickable in play mode via their own `pointer-events` while the overlay is otherwise click-through, so pan / token drag are unaffected.
+
+### Added
+- `app/models.py` + `app/database.py` — `Map.hotspots` JSON column (Schema v88 migration).
+- `app/routes/tabletop_routes.py` — `_sanitize_hotspots`, `GET/PUT /map/{id}/hotspots`, hotspots in `/active-map`; `hotspots_update` broadcast.
+- `app/templates/tabletop.html` — 📍 Spots toggle + hotspot marker rendering, placement/delete, and the description popup; `window._onHotspotsUpdate`.
+- `app/static/tabletop.js` — `hotspots_update` WS handler.
+- `tests/harness/test_map_hotspots.py` (new, +3) — set/get round-trip + sanitisation + `hotspots_update` broadcast; non-GM write → 403; unknown map → 404.
+- `tests/harness_ui/test_hotspot_editor.py` (new, +1) — a `hotspots_update` renders a marker; clicking it opens the popup with label + description; the 📍 toggle arms edit mode.
+
+### Schema
+- **v88** — `maps.hotspots` (JSON, default `[]`). Additive.
+
 ## [2.755.0] - 2026-06-29 — "The Opening Door"
 
 **Schema version:** 87
