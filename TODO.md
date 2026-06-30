@@ -1012,8 +1012,10 @@ Allow GMs to sync Philips Hue smart lights with tabletop events — e.g. dim lig
 
 ## Visual
 
-### Frosted-glass treatment across the whole tabletop interface
-v2.49.139 applied the iOS-style frosted-glass look (semi-transparent background + `backdrop-filter: blur(10px) saturate(140%)`) to roll-log cards only. Extend to every drawer card on the tabletop so the canvas behind reads through everywhere — init-tracker cards (`.init-row` / `.init-entry`), GM panel cards (`.gm-panel`), the sound panel, the AoE picker hint, the ruler hint, the targeting chip, etc. Each surface needs:
+### Frosted-glass treatment across the whole tabletop interface — 🟠 largely shipped
+v2.49.139 applied the iOS-style frosted-glass look (semi-transparent background + `backdrop-filter`) to roll-log cards only; it has since been **broadly extended** — `tabletop.html` now carries ~37 `backdrop-filter` surfaces including the topbar cards, the `--glass-alpha`-tunable drawer cards, `.init-entry`, `.gm-panel`, and roll/spell cards (blur(20px) saturate(170%)). **Residual (unverified):** a surface-by-surface sweep that every last card (sound panel, AoE/ruler hints, targeting chip) is glassed AND text stays readable across all 9 themes, plus the composite-layer perf audit. The original per-surface checklist:
+
+Extend to every drawer card on the tabletop so the canvas behind reads through everywhere — init-tracker cards (`.init-row` / `.init-entry`), GM panel cards (`.gm-panel`), the sound panel, the AoE picker hint, the ruler hint, the targeting chip, etc. Each surface needs:
 - A theme-coherent `color-mix(in srgb, var(--bg) 78%, transparent)` background (or the appropriate variant for accent / panel-tinted surfaces)
 - `backdrop-filter: blur(10px) saturate(140%)` + `-webkit-backdrop-filter` for Safari/iPad
 - Verification that text remains readable on a busy map across all 9 themes (dark, midnight, dim, light, forest, bubblegum, oled, fire, sepia)

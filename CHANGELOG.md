@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.759.1] - 2026-06-29 — "The Clouded Glass"
+
+**Schema version:** 88
+
+**Commit summary:** Doc reconciliation — the frosted-glass treatment is largely shipped (annotated, no code change).
+
+**Description:** Verify-and-tidy sweep of the Visual section. The "frosted-glass treatment across the whole tabletop interface" item was filed when v2.49.139 had glassed only roll-log cards; it has since been broadly extended — `tabletop.html` carries ~37 `backdrop-filter` surfaces (topbar cards, the `--glass-alpha`-tunable drawer cards, `.init-entry`, `.gm-panel`, roll/spell cards). Annotated the TODO entry as 🟠 largely shipped, with the honest residual being a surface-by-surface sweep that every last card is glassed and readable across all 9 themes plus the composite-layer perf audit — which can't be confirmed by grep, so the item stays open (not archived) rather than over-claimed. No behavior change.
+
+### Changed
+- `TODO.md` — Frosted-glass item annotated as largely shipped with the unverified residual called out.
+
+### Schema
+- No schema change (still v88).
+
 ## [2.759.0] - 2026-06-29 — "The Shifting Stone"
 
 **Schema version:** 88
