@@ -24,8 +24,10 @@ def test_tabletop_renders_walls_no_edit_toggle(gm_page: Page) -> None:
     # The in-canvas wall/hotspot EDIT toggles are gone (editing → map editor).
     assert gm_page.locator("#wall-edit-btn").count() == 0
     assert gm_page.locator("#hotspot-edit-btn").count() == 0
-    # …replaced by a quick link to the dedicated editor.
-    expect(gm_page.locator('.canvas-tools a', has_text="Edit map")).to_be_visible()
+    # The Edit-map link now lives in Tools → Encounters (v2.773.0), not the
+    # canvas toolbar.
+    assert gm_page.locator('.canvas-tools a', has_text="Edit map").count() == 0
+    assert gm_page.locator('#encounters-panel a', has_text="Edit map").count() == 1
 
     # The overlay still renders walls + doors pushed over the WS. v2.772.0:
     # each segment renders as several styled lines (casing/face/sheen, or a

@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.773.0] - 2026-06-30 — "The Tidy Toolbar"
+
+**Schema version:** 91
+
+**Commit summary:** Move the Edit-map link + movement-lock toggle off the canvas toolbar into Tools → Encounters.
+
+**Description:** Declutters the tabletop canvas toolbar by relocating the **✏ Edit map** link and the **🔒 Locked / 🔓 Unlocked** movement-lock toggle into the **Tools → Encounters** panel (a new controls row at the top of `#encounters-panel`). The movement-lock button keeps its id, so its existing wiring (label/aria sync from `window._MOVEMENT_LOCKED`, the `movement_lock_update` WS, and the click→`/movement_lock` POST) is unchanged. The canvas toolbar now carries just the ruler, the multi-map switcher, and play controls.
+
+### Changed
+- `app/templates/tabletop.html` — removed the movement-lock button + Edit-map link from `.canvas-tools`; added a map-controls row (Edit map + movement lock) atop the Tools → Encounters panel.
+- `tests/harness_ui/test_wall_editor.py` — asserts the Edit-map link is in `#encounters-panel`, not the canvas toolbar.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.772.0] - 2026-06-30 — "The Mason's Palette"
 
 **Schema version:** 91

@@ -2242,30 +2242,9 @@
                 {% if not active_map %}aria-disabled="true" disabled{% endif %}>
             📏 Ruler
         </button>
-        {# v2.102.0 — GM-only movement-lock toggle. When pressed,
-           players can't drag their tokens (server 409 movement_locked +
-           client gate); the GM can still move with an advisory confirm.
-           Label + aria-pressed are synced by tabletop.js from the live
-           window._MOVEMENT_LOCKED flag (seeded below, kept fresh by the
-           movement_lock_update WS broadcast). #}
-        {% if is_gm %}
-        <button type="button"
-                id="movement-lock-btn"
-                class="canvas-tool-btn"
-                aria-pressed="{{ 'true' if campaign.movement_locked else 'false' }}"
-                title="Toggle player movement lock">
-            {% if campaign.movement_locked %}🔒 Locked{% else %}🔓 Unlocked{% endif %}
-        </button>
-        {# v2.768.0 — map editing (walls / doors / hotspots / lights / fog /
-           grid) moved to the dedicated map editor; the tabletop only renders
-           the overlays + handles play-time interactions (door toggle, hotspot
-           popups). This is a quick link to the editor for the active map. #}
-        {% if active_map %}
-        <a href="/campaign/{{ campaign.id }}/map/{{ active_map.id }}/edit"
-           class="canvas-tool-btn" style="display:inline-flex;align-items:center;text-decoration:none;"
-           title="Open the dedicated map editor (walls, doors, lights, fog, grid)">✏ Edit map</a>
-        {% endif %}
-        {% endif %}
+        {# v2.773.0 — the movement-lock toggle + map-editor link moved to
+           Tools → Encounters (see #encounters-panel) to declutter the canvas
+           toolbar. #}
         {# v2.762.0 — multi-map quick-switcher (GM-only). Hidden unless the
            running encounter links >1 map; populated by the script below. #}
         {% if is_gm %}
@@ -4445,6 +4424,22 @@
                       style="display:none;margin-left:auto;font-size:9px;padding:1px 6px;border-radius:8px;background:#3a2f15;color:#d4a84a;border:1px solid #6e5828;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
             </summary>
             <div class="gm-panel-body">
+            {# v2.773.0 — map controls relocated here from the canvas toolbar:
+               edit the active map + toggle player movement lock. #}
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;align-items:center;">
+                {% if active_map %}
+                <a href="/campaign/{{ campaign.id }}/map/{{ active_map.id }}/edit"
+                   style="font-size:11px;padding:4px 10px;border:1px solid var(--border);border-radius:5px;text-decoration:none;color:var(--fg);display:inline-flex;align-items:center;min-height:32px;"
+                   title="Open the dedicated map editor (walls, doors, lights, fog, grid)">✏ Edit map</a>
+                {% endif %}
+                <button type="button"
+                        id="movement-lock-btn"
+                        aria-pressed="{{ 'true' if campaign.movement_locked else 'false' }}"
+                        style="font-size:11px;padding:4px 10px;min-height:32px;"
+                        title="Toggle player movement lock (players can't drag their tokens while locked)">
+                    {% if campaign.movement_locked %}🔒 Locked{% else %}🔓 Unlocked{% endif %}
+                </button>
+            </div>
             <input type="search" id="enc-search" placeholder="Search by name or tag…"
                    style="width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px;margin-bottom:4px;">
             <div style="display:flex;align-items:center;gap:8px;font-size:10px;color:var(--fg-mute);margin-bottom:6px;flex-wrap:wrap;">
