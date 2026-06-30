@@ -2535,11 +2535,31 @@
             var body = document.createElement('div');
             body.style.cssText = 'font-size:13px;color:var(--fg-mute);white-space:pre-wrap;';
             body.textContent = h.description || '';
+            box.appendChild(title); box.appendChild(body);
+            // v2.758.0 — optional roll prompt: a 🎲 button that fires the
+            // hotspot's dice expression through the normal /roll pipeline.
+            if (h.roll) {
+                var rollBtn = document.createElement('button');
+                rollBtn.type = 'button'; rollBtn.className = 'sheet-section-btn';
+                rollBtn.style.cssText = 'margin-top:10px;margin-right:8px;';
+                rollBtn.textContent = '🎲 Roll ' + h.roll;
+                rollBtn.addEventListener('click', function () {
+                    fetch('/api/campaign/' + CID + '/roll', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            expression: h.roll, visibility: 'public',
+                            note: '📍 ' + (h.label || 'Hotspot'),
+                        }),
+                    }).catch(function () {});
+                    box.remove();
+                });
+                box.appendChild(rollBtn);
+            }
             var close = document.createElement('button');
             close.type = 'button'; close.className = 'sheet-section-btn';
             close.textContent = 'Close'; close.style.cssText = 'margin-top:10px;';
             close.addEventListener('click', function () { box.remove(); });
-            box.appendChild(title); box.appendChild(body); box.appendChild(close);
+            box.appendChild(close);
             document.body.appendChild(box);
         }
         async function save() {
@@ -2620,11 +2640,13 @@
                     var label = window.prompt('Hotspot label (short name):', '');
                     if (label === null) return;  // cancelled
                     var desc = window.prompt('Description (shown on click):', '') || '';
+                    var roll = window.prompt('Optional roll (e.g. 1d20+5, blank for none):', '') || '';
                     hotspots.push({
                         id: 'h' + Date.now() + '_' + (seq++),
                         x: p.x, y: p.y,
                         label: (label || 'Hotspot').slice(0, 120),
                         description: desc.slice(0, 2000),
+                        roll: roll.trim().slice(0, 60),
                     });
                     saveHotspots();
                 }

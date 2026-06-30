@@ -42,6 +42,16 @@ def test_hotspot_render_and_popup(gm_page: Page) -> None:
     gm_page.locator("#hotspot-popup button", has_text="Close").click()
     expect(gm_page.locator("#hotspot-popup")).to_have_count(0)
 
+    # v2.758.0 — a hotspot with a roll shows a 🎲 Roll button in its popup.
+    gm_page.evaluate("""() => window._onHotspotsUpdate({ hotspots: [
+        { id: 'h2', x: 200, y: 200, label: 'Trap', description: 'Spikes!', roll: '2d6' }
+    ]})""")
+    gm_page.locator(".map-hotspot").first.click()
+    expect(
+        gm_page.locator("#hotspot-popup button", has_text="Roll 2d6")
+    ).to_be_visible()
+    gm_page.locator("#hotspot-popup button", has_text="Close").click()
+
     # The 📍 toggle arms spot-edit mode.
     spot_btn.click()
     assert spot_btn.get_attribute("aria-pressed") == "true"

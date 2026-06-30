@@ -124126,6 +124126,10 @@ def _sanitize_hotspots(raw) -> list:
             "x": x, "y": y,
             "label": str(h.get("label") or "").strip()[:120],
             "description": str(h.get("description") or "").strip()[:2000],
+            # v2.758.0 — optional dice expression; the popup shows a 🎲 Roll
+            # button that fires it through the normal /roll pipeline. The roll
+            # endpoint validates the expression, so we only trim + cap here.
+            "roll": str(h.get("roll") or "").strip()[:60],
         })
     return out
 

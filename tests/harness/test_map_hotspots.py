@@ -51,6 +51,29 @@ async def test_set_and_get_hotspots(gm_client, gm_ws):
             json={"hotspots": []})
 
 
+async def test_hotspot_roll_field_persists(gm_client):
+    """v2.758.0 — a hotspot can carry an optional dice expression (the popup's
+    🎲 Roll button); it round-trips through the sanitiser."""
+    mid = await _active_map_id(gm_client)
+    try:
+        r = await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/hotspots",
+            json={"hotspots": [{"x": 50, "y": 60, "label": "Trap",
+                                "description": "Spikes!", "roll": "2d6"}]})
+        assert r.status_code == 200, r.text
+        h = r.json()["hotspots"][0]
+        assert h["roll"] == "2d6"
+        # A hotspot with no roll defaults to an empty string.
+        r2 = await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/hotspots",
+            json={"hotspots": [{"x": 1, "y": 2, "label": "Plain"}]})
+        assert r2.json()["hotspots"][0]["roll"] == ""
+    finally:
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/hotspots",
+            json={"hotspots": []})
+
+
 async def test_set_hotspots_requires_gm(gm_client, alice_client):
     mid = await _active_map_id(gm_client)
     assert (await alice_client.get(

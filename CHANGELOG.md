@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.758.0] - 2026-06-29 — "The Trapped Tile"
+
+**Schema version:** 88
+
+**Commit summary:** Roll-prompt hotspots — a clickable map marker can fire a dice roll, not just show text.
+
+**Description:** Maps 2.0 polish completing the "description popup **or** roll prompt" half of the clickable-hotspots item. A hotspot now carries an optional `roll` dice expression (`_sanitize_hotspots` trims + caps it; the `/roll` endpoint validates it). When the GM places a hotspot, a third prompt asks for an optional roll (e.g. `1d20+5`, blank for none). The hotspot's description popup shows a **🎲 Roll \<expr\>** button when a roll is set; clicking it fires the expression through the normal `/api/campaign/{cid}/roll` pipeline as a public roll noted with the hotspot's label, so a trap tile or perception spot can roll for the table in one click. Description-only hotspots are unchanged (`roll` defaults to `""`).
+
+### Added
+- `app/routes/tabletop_routes.py` — `roll` field in `_sanitize_hotspots`.
+- `app/templates/tabletop.html` — the place-prompt's optional roll input + the 🎲 Roll button in the hotspot popup (posts to `/roll`).
+- `tests/harness/test_map_hotspots.py` (+1) — the `roll` field round-trips; absent → `""`.
+- `tests/harness_ui/test_hotspot_editor.py` (+ assertion) — a hotspot with a roll shows the 🎲 Roll button in its popup.
+
+### Schema
+- No schema change (still v88).
+
 ## [2.757.0] - 2026-06-29 — "The Cast Shadow"
 
 **Schema version:** 88
