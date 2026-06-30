@@ -1,9 +1,10 @@
-"""v2.754.0 — Maps 2.0 GM wall-editor overlay.
+"""v2.768.0 — tabletop wall/door rendering (editing moved to the map editor).
 
-Drives the real `#wall-overlay` SVG + the GM "🧱 Walls" toggle: entering edit
-mode flips aria-pressed, reveals the door checkbox, and makes the overlay
-interactive; a `walls_update` (via `window._onWallsUpdate`) renders wall + door
-segments as SVG lines.
+The tabletop no longer carries wall/hotspot edit toggles — authoring lives in
+the dedicated map editor (`/campaign/{cid}/map/{id}/edit`). The tabletop still
+*renders* the wall/door overlay (kept live by `walls_update`); this test
+verifies that, and that the edit toggles are gone in favour of an ✏ Edit-map
+link.
 """
 from __future__ import annotations
 
@@ -12,7 +13,7 @@ from playwright.sync_api import Page, expect
 from .conftest import BASE_URL, CAMPAIGN_ID
 
 
-def test_wall_editor_toggle_and_render(gm_page: Page) -> None:
+def test_tabletop_renders_walls_no_edit_toggle(gm_page: Page) -> None:
     errors: list[str] = []
     gm_page.on("pageerror", lambda e: errors.append(str(e)))
     gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}")
@@ -20,35 +21,22 @@ def test_wall_editor_toggle_and_render(gm_page: Page) -> None:
         "() => document.getElementById('wall-overlay') && "
         "typeof window._onWallsUpdate === 'function'", timeout=8000)
 
-    btn = gm_page.locator("#wall-edit-btn")
-    expect(btn).to_be_visible()
-    assert btn.get_attribute("aria-pressed") == "false"
+    # The in-canvas wall/hotspot EDIT toggles are gone (editing → map editor).
+    assert gm_page.locator("#wall-edit-btn").count() == 0
+    assert gm_page.locator("#hotspot-edit-btn").count() == 0
+    # …replaced by a quick link to the dedicated editor.
+    expect(gm_page.locator('.canvas-tools a', has_text="Edit map")).to_be_visible()
 
-    # Enter edit mode: aria-pressed flips, the door checkbox appears.
-    btn.click()
-    assert btn.get_attribute("aria-pressed") == "true"
-    expect(gm_page.locator("#wall-door-toggle")).to_be_visible()
-    assert gm_page.eval_on_selector(
-        "#wall-overlay", "el => el.style.pointerEvents") == "auto"
-
-    # Render a wall + a door via the WS hook.
+    # The overlay still renders walls + doors pushed over the WS.
     gm_page.evaluate("""() => window._onWallsUpdate({ walls: [
         { id: 'a', x1: 10, y1: 10, x2: 200, y2: 10, door: false, open: false },
         { id: 'b', x1: 200, y1: 10, x2: 200, y2: 200, door: true, open: false }
     ]})""")
-    # Two segments → two visible lines + two hit lines = 4 <line> nodes.
-    # (_onWallsUpdate renders synchronously, so the nodes exist immediately.)
     lines = gm_page.locator("#wall-overlay line")
-    assert lines.count() == 4, lines.count()
-    # The door's visible line is dashed.
+    assert lines.count() == 4, lines.count()  # 2 visible + 2 hit
     dashed = gm_page.eval_on_selector_all(
         "#wall-overlay line",
         "els => els.filter(e => e.getAttribute('stroke-dasharray')).length")
-    assert dashed >= 1
-
-    # Leaving edit mode hides the door toggle + locks the overlay.
-    btn.click()
-    assert btn.get_attribute("aria-pressed") == "false"
-    expect(gm_page.locator("#wall-door-toggle")).to_be_hidden()
+    assert dashed >= 1  # the door is dashed
 
     assert not errors, f"JS errors: {errors}"

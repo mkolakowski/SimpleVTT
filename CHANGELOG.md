@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.768.0] - 2026-06-29 — "The Cleared Table"
+
+**Schema version:** 91
+
+**Commit summary:** Remove the in-canvas map-editing toggles from the tabletop — authoring lives in the dedicated map editor now.
+
+**Description:** The tabletop's canvas toolbar no longer carries the 🧱 Walls / door / 📍 Spots **edit** toggles; all map authoring (walls, doors, hotspots, lights, fog, grid) now happens in the dedicated map editor (`/campaign/{cid}/map/{id}/edit`). The tabletop still **renders** every overlay live (kept fresh by `walls_update` / `hotspots_update` / `lights_update` / `fog_update`) and keeps the **play-time** interactions — clicking a door toggles it open/closed, clicking a hotspot opens its popup — so nothing is lost for players at the table; only the GM's in-canvas editing chrome moved. A new **✏ Edit map** link in the toolbar jumps straight to the editor for the active map.
+
+### Changed
+- `app/templates/tabletop.html` — removed the wall/hotspot edit toggles + door checkbox; added the ✏ Edit-map link. (The editor script's button wiring is already null-guarded, so removal is inert; render + door/hotspot play interactions are unchanged.)
+- `tests/harness_ui/test_wall_editor.py` + `test_hotspot_editor.py` — repurposed to assert the tabletop *renders* walls/doors/hotspots + the popup works + the edit toggles are gone; deleted `test_wall_drag.py` (tabletop drag-editing removed; drawing/dragging is covered by the editor tests).
+
+### Schema
+- No schema change (still v91).
+
 ## [2.767.0] - 2026-06-29 — "The Magnifying Glass"
 
 **Schema version:** 91

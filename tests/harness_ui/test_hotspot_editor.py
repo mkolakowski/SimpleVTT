@@ -1,9 +1,8 @@
-"""v2.756.0 — Maps 2.0 clickable hotspots overlay.
+"""v2.768.0 — tabletop hotspot rendering + popup (editing moved to the editor).
 
-Drives the `#wall-overlay` hotspot markers + the GM "📍 Spots" toggle: a
-`hotspots_update` (via `window._onHotspotsUpdate`) renders `.map-hotspot`
-markers, and clicking one in play mode opens the `#hotspot-popup` with its
-label + description.
+Hotspot authoring lives in the dedicated map editor now; the tabletop renders
+the markers and shows the description popup when a player clicks one. This
+verifies the render + popup, and that the edit toggle is gone.
 """
 from __future__ import annotations
 
@@ -20,29 +19,23 @@ def test_hotspot_render_and_popup(gm_page: Page) -> None:
         "() => document.getElementById('wall-overlay') && "
         "typeof window._onHotspotsUpdate === 'function'", timeout=8000)
 
-    # The GM toggle exists.
-    spot_btn = gm_page.locator("#hotspot-edit-btn")
-    expect(spot_btn).to_be_visible()
+    # The in-canvas hotspot edit toggle is gone (authoring → map editor).
+    assert gm_page.locator("#hotspot-edit-btn").count() == 0
 
-    # Render a hotspot via the WS hook (play mode → click opens the popup).
+    # A hotspot pushed over the WS renders; clicking it opens its popup.
     gm_page.evaluate("""() => window._onHotspotsUpdate({ hotspots: [
         { id: 'h1', x: 120, y: 140, label: 'Altar', description: 'A bloodied altar.' }
     ]})""")
     marker = gm_page.locator(".map-hotspot")
     assert marker.count() == 1, marker.count()
-
-    # Click the marker → the description popup appears with the label + text.
     marker.first.click()
     popup = gm_page.locator("#hotspot-popup")
     expect(popup).to_be_visible()
     expect(popup).to_contain_text("Altar")
     expect(popup).to_contain_text("bloodied altar")
 
-    # Closing the popup removes it.
+    # A roll-prompt hotspot shows the 🎲 Roll button.
     gm_page.locator("#hotspot-popup button", has_text="Close").click()
-    expect(gm_page.locator("#hotspot-popup")).to_have_count(0)
-
-    # v2.758.0 — a hotspot with a roll shows a 🎲 Roll button in its popup.
     gm_page.evaluate("""() => window._onHotspotsUpdate({ hotspots: [
         { id: 'h2', x: 200, y: 200, label: 'Trap', description: 'Spikes!', roll: '2d6' }
     ]})""")
@@ -50,10 +43,5 @@ def test_hotspot_render_and_popup(gm_page: Page) -> None:
     expect(
         gm_page.locator("#hotspot-popup button", has_text="Roll 2d6")
     ).to_be_visible()
-    gm_page.locator("#hotspot-popup button", has_text="Close").click()
-
-    # The 📍 toggle arms spot-edit mode.
-    spot_btn.click()
-    assert spot_btn.get_attribute("aria-pressed") == "true"
 
     assert not errors, f"JS errors: {errors}"

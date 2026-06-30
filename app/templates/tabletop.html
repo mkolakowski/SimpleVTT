@@ -2256,31 +2256,15 @@
                 title="Toggle player movement lock">
             {% if campaign.movement_locked %}🔒 Locked{% else %}🔓 Unlocked{% endif %}
         </button>
-        {# v2.754.0 — GM-only wall editor toggle (Maps 2.0). Enters draw mode:
-           click two points to add a wall, click a segment to delete it. The
-           "door" box makes the next segment an openable door. #}
-        <button type="button"
-                id="wall-edit-btn"
-                class="canvas-tool-btn"
-                aria-pressed="false"
-                title="Wall editor: draw walls/doors (click two points; click a wall to delete)"
-                {% if not active_map %}aria-disabled="true" disabled{% endif %}>
-            🧱 Walls
-        </button>
-        <label id="wall-door-toggle" style="display:none;align-items:center;gap:4px;font-size:12px;color:var(--fg-mute);">
-            <input type="checkbox" id="wall-door-cb"> door
-        </label>
-        {# v2.756.0 — GM-only clickable-hotspot editor toggle. Click empty map
-           to place a marker (prompts for label + description); click a marker
-           to delete. Players click markers to read the description popup. #}
-        <button type="button"
-                id="hotspot-edit-btn"
-                class="canvas-tool-btn"
-                aria-pressed="false"
-                title="Hotspot editor: click the map to place a description marker"
-                {% if not active_map %}aria-disabled="true" disabled{% endif %}>
-            📍 Spots
-        </button>
+        {# v2.768.0 — map editing (walls / doors / hotspots / lights / fog /
+           grid) moved to the dedicated map editor; the tabletop only renders
+           the overlays + handles play-time interactions (door toggle, hotspot
+           popups). This is a quick link to the editor for the active map. #}
+        {% if active_map %}
+        <a href="/campaign/{{ campaign.id }}/map/{{ active_map.id }}/edit"
+           class="canvas-tool-btn" style="display:inline-flex;align-items:center;text-decoration:none;"
+           title="Open the dedicated map editor (walls, doors, lights, fog, grid)">✏ Edit map</a>
+        {% endif %}
         {% endif %}
         {# v2.762.0 — multi-map quick-switcher (GM-only). Hidden unless the
            running encounter links >1 map; populated by the script below. #}
