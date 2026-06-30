@@ -69,18 +69,24 @@
             title="Click the map to place a description hotspot; click a hotspot to delete">📍 Hotspots</button>
     <button type="button" id="me-light-btn" class="me-tool-btn" aria-pressed="false"
             title="Click the map to place a light source of the chosen type; click a light to delete">💡 Lights</button>
-    <label style="gap:3px;" title="Light type for new lights (right-click a light to change it)">
+    <label style="gap:3px;" title="Light type for new lights (sets its look + flicker; right-click a light to change it)">
       <select id="me-light-type" style="min-height:32px;font-size:12px;">
-        <option value="candle">🕯 Candle 5/5</option>
-        <option value="torch" selected>🔥 Torch 20/20</option>
-        <option value="lamp">💡 Lamp 15/45</option>
-        <option value="lantern">🏮 Hooded lantern 30/30</option>
-        <option value="bullseye">🔦 Bullseye 60/60</option>
-        <option value="light">✨ Light cantrip 20/20</option>
-        <option value="daylight">☀ Daylight 60/60</option>
-        <option value="custom">Custom…</option>
+        <option value="candle">🕯 Candle</option>
+        <option value="torch" selected>🔥 Torch</option>
+        <option value="lamp">💡 Lamp</option>
+        <option value="lantern">🏮 Hooded lantern</option>
+        <option value="bullseye">🔦 Bullseye</option>
+        <option value="light">✨ Light cantrip</option>
+        <option value="daylight">☀ Daylight</option>
       </select>
     </label>
+    {# v2.784.0 — radii are their own field now, decoupled from the type. #}
+    <label style="gap:2px;" title="Bright light radius (ft) for new lights">bright<input
+        type="number" id="me-light-bright" min="0" max="500" value="20"
+        style="width:48px;min-height:32px;"></label>
+    <label style="gap:2px;" title="Dim light radius (ft) for new lights">dim<input
+        type="number" id="me-light-dim" min="0" max="500" value="20"
+        style="width:48px;min-height:32px;"></label>
   </div>
   <div class="me-group" role="group" aria-label="Fog of war and lighting">
     <span class="me-grp-lbl">Fog &amp; Light</span>
@@ -939,6 +945,14 @@
   if (doorBtn) doorBtn.addEventListener('click', function () { setMode(doorMode ? null : 'door'); });
   spotBtn.addEventListener('click', function () { setMode(spotMode ? null : 'spot'); });
   if (lightBtn) lightBtn.addEventListener('click', function () { setMode(lightMode ? null : 'light'); });
+  // v2.784.0 — picking a light type fills the radius fields with its preset
+  // (the user can then tweak the numbers independently of the type).
+  var lightTypeSel = document.getElementById('me-light-type');
+  if (lightTypeSel) lightTypeSel.addEventListener('change', function () {
+    var t = lightType(this.value); if (!t) return;
+    var bi = document.getElementById('me-light-bright'), di = document.getElementById('me-light-dim');
+    if (bi) bi.value = t.bright; if (di) di.value = t.dim;
+  });
   if (fogBtn) fogBtn.addEventListener('click', function () {
     var entering = !fogMode;
     setMode(entering ? 'fog' : null);
@@ -1037,18 +1051,14 @@
       saveHotspots();
     } else if (lightMode) {
       var sel = (document.getElementById('me-light-type') || {}).value || 'torch';
-      if (sel === 'custom') {
-        var bright = window.prompt('Bright light radius (ft):', '20');
-        if (bright === null) return;
-        var dim = window.prompt('Dim light radius (ft, ≥ bright):', '40') || '0';
-        lights.push({ id: 'l' + Date.now() + '_' + (seq++), x: p.x, y: p.y,
-          bright_ft: Math.max(0, parseFloat(bright) || 0),
-          dim_ft: Math.max(0, parseFloat(dim) || 0), color: '#ffd27f', type: 'custom' });
-      } else {
-        var t = lightType(sel) || lightType('torch');
-        lights.push({ id: 'l' + Date.now() + '_' + (seq++), x: p.x, y: p.y,
-          bright_ft: t.bright, dim_ft: t.dim, color: t.color, type: t.key });
-      }
+      var t = lightType(sel) || lightType('torch');
+      // v2.784.0 — radii come from their own fields (type only sets look/flicker).
+      var bv = parseFloat((document.getElementById('me-light-bright') || {}).value);
+      var dv = parseFloat((document.getElementById('me-light-dim') || {}).value);
+      if (isNaN(bv)) bv = t.bright;
+      if (isNaN(dv)) dv = t.dim;
+      lights.push({ id: 'l' + Date.now() + '_' + (seq++), x: p.x, y: p.y,
+        bright_ft: Math.max(0, bv), dim_ft: Math.max(0, dv), color: t.color, type: t.key });
       saveLights();
     }
   });

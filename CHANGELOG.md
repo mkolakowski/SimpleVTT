@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.784.0] - 2026-06-30 — "The Measured Glow"
+
+**Schema version:** 91
+
+**Commit summary:** Light radius is its own field in the editor, decoupled from the light-type select.
+
+**Description:** The light-type dropdown now lists just the **type names** (Candle, Torch, Lamp, Hooded lantern, Bullseye, Light cantrip, Daylight) — the bright/dim **measurement moved into its own `bright` / `dim` number fields** in the Markers group. Picking a type fills those fields with its preset radii, which you can then tweak independently (the type now governs look/colour; the fields govern reach). The standalone "Custom…" option is gone — any radius is just typed into the fields. Placing a light reads the fields for its radii and the type for its colour.
+
+### Changed
+- `app/templates/map_editor.html` — light-type `<select>` shows names only; new `#me-light-bright` / `#me-light-dim` fields; a type-change handler populates them; placement reads the fields.
+- `tests/harness_ui/test_map_lights_editor.py` — sets the radius fields instead of answering prompts.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.783.3] - 2026-06-30 — "The One-Line Bench"
 
 **Schema version:** 91
