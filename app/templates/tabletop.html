@@ -2530,6 +2530,7 @@
                 hotspots = d.hotspots || []; render();
                 if (window._setMapWalls) window._setMapWalls(walls);
                 if (window._setMapLights) window._setMapLights(d.lights || []);
+                if (window._setMapFog) window._setMapFog(d.fog_enabled, d.fog_revealed || []);
             } catch (e) {}
         }
         async function saveHotspots() {

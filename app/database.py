@@ -1067,6 +1067,21 @@ def _apply_inline_migrations() -> None:
                 "ALTER TABLE maps ADD COLUMN lights JSON NOT NULL DEFAULT '[]'"
             ))
 
+    # ---- Schema v91 (2.766.0): maps.fog_enabled + maps.fog_revealed ----
+    # Maps 2.0 fog of war — a per-map enable flag + a JSON list of revealed
+    # rectangles. Additive; defaults = fog off, nothing revealed.
+    maps_cols_v91 = _column_names("maps")
+    with engine.begin() as conn:
+        if maps_cols_v91 and "fog_enabled" not in maps_cols_v91:
+            conn.execute(text(
+                "ALTER TABLE maps ADD COLUMN fog_enabled "
+                "BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+        if maps_cols_v91 and "fog_revealed" not in maps_cols_v91:
+            conn.execute(text(
+                "ALTER TABLE maps ADD COLUMN fog_revealed JSON NOT NULL DEFAULT '[]'"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

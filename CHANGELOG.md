@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.766.0] - 2026-06-29 — "The Drawn Veil"
+
+**Schema version:** 91
+
+**Commit summary:** Map-editor fog of war — the GM paints revealed areas; players see the rest of the map obscured.
+
+**Description:** Third requested map-editor enhancement, completing the set (snapping v2.764.0, lights v2.765.0, fog now). New `Map.fog_enabled` + `Map.fog_revealed` (Schema v91) store a per-map fog flag + a JSON list of revealed `{x,y,w,h}` rectangles. `GET/PUT /map/{id}/fog` (PUT GM-only, sanitised — zero-size rects dropped, broadcasts `fog_update`); surfaced in `/active-map`. In the map editor, a **🌫 Fog** tool (with a "fog on" checkbox) lets the GM drag to reveal a rectangle and click a revealed area to re-hide it, with a live preview veil + dashed reveal outlines. On the tabletop, when fog is enabled a fog overlay covers the map with the revealed rects cut out — **opaque** for players (they can't see unexplored areas, even lit ones) and a **faint tint** for the GM (who always sees the full map + knows what's still hidden). The overlay updates live over `fog_update`.
+
+### Added
+- `app/models.py` + `app/database.py` — `Map.fog_enabled` + `Map.fog_revealed` (Schema v91 migration).
+- `app/routes/tabletop_routes.py` — `_sanitize_fog_rects`, `GET/PUT /map/{id}/fog`, fog in `/active-map` + the editor route; `fog_update` broadcast.
+- `app/templates/map_editor.html` — 🌫 Fog tool: drag-to-reveal + click-to-hide + the fog-on checkbox + preview.
+- `app/static/tabletop.js` — `mapFog*` state + `window._setMapFog`, `drawFog()` overlay (GM-faint / player-opaque), `fog_update` WS handler.
+- `app/templates/tabletop.html` — feed fog from the `/active-map` bootstrap.
+- `tests/harness/test_map_fog.py` (new, +4) + `tests/harness_ui/test_map_fog_player.py` (new, +1) — set/get + partial patch + GM gate + 404; player sees hidden areas opaque, revealed clear.
+
+### Schema
+- **v91** — `maps.fog_enabled` (bool, default false) + `maps.fog_revealed` (JSON, default `[]`). Additive.
+
 ## [2.765.0] - 2026-06-29 — "The Lantern Keeper"
 
 **Schema version:** 90

@@ -116,6 +116,14 @@
         mapLights = Array.isArray(l) ? l : [];
         try { render(); } catch (_) {}
     };
+    // v2.766.0 — fog of war. Players see the map obscured except inside the
+    // revealed rects; the GM sees a faint fog tint over still-hidden areas.
+    let mapFogEnabled = false, mapFogRevealed = [];
+    window._setMapFog = function (enabled, revealed) {
+        mapFogEnabled = !!enabled;
+        mapFogRevealed = Array.isArray(revealed) ? revealed : [];
+        try { render(); } catch (_) {}
+    };
     // The server-rendered initial-data predates the vision fields, so pull
     // the active map's ambient + placed emitters once on load. Deferred
     // (async) so it runs after the sync init defines render() + CAMPAIGN_ID.
@@ -2864,6 +2872,9 @@
         // Drawn after tokens/markers (so darkness dims them) but before the
         // gutter labels (which must stay readable as UI chrome).
         drawLighting();
+        // v2.766.0 — fog of war on top of lighting (a player can't see a lit
+        // room that hasn't been explored).
+        drawFog();
 
         // v2.50.0 — grid coordinate labels drawn LAST so the gutter
         // sits on top of every other rendered element. Tokens sliding
@@ -3029,6 +3040,35 @@
         try { drawLighting(); } catch (e) { return String(e); }
         return true;
     };
+
+    // v2.766.0 — fog of war overlay. Covers the map with a fog veil and cuts
+    // out the GM-revealed rectangles. Players get an opaque veil (can't see
+    // unexplored areas); the GM gets a faint tint so they know what's hidden.
+    let _fogCanvas = null;
+    function drawFog() {
+        if (!mapFogEnabled) return;
+        const isGm = !!(typeof ME !== 'undefined' && ME && ME.isGm);
+        if (!_fogCanvas) _fogCanvas = document.createElement('canvas');
+        if (_fogCanvas.width !== MAP_W) _fogCanvas.width = MAP_W;
+        if (_fogCanvas.height !== MAP_H) _fogCanvas.height = MAP_H;
+        const fc = _fogCanvas.getContext('2d');
+        fc.clearRect(0, 0, MAP_W, MAP_H);
+        fc.globalCompositeOperation = 'source-over';
+        fc.fillStyle = isGm ? 'rgba(8,10,22,0.40)' : 'rgba(5,7,16,0.97)';
+        fc.fillRect(0, 0, MAP_W, MAP_H);
+        // Cut out the revealed rectangles.
+        fc.globalCompositeOperation = 'destination-out';
+        fc.fillStyle = 'rgba(0,0,0,1)';
+        (mapFogRevealed || []).forEach(r => {
+            if (!r) return;
+            const w = Number(r.w || 0), h = Number(r.h || 0);
+            if (w <= 0 || h <= 0) return;
+            fc.fillRect(Number(r.x || 0), Number(r.y || 0), w, h);
+        });
+        fc.globalCompositeOperation = 'source-over';
+        ctx.drawImage(_fogCanvas, 0, 0);
+        window.__fogCanvasForTest = _fogCanvas;
+    }
 
     /* v2.8.1: movement breadcrumb. Drawn on top of tokens so the line
      * stays visible when a token sits on a waypoint. Reads
@@ -5384,6 +5424,13 @@
                 // v2.765.0 — Maps 2.0: re-render placeable map light sources.
                 if (msg.data && typeof window._setMapLights === 'function') {
                     try { window._setMapLights(msg.data.lights || []); } catch (_) {}
+                }
+            } else if (msg.type === 'fog_update') {
+                // v2.766.0 — Maps 2.0: re-render fog of war.
+                if (msg.data && typeof window._setMapFog === 'function') {
+                    try {
+                        window._setMapFog(msg.data.fog_enabled, msg.data.fog_revealed || []);
+                    } catch (_) {}
                 }
             } else if (msg.type === 'character_death_save') {
                 _onCharacterDeathSave(msg.data);

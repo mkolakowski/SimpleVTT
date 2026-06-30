@@ -392,6 +392,15 @@ class Map(Base):
     # lighting overlay punches a bright/dim hole at each (with wall shadows);
     # the GM places + tunes them in the map editor.
     lights: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
+    # v2.766.0 — Maps 2.0 fog of war. When ``fog_enabled`` is true, players see
+    # the map obscured except inside the revealed rectangles in ``fog_revealed``
+    # (a JSON list of ``{"x": float, "y": float, "w": float, "h": float}`` in
+    # map-pixel coords); the GM always sees the full map + a faint fog tint over
+    # the still-hidden areas. The GM paints reveals in the map editor.
+    fog_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false")
+    fog_revealed: Mapped[list] = mapped_column(
+        JSON, default=list, server_default="[]")
     folder: Mapped[Optional[str]] = mapped_column(String(120), nullable=True, default="", server_default="")
     thumbnail_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

@@ -34,6 +34,9 @@
           title="Click the map to place a description hotspot; click a hotspot to delete">📍 Hotspots</button>
   <button type="button" id="me-light-btn" class="me-tool-btn" aria-pressed="false"
           title="Click the map to place a light source (set its bright/dim range in ft); click a light to delete">💡 Lights</button>
+  <button type="button" id="me-fog-btn" class="me-tool-btn" aria-pressed="false"
+          title="Fog of war: drag to reveal an area; click a revealed area to re-hide it">🌫 Fog</button>
+  <label id="me-fog-on-lbl" style="display:none;"><input type="checkbox" id="me-fog-on-cb"> fog on</label>
   <button type="button" id="me-snap-btn" class="me-tool-btn" aria-pressed="true"
           title="Snap wall/door endpoints to the grid + to nearby wall ends">🧲 Snap</button>
   <label>Grid px
@@ -69,7 +72,10 @@
   var walls = {{ walls | tojson }};
   var hotspots = {{ hotspots | tojson }};
   var lights = {{ lights | tojson }};
-  var wallMode = false, spotMode = false, lightMode = false, pending = null, seq = 0;
+  var fogEnabled = {{ 'true' if fog_enabled else 'false' }};
+  var fogRevealed = {{ fog_revealed | tojson }};
+  var wallMode = false, spotMode = false, lightMode = false, fogMode = false, pending = null, seq = 0;
+  var fogDrag = null;
   var pxPerFt = (({{ map.grid_size_px }} || 70) / 5);  // ft → px
   var grab = null, suppressClick = false;
   var gridPx = {{ map.grid_size_px }} || 70;
@@ -202,6 +208,44 @@
       });
       svg.appendChild(dot);
     });
+    // v2.766.0 — fog-of-war editor preview: a faint dark veil over the whole
+    // map with the revealed rectangles cut out (lighter); click a reveal (in
+    // fog mode) to re-hide it.
+    if (fogEnabled) {
+      var W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
+      var veil = document.createElementNS(NS, 'rect');
+      veil.setAttribute('x', 0); veil.setAttribute('y', 0);
+      veil.setAttribute('width', W); veil.setAttribute('height', H);
+      veil.setAttribute('fill', 'rgba(10,12,24,0.5)');
+      veil.style.pointerEvents = 'none';
+      svg.appendChild(veil);
+      fogRevealed.forEach(function (r, i) {
+        var rc = document.createElementNS(NS, 'rect');
+        rc.setAttribute('x', r.x); rc.setAttribute('y', r.y);
+        rc.setAttribute('width', r.w); rc.setAttribute('height', r.h);
+        rc.setAttribute('fill', 'rgba(108,180,255,0.18)');
+        rc.setAttribute('stroke', '#6cb4ff'); rc.setAttribute('stroke-dasharray', '6 6');
+        rc.style.pointerEvents = fogMode ? 'all' : 'none';
+        rc.style.cursor = fogMode ? 'pointer' : 'default';
+        rc.addEventListener('click', function (e) {
+          if (!fogMode) return;
+          e.stopPropagation();
+          fogRevealed.splice(i, 1);
+          saveFog();
+        });
+        svg.appendChild(rc);
+      });
+      if (fogDrag) {  // live preview of the rect being painted
+        var pv = document.createElementNS(NS, 'rect');
+        var x = Math.min(fogDrag.sx, fogDrag.cx), y = Math.min(fogDrag.sy, fogDrag.cy);
+        pv.setAttribute('x', x); pv.setAttribute('y', y);
+        pv.setAttribute('width', Math.abs(fogDrag.cx - fogDrag.sx));
+        pv.setAttribute('height', Math.abs(fogDrag.cy - fogDrag.sy));
+        pv.setAttribute('fill', 'rgba(108,180,255,0.28)');
+        pv.style.pointerEvents = 'none';
+        svg.appendChild(pv);
+      }
+    }
   }
   function toMap(e) {
     var pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
@@ -243,6 +287,17 @@
     } catch (e) { setStatus('Save failed.'); }
     render();
   }
+  async function saveFog() {
+    setStatus('Saving…');
+    try {
+      await fetch('/api/campaign/' + CID + '/map/' + MID + '/fog', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: fogEnabled, revealed: fogRevealed }),
+      });
+      setStatus('Saved.');
+    } catch (e) { setStatus('Save failed.'); }
+    render();
+  }
 
   // Toolbar wiring.
   var wallBtn = document.getElementById('me-wall-btn');
@@ -255,24 +310,52 @@
     snapBtn.setAttribute('aria-pressed', snapOn ? 'true' : 'false');
   });
   var lightBtn = document.getElementById('me-light-btn');
+  var fogBtn = document.getElementById('me-fog-btn');
   function syncStageCursor() {
-    var on = wallMode || spotMode || lightMode;
+    var on = wallMode || spotMode || lightMode || fogMode;
     svg.style.pointerEvents = on ? 'auto' : 'none';
     svg.style.cursor = on ? 'crosshair' : 'default';
   }
-  // One edit mode at a time (wall / spot / light), or null for view.
+  // One edit mode at a time (wall / spot / light / fog), or null for view.
   function setMode(mode) {
-    wallMode = (mode === 'wall'); spotMode = (mode === 'spot'); lightMode = (mode === 'light');
+    wallMode = (mode === 'wall'); spotMode = (mode === 'spot');
+    lightMode = (mode === 'light'); fogMode = (mode === 'fog');
     wallBtn.setAttribute('aria-pressed', wallMode ? 'true' : 'false');
     spotBtn.setAttribute('aria-pressed', spotMode ? 'true' : 'false');
     if (lightBtn) lightBtn.setAttribute('aria-pressed', lightMode ? 'true' : 'false');
+    if (fogBtn) fogBtn.setAttribute('aria-pressed', fogMode ? 'true' : 'false');
     doorLbl.style.display = wallMode ? 'inline-flex' : 'none';
-    pending = null; syncStageCursor(); render();
+    if (fogOnLbl) fogOnLbl.style.display = fogMode ? 'inline-flex' : 'none';
+    pending = null; fogDrag = null; syncStageCursor(); render();
   }
+  var fogOnLbl = document.getElementById('me-fog-on-lbl');
+  var fogOnCb = document.getElementById('me-fog-on-cb');
+  if (fogOnCb) fogOnCb.checked = fogEnabled;
   wallBtn.addEventListener('click', function () { setMode(wallMode ? null : 'wall'); });
   spotBtn.addEventListener('click', function () { setMode(spotMode ? null : 'spot'); });
   if (lightBtn) lightBtn.addEventListener('click', function () { setMode(lightMode ? null : 'light'); });
+  if (fogBtn) fogBtn.addEventListener('click', function () {
+    var entering = !fogMode;
+    setMode(entering ? 'fog' : null);
+    // Entering fog mode turns fog on for the map (if it wasn't already).
+    if (entering && !fogEnabled) { fogEnabled = true; if (fogOnCb) fogOnCb.checked = true; saveFog(); }
+  });
+  if (fogOnCb) fogOnCb.addEventListener('change', function () {
+    fogEnabled = fogOnCb.checked; saveFog();
+  });
+  // Fog reveal painting: drag a rectangle on the overlay.
+  svg.addEventListener('pointerdown', function (e) {
+    if (!fogMode) return;
+    var p = toMap(e); if (!p) return;
+    e.preventDefault();
+    fogDrag = { sx: p.x, sy: p.y, cx: p.x, cy: p.y };
+    try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+  });
   svg.addEventListener('pointermove', function (e) {
+    if (fogDrag) {
+      var fp = toMap(e); if (fp) { fogDrag.cx = fp.x; fogDrag.cy = fp.y; render(); }
+      return;
+    }
     if (!grab) return;
     var p = toMap(e); if (!p) return;
     var dx = p.x - grab.sx, dy = p.y - grab.sy;
@@ -286,6 +369,18 @@
     render();
   });
   svg.addEventListener('pointerup', function (e) {
+    if (fogDrag) {
+      var fd = fogDrag; fogDrag = null;
+      try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
+      var x = Math.min(fd.sx, fd.cx), y = Math.min(fd.sy, fd.cy);
+      var w = Math.abs(fd.cx - fd.sx), h = Math.abs(fd.cy - fd.sy);
+      if (w > 6 && h > 6) {  // ignore stray taps
+        fogRevealed.push({ x: x, y: y, w: w, h: h });
+        saveFog();
+      } else { render(); }
+      suppressClick = true; setTimeout(function () { suppressClick = false; }, 0);
+      return;
+    }
     if (!grab) return;
     var g = grab; grab = null;
     try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
