@@ -112,6 +112,25 @@ def test_right_click_works_in_draw_mode(gm_page: Page) -> None:
             c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
 
 
+def test_left_click_in_draw_mode_keeps_wall(gm_page: Page) -> None:
+    # v2.783.2 — a plain click on a wall while a draw tool is active must NOT
+    # delete it (removal is Erase-mode / right-click only).
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
+        c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
+        c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
+            {"id": "w", "x1": 150, "y1": 150, "x2": 320, "y2": 150, "style": "stone"}]})
+        try:
+            _open_editor(gm_page, mid)
+            gm_page.locator("#me-wall-btn").click()   # enter wall (draw) mode
+            box = _hit_box(gm_page)
+            gm_page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+            gm_page.wait_for_timeout(250)
+            assert len(_walls(c, mid)) == 1, _walls(c, mid)  # still there
+        finally:
+            c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
+
+
 def test_move_drags_object(gm_page: Page) -> None:
     with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})

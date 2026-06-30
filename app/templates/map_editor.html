@@ -1005,8 +1005,10 @@
     if (!grab) return;
     var g = grab; grab = null;
     try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
-    if (!g.moved) { walls = walls.filter(function (x) { return x.id !== g.w.id; }); }
-    saveWalls();
+    // v2.783.2 — a click (no drag) on a wall in draw mode must NOT delete it;
+    // removal is only via Erase mode or the right-click menu. Only persist an
+    // actual move.
+    if (g.moved) { saveWalls(); } else { render(); }
     suppressClick = true; setTimeout(function () { suppressClick = false; }, 0);
   });
   svg.addEventListener('click', function (e) {

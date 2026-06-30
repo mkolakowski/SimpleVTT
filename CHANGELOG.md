@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.783.2] - 2026-06-30 — "The Harmless Tap"
+
+**Schema version:** 91
+
+**Commit summary:** Clicking a wall while a draw tool is active no longer deletes it.
+
+**Description:** Fixes the lingering "click to remove" in the map editor: in Wall/Door draw mode, a plain click on an existing wall started a move-grab that, on release with no movement, **deleted** the wall. Removal is now only via **Erase** mode or the right-click **Delete** — a no-move grab just releases. Dragging a wall to move it is unchanged (a real move still saves).
+
+### Fixed
+- `app/templates/map_editor.html` — the wall move-grab `pointerup` only persists when the segment actually moved; it no longer deletes on a zero-distance click.
+
+### Added
+- `tests/harness_ui/test_map_editor_interactions.py` (+1) — a click on a wall in draw mode leaves it intact.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.783.1] - 2026-06-30 — "The Shared Shadow"
 
 **Schema version:** 91
