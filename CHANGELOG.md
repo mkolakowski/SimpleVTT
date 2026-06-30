@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.785.5] - 2026-06-30 — "The Clean Inputs"
+
+**Schema version:** 91
+
+**Commit summary:** Narrow the Ambient select, widen the light-radius inputs, and drop spinner arrows from all toolbar number inputs.
+
+**Description:** Small map-editor toolbar polish: the **Ambient** lighting select is narrower (fixed 72 px — its values are short), the **B/D light-radius** number inputs are wider (60 px) so longer values read cleanly, and the up/down **spinner arrows are removed from every toolbar number input** (light radii + grid size/offset) for a tidier look.
+
+### Changed
+- `app/templates/map_editor.html` — `#me-ambient` fixed 72 px (no flex-grow); `#me-light-bright` / `#me-light-dim` widened to 60 px; CSS hides `::-webkit-(inner|outer)-spin-button` + `-moz-appearance:textfield` on `.me-toolbar input[type=number]`.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.785.4] - 2026-06-30 — "The Quad Grid"
 
 **Schema version:** 91

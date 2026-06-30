@@ -33,6 +33,10 @@
   /* a sub-row that keeps several controls together on one line */
   .me-sub { display:flex; align-items:center; gap:4px; }
   .me-sub > label { flex:0 0 auto; }
+  /* v2.785.5 — drop the spinner arrows on all toolbar number inputs. */
+  .me-toolbar input[type=number] { -moz-appearance:textfield; appearance:textfield; }
+  .me-toolbar input[type=number]::-webkit-outer-spin-button,
+  .me-toolbar input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
   .me-stage { position:relative; display:block; width:100%; box-sizing:border-box;
     border:1px solid var(--border); border-radius:6px; overflow:auto;
     max-height:86vh; background:#0b0d16; }
@@ -94,17 +98,17 @@
       </label>
       <label style="gap:2px;" title="Bright light radius (ft) for new lights">B<input
           type="number" id="me-light-bright" min="0" max="500" value="20"
-          style="width:42px;min-height:32px;"></label>
+          style="width:60px;min-height:32px;"></label>
       <label style="gap:2px;" title="Dim light radius (ft) for new lights">D<input
           type="number" id="me-light-dim" min="0" max="500" value="20"
-          style="width:42px;min-height:32px;"></label>
+          style="width:60px;min-height:32px;"></label>
     </div>
   </div>
   <div class="me-group" role="group" aria-label="Fog of war and lighting">
     <span class="me-grp-lbl">Fog &amp; Light</span>
     {# v2.785.1 — ambient lighting select sits above the Fog button. #}
     <label class="me-fullrow" style="gap:4px;">Ambient
-      <select id="me-ambient" style="min-height:32px;flex:1 1 auto;">
+      <select id="me-ambient" style="min-height:32px;flex:0 0 auto;width:72px;">
         {% for lvl in ['bright','dim','dark'] %}
         <option value="{{ lvl }}" {% if map.ambient_light == lvl %}selected{% endif %}>{{ lvl }}</option>
         {% endfor %}
