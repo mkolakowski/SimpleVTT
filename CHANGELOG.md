@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.785.4] - 2026-06-30 — "The Quad Grid"
+
+**Schema version:** 91
+
+**Commit summary:** Lay the Grid group's controls out 2×2 (show / px on top, x / y beneath).
+
+**Description:** The Grid toolbar group now arranges its four controls in a **2×2** block — **show** and **px** on the first row, **x** and **y** offsets on the second — instead of a single four-deep column, so it's squarer and shorter.
+
+### Changed
+- `app/templates/map_editor.html` — Grid controls wrapped into two `.me-sub` rows (show + px, then x + y). Control IDs unchanged.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.785.3] - 2026-06-30 — "The Trim Buttons"
 
 **Schema version:** 91

@@ -130,10 +130,15 @@
   </div>
   <div class="me-group" role="group" aria-label="Grid">
     <span class="me-grp-lbl">Grid</span>
-    <label style="gap:4px;"><input type="checkbox" id="me-grid-show" {% if map.show_grid %}checked{% endif %}> show</label>
-    <label style="gap:3px;">px<input type="number" id="me-grid" min="20" max="300" value="{{ map.grid_size_px }}" style="width:58px;min-height:32px;" title="Grid cell size in pixels"></label>
-    <label style="gap:3px;">x<input type="number" id="me-grid-offx" min="0" value="{{ map.grid_offset_x }}" style="width:48px;min-height:32px;" title="Grid offset X (align the grid to the image)"></label>
-    <label style="gap:3px;">y<input type="number" id="me-grid-offy" min="0" value="{{ map.grid_offset_y }}" style="width:48px;min-height:32px;" title="Grid offset Y"></label>
+    {# v2.785.4 — 2×2: show / px on top, x / y beneath. #}
+    <div class="me-sub">
+      <label style="gap:4px;"><input type="checkbox" id="me-grid-show" {% if map.show_grid %}checked{% endif %}> show</label>
+      <label style="gap:3px;">px<input type="number" id="me-grid" min="20" max="300" value="{{ map.grid_size_px }}" style="width:50px;min-height:32px;" title="Grid cell size in pixels"></label>
+    </div>
+    <div class="me-sub">
+      <label style="gap:3px;">x<input type="number" id="me-grid-offx" min="0" value="{{ map.grid_offset_x }}" style="width:48px;min-height:32px;" title="Grid offset X (align the grid to the image)"></label>
+      <label style="gap:3px;">y<input type="number" id="me-grid-offy" min="0" value="{{ map.grid_offset_y }}" style="width:48px;min-height:32px;" title="Grid offset Y"></label>
+    </div>
   </div>
   <div class="me-group me-group--stack" role="group" aria-label="View">
     <span class="me-grp-lbl">View</span>
