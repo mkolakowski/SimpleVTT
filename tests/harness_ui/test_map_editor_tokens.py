@@ -126,9 +126,7 @@ def test_token_darkvision_limits_dark_sight(gm_page: Page) -> None:
             gm_page.wait_for_timeout(400)
             gm_page.locator("#me-token-btn").click()
             tok = gm_page.locator(".me-token").first
-            box = tok.bounding_box()
-            cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
-            gm_page.mouse.click(cx, cy)  # show line of sight
+            tok.click()  # show line of sight (re-targets the token each time)
 
             def eye_alpha():
                 return gm_page.evaluate("""() => {
@@ -139,7 +137,7 @@ def test_token_darkvision_limits_dark_sight(gm_page: Page) -> None:
                 }""")
 
             # Darkvision: None → blind in the dark; the token's own square is veiled.
-            gm_page.mouse.click(cx, cy, button="right")
+            tok.click(button="right")
             gm_page.locator("#me-ctx-menu button", has_text="None").click()
             gm_page.wait_for_timeout(150)
             r0 = eye_alpha()
@@ -147,7 +145,7 @@ def test_token_darkvision_limits_dark_sight(gm_page: Page) -> None:
             assert r0["eye"] > 150, r0
 
             # Darkvision: 60 ft → it can now see (a lit bubble at its position).
-            gm_page.mouse.click(cx, cy, button="right")
+            tok.click(button="right")
             gm_page.locator("#me-ctx-menu button", has_text="60 ft").click()
             gm_page.wait_for_timeout(150)
             r60 = eye_alpha()

@@ -6,12 +6,19 @@
   .me-head { display:flex; align-items:center; justify-content:space-between;
     flex-wrap:wrap; gap:12px; margin:16px 0 12px; }
   .me-head h1 { margin:0; font-size:20px; }
-  .me-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  .me-toolbar { display:flex; align-items:stretch; gap:10px; flex-wrap:wrap;
     padding:10px 12px; border:1px solid var(--border); border-radius:8px;
     background:var(--bg-2); margin-bottom:12px; }
   .me-toolbar label { font-size:13px; color:var(--fg-mute); display:inline-flex;
     align-items:center; gap:5px; }
   .me-tool-btn[aria-pressed="true"] { background:var(--accent); color:#fff; }
+  /* v2.783.0 — controls grouped into labelled sub-groups. */
+  .me-group { display:inline-flex; align-items:center; gap:6px; padding:4px 9px;
+    border:1px solid var(--border); border-radius:8px;
+    background:color-mix(in srgb, var(--bg) 55%, transparent); }
+  .me-grp-lbl { font-size:9px; font-weight:700; text-transform:uppercase;
+    letter-spacing:.6px; color:var(--fg-mute); opacity:.75; user-select:none;
+    margin-right:1px; }
   .me-stage { position:relative; display:block; width:100%; box-sizing:border-box;
     border:1px solid var(--border); border-radius:6px; overflow:auto;
     max-height:86vh; background:#0b0d16; }
@@ -34,63 +41,85 @@
 </div>
 
 <div class="me-toolbar">
-  <button type="button" id="me-wall-btn" class="me-tool-btn" aria-pressed="false"
-          title="Draw a wall: click two points (right-click a wall for Move/Delete)">🧱 Wall</button>
-  <button type="button" id="me-door-btn" class="me-tool-btn" aria-pressed="false"
-          title="Draw a door: click two points (players can open/close it at the table)">🚪 Door</button>
-  <label style="gap:3px;" title="Material/look for new walls + doors">
-    <select id="me-wall-style" style="min-height:32px;font-size:12px;">
-      <option value="stone">Stone</option>
-      <option value="wood">Wood</option>
-      <option value="brick">Brick</option>
-      <option value="metal">Metal</option>
-      <option value="cave">Cave</option>
-    </select>
-  </label>
-  <button type="button" id="me-spot-btn" class="me-tool-btn" aria-pressed="false"
-          title="Click the map to place a description hotspot; click a hotspot to delete">📍 Hotspots</button>
-  <button type="button" id="me-light-btn" class="me-tool-btn" aria-pressed="false"
-          title="Click the map to place a light source of the chosen type; click a light to delete">💡 Lights</button>
-  <label style="gap:3px;" title="Light type for new lights (right-click a light to change it)">
-    <select id="me-light-type" style="min-height:32px;font-size:12px;">
-      <option value="candle">🕯 Candle 5/5</option>
-      <option value="torch" selected>🔥 Torch 20/20</option>
-      <option value="lamp">💡 Lamp 15/45</option>
-      <option value="lantern">🏮 Hooded lantern 30/30</option>
-      <option value="bullseye">🔦 Bullseye 60/60</option>
-      <option value="light">✨ Light cantrip 20/20</option>
-      <option value="daylight">☀ Daylight 60/60</option>
-      <option value="custom">Custom…</option>
-    </select>
-  </label>
-  <button type="button" id="me-fog-btn" class="me-tool-btn" aria-pressed="false"
-          title="Fog of war: drag to reveal an area; click a revealed area to re-hide it">🌫 Fog</button>
-  <label id="me-fog-on-lbl" style="display:none;"><input type="checkbox" id="me-fog-on-cb"> fog on</label>
-  <button type="button" id="me-token-btn" class="me-tool-btn"
-          title="Drop a sample token you can drag around to test the map (preview only — not saved; right-click a token to remove)">🎭 Token</button>
-  <button type="button" id="me-erase-btn" class="me-tool-btn" aria-pressed="false"
-          title="Erase mode: click any wall / door / hotspot / light to delete it (right-click an object for Move/Delete anytime)">🗑 Erase</button>
-  <button type="button" id="me-snap-btn" class="me-tool-btn" aria-pressed="true"
-          title="Snap wall/door endpoints to the grid + to nearby wall ends">🧲 Snap</button>
-  <span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:6px;padding:3px 8px;">
-    <label style="gap:4px;"><input type="checkbox" id="me-grid-show" {% if map.show_grid %}checked{% endif %}> grid</label>
+  {# v2.783.0 — controls organised into labelled sub-groups: Walls · Markers ·
+     Fog · Tokens · Tools · Grid · Lighting · View. #}
+  <div class="me-group" role="group" aria-label="Walls">
+    <span class="me-grp-lbl">Walls</span>
+    <button type="button" id="me-wall-btn" class="me-tool-btn" aria-pressed="false"
+            title="Draw a wall: click two points (right-click a wall for Move/Delete)">🧱 Wall</button>
+    <button type="button" id="me-door-btn" class="me-tool-btn" aria-pressed="false"
+            title="Draw a door: click two points (players can open/close it at the table)">🚪 Door</button>
+    <label style="gap:3px;" title="Material/look for new walls + doors">
+      <select id="me-wall-style" style="min-height:32px;font-size:12px;">
+        <option value="stone">Stone</option>
+        <option value="wood">Wood</option>
+        <option value="brick">Brick</option>
+        <option value="metal">Metal</option>
+        <option value="cave">Cave</option>
+      </select>
+    </label>
+  </div>
+  <div class="me-group" role="group" aria-label="Markers">
+    <span class="me-grp-lbl">Markers</span>
+    <button type="button" id="me-spot-btn" class="me-tool-btn" aria-pressed="false"
+            title="Click the map to place a description hotspot; click a hotspot to delete">📍 Hotspots</button>
+    <button type="button" id="me-light-btn" class="me-tool-btn" aria-pressed="false"
+            title="Click the map to place a light source of the chosen type; click a light to delete">💡 Lights</button>
+    <label style="gap:3px;" title="Light type for new lights (right-click a light to change it)">
+      <select id="me-light-type" style="min-height:32px;font-size:12px;">
+        <option value="candle">🕯 Candle 5/5</option>
+        <option value="torch" selected>🔥 Torch 20/20</option>
+        <option value="lamp">💡 Lamp 15/45</option>
+        <option value="lantern">🏮 Hooded lantern 30/30</option>
+        <option value="bullseye">🔦 Bullseye 60/60</option>
+        <option value="light">✨ Light cantrip 20/20</option>
+        <option value="daylight">☀ Daylight 60/60</option>
+        <option value="custom">Custom…</option>
+      </select>
+    </label>
+  </div>
+  <div class="me-group" role="group" aria-label="Fog of war">
+    <span class="me-grp-lbl">Fog</span>
+    <button type="button" id="me-fog-btn" class="me-tool-btn" aria-pressed="false"
+            title="Fog of war: drag to reveal an area; click a revealed area to re-hide it">🌫 Fog</button>
+    <label id="me-fog-on-lbl" style="display:none;"><input type="checkbox" id="me-fog-on-cb"> fog on</label>
+  </div>
+  <div class="me-group" role="group" aria-label="Tokens">
+    <span class="me-grp-lbl">Tokens</span>
+    <button type="button" id="me-token-btn" class="me-tool-btn"
+            title="Drop a sample token you can drag around to test the map (preview only — not saved; right-click a token to remove)">🎭 Token</button>
+  </div>
+  <div class="me-group" role="group" aria-label="Tools">
+    <span class="me-grp-lbl">Tools</span>
+    <button type="button" id="me-erase-btn" class="me-tool-btn" aria-pressed="false"
+            title="Erase mode: click any wall / door / hotspot / light to delete it (right-click an object for Move/Delete anytime)">🗑 Erase</button>
+    <button type="button" id="me-snap-btn" class="me-tool-btn" aria-pressed="true"
+            title="Snap wall/door endpoints + tokens to the grid">🧲 Snap</button>
+  </div>
+  <div class="me-group" role="group" aria-label="Grid">
+    <span class="me-grp-lbl">Grid</span>
+    <label style="gap:4px;"><input type="checkbox" id="me-grid-show" {% if map.show_grid %}checked{% endif %}> show</label>
     <label style="gap:3px;">px<input type="number" id="me-grid" min="20" max="300" value="{{ map.grid_size_px }}" style="width:58px;min-height:32px;" title="Grid cell size in pixels"></label>
     <label style="gap:3px;">x<input type="number" id="me-grid-offx" min="0" value="{{ map.grid_offset_x }}" style="width:48px;min-height:32px;" title="Grid offset X (align the grid to the image)"></label>
     <label style="gap:3px;">y<input type="number" id="me-grid-offy" min="0" value="{{ map.grid_offset_y }}" style="width:48px;min-height:32px;" title="Grid offset Y"></label>
-  </span>
-  <label>Ambient
-    <select id="me-ambient" style="min-height:32px;">
-      {% for lvl in ['bright','dim','dark'] %}
-      <option value="{{ lvl }}" {% if map.ambient_light == lvl %}selected{% endif %}>{{ lvl }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <span style="display:inline-flex;align-items:center;gap:3px;">
+  </div>
+  <div class="me-group" role="group" aria-label="Lighting">
+    <span class="me-grp-lbl">Lighting</span>
+    <label style="gap:4px;">Ambient
+      <select id="me-ambient" style="min-height:32px;">
+        {% for lvl in ['bright','dim','dark'] %}
+        <option value="{{ lvl }}" {% if map.ambient_light == lvl %}selected{% endif %}>{{ lvl }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+  <div class="me-group" role="group" aria-label="View">
+    <span class="me-grp-lbl">View</span>
     <button type="button" id="me-zoom-out" class="me-tool-btn" title="Zoom out">🔍−</button>
     <span id="me-zoom-lbl" style="font-size:12px;color:var(--fg-mute);min-width:3em;text-align:center;">100%</span>
     <button type="button" id="me-zoom-in" class="me-tool-btn" title="Zoom in">🔍+</button>
     <button type="button" id="me-zoom-fit" class="me-tool-btn" title="Fit the map to the view">Fit</button>
-  </span>
+  </div>
   <span class="me-status" id="me-status"></span>
 </div>
 

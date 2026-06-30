@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.783.0] - 2026-06-30 — "The Sorted Workbench"
+
+**Schema version:** 91
+
+**Commit summary:** Reorganize the map-editor toolbar into labelled sub-groups (Walls · Markers · Fog · Tokens · Tools · Grid · Lighting · View).
+
+**Description:** The flat row of editor controls is now grouped into eight labelled, visually-bordered sub-groups so the toolbar reads at a glance: **Walls** (Wall/Door + material), **Markers** (Hotspots/Lights + light type), **Fog**, **Tokens**, **Tools** (Erase/Snap), **Grid** (show + size + offset), **Lighting** (Ambient), and **View** (zoom/Fit), with the status text trailing. All control IDs are unchanged, so behaviour, JS wiring, and existing tests are unaffected — this is purely layout.
+
+### Changed
+- `app/templates/map_editor.html` — controls wrapped in `.me-group` containers with `.me-grp-lbl` captions + supporting CSS; grid "grid" checkbox relabelled "show".
+
+### Added
+- `tests/harness_ui/test_map_editor_toolbar.py` (new, +1) — asserts the eight group labels render in order and every tool ID is still present.
+
+### Fixed
+- `tests/harness_ui/test_map_editor_tokens.py` — the darkvision test re-targets the token via its locator each click (robust to toolbar-wrap layout shifts).
+
+### Schema
+- No schema change (still v91).
+
 ## [2.782.0] - 2026-06-30 — "The Darkvision Dial"
 
 **Schema version:** 91
