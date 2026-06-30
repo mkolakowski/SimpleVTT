@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.784.2] - 2026-06-30 — "The Stacked Bench"
+
+**Schema version:** 91
+
+**Commit summary:** Stack each toolbar group's controls vertically; drop sample tokens at the visible centre.
+
+**Description:** Each map-editor toolbar group now lays its controls out as a **vertical stack** (label header on top, controls full-width beneath) instead of a wrapping row, so every group reads as a tidy labelled column. Because the toolbar is now taller, the 🎭 Token button drops new tokens at the centre of the **visible** part of the stage (clamped to the viewport) rather than the full-stage centre, so a placed token always lands on-screen.
+
+### Changed
+- `app/templates/map_editor.html` — `.me-group` is `flex-direction:column` with full-width stacked controls; token placement targets the visible stage centre.
+- `tests/harness_ui/test_map_editor_interactions.py` / `test_map_light_types.py` — interaction/placement clicks target the visible upper area (robust to the taller toolbar).
+
+### Schema
+- No schema change (still v91).
+
 ## [2.784.1] - 2026-06-30 — "The Living Flame"
 
 **Schema version:** 91

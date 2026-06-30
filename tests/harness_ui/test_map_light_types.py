@@ -31,8 +31,10 @@ def test_place_light_with_preset(gm_page: Page) -> None:
             _open_editor(gm_page, mid)
             gm_page.locator("#me-light-btn").click()           # enter light mode
             gm_page.select_option("#me-light-type", "daylight")
+            # Click near the visible top of the overlay (the tall stacked
+            # toolbar can push the centre below the fold).
             ov = gm_page.locator("#me-overlay").bounding_box()
-            gm_page.mouse.click(ov["x"] + ov["width"] / 2, ov["y"] + ov["height"] / 2)
+            gm_page.mouse.click(ov["x"] + 140, ov["y"] + 120)
             gm_page.wait_for_timeout(350)
             ls = _lights(c, mid)
             assert len(ls) == 1, ls

@@ -58,9 +58,10 @@ def test_copy_paste_wall(gm_page: Page) -> None:
             gm_page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2,
                                 button="right")
             gm_page.locator("#me-ctx-menu button", has_text="Copy").click()
-            # Right-click an empty part of the map (centre; the wall is up top).
+            # Right-click an empty, visible part of the map (near the top, to
+            # the right of the wall — the tall toolbar can push the centre off).
             ov = gm_page.locator("#me-overlay").bounding_box()
-            gm_page.mouse.click(ov["x"] + ov["width"] / 2, ov["y"] + ov["height"] / 2,
+            gm_page.mouse.click(ov["x"] + ov["width"] * 0.6, ov["y"] + 110,
                                 button="right")
             gm_page.locator("#me-ctx-menu button", has_text="Paste").click()
             gm_page.wait_for_timeout(300)

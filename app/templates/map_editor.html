@@ -15,14 +15,18 @@
   .me-toolbar label { font-size:13px; color:var(--fg-mute); display:inline-flex;
     align-items:center; gap:5px; }
   .me-tool-btn[aria-pressed="true"] { background:var(--accent); color:#fff; }
-  /* v2.783.0 — controls grouped into labelled sub-groups. */
-  .me-group { display:flex; flex-wrap:wrap; align-items:center; gap:6px;
+  /* v2.783.0 — controls grouped into labelled sub-groups.
+     v2.784.2 — buttons stack vertically within each group. */
+  .me-group { display:flex; flex-direction:column; align-items:stretch; gap:6px;
     padding:5px 9px; border:1px solid var(--border); border-radius:8px;
     flex:0 0 auto;
     background:color-mix(in srgb, var(--bg) 55%, transparent); }
-  .me-grp-lbl { flex-basis:100%; width:100%; font-size:9px; font-weight:700;
+  .me-grp-lbl { font-size:9px; font-weight:700;
     text-transform:uppercase; letter-spacing:.6px; color:var(--fg-mute);
-    opacity:.75; user-select:none; margin-bottom:1px; }
+    opacity:.75; user-select:none; text-align:center; margin-bottom:2px; }
+  /* stacked controls fill the group width for a tidy column */
+  .me-group > .me-tool-btn, .me-group > label { width:100%; }
+  .me-group > label { justify-content:center; }
   .me-stage { position:relative; display:block; width:100%; box-sizing:border-box;
     border:1px solid var(--border); border-radius:6px; overflow:auto;
     max-height:86vh; background:#0b0d16; }
@@ -948,7 +952,11 @@
   if (tokenBtn) tokenBtn.addEventListener('click', function () {
     var st = document.getElementById('me-stage');
     var rect = st.getBoundingClientRect();
-    var p = toMap({ clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 });
+    // v2.784.2 — drop at the centre of the VISIBLE part of the stage (clamped
+    // to the viewport) so the token lands where you can see it.
+    var vx = (Math.max(rect.left, 0) + Math.min(rect.right, window.innerWidth)) / 2;
+    var vy = (Math.max(rect.top, 0) + Math.min(rect.bottom, window.innerHeight)) / 2;
+    var p = toMap({ clientX: vx, clientY: vy });
     if (!p) p = { x: (img.naturalWidth || 1000) / 2, y: (img.naturalHeight || 1000) / 2 };
     var n = sampleTokens.length + 1;
     // Spread successive drops across a 3×3 block of cells so they don't stack
