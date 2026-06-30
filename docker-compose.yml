@@ -47,6 +47,10 @@ services:
       DEMO_RESET_INTERVAL_MINUTES: ${DEMO_RESET_INTERVAL_MINUTES:-60}
       DEMO_RESET_ON_BOOT: ${DEMO_RESET_ON_BOOT:-true}
       DEMO_CREDENTIALS_VISIBLE: ${DEMO_CREDENTIALS_VISIBLE:-true}
+      # v2.776.0 — version-stamp display toggles.
+      SHOW_VERSION: ${SHOW_VERSION:-true}
+      VERSION_LINK_CHANGELOG: ${VERSION_LINK_CHANGELOG:-true}
+      SHOW_VERSION_NAME: ${SHOW_VERSION_NAME:-true}
       # v2.495.0 — whether the demo GM (demo-gm@example.com) is granted
       # SITE-admin (the /admin portal: user management, audit-log
       # scrub, ban controls) — distinct from its per-campaign GM role.

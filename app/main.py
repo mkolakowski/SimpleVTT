@@ -31,7 +31,7 @@ from .routes import (
     user_routes,
     wiki_routes,
 )
-from .version import APP_VERSION, SCHEMA_VERSION
+from .version import APP_VERSION, APP_VERSION_NAME, SCHEMA_VERSION
 from .visitor_log import emit_visitor_request, visitor_request_log_enabled
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -468,4 +468,9 @@ def healthz():
 
 @app.get("/version")
 def version():
-    return {"app_version": APP_VERSION, "schema_version": SCHEMA_VERSION}
+    # v2.776.0 — also surface the release "Fun Name" for clients/tests.
+    return {
+        "app_version": APP_VERSION,
+        "app_version_name": APP_VERSION_NAME,
+        "schema_version": SCHEMA_VERSION,
+    }

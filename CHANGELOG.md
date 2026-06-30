@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.776.0] - 2026-06-30 — "The Signed Masthead"
+
+**Schema version:** 91
+
+**Commit summary:** Operator env toggles for the version stamp — show/hide, link to the wiki changelog, and show the release "Fun Name".
+
+**Description:** Three new env toggles (all default **true**, so a fresh deploy is unchanged) control the version stamp on the masthead, footer, and tabletop Quick Links:
+- **`SHOW_VERSION`** — show or hide the version number entirely.
+- **`VERSION_LINK_CHANGELOG`** — link the version to the wiki changelog (`/wiki/doc/changelog`; the current release is always at the top of the page).
+- **`SHOW_VERSION_NAME`** — append the release "Fun Name" (e.g. *"The Signed Masthead"*) after the number.
+
+The fun name now lives in `app/version.py` as `APP_VERSION_NAME` (bumped each release alongside `APP_VERSION`), is exposed as a Jinja global, and is also reported by `GET /version`.
+
+### Added
+- `app/version.py` — `APP_VERSION_NAME` constant.
+- `app/config.py` — `show_version` / `version_link_changelog` / `show_version_name` settings (env `SHOW_VERSION` / `VERSION_LINK_CHANGELOG` / `SHOW_VERSION_NAME`).
+- `app/templates.py` — `APP_VERSION_NAME` + the three toggles exposed as Jinja globals.
+- `.env.example`, `.env`, `docker-compose.yml` — the three toggles, defaulted true.
+- `tests/harness/test_version_display.py` (new, +2) — `/version` reports the fun name; the rendered footer shows the number + name + a changelog link under the default (all-true) config.
+
+### Changed
+- `app/templates/base.html` + `app/templates/tabletop.html` — the version stamp respects the new toggles.
+- `GET /version` — now also returns `app_version_name`.
+- `CLAUDE.md` — note to bump `APP_VERSION_NAME` each release.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.775.0] - 2026-06-30 — "The Right-Click Workbench"
 
 **Schema version:** 91

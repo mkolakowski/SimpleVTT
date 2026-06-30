@@ -68,6 +68,16 @@ class Settings(BaseModel):
     demo_reset_on_boot: bool = True
     demo_credentials_visible: bool = True   # show login creds on /login
 
+    # Version-number display (v2.776.0). Operator toggles for the masthead /
+    # footer version stamp. All default true so a fresh deploy looks the same
+    # as before. ``show_version`` hides the stamp entirely;
+    # ``version_link_changelog`` makes it link to the wiki changelog (current
+    # release is always at the top); ``show_version_name`` appends the release
+    # "Fun Name" (``APP_VERSION_NAME``).
+    show_version: bool = True
+    version_link_changelog: bool = True
+    show_version_name: bool = True
+
     # Derived/runtime settings
     database_url: str = ""
 
@@ -102,6 +112,9 @@ def get_settings() -> Settings:
         demo_reset_interval_minutes=max(5, min(1440, int(os.environ.get("DEMO_RESET_INTERVAL_MINUTES") or 60))),
         demo_reset_on_boot=_env_bool("DEMO_RESET_ON_BOOT", True),
         demo_credentials_visible=_env_bool("DEMO_CREDENTIALS_VISIBLE", True),
+        show_version=_env_bool("SHOW_VERSION", True),
+        version_link_changelog=_env_bool("VERSION_LINK_CHANGELOG", True),
+        show_version_name=_env_bool("SHOW_VERSION_NAME", True),
     )
 
     db_url = os.environ.get("DATABASE_URL")

@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi.templating import Jinja2Templates
 from jinja2 import ChainableUndefined
 
-from .version import APP_VERSION, SCHEMA_VERSION
+from .version import APP_VERSION, APP_VERSION_NAME, SCHEMA_VERSION
 from .config import get_settings
 from .content.condition_impacts import CONDITION_IMPACTS
 
@@ -26,7 +26,13 @@ templates.env.undefined = ChainableUndefined
 # any other template that wants them) can reach them without each route
 # passing them in its context dict.
 templates.env.globals["APP_VERSION"] = APP_VERSION
+templates.env.globals["APP_VERSION_NAME"] = APP_VERSION_NAME
 templates.env.globals["SCHEMA_VERSION"] = SCHEMA_VERSION
+# v2.776.0 — operator toggles for the version stamp (show/hide, link to the
+# wiki changelog, show the release "Fun Name").
+templates.env.globals["SHOW_VERSION"] = get_settings().show_version
+templates.env.globals["VERSION_LINK_CHANGELOG"] = get_settings().version_link_changelog
+templates.env.globals["SHOW_VERSION_NAME"] = get_settings().show_version_name
 templates.env.globals["APP_DEFAULT_THEME"] = get_settings().default_theme
 templates.env.globals["DEMO_MODE"] = get_settings().demo_mode
 templates.env.globals["DEMO_RESET_INTERVAL_MINUTES"] = get_settings().demo_reset_interval_minutes

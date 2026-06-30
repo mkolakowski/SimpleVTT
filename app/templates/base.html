@@ -113,7 +113,11 @@
        number that used to live up here. #}
     {% block topnav %}
     <header class="topnav">
-        <a href="/" class="brand">SimpleVTT<span class="brand-version" title="App version v{{ APP_VERSION }} · schema v{{ SCHEMA_VERSION }}">· v{{ APP_VERSION }}</span></a>
+        {# v2.776.0 — version stamp gated by SHOW_VERSION; optionally links to
+           the wiki changelog (VERSION_LINK_CHANGELOG) + shows the release "Fun
+           Name" (SHOW_VERSION_NAME). The version is a sibling of the brand link
+           (not nested) so it can be its own anchor. #}
+        <a href="/" class="brand">SimpleVTT</a>{% if SHOW_VERSION %}{% set _vlabel %}· v{{ APP_VERSION }}{% if SHOW_VERSION_NAME %} “{{ APP_VERSION_NAME }}”{% endif %}{% endset %}{% if VERSION_LINK_CHANGELOG %}<a href="/wiki/doc/changelog" class="brand-version" target="_blank" rel="noopener noreferrer" title="App version v{{ APP_VERSION }} · schema v{{ SCHEMA_VERSION }} — view change notes">{{ _vlabel }}</a>{% else %}<span class="brand-version" title="App version v{{ APP_VERSION }} · schema v{{ SCHEMA_VERSION }}">{{ _vlabel }}</span>{% endif %}{% endif %}
         <nav>
             {# v2.43.5: wiki link in the topnav so it's reachable from
                every page including the tabletop (which suppresses the
@@ -142,7 +146,7 @@
     {# Version footer — pages can override this block (see tabletop.html). #}
     {% block footer %}
     <footer class="site-footer" aria-label="Application version">
-        SimpleVTT v{{ APP_VERSION }} · schema v{{ SCHEMA_VERSION }} · <a href="/wiki" target="_blank" rel="noopener noreferrer">Wiki</a>
+        {% if SHOW_VERSION %}SimpleVTT {% if VERSION_LINK_CHANGELOG %}<a href="/wiki/doc/changelog" target="_blank" rel="noopener noreferrer">v{{ APP_VERSION }}</a>{% else %}v{{ APP_VERSION }}{% endif %}{% if SHOW_VERSION_NAME %} — “{{ APP_VERSION_NAME }}”{% endif %} · schema v{{ SCHEMA_VERSION }} · {% endif %}<a href="/wiki" target="_blank" rel="noopener noreferrer">Wiki</a>
     </footer>
     {% endblock %}
 
