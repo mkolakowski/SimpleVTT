@@ -79,10 +79,13 @@
   </div>
   <div class="me-group" role="group" aria-label="Markers">
     <span class="me-grp-lbl">Markers</span>
-    <button type="button" id="me-spot-btn" class="me-tool-btn" aria-pressed="false"
-            title="Click the map to place a description hotspot; click a hotspot to delete">📍 Hotspots</button>
-    <button type="button" id="me-light-btn" class="me-tool-btn" aria-pressed="false"
-            title="Click the map to place a light source of the chosen type; click a light to delete">💡 Lights</button>
+    {# v2.785.6 — Hotspots + Lights share one line. #}
+    <div class="me-sub">
+      <button type="button" id="me-spot-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
+              title="Click the map to place a description hotspot; click a hotspot to delete">📍 Hotspots</button>
+      <button type="button" id="me-light-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
+              title="Click the map to place a light source of the chosen type; click a light to delete">💡 Lights</button>
+    </div>
     {# v2.785.1 — light type + bright + dim share one line. #}
     <div class="me-sub">
       <label style="gap:3px;flex:1 1 auto;" title="Light type for new lights (sets its look + flicker; right-click a light to change it)">

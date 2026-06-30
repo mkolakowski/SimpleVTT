@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.785.6] - 2026-06-30 — "The Paired Markers"
+
+**Schema version:** 91
+
+**Commit summary:** Put the Hotspots and Lights buttons on the same line.
+
+**Description:** The Markers group's **📍 Hotspots** and **💡 Lights** buttons now share one row (equal width) instead of stacking, sitting above the light type / radius row.
+
+### Changed
+- `app/templates/map_editor.html` — Hotspots + Lights wrapped in a `.me-sub` row (each `flex:1 1 0`).
+
+### Schema
+- No schema change (still v91).
+
 ## [2.785.5] - 2026-06-30 — "The Clean Inputs"
 
 **Schema version:** 91
