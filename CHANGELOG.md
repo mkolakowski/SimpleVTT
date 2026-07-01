@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.800.0] - 2026-07-01 — "The Fading Prop"
+
+**Schema version:** 94
+
+**Commit summary:** Prop polish — set a placed prop's opacity (Fainter / Bolder / Solid).
+
+**Description:** Props gain a **🌗 Opacity** submenu in their right-click menu — **◑ Fainter**, **◕ Bolder**, and **● Solid** — to fade a prop toward the map (ghostly scenery, faint bloodstains, worn rugs, subtle background dressing). The value clamps to 0.1–1.0, persists per prop, and both the editor and live tabletop honour it (it also carries through copy/paste). Second of the prop-polish run (flip → opacity → grid-snap).
+
+### Added
+- `app/routes/tabletop_routes.py` — `_sanitize_props` stores a clamped `op` (0.1–1.0, defaults 1).
+- `app/templates/map_editor.html` — opacity in the prop render; **🌗 Opacity** right-click submenu; `op` carried through copy/paste.
+- `app/templates/tabletop.html` — opacity in the tabletop prop render.
+- `tests/harness/test_map_props.py` (+1) — `op` round-trips, clamps to 0.1..1, defaults to 1.
+
+### Schema
+- No schema change (still v94 — `op` is an additive JSON field).
+
 ## [2.799.0] - 2026-07-01 — "The Mirror Image"
 
 **Schema version:** 94

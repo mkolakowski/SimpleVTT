@@ -2599,6 +2599,7 @@
                     if (pr.flip) ptf += ' translate(' + pr.x + ' ' + pr.y + ') scale(-1 1) translate(' + (-pr.x) + ' ' + (-pr.y) + ')';
                     el.setAttribute('transform', ptf);
                 }
+                if (pr.op != null && pr.op < 1) el.setAttribute('opacity', pr.op);  // v2.800.0 — fade
                 el.style.pointerEvents = 'none';
                 el.style.userSelect = 'none';
                 el.classList.add('tt-prop');

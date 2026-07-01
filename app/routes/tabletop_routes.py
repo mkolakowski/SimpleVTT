@@ -124593,12 +124593,18 @@ def _sanitize_props(raw) -> list:
         except (TypeError, ValueError):
             rot = 0.0
         rot = rot % 360
+        try:
+            op = float(p.get("op") if p.get("op") is not None else 1)
+        except (TypeError, ValueError):
+            op = 1.0
+        op = max(0.1, min(1.0, op))  # v2.800.0 — prop opacity / fade
         kind = str(p.get("kind") or "").strip()[:40] or "📦"
         out.append({
             "id": (str(p.get("id") or "").strip()[:40] or f"pr{i}"),
             "x": x, "y": y, "kind": kind, "size": size, "rot": rot,
             # v2.799.0 — mirror the prop horizontally (flip its art / glyph).
             "flip": bool(p.get("flip")),
+            "op": op,
         })
     return out
 

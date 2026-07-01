@@ -960,6 +960,7 @@
       // v2.799.0 — mirror about the prop's centre when flipped.
       if (pr.flip) ptf += ' translate(' + pr.x + ' ' + pr.y + ') scale(-1 1) translate(' + (-pr.x) + ' ' + (-pr.y) + ')';
       pg.setAttribute('transform', ptf);
+      if (pr.op != null && pr.op < 1) pg.setAttribute('opacity', pr.op);  // v2.800.0 — fade
       var kind = pr.kind || '📦';
       if (kind.indexOf('img:') === 0) {
         // v2.795.0 — a shipped SVG prop illustration, centred on its point.
@@ -1003,6 +1004,11 @@
           { label: (pr.flip ? '✓ ' : '') + '🔄 Flip', fn: function () { pr.flip = !pr.flip; saveProps(); } },
           { label: '➕ Bigger', fn: function () { pr.size = Math.min(400, (pr.size || 40) * 1.25); saveProps(); } },
           { label: '➖ Smaller', fn: function () { pr.size = Math.max(8, (pr.size || 40) * 0.8); saveProps(); } },
+          { label: '🌗 Opacity', sub: [
+            { label: '◑ Fainter', fn: function () { pr.op = Math.max(0.1, (pr.op == null ? 1 : pr.op) - 0.2); saveProps(); } },
+            { label: '◕ Bolder', fn: function () { pr.op = Math.min(1, (pr.op == null ? 1 : pr.op) + 0.2); saveProps(); } },
+            { label: '● Solid', fn: function () { pr.op = 1; saveProps(); } },
+          ] },
           { label: '📋 Copy', fn: function () { copyObj('prop', pr); } },
           { label: '🗑 Delete', fn: function () { props.splice(i, 1); saveProps(); } },
         ]);
@@ -1615,7 +1621,8 @@
       saveLights();
     } else if (clipboard.kind === 'prop') {
       props.push({ id: newId('pr'), x: p.x, y: p.y, kind: d.kind || '📦',
-        size: d.size || 40, rot: d.rot || 0, flip: !!d.flip });
+        size: d.size || 40, rot: d.rot || 0, flip: !!d.flip,
+        op: (d.op == null ? 1 : d.op) });
       saveProps();
     }
   }

@@ -81,6 +81,28 @@ async def test_prop_flip_roundtrips(gm_client):
             f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/props", json={"props": []})
 
 
+async def test_prop_opacity_roundtrips(gm_client):
+    """v2.800.0 — a prop's ``op`` (opacity) round-trips, clamps to 0.1..1, and
+    defaults to 1."""
+    mid = await _active_map_id(gm_client)
+    try:
+        r = await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/props",
+            json={"props": [
+                {"x": 1, "y": 2, "kind": "🌫", "op": 0.4},
+                {"x": 3, "y": 4, "kind": "🌫", "op": 5},    # clamped to 1.0
+                {"x": 5, "y": 6, "kind": "🌫", "op": 0.001},  # clamped to 0.1
+                {"x": 7, "y": 8, "kind": "🌫"}]})            # default 1.0
+        ps = r.json()["props"]
+        assert ps[0]["op"] == 0.4
+        assert ps[1]["op"] == 1.0
+        assert ps[2]["op"] == 0.1
+        assert ps[3]["op"] == 1.0
+    finally:
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/props", json={"props": []})
+
+
 async def test_set_props_requires_gm(gm_client, alice_client):
     mid = await _active_map_id(gm_client)
     # A player can read props (needs them to render the scene)...
