@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.787.1] - 2026-07-01 — "The Swinging Gate"
+
+**Schema version:** 91
+
+**Commit summary:** Gates (open in the middle), door/gate swing-orientation flip, and click-anywhere toggling — editor + tabletop.
+
+**Description:** Builds the client side on v2.787.0's substrate:
+- **Gates** — a new wall type that **opens from the middle** (double leaves hinged at each end, meeting in the centre; both swing 90° when open). Set via the wall right-click **🔀 Type** submenu (Wall / Door / Gate).
+- **Orientation** — a **↻ Flip swing** menu item flips which side a door/gate swings toward.
+- **Click anywhere** — clicking **any part** of a door/gate toggles it, including the **swung-open leaf** (an extra hit-line covers the leaf while it's open), in both the editor and the tabletop.
+- Gates render like doors (jamb frame + swing arcs + leaves), carry the open/closed hover tooltip, and block/pass sight exactly like doors (occlusion + the editor lighting/vision previews).
+
+### Added
+- `app/templates/map_editor.html` + `app/templates/tabletop.html` — `doorGeom` / `doorLeafSegments`; door/gate rendering with flip; leaf hit-lines for click-anywhere; Type + Flip menu items; gate occlusion in the lighting/vision filters.
+- `tests/harness_ui/test_map_editor_gate.py` (new, +2) — convert a wall to a gate + flip it; clicking an open door's leaf closes it.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.787.0] - 2026-07-01 — "The Gatekeeper"
 
 **Schema version:** 91

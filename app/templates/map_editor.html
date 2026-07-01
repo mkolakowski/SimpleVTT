@@ -398,10 +398,10 @@
     ln.style.pointerEvents = relocating ? 'none' : 'stroke';
     ln.style.cursor = eraseMode ? 'pointer'
       : ((wallMode || doorMode) ? 'move' : 'context-menu');
-    // v2.786.7 — native hover tooltip identifying a door + its state.
-    if (w.door) {
+    // v2.786.7 — native hover tooltip identifying a door/gate + its state.
+    if (w.door || w.gate) {
       var ttl = document.createElementNS(NS, 'title');
-      ttl.textContent = '🚪 Door — ' + (w.open ? 'open' : 'closed') + ' (click to toggle)';
+      ttl.textContent = (w.gate ? '🚪 Gate — ' : '🚪 Door — ') + (w.open ? 'open' : 'closed') + ' (click to toggle)';
       ln.appendChild(ttl);
     }
     return ln;
@@ -434,9 +434,25 @@
     });
     return h;
   }
+  // v2.787.1 — door/gate geometry: hinge(s), closed + open (swung 90°) leaf
+  // ends. ``gate`` = double door hinged at both ends, meeting in the middle;
+  // ``flip`` swings to the other side.
+  function doorGeom(w) {
+    var x1 = w.x1, y1 = w.y1, x2 = w.x2, y2 = w.y2;
+    var dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy) || 1;
+    var s = w.flip ? -1 : 1;
+    var px = -dy / L * s, py = dx / L * s;   // unit perpendicular (swing dir)
+    if (w.gate) {
+      var mx = (x1 + x2) / 2, my = (y1 + y2) / 2, half = L / 2;
+      return { gate: true, L: L, half: half, px: px, py: py,
+        a: { hinge: [x1, y1], closed: [mx, my], open: [x1 + px * half, y1 + py * half] },
+        b: { hinge: [x2, y2], closed: [mx, my], open: [x2 + px * half, y2 + py * half] } };
+    }
+    return { gate: false, L: L, px: px, py: py,
+      hinge: [x1, y1], closed: [x2, y2], open: [x1 + px * L, y1 + py * L] };
+  }
   // v2.772.0 — the visible look. Walls: a dark casing under a material face +
-  // a faint top sheen (a solid, beveled wall). Doors: a framed panel + a knob,
-  // green when open. Appends each piece to the svg.
+  // a faint top sheen. Doors/gates: jamb frame + swing arc + leaf(s).
   function drawWallVisual(w) {
     var st = wallStyle(w);
     function seg(color, width, cap) {
@@ -448,22 +464,15 @@
       ln.style.pointerEvents = 'none';
       svg.appendChild(ln);
     }
-    if (w.door) {
-      // v2.786.7 — draw a real hinged door: jamb frame, a swing arc, and a
-      // leaf that lies in the opening when closed / swings 90° when open.
+    if (w.door || w.gate) {
       var open = !!w.open;
-      var hx = w.x1, hy = w.y1, ex = w.x2, ey = w.y2;   // hinge, closed free end
-      var dx = ex - hx, dy = ey - hy, L = Math.hypot(dx, dy) || 1;
-      var ux = dx / L, uy = dy / L, nx = -uy, ny = ux;  // along / perpendicular
-      var ox = hx + nx * L, oy = hy + ny * L;           // open free end (swung 90°)
-      var fx = open ? ox : ex, fy = open ? oy : ey;     // leaf free end
-      function line2(ax, ay, bx, by, color, width, cap, dash) {
+      var G = doorGeom(w);
+      function line2(ax, ay, bx, by, color, width) {
         var ln = document.createElementNS(NS, 'line');
         ln.setAttribute('x1', ax); ln.setAttribute('y1', ay);
         ln.setAttribute('x2', bx); ln.setAttribute('y2', by);
         ln.setAttribute('stroke', color); ln.setAttribute('stroke-width', width);
-        ln.setAttribute('stroke-linecap', cap || 'round');
-        if (dash) ln.setAttribute('stroke-dasharray', dash);
+        ln.setAttribute('stroke-linecap', 'round');
         ln.style.pointerEvents = 'none'; svg.appendChild(ln);
       }
       function dot(cx, cy, r, fill) {
@@ -471,25 +480,44 @@
         c.setAttribute('cx', cx); c.setAttribute('cy', cy); c.setAttribute('r', r);
         c.setAttribute('fill', fill); c.style.pointerEvents = 'none'; svg.appendChild(c);
       }
-      var jamb = Math.max(7, st.width + 3);
-      line2(hx - nx * jamb / 2, hy - ny * jamb / 2, hx + nx * jamb / 2, hy + ny * jamb / 2, st.casing, 5);
-      line2(ex - nx * jamb / 2, ey - ny * jamb / 2, ex + nx * jamb / 2, ey + ny * jamb / 2, st.casing, 5);
-      var arc = document.createElementNS(NS, 'path');
-      arc.setAttribute('d', 'M ' + ex + ' ' + ey + ' A ' + L + ' ' + L + ' 0 0 1 ' + ox + ' ' + oy);
-      arc.setAttribute('fill', 'none');
-      arc.setAttribute('stroke', open ? 'rgba(120,220,150,0.75)' : 'rgba(255,255,255,0.30)');
-      arc.setAttribute('stroke-width', '1.5'); arc.setAttribute('stroke-dasharray', '5 5');
-      arc.style.pointerEvents = 'none'; svg.appendChild(arc);
-      line2(hx, hy, fx, fy, st.casing, st.width + 4);                 // leaf edge/shadow
-      line2(hx, hy, fx, fy, open ? '#4ec978' : st.color, st.width);   // leaf face
-      line2(hx, hy, fx, fy, 'rgba(255,255,255,0.35)', 2);            // sheen
-      dot(hx, hy, 3.2, '#26262c');   // hinge
-      dot(fx, fy, 3.2, '#f0d060');   // knob
+      var jw = Math.max(8, st.width + 4);
+      function jamb(cx, cy) {
+        line2(cx - G.px * jw / 2, cy - G.py * jw / 2, cx + G.px * jw / 2, cy + G.py * jw / 2, st.casing, 5);
+      }
+      function arc(fromP, toP, r) {
+        var a = document.createElementNS(NS, 'path');
+        a.setAttribute('d', 'M ' + fromP[0] + ' ' + fromP[1] + ' A ' + r + ' ' + r + ' 0 0 1 ' + toP[0] + ' ' + toP[1]);
+        a.setAttribute('fill', 'none');
+        a.setAttribute('stroke', open ? 'rgba(120,220,150,0.75)' : 'rgba(255,255,255,0.30)');
+        a.setAttribute('stroke-width', '1.5'); a.setAttribute('stroke-dasharray', '5 5');
+        a.style.pointerEvents = 'none'; svg.appendChild(a);
+      }
+      function leaf(hp, ep) {
+        line2(hp[0], hp[1], ep[0], ep[1], st.casing, st.width + 4);
+        line2(hp[0], hp[1], ep[0], ep[1], open ? '#4ec978' : st.color, st.width);
+        line2(hp[0], hp[1], ep[0], ep[1], 'rgba(255,255,255,0.35)', 2);
+        dot(hp[0], hp[1], 3.2, '#26262c'); dot(ep[0], ep[1], 3.2, '#f0d060');
+      }
+      jamb(w.x1, w.y1); jamb(w.x2, w.y2);
+      if (G.gate) {
+        arc(G.a.closed, G.a.open, G.half); arc(G.b.closed, G.b.open, G.half);
+        leaf(G.a.hinge, open ? G.a.open : G.a.closed);
+        leaf(G.b.hinge, open ? G.b.open : G.b.closed);
+      } else {
+        arc(G.closed, G.open, G.L);
+        leaf(G.hinge, open ? G.open : G.closed);
+      }
     } else {
       seg(st.casing, st.width + 4);                       // casing (depth)
       seg(st.color, st.width);                            // wall face
       seg('rgba(255,255,255,0.18)', Math.max(1, st.width - 4)); // top sheen
     }
+  }
+  // v2.787.1 — the current leaf segment(s) (for click-anywhere hit targets).
+  function doorLeafSegments(w) {
+    var G = doorGeom(w), open = !!w.open;
+    if (G.gate) return [[G.a.hinge, open ? G.a.open : G.a.closed], [G.b.hinge, open ? G.b.open : G.b.closed]];
+    return [[G.hinge, open ? G.open : G.closed]];
   }
   // v2.774.0 — lighting preview: veil for dim/dark ambient, punched by each
   // light's bright/dim radius with wall shadows (mirrors the tabletop).
@@ -511,7 +539,7 @@
     lc.fillStyle = 'rgba(3,6,18,' + (dark ? 0.8 : 0.42) + ')';
     lc.fillRect(0, 0, W, H);
     var solid = (walls || []).filter(function (w) {
-      return w && !(w.door && w.open) &&
+      return w && !((w.door || w.gate) && w.open) &&
         [w.x1, w.y1, w.x2, w.y2].every(function (n) { return typeof n === 'number'; });
     });
     function eraseShadows(sctx, sx, sy) {
@@ -571,7 +599,7 @@
     vc.fillStyle = 'rgba(2,4,12,0.72)';
     vc.fillRect(0, 0, W, H);
     var solid = (walls || []).filter(function (w) {
-      return w && !(w.door && w.open) &&
+      return w && !((w.door || w.gate) && w.open) &&
         [w.x1, w.y1, w.x2, w.y2].every(function (n) { return typeof n === 'number'; });
     });
     if (!_meVisSrc) _meVisSrc = document.createElement('canvas');
@@ -660,10 +688,9 @@
       });
       hit.addEventListener('click', function (e) {
         if (eraseMode) { e.stopPropagation(); deleteWall(w); return; }
-        // v2.775.0 — outside erase/draw modes, clicking a door previews the
-        // player interaction: toggle it open/closed (left-click no longer
-        // deletes, so this is now safe).
-        if (w.door && !wallMode && !doorMode && !relocating) {
+        // v2.775.0/v2.787.1 — outside erase/draw modes, clicking a door/gate
+        // toggles it open/closed.
+        if ((w.door || w.gate) && !wallMode && !doorMode && !relocating) {
           e.stopPropagation();
           w.open = !w.open;
           saveWalls();
@@ -678,20 +705,53 @@
                      + key.charAt(0).toUpperCase() + key.slice(1),
                    fn: function () { w.style = key; saveWalls(); } };
         });
-        showMenu(e.clientX, e.clientY, [
-          { label: (w.door ? '🚪 Door' : '🧱 Wall') + ' — ↔ Move', fn: function () { startMove('wall', w); } },
+        // v2.787.1 — Wall / Door / Gate type submenu.
+        var isGate = !!w.gate, isDoor = !!w.door;
+        var typeItems = [
+          { label: (!isDoor && !isGate ? '✓ ' : '   ') + '🧱 Wall', fn: function () { w.door = false; w.gate = false; saveWalls(); } },
+          { label: (isDoor ? '✓ ' : '   ') + '🚪 Door', fn: function () { w.door = true; w.gate = false; saveWalls(); } },
+          { label: (isGate ? '✓ ' : '   ') + '🚪 Gate (opens in middle)', fn: function () { w.gate = true; w.door = false; saveWalls(); } },
+        ];
+        var items = [
+          { label: (isGate ? '🚪 Gate' : isDoor ? '🚪 Door' : '🧱 Wall') + ' — ↔ Move', fn: function () { startMove('wall', w); } },
           { label: (resizing && resizing.id === w.id ? '↔ Resize (done)' : '↔ Resize (drag ends)'),
             fn: function () {
               resizing = (resizing && resizing.id === w.id) ? null : w;
               setStatus(resizing ? 'Drag the yellow end-handles to resize; click the map to finish.' : '');
               syncStageCursor(); render();
             } },
+          { label: '🔀 Type', sub: typeItems },
           { label: '🎨 Material', sub: matItems },
+        ];
+        if (isDoor || isGate) {
+          items.push({ label: '↻ Flip swing', fn: function () { w.flip = !w.flip; saveWalls(); } });
+        }
+        items.push(
           { label: '📋 Copy', fn: function () { copyObj('wall', w); } },
-          { label: '🗑 Delete', fn: function () { deleteWall(w); } },
-        ]);
+          { label: '🗑 Delete', fn: function () { deleteWall(w); } });
+        showMenu(e.clientX, e.clientY, items);
       });
       svg.appendChild(hit);
+      // v2.787.1 — click-anywhere on an OPEN door/gate: the swung leaf is away
+      // from the opening, so add a hit-line over it too (closed leaves overlap
+      // the main hit-line already).
+      if ((w.door || w.gate) && w.open && !wallMode && !doorMode) {
+        doorLeafSegments(w).forEach(function (sp) {
+          var lh = document.createElementNS(NS, 'line');
+          lh.setAttribute('x1', sp[0][0]); lh.setAttribute('y1', sp[0][1]);
+          lh.setAttribute('x2', sp[1][0]); lh.setAttribute('y2', sp[1][1]);
+          lh.setAttribute('stroke', 'transparent'); lh.setAttribute('stroke-width', '18');
+          lh.style.pointerEvents = relocating ? 'none' : 'stroke'; lh.style.cursor = 'pointer';
+          var ttl = document.createElementNS(NS, 'title');
+          ttl.textContent = (w.gate ? '🚪 Gate — open (click to close)' : '🚪 Door — open (click to close)');
+          lh.appendChild(ttl);
+          lh.addEventListener('click', function (e) {
+            if (eraseMode || relocating) return;
+            e.stopPropagation(); w.open = !w.open; saveWalls();
+          });
+          svg.appendChild(lh);
+        });
+      }
       // v2.786.6 — draggable end-handles while this wall is being resized.
       if (resizing && resizing.id === w.id) {
         svg.appendChild(mkResizeHandle(w, false));
@@ -1069,6 +1129,7 @@
       var dx = p.x - mx, dy = p.y - my;
       walls.push({ id: newId('w'), x1: d.x1 + dx, y1: d.y1 + dy,
         x2: d.x2 + dx, y2: d.y2 + dy, door: !!d.door, open: !!d.open,
+        gate: !!d.gate, flip: !!d.flip, opacity: (d.opacity == null ? 1 : d.opacity),
         style: d.style || 'stone' });
       saveWalls();
     } else if (clipboard.kind === 'hotspot') {

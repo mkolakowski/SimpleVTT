@@ -2412,16 +2412,36 @@
             ln.setAttribute('stroke-width', '16');
             // Doors stay clickable in play mode (toggle open/close); the value
             // re-enables hit-testing even though the overlay svg is none.
-            var clickable = editMode || w.door;
+            var clickable = editMode || w.door || w.gate;
             ln.style.pointerEvents = clickable ? 'stroke' : 'none';
             ln.style.cursor = clickable ? 'pointer' : 'default';
-            // v2.786.7 — native hover tooltip identifying a door + its state.
-            if (w.door) {
+            // v2.786.7 — native hover tooltip identifying a door/gate + state.
+            if (w.door || w.gate) {
                 var ttl = document.createElementNS(NS, 'title');
-                ttl.textContent = '🚪 Door — ' + (w.open ? 'open' : 'closed') + ' (click to toggle)';
+                ttl.textContent = (w.gate ? '🚪 Gate — ' : '🚪 Door — ') + (w.open ? 'open' : 'closed') + ' (click to toggle)';
                 ln.appendChild(ttl);
             }
             return ln;
+        }
+        // v2.787.1 — door/gate geometry (mirrors the editor).
+        function doorGeom(w) {
+            var x1 = w.x1, y1 = w.y1, x2 = w.x2, y2 = w.y2;
+            var dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy) || 1;
+            var s = w.flip ? -1 : 1;
+            var px = -dy / L * s, py = dx / L * s;
+            if (w.gate) {
+                var mx = (x1 + x2) / 2, my = (y1 + y2) / 2, half = L / 2;
+                return { gate: true, L: L, half: half, px: px, py: py,
+                    a: { hinge: [x1, y1], closed: [mx, my], open: [x1 + px * half, y1 + py * half] },
+                    b: { hinge: [x2, y2], closed: [mx, my], open: [x2 + px * half, y2 + py * half] } };
+            }
+            return { gate: false, L: L, px: px, py: py,
+                hinge: [x1, y1], closed: [x2, y2], open: [x1 + px * L, y1 + py * L] };
+        }
+        function doorLeafSegments(w) {
+            var G = doorGeom(w), open = !!w.open;
+            if (G.gate) return [[G.a.hinge, open ? G.a.open : G.a.closed], [G.b.hinge, open ? G.b.open : G.b.closed]];
+            return [[G.hinge, open ? G.open : G.closed]];
         }
         function drawWallVisual(w) {
             var st = wallStyle(w);
@@ -2434,22 +2454,15 @@
                 ln.style.pointerEvents = 'none';
                 svg.appendChild(ln);
             }
-            if (w.door) {
-                // v2.786.7 — a real hinged door: jamb frame + swing arc + a
-                // leaf that lies in the opening (closed) / swings 90° (open).
+            if (w.door || w.gate) {
                 var open = !!w.open;
-                var hx = w.x1, hy = w.y1, ex = w.x2, ey = w.y2;
-                var dx = ex - hx, dy = ey - hy, L = Math.hypot(dx, dy) || 1;
-                var ux = dx / L, uy = dy / L, nx = -uy, ny = ux;
-                var ox = hx + nx * L, oy = hy + ny * L;
-                var fx = open ? ox : ex, fy = open ? oy : ey;
-                function line2(ax, ay, bx, by, color, width, dash) {
+                var G = doorGeom(w);
+                function line2(ax, ay, bx, by, color, width) {
                     var ln = document.createElementNS(NS, 'line');
                     ln.setAttribute('x1', ax); ln.setAttribute('y1', ay);
                     ln.setAttribute('x2', bx); ln.setAttribute('y2', by);
                     ln.setAttribute('stroke', color); ln.setAttribute('stroke-width', width);
                     ln.setAttribute('stroke-linecap', 'round');
-                    if (dash) ln.setAttribute('stroke-dasharray', dash);
                     ln.style.pointerEvents = 'none'; svg.appendChild(ln);
                 }
                 function dot(cx, cy, r, fill) {
@@ -2457,20 +2470,33 @@
                     c.setAttribute('cx', cx); c.setAttribute('cy', cy); c.setAttribute('r', r);
                     c.setAttribute('fill', fill); c.style.pointerEvents = 'none'; svg.appendChild(c);
                 }
-                var jamb = Math.max(7, st.width + 3);
-                line2(hx - nx * jamb / 2, hy - ny * jamb / 2, hx + nx * jamb / 2, hy + ny * jamb / 2, st.casing, 5);
-                line2(ex - nx * jamb / 2, ey - ny * jamb / 2, ex + nx * jamb / 2, ey + ny * jamb / 2, st.casing, 5);
-                var arc = document.createElementNS(NS, 'path');
-                arc.setAttribute('d', 'M ' + ex + ' ' + ey + ' A ' + L + ' ' + L + ' 0 0 1 ' + ox + ' ' + oy);
-                arc.setAttribute('fill', 'none');
-                arc.setAttribute('stroke', open ? 'rgba(120,220,150,0.75)' : 'rgba(255,255,255,0.30)');
-                arc.setAttribute('stroke-width', '1.5'); arc.setAttribute('stroke-dasharray', '5 5');
-                arc.style.pointerEvents = 'none'; svg.appendChild(arc);
-                line2(hx, hy, fx, fy, st.casing, st.width + 4);
-                line2(hx, hy, fx, fy, open ? '#4ec978' : st.color, st.width);
-                line2(hx, hy, fx, fy, 'rgba(255,255,255,0.35)', 2);
-                dot(hx, hy, 3.2, '#26262c');
-                dot(fx, fy, 3.2, '#f0d060');
+                var jw = Math.max(8, st.width + 4);
+                function jamb(cx, cy) {
+                    line2(cx - G.px * jw / 2, cy - G.py * jw / 2, cx + G.px * jw / 2, cy + G.py * jw / 2, st.casing, 5);
+                }
+                function arc(fromP, toP, r) {
+                    var a = document.createElementNS(NS, 'path');
+                    a.setAttribute('d', 'M ' + fromP[0] + ' ' + fromP[1] + ' A ' + r + ' ' + r + ' 0 0 1 ' + toP[0] + ' ' + toP[1]);
+                    a.setAttribute('fill', 'none');
+                    a.setAttribute('stroke', open ? 'rgba(120,220,150,0.75)' : 'rgba(255,255,255,0.30)');
+                    a.setAttribute('stroke-width', '1.5'); a.setAttribute('stroke-dasharray', '5 5');
+                    a.style.pointerEvents = 'none'; svg.appendChild(a);
+                }
+                function leaf(hp, ep) {
+                    line2(hp[0], hp[1], ep[0], ep[1], st.casing, st.width + 4);
+                    line2(hp[0], hp[1], ep[0], ep[1], open ? '#4ec978' : st.color, st.width);
+                    line2(hp[0], hp[1], ep[0], ep[1], 'rgba(255,255,255,0.35)', 2);
+                    dot(hp[0], hp[1], 3.2, '#26262c'); dot(ep[0], ep[1], 3.2, '#f0d060');
+                }
+                jamb(w.x1, w.y1); jamb(w.x2, w.y2);
+                if (G.gate) {
+                    arc(G.a.closed, G.a.open, G.half); arc(G.b.closed, G.b.open, G.half);
+                    leaf(G.a.hinge, open ? G.a.open : G.a.closed);
+                    leaf(G.b.hinge, open ? G.b.open : G.b.closed);
+                } else {
+                    arc(G.closed, G.open, G.L);
+                    leaf(G.hinge, open ? G.open : G.closed);
+                }
             } else {
                 seg(st.casing, st.width + 4);
                 seg(st.color, st.width);
@@ -2483,9 +2509,9 @@
                 drawWallVisual(w);
                 var hit = mkHitLine(w);
                 hit.addEventListener('click', function (e) {
-                    // Play mode: a door toggles open/closed. (Edit-mode
+                    // Play mode: a door/gate toggles open/closed. (Edit-mode
                     // delete/move is handled by the pointer drag below.)
-                    if (!editMode && w.door) {
+                    if (!editMode && (w.door || w.gate)) {
                         e.stopPropagation();
                         toggleDoor(w);
                     }
@@ -2502,6 +2528,22 @@
                     try { svg.setPointerCapture(e.pointerId); } catch (_) {}
                 });
                 svg.appendChild(hit);
+                // v2.787.1 — click-anywhere on an OPEN door/gate in play mode:
+                // a hit-line over the swung leaf toggles it shut.
+                if (!editMode && (w.door || w.gate) && w.open) {
+                    doorLeafSegments(w).forEach(function (sp) {
+                        var lh = document.createElementNS(NS, 'line');
+                        lh.setAttribute('x1', sp[0][0]); lh.setAttribute('y1', sp[0][1]);
+                        lh.setAttribute('x2', sp[1][0]); lh.setAttribute('y2', sp[1][1]);
+                        lh.setAttribute('stroke', 'transparent'); lh.setAttribute('stroke-width', '16');
+                        lh.style.pointerEvents = 'stroke'; lh.style.cursor = 'pointer';
+                        var ttl = document.createElementNS(NS, 'title');
+                        ttl.textContent = (w.gate ? '🚪 Gate — open (click to close)' : '🚪 Door — open (click to close)');
+                        lh.appendChild(ttl);
+                        lh.addEventListener('click', function (e) { e.stopPropagation(); toggleDoor(w); });
+                        svg.appendChild(lh);
+                    });
+                }
             });
             if (pending) {
                 var c = document.createElementNS(NS, 'circle');
