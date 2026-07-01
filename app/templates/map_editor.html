@@ -154,6 +154,12 @@
     <button type="button" id="me-snap-btn" class="me-tool-btn" aria-pressed="true"
             title="Snap wall/door endpoints + tokens to the grid">🧲 Snap</button>
   </div>
+  {# v2.788.0 — undo / redo history. #}
+  <div class="me-group me-group--stack" role="group" aria-label="History">
+    <span class="me-grp-lbl">History</span>
+    <button type="button" id="me-undo-btn" class="me-tool-btn" title="Undo (⌘/Ctrl+Z)" disabled>↶ Undo</button>
+    <button type="button" id="me-redo-btn" class="me-tool-btn" title="Redo (⌘/Ctrl+Shift+Z)" disabled>↷ Redo</button>
+  </div>
   <div class="me-group" role="group" aria-label="Grid">
     <span class="me-grp-lbl">Grid</span>
     {# v2.785.4 — 2×2: show / px on top, x / y beneath. #}
@@ -1048,6 +1054,7 @@
     if (selectedTokenId === t.id) drawTokenVision();
   }
   async function saveWalls() {
+    pushHistory();
     setStatus('Saving…');
     try {
       await fetch('/api/campaign/' + CID + '/map/' + MID + '/walls', {
@@ -1059,6 +1066,7 @@
     render();
   }
   async function saveHotspots() {
+    pushHistory();
     setStatus('Saving…');
     try {
       await fetch('/api/campaign/' + CID + '/map/' + MID + '/hotspots', {
@@ -1070,6 +1078,7 @@
     render();
   }
   async function saveLights() {
+    pushHistory();
     setStatus('Saving…');
     try {
       await fetch('/api/campaign/' + CID + '/map/' + MID + '/lights', {
@@ -1081,6 +1090,7 @@
     render();
   }
   async function saveFog() {
+    pushHistory();
     setStatus('Saving…');
     try {
       await fetch('/api/campaign/' + CID + '/map/' + MID + '/fog', {
@@ -1109,6 +1119,42 @@
       ]);
       setStatus('All changes saved ✓');
     } catch (e) { setStatus('Save failed — check your connection.'); }
+  }
+  // v2.788.0 — undo/redo for the persisted map layers (walls / hotspots /
+  // lights / fog). Sample tokens + grid/ambient settings are out of scope.
+  var _hist = [], _histIdx = -1, _applyingHist = false;
+  function _snap() {
+    return JSON.stringify({ walls: walls, hotspots: hotspots, lights: lights,
+      fogEnabled: fogEnabled, fogRevealed: fogRevealed });
+  }
+  function pushHistory() {
+    if (_applyingHist) return;
+    var s = _snap();
+    if (_histIdx >= 0 && _hist[_histIdx] === s) return;  // no change
+    _hist = _hist.slice(0, _histIdx + 1);
+    _hist.push(s);
+    if (_hist.length > 100) _hist.shift();
+    _histIdx = _hist.length - 1;
+    updateHistoryButtons();
+  }
+  function _restore(s) {
+    var o = JSON.parse(s);
+    walls = o.walls; hotspots = o.hotspots; lights = o.lights;
+    fogEnabled = o.fogEnabled; fogRevealed = o.fogRevealed;
+    if (typeof fogOnCb !== 'undefined' && fogOnCb) fogOnCb.checked = fogEnabled;
+  }
+  async function _applyHistory(idx) {
+    _histIdx = idx; _applyingHist = true;
+    _restore(_hist[_histIdx]); render();
+    await saveAll();
+    _applyingHist = false; updateHistoryButtons();
+  }
+  function undo() { if (_histIdx > 0) _applyHistory(_histIdx - 1); }
+  function redo() { if (_histIdx < _hist.length - 1) _applyHistory(_histIdx + 1); }
+  function updateHistoryButtons() {
+    var u = document.getElementById('me-undo-btn'), r = document.getElementById('me-redo-btn');
+    if (u) u.disabled = _histIdx <= 0;
+    if (r) r.disabled = _histIdx >= _hist.length - 1;
   }
   // v2.770.0 — object delete + move (via erase mode / right-click menu).
   function deleteWall(w) { walls = walls.filter(function (x) { return x.id !== w.id; }); saveWalls(); }
@@ -1251,6 +1297,11 @@
   // v2.781.0 — explicit Save button + ⌘/Ctrl+S.
   var saveBtn = document.getElementById('me-save-btn');
   if (saveBtn) saveBtn.addEventListener('click', saveAll);
+  // v2.788.0 — undo / redo buttons.
+  var undoBtn = document.getElementById('me-undo-btn');
+  if (undoBtn) undoBtn.addEventListener('click', undo);
+  var redoBtn = document.getElementById('me-redo-btn');
+  if (redoBtn) redoBtn.addEventListener('click', redo);
   // v2.786.2 — inline map rename (header ✎).
   var nameSpan = document.getElementById('me-map-name');
   var nameInput = document.getElementById('me-map-name-input');
@@ -1299,7 +1350,14 @@
   if (tagsInput) tagsInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doSaveTags(); } });
   document.addEventListener('keydown', function (e) {
     if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
-      e.preventDefault(); saveAll();
+      e.preventDefault(); saveAll(); return;
+    }
+    // v2.788.0 — undo / redo.
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z')) {
+      e.preventDefault(); if (e.shiftKey) redo(); else undo(); return;
+    }
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || e.key === 'Y')) {
+      e.preventDefault(); redo(); return;
     }
   });
   // One edit mode at a time (wall / door / spot / light / fog), or null.
@@ -1527,6 +1585,7 @@
   if (img.complete) fitContain(); else img.addEventListener('load', fitContain);
   window.addEventListener('resize', syncOverlay);
   render();
+  pushHistory();  // v2.788.0 — baseline for undo
 })();
 </script>
 </div>

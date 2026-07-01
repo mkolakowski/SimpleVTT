@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.788.0] - 2026-07-01 — "The Second Chance"
+
+**Schema version:** 91
+
+**Commit summary:** Undo / redo for the map editor (walls, doors, lights, hotspots, fog).
+
+**Description:** The map editor gains **undo / redo**. Every change to the persisted layers — walls / doors / gates, hotspots, and lights, plus fog — snapshots into a history stack (capped at 100), so you can step backward and forward through your edits. Undo/redo is available from a new **History** toolbar group (↶ Undo / ↷ Redo, disabled when there's nothing to do) and via **⌘/Ctrl+Z** and **⌘/Ctrl+Shift+Z** (⌘/Ctrl+Y also redoes). Each step persists to the server. Sample tokens (ephemeral) and grid/ambient settings are out of scope.
+
+### Added
+- `app/templates/map_editor.html` — history stack (`pushHistory` on every layer save, `undo`/`redo`, `_restore`), a **History** toolbar group, keyboard shortcuts, and a baseline snapshot on load.
+- `tests/harness_ui/test_map_editor_undo.py` (new, +1) — draw a wall, Undo removes it, Redo restores it (each persisted).
+
+### Changed
+- `tests/harness_ui/test_map_editor_toolbar.py` — expects the new **History** group.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.787.3] - 2026-07-01 — "The Glass Wall"
 
 **Schema version:** 91
