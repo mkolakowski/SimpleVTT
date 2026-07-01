@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.815.0] - 2026-07-01 — "The Captioned Rack"
+
+**Schema version:** 96
+
+**Commit summary:** Every toolbar dropdown gets a small caption above it (material, ambient, terrain, weather, prop, grid type — matching the existing "light type").
+
+**Description:** Adds a **caption above every dropdown** in the map-editor ribbon so each select says what it controls at a glance — **material** (Walls), **ambient / terrain / weather** (Environment), **prop** (Props), and **grid type** (Grid) — matching the **light type** caption that was already there. Wrapped in a reusable `.me-capsel` (caption-over-control) layout for consistent alignment.
+
+### Added
+- `app/templates/map_editor.html` — `.me-capsel` helper + `.me-cap` captions over the material / ambient / terrain / weather / prop / grid-type selects.
+- `tests/harness_ui/test_map_editor_captions.py` (new, +1) — every ribbon `<select>` has a non-empty caption in its label, and the six new caption texts are present.
+
+### Schema
+- No schema change (still v96 — layout only).
+
 ## [2.814.0] - 2026-07-01 — "The Even Rows"
 
 **Schema version:** 96

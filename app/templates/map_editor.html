@@ -83,6 +83,9 @@
   /* v2.785.9 — a tiny caption above a control */
   .me-cap { font-size:9px; font-weight:700; text-transform:uppercase;
     letter-spacing:.4px; color:var(--fg-mute); opacity:.75; line-height:1.2; }
+  /* v2.815.0 — caption-above-a-dropdown wrapper (title over every select). */
+  .me-capsel { display:flex; flex-direction:column; align-items:stretch; gap:1px; }
+  .me-capsel > .me-cap { text-align:center; }
   /* v2.785.5 — drop the spinner arrows on all toolbar number inputs. */
   .me-toolbar input[type=number] { -moz-appearance:textfield; appearance:textfield; }
   .me-toolbar input[type=number]::-webkit-outer-spin-button,
@@ -118,8 +121,9 @@
             title="Draw a door: click two points (players can open/close it at the table)">🚪 Door</button>
     <button type="button" id="me-room-btn" class="me-tool-btn" aria-pressed="false"
             title="Draw a room: click two opposite corners to enclose it with four walls">🔲 Room</button>
-    <label style="gap:3px;" title="Material/look for new walls + doors">
-      <select id="me-wall-style" style="min-height:32px;font-size:12px;">
+    <label class="me-capsel" title="Material/look for new walls + doors">
+      <span class="me-cap">material</span>
+      <select id="me-wall-style" style="min-height:32px;font-size:12px;width:100%;">
         <option value="stone">Stone</option>
         <option value="wood">Wood</option>
         <option value="brick">Brick</option>
@@ -171,8 +175,9 @@
   <div class="me-group" role="group" aria-label="Environment">
     <span class="me-grp-lbl">Environment</span>
     {# v2.785.1 — ambient lighting select sits above the Fog button. #}
-    <label class="me-fullrow" style="gap:4px;">Ambient
-      <select id="me-ambient" style="min-height:32px;flex:0 0 auto;width:72px;">
+    <label class="me-capsel" title="Ambient light level for the whole map">
+      <span class="me-cap">ambient</span>
+      <select id="me-ambient" style="min-height:32px;width:100%;">
         {% for lvl in ['bright','dim','dark'] %}
         <option value="{{ lvl }}" {% if map.ambient_light == lvl %}selected{% endif %}>{{ lvl }}</option>
         {% endfor %}
@@ -185,7 +190,8 @@
               title="Terrain: drag a rectangle to mark difficult terrain / water / lava…; right-click a region to change its type or delete">⛰ Terrain</button>
     </div>
     <label id="me-fog-on-lbl" style="display:none;"><input type="checkbox" id="me-fog-on-cb"> fog on</label>
-    <label style="gap:3px;" title="Terrain type for new regions">
+    <label class="me-capsel" title="Terrain type for new regions">
+      <span class="me-cap">terrain</span>
       <select id="me-terrain-type" style="min-height:32px;font-size:12px;width:100%;">
         <option value="difficult">🟤 Difficult</option>
         <option value="water">🔵 Water</option>
@@ -196,7 +202,8 @@
       </select>
     </label>
     {# v2.812.0 — ambient weather folded into Environment. #}
-    <label style="gap:3px;" title="Ambient weather shown on the live tabletop">
+    <label class="me-capsel" title="Ambient weather shown on the live tabletop">
+      <span class="me-cap">weather</span>
       <select id="me-weather" style="min-height:32px;font-size:12px;width:100%;">
         <option value="">∅ No weather</option>
         <option value="rain">🌧 Rain</option>
@@ -210,7 +217,8 @@
     <span class="me-grp-lbl">Props</span>
     <button type="button" id="me-prop-btn" class="me-tool-btn" aria-pressed="false"
             title="Prop stamp: pick a glyph and click the map to place it; drag to move, right-click to rotate / resize / delete">🪑 Prop</button>
-    <label style="gap:3px;" title="Prop glyph to place">
+    <label class="me-capsel" title="Prop glyph to place">
+      <span class="me-cap">prop</span>
       <select id="me-prop-kind" style="min-height:32px;font-size:14px;width:100%;">
         <option value="🪑">🪑 Chair</option>
         <option value="🛏">🛏 Bed</option>
@@ -299,7 +307,8 @@
   <div class="me-group" role="group" aria-label="Grid">
     <span class="me-grp-lbl">Grid</span>
     {# v2.788.4 — grid type (square / hex / none) drives the overlay + snapping. #}
-    <label style="gap:3px;" title="Grid type (square / hex / none)">
+    <label class="me-capsel" title="Grid type (square / hex / none)">
+      <span class="me-cap">grid type</span>
       <select id="me-grid-type" style="min-height:32px;font-size:12px;width:100%;">
         <option value="square"{% if not map.grid_type or map.grid_type.value == 'square' %} selected{% endif %}>▦ Square</option>
         <option value="hex"{% if map.grid_type and map.grid_type.value == 'hex' %} selected{% endif %}>⬡ Hex</option>
