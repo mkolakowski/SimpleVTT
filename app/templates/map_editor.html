@@ -353,6 +353,9 @@
   {# v2.790.3 — per-layer visibility (authoring only; saved locally). #}
   <div class="me-group" role="group" aria-label="Layers">
     <span class="me-grp-lbl">Layers</span>
+    {# v2.818.0 — one click hides/shows every overlay (isolate the bare map). #}
+    <button type="button" id="me-layers-toggle" class="me-tool-btn" style="font-size:11px;"
+            title="Show or hide every overlay at once — handy for eyeballing the bare map image">👁 All / None</button>
     {# v2.814.0 — uniform 2-column checkbox grid. #}
     <div class="me-layers-grid">
       <label style="gap:4px;"><input type="checkbox" id="me-layer-walls" checked> Walls</label>
@@ -2454,12 +2457,28 @@
   });
 
   // v2.790.3 — layer-visibility checkboxes (reflect + persist localStorage).
-  ['walls', 'terrain', 'lights', 'hotspots', 'fog', 'gmpins', 'props', 'labels', 'tokens'].forEach(function (k) {
+  var LAYER_KEYS = ['walls', 'terrain', 'lights', 'hotspots', 'fog', 'gmpins', 'props', 'labels', 'tokens'];
+  LAYER_KEYS.forEach(function (k) {
     var cb = document.getElementById('me-layer-' + k);
     if (!cb) return;
     cb.checked = layers[k];
     cb.addEventListener('change', function () { layers[k] = cb.checked; saveLayers(); render(); });
   });
+  // v2.818.0 — All / None flips every layer at once: if anything is shown,
+  // hide them all (isolate the bare map); otherwise show them all.
+  var layersToggle = document.getElementById('me-layers-toggle');
+  if (layersToggle) {
+    layersToggle.addEventListener('click', function () {
+      var next = !LAYER_KEYS.some(function (k) { return layers[k]; });
+      LAYER_KEYS.forEach(function (k) {
+        layers[k] = next;
+        var cb = document.getElementById('me-layer-' + k);
+        if (cb) cb.checked = next;
+      });
+      saveLayers();
+      render();
+    });
+  }
   // v2.811.0 — collapsible toolbar groups: click a group's label to fold it to
   // just the label (reclaims horizontal space); persisted per map.
   var collapsedGroups = (function () {

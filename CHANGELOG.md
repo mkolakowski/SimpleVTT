@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.818.0] - 2026-07-01 — "The Bare Map"
+
+**Schema version:** 96
+
+**Commit summary:** Add an "All / None" toggle to the map-editor Layers group — one click hides or shows every overlay.
+
+**Description:** The Layers group in the map-editor ribbon has nine per-overlay checkboxes (Walls, Terrain, Lights, Hotspots, Fog, Pins, Props, Labels, Tokens). To eyeball the **bare map image** a GM previously had to uncheck eight boxes one at a time, then re-check them all to restore. This adds a **👁 All / None** button above the checkbox grid: if any overlay is currently shown it hides them all (isolating the base image); if everything is already hidden it shows them all again. It reflects into the existing checkboxes, persists to `localStorage` like the individual toggles, and re-renders live. Authoring-only — the toggle never touches saved map data.
+
+### Added
+- `app/templates/map_editor.html` — `#me-layers-toggle` button + its click handler (hoisted the shared `LAYER_KEYS` list so the toggle and the per-checkbox wiring share one source of truth).
+- `tests/harness_ui/test_map_editor_layers.py` — `test_layers_all_none_toggle` (+1): all nine boxes start checked, one click unchecks every box, a second click restores them.
+
+### Schema
+- No schema change (still v96 — client-side authoring toggle only).
+
 ## [2.817.0] - 2026-07-01 — "The Painted Lines"
 
 **Schema version:** 96
