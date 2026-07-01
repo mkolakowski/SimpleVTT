@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.788.4] - 2026-07-01 — "The Honeycomb"
+
+**Schema version:** 91
+
+**Commit summary:** Hex grid support in the map editor — pick Square / Hex / None; hex overlay + hex token snapping.
+
+**Description:** The map editor's **Grid** group gains a **type selector** — **▦ Square / ⬡ Hex / ∅ None**. Choosing **Hex** renders a pointy-top hex overlay and snaps sample tokens to hex centres (matching the tabletop's existing hex math); **None** hides the overlay and disables snapping. The choice persists per map via a new `grid_type` setter and drives the live tabletop too (which already rendered/snapped hex). Previously `grid_type` could only be set at map upload — now it's editable.
+
+### Added
+- `app/routes/tabletop_routes.py` — `POST …/maps/{id}/grid_type` (square/hex/none, GM-only, 400 on bad value); `grid_type` added to `GET …/active-map`.
+- `app/templates/map_editor.html` — `#me-grid-type` selector; hex overlay (SVG polygons) + hex token snapping; `None` hides the grid.
+- `tests/harness/test_map_grid_type.py` (new, +3) — hex round-trip, 400, 403; `tests/harness_ui/test_map_editor_hexgrid.py` (new, +1) — switching to Hex renders polygons + persists across reload.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.788.3] - 2026-07-01 — "The Hidden Door"
 
 **Schema version:** 91

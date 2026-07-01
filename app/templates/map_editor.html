@@ -164,6 +164,14 @@
   </div>
   <div class="me-group" role="group" aria-label="Grid">
     <span class="me-grp-lbl">Grid</span>
+    {# v2.788.4 — grid type (square / hex / none) drives the overlay + snapping. #}
+    <label style="gap:3px;" title="Grid type (square / hex / none)">
+      <select id="me-grid-type" style="min-height:32px;font-size:12px;width:100%;">
+        <option value="square"{% if not map.grid_type or map.grid_type.value == 'square' %} selected{% endif %}>▦ Square</option>
+        <option value="hex"{% if map.grid_type and map.grid_type.value == 'hex' %} selected{% endif %}>⬡ Hex</option>
+        <option value="none"{% if map.grid_type and map.grid_type.value == 'none' %} selected{% endif %}>∅ None</option>
+      </select>
+    </label>
     {# v2.785.4 — 2×2: show / px on top, x / y beneath. #}
     <div class="me-sub">
       <label style="gap:4px;"><input type="checkbox" id="me-grid-show" {% if map.show_grid %}checked{% endif %}> show</label>
@@ -351,6 +359,7 @@
   var gridPx = {{ map.grid_size_px }} || 70;
   var gridShow = {{ 'true' if map.show_grid else 'false' }};
   var gridOffX = {{ map.grid_offset_x }} || 0, gridOffY = {{ map.grid_offset_y }} || 0;
+  var gridType = {{ (map.grid_type.value if map.grid_type else 'square') | tojson }};  // v2.788.4 — square / hex / none
   var ambient = {{ map.ambient_light | tojson }} || 'bright';  // v2.774.0 lighting preview
   var snapOn = true;
 
@@ -373,8 +382,15 @@
   // (respecting the per-map offset), mirroring the tabletop's token snap.
   // Gated by the 🧲 Snap toggle so the GM can still place freely.
   function snapTokenToGrid(p) {
-    if (!snapOn) return p;
+    if (!snapOn || gridType === 'none') return p;
     var g = gridPx || 70;
+    if (gridType === 'hex') {  // v2.788.4 — snap to the hex centre (tabletop math)
+      var hw = Math.sqrt(3) / 2 * g, rowH = g * 0.75;
+      var row = Math.round(p.y / rowH);
+      var offX = (row % 2) * (hw / 2);
+      var col = Math.round((p.x - offX) / hw);
+      return { x: Math.round(col * hw + offX), y: Math.round(row * rowH) };
+    }
     return {
       x: gridOffX + (Math.floor((p.x - gridOffX) / g) + 0.5) * g,
       y: gridOffY + (Math.floor((p.y - gridOffY) / g) + 0.5) * g,
@@ -704,7 +720,7 @@
     while (svg.firstChild) svg.removeChild(svg.firstChild);
     // v2.769.0 — grid overlay (behind walls/lights/fog), at grid_size_px with
     // the per-map offset. Faint lines so the map image still reads through.
-    if (gridShow && gridPx > 0) {
+    if (gridShow && gridPx > 0 && gridType !== 'none') {
       var W = img.naturalWidth || img.width || 2000;
       var H = img.naturalHeight || img.height || 2000;
       var g = document.createElementNS(NS, 'g');
@@ -712,16 +728,37 @@
       // v2.786.3 — fade the grid as the ambient light drops so it blends into
       // the darkened map instead of glowing over the veil.
       var gridAlpha = ambient === 'dark' ? 0.07 : (ambient === 'dim' ? 0.11 : 0.18);
-      function gridLine(x1, y1, x2, y2) {
-        var ln = document.createElementNS(NS, 'line');
-        ln.setAttribute('x1', x1); ln.setAttribute('y1', y1);
-        ln.setAttribute('x2', x2); ln.setAttribute('y2', y2);
-        ln.setAttribute('stroke', 'rgba(255,255,255,' + gridAlpha + ')');
-        ln.setAttribute('stroke-width', '1');
-        g.appendChild(ln);
+      var gridStroke = 'rgba(255,255,255,' + gridAlpha + ')';
+      if (gridType === 'hex') {
+        // v2.788.4 — pointy-top hex grid (mirrors the tabletop's hex math).
+        var hh = gridPx, hw = Math.sqrt(3) / 2 * hh, rowH = hh * 0.75;
+        var cols = Math.ceil(W / hw) + 1, rows = Math.ceil(H / rowH) + 1;
+        for (var hr = 0; hr < rows; hr++) {
+          var offX = (hr % 2) * (hw / 2);
+          for (var hc = 0; hc < cols; hc++) {
+            var hcx = hc * hw + offX, hcy = hr * rowH, pts = [];
+            for (var i = 0; i < 6; i++) {
+              var a = Math.PI / 180 * (60 * i - 30);
+              pts.push((hcx + (hw / 2) * Math.cos(a)).toFixed(1) + ',' + (hcy + (hh / 2) * Math.sin(a)).toFixed(1));
+            }
+            var poly = document.createElementNS(NS, 'polygon');
+            poly.setAttribute('points', pts.join(' '));
+            poly.setAttribute('fill', 'none'); poly.setAttribute('stroke', gridStroke);
+            poly.setAttribute('stroke-width', '1');
+            g.appendChild(poly);
+          }
+        }
+      } else {
+        var gridLine = function (x1, y1, x2, y2) {
+          var ln = document.createElementNS(NS, 'line');
+          ln.setAttribute('x1', x1); ln.setAttribute('y1', y1);
+          ln.setAttribute('x2', x2); ln.setAttribute('y2', y2);
+          ln.setAttribute('stroke', gridStroke); ln.setAttribute('stroke-width', '1');
+          g.appendChild(ln);
+        };
+        for (var gx = (gridOffX % gridPx); gx <= W; gx += gridPx) gridLine(gx, 0, gx, H);
+        for (var gy = (gridOffY % gridPx); gy <= H; gy += gridPx) gridLine(0, gy, W, gy);
       }
-      for (var gx = (gridOffX % gridPx); gx <= W; gx += gridPx) gridLine(gx, 0, gx, H);
-      for (var gy = (gridOffY % gridPx); gy <= H; gy += gridPx) gridLine(0, gy, W, gy);
       svg.appendChild(g);
     }
     walls.forEach(function (w) {
@@ -1568,6 +1605,16 @@
   document.getElementById('me-grid').addEventListener('change', function (e) {
     gridPx = Math.max(20, Math.min(300, parseInt(e.target.value, 10) || 70));
     e.target.value = gridPx; pxPerFt = gridPx / 5; render(); saveGrid();
+  });
+  // v2.788.4 — grid type (square / hex / none).
+  var gridTypeSel = document.getElementById('me-grid-type');
+  if (gridTypeSel) gridTypeSel.addEventListener('change', function (e) {
+    gridType = e.target.value; render();
+    setStatus('Saving…');
+    fetch('/campaign/' + CID + '/settings/maps/' + MID + '/grid_type', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grid_type: gridType }),
+    }).then(function () { setStatus('Saved.'); }).catch(function () { setStatus('Save failed.'); });
   });
   document.getElementById('me-grid-offx').addEventListener('change', function (e) {
     gridOffX = Math.max(0, parseInt(e.target.value, 10) || 0); render(); saveGrid();

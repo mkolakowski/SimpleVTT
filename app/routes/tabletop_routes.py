@@ -124013,6 +124013,32 @@ async def settings_map_show_grid(
     return {"ok": True, "show_grid": m.show_grid}
 
 
+@router.post("/campaign/{campaign_id}/settings/maps/{map_id}/grid_type")
+async def settings_map_grid_type(
+    campaign_id: int,
+    map_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.788.4 — set the per-map grid type (square / hex / none). GM-only.
+    Drives token snapping + the overlay shape on both the editor + tabletop.
+    Body: ``{grid_type: "square"|"hex"|"none"}``."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404)
+    body = await request.json()
+    val = str(body.get("grid_type") or "").strip().lower()
+    if val not in ("square", "hex", "none"):
+        raise HTTPException(400, "grid_type must be square, hex, or none")
+    m.grid_type = GridType(val)
+    db.commit()
+    return {"ok": True, "grid_type": m.grid_type.value}
+
+
 @router.post("/campaign/{campaign_id}/settings/maps/{map_id}/ambient_light")
 async def settings_map_ambient_light(
     campaign_id: int,
@@ -124107,6 +124133,7 @@ def get_active_map(
     return {
         "ok": True, "map_id": m.id, "name": m.name,
         "grid_size_px": m.grid_size_px,
+        "grid_type": getattr(m.grid_type, "value", m.grid_type) or "square",
         "ambient_light": m.ambient_light,
         "walls": list(m.walls or []),
         "hotspots": list(getattr(m, "hotspots", None) or []),
