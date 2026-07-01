@@ -265,22 +265,51 @@
   function hideMenu() {
     var ex = document.getElementById('me-ctx-menu');
     if (ex) ex.remove();
+    // v2.786.5 — also drop any hover flyouts.
+    var flies = document.querySelectorAll('.me-ctx-fly');
+    for (var i = 0; i < flies.length; i++) flies[i].remove();
+  }
+  var _MENU_BTN_CSS = 'display:block;width:100%;text-align:left;margin:1px 0;';
+  var _MENU_PANEL_CSS = 'background:var(--bg-1,#1b1d27);border:1px solid var(--border,#333);'
+    + 'border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,.5);padding:4px;min-width:120px;';
+  function _menuBtn(it) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'sheet-section-btn';
+    b.style.cssText = _MENU_BTN_CSS;
+    if (it.sub) {
+      // v2.786.5 — a hover flyout of sub-buttons (e.g. wall materials).
+      b.textContent = it.label + '  ▸';
+      var fly = document.createElement('div');
+      fly.className = 'me-ctx-fly';
+      fly.style.cssText = 'position:fixed;z-index:9601;display:none;' + _MENU_PANEL_CSS;
+      it.sub.forEach(function (sit) { fly.appendChild(_menuBtn(sit)); });
+      document.body.appendChild(fly);
+      var timer;
+      function place() {
+        var r = b.getBoundingClientRect();
+        fly.style.display = 'block';
+        var fw = fly.offsetWidth, fh = fly.offsetHeight;
+        var left = r.right + 2; if (left + fw > window.innerWidth) left = Math.max(4, r.left - fw - 2);
+        var top = r.top; if (top + fh > window.innerHeight) top = Math.max(4, window.innerHeight - fh - 4);
+        fly.style.left = left + 'px'; fly.style.top = top + 'px';
+      }
+      b.addEventListener('mouseenter', function () { clearTimeout(timer); place(); });
+      b.addEventListener('mouseleave', function () { timer = setTimeout(function () { fly.style.display = 'none'; }, 250); });
+      b.addEventListener('click', function (e) { e.stopPropagation(); place(); });  // touch
+      fly.addEventListener('mouseenter', function () { clearTimeout(timer); });
+      fly.addEventListener('mouseleave', function () { fly.style.display = 'none'; });
+    } else {
+      b.textContent = it.label;
+      b.addEventListener('click', function (e) { e.stopPropagation(); hideMenu(); it.fn(); });
+    }
+    return b;
   }
   function showMenu(clientX, clientY, items) {
     hideMenu();
     var menu = document.createElement('div');
     menu.id = 'me-ctx-menu';
-    menu.style.cssText = 'position:fixed;z-index:9600;left:' + clientX + 'px;top:' + clientY
-      + 'px;background:var(--bg-1,#1b1d27);border:1px solid var(--border,#333);'
-      + 'border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,.5);padding:4px;min-width:120px;';
-    items.forEach(function (it) {
-      var b = document.createElement('button');
-      b.type = 'button'; b.className = 'sheet-section-btn';
-      b.textContent = it.label;
-      b.style.cssText = 'display:block;width:100%;text-align:left;margin:1px 0;';
-      b.addEventListener('click', function (e) { e.stopPropagation(); hideMenu(); it.fn(); });
-      menu.appendChild(b);
-    });
+    menu.style.cssText = 'position:fixed;z-index:9600;left:' + clientX + 'px;top:' + clientY + 'px;' + _MENU_PANEL_CSS;
+    items.forEach(function (it) { menu.appendChild(_menuBtn(it)); });
     document.body.appendChild(menu);
     // v2.778.0 — keep the (now taller) menu on-screen: flip up / left when it
     // would overflow the viewport.
@@ -571,7 +600,7 @@
       });
       hit.addEventListener('contextmenu', function (e) {
         e.preventDefault(); e.stopPropagation();
-        // v2.786.4 — set the material directly from the menu (no prompt popup).
+        // v2.786.5 — material lives in a hover flyout submenu.
         var cur = w.style || 'stone';
         var matItems = Object.keys(WALL_STYLES).map(function (key) {
           return { label: (cur === key ? '✓ ' : '   ') + '🧱 '
@@ -580,10 +609,10 @@
         });
         showMenu(e.clientX, e.clientY, [
           { label: (w.door ? '🚪 Door' : '🧱 Wall') + ' — ↔ Move', fn: function () { startMove('wall', w); } },
-        ].concat(matItems).concat([
+          { label: '🎨 Material', sub: matItems },
           { label: '📋 Copy', fn: function () { copyObj('wall', w); } },
           { label: '🗑 Delete', fn: function () { deleteWall(w); } },
-        ]));
+        ]);
       });
       svg.appendChild(hit);
     });

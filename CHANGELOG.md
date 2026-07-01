@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.786.5] - 2026-06-30 — "The Flyout Palette"
+
+**Schema version:** 91
+
+**Commit summary:** Condense wall/door material into a single "🎨 Material" item that hovers out a side flyout of material buttons.
+
+**Description:** The five material rows in a wall/door's right-click menu are folded into one **🎨 Material ▸** entry; hovering it pops out a **side flyout** with the material buttons (Stone / Wood / Brick / Metal / Cave, current check-marked), keeping the main menu short. Clicking one applies it. (The context menu now supports nested hover submenus generally.)
+
+### Changed
+- `app/templates/map_editor.html` — `showMenu` supports items with a `sub` array (hover flyout, `.me-ctx-fly`); `hideMenu` clears flyouts; the wall/door menu uses a Material submenu.
+- `tests/harness_ui/test_map_editor_interactions.py` — the material test hovers Material then clicks Wood in the flyout.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.786.4] - 2026-06-30 — "The Material Menu"
 
 **Schema version:** 91
