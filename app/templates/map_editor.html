@@ -78,6 +78,12 @@
 <div class="me-toolbar">
   {# v2.783.0 — controls organised into labelled sub-groups: Walls · Markers ·
      Fog · Tokens · Tools · Grid · Lighting · View. #}
+  {# v2.810.0 — undo / redo history, pinned to the far left. #}
+  <div class="me-group me-group--stack" role="group" aria-label="History">
+    <span class="me-grp-lbl">History</span>
+    <button type="button" id="me-undo-btn" class="me-tool-btn" title="Undo (⌘/Ctrl+Z)" disabled>↶ Undo</button>
+    <button type="button" id="me-redo-btn" class="me-tool-btn" title="Redo (⌘/Ctrl+Shift+Z)" disabled>↷ Redo</button>
+  </div>
   <div class="me-group" role="group" aria-label="Walls">
     <span class="me-grp-lbl">Walls</span>
     <button type="button" id="me-wall-btn" class="me-tool-btn" aria-pressed="false"
@@ -127,9 +133,17 @@
           type="number" id="me-light-dim" min="0" max="500" value="20"
           style="width:60px;min-height:32px;"></label>
     </div>
+    {# v2.810.0 — Label + GM pin tools folded into Markers. #}
+    <div class="me-sub">
+      <button type="button" id="me-label-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
+              title="Text label: click the map to write a visible label (room name etc.); right-click to edit, recolour, resize, or delete">🔤 Label</button>
+      <button type="button" id="me-pin-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
+              title="GM pin: click the map to drop a private note marker (trap DCs, reminders) — players never see these">📌 Pin</button>
+    </div>
   </div>
-  <div class="me-group" role="group" aria-label="Fog of war and lighting">
-    <span class="me-grp-lbl">Fog &amp; Light</span>
+  {# v2.810.0 — Fog & Light merged with Terrain into one Environment group. #}
+  <div class="me-group" role="group" aria-label="Environment">
+    <span class="me-grp-lbl">Environment</span>
     {# v2.785.1 — ambient lighting select sits above the Fog button. #}
     <label class="me-fullrow" style="gap:4px;">Ambient
       <select id="me-ambient" style="min-height:32px;flex:0 0 auto;width:72px;">
@@ -138,15 +152,13 @@
         {% endfor %}
       </select>
     </label>
-    <button type="button" id="me-fog-btn" class="me-tool-btn" aria-pressed="false"
-            title="Fog of war: drag to reveal an area; click a revealed area to re-hide it">🌫 Fog</button>
+    <div class="me-sub">
+      <button type="button" id="me-fog-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
+              title="Fog of war: drag to reveal an area; click a revealed area to re-hide it">🌫 Fog</button>
+      <button type="button" id="me-terrain-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
+              title="Terrain: drag a rectangle to mark difficult terrain / water / lava…; right-click a region to change its type or delete">⛰ Terrain</button>
+    </div>
     <label id="me-fog-on-lbl" style="display:none;"><input type="checkbox" id="me-fog-on-cb"> fog on</label>
-  </div>
-  {# v2.789.1 — terrain regions. #}
-  <div class="me-group" role="group" aria-label="Terrain">
-    <span class="me-grp-lbl">Terrain</span>
-    <button type="button" id="me-terrain-btn" class="me-tool-btn" aria-pressed="false"
-            title="Terrain: drag a rectangle to mark difficult terrain / water / lava…; right-click a region to change its type or delete">⛰ Terrain</button>
     <label style="gap:3px;" title="Terrain type for new regions">
       <select id="me-terrain-type" style="min-height:32px;font-size:12px;width:100%;">
         <option value="difficult">🟤 Difficult</option>
@@ -230,18 +242,7 @@
       </select>
     </label>
   </div>
-  {# v2.802.0 — public text labels (room names, visible to everyone). #}
-  <div class="me-group" role="group" aria-label="Labels">
-    <span class="me-grp-lbl">Labels</span>
-    <button type="button" id="me-label-btn" class="me-tool-btn" aria-pressed="false"
-            title="Text label: click the map to write a visible label (room name etc.); right-click to edit, recolour, resize, or delete">🔤 Label</button>
-  </div>
-  {# v2.790.1 — GM-only pins (never shown to players). #}
-  <div class="me-group" role="group" aria-label="GM pins">
-    <span class="me-grp-lbl">GM</span>
-    <button type="button" id="me-pin-btn" class="me-tool-btn" aria-pressed="false"
-            title="GM pin: click the map to drop a private note marker (trap DCs, reminders) — players never see these">📌 Pin</button>
-  </div>
+  {# v2.810.0 — Labels + GM pin tools moved into the Markers group. #}
   <div class="me-group" role="group" aria-label="Tokens">
     <span class="me-grp-lbl">Tokens</span>
     <button type="button" id="me-token-btn" class="me-tool-btn"
@@ -259,12 +260,6 @@
             title="Measure: drag a line to read its length in feet (5 ft per grid cell)">📏 Measure</button>
     <button type="button" id="me-select-btn" class="me-tool-btn" aria-pressed="false"
             title="Select: drag a box to select multiple objects, then drag to move them together or press Delete to remove them all">⬚ Select</button>
-  </div>
-  {# v2.788.0 — undo / redo history. #}
-  <div class="me-group me-group--stack" role="group" aria-label="History">
-    <span class="me-grp-lbl">History</span>
-    <button type="button" id="me-undo-btn" class="me-tool-btn" title="Undo (⌘/Ctrl+Z)" disabled>↶ Undo</button>
-    <button type="button" id="me-redo-btn" class="me-tool-btn" title="Redo (⌘/Ctrl+Shift+Z)" disabled>↷ Redo</button>
   </div>
   <div class="me-group" role="group" aria-label="Grid">
     <span class="me-grp-lbl">Grid</span>

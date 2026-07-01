@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.810.0] - 2026-07-01 — "The Tidier Bench"
+
+**Schema version:** 96
+
+**Commit summary:** Map-editor toolbar reorg — History pinned far-left, Labels + GM-pin folded into Markers, Fog & Light merged with Terrain into one Environment group.
+
+**Description:** Tightens the editor toolbar into fewer, more logical groups. **History** (Undo/Redo) moves to the **far left**. The **🔤 Label** and **📌 Pin** tools fold into the **Markers** group (alongside Hotspots + Lights), retiring the standalone Labels and GM groups. **Fog & Light** and **Terrain** merge into a single **Environment** group (Ambient · Fog · Terrain). All tool IDs and behaviour are unchanged — this is purely a layout reshuffle, so the toolbar is shorter and scans better.
+
+### Changed
+- `app/templates/map_editor.html` — History group relocated to the far left; Label + Pin buttons moved into Markers; Fog & Light + Terrain combined into an **Environment** group; standalone Labels / GM / Terrain groups removed.
+- `tests/harness_ui/test_map_editor_toolbar.py` — expects the new 12-group order (`HISTORY, WALLS, MARKERS, ENVIRONMENT, PROPS, TOKENS, TOOLS, GRID, TAGS, WEATHER, LAYERS, VIEW`).
+
+### Schema
+- No schema change (still v96 — layout only, no endpoint or data change).
+
 ## [2.809.0] - 2026-07-01 — "The Storm Caller"
 
 **Schema version:** 96
