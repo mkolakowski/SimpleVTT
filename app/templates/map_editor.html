@@ -456,6 +456,9 @@
   // a faint top sheen. Doors/gates: jamb frame + swing arc + leaf(s).
   function drawWallVisual(w) {
     var st = wallStyle(w);
+    // v2.787.3 — render into an opacity group when the wall is transparent.
+    var _wc = svg, _o = (w.opacity == null ? 1 : w.opacity);
+    if (_o < 1) { _wc = document.createElementNS(NS, 'g'); _wc.setAttribute('opacity', _o); svg.appendChild(_wc); }
     function seg(color, width, cap, dash) {
       var ln = document.createElementNS(NS, 'line');
       ln.setAttribute('x1', w.x1); ln.setAttribute('y1', w.y1);
@@ -464,7 +467,7 @@
       ln.setAttribute('stroke-linecap', cap || 'round');
       if (dash) ln.setAttribute('stroke-dasharray', dash);
       ln.style.pointerEvents = 'none';
-      svg.appendChild(ln);
+      _wc.appendChild(ln);
     }
     if (w.door || w.gate) {
       var open = !!w.open;
@@ -475,12 +478,12 @@
         ln.setAttribute('x2', bx); ln.setAttribute('y2', by);
         ln.setAttribute('stroke', color); ln.setAttribute('stroke-width', width);
         ln.setAttribute('stroke-linecap', 'round');
-        ln.style.pointerEvents = 'none'; svg.appendChild(ln);
+        ln.style.pointerEvents = 'none'; _wc.appendChild(ln);
       }
       function dot(cx, cy, r, fill) {
         var c = document.createElementNS(NS, 'circle');
         c.setAttribute('cx', cx); c.setAttribute('cy', cy); c.setAttribute('r', r);
-        c.setAttribute('fill', fill); c.style.pointerEvents = 'none'; svg.appendChild(c);
+        c.setAttribute('fill', fill); c.style.pointerEvents = 'none'; _wc.appendChild(c);
       }
       var jw = Math.max(8, st.width + 4);
       function jamb(cx, cy) {
@@ -492,7 +495,7 @@
         a.setAttribute('fill', 'none');
         a.setAttribute('stroke', open ? 'rgba(120,220,150,0.75)' : 'rgba(255,255,255,0.30)');
         a.setAttribute('stroke-width', '1.5'); a.setAttribute('stroke-dasharray', '5 5');
-        a.style.pointerEvents = 'none'; svg.appendChild(a);
+        a.style.pointerEvents = 'none'; _wc.appendChild(a);
       }
       function leaf(hp, ep) {
         line2(hp[0], hp[1], ep[0], ep[1], st.casing, st.width + 4);
@@ -735,6 +738,11 @@
             } },
           { label: '🔀 Type', sub: typeItems },
           { label: '🎨 Material', sub: matItems },
+          { label: '🌫 Transparency', sub: [1, 0.75, 0.5, 0.25].map(function (o) {
+              return { label: ((w.opacity == null ? 1 : w.opacity) === o ? '✓ ' : '   ')
+                         + Math.round(o * 100) + '%',
+                       fn: function () { w.opacity = o; saveWalls(); } };
+            }) },
         ];
         if (isDoor || isGate) {
           items.push({ label: '↻ Flip swing', fn: function () { w.flip = !w.flip; saveWalls(); } });

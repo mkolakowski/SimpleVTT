@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.787.3] - 2026-07-01 — "The Glass Wall"
+
+**Schema version:** 91
+
+**Commit summary:** Add a Transparency submenu to the wall/door right-click; walls render at the chosen opacity.
+
+**Description:** The wall/door right-click menu gains a **🌫 Transparency** hover flyout with **100 / 75 / 50 / 25 %** presets (current check-marked). A wall/door/gate now renders inside an **opacity group** at the chosen level (persisted via the `opacity` field), so you can make a wall a faint window/overlay — in both the editor and the tabletop. Occlusion is unaffected (transparency is visual only).
+
+### Added
+- `app/templates/map_editor.html` + `app/templates/tabletop.html` — `drawWallVisual` renders into an `<g opacity>` when `opacity < 1`; a Transparency submenu in the wall menu.
+- `tests/harness_ui/test_map_editor_gate.py` (+1) — setting 50% transparency persists `opacity` + renders an `opacity="0.5"` group.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.787.2] - 2026-07-01 — "The Rough Hewn"
 
 **Schema version:** 91

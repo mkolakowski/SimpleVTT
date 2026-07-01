@@ -48,6 +48,28 @@ def test_convert_to_gate_and_flip(gm_page: Page) -> None:
             c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
 
 
+def test_wall_transparency_submenu(gm_page: Page) -> None:
+    # v2.787.3 — set a wall's transparency from the right-click flyout.
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
+        c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
+        c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
+            {"id": "w", "x1": 200, "y1": 200, "x2": 340, "y2": 200, "style": "stone"}]})
+        try:
+            _open(gm_page, mid)
+            box = _hit_box(gm_page)
+            gm_page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2,
+                                button="right")
+            gm_page.locator("#me-ctx-menu button", has_text="Transparency").hover()
+            gm_page.locator(".me-ctx-fly button", has_text="50%").click()
+            gm_page.wait_for_timeout(300)
+            assert _walls(c, mid)[0]["opacity"] == 0.5, _walls(c, mid)
+            # It renders inside an opacity group.
+            assert gm_page.locator('#me-overlay g[opacity="0.5"]').count() >= 1
+        finally:
+            c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
+
+
 def test_open_door_leaf_click_closes(gm_page: Page) -> None:
     # v2.787.1 — click-anywhere: clicking the swung-open leaf toggles it shut.
     with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
