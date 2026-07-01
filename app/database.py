@@ -1122,6 +1122,15 @@ def _apply_inline_migrations() -> None:
                 "ALTER TABLE maps ADD COLUMN labels JSON NOT NULL DEFAULT '[]'"
             ))
 
+    # ---- Schema v96 (2.807.0): maps.weather ----
+    # Ambient weather overlay ("" / rain / snow / fog). Additive; default "".
+    maps_cols_v96 = _column_names("maps")
+    with engine.begin() as conn:
+        if maps_cols_v96 and "weather" not in maps_cols_v96:
+            conn.execute(text(
+                "ALTER TABLE maps ADD COLUMN weather VARCHAR(16) NOT NULL DEFAULT ''"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

@@ -124039,6 +124039,39 @@ async def settings_map_grid_type(
     return {"ok": True, "grid_type": m.grid_type.value}
 
 
+@router.post("/campaign/{campaign_id}/settings/maps/{map_id}/weather")
+async def settings_map_weather(
+    campaign_id: int,
+    map_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.807.0 — set a map's ambient weather overlay (none / rain / snow /
+    fog), animated on the live tabletop. GM-only. Body: ``{weather: "" | "rain"
+    | "snow" | "fog"}``. Broadcasts ``weather_update`` so clients start/stop the
+    animation live."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404)
+    body = await request.json()
+    val = str(body.get("weather") or "").strip().lower()
+    if val in ("none", "clear"):
+        val = ""
+    if val not in ("", "rain", "snow", "fog"):
+        raise HTTPException(400, "weather must be rain, snow, fog, or none")
+    m.weather = val
+    db.commit()
+    await hub.broadcast(campaign_id, {
+        "type": "weather_update",
+        "data": {"map_id": m.id, "weather": m.weather},
+    })
+    return {"ok": True, "map_id": m.id, "weather": m.weather}
+
+
 @router.post("/campaign/{campaign_id}/settings/maps/{map_id}/ambient_light")
 async def settings_map_ambient_light(
     campaign_id: int,
@@ -124143,6 +124176,7 @@ def get_active_map(
         "terrain": list(getattr(m, "terrain", None) or []),
         "props": list(getattr(m, "props", None) or []),
         "labels": list(getattr(m, "labels", None) or []),
+        "weather": getattr(m, "weather", "") or "",
     }
 
 
@@ -124816,6 +124850,7 @@ def map_editor_page(
         "gm_pins": list(getattr(m, "gm_pins", None) or []),
         "props": list(getattr(m, "props", None) or []),
         "labels": list(getattr(m, "labels", None) or []),
+        "weather": getattr(m, "weather", "") or "",
         "is_active": m.id == campaign.active_map_id,
     })
 

@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.807.0] - 2026-07-01 — "The Gathering Clouds"
+
+**Schema version:** 96
+
+**Commit summary:** Substrate for per-map ambient weather — `maps.weather` column + setter endpoint + `weather_update` broadcast.
+
+**Description:** Lays the foundation for an **ambient weather overlay** (rain / snow / fog drift animated on the live tabletop). This commit ships the **data layer**: a new `maps.weather` string column (`""` = none / `rain` / `snow` / `fog`), a GM-only `POST /settings/maps/{id}/weather` setter that validates the value (and normalises `none`/`clear` → `""`), a `weather_update` WS broadcast, and `weather` in both the `active-map` bootstrap and editor-page context. The editor control + the animated tabletop overlay land in the next commit.
+
+### Added
+- `app/models.py` — `Map.weather` string column (default `""`).
+- `app/database.py` — schema v96 migration: `ALTER TABLE maps ADD COLUMN weather`.
+- `app/routes/tabletop_routes.py` — `POST /campaign/{cid}/settings/maps/{mid}/weather` (GM-only, validates rain/snow/fog/none, `weather_update` broadcast); `weather` in `get_active_map` + `map_editor_page` context.
+- `tests/harness/test_map_weather.py` (new, +4) — set/round-trip (+ WS + active-map surfacing), `none` → `""`, bad-value 400, non-GM 403.
+
+### Schema
+- **Schema version → 96.** New `maps.weather` column; additive, defaults to `""`.
+
 ## [2.806.0] - 2026-07-01 — "The Gathered Handful"
 
 **Schema version:** 95

@@ -352,6 +352,11 @@ class Map(Base):
     ambient_light: Mapped[str] = mapped_column(
         String(10), default="bright", server_default="bright",
     )
+    # v2.807.0 — per-map ambient weather overlay animated on the live tabletop:
+    # "" (none) / "rain" / "snow" / "fog". Presentation only.
+    weather: Mapped[str] = mapped_column(
+        String(16), default="", server_default="",
+    )
     # v2.733.0 — when set, the canvas letterbox/surround (the gutter strips
     # around the map + the #map-pane behind it) is painted this colour
     # instead of the default dark overlay. The GM toggle computes the map
