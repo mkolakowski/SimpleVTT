@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.820.0] - 2026-07-01 — "The Concertina"
+
+**Schema version:** 96
+
+**Commit summary:** Click a map-editor zone divider label to collapse or expand every group in that Actions/Draw/Map zone at once.
+
+**Description:** Builds the bulk companion to the v2.811.0 per-group collapse on top of the v2.817.0 zone dividers. Each zone divider's vertical label (**Draw**, **Map**) is now clickable: one click folds **every group in that zone** down to its header (Draw = Walls · Markers · Environment · Props · Tokens; Map = Grid · Tags · Layers · View), reclaiming a big chunk of ribbon width in a single gesture; a second click expands them all. It writes through the **same `me-collapsed` localStorage store** as the per-group collapse, so the two stay consistent and the folded state persists across reloads. The label hovers to the accent colour to hint it's interactive.
+
+### Added
+- `app/templates/map_editor.html` — clickable zone-divider labels with a `ZONE_MEMBERS` map + a bulk collapse/expand handler sharing the per-group `collapsedGroups` store; hover affordance on `.me-zone-lbl`; dropped the now-interactive dividers' `aria-hidden`.
+- `tests/harness_ui/test_map_editor_collapse.py` — `test_zone_divider_collapses_whole_zone` (+1): clicking the Draw label collapses all five Draw groups (Map zone untouched), persists across reload, and a second click re-expands them.
+
+### Schema
+- No schema change (still v96 — client-side authoring interaction only).
+
 ## [2.819.0] - 2026-07-01 — "The Solo Spotlight"
 
 **Schema version:** 96

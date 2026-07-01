@@ -67,7 +67,9 @@
     background:linear-gradient(var(--border), color-mix(in srgb, var(--accent) 40%, var(--border)), var(--border)); }
   .me-zone-sep > .me-zone-lbl { writing-mode:vertical-rl; transform:rotate(180deg);
     font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:1px;
-    color:var(--fg-mute); opacity:.6; user-select:none; }
+    color:var(--fg-mute); opacity:.6; user-select:none; cursor:pointer; }
+  /* v2.820.0 — the zone label folds/expands its whole zone; hover hints it. */
+  .me-zone-sep > .me-zone-lbl:hover { opacity:1; color:var(--accent); }
   /* v2.783.0 — labelled sub-groups, stacked + width-equalised to the widest. */
   .me-group { display:flex; flex-direction:column; align-items:stretch; gap:4px;
     padding:3px 6px 5px; border:1px solid var(--border); border-radius:7px;
@@ -135,8 +137,8 @@
     <button type="button" id="me-select-btn" class="me-tool-btn" aria-pressed="false"
             title="Select: drag a box to select multiple objects, then drag to move them together or press Delete to remove them all">⬚ Select</button>
   </div>
-  {# v2.817.0 — Actions │ Draw zone boundary. #}
-  <div class="me-zone-sep" aria-hidden="true"><span class="me-zone-lbl">Draw</span></div>
+  {# v2.817.0 — Actions │ Draw zone boundary. v2.820.0 — label folds the zone. #}
+  <div class="me-zone-sep"><span class="me-zone-lbl">Draw</span></div>
   <div class="me-group" role="group" aria-label="Walls">
     <span class="me-grp-lbl">Walls</span>
     <button type="button" id="me-wall-btn" class="me-tool-btn" aria-pressed="false"
@@ -317,8 +319,8 @@
     <button type="button" id="me-token2-btn" class="me-tool-btn"
             title="Drop a second (orange) sample token so you can compare two vantage points">🟠 Token</button>
   </div>
-  {# v2.817.0 — Draw │ Map zone boundary. #}
-  <div class="me-zone-sep" aria-hidden="true"><span class="me-zone-lbl">Map</span></div>
+  {# v2.817.0 — Draw │ Map zone boundary. v2.820.0 — label folds the zone. #}
+  <div class="me-zone-sep"><span class="me-zone-lbl">Map</span></div>
   <div class="me-group" role="group" aria-label="Grid">
     <span class="me-grp-lbl">Grid</span>
     {# v2.788.4 — grid type (square / hex / none) drives the overlay + snapping. #}
@@ -2513,6 +2515,33 @@
       var i = collapsedGroups.indexOf(key);
       if (now && i < 0) collapsedGroups.push(key);
       else if (!now && i >= 0) collapsedGroups.splice(i, 1);
+      saveCollapsed();
+    });
+  });
+  // v2.820.0 — click a zone divider's label to collapse / expand every group in
+  // that zone at once (the bulk version of the per-group collapse above). Reuses
+  // the same collapsedGroups store so per-group + per-zone state stay in sync.
+  var ZONE_MEMBERS = {
+    Draw: ['Walls', 'Markers', 'Environment', 'Props', 'Tokens'],
+    Map: ['Grid', 'Tags', 'Layers', 'View'],
+  };
+  Array.prototype.forEach.call(document.querySelectorAll('.me-zone-sep > .me-zone-lbl'), function (lbl) {
+    var zone = (lbl.textContent || '').trim();
+    var members = ZONE_MEMBERS[zone] || [];
+    lbl.setAttribute('title', 'Click to collapse / expand the whole ' + zone + ' zone');
+    lbl.addEventListener('click', function () {
+      var groups = members.map(function (k) {
+        return document.querySelector('.me-toolbar .me-group[aria-label="' + k + '"]');
+      }).filter(Boolean);
+      // Collapse the zone if ANY member is still expanded; otherwise expand all.
+      var collapse = groups.some(function (g) { return !g.classList.contains('me-collapsed'); });
+      groups.forEach(function (g) {
+        var key = g.getAttribute('aria-label') || '';
+        g.classList.toggle('me-collapsed', collapse);
+        var i = collapsedGroups.indexOf(key);
+        if (collapse && i < 0) collapsedGroups.push(key);
+        else if (!collapse && i >= 0) collapsedGroups.splice(i, 1);
+      });
       saveCollapsed();
     });
   });

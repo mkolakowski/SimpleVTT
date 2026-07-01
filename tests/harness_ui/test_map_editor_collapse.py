@@ -31,3 +31,39 @@ def test_group_collapses_and_persists(gm_page: Page) -> None:
     gm_page.locator('.me-group[aria-label="Grid"] .me-grp-lbl').click()
     gm_page.wait_for_timeout(150)
     assert gm_page.locator("#me-grid-type").is_visible()
+
+
+def test_zone_divider_collapses_whole_zone(gm_page: Page) -> None:
+    """v2.820.0 — clicking a zone divider label folds every group in that zone."""
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
+        c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
+    gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
+    expect(gm_page.locator("#me-overlay")).to_be_visible()
+    gm_page.wait_for_timeout(300)
+
+    # The Draw zone spans Walls · Markers · Environment · Props · Tokens.
+    draw_groups = ["Walls", "Markers", "Environment", "Props", "Tokens"]
+    for g in draw_groups:
+        assert "me-collapsed" not in (
+            gm_page.locator(f'.me-group[aria-label="{g}"]').get_attribute("class") or "")
+
+    # Click the "Draw" zone divider label → every Draw group collapses.
+    gm_page.locator('.me-zone-sep > .me-zone-lbl', has_text="Draw").click()
+    gm_page.wait_for_timeout(150)
+    for g in draw_groups:
+        assert "me-collapsed" in (
+            gm_page.locator(f'.me-group[aria-label="{g}"]').get_attribute("class") or ""), g
+    # The Map zone is untouched (Grid still expanded).
+    assert gm_page.locator("#me-grid-type").is_visible()
+
+    # Persists across reload, then a second click re-expands the whole zone.
+    gm_page.reload()
+    gm_page.wait_for_timeout(400)
+    assert "me-collapsed" in (
+        gm_page.locator('.me-group[aria-label="Walls"]').get_attribute("class") or "")
+    gm_page.locator('.me-zone-sep > .me-zone-lbl', has_text="Draw").click()
+    gm_page.wait_for_timeout(150)
+    for g in draw_groups:
+        assert "me-collapsed" not in (
+            gm_page.locator(f'.me-group[aria-label="{g}"]').get_attribute("class") or ""), g
