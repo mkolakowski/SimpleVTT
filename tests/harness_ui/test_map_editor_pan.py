@@ -44,3 +44,40 @@ def test_drag_pans_the_stage(gm_page: Page) -> None:
     # Dragging left/up scrolls the content right/down: both offsets grow.
     assert after["x"] > before["x"], (before, after)
     assert after["y"] > before["y"], (before, after)
+
+
+def test_middle_button_pans_with_tool_active(gm_page: Page) -> None:
+    """v2.824.0 — the middle button pans even while a drawing tool is active."""
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
+        c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
+    gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
+    expect(gm_page.locator("#me-overlay")).to_be_visible()
+    gm_page.wait_for_timeout(300)
+
+    # Activate the Wall tool (left-drag now draws, so it must NOT pan).
+    gm_page.keyboard.press("w")
+    gm_page.wait_for_timeout(80)
+    assert gm_page.locator("#me-wall-btn").get_attribute("aria-pressed") == "true"
+
+    for _ in range(4):
+        gm_page.locator("#me-zoom-in").click()
+        gm_page.wait_for_timeout(50)
+    gm_page.wait_for_timeout(150)
+
+    before = gm_page.eval_on_selector(
+        "#me-stage", "el => ({x: el.scrollLeft, y: el.scrollTop})")
+
+    gm_page.locator("#me-stage").scroll_into_view_if_needed()
+    box = gm_page.locator("#me-stage").bounding_box()
+    sx, sy = box["x"] + box["width"] / 2, box["y"] + 100
+    gm_page.mouse.move(sx, sy)
+    gm_page.mouse.down(button="middle")
+    gm_page.mouse.move(sx - 160, sy - 80, steps=12)
+    gm_page.mouse.up(button="middle")
+    gm_page.wait_for_timeout(120)
+
+    after = gm_page.eval_on_selector(
+        "#me-stage", "el => ({x: el.scrollLeft, y: el.scrollTop})")
+    assert after["x"] > before["x"], (before, after)
+    assert after["y"] > before["y"], (before, after)

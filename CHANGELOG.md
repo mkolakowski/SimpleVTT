@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.824.0] - 2026-07-01 — "The Middle Grip"
+
+**Schema version:** 96
+
+**Commit summary:** Middle-mouse-button panning of the map editor works regardless of the active tool.
+
+**Description:** The v2.823.0 grab-drag pan only worked in the default no-tool state (a left-drag while drawing has to draw, not pan). This adds **middle-button panning that works no matter which tool is active** — the standard gesture in map / CAD / drawing editors, and matching the tabletop's always-available pan. Now you can reposition the view mid-draw without dropping your Wall/Door/etc. tool: hold the middle mouse button and drag. The browser's native middle-click autoscroll is suppressed so it doesn't fight the pan. Left-drag panning (no tool active) is unchanged.
+
+### Changed
+- `app/templates/map_editor.html` — the `stagePan` pointerdown now engages on the middle button (`e.button === 1`) for any tool state, `preventDefault`-ing the middle-click autoscroll; the left button still only pans when no tool is active.
+
+### Added
+- `tests/harness_ui/test_map_editor_pan.py` — `test_middle_button_pans_with_tool_active` (+1): activates the Wall tool, then middle-drags and asserts the stage still scrolls.
+
+### Schema
+- No schema change (still v96 — client-side viewport interaction only).
+
 ## [2.823.0] - 2026-07-01 — "The Grabbed Map"
 
 **Schema version:** 96

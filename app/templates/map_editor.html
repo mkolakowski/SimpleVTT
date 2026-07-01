@@ -2481,10 +2481,15 @@
   // A pan needs >3px of movement to engage, so a plain tap still reaches the
   // object under it (e.g. a door toggle). Listens on window so the drag
   // survives the pointer leaving the stage bounds.
+  // v2.824.0 — the MIDDLE button pans regardless of the active tool (like the
+  // tabletop, and standard in map/CAD editors), so you can reposition the view
+  // without leaving the tool you're drawing with.
   var stagePan = null;
   stage.addEventListener('pointerdown', function (e) {
-    if (e.button !== 0) return;                      // left-drag only
-    if (svg.style.pointerEvents === 'auto') return;  // a drawing tool is active
+    var middle = (e.button === 1);                                  // always pans
+    var leftFree = (e.button === 0 && svg.style.pointerEvents !== 'auto');  // no tool active
+    if (!middle && !leftFree) return;
+    if (middle) e.preventDefault();  // suppress the browser's middle-click autoscroll
     stagePan = { x: e.clientX, y: e.clientY, sl: stage.scrollLeft, st: stage.scrollTop, active: false };
   });
   window.addEventListener('pointermove', function (e) {
