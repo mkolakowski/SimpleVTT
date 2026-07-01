@@ -72,6 +72,11 @@
   .me-group.me-collapsed > .me-grp-lbl::before { content:'▸ '; }
   .me-group.me-collapsed > *:not(.me-grp-lbl) { display:none !important; }
   .me-group > label { justify-content:center; }
+  /* v2.814.0 — Layers checkboxes as a uniform 2-column grid (aligned rows). */
+  .me-layers-grid { display:grid; grid-template-columns:1fr 1fr; column-gap:12px;
+    row-gap:2px; }
+  .me-layers-grid > label { justify-content:flex-start; white-space:nowrap;
+    font-size:12px; }
   /* a sub-row that keeps several controls together on one line */
   .me-sub { display:flex; align-items:center; gap:4px; }
   .me-sub > label { flex:0 0 auto; }
@@ -324,23 +329,18 @@
   {# v2.790.3 — per-layer visibility (authoring only; saved locally). #}
   <div class="me-group" role="group" aria-label="Layers">
     <span class="me-grp-lbl">Layers</span>
-    <div class="me-sub">
-      <label style="gap:3px;"><input type="checkbox" id="me-layer-walls" checked> Walls</label>
-      <label style="gap:3px;"><input type="checkbox" id="me-layer-terrain" checked> Terrain</label>
+    {# v2.814.0 — uniform 2-column checkbox grid. #}
+    <div class="me-layers-grid">
+      <label style="gap:4px;"><input type="checkbox" id="me-layer-walls" checked> Walls</label>
+      <label style="gap:4px;"><input type="checkbox" id="me-layer-terrain" checked> Terrain</label>
+      <label style="gap:4px;"><input type="checkbox" id="me-layer-lights" checked> Lights</label>
+      <label style="gap:4px;"><input type="checkbox" id="me-layer-hotspots" checked> Hotspots</label>
+      <label style="gap:4px;"><input type="checkbox" id="me-layer-fog" checked> Fog</label>
+      <label style="gap:4px;"><input type="checkbox" id="me-layer-gmpins" checked> Pins</label>
+      <label style="gap:4px;"><input type="checkbox" id="me-layer-props" checked> Props</label>
+      <label style="gap:4px;"><input type="checkbox" id="me-layer-labels" checked> Labels</label>
+      <label style="gap:4px;"><input type="checkbox" id="me-layer-tokens" checked> Tokens</label>
     </div>
-    <div class="me-sub">
-      <label style="gap:3px;"><input type="checkbox" id="me-layer-lights" checked> Lights</label>
-      <label style="gap:3px;"><input type="checkbox" id="me-layer-hotspots" checked> Hotspots</label>
-    </div>
-    <div class="me-sub">
-      <label style="gap:3px;"><input type="checkbox" id="me-layer-fog" checked> Fog</label>
-      <label style="gap:3px;"><input type="checkbox" id="me-layer-gmpins" checked> Pins</label>
-    </div>
-    <div class="me-sub">
-      <label style="gap:3px;"><input type="checkbox" id="me-layer-props" checked> Props</label>
-      <label style="gap:3px;"><input type="checkbox" id="me-layer-labels" checked> Labels</label>
-    </div>
-    <label style="gap:3px;"><input type="checkbox" id="me-layer-tokens" checked> Tokens</label>
   </div>
   <div class="me-group me-group--stack" role="group" aria-label="View">
     <span class="me-grp-lbl">View</span>

@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.814.0] - 2026-07-01 — "The Even Rows"
+
+**Schema version:** 96
+
+**Commit summary:** Tidy the Layers group into a uniform 2-column checkbox grid.
+
+**Description:** The **Layers** toolbar group's nine visibility checkboxes are now laid out as a **uniform 2-column grid** instead of four flex pair-rows plus a lone Tokens checkbox. Every checkbox lines up on the same two column edges with even row spacing, so the group reads as a clean grid rather than ragged rows. No behaviour change — the same per-layer toggles, same IDs.
+
+### Changed
+- `app/templates/map_editor.html` — Layers checkboxes wrapped in a `.me-layers-grid` (CSS grid, 2 equal columns, left-aligned, even gaps); removed the `me-sub` pair-rows + the standalone Tokens row.
+
+### Schema
+- No schema change (still v96 — layout only).
+
 ## [2.813.0] - 2026-07-01 — "The Raised Curtain"
 
 **Schema version:** 96
