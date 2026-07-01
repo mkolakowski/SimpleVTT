@@ -2876,6 +2876,7 @@
         }
         function applyWeather(type) {
             weather = type || '';
+            if (typeof _syncLiveWeatherBtns === 'function') _syncLiveWeatherBtns(weather);
             if (!_wxCanvas) { _wxCanvas = document.getElementById('weather-canvas');
                 _wxCtx = _wxCanvas ? _wxCanvas.getContext('2d') : null; }
             if (!_wxCanvas || !_wxCtx) return;
@@ -2893,6 +2894,23 @@
             if (!data) return;
             applyWeather(data.weather || '');
         };
+        // v2.809.0 — live GM weather control (POSTs the active map's weather;
+        // the broadcast updates every client including this one).
+        function _syncLiveWeatherBtns(val) {
+            var btns = document.querySelectorAll('#live-weather-btns button');
+            for (var i = 0; i < btns.length; i++) {
+                btns[i].classList.toggle('active', (btns[i].getAttribute('data-wx') || '') === (val || ''));
+            }
+        }
+        function setLiveWeather(val) {
+            if (!mapId) return;
+            _syncLiveWeatherBtns(val);  // optimistic; the broadcast confirms
+            fetch('/campaign/' + CID + '/settings/maps/' + mapId + '/weather', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ weather: val }),
+            }).catch(function () {});
+        }
+        window.setLiveWeather = setLiveWeather;
         // v2.790.2 — GM-only pins: fetch (GM only) + re-fetch on the signal.
         async function fetchGmPins() {
             if (!IS_GM || !mapId) { gmPins = []; return; }
@@ -4841,6 +4859,27 @@
             <div id="token-tracker-list"></div>
             </div><!-- /gm-panel-body (token management) -->
         </details>
+
+        {% if is_gm %}
+        {# v2.809.0 — live ambient-weather control (GM sets the active map's
+           weather mid-session without opening the editor). #}
+        <details id="weather-panel" class="gm-panel" open>
+            <summary>
+                <span style="font-size:9px;color:var(--fg-mute);transition:transform .15s;">▼</span>
+                <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">🌦 Weather</h4>
+            </summary>
+            <div class="gm-panel-body">
+            {# Dense GM panel — 32px compact buttons per the touch-target exception. #}
+            <style>#live-weather-btns button.active{background:var(--accent);color:#0b0f14;border-color:var(--accent);}</style>
+            <div id="live-weather-btns" style="display:flex;gap:6px;flex-wrap:wrap;">
+                <button type="button" data-wx="" onclick="setLiveWeather('')" style="font-size:12px;padding:6px 10px;min-height:32px;">∅ None</button>
+                <button type="button" data-wx="rain" onclick="setLiveWeather('rain')" style="font-size:12px;padding:6px 10px;min-height:32px;">🌧 Rain</button>
+                <button type="button" data-wx="snow" onclick="setLiveWeather('snow')" style="font-size:12px;padding:6px 10px;min-height:32px;">❄ Snow</button>
+                <button type="button" data-wx="fog" onclick="setLiveWeather('fog')" style="font-size:12px;padding:6px 10px;min-height:32px;">🌫 Fog</button>
+            </div>
+            </div><!-- /gm-panel-body (weather) -->
+        </details>
+        {% endif %}
 
         <details id="music-panel" class="gm-panel" open>
             <summary>

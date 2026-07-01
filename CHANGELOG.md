@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.809.0] - 2026-07-01 — "The Storm Caller"
+
+**Schema version:** 96
+
+**Commit summary:** Live GM weather control on the tabletop — change the active map's weather mid-session without opening the editor.
+
+**Description:** Adds a **🌦 Weather** panel to the GM tools drawer on the live tabletop with **None / 🌧 Rain / ❄ Snow / 🌫 Fog** buttons. Clicking one sets the **active map's** weather through the existing GM-only endpoint; the `weather_update` broadcast then starts/stops the animated overlay for every connected client (and highlights the active choice). Lets the GM turn on a downpour the moment the party steps outside — no editor round-trip. GM-only (the panel is gated behind `is_gm`).
+
+### Added
+- `app/templates/tabletop.html` — a GM-only **Weather** panel (`#live-weather-btns`); `setLiveWeather` / `_syncLiveWeatherBtns`; the active button syncs with the current weather on load + on every `weather_update`.
+- `tests/harness_ui/test_tabletop_weather_control.py` (new, +1) — the GM Rain button sets the active map's weather and reflects the active state.
+
+### Schema
+- No schema change (still v96 — reuses the `/settings/maps/{id}/weather` endpoint from v2.807.0).
+
 ## [2.808.0] - 2026-07-01 — "The Weather Turns"
 
 **Schema version:** 96
