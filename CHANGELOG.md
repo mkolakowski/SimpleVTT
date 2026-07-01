@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.823.0] - 2026-07-01 — "The Grabbed Map"
+
+**Schema version:** 96
+
+**Commit summary:** Grab-and-drag panning of the map-editor stage, like the tabletop — press and drag the map to move it around.
+
+**Description:** Previously the editor could only be panned via the scrollbars or a plain mouse wheel. This adds **tabletop-style grab-drag panning**: in the default (no-tool) state — where the SVG overlay is `pointer-events:none` so presses fall through to the stage — pressing and dragging the map scrolls the `overflow:auto` stage to move the view, exactly like grabbing the tabletop canvas. The stage now shows a **grab** cursor to advertise it, swapping to **grabbing** mid-drag. A pan only engages past a 3px movement threshold, so a plain tap still reaches the object beneath it (e.g. toggling a door). When a drawing tool is active the overlay captures the press instead, so drawing is unaffected. The drag is tracked on `window`, so it keeps working even if the pointer leaves the stage bounds.
+
+### Added
+- `app/templates/map_editor.html` — a `stagePan` pointer-drag handler that scrolls the stage (threshold-gated, window-tracked) + a `cursor:grab` hint on `.me-stage`.
+- `tests/harness_ui/test_map_editor_pan.py` (new, +1) — zooms the map to overflow, drags the stage up-left, and asserts both scroll offsets grow (and the default cursor is `grab`).
+
+### Schema
+- No schema change (still v96 — client-side viewport interaction only).
+
 ## [2.822.0] - 2026-07-01 — "The Frosted Bar"
 
 **Schema version:** 96

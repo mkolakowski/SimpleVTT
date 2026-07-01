@@ -106,9 +106,12 @@
   .me-toolbar input[type=number] { -moz-appearance:textfield; appearance:textfield; }
   .me-toolbar input[type=number]::-webkit-outer-spin-button,
   .me-toolbar input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+  /* v2.823.0 — grab cursor hints the map is drag-pannable (tabletop-style);
+     JS swaps to 'grabbing' while a pan is in progress. An active drawing tool
+     puts its own crosshair on the SVG overlay, which covers this. */
   .me-stage { position:relative; display:block; width:100%; box-sizing:border-box;
     border:1px solid var(--border); border-radius:6px; overflow:auto;
-    max-height:86vh; background:#0b0d16; }
+    max-height:86vh; background:#0b0d16; cursor:grab; }
   .me-stage img { display:block; }
   #me-overlay { position:absolute; top:0; left:0; overflow:visible; }
   .me-status { font-size:12px; color:var(--fg-mute); margin-left:auto; }
@@ -2472,6 +2475,34 @@
     e.preventDefault();
     setZoom(zoom * (e.deltaY < 0 ? 1.1 : 0.9));
   }, { passive: false });
+  // v2.823.0 — grab-and-drag panning of the map, like the tabletop. In the
+  // default (no-tool) state the SVG overlay is pointer-events:none, so a press
+  // on the map reaches the stage; we pan by scrolling the overflow:auto stage.
+  // A pan needs >3px of movement to engage, so a plain tap still reaches the
+  // object under it (e.g. a door toggle). Listens on window so the drag
+  // survives the pointer leaving the stage bounds.
+  var stagePan = null;
+  stage.addEventListener('pointerdown', function (e) {
+    if (e.button !== 0) return;                      // left-drag only
+    if (svg.style.pointerEvents === 'auto') return;  // a drawing tool is active
+    stagePan = { x: e.clientX, y: e.clientY, sl: stage.scrollLeft, st: stage.scrollTop, active: false };
+  });
+  window.addEventListener('pointermove', function (e) {
+    if (!stagePan) return;
+    var dx = e.clientX - stagePan.x, dy = e.clientY - stagePan.y;
+    if (!stagePan.active) {
+      if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;  // below the drag threshold
+      stagePan.active = true;
+      stage.style.cursor = 'grabbing';
+    }
+    stage.scrollLeft = stagePan.sl - dx;
+    stage.scrollTop = stagePan.st - dy;
+  });
+  window.addEventListener('pointerup', function () {
+    if (!stagePan) return;
+    stagePan = null;
+    stage.style.cursor = '';
+  });
   // v2.775.0 — right-click the empty map to paste a copied object. (Object
   // right-clicks stopPropagation, so this only fires on the background.)
   stage.addEventListener('contextmenu', function (e) {
