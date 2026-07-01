@@ -5751,6 +5751,8 @@ def _walls_block_sight(map_row, ax, ay, bx, by) -> bool:
     for w in (getattr(map_row, "walls", None) or []):
         if not isinstance(w, dict):
             continue
+        if w.get("window"):
+            continue  # window — sight passes through the glass
         if (w.get("door") or w.get("gate")) and w.get("open"):
             continue  # open door / gate — sight passes
         try:
@@ -124072,6 +124074,10 @@ def _sanitize_wall_segments(raw) -> list:
             # (double leaves). ``flip`` picks which side the door/gate swings.
             "gate": bool(seg.get("gate")),
             "flip": bool(seg.get("flip")),
+            # v2.788.2 — a window passes sight but reads as a solid wall;
+            # a secret door is hidden from players until opened.
+            "window": bool(seg.get("window")),
+            "secret": bool(seg.get("secret")),
             # v2.787.0 — visual opacity [0,1] (1 = solid). Presentation only.
             "opacity": op,
             # v2.772.0 — visual material (stone/wood/brick/metal/cave/…); a

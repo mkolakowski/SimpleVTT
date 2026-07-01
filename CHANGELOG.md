@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.788.2] - 2026-07-01 — "The Bay Window"
+
+**Schema version:** 91
+
+**Commit summary:** Windows — a see-through wall type that passes sight but reads as a solid wall; + `window`/`secret` wall fields.
+
+**Description:** Adds **windows** as a wall type (right-click **🔀 Type → 🪟 Window**). A window renders as **framed glass** (translucent blue pane + mullion bars) and **passes line of sight** — so a creature can see through it — while still reading as a solid barrier on the map. Occlusion (server `_walls_block_sight`, the tabletop light-shadow pass, and the editor lighting/vision previews) all let sight through windows. Also lands the `window` + `secret` fields on the wall substrate (secret-door rendering follows next).
+
+### Added
+- `app/routes/tabletop_routes.py` — `_sanitize_wall_segments` stores `window` + `secret`; `_walls_block_sight` passes sight through windows.
+- `app/templates/map_editor.html` + `app/templates/tabletop.html` — window render branch (glass + mullions); Type submenu gains Window; occlusion filters skip windows.
+- `app/static/tabletop.js` — the light-shadow `solidWalls` filter skips windows (and now open gates).
+- `tests/harness/test_map_walls.py` (+1) — window/secret round-trip; `tests/harness_ui/test_map_editor_gate.py` (+1) — convert a wall to a window + glass renders.
+
+### Schema
+- No schema change (still v91; additive `walls` keys).
+
 ## [2.788.1] - 2026-07-01 — "The Quick Room"
 
 **Schema version:** 91

@@ -78,6 +78,23 @@ async def test_gate_flip_opacity_round_trip(gm_client):
             f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
 
 
+async def test_window_secret_round_trip(gm_client):
+    # v2.788.2 — window + secret flags persist through PUT/GET.
+    mid = await _active_map_id(gm_client)
+    try:
+        r = await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
+                {"id": "win", "x1": 50, "y1": 0, "x2": 50, "y2": 100, "window": True},
+                {"id": "sd", "x1": 80, "y1": 0, "x2": 80, "y2": 100, "door": True, "secret": True},
+            ]})
+        ws = r.json()["walls"]
+        assert ws[0]["window"] is True and ws[0]["secret"] is False, ws[0]
+        assert ws[1]["secret"] is True and ws[1]["window"] is False, ws[1]
+    finally:
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
+
+
 async def test_gate_toggle_opens(gm_client):
     # v2.787.0 — a gate toggles open/closed via the door-toggle endpoint.
     mid = await _active_map_id(gm_client)

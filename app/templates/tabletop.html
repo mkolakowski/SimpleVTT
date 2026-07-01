@@ -2467,7 +2467,22 @@
                 ln.style.pointerEvents = 'none';
                 _wc.appendChild(ln);
             }
-            if (w.door || w.gate) {
+            if (w.window) {
+                // v2.788.2 — framed glass that passes sight.
+                seg(st.casing, st.width + 4);
+                seg('rgba(150,205,255,0.45)', st.width);
+                seg('rgba(255,255,255,0.55)', 2);
+                var wdx = w.x2 - w.x1, wdy = w.y2 - w.y1, wL = Math.hypot(wdx, wdy) || 1;
+                var wnx = -wdy / wL, wny = wdx / wL, mw = st.width + 2;
+                [0.34, 0.67].forEach(function (tt) {
+                    var cx = w.x1 + wdx * tt, cy = w.y1 + wdy * tt;
+                    var ln = document.createElementNS(NS, 'line');
+                    ln.setAttribute('x1', cx - wnx * mw / 2); ln.setAttribute('y1', cy - wny * mw / 2);
+                    ln.setAttribute('x2', cx + wnx * mw / 2); ln.setAttribute('y2', cy + wny * mw / 2);
+                    ln.setAttribute('stroke', st.casing); ln.setAttribute('stroke-width', '2');
+                    ln.style.pointerEvents = 'none'; _wc.appendChild(ln);
+                });
+            } else if (w.door || w.gate) {
                 var open = !!w.open;
                 var G = doorGeom(w);
                 function line2(ax, ay, bx, by, color, width) {

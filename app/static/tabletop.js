@@ -2923,7 +2923,7 @@
         // it's punched into the veil — so shadows are per-source (one light's
         // shadow doesn't darken an area another light reaches).
         const solidWalls = (mapWalls || []).filter(
-            w => w && !(w.door && w.open) &&
+            w => w && !((w.door || w.gate) && w.open) && !w.window &&
                  [w.x1, w.y1, w.x2, w.y2].every(n => typeof n === 'number'));
         let _srcCanvas = null;
         function _eraseWallShadows(sctx, sx, sy) {
