@@ -260,6 +260,7 @@
   var relocating = null;       // {kind, obj} — being repositioned (drag)
   var relocDragging = false;   // v2.775.0 — true while dragging the held object
   var sampleTokens = [];       // v2.777.0 — ephemeral preview tokens (not saved)
+  var resizing = null;         // v2.786.6 — a wall/door whose ends are draggable
 
   // v2.770.0 — right-click context menu for map objects.
   function hideMenu() {
@@ -389,6 +390,34 @@
     ln.style.cursor = eraseMode ? 'pointer'
       : ((wallMode || doorMode) ? 'move' : 'context-menu');
     return ln;
+  }
+  // v2.786.6 — a draggable end-handle for resizing a wall/door.
+  function mkResizeHandle(w, isEnd) {
+    var hx = isEnd ? w.x2 : w.x1, hy = isEnd ? w.y2 : w.y1;
+    var h = document.createElementNS(NS, 'circle');
+    h.setAttribute('cx', hx); h.setAttribute('cy', hy);
+    h.setAttribute('r', Math.max(7, (gridPx || 70) * 0.13));
+    h.setAttribute('fill', '#ffd24a'); h.setAttribute('stroke', '#000');
+    h.setAttribute('stroke-width', '1.5');
+    h.style.pointerEvents = 'all'; h.style.cursor = 'grab';
+    h.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      e.stopPropagation(); e.preventDefault();
+      function mv(ev) {
+        var p = toMap(ev); if (!p) return;
+        var s = snapPoint(p);
+        if (isEnd) { w.x2 = s.x; w.y2 = s.y; } else { w.x1 = s.x; w.y1 = s.y; }
+        render();
+      }
+      function up() {
+        window.removeEventListener('pointermove', mv);
+        window.removeEventListener('pointerup', up);
+        saveWalls();
+      }
+      window.addEventListener('pointermove', mv);
+      window.addEventListener('pointerup', up);
+    });
+    return h;
   }
   // v2.772.0 — the visible look. Walls: a dark casing under a material face +
   // a faint top sheen (a solid, beveled wall). Doors: a framed panel + a knob,
@@ -609,12 +638,23 @@
         });
         showMenu(e.clientX, e.clientY, [
           { label: (w.door ? '🚪 Door' : '🧱 Wall') + ' — ↔ Move', fn: function () { startMove('wall', w); } },
+          { label: (resizing && resizing.id === w.id ? '↔ Resize (done)' : '↔ Resize (drag ends)'),
+            fn: function () {
+              resizing = (resizing && resizing.id === w.id) ? null : w;
+              setStatus(resizing ? 'Drag the yellow end-handles to resize; click the map to finish.' : '');
+              syncStageCursor(); render();
+            } },
           { label: '🎨 Material', sub: matItems },
           { label: '📋 Copy', fn: function () { copyObj('wall', w); } },
           { label: '🗑 Delete', fn: function () { deleteWall(w); } },
         ]);
       });
       svg.appendChild(hit);
+      // v2.786.6 — draggable end-handles while this wall is being resized.
+      if (resizing && resizing.id === w.id) {
+        svg.appendChild(mkResizeHandle(w, false));
+        svg.appendChild(mkResizeHandle(w, true));
+      }
     });
     if (pending) {
       var c = document.createElementNS(NS, 'circle');
@@ -1038,7 +1078,7 @@
   function syncStageCursor() {
     // The overlay captures empty-area clicks when placing/painting/relocating.
     // (Objects stay individually clickable for erase/right-click regardless.)
-    var on = wallMode || doorMode || spotMode || lightMode || fogMode || relocating;
+    var on = wallMode || doorMode || spotMode || lightMode || fogMode || relocating || resizing;
     svg.style.pointerEvents = on ? 'auto' : 'none';
     svg.style.cursor = on ? 'crosshair' : 'default';
   }
@@ -1236,6 +1276,8 @@
   });
   svg.addEventListener('click', function (e) {
     if (suppressClick) return;
+    // v2.786.6 — a click on the empty map finishes a resize.
+    if (resizing) { resizing = null; setStatus(''); syncStageCursor(); render(); return; }
     var p = toMap(e); if (!p) return;
     if (wallMode || doorMode) {
       p = snapPoint(p);

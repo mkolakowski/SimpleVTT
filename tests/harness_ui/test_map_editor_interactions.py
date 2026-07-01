@@ -134,6 +134,36 @@ def test_left_click_in_draw_mode_keeps_wall(gm_page: Page) -> None:
             c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
 
 
+def test_resize_wall_end_handle(gm_page: Page) -> None:
+    # v2.786.6 — Resize toggle shows draggable end-handles.
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
+        c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
+        c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
+            {"id": "w", "x1": 150, "y1": 150, "x2": 320, "y2": 150, "style": "stone"}]})
+        try:
+            _open_editor(gm_page, mid)
+            box = _hit_box(gm_page)
+            gm_page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2,
+                                button="right")
+            gm_page.locator("#me-ctx-menu button", has_text="Resize").click()
+            gm_page.wait_for_timeout(200)
+            handle = gm_page.locator('#me-overlay circle[fill="#ffd24a"]').first
+            hb = handle.bounding_box()
+            hx, hy = hb["x"] + hb["width"] / 2, hb["y"] + hb["height"] / 2
+            before = _walls(c, mid)[0]
+            gm_page.mouse.move(hx, hy)
+            gm_page.mouse.down()
+            gm_page.mouse.move(hx + 130, hy + 90, steps=6)
+            gm_page.mouse.up()
+            gm_page.wait_for_timeout(300)
+            after = _walls(c, mid)[0]
+            assert (after["x1"], after["y1"]) != (before["x1"], before["y1"]), (before, after)
+            assert (after["x2"], after["y2"]) == (before["x2"], before["y2"]), after  # other end fixed
+        finally:
+            c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
+
+
 def test_move_drags_object(gm_page: Page) -> None:
     with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})

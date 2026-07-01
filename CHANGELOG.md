@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.786.6] - 2026-06-30 — "The Stretchable Wall"
+
+**Schema version:** 91
+
+**Commit summary:** Add a "Resize" toggle to the wall/door menu with draggable end-handles.
+
+**Description:** A wall/door's right-click menu gains **↔ Resize (drag ends)**. Toggling it shows two **draggable yellow handles** at the segment's endpoints — drag either end (snapped to the grid) to make the wall/door longer or shorter; the other end stays put. Click the map (or pick **Resize (done)**) to finish.
+
+### Added
+- `app/templates/map_editor.html` — `resizing` state, `mkResizeHandle()` (draggable endpoint), a Resize menu toggle, handles drawn while resizing, empty-map click finishes; the overlay arms during a resize.
+- `tests/harness_ui/test_map_editor_interactions.py` (+1) — dragging an end-handle moves that endpoint while the far end stays fixed.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.786.5] - 2026-06-30 — "The Flyout Palette"
 
 **Schema version:** 91
