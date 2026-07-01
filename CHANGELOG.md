@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.786.0] - 2026-06-30 — "The Fixed Address"
+
+**Schema version:** 91
+
+**Commit summary:** Demo reseed now hands out stable `maps` + `encounters` IDs, so bookmarked map-editor URLs survive an hourly reset.
+
+**Description:** The demo reset already reset the auto-increment sequences for the URL-keyed tables (`campaigns` / `characters` / `token_templates`) so their IDs stay stable across the hourly reseed — but **`maps` and `encounters` were excluded**, so a map's ID crept upward every cycle and a bookmarked `/campaign/1/map/{id}/edit` URL 404'd after a reset (the root cause behind the earlier re-login complaint). Those two tables are now included, so every reseed recreates the same objects at the same IDs. Verified: two back-to-back reseeds both produced map IDs `[1,2,3,4,5]`. On a mixed database the existing `setval(MAX(id)+1)` guard keeps it collision-safe for any real non-demo rows.
+
+### Changed
+- `app/demo_seed.py` — `_reset_sequences` now also resets `maps_id_seq` and `encounters_id_seq`.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.785.10] - 2026-06-30 — "The Even Cards"
 
 **Schema version:** 91

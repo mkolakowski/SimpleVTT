@@ -8706,16 +8706,18 @@ def _reset_sequences(db: Session) -> None:
     Only Postgres's strict no-reuse `SERIAL` / `IDENTITY` exhibits the
     creep the user noticed.
 
-    Scoped to the URL-visible tables (campaigns / characters /
-    token_templates) — tokens / maps / encounters / users etc. still
-    creep upward but their ids aren't bookmarked so it doesn't matter.
+    Scoped to the URL-visible tables. v2.786.0 — added ``maps`` and
+    ``encounters`` so a bookmarked map-editor URL (``/campaign/1/map/1/edit``)
+    survives an hourly demo reseed instead of 404-ing when the map id drifts
+    upward. Tokens / users etc. still creep upward but their ids aren't
+    bookmarked so it doesn't matter.
     """
     from sqlalchemy import text
     bind = db.get_bind()
     dialect = bind.dialect.name
     if dialect != "postgresql":
         return
-    tables = ("campaigns", "characters", "token_templates")
+    tables = ("campaigns", "characters", "token_templates", "maps", "encounters")
     for t in tables:
         try:
             db.execute(text(
