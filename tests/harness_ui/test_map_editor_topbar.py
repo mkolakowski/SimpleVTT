@@ -33,3 +33,5 @@ def test_editor_topbar_layout(gm_page: Page) -> None:
         '.me-group[aria-label="File"] #me-save-btn').count() == 1
     # The old header row is gone.
     assert gm_page.locator(".me-head").count() == 0
+    # v2.827.0 — the bottom hint paragraph was removed (it duplicated tooltips).
+    assert gm_page.locator(".m4hint").count() == 0

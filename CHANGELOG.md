@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.827.0] - 2026-07-01 — "The Cleared Footer"
+
+**Schema version:** 96
+
+**Commit summary:** Remove the explanatory hint paragraph at the bottom of the map editor.
+
+**Description:** Drops the `.m4hint` paragraph under the editor stage ("Walls block line of sight… Hotspots show a description popup… Changes save automatically.") — it duplicated information already carried by each tool's tooltip and just consumed vertical space below the map. The now-unused `.m4hint` CSS rule is removed too.
+
+### Removed
+- `app/templates/map_editor.html` — the bottom `<p class="m4hint">` hint text and its CSS rule.
+
+### Changed
+- `tests/harness_ui/test_map_editor_topbar.py` — asserts `.m4hint` is absent.
+
+### Schema
+- No schema change (still v96 — layout only).
+
 ## [2.826.0] - 2026-07-01 — "The Filing Cabinet"
 
 **Schema version:** 96
