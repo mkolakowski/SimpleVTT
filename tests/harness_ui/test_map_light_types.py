@@ -64,8 +64,8 @@ def test_light_marker_flicker_matches_type(gm_page: Page) -> None:
                 "els => els.map(e => e.getAttribute('dur') + '|' + e.getAttribute('begin'))")
             assert len(fx) == 2 and fx[0] != fx[1], fx
             durs = [float(x.split("|")[0].rstrip("s")) for x in fx]
-            for d in durs:  # torch base 0.7, jittered ±35%
-                assert 0.45 <= d <= 1.0, durs
+            for d in durs:  # torch base 0.9 (softened), jittered ±35%
+                assert 0.6 <= d <= 1.3, durs
             # Re-typing one to Candle (base 0.45) makes it flicker faster than a torch.
             hit = gm_page.locator("#me-overlay circle.me-light").first
             box = hit.bounding_box()

@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.786.9] - 2026-07-01 — "The Gentle Glow"
+
+**Schema version:** 91
+
+**Commit summary:** Soften the candle + torch flicker (smaller brightness swings, gentler timing).
+
+**Description:** The candle and torch glow flicker was fairly harsh — big opacity swings at a quick cadence. Their brightness range is now narrower and the timing a touch slower, so they shimmer gently instead of strobing (candle base 0.45→0.6 s with a ~0.46–0.68 range; torch 0.7→0.9 s with a ~0.54–0.76 range). Per-light rate/phase jitter still applies.
+
+### Changed
+- `app/templates/map_editor.html` — softened `LIGHT_FX.candle` / `LIGHT_FX.torch`.
+- `tests/harness_ui/test_map_light_types.py` — torch dur range updated for the softened base.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.786.8] - 2026-07-01 — "The Restless Flames"
 
 **Schema version:** 91
