@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.788.1] - 2026-07-01 — "The Quick Room"
+
+**Schema version:** 91
+
+**Commit summary:** Room tool (four walls in one shot) + polyline wall chaining.
+
+**Description:** Two authoring speedups for walls:
+- **🔲 Room tool** — click two opposite corners to enclose a rectangular room with **four walls** at once (uses the current material).
+- **Polyline chaining** — the 🧱 Wall tool now **chains**: each click continues a connected wall from the previous point instead of resetting after two clicks. Click the **last point again** or press **Esc** to finish. Doors stay single openings.
+
+### Added
+- `app/templates/map_editor.html` — `roomMode` + `#me-room-btn`; wall chaining (pending endpoint carries forward; same-point / Esc ends); the room builds four segments.
+- `tests/harness_ui/test_map_editor_room.py` (new, +2) — the room tool creates four walls; a 3-point chain makes two connected segments.
+
+### Changed
+- `tests/harness_ui/test_map_editor_toolbar.py` — (Walls group now includes the Room button; label list unchanged.)
+
+### Schema
+- No schema change (still v91).
+
 ## [2.788.0] - 2026-07-01 — "The Second Chance"
 
 **Schema version:** 91

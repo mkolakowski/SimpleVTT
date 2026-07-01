@@ -81,9 +81,11 @@
   <div class="me-group" role="group" aria-label="Walls">
     <span class="me-grp-lbl">Walls</span>
     <button type="button" id="me-wall-btn" class="me-tool-btn" aria-pressed="false"
-            title="Draw a wall: click two points (right-click a wall for Move/Delete)">🧱 Wall</button>
+            title="Draw connected walls: click a chain of points; click the last point again or press Esc to finish">🧱 Wall</button>
     <button type="button" id="me-door-btn" class="me-tool-btn" aria-pressed="false"
             title="Draw a door: click two points (players can open/close it at the table)">🚪 Door</button>
+    <button type="button" id="me-room-btn" class="me-tool-btn" aria-pressed="false"
+            title="Draw a room: click two opposite corners to enclose it with four walls">🔲 Room</button>
     <label style="gap:3px;" title="Material/look for new walls + doors">
       <select id="me-wall-style" style="min-height:32px;font-size:12px;">
         <option value="stone">Stone</option>
@@ -223,7 +225,7 @@
   var lights = {{ lights | tojson }};
   var fogEnabled = {{ 'true' if fog_enabled else 'false' }};
   var fogRevealed = {{ fog_revealed | tojson }};
-  var wallMode = false, doorMode = false, spotMode = false, lightMode = false, fogMode = false, pending = null, seq = 0;
+  var wallMode = false, doorMode = false, roomMode = false, spotMode = false, lightMode = false, fogMode = false, pending = null, seq = 0;
   // v2.772.0 — wall/door material looks. Walls draw as a thick casing + face
   // line; doors draw as a panel + knob (open = ajar/green).
   // v2.787.2 — thicker walls + per-material texture keys.
@@ -1243,6 +1245,7 @@
   // Toolbar wiring.
   var wallBtn = document.getElementById('me-wall-btn');
   var doorBtn = document.getElementById('me-door-btn');
+  var roomBtn = document.getElementById('me-room-btn');
   var styleSel = document.getElementById('me-wall-style');
   var spotBtn = document.getElementById('me-spot-btn');
   var snapBtn = document.getElementById('me-snap-btn');
@@ -1255,7 +1258,7 @@
   function syncStageCursor() {
     // The overlay captures empty-area clicks when placing/painting/relocating.
     // (Objects stay individually clickable for erase/right-click regardless.)
-    var on = wallMode || doorMode || spotMode || lightMode || fogMode || relocating || resizing;
+    var on = wallMode || doorMode || roomMode || spotMode || lightMode || fogMode || relocating || resizing;
     svg.style.pointerEvents = on ? 'auto' : 'none';
     svg.style.cursor = on ? 'crosshair' : 'default';
   }
@@ -1359,12 +1362,15 @@
     if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || e.key === 'Y')) {
       e.preventDefault(); redo(); return;
     }
+    // v2.788.1 — Esc finishes a wall/room chain.
+    if (e.key === 'Escape' && pending) { pending = null; render(); }
   });
   // One edit mode at a time (wall / door / spot / light / fog), or null.
   function setMode(mode) {
-    wallMode = (mode === 'wall'); doorMode = (mode === 'door');
+    wallMode = (mode === 'wall'); doorMode = (mode === 'door'); roomMode = (mode === 'room');
     spotMode = (mode === 'spot'); lightMode = (mode === 'light'); fogMode = (mode === 'fog');
     wallBtn.setAttribute('aria-pressed', wallMode ? 'true' : 'false');
+    if (roomBtn) roomBtn.setAttribute('aria-pressed', roomMode ? 'true' : 'false');
     if (doorBtn) doorBtn.setAttribute('aria-pressed', doorMode ? 'true' : 'false');
     spotBtn.setAttribute('aria-pressed', spotMode ? 'true' : 'false');
     if (lightBtn) lightBtn.setAttribute('aria-pressed', lightMode ? 'true' : 'false');
@@ -1377,6 +1383,7 @@
   if (fogOnCb) fogOnCb.checked = fogEnabled;
   wallBtn.addEventListener('click', function () { setMode(wallMode ? null : 'wall'); });
   if (doorBtn) doorBtn.addEventListener('click', function () { setMode(doorMode ? null : 'door'); });
+  if (roomBtn) roomBtn.addEventListener('click', function () { setMode(roomMode ? null : 'room'); });
   spotBtn.addEventListener('click', function () { setMode(spotMode ? null : 'spot'); });
   if (lightBtn) lightBtn.addEventListener('click', function () { setMode(lightMode ? null : 'light'); });
   // v2.784.0 — picking a light type fills the radius fields with its preset
@@ -1471,10 +1478,29 @@
     if (wallMode || doorMode) {
       p = snapPoint(p);
       if (!pending) { pending = p; render(); return; }
+      // v2.788.1 — click the last point again to finish (no zero-length wall).
+      if (p.x === pending.x && p.y === pending.y) { pending = null; render(); return; }
       walls.push({ id: 'w' + Date.now() + '_' + (seq++),
         x1: pending.x, y1: pending.y, x2: p.x, y2: p.y,
         door: doorMode, open: false,
         style: (styleSel && styleSel.value) || 'stone' });
+      // Doors are single openings; walls chain from the new endpoint.
+      pending = doorMode ? null : p;
+      saveWalls();
+    } else if (roomMode) {
+      // v2.788.1 — two opposite corners → four walls forming the room.
+      p = snapPoint(p);
+      if (!pending) { pending = p; render(); return; }
+      var rx1 = pending.x, ry1 = pending.y, rx2 = p.x, ry2 = p.y;
+      var rstyle = (styleSel && styleSel.value) || 'stone';
+      if (rx1 !== rx2 && ry1 !== ry2) {
+        var rseg = function (ax, ay, bx, by) {
+          return { id: 'w' + Date.now() + '_' + (seq++), x1: ax, y1: ay, x2: bx, y2: by,
+            door: false, open: false, style: rstyle };
+        };
+        walls.push(rseg(rx1, ry1, rx2, ry1), rseg(rx2, ry1, rx2, ry2),
+                   rseg(rx2, ry2, rx1, ry2), rseg(rx1, ry2, rx1, ry1));
+      }
       pending = null; saveWalls();
     } else if (spotMode) {
       var label = window.prompt('Hotspot label:', '');
