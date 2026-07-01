@@ -35,7 +35,12 @@
     background:color-mix(in srgb, var(--bg) 55%, transparent); }
   .me-grp-lbl { font-size:9px; font-weight:700; text-transform:uppercase;
     letter-spacing:.5px; color:var(--fg-mute); opacity:.75; user-select:none;
-    text-align:center; margin-bottom:1px; }
+    text-align:center; margin-bottom:1px; cursor:pointer; }
+  /* v2.811.0 — click a group label to collapse it (reclaims toolbar width). */
+  .me-grp-lbl::before { content:'▾ '; font-size:8px; opacity:.7; }
+  .me-group.me-collapsed { justify-content:center; padding-left:4px; padding-right:4px; }
+  .me-group.me-collapsed > .me-grp-lbl::before { content:'▸ '; }
+  .me-group.me-collapsed > *:not(.me-grp-lbl) { display:none !important; }
   .me-group > label { justify-content:center; }
   /* a sub-row that keeps several controls together on one line */
   .me-sub { display:flex; align-items:center; gap:4px; }
@@ -2416,6 +2421,29 @@
     if (!cb) return;
     cb.checked = layers[k];
     cb.addEventListener('change', function () { layers[k] = cb.checked; saveLayers(); render(); });
+  });
+  // v2.811.0 — collapsible toolbar groups: click a group's label to fold it to
+  // just the label (reclaims horizontal space); persisted per map.
+  var collapsedGroups = (function () {
+    try { var s = localStorage.getItem('me-collapsed-' + MID); return s ? JSON.parse(s) : []; }
+    catch (e) { return []; }
+  })();
+  function saveCollapsed() {
+    try { localStorage.setItem('me-collapsed-' + MID, JSON.stringify(collapsedGroups)); } catch (e) {}
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('.me-toolbar .me-group'), function (g) {
+    var key = g.getAttribute('aria-label') || '';
+    var lbl = g.querySelector('.me-grp-lbl');
+    if (!lbl) return;
+    if (collapsedGroups.indexOf(key) >= 0) g.classList.add('me-collapsed');
+    lbl.setAttribute('title', 'Click to collapse / expand this group');
+    lbl.addEventListener('click', function () {
+      var now = g.classList.toggle('me-collapsed');
+      var i = collapsedGroups.indexOf(key);
+      if (now && i < 0) collapsedGroups.push(key);
+      else if (!now && i >= 0) collapsedGroups.splice(i, 1);
+      saveCollapsed();
+    });
   });
   // Show the whole map on load.
   if (img.complete) fitContain(); else img.addEventListener('load', fitContain);

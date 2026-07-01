@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.811.0] - 2026-07-01 — "The Folding Ruler"
+
+**Schema version:** 96
+
+**Commit summary:** Collapsible map-editor toolbar groups — click a group's label to fold it away and reclaim horizontal space.
+
+**Description:** Every toolbar group's **label is now a toggle**: click it to collapse the group down to just its label (a ▸ marks a collapsed group, ▾ an expanded one), and click again to expand. Because the toolbar is a single non-wrapping, horizontally-scrolling row, folding away the groups you aren't using right now (Grid, Tags, Weather, Layers…) reclaims width so the tools you *are* using stay on screen without scrolling. Collapsed state is remembered **per map** in localStorage.
+
+### Added
+- `app/templates/map_editor.html` — clickable group labels toggle a `me-collapsed` class (hides all but the label); collapsed set persisted per map in localStorage and re-applied on load; ▾/▸ affordance on every label.
+- `tests/harness_ui/test_map_editor_collapse.py` (new, +1) — collapsing the Grid group hides its controls, persists across reload, and re-expands on a second click.
+
+### Schema
+- No schema change (still v96 — client-only authoring preference).
+
 ## [2.810.0] - 2026-07-01 — "The Tidier Bench"
 
 **Schema version:** 96
