@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.790.0] - 2026-07-01 — "The Secret Ledger"
+
+**Schema version:** 93
+
+**Commit summary:** GM-only pins substrate — a private `maps.gm_pins` layer with GM-gated GET/PUT (schema v93).
+
+**Description:** Foundation for **GM-only notes/pins** — map markers holding secret prep (trap DCs, plot reminders) that **players never receive**. Adds a `gm_pins` JSON column to `maps` (schema **v93**), a sanitizer (`{id,x,y,label,note}`), and `GET`/`PUT /api/campaign/{cid}/map/{id}/gm_pins` — both **GM-only (403 for players)**. Editing broadcasts only a **data-less `gm_pins_changed`** signal (so other GM clients re-fetch via the gated GET); the note text is never put on the wire to players, and GM pins are **not** included in the shared `active-map` payload. Editor + tabletop rendering land next.
+
+### Added
+- `app/models.py` + `app/database.py` — `maps.gm_pins` JSON column + schema-v93 migration.
+- `app/routes/tabletop_routes.py` — `_sanitize_gm_pins`, GM-gated GET/PUT + `gm_pins_changed` broadcast; editor page passes `gm_pins`.
+- `tests/harness/test_map_gm_pins.py` (new, +3) — GM set/get + data-less broadcast; players get 403 on read + write; unknown-map 404.
+
+### Schema
+- **Schema v93:** `maps.gm_pins` (JSON, default `[]`). Additive; SCHEMA_VERSION 92 → 93.
+
 ## [2.789.2] - 2026-07-01 — "The Living Battlefield"
 
 **Schema version:** 92

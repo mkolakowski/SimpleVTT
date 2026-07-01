@@ -1092,6 +1092,16 @@ def _apply_inline_migrations() -> None:
                 "ALTER TABLE maps ADD COLUMN terrain JSON NOT NULL DEFAULT '[]'"
             ))
 
+    # ---- Schema v93 (2.790.0): maps.gm_pins ----
+    # GM-only pins — a JSON list of {id,x,y,label,note} markers. Additive;
+    # default empty list.
+    maps_cols_v93 = _column_names("maps")
+    with engine.begin() as conn:
+        if maps_cols_v93 and "gm_pins" not in maps_cols_v93:
+            conn.execute(text(
+                "ALTER TABLE maps ADD COLUMN gm_pins JSON NOT NULL DEFAULT '[]'"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

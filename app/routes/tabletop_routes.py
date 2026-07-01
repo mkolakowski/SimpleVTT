@@ -124495,6 +124495,76 @@ async def set_map_terrain(
     return {"ok": True, "map_id": m.id, "terrain": list(m.terrain or [])}
 
 
+def _sanitize_gm_pins(raw) -> list:
+    """v2.790.0 — coerce a client GM-pin list into ``{id, x, y, label, note}``
+    in map-pixel coords. Drops anything without numeric x/y."""
+    out = []
+    if not isinstance(raw, list):
+        return out
+    for i, p in enumerate(raw):
+        if not isinstance(p, dict):
+            continue
+        try:
+            x = float(p.get("x")); y = float(p.get("y"))
+        except (TypeError, ValueError):
+            continue
+        out.append({
+            "id": (str(p.get("id") or "").strip()[:40] or f"p{i}"),
+            "x": x, "y": y,
+            "label": str(p.get("label") or "Pin").strip()[:120] or "Pin",
+            "note": str(p.get("note") or "").strip()[:2000],
+        })
+    return out
+
+
+@router.get("/api/campaign/{campaign_id}/map/{map_id}/gm_pins")
+def get_map_gm_pins(
+    campaign_id: int,
+    map_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.790.0 — read a map's GM-only pins. GM-only (never exposed to
+    players — the pins carry secret prep notes)."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(
+        Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404, "Map not found")
+    return {"ok": True, "map_id": m.id,
+            "gm_pins": list(getattr(m, "gm_pins", None) or [])}
+
+
+@router.put("/api/campaign/{campaign_id}/map/{map_id}/gm_pins")
+async def set_map_gm_pins(
+    campaign_id: int,
+    map_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.790.0 — replace a map's GM-only pins (GM-only). Broadcasts a
+    data-less ``gm_pins_changed`` signal so other GM clients re-fetch via the
+    GM-gated GET (the pin text is never put on the wire to players)."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(
+        Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404, "Map not found")
+    body = await request.json()
+    m.gm_pins = _sanitize_gm_pins(body.get("gm_pins"))
+    db.commit()
+    await hub.broadcast(campaign_id, {
+        "type": "gm_pins_changed",
+        "data": {"map_id": m.id},  # no pin data — GM clients re-fetch
+    })
+    return {"ok": True, "map_id": m.id, "gm_pins": list(m.gm_pins or [])}
+
+
 @router.post("/api/campaign/{campaign_id}/map/{map_id}/door/{door_id}/toggle")
 async def toggle_map_door(
     campaign_id: int,
@@ -124571,6 +124641,7 @@ def map_editor_page(
         "fog_enabled": bool(getattr(m, "fog_enabled", False)),
         "fog_revealed": list(getattr(m, "fog_revealed", None) or []),
         "terrain": list(getattr(m, "terrain", None) or []),
+        "gm_pins": list(getattr(m, "gm_pins", None) or []),
         "is_active": m.id == campaign.active_map_id,
     })
 
