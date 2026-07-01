@@ -409,6 +409,9 @@ class Map(Base):
     # the GM sees on the map (trap DCs, plot reminders). NEVER sent to players
     # (the GET is GM-gated; edits broadcast only a data-less "changed" signal).
     gm_pins: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
+    # v2.791.0 — decorative prop stamps: a JSON list of {id, x, y, kind, size,
+    # rot} emoji props (furniture / trees / barrels). Presentation only.
+    props: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     folder: Mapped[Optional[str]] = mapped_column(String(120), nullable=True, default="", server_default="")
     thumbnail_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

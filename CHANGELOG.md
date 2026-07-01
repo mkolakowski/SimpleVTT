@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.791.0] - 2026-07-01 — "The Furnished Room"
+
+**Schema version:** 94
+
+**Commit summary:** Substrate for decorative prop stamps — `maps.props` column + GET/PUT endpoints + `props_update` broadcast.
+
+**Description:** Lays the foundation for **decorative prop stamps** — emoji props (furniture, trees, barrels, campfires) you'll place on a map to dress a scene. This commit ships the **data layer**: a new `maps.props` JSON column (`{id, x, y, kind, size, rot}`), a sanitizer that clamps size (8–400 px) + rotation (0–359°) and defaults the glyph, GET (any member) / PUT (GM-only) endpoints, a `props_update` WS broadcast, and `props` in both the `active-map` bootstrap and the editor-page context. The editor tool + tabletop render land in the next two commits.
+
+### Added
+- `app/models.py` — `Map.props` JSON column (default `[]`).
+- `app/database.py` — schema v94 migration: `ALTER TABLE maps ADD COLUMN props`.
+- `app/routes/tabletop_routes.py` — `_sanitize_props`; `GET`/`PUT /api/campaign/{cid}/map/{mid}/props` (PUT GM-only, `props_update` broadcast); `props` in `get_active_map` + `map_editor_page` context.
+- `tests/harness/test_map_props.py` (new, +2) — PUT/GET round-trip (clamps size + rot, defaults glyph) and the player-PUT 403 error path.
+
+### Schema
+- **Schema version → 94.** New `maps.props` column; additive, defaults to `[]`.
+
 ## [2.790.3] - 2026-07-01 — "The Overlay Stack"
 
 **Schema version:** 93

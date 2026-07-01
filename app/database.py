@@ -1102,6 +1102,16 @@ def _apply_inline_migrations() -> None:
                 "ALTER TABLE maps ADD COLUMN gm_pins JSON NOT NULL DEFAULT '[]'"
             ))
 
+    # ---- Schema v94 (2.791.0): maps.props ----
+    # Decorative prop stamps — a JSON list of {id,x,y,kind,size,rot}. Additive;
+    # default empty list.
+    maps_cols_v94 = _column_names("maps")
+    with engine.begin() as conn:
+        if maps_cols_v94 and "props" not in maps_cols_v94:
+            conn.execute(text(
+                "ALTER TABLE maps ADD COLUMN props JSON NOT NULL DEFAULT '[]'"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

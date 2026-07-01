@@ -124141,6 +124141,7 @@ def get_active_map(
         "fog_enabled": bool(getattr(m, "fog_enabled", False)),
         "fog_revealed": list(getattr(m, "fog_revealed", None) or []),
         "terrain": list(getattr(m, "terrain", None) or []),
+        "props": list(getattr(m, "props", None) or []),
     }
 
 
@@ -124565,6 +124566,86 @@ async def set_map_gm_pins(
     return {"ok": True, "map_id": m.id, "gm_pins": list(m.gm_pins or [])}
 
 
+def _sanitize_props(raw) -> list:
+    """v2.791.0 — coerce a client prop-stamp list into the stored shape: a list
+    of ``{id, x, y, kind, size, rot}`` decorative emoji props in map-pixel
+    coords. Drops anything without numeric x/y. ``kind`` is a short glyph
+    string (an emoji), ``size`` the render font-size in px (clamped 8..400),
+    ``rot`` the rotation in degrees (0..359)."""
+    out = []
+    if not isinstance(raw, list):
+        return out
+    for i, p in enumerate(raw):
+        if not isinstance(p, dict):
+            continue
+        try:
+            x = float(p.get("x")); y = float(p.get("y"))
+        except (TypeError, ValueError):
+            continue
+        try:
+            size = float(p.get("size") or 40)
+        except (TypeError, ValueError):
+            size = 40.0
+        size = max(8.0, min(400.0, size))
+        try:
+            rot = float(p.get("rot") or 0)
+        except (TypeError, ValueError):
+            rot = 0.0
+        rot = rot % 360
+        kind = str(p.get("kind") or "").strip()[:8] or "📦"
+        out.append({
+            "id": (str(p.get("id") or "").strip()[:40] or f"pr{i}"),
+            "x": x, "y": y, "kind": kind, "size": size, "rot": rot,
+        })
+    return out
+
+
+@router.get("/api/campaign/{campaign_id}/map/{map_id}/props")
+def get_map_props(
+    campaign_id: int,
+    map_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.791.0 — read a map's decorative prop stamps (any member)."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    m = db.query(Map).filter(
+        Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404, "Map not found")
+    return {"ok": True, "map_id": m.id,
+            "props": list(getattr(m, "props", None) or [])}
+
+
+@router.put("/api/campaign/{campaign_id}/map/{map_id}/props")
+async def set_map_props(
+    campaign_id: int,
+    map_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.791.0 — replace a map's decorative prop stamps (GM-only). Body:
+    ``{props: [{x,y,kind,size?,rot?}]}``. Broadcasts ``props_update``."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(
+        Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404, "Map not found")
+    body = await request.json()
+    m.props = _sanitize_props(body.get("props"))
+    db.commit()
+    await hub.broadcast(campaign_id, {
+        "type": "props_update",
+        "data": {"map_id": m.id, "props": list(m.props or [])},
+    })
+    return {"ok": True, "map_id": m.id, "props": list(m.props or [])}
+
+
 @router.post("/api/campaign/{campaign_id}/map/{map_id}/door/{door_id}/toggle")
 async def toggle_map_door(
     campaign_id: int,
@@ -124642,6 +124723,7 @@ def map_editor_page(
         "fog_revealed": list(getattr(m, "fog_revealed", None) or []),
         "terrain": list(getattr(m, "terrain", None) or []),
         "gm_pins": list(getattr(m, "gm_pins", None) or []),
+        "props": list(getattr(m, "props", None) or []),
         "is_active": m.id == campaign.active_map_id,
     })
 

@@ -3,9 +3,9 @@
 Single source of truth. See CHANGELOG.md for the bump rules.
 """
 
-APP_VERSION = "2.790.3"
+APP_VERSION = "2.791.0"
 # v2.776.0 — the current release's "Fun Name" (matches the top CHANGELOG entry
 # + the git subject). Bump this alongside APP_VERSION every release; it feeds
 # the optional version-name display gated by SHOW_VERSION_NAME.
-APP_VERSION_NAME = "The Overlay Stack"
-SCHEMA_VERSION = 93
+APP_VERSION_NAME = "The Furnished Room"
+SCHEMA_VERSION = 94
