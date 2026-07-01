@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- Top-down stone pillar/column: concentric fluted rings. Original art. -->
+  <circle cx="50" cy="50" r="40" fill="#a2a6ac" stroke="#5a5d63" stroke-width="3"/>
+  <circle cx="50" cy="50" r="30" fill="#b7bbc1" stroke="#6b6f75" stroke-width="2"/>
+  <circle cx="50" cy="50" r="20" fill="#c7cbd1" stroke="#6b6f75" stroke-width="2"/>
+  <g stroke="#8a8e94" stroke-width="1.5">
+    <line x1="50" y1="20" x2="50" y2="30"/><line x1="50" y1="70" x2="50" y2="80"/>
+    <line x1="20" y1="50" x2="30" y2="50"/><line x1="70" y1="50" x2="80" y2="50"/>
+    <line x1="29" y1="29" x2="36" y2="36"/><line x1="71" y1="29" x2="64" y2="36"/>
+    <line x1="29" y1="71" x2="36" y2="64"/><line x1="71" y1="71" x2="64" y2="64"/>
+  </g>
+</svg>

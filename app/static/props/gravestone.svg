@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- Top-down grave: rounded headstone at the head of a grassy mound. Original art. -->
+  <rect x="26" y="20" width="48" height="60" rx="10" fill="#4b6b3a" stroke="#2f4522" stroke-width="3"/>
+  <rect x="30" y="24" width="40" height="52" rx="8" fill="#5f7f45"/>
+  <rect x="34" y="14" width="32" height="20" rx="14" fill="#a2a6ac" stroke="#5a5d63" stroke-width="3"/>
+  <path d="M50 20 v10 M45 24 h10" stroke="#6b6f75" stroke-width="3"/>
+  <path d="M40 48 q10 6 20 0 M40 58 q10 6 20 0" stroke="#3f5a2c" stroke-width="2" fill="none"/>
+</svg>

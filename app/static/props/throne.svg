@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- Top-down throne: ornate high-back chair, gold frame, red seat. Original art. -->
+  <rect x="24" y="12" width="52" height="76" rx="8" fill="#c9a23a" stroke="#7a5f12" stroke-width="3"/>
+  <rect x="24" y="12" width="52" height="18" rx="8" fill="#dfbe55"/>
+  <rect x="32" y="30" width="36" height="52" rx="5" fill="#8c2f2f" stroke="#5a1c1c" stroke-width="2"/>
+  <rect x="36" y="34" width="28" height="30" rx="4" fill="#a83a3a"/>
+  <circle cx="30" cy="20" r="4" fill="#f0d878"/><circle cx="70" cy="20" r="4" fill="#f0d878"/>
+</svg>

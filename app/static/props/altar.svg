@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- Top-down stone altar: cloth runner + two candle flames. Original art. -->
+  <rect x="20" y="26" width="60" height="48" rx="4" fill="#9a9ea4" stroke="#4b4f55" stroke-width="3"/>
+  <rect x="34" y="26" width="32" height="48" fill="#8c2f2f"/>
+  <rect x="34" y="26" width="32" height="48" fill="none" stroke="#e0b34a" stroke-width="2"/>
+  <g>
+    <circle cx="30" cy="36" r="4" fill="#f2eede" stroke="#6b6f75" stroke-width="1.5"/>
+    <path d="M30 28 q3 3 0 6 q-3 -3 0 -6Z" fill="#f0632a"/>
+    <circle cx="70" cy="36" r="4" fill="#f2eede" stroke="#6b6f75" stroke-width="1.5"/>
+    <path d="M70 28 q3 3 0 6 q-3 -3 0 -6Z" fill="#f0632a"/>
+  </g>
+</svg>

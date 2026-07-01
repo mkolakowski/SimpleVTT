@@ -83,7 +83,10 @@ async def test_props_unknown_map_404(gm_client):
 async def test_shipped_prop_svgs_serve(gm_client):
     """v2.794.0 — the shipped SVG prop library is served as static assets."""
     for slug in ("table", "barrel", "crate", "chest", "bed", "rug",
-                 "bookshelf", "campfire", "tree", "rock", "well"):
+                 "bookshelf", "campfire", "tree", "rock", "well",
+                 "statue", "altar", "bones", "weaponrack", "anvil",
+                 "cauldron", "gravestone", "throne", "brazier", "pillar",
+                 "cart"):
         r = await gm_client.get(f"/static/props/{slug}.svg")
         assert r.status_code == 200, f"{slug}: {r.status_code}"
         assert "<svg" in r.text, slug

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.796.0] - 2026-07-01 — "The Deeper Cupboard"
+
+**Schema version:** 94
+
+**Commit summary:** Add 11 more SVG prop illustrations (dungeon + wilderness) — the image-prop library grows from 11 to 22.
+
+**Description:** Doubles the shipped prop-art set with **11 new original top-down SVG illustrations**: statue, altar, bones, weapon rack, anvil, cauldron, gravestone, throne, brazier, pillar, and cart. Same flat, license-clean vector style as the first batch; all appear in the editor's 🖼 Images picker and render through the existing `img:<slug>` path (no render-code change needed). The library now covers 22 props.
+
+### Added
+- `app/static/props/*.svg` (new, 11 files) — statue, altar, bones, weaponrack, anvil, cauldron, gravestone, throne, brazier, pillar, cart (original top-down vector art).
+- `app/templates/map_editor.html` — 11 new options in the 🖼 Images prop picker.
+
+### Changed
+- `tests/harness/test_map_props.py` — the serve-check now asserts all 22 shipped prop SVGs serve.
+
+### Schema
+- No schema change (still v94).
+
 ## [2.795.0] - 2026-07-01 — "The Painted Scenery"
 
 **Schema version:** 94
