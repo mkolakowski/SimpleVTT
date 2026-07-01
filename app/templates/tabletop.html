@@ -2402,6 +2402,7 @@
         function terrainColor(t) { return TERRAIN_TYPES[t] || TERRAIN_TYPES.difficult; }
         var gmPins = [];  // v2.790.2 — GM-only pins (fetched only when IS_GM)
         var props = [];   // v2.793.0 — decorative prop stamps (emoji glyphs)
+        var labels = [];  // v2.804.0 — public text labels (room names)
 
         // v2.772.0 — wall/door material looks (kept in sync with the map editor).
         // v2.787.2 — thicker walls + per-material texture keys.
@@ -2605,6 +2606,26 @@
                 el.classList.add('tt-prop');
                 svg.appendChild(el);
             });
+            // v2.804.0 — public text labels (room names): centred outlined text,
+            // visible to everyone, non-interactive.
+            labels.forEach(function (lb) {
+                var t = document.createElementNS(NS, 'text');
+                t.setAttribute('x', lb.x); t.setAttribute('y', lb.y);
+                t.setAttribute('font-size', lb.size || 24);
+                t.setAttribute('text-anchor', 'middle');
+                t.setAttribute('dominant-baseline', 'central');
+                t.setAttribute('font-weight', '700');
+                t.setAttribute('fill', lb.color || '#ffffff');
+                t.setAttribute('stroke', '#000000');
+                t.setAttribute('stroke-width', Math.max(1, (lb.size || 24) / 12));
+                t.style.paintOrder = 'stroke';
+                t.style.strokeLinejoin = 'round';
+                t.style.pointerEvents = 'none';
+                t.style.userSelect = 'none';
+                t.classList.add('tt-label');
+                t.textContent = lb.text || '';
+                svg.appendChild(t);
+            });
             // v2.790.2 — GM-only pins (only the GM ever has this data).
             if (IS_GM) gmPins.forEach(function (pin) {
                 var pc = document.createElementNS(NS, 'circle');
@@ -2713,7 +2734,7 @@
                 var d = await r.json();
                 mapId = d.map_id; walls = d.walls || [];
                 hotspots = d.hotspots || []; terrain = d.terrain || [];
-                props = d.props || []; render();
+                props = d.props || []; labels = d.labels || []; render();
                 fetchGmPins();  // v2.790.2 — GM-only (no-op for players)
                 if (window._setMapWalls) window._setMapWalls(walls);
                 if (window._setMapLights) window._setMapLights(d.lights || []);
@@ -2807,6 +2828,10 @@
         window._onPropsUpdate = function (data) {  // v2.793.0
             if (!data) return;
             props = data.props || []; render();
+        };
+        window._onLabelsUpdate = function (data) {  // v2.804.0
+            if (!data) return;
+            labels = data.labels || []; render();
         };
         // v2.790.2 — GM-only pins: fetch (GM only) + re-fetch on the signal.
         async function fetchGmPins() {

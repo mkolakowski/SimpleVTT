@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.804.0] - 2026-07-01 — "The Sign Hung"
+
+**Schema version:** 95
+
+**Commit summary:** Public text labels render on the live tabletop + refresh over the `labels_update` WS broadcast.
+
+**Description:** The **text labels** authored in the map editor now show on the **live tabletop** for everyone — centred, outlined text drawn above the scenery, at the size + colour they were placed. They load with the map (`active-map` bootstrap) and refresh live when the GM edits them, via the new `labels_update` broadcast handler. Completes the text-label feature: substrate (v2.802.0) → editor tool (v2.803.0) → tabletop render (this commit).
+
+### Added
+- `app/templates/tabletop.html` — `labels` state; label render (centred outlined `<text.tt-label>`); `labels` in the `active-map` bootstrap; `window._onLabelsUpdate` handler.
+- `app/static/tabletop.js` — `labels_update` WS case → `window._onLabelsUpdate`.
+- `tests/harness_ui/test_tabletop_label.py` (new, +1) — a `labels_update` renders the text as a `text.tt-label` in the overlay.
+
+### Schema
+- No schema change (still v95).
+
 ## [2.803.0] - 2026-07-01 — "The Named Room"
 
 **Schema version:** 95

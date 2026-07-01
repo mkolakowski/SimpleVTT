@@ -5448,6 +5448,11 @@
                 if (msg.data && typeof window._onPropsUpdate === 'function') {
                     try { window._onPropsUpdate(msg.data); } catch (_) {}
                 }
+            } else if (msg.type === 'labels_update') {
+                // v2.804.0 — Maps 2.0: re-render public text labels.
+                if (msg.data && typeof window._onLabelsUpdate === 'function') {
+                    try { window._onLabelsUpdate(msg.data); } catch (_) {}
+                }
             } else if (msg.type === 'character_death_save') {
                 _onCharacterDeathSave(msg.data);
             } else if (msg.type === 'character_roll_state') {
