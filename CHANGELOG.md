@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.805.0] - 2026-07-01 — "The Measured Stride"
+
+**Schema version:** 95
+
+**Commit summary:** Ruler / measure tool in the map editor — drag a line to read its length in feet.
+
+**Description:** The editor's **Tools** group gains a **📏 Measure** tool. Drag a line anywhere on the map to read its **length in feet** (5 ft per grid cell, from the map's grid size), shown as a cyan dashed line with endpoint dots and a feet label at the midpoint. The last measurement stays on screen so you can compare, and clears when you switch to another tool. Purely an authoring aid — nothing is saved or broadcast, so no schema or endpoint change.
+
+### Added
+- `app/templates/map_editor.html` — `measureMode` + a **📏 Measure** tool; `drawMeasure` (dashed line + endpoints + feet label); ruler drag wired into the pointer handlers; measurement clears on tool change.
+- `tests/harness_ui/test_map_editor_measure.py` (new, +1) — dragging the ruler shows an `N ft` label (`text.me-measure`) that clears when another tool is armed.
+
+### Schema
+- No schema change (still v95 — client-only authoring tool).
+
 ## [2.804.0] - 2026-07-01 — "The Sign Hung"
 
 **Schema version:** 95

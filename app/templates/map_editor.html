@@ -255,6 +255,8 @@
             title="Erase mode: click any wall / door / hotspot / light to delete it (right-click an object for Move/Delete anytime)">🗑 Erase</button>
     <button type="button" id="me-snap-btn" class="me-tool-btn" aria-pressed="true"
             title="Snap wall/door endpoints + tokens to the grid">🧲 Snap</button>
+    <button type="button" id="me-measure-btn" class="me-tool-btn" aria-pressed="false"
+            title="Measure: drag a line to read its length in feet (5 ft per grid cell)">📏 Measure</button>
   </div>
   {# v2.788.0 — undo / redo history. #}
   <div class="me-group me-group--stack" role="group" aria-label="History">
@@ -432,6 +434,9 @@
   }
   var fogDrag = null;
   var terrainDrag = null;   // v2.789.1 — rect being painted
+  var measureMode = false;  // v2.805.0 — ruler tool
+  var measureDrag = null;   // the line being dragged
+  var measureLine = null;   // the last committed measurement (stays shown)
   var eraseMode = false;       // v2.770.0 — click an object to delete
   var relocating = null;       // {kind, obj} — being repositioned (drag)
   var relocDragging = false;   // v2.775.0 — true while dragging the held object
@@ -1355,6 +1360,38 @@
     window.__meTokens = sampleTokens;
     window.__meGrid = { px: gridPx, offX: gridOffX, offY: gridOffY };
     drawTokenVision();  // v2.780.0 — refresh the selected token's line of sight
+    // v2.805.0 — ruler: draw the live drag + the last committed measurement on top.
+    drawMeasure(measureLine);
+    drawMeasure(measureDrag);
+  }
+  // v2.805.0 — render a measurement line (dashed) with a feet label at its
+  // midpoint. 5 ft per grid cell (pxPerFt = gridPx / 5).
+  function drawMeasure(m) {
+    if (!m) return;
+    var line = document.createElementNS(NS, 'line');
+    line.setAttribute('x1', m.sx); line.setAttribute('y1', m.sy);
+    line.setAttribute('x2', m.cx); line.setAttribute('y2', m.cy);
+    line.setAttribute('stroke', '#5ad6e0'); line.setAttribute('stroke-width', '2.5');
+    line.setAttribute('stroke-dasharray', '9 6'); line.style.pointerEvents = 'none';
+    svg.appendChild(line);
+    [[m.sx, m.sy], [m.cx, m.cy]].forEach(function (pt) {
+      var d = document.createElementNS(NS, 'circle');
+      d.setAttribute('cx', pt[0]); d.setAttribute('cy', pt[1]); d.setAttribute('r', '4');
+      d.setAttribute('fill', '#5ad6e0'); d.style.pointerEvents = 'none';
+      svg.appendChild(d);
+    });
+    var distPx = Math.hypot(m.cx - m.sx, m.cy - m.sy);
+    var ft = Math.round(distPx * 5 / (gridPx || 70));
+    var t = document.createElementNS(NS, 'text');
+    var mx = (m.sx + m.cx) / 2, my = (m.sy + m.cy) / 2;
+    t.setAttribute('x', mx); t.setAttribute('y', my - 8);
+    t.setAttribute('font-size', Math.max(13, (gridPx || 70) * 0.22));
+    t.setAttribute('text-anchor', 'middle'); t.setAttribute('font-weight', '700');
+    t.setAttribute('fill', '#5ad6e0'); t.setAttribute('stroke', '#06232a');
+    t.setAttribute('stroke-width', '3'); t.style.paintOrder = 'stroke';
+    t.style.pointerEvents = 'none'; t.classList.add('me-measure');
+    t.textContent = ft + ' ft';
+    svg.appendChild(t);
   }
   function toMap(e) {
     var pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
@@ -1753,10 +1790,12 @@
   if (propBtn) propBtn.addEventListener('click', function () { setMode(propMode ? null : 'prop'); });
   var labelBtn = document.getElementById('me-label-btn');
   if (labelBtn) labelBtn.addEventListener('click', function () { setMode(labelMode ? null : 'label'); });
+  var measureBtn = document.getElementById('me-measure-btn');
+  if (measureBtn) measureBtn.addEventListener('click', function () { setMode(measureMode ? null : 'measure'); });
   function syncStageCursor() {
     // The overlay captures empty-area clicks when placing/painting/relocating.
     // (Objects stay individually clickable for erase/right-click regardless.)
-    var on = wallMode || doorMode || roomMode || spotMode || lightMode || fogMode || terrainMode || pinMode || propMode || labelMode || relocating || resizing;
+    var on = wallMode || doorMode || roomMode || spotMode || lightMode || fogMode || terrainMode || pinMode || propMode || labelMode || measureMode || relocating || resizing;
     svg.style.pointerEvents = on ? 'auto' : 'none';
     svg.style.cursor = on ? 'crosshair' : 'default';
   }
@@ -1869,6 +1908,9 @@
     spotMode = (mode === 'spot'); lightMode = (mode === 'light'); fogMode = (mode === 'fog');
     terrainMode = (mode === 'terrain'); pinMode = (mode === 'pin');
     propMode = (mode === 'prop'); labelMode = (mode === 'label');
+    measureMode = (mode === 'measure');
+    if (!measureMode) { measureDrag = null; measureLine = null; }  // clear ruler on tool change
+    if (measureBtn) measureBtn.setAttribute('aria-pressed', measureMode ? 'true' : 'false');
     wallBtn.setAttribute('aria-pressed', wallMode ? 'true' : 'false');
     if (roomBtn) roomBtn.setAttribute('aria-pressed', roomMode ? 'true' : 'false');
     if (terrainBtn) terrainBtn.setAttribute('aria-pressed', terrainMode ? 'true' : 'false');
@@ -1925,6 +1967,15 @@
       try { svg.setPointerCapture(e.pointerId); } catch (_) {}
       return;
     }
+    if (measureMode) {  // v2.805.0 — drag a ruler line
+      var mp = toMap(e); if (!mp) return;
+      e.preventDefault();
+      measureLine = null;
+      measureDrag = { sx: mp.x, sy: mp.y, cx: mp.x, cy: mp.y };
+      try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+      render();
+      return;
+    }
     if (!fogMode) return;
     var p = toMap(e); if (!p) return;
     e.preventDefault();
@@ -1938,6 +1989,10 @@
     }
     if (terrainDrag) {
       var tmp = toMap(e); if (tmp) { terrainDrag.cx = tmp.x; terrainDrag.cy = tmp.y; render(); }
+      return;
+    }
+    if (measureDrag) {
+      var mmp = toMap(e); if (mmp) { measureDrag.cx = mmp.x; measureDrag.cy = mmp.y; render(); }
       return;
     }
     if (fogDrag) {
@@ -1961,6 +2016,13 @@
       var r = relocating; relocating = null; relocDragging = false;
       try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
       saveReloc(r); setStatus(''); syncStageCursor();
+      suppressClick = true; setTimeout(function () { suppressClick = false; }, 0);
+      return;
+    }
+    if (measureDrag) {  // v2.805.0 — commit the measurement (keep it shown)
+      measureLine = measureDrag; measureDrag = null;
+      try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
+      render();
       suppressClick = true; setTimeout(function () { suppressClick = false; }, 0);
       return;
     }
