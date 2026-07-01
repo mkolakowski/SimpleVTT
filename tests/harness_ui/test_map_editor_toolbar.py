@@ -20,6 +20,10 @@ def test_toolbar_grouped(gm_page: Page) -> None:
     assert labels == ["HISTORY", "TOOLS", "WALLS", "MARKERS", "ENVIRONMENT",
                       "PROPS", "TOKENS", "GRID", "TAGS", "LAYERS", "VIEW"], labels
 
+    # v2.817.0 — two zone dividers make the Actions │ Draw │ Map zoning visible.
+    zones = [s.upper() for s in gm_page.locator(".me-zone-sep .me-zone-lbl").all_inner_texts()]
+    assert zones == ["DRAW", "MAP"], zones
+
     # Every tool still present (grouping preserved the IDs the JS + tests use).
     for sel in ["#me-wall-btn", "#me-door-btn", "#me-wall-style", "#me-spot-btn",
                 "#me-light-btn", "#me-light-type", "#me-fog-btn", "#me-token-btn",

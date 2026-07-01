@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.817.0] - 2026-07-01 — "The Painted Lines"
+
+**Schema version:** 96
+
+**Commit summary:** Draw hairline zone dividers between the ribbon's Actions · Draw · Map zones so the v2.816.0 zoning reads visually, not just conceptually.
+
+**Description:** The previous release **reordered** the map-editor ribbon into three logical zones, but the groups still rendered as one undifferentiated row of cards — the zoning was conceptual only. This adds a **subtle vertical divider** at each of the two zone boundaries (Actions │ Draw and Draw │ Map), a hairline rule with the upcoming zone name printed vertically up it. Now the ribbon visibly reads as three clusters. Pure CSS + two marker elements; every tool ID and behaviour is unchanged, and the dividers are `aria-hidden` so they don't pollute the group semantics.
+
+### Added
+- `app/templates/map_editor.html` — `.me-zone-sep` divider (hairline gradient rule + vertically-set `.me-zone-lbl`) inserted after the Tools group (Actions │ Draw) and after the Tokens group (Draw │ Map).
+- `tests/harness_ui/test_map_editor_toolbar.py` — asserts the two zone-divider labels render as `DRAW`, `MAP`.
+
+### Schema
+- No schema change (still v96 — layout only).
+
 ## [2.816.0] - 2026-07-01 — "The Three Zones"
 
 **Schema version:** 96
