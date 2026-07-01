@@ -257,6 +257,8 @@
             title="Snap wall/door endpoints + tokens to the grid">🧲 Snap</button>
     <button type="button" id="me-measure-btn" class="me-tool-btn" aria-pressed="false"
             title="Measure: drag a line to read its length in feet (5 ft per grid cell)">📏 Measure</button>
+    <button type="button" id="me-select-btn" class="me-tool-btn" aria-pressed="false"
+            title="Select: drag a box to select multiple objects, then drag to move them together or press Delete to remove them all">⬚ Select</button>
   </div>
   {# v2.788.0 — undo / redo history. #}
   <div class="me-group me-group--stack" role="group" aria-label="History">
@@ -437,6 +439,10 @@
   var measureMode = false;  // v2.805.0 — ruler tool
   var measureDrag = null;   // the line being dragged
   var measureLine = null;   // the last committed measurement (stays shown)
+  var selectMode = false;   // v2.806.0 — marquee multi-select tool
+  var selectDrag = null;    // the marquee box being dragged
+  var selection = [];       // [{kind, obj}] currently selected
+  var selGroupDrag = null;  // v2.807.0 — dragging the whole selection to move it
   var eraseMode = false;       // v2.770.0 — click an object to delete
   var relocating = null;       // {kind, obj} — being repositioned (drag)
   var relocDragging = false;   // v2.775.0 — true while dragging the held object
@@ -1045,7 +1051,7 @@
         if (eraseMode) { e.stopPropagation(); deleteWall(w); return; }
         // v2.775.0/v2.787.1 — outside erase/draw modes, clicking a door/gate
         // toggles it open/closed.
-        if ((w.door || w.gate) && !wallMode && !doorMode && !relocating) {
+        if ((w.door || w.gate) && !wallMode && !doorMode && !relocating && !selectMode && !measureMode) {
           e.stopPropagation();
           w.open = !w.open;
           saveWalls();
@@ -1109,7 +1115,7 @@
           ttl.textContent = (w.gate ? '🚪 Gate — open (click to close)' : '🚪 Door — open (click to close)');
           lh.appendChild(ttl);
           lh.addEventListener('click', function (e) {
-            if (eraseMode || relocating) return;
+            if (eraseMode || relocating || selectMode || measureMode) return;
             e.stopPropagation(); w.open = !w.open; saveWalls();
           });
           svg.appendChild(lh);
@@ -1138,6 +1144,7 @@
       if (h.label) { var t = document.createElementNS(NS, 'title'); t.textContent = h.label; mk.appendChild(t); }
       mk.addEventListener('click', function (e) {
         e.stopPropagation();
+        if (selectMode || measureMode) return;
         if (eraseMode) { deleteHotspot(h); return; }
         alert('📍 ' + (h.label || 'Hotspot') + (h.description ? '\n\n' + h.description : '')
           + (h.roll ? '\n\n🎲 ' + h.roll : ''));
@@ -1167,6 +1174,7 @@
       pc.appendChild(tip);
       pc.addEventListener('click', function (e) {
         e.stopPropagation();
+        if (selectMode || measureMode) return;
         if (eraseMode) { gmPins.splice(i, 1); saveGmPins(); return; }
         alert('📌 ' + (pin.label || 'Pin') + (pin.note ? '\n\n' + pin.note : '') + '\n\n(GM-only — players never see this)');
       });
@@ -1363,6 +1371,7 @@
     // v2.805.0 — ruler: draw the live drag + the last committed measurement on top.
     drawMeasure(measureLine);
     drawMeasure(measureDrag);
+    drawSelection();  // v2.806.0 — marquee + selection highlights on top
   }
   // v2.805.0 — render a measurement line (dashed) with a feet label at its
   // midpoint. 5 ft per grid cell (pxPerFt = gridPx / 5).
@@ -1392,6 +1401,94 @@
     t.style.pointerEvents = 'none'; t.classList.add('me-measure');
     t.textContent = ft + ' ft';
     svg.appendChild(t);
+  }
+  // v2.806.0 — marquee multi-select. The selectable object layers (arrays are
+  // captured live because undo/restore reassigns them).
+  function _selLayers() {
+    return [
+      { kind: 'wall', arr: walls }, { kind: 'prop', arr: props },
+      { kind: 'label', arr: labels }, { kind: 'light', arr: lights },
+      { kind: 'hotspot', arr: hotspots }, { kind: 'gmpin', arr: gmPins },
+    ];
+  }
+  function selRep(kind, obj) {  // representative point for hit-testing / highlight
+    if (kind === 'wall') return { x: (obj.x1 + obj.x2) / 2, y: (obj.y1 + obj.y2) / 2 };
+    return { x: obj.x, y: obj.y };
+  }
+  function collectSelection(box) {
+    selection = [];
+    var x1 = Math.min(box.sx, box.cx), y1 = Math.min(box.sy, box.cy);
+    var x2 = Math.max(box.sx, box.cx), y2 = Math.max(box.sy, box.cy);
+    _selLayers().forEach(function (L) {
+      (L.arr || []).forEach(function (obj) {
+        var p = selRep(L.kind, obj);
+        if (p.x >= x1 && p.x <= x2 && p.y >= y1 && p.y <= y2) selection.push({ kind: L.kind, obj: obj });
+      });
+    });
+  }
+  function selBounds() {  // bounding box of the current selection (rep points)
+    if (!selection.length) return null;
+    var xs = selection.map(function (s) { return selRep(s.kind, s.obj).x; });
+    var ys = selection.map(function (s) { return selRep(s.kind, s.obj).y; });
+    return { x1: Math.min.apply(null, xs), y1: Math.min.apply(null, ys),
+             x2: Math.max.apply(null, xs), y2: Math.max.apply(null, ys) };
+  }
+  function moveSelectionBy(dx, dy) {  // v2.807.0 — shift every selected object
+    selection.forEach(function (s) {
+      if (s.kind === 'wall') {
+        s.obj.x1 += dx; s.obj.y1 += dy; s.obj.x2 += dx; s.obj.y2 += dy;
+      } else { s.obj.x += dx; s.obj.y += dy; }
+    });
+  }
+  function deleteSelection() {
+    if (!selection.length) return;
+    var byKind = {};
+    selection.forEach(function (s) { (byKind[s.kind] = byKind[s.kind] || []).push(s.obj); });
+    function drop(arr, set) { return arr.filter(function (o) { return set.indexOf(o) < 0; }); }
+    if (byKind.wall) walls = drop(walls, byKind.wall);
+    if (byKind.prop) props = drop(props, byKind.prop);
+    if (byKind.label) labels = drop(labels, byKind.label);
+    if (byKind.light) lights = drop(lights, byKind.light);
+    if (byKind.hotspot) hotspots = drop(hotspots, byKind.hotspot);
+    if (byKind.gmpin) gmPins = drop(gmPins, byKind.gmpin);
+    var n = selection.length; selection = [];
+    pushHistory(); saveAll(); render();
+    setStatus('Deleted ' + n + ' object' + (n === 1 ? '' : 's') + '.');
+  }
+  function drawSelection() {
+    // Highlight each selected object + a bounding box.
+    selection.forEach(function (s) {
+      var p = selRep(s.kind, s.obj);
+      var r = document.createElementNS(NS, 'circle');
+      r.setAttribute('cx', p.x); r.setAttribute('cy', p.y); r.setAttribute('r', '13');
+      r.setAttribute('fill', 'none'); r.setAttribute('stroke', '#6cf');
+      r.setAttribute('stroke-width', '2.5'); r.style.pointerEvents = 'none';
+      svg.appendChild(r);
+    });
+    var b = selBounds();
+    if (b && selection.length > 1) {
+      var bx = document.createElementNS(NS, 'rect');
+      bx.setAttribute('x', b.x1 - 18); bx.setAttribute('y', b.y1 - 18);
+      bx.setAttribute('width', (b.x2 - b.x1) + 36); bx.setAttribute('height', (b.y2 - b.y1) + 36);
+      bx.setAttribute('fill', 'none'); bx.setAttribute('stroke', '#6cf');
+      bx.setAttribute('stroke-width', '1.5'); bx.setAttribute('stroke-dasharray', '6 5');
+      bx.style.pointerEvents = 'none';
+      svg.appendChild(bx);
+    }
+    if (selectDrag) {  // the marquee being dragged
+      var mq = document.createElementNS(NS, 'rect');
+      mq.setAttribute('x', Math.min(selectDrag.sx, selectDrag.cx));
+      mq.setAttribute('y', Math.min(selectDrag.sy, selectDrag.cy));
+      mq.setAttribute('width', Math.abs(selectDrag.cx - selectDrag.sx));
+      mq.setAttribute('height', Math.abs(selectDrag.cy - selectDrag.sy));
+      mq.setAttribute('fill', 'rgba(102,204,255,0.15)');
+      mq.setAttribute('stroke', '#6cf'); mq.setAttribute('stroke-dasharray', '6 5');
+      mq.style.pointerEvents = 'none';
+      svg.appendChild(mq);
+    }
+  }
+  function pointInBox(p, b, pad) {
+    return b && p.x >= b.x1 - pad && p.x <= b.x2 + pad && p.y >= b.y1 - pad && p.y <= b.y2 + pad;
   }
   function toMap(e) {
     var pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
@@ -1792,10 +1889,12 @@
   if (labelBtn) labelBtn.addEventListener('click', function () { setMode(labelMode ? null : 'label'); });
   var measureBtn = document.getElementById('me-measure-btn');
   if (measureBtn) measureBtn.addEventListener('click', function () { setMode(measureMode ? null : 'measure'); });
+  var selectBtn = document.getElementById('me-select-btn');
+  if (selectBtn) selectBtn.addEventListener('click', function () { setMode(selectMode ? null : 'select'); });
   function syncStageCursor() {
     // The overlay captures empty-area clicks when placing/painting/relocating.
     // (Objects stay individually clickable for erase/right-click regardless.)
-    var on = wallMode || doorMode || roomMode || spotMode || lightMode || fogMode || terrainMode || pinMode || propMode || labelMode || measureMode || relocating || resizing;
+    var on = wallMode || doorMode || roomMode || spotMode || lightMode || fogMode || terrainMode || pinMode || propMode || labelMode || measureMode || selectMode || relocating || resizing;
     svg.style.pointerEvents = on ? 'auto' : 'none';
     svg.style.cursor = on ? 'crosshair' : 'default';
   }
@@ -1899,8 +1998,17 @@
     if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || e.key === 'Y')) {
       e.preventDefault(); redo(); return;
     }
-    // v2.788.1 — Esc finishes a wall/room chain.
-    if (e.key === 'Escape' && pending) { pending = null; render(); }
+    // v2.806.0 — Delete/Backspace removes the current multi-selection (unless
+    // you're typing in a field).
+    var typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '');
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selection.length && !typing) {
+      e.preventDefault(); deleteSelection(); return;
+    }
+    // v2.788.1 — Esc finishes a wall/room chain or clears the selection.
+    if (e.key === 'Escape') {
+      if (pending) { pending = null; render(); }
+      else if (selection.length) { selection = []; render(); }
+    }
   });
   // One edit mode at a time (wall / door / spot / light / fog), or null.
   function setMode(mode) {
@@ -1911,6 +2019,9 @@
     measureMode = (mode === 'measure');
     if (!measureMode) { measureDrag = null; measureLine = null; }  // clear ruler on tool change
     if (measureBtn) measureBtn.setAttribute('aria-pressed', measureMode ? 'true' : 'false');
+    selectMode = (mode === 'select');  // v2.806.0
+    if (!selectMode) { selectDrag = null; selGroupDrag = null; selection = []; }  // clear selection on tool change
+    if (selectBtn) selectBtn.setAttribute('aria-pressed', selectMode ? 'true' : 'false');
     wallBtn.setAttribute('aria-pressed', wallMode ? 'true' : 'false');
     if (roomBtn) roomBtn.setAttribute('aria-pressed', roomMode ? 'true' : 'false');
     if (terrainBtn) terrainBtn.setAttribute('aria-pressed', terrainMode ? 'true' : 'false');
@@ -1976,6 +2087,21 @@
       render();
       return;
     }
+    if (selectMode) {  // v2.806.0 — marquee select, or drag an existing selection to move it
+      var selp = toMap(e); if (!selp) return;
+      e.preventDefault();
+      try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+      // v2.807.0 — pressing inside (or within ~half a cell of) the current
+      // selection drags the whole group.
+      if (selection.length && pointInBox(selp, selBounds(), Math.max(24, (gridPx || 70) * 0.6))) {
+        selGroupDrag = { lx: selp.x, ly: selp.y, moved: false };
+      } else {
+        selGroupDrag = null;
+        selectDrag = { sx: selp.x, sy: selp.y, cx: selp.x, cy: selp.y };
+      }
+      render();
+      return;
+    }
     if (!fogMode) return;
     var p = toMap(e); if (!p) return;
     e.preventDefault();
@@ -1993,6 +2119,18 @@
     }
     if (measureDrag) {
       var mmp = toMap(e); if (mmp) { measureDrag.cx = mmp.x; measureDrag.cy = mmp.y; render(); }
+      return;
+    }
+    if (selGroupDrag) {  // v2.807.0 — move every selected object by the drag delta
+      var gp = toMap(e); if (gp) {
+        moveSelectionBy(gp.x - selGroupDrag.lx, gp.y - selGroupDrag.ly);
+        selGroupDrag.lx = gp.x; selGroupDrag.ly = gp.y; selGroupDrag.moved = true;
+        render();
+      }
+      return;
+    }
+    if (selectDrag) {
+      var smp = toMap(e); if (smp) { selectDrag.cx = smp.x; selectDrag.cy = smp.y; render(); }
       return;
     }
     if (fogDrag) {
@@ -2022,6 +2160,26 @@
     if (measureDrag) {  // v2.805.0 — commit the measurement (keep it shown)
       measureLine = measureDrag; measureDrag = null;
       try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
+      render();
+      suppressClick = true; setTimeout(function () { suppressClick = false; }, 0);
+      return;
+    }
+    if (selGroupDrag) {  // v2.807.0 — commit a group move
+      var gmoved = selGroupDrag.moved; selGroupDrag = null;
+      try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
+      if (gmoved) { pushHistory(); saveAll(); setStatus('Moved ' + selection.length + ' objects.'); }
+      render();
+      suppressClick = true; setTimeout(function () { suppressClick = false; }, 0);
+      return;
+    }
+    if (selectDrag) {  // v2.806.0 — commit the marquee → selection
+      var sbox = selectDrag; selectDrag = null;
+      try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
+      var sdrag = Math.abs(sbox.cx - sbox.sx) > 4 || Math.abs(sbox.cy - sbox.sy) > 4;
+      if (sdrag) {
+        collectSelection(sbox);
+        setStatus(selection.length + ' selected — drag inside to move, Delete to remove.');
+      } else { selection = []; }  // a click (no drag) clears the selection
       render();
       suppressClick = true; setTimeout(function () { suppressClick = false; }, 0);
       return;

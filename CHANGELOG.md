@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.806.0] - 2026-07-01 — "The Gathered Handful"
+
+**Schema version:** 95
+
+**Commit summary:** Marquee multi-select in the map editor — box-select many objects, then move or delete them together.
+
+**Description:** The editor's **Tools** group gains an **⬚ Select** tool. Drag a box to select every object it covers — walls/doors, props, labels, lights, hotspots, and GM pins (each highlighted with a cyan ring, plus a dashed bounding box). Then **drag inside the selection** to move the whole group at once, or press **Delete / Backspace** to remove them all. **Esc** or a single empty click clears the selection; switching tools does too. Group move + delete are one **undo** step and one **Save-all**. While the Select (or Measure) tool is active, clicking a door/hotspot/pin no longer toggles or opens it, so marquees that start on an object behave predictably.
+
+### Added
+- `app/templates/map_editor.html` — `⬚ Select` tool; marquee selection across walls/props/labels/lights/hotspots/pins; selection highlights + bounding box; group move (drag inside the selection) and group delete (Delete/Backspace); Esc / empty-click clears; `moveSelectionBy` / `deleteSelection` / `collectSelection` / `drawSelection` helpers.
+- `tests/harness_ui/test_map_editor_select.py` (new, +1) — marquee-selects two props, group-moves them down, then Delete removes both.
+
+### Changed
+- `app/templates/map_editor.html` — door / hotspot / GM-pin click handlers no-op while Select or Measure is active.
+
+### Schema
+- No schema change (still v95 — client-only editor UX; group edits reuse the existing per-layer save endpoints).
+
 ## [2.805.0] - 2026-07-01 — "The Measured Stride"
 
 **Schema version:** 95
