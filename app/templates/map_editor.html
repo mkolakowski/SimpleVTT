@@ -158,6 +158,12 @@
       </select>
     </label>
   </div>
+  {# v2.790.1 — GM-only pins (never shown to players). #}
+  <div class="me-group" role="group" aria-label="GM pins">
+    <span class="me-grp-lbl">GM</span>
+    <button type="button" id="me-pin-btn" class="me-tool-btn" aria-pressed="false"
+            title="GM pin: click the map to drop a private note marker (trap DCs, reminders) — players never see these">📌 Pin</button>
+  </div>
   <div class="me-group" role="group" aria-label="Tokens">
     <span class="me-grp-lbl">Tokens</span>
     <button type="button" id="me-token-btn" class="me-tool-btn"
@@ -251,6 +257,7 @@
   var fogEnabled = {{ 'true' if fog_enabled else 'false' }};
   var fogRevealed = {{ fog_revealed | tojson }};
   var terrain = {{ terrain | tojson }};   // v2.789.1 — terrain regions
+  var gmPins = {{ gm_pins | tojson }};    // v2.790.1 — GM-only pins
   // v2.789.1 — terrain region types (colour + label).
   var TERRAIN_TYPES = [
     { key: 'difficult', label: 'Difficult', color: '#8a6d3b' },
@@ -264,7 +271,7 @@
     for (var i = 0; i < TERRAIN_TYPES.length; i++) if (TERRAIN_TYPES[i].key === key) return TERRAIN_TYPES[i];
     return TERRAIN_TYPES[0];
   }
-  var wallMode = false, doorMode = false, roomMode = false, spotMode = false, lightMode = false, fogMode = false, terrainMode = false, pending = null, seq = 0;
+  var wallMode = false, doorMode = false, roomMode = false, spotMode = false, lightMode = false, fogMode = false, terrainMode = false, pinMode = false, pending = null, seq = 0;
   // v2.772.0 — wall/door material looks. Walls draw as a thick casing + face
   // line; doors draw as a panel + knob (open = ajar/green).
   // v2.787.2 — thicker walls + per-material texture keys.
@@ -964,6 +971,40 @@
       });
       svg.appendChild(mk);
     });
+    // v2.790.1 — GM-only pins: amber markers (📌) with a hover note tooltip.
+    gmPins.forEach(function (pin, i) {
+      var pg = document.createElementNS(NS, 'g');
+      var pc = document.createElementNS(NS, 'circle');
+      pc.setAttribute('cx', pin.x); pc.setAttribute('cy', pin.y); pc.setAttribute('r', '11');
+      pc.setAttribute('fill', '#f0b429'); pc.setAttribute('stroke', '#7a5200');
+      pc.setAttribute('stroke-width', '2');
+      pc.style.pointerEvents = relocating ? 'none' : 'all'; pc.style.cursor = 'pointer';
+      pc.classList.add('me-gmpin');
+      var tip = document.createElementNS(NS, 'title');
+      tip.textContent = '📌 ' + (pin.label || 'Pin') + (pin.note ? ' — ' + pin.note : '');
+      pc.appendChild(tip);
+      pc.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (eraseMode) { gmPins.splice(i, 1); saveGmPins(); return; }
+        alert('📌 ' + (pin.label || 'Pin') + (pin.note ? '\n\n' + pin.note : '') + '\n\n(GM-only — players never see this)');
+      });
+      pc.addEventListener('contextmenu', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        showMenu(e.clientX, e.clientY, [
+          { label: '📌 GM Pin — ↔ Move', fn: function () { startMove('gmpin', pin); } },
+          { label: '✎ Edit', fn: function () { editGmPin(pin); } },
+          { label: '🗑 Delete', fn: function () { gmPins.splice(i, 1); saveGmPins(); } },
+        ]);
+      });
+      pg.appendChild(pc);
+      var pl = document.createElementNS(NS, 'text');
+      pl.setAttribute('x', pin.x + 14); pl.setAttribute('y', pin.y + 5);
+      pl.setAttribute('fill', '#f0b429'); pl.setAttribute('font-size', '13');
+      pl.setAttribute('font-weight', '700'); pl.style.pointerEvents = 'none';
+      pl.textContent = pin.label || 'Pin';
+      pg.appendChild(pl);
+      svg.appendChild(pg);
+    });
     // v2.784.1 — shared soft-glow blur filter for light markers.
     if (lights.length) {
       var ldefs = document.createElementNS(NS, 'defs');
@@ -1260,6 +1301,27 @@
     } catch (e) { setStatus('Save failed.'); }
     render();
   }
+  async function saveGmPins() {
+    pushHistory();
+    setStatus('Saving…');
+    try {
+      await fetch('/api/campaign/' + CID + '/map/' + MID + '/gm_pins', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gm_pins: gmPins }),
+      });
+      setStatus('Saved.');
+    } catch (e) { setStatus('Save failed.'); }
+    render();
+  }
+  function editGmPin(pin) {
+    var label = window.prompt('Pin label:', pin.label || '');
+    if (label === null) return;
+    var note = window.prompt('GM note (players never see this):', pin.note || '');
+    if (note === null) return;
+    pin.label = (label || 'Pin').slice(0, 120);
+    pin.note = note.slice(0, 2000);
+    saveGmPins();
+  }
   // v2.781.0 — commit every layer of the map in one click. Edits already
   // auto-save as you go; this is the explicit "save now" affordance (+ ⌘/Ctrl+S).
   async function saveAll() {
@@ -1273,6 +1335,7 @@
         fetch(base + '/lights', { method: 'PUT', headers: J, body: JSON.stringify({ lights: lights }) }),
         fetch(base + '/fog', { method: 'PUT', headers: J, body: JSON.stringify({ enabled: fogEnabled, revealed: fogRevealed }) }),
         fetch(base + '/terrain', { method: 'PUT', headers: J, body: JSON.stringify({ terrain: terrain }) }),
+        fetch(base + '/gm_pins', { method: 'PUT', headers: J, body: JSON.stringify({ gm_pins: gmPins }) }),
         fetch('/campaign/' + CID + '/settings/maps/' + MID + '/grid_size', {
           method: 'POST', headers: J,
           body: JSON.stringify({ grid_size_px: gridPx, grid_offset_x: gridOffX, grid_offset_y: gridOffY }) }),
@@ -1285,7 +1348,7 @@
   var _hist = [], _histIdx = -1, _applyingHist = false;
   function _snap() {
     return JSON.stringify({ walls: walls, hotspots: hotspots, lights: lights,
-      fogEnabled: fogEnabled, fogRevealed: fogRevealed, terrain: terrain });
+      fogEnabled: fogEnabled, fogRevealed: fogRevealed, terrain: terrain, gmPins: gmPins });
   }
   function pushHistory() {
     if (_applyingHist) return;
@@ -1302,6 +1365,7 @@
     walls = o.walls; hotspots = o.hotspots; lights = o.lights;
     fogEnabled = o.fogEnabled; fogRevealed = o.fogRevealed;
     if (o.terrain) terrain = o.terrain;
+    if (o.gmPins) gmPins = o.gmPins;
     if (typeof fogOnCb !== 'undefined' && fogOnCb) fogOnCb.checked = fogEnabled;
   }
   async function _applyHistory(idx) {
@@ -1340,6 +1404,7 @@
     if (r.kind === 'wall') saveWalls();
     else if (r.kind === 'hotspot') saveHotspots();
     else if (r.kind === 'light') saveLights();
+    else if (r.kind === 'gmpin') saveGmPins();
   }
   // v2.775.0 — copy/paste objects via the right-click menu.
   var clipboard = null;
@@ -1416,10 +1481,12 @@
   var fogBtn = document.getElementById('me-fog-btn');
   var terrainBtn = document.getElementById('me-terrain-btn');
   if (terrainBtn) terrainBtn.addEventListener('click', function () { setMode(terrainMode ? null : 'terrain'); });
+  var pinBtn = document.getElementById('me-pin-btn');
+  if (pinBtn) pinBtn.addEventListener('click', function () { setMode(pinMode ? null : 'pin'); });
   function syncStageCursor() {
     // The overlay captures empty-area clicks when placing/painting/relocating.
     // (Objects stay individually clickable for erase/right-click regardless.)
-    var on = wallMode || doorMode || roomMode || spotMode || lightMode || fogMode || terrainMode || relocating || resizing;
+    var on = wallMode || doorMode || roomMode || spotMode || lightMode || fogMode || terrainMode || pinMode || relocating || resizing;
     svg.style.pointerEvents = on ? 'auto' : 'none';
     svg.style.cursor = on ? 'crosshair' : 'default';
   }
@@ -1530,10 +1597,11 @@
   function setMode(mode) {
     wallMode = (mode === 'wall'); doorMode = (mode === 'door'); roomMode = (mode === 'room');
     spotMode = (mode === 'spot'); lightMode = (mode === 'light'); fogMode = (mode === 'fog');
-    terrainMode = (mode === 'terrain');
+    terrainMode = (mode === 'terrain'); pinMode = (mode === 'pin');
     wallBtn.setAttribute('aria-pressed', wallMode ? 'true' : 'false');
     if (roomBtn) roomBtn.setAttribute('aria-pressed', roomMode ? 'true' : 'false');
     if (terrainBtn) terrainBtn.setAttribute('aria-pressed', terrainMode ? 'true' : 'false');
+    if (pinBtn) pinBtn.setAttribute('aria-pressed', pinMode ? 'true' : 'false');
     if (doorBtn) doorBtn.setAttribute('aria-pressed', doorMode ? 'true' : 'false');
     spotBtn.setAttribute('aria-pressed', spotMode ? 'true' : 'false');
     if (lightBtn) lightBtn.setAttribute('aria-pressed', lightMode ? 'true' : 'false');
@@ -1709,6 +1777,14 @@
       lights.push({ id: 'l' + Date.now() + '_' + (seq++), x: p.x, y: p.y,
         bright_ft: Math.max(0, bv), dim_ft: Math.max(0, dv), color: t.color, type: t.key });
       saveLights();
+    } else if (pinMode) {
+      // v2.790.1 — drop a GM-only pin (label + private note).
+      var plabel = window.prompt('Pin label:', 'Pin');
+      if (plabel === null) return;
+      var pnote = window.prompt('GM note (players never see this):', '') || '';
+      gmPins.push({ id: 'p' + Date.now() + '_' + (seq++), x: p.x, y: p.y,
+        label: (plabel || 'Pin').slice(0, 120), note: pnote.slice(0, 2000) });
+      saveGmPins();
     }
   });
 

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.790.1] - 2026-07-01 — "The GM's Margin"
+
+**Schema version:** 93
+
+**Commit summary:** GM-pin authoring in the map editor (📌 tool, amber markers, private notes).
+
+**Description:** The editor gets a **GM** group with a **📌 Pin** tool. Click the map to drop a GM-only pin (prompts for a label + a private note); pins render as **amber markers** with a hover tooltip and their label, clicking one shows the note (with a "players never see this" reminder), and right-click **Move / Edit / Delete** (Erase-click deletes). Pins save via the GM-gated endpoint and are covered by **undo/redo** + **Save-all**.
+
+### Added
+- `app/templates/map_editor.html` — `gmPins` state; a **GM** toolbar group + Pin tool; pin placement (label + note prompts), render (amber marker + tooltip + label), click-to-view, right-click Move/Edit/Delete; `saveGmPins` / `editGmPin`; pins in the undo snapshot + `saveAll` + relocation.
+- `tests/harness_ui/test_map_editor_gmpin.py` (new, +1) — placing a pin persists label + note and renders the marker.
+
+### Changed
+- `tests/harness_ui/test_map_editor_toolbar.py` — expects the new **GM** group.
+
+### Schema
+- No schema change (still v93).
+
 ## [2.790.0] - 2026-07-01 — "The Secret Ledger"
 
 **Schema version:** 93
