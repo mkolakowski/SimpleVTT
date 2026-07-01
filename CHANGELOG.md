@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.826.0] - 2026-07-01 — "The Filing Cabinet"
+
+**Schema version:** 96
+
+**Commit summary:** Fold the map Tags into the History toolbar group and rename it "File" (Save · Undo/Redo · Tags together).
+
+**Description:** Consolidates the map's file-level controls into one group. The far-left **History** group is renamed **File**, and the standalone **Tags** group (its input + Save-tags button) is folded into it beneath the Save button, under a small "Tags" caption. So the leftmost group now holds everything about the map *as a file* — 💾 Save, ↶↷ Undo/Redo, and the map's tags — instead of scattering tags over in the Map zone. The tag field keeps its `#me-tags-input` / `#me-tags-save` IDs and behaviour; only its location changed. The Map zone's collapse membership drops Tags accordingly.
+
+### Changed
+- `app/templates/map_editor.html` — History group → `aria-label="File"` / "File" label with the Tags input + Save-tags button folded in; standalone Tags group removed; `ZONE_MEMBERS.Map` drops `Tags`.
+- `tests/harness_ui/test_map_editor_toolbar.py` — expected group order updated to `FILE, TOOLS, WALLS, MARKERS, ENVIRONMENT, PROPS, TOKENS, GRID, LAYERS, VIEW` (10 groups; no standalone Tags).
+- `tests/harness_ui/test_map_editor_topbar.py` — Save button now asserted inside the `File` group.
+
+### Schema
+- No schema change (still v96 — layout only).
+
 ## [2.825.0] - 2026-07-01 — "The Little Herald"
 
 **Schema version:** 96

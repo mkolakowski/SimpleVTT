@@ -28,8 +28,8 @@ def test_editor_topbar_layout(gm_page: Page) -> None:
     wiki_i = next(i for i, h in enumerate(hrefs) if h == "/wiki")
     assert back_i < wiki_i, hrefs
 
-    # Save button now lives inside the History toolbar group.
+    # Save button lives inside the File toolbar group (renamed from History v2.826.0).
     assert gm_page.locator(
-        '.me-group[aria-label="History"] #me-save-btn').count() == 1
+        '.me-group[aria-label="File"] #me-save-btn').count() == 1
     # The old header row is gone.
     assert gm_page.locator(".me-head").count() == 0
