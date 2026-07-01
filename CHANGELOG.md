@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.825.0] - 2026-07-01 — "The Little Herald"
+
+**Schema version:** 96
+
+**Commit summary:** Pop a transient toast confirming an explicit map-editor save (Save button or ⌘S).
+
+**Description:** The editor only signalled a save via the small "All changes saved ✓" status text tucked at the end of the toolbar — easy to miss. This adds a **toast popup** that slides up from the bottom-centre when the user makes an **explicit** save (the 💾 Save button or ⌘/Ctrl+S), reading **"Map saved ✓"** (or "Save failed ✗" on error) and fading out after ~2.2s. Autosaves (on every edit / undo-redo / group-move) deliberately **don't** toast, so the popup stays meaningful rather than spammy — the flag is only passed by the two explicit save paths.
+
+### Added
+- `app/templates/map_editor.html` — a `showToast()` helper + `.me-toast` styling; `saveAll(opts)` announces via toast when `opts.toast` is set, wired only to the Save button + ⌘S handlers.
+- `tests/harness_ui/test_map_editor_toast.py` (new, +1) — no toast on load; clicking Save pops a visible toast whose text says "saved".
+
+### Schema
+- No schema change (still v96 — client-side feedback only).
+
 ## [2.824.0] - 2026-07-01 — "The Middle Grip"
 
 **Schema version:** 96

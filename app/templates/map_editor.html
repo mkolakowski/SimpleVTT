@@ -116,6 +116,14 @@
   #me-overlay { position:absolute; top:0; left:0; overflow:visible; }
   .me-status { font-size:12px; color:var(--fg-mute); margin-left:auto; }
   .m4hint { font-size:12px; color:var(--fg-mute); margin:8px 0 0; }
+  /* v2.825.0 — transient toast popup (shown on an explicit save). */
+  .me-toast { position:fixed; left:50%; bottom:28px;
+    transform:translateX(-50%) translateY(8px);
+    background:var(--bg-2); color:var(--fg); border:1px solid var(--border);
+    border-radius:8px; padding:10px 16px; font-size:13px; font-weight:600;
+    box-shadow:0 6px 24px rgba(0,0,0,.4); opacity:0; pointer-events:none;
+    transition:opacity .18s ease, transform .18s ease; z-index:9999; }
+  .me-toast.me-toast--show { opacity:1; transform:translateX(-50%) translateY(0); }
 </style>
 
 {# v2.813.0 — the old .me-head row is gone: title + rename moved to the top bar,
@@ -620,6 +628,23 @@
   }
 
   function setStatus(t) { statusEl.textContent = t || ''; }
+  // v2.825.0 — transient toast popup, e.g. confirming an explicit save.
+  var _toastEl = null, _toastTimer = null;
+  function showToast(msg) {
+    if (!_toastEl) {
+      _toastEl = document.createElement('div');
+      _toastEl.className = 'me-toast';
+      _toastEl.setAttribute('role', 'status');
+      document.body.appendChild(_toastEl);
+    }
+    _toastEl.textContent = msg;
+    void _toastEl.offsetWidth;  // reflow so the transition re-runs if re-shown
+    _toastEl.classList.add('me-toast--show');
+    if (_toastTimer) clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(function () {
+      if (_toastEl) _toastEl.classList.remove('me-toast--show');
+    }, 2200);
+  }
 
   // Size the overlay to the rendered image so SVG coords map to the image's
   // natural pixel space (the same space walls/hotspots are stored in).
@@ -1770,7 +1795,8 @@
   }
   // v2.781.0 — commit every layer of the map in one click. Edits already
   // auto-save as you go; this is the explicit "save now" affordance (+ ⌘/Ctrl+S).
-  async function saveAll() {
+  async function saveAll(opts) {
+    var announce = !!(opts && opts.toast);  // v2.825.0 — toast only on explicit saves
     setStatus('Saving…');
     var base = '/api/campaign/' + CID + '/map/' + MID;
     var J = { 'Content-Type': 'application/json' };
@@ -1789,7 +1815,11 @@
           body: JSON.stringify({ grid_size_px: gridPx, grid_offset_x: gridOffX, grid_offset_y: gridOffY }) }),
       ]);
       setStatus('All changes saved ✓');
-    } catch (e) { setStatus('Save failed — check your connection.'); }
+      if (announce) showToast('Map saved ✓');
+    } catch (e) {
+      setStatus('Save failed — check your connection.');
+      if (announce) showToast('Save failed ✗');
+    }
   }
   // v2.788.0 — undo/redo for the persisted map layers (walls / hotspots /
   // lights / fog). Sample tokens + grid/ambient settings are out of scope.
@@ -1997,7 +2027,7 @@
   if (tokenBtn2) tokenBtn2.addEventListener('click', function () { addSampleToken('#ff9b42'); });
   // v2.781.0 — explicit Save button + ⌘/Ctrl+S.
   var saveBtn = document.getElementById('me-save-btn');
-  if (saveBtn) saveBtn.addEventListener('click', saveAll);
+  if (saveBtn) saveBtn.addEventListener('click', function () { saveAll({ toast: true }); });
   // v2.788.0 — undo / redo buttons.
   var undoBtn = document.getElementById('me-undo-btn');
   if (undoBtn) undoBtn.addEventListener('click', undo);
@@ -2064,7 +2094,7 @@
   });
   document.addEventListener('keydown', function (e) {
     if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
-      e.preventDefault(); saveAll(); return;
+      e.preventDefault(); saveAll({ toast: true }); return;
     }
     // v2.788.0 — undo / redo.
     if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z')) {
