@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.816.0] - 2026-07-01 — "The Three Zones"
+
+**Schema version:** 96
+
+**Commit summary:** Zone the editor ribbon into Actions · Draw · Map — Tools moves up next to History.
+
+**Description:** Reorganises the map-editor controls ribbon into three logical left-to-right zones so it scans by intent: **Actions** (History = Undo/Redo/Save, then **Tools** = Erase/Snap/Measure/Select — moved up from the middle to sit beside History), **Draw** (Walls · Markers · Environment · Props · Tokens), and **Map** (Grid · Tags · Layers · View). Only the Tools group moved; every tool ID and behaviour is unchanged.
+
+### Changed
+- `app/templates/map_editor.html` — Tools group relocated to the far-left Actions zone (right after History), leaving the Draw and Map zones in order.
+- `tests/harness_ui/test_map_editor_toolbar.py` — expects the zoned 11-group order (`HISTORY, TOOLS, WALLS, MARKERS, ENVIRONMENT, PROPS, TOKENS, GRID, TAGS, LAYERS, VIEW`).
+
+### Schema
+- No schema change (still v96 — layout only).
+
 ## [2.815.0] - 2026-07-01 — "The Captioned Rack"
 
 **Schema version:** 96

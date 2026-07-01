@@ -113,6 +113,18 @@
     <button type="button" id="me-save-btn" class="me-tool-btn" style="background:var(--accent);color:#fff;font-weight:600;"
             title="Commit all map changes now (⌘/Ctrl+S) — edits also save automatically">💾 Save</button>
   </div>
+  {# v2.816.0 — Actions zone: Tools sits beside History (Undo/Redo/Save). #}
+  <div class="me-group me-group--stack" role="group" aria-label="Tools">
+    <span class="me-grp-lbl">Tools</span>
+    <button type="button" id="me-erase-btn" class="me-tool-btn" aria-pressed="false"
+            title="Erase mode: click any wall / door / hotspot / light to delete it (right-click an object for Move/Delete anytime)">🗑 Erase</button>
+    <button type="button" id="me-snap-btn" class="me-tool-btn" aria-pressed="true"
+            title="Snap wall/door endpoints + tokens to the grid">🧲 Snap</button>
+    <button type="button" id="me-measure-btn" class="me-tool-btn" aria-pressed="false"
+            title="Measure: drag a line to read its length in feet (5 ft per grid cell)">📏 Measure</button>
+    <button type="button" id="me-select-btn" class="me-tool-btn" aria-pressed="false"
+            title="Select: drag a box to select multiple objects, then drag to move them together or press Delete to remove them all">⬚ Select</button>
+  </div>
   <div class="me-group" role="group" aria-label="Walls">
     <span class="me-grp-lbl">Walls</span>
     <button type="button" id="me-wall-btn" class="me-tool-btn" aria-pressed="false"
@@ -292,17 +304,6 @@
             title="Drop a blue sample token; left-click it for its line of sight, drag to move, right-click to remove (preview only — not saved)">🔵 Token</button>
     <button type="button" id="me-token2-btn" class="me-tool-btn"
             title="Drop a second (orange) sample token so you can compare two vantage points">🟠 Token</button>
-  </div>
-  <div class="me-group me-group--stack" role="group" aria-label="Tools">
-    <span class="me-grp-lbl">Tools</span>
-    <button type="button" id="me-erase-btn" class="me-tool-btn" aria-pressed="false"
-            title="Erase mode: click any wall / door / hotspot / light to delete it (right-click an object for Move/Delete anytime)">🗑 Erase</button>
-    <button type="button" id="me-snap-btn" class="me-tool-btn" aria-pressed="true"
-            title="Snap wall/door endpoints + tokens to the grid">🧲 Snap</button>
-    <button type="button" id="me-measure-btn" class="me-tool-btn" aria-pressed="false"
-            title="Measure: drag a line to read its length in feet (5 ft per grid cell)">📏 Measure</button>
-    <button type="button" id="me-select-btn" class="me-tool-btn" aria-pressed="false"
-            title="Select: drag a box to select multiple objects, then drag to move them together or press Delete to remove them all">⬚ Select</button>
   </div>
   <div class="me-group" role="group" aria-label="Grid">
     <span class="me-grp-lbl">Grid</span>
