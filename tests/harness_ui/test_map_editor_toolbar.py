@@ -17,8 +17,7 @@ def test_toolbar_grouped(gm_page: Page) -> None:
     # (CSS upper-cases the labels, so inner_text comes back upper-cased.)
     labels = [s.upper() for s in gm_page.locator(".me-group .me-grp-lbl").all_inner_texts()]
     assert labels == ["HISTORY", "WALLS", "MARKERS", "ENVIRONMENT", "PROPS",
-                      "TOKENS", "TOOLS", "GRID", "TAGS", "WEATHER", "LAYERS",
-                      "VIEW"], labels
+                      "TOKENS", "TOOLS", "GRID", "TAGS", "LAYERS", "VIEW"], labels
 
     # Every tool still present (grouping preserved the IDs the JS + tests use).
     for sel in ["#me-wall-btn", "#me-door-btn", "#me-wall-style", "#me-spot-btn",

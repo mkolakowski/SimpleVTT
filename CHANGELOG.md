@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.812.0] - 2026-07-01 — "The Weathered Corner"
+
+**Schema version:** 96
+
+**Commit summary:** Weather dropdown folded into the Environment group (one fewer toolbar group).
+
+**Description:** The **Weather** dropdown moves into the **Environment** group — now **Ambient · Fog · Terrain · Weather** — retiring the standalone Weather group so the toolbar carries 11 groups instead of 12. (Weather is a per-map ambience setting, so it belongs with the other environment controls.) Behaviour and the `#me-weather` wiring are unchanged.
+
+### Changed
+- `app/templates/map_editor.html` — `#me-weather` moved into the Environment group; standalone Weather group removed.
+- `tests/harness_ui/test_map_editor_toolbar.py` — expects the 11-group order (Weather removed).
+
+### Schema
+- No schema change (still v96 — layout only).
+
 ## [2.811.0] - 2026-07-01 — "The Folding Ruler"
 
 **Schema version:** 96
