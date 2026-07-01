@@ -5751,8 +5751,8 @@ def _walls_block_sight(map_row, ax, ay, bx, by) -> bool:
     for w in (getattr(map_row, "walls", None) or []):
         if not isinstance(w, dict):
             continue
-        if w.get("door") and w.get("open"):
-            continue  # open door — sight passes
+        if (w.get("door") or w.get("gate")) and w.get("open"):
+            continue  # open door / gate — sight passes
         try:
             wx1 = float(w["x1"]); wy1 = float(w["y1"])
             wx2 = float(w["x2"]); wy2 = float(w["y2"])
@@ -124059,11 +124059,21 @@ def _sanitize_wall_segments(raw) -> list:
             x2 = float(seg.get("x2")); y2 = float(seg.get("y2"))
         except (TypeError, ValueError):
             continue
+        try:
+            op = max(0.0, min(1.0, float(seg.get("opacity"))))
+        except (TypeError, ValueError):
+            op = 1.0
         out.append({
             "id": (str(seg.get("id") or "").strip()[:40] or f"w{i}"),
             "x1": x1, "y1": y1, "x2": x2, "y2": y2,
             "door": bool(seg.get("door")),
             "open": bool(seg.get("open")),
+            # v2.787.0 — a gate is a door variant that opens from the middle
+            # (double leaves). ``flip`` picks which side the door/gate swings.
+            "gate": bool(seg.get("gate")),
+            "flip": bool(seg.get("flip")),
+            # v2.787.0 — visual opacity [0,1] (1 = solid). Presentation only.
+            "opacity": op,
             # v2.772.0 — visual material (stone/wood/brick/metal/cave/…); a
             # short style key the client maps to a wall/door look. Presentation
             # only — occlusion ignores it.
@@ -124404,7 +124414,8 @@ async def toggle_map_door(
     did = str(door_id).strip()
     target = next(
         (w for w in walls
-         if isinstance(w, dict) and str(w.get("id")) == did and w.get("door")),
+         if isinstance(w, dict) and str(w.get("id")) == did
+         and (w.get("door") or w.get("gate"))),  # v2.787.0 — gates toggle too
         None)
     if target is None:
         raise HTTPException(404, "Door not found")

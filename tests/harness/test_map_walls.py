@@ -58,6 +58,42 @@ async def test_set_and_get_walls_with_broadcast(gm_client, gm_ws):
             f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
 
 
+async def test_gate_flip_opacity_round_trip(gm_client):
+    # v2.787.0 — gate / flip / opacity persist; opacity clamps to [0,1].
+    mid = await _active_map_id(gm_client)
+    try:
+        r = await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
+                {"x1": 0, "y1": 0, "x2": 70, "y2": 0, "gate": True, "flip": True,
+                 "open": False, "opacity": 0.4},
+                {"x1": 0, "y1": 5, "x2": 70, "y2": 5, "opacity": 5},   # clamps to 1
+                {"x1": 0, "y1": 9, "x2": 70, "y2": 9},                 # defaults
+            ]})
+        ws = r.json()["walls"]
+        assert ws[0]["gate"] is True and ws[0]["flip"] is True and ws[0]["opacity"] == 0.4, ws[0]
+        assert ws[1]["opacity"] == 1.0, ws[1]
+        assert ws[2]["gate"] is False and ws[2]["opacity"] == 1.0, ws[2]
+    finally:
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
+
+
+async def test_gate_toggle_opens(gm_client):
+    # v2.787.0 — a gate toggles open/closed via the door-toggle endpoint.
+    mid = await _active_map_id(gm_client)
+    try:
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
+                {"id": "g1", "x1": 0, "y1": 0, "x2": 70, "y2": 0, "gate": True, "open": False}]})
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/door/g1/toggle")
+        assert r.status_code == 200, r.text
+        assert r.json()["open"] is True
+    finally:
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
+
+
 async def test_set_walls_requires_gm(gm_client, alice_client):
     mid = await _active_map_id(gm_client)
     # A non-GM member can read walls but not write them.

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.787.0] - 2026-07-01 — "The Gatekeeper"
+
+**Schema version:** 91
+
+**Commit summary:** Wall substrate gains `gate` / `flip` / `opacity` fields; open gates pass sight + toggle like doors.
+
+**Description:** Server foundation for the upcoming gate + orientation + transparency work. Wall segments now persist three new presentation/behaviour fields: **`gate`** (a door variant that opens from the middle), **`flip`** (which side the door/gate swings), and **`opacity`** (`[0,1]`, visual only). Occlusion now treats an **open gate** the same as an open door (sight passes), and the door-toggle endpoint opens/closes **gates** too.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_sanitize_wall_segments` stores `gate` / `flip` / `opacity` (opacity clamped to `[0,1]`, default 1).
+- `tests/harness/test_map_walls.py` (+2) — gate/flip/opacity round-trip (+ clamp/defaults); a gate toggles open via the door endpoint.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `_walls_block_sight` + `/door/{id}/toggle` treat gates like doors.
+
+### Schema
+- No schema change (still v91; the new keys are additive in the existing `walls` JSON).
+
 ## [2.786.10] - 2026-07-01 — "The Nested Lamp"
 
 **Schema version:** 91
