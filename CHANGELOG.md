@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.792.0] - 2026-07-01 — "The Stamp Set"
+
+**Schema version:** 94
+
+**Commit summary:** Prop-stamp tool in the map editor — pick an emoji glyph, click to place; drag / rotate / resize / delete.
+
+**Description:** The editor gets a **Props** group with a **🪑 Prop** tool and an 18-glyph picker (furniture, containers, nature, campfire, statue, …). Pick a glyph, arm the tool, and click the map to stamp it; props render as rotated emoji glyphs. Right-click a prop for **↔ Move / ⟳ Rotate 45° / ➕ Bigger / ➖ Smaller / 📋 Copy / 🗑 Delete** (Erase-click deletes, drag repositions). Props are covered by **undo/redo** + **Save-all** and get their own **Layers** toggle. Renders in the editor only for now — the live-tabletop render lands next commit.
+
+### Added
+- `app/templates/map_editor.html` — `props` state + `PROP_KINDS` picker; a **Props** toolbar group + tool; prop placement, rotated-glyph render with a transparent hit box, right-click Move/Rotate/Resize/Copy/Delete; `saveProps`; props in the undo snapshot + `saveAll` + relocation + copy/paste; a **Props** Layers checkbox.
+- `tests/harness_ui/test_map_editor_prop.py` (new, +1) — placing a 🌲 prop persists (kind/size/rot), renders an SVG `<text>`, and the Props layer toggle hides it.
+
+### Changed
+- `tests/harness_ui/test_map_editor_toolbar.py` — expects the new **Props** group.
+
+### Schema
+- No schema change (still v94 — the column shipped in v2.791.0).
+
 ## [2.791.0] - 2026-07-01 — "The Furnished Room"
 
 **Schema version:** 94

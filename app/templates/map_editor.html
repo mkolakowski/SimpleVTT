@@ -158,6 +158,34 @@
       </select>
     </label>
   </div>
+  {# v2.791.0 — decorative prop stamps (emoji furniture / nature). #}
+  <div class="me-group" role="group" aria-label="Props">
+    <span class="me-grp-lbl">Props</span>
+    <button type="button" id="me-prop-btn" class="me-tool-btn" aria-pressed="false"
+            title="Prop stamp: pick a glyph and click the map to place it; drag to move, right-click to rotate / resize / delete">🪑 Prop</button>
+    <label style="gap:3px;" title="Prop glyph to place">
+      <select id="me-prop-kind" style="min-height:32px;font-size:14px;width:100%;">
+        <option value="🪑">🪑 Chair</option>
+        <option value="🛏">🛏 Bed</option>
+        <option value="🛋">🛋 Couch</option>
+        <option value="🪟">🪟 Window</option>
+        <option value="📦">📦 Crate</option>
+        <option value="🛢">🛢 Barrel</option>
+        <option value="🗄">🗄 Cabinet</option>
+        <option value="📚">📚 Books</option>
+        <option value="🏺">🏺 Vase</option>
+        <option value="💰">💰 Treasure</option>
+        <option value="⚰">⚰ Coffin</option>
+        <option value="🔥">🔥 Campfire</option>
+        <option value="🌲">🌲 Pine</option>
+        <option value="🌳">🌳 Oak</option>
+        <option value="🌿">🌿 Bush</option>
+        <option value="🪨">🪨 Rock</option>
+        <option value="⛲">⛲ Fountain</option>
+        <option value="🗿">🗿 Statue</option>
+      </select>
+    </label>
+  </div>
   {# v2.790.1 — GM-only pins (never shown to players). #}
   <div class="me-group" role="group" aria-label="GM pins">
     <span class="me-grp-lbl">GM</span>
@@ -228,7 +256,10 @@
       <label style="gap:3px;"><input type="checkbox" id="me-layer-fog" checked> Fog</label>
       <label style="gap:3px;"><input type="checkbox" id="me-layer-gmpins" checked> Pins</label>
     </div>
-    <label style="gap:3px;"><input type="checkbox" id="me-layer-tokens" checked> Tokens</label>
+    <div class="me-sub">
+      <label style="gap:3px;"><input type="checkbox" id="me-layer-props" checked> Props</label>
+      <label style="gap:3px;"><input type="checkbox" id="me-layer-tokens" checked> Tokens</label>
+    </div>
   </div>
   <div class="me-group me-group--stack" role="group" aria-label="View">
     <span class="me-grp-lbl">View</span>
@@ -275,9 +306,10 @@
   var fogRevealed = {{ fog_revealed | tojson }};
   var terrain = {{ terrain | tojson }};   // v2.789.1 — terrain regions
   var gmPins = {{ gm_pins | tojson }};    // v2.790.1 — GM-only pins
+  var props = {{ props | tojson }};       // v2.791.0 — decorative prop stamps
   // v2.790.3 — per-layer visibility (authoring only; saved to localStorage).
   var layers = (function () {
-    var def = { walls: true, terrain: true, lights: true, hotspots: true, fog: true, gmpins: true, tokens: true };
+    var def = { walls: true, terrain: true, lights: true, hotspots: true, fog: true, gmpins: true, props: true, tokens: true };
     try {
       var s = localStorage.getItem('me-layers-' + MID);
       if (s) { var o = JSON.parse(s); for (var k in def) if (k in o) def[k] = !!o[k]; }
@@ -298,7 +330,7 @@
     for (var i = 0; i < TERRAIN_TYPES.length; i++) if (TERRAIN_TYPES[i].key === key) return TERRAIN_TYPES[i];
     return TERRAIN_TYPES[0];
   }
-  var wallMode = false, doorMode = false, roomMode = false, spotMode = false, lightMode = false, fogMode = false, terrainMode = false, pinMode = false, pending = null, seq = 0;
+  var wallMode = false, doorMode = false, roomMode = false, spotMode = false, lightMode = false, fogMode = false, terrainMode = false, pinMode = false, propMode = false, pending = null, seq = 0;
   // v2.772.0 — wall/door material looks. Walls draw as a thick casing + face
   // line; doors draw as a panel + knob (open = ajar/green).
   // v2.787.2 — thicker walls + per-material texture keys.
@@ -874,6 +906,47 @@
       tpv.style.pointerEvents = 'none';
       svg.appendChild(tpv);
     }
+    // v2.791.0 — decorative prop stamps (emoji glyphs) above terrain, below
+    // walls/tokens. Each renders as a rotated <text> centred on its point with
+    // a transparent hit box; interactive in prop / erase mode + right-click.
+    if (layers.props) props.forEach(function (pr, i) {
+      var pg = document.createElementNS(NS, 'g');
+      var rot = pr.rot || 0, sz = pr.size || 40;
+      pg.setAttribute('transform', 'rotate(' + rot + ' ' + pr.x + ' ' + pr.y + ')');
+      var gl = document.createElementNS(NS, 'text');
+      gl.setAttribute('x', pr.x); gl.setAttribute('y', pr.y);
+      gl.setAttribute('font-size', sz);
+      gl.setAttribute('text-anchor', 'middle');
+      gl.setAttribute('dominant-baseline', 'central');
+      gl.style.pointerEvents = 'none';
+      gl.style.userSelect = 'none';
+      gl.textContent = pr.kind || '📦';
+      pg.appendChild(gl);
+      // Transparent hit box (square around the glyph) for click/right-click.
+      var hb = document.createElementNS(NS, 'rect');
+      hb.setAttribute('x', pr.x - sz / 2); hb.setAttribute('y', pr.y - sz / 2);
+      hb.setAttribute('width', sz); hb.setAttribute('height', sz);
+      hb.setAttribute('fill', 'transparent');
+      hb.style.pointerEvents = relocating ? 'none' : 'all';
+      hb.style.cursor = 'pointer';
+      hb.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (eraseMode) { props.splice(i, 1); saveProps(); }
+      });
+      hb.addEventListener('contextmenu', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        showMenu(e.clientX, e.clientY, [
+          { label: (pr.kind || '📦') + ' Prop — ↔ Move', fn: function () { startMove('prop', pr); } },
+          { label: '⟳ Rotate 45°', fn: function () { pr.rot = ((pr.rot || 0) + 45) % 360; saveProps(); } },
+          { label: '➕ Bigger', fn: function () { pr.size = Math.min(400, (pr.size || 40) * 1.25); saveProps(); } },
+          { label: '➖ Smaller', fn: function () { pr.size = Math.max(8, (pr.size || 40) * 0.8); saveProps(); } },
+          { label: '📋 Copy', fn: function () { copyObj('prop', pr); } },
+          { label: '🗑 Delete', fn: function () { props.splice(i, 1); saveProps(); } },
+        ]);
+      });
+      pg.appendChild(hb);
+      svg.appendChild(pg);
+    });
     if (layers.walls) walls.forEach(function (w) {
       drawWallVisual(w);
       var hit = mkHitLine(w);
@@ -1340,6 +1413,18 @@
     } catch (e) { setStatus('Save failed.'); }
     render();
   }
+  async function saveProps() {
+    pushHistory();
+    setStatus('Saving…');
+    try {
+      await fetch('/api/campaign/' + CID + '/map/' + MID + '/props', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ props: props }),
+      });
+      setStatus('Saved.');
+    } catch (e) { setStatus('Save failed.'); }
+    render();
+  }
   function editGmPin(pin) {
     var label = window.prompt('Pin label:', pin.label || '');
     if (label === null) return;
@@ -1363,6 +1448,7 @@
         fetch(base + '/fog', { method: 'PUT', headers: J, body: JSON.stringify({ enabled: fogEnabled, revealed: fogRevealed }) }),
         fetch(base + '/terrain', { method: 'PUT', headers: J, body: JSON.stringify({ terrain: terrain }) }),
         fetch(base + '/gm_pins', { method: 'PUT', headers: J, body: JSON.stringify({ gm_pins: gmPins }) }),
+        fetch(base + '/props', { method: 'PUT', headers: J, body: JSON.stringify({ props: props }) }),
         fetch('/campaign/' + CID + '/settings/maps/' + MID + '/grid_size', {
           method: 'POST', headers: J,
           body: JSON.stringify({ grid_size_px: gridPx, grid_offset_x: gridOffX, grid_offset_y: gridOffY }) }),
@@ -1375,7 +1461,8 @@
   var _hist = [], _histIdx = -1, _applyingHist = false;
   function _snap() {
     return JSON.stringify({ walls: walls, hotspots: hotspots, lights: lights,
-      fogEnabled: fogEnabled, fogRevealed: fogRevealed, terrain: terrain, gmPins: gmPins });
+      fogEnabled: fogEnabled, fogRevealed: fogRevealed, terrain: terrain,
+      gmPins: gmPins, props: props });
   }
   function pushHistory() {
     if (_applyingHist) return;
@@ -1393,6 +1480,7 @@
     fogEnabled = o.fogEnabled; fogRevealed = o.fogRevealed;
     if (o.terrain) terrain = o.terrain;
     if (o.gmPins) gmPins = o.gmPins;
+    if (o.props) props = o.props;
     if (typeof fogOnCb !== 'undefined' && fogOnCb) fogOnCb.checked = fogEnabled;
   }
   async function _applyHistory(idx) {
@@ -1432,6 +1520,7 @@
     else if (r.kind === 'hotspot') saveHotspots();
     else if (r.kind === 'light') saveLights();
     else if (r.kind === 'gmpin') saveGmPins();
+    else if (r.kind === 'prop') saveProps();
   }
   // v2.775.0 — copy/paste objects via the right-click menu.
   var clipboard = null;
@@ -1461,6 +1550,10 @@
         bright_ft: d.bright_ft || 0, dim_ft: d.dim_ft || 0,
         color: d.color || '#ffd27f', type: d.type || '' });
       saveLights();
+    } else if (clipboard.kind === 'prop') {
+      props.push({ id: newId('pr'), x: p.x, y: p.y, kind: d.kind || '📦',
+        size: d.size || 40, rot: d.rot || 0 });
+      saveProps();
     }
   }
   // v2.775.0 — edit an object's properties from the right-click menu.
@@ -1510,10 +1603,12 @@
   if (terrainBtn) terrainBtn.addEventListener('click', function () { setMode(terrainMode ? null : 'terrain'); });
   var pinBtn = document.getElementById('me-pin-btn');
   if (pinBtn) pinBtn.addEventListener('click', function () { setMode(pinMode ? null : 'pin'); });
+  var propBtn = document.getElementById('me-prop-btn');
+  if (propBtn) propBtn.addEventListener('click', function () { setMode(propMode ? null : 'prop'); });
   function syncStageCursor() {
     // The overlay captures empty-area clicks when placing/painting/relocating.
     // (Objects stay individually clickable for erase/right-click regardless.)
-    var on = wallMode || doorMode || roomMode || spotMode || lightMode || fogMode || terrainMode || pinMode || relocating || resizing;
+    var on = wallMode || doorMode || roomMode || spotMode || lightMode || fogMode || terrainMode || pinMode || propMode || relocating || resizing;
     svg.style.pointerEvents = on ? 'auto' : 'none';
     svg.style.cursor = on ? 'crosshair' : 'default';
   }
@@ -1625,10 +1720,12 @@
     wallMode = (mode === 'wall'); doorMode = (mode === 'door'); roomMode = (mode === 'room');
     spotMode = (mode === 'spot'); lightMode = (mode === 'light'); fogMode = (mode === 'fog');
     terrainMode = (mode === 'terrain'); pinMode = (mode === 'pin');
+    propMode = (mode === 'prop');
     wallBtn.setAttribute('aria-pressed', wallMode ? 'true' : 'false');
     if (roomBtn) roomBtn.setAttribute('aria-pressed', roomMode ? 'true' : 'false');
     if (terrainBtn) terrainBtn.setAttribute('aria-pressed', terrainMode ? 'true' : 'false');
     if (pinBtn) pinBtn.setAttribute('aria-pressed', pinMode ? 'true' : 'false');
+    if (propBtn) propBtn.setAttribute('aria-pressed', propMode ? 'true' : 'false');
     if (doorBtn) doorBtn.setAttribute('aria-pressed', doorMode ? 'true' : 'false');
     spotBtn.setAttribute('aria-pressed', spotMode ? 'true' : 'false');
     if (lightBtn) lightBtn.setAttribute('aria-pressed', lightMode ? 'true' : 'false');
@@ -1812,6 +1909,12 @@
       gmPins.push({ id: 'p' + Date.now() + '_' + (seq++), x: p.x, y: p.y,
         label: (plabel || 'Pin').slice(0, 120), note: pnote.slice(0, 2000) });
       saveGmPins();
+    } else if (propMode) {
+      // v2.791.0 — stamp the selected prop glyph at the click point.
+      var pk = (document.getElementById('me-prop-kind') || {}).value || '📦';
+      props.push({ id: 'pr' + Date.now() + '_' + (seq++), x: p.x, y: p.y,
+        kind: pk, size: 40, rot: 0 });
+      saveProps();
     }
   });
 
@@ -1908,7 +2011,7 @@
   });
 
   // v2.790.3 — layer-visibility checkboxes (reflect + persist localStorage).
-  ['walls', 'terrain', 'lights', 'hotspots', 'fog', 'gmpins', 'tokens'].forEach(function (k) {
+  ['walls', 'terrain', 'lights', 'hotspots', 'fog', 'gmpins', 'props', 'tokens'].forEach(function (k) {
     var cb = document.getElementById('me-layer-' + k);
     if (!cb) return;
     cb.checked = layers[k];
