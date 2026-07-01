@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.808.0] - 2026-07-01 — "The Weather Turns"
+
+**Schema version:** 96
+
+**Commit summary:** Ambient weather comes alive — editor selector + an animated rain / snow / fog overlay on the live tabletop.
+
+**Description:** Completes the **ambient weather** feature. The editor gets a **Weather** group with a dropdown (None / 🌧 Rain / ❄ Snow / 🌫 Fog) that sets the map's weather; the value drives a lightweight **particle animation on the live tabletop** — diagonal rain streaks, drifting snow, or slow-rolling fog banks — drawn on a canvas inside `#map-transform` so it pans and zooms with the map. It starts on map load (`active-map` bootstrap) and switches live via the `weather_update` broadcast. Purely atmospheric (non-interactive, above the scenery, below the UI).
+
+### Added
+- `app/templates/tabletop.html` — `#weather-canvas` overlay; a compact particle engine (`applyWeather` / rain / snow / fog); `weather` bootstrap in `load()`; `window._onWeatherUpdate` handler.
+- `app/static/tabletop.js` — `weather_update` WS case → `window._onWeatherUpdate`.
+- `app/templates/map_editor.html` — a **Weather** toolbar group + dropdown that POSTs the map weather (initialised from the map's current value).
+- `tests/harness_ui/test_map_editor_weather.py` (new, +2) — the editor selector persists the choice; a `rain` `weather_update` draws particles on the canvas and clearing it blanks the canvas.
+
+### Changed
+- `tests/harness_ui/test_map_editor_toolbar.py` — expects the new **Weather** group.
+
+### Schema
+- No schema change (still v96 — the column shipped in v2.807.0).
+
 ## [2.807.0] - 2026-07-01 — "The Gathering Clouds"
 
 **Schema version:** 96

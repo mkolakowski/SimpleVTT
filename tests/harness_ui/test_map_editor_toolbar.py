@@ -18,7 +18,7 @@ def test_toolbar_grouped(gm_page: Page) -> None:
     labels = [s.upper() for s in gm_page.locator(".me-group .me-grp-lbl").all_inner_texts()]
     assert labels == ["WALLS", "MARKERS", "FOG & LIGHT", "TERRAIN", "PROPS",
                       "LABELS", "GM", "TOKENS", "TOOLS", "HISTORY", "GRID",
-                      "TAGS", "LAYERS", "VIEW"], labels
+                      "TAGS", "WEATHER", "LAYERS", "VIEW"], labels
 
     # Every tool still present (grouping preserved the IDs the JS + tests use).
     for sel in ["#me-wall-btn", "#me-door-btn", "#me-wall-style", "#me-spot-btn",

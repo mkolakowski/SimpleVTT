@@ -2372,6 +2372,9 @@
             <svg id="wall-overlay" width="{{ active_map.width_px }}" height="{{ active_map.height_px }}"
                  viewBox="0 0 {{ active_map.width_px }} {{ active_map.height_px }}"
                  style="position:absolute;top:0;left:0;z-index:3;pointer-events:none;overflow:visible;"></svg>
+            {# v2.808.0 — ambient weather overlay (rain / snow / fog), animated. #}
+            <canvas id="weather-canvas" width="{{ active_map.width_px }}" height="{{ active_map.height_px }}"
+                    style="position:absolute;top:0;left:0;z-index:4;pointer-events:none;"></canvas>
             </div>
         {% else %}
             <p class="muted" style="padding: 20px;">No active map. {% if is_gm %}Upload one in <a href="/admin/campaign/{{ campaign.id }}">campaign settings</a>.{% endif %}</p>
@@ -2403,6 +2406,7 @@
         var gmPins = [];  // v2.790.2 — GM-only pins (fetched only when IS_GM)
         var props = [];   // v2.793.0 — decorative prop stamps (emoji glyphs)
         var labels = [];  // v2.804.0 — public text labels (room names)
+        var weather = '';  // v2.808.0 — ambient weather overlay (rain/snow/fog)
 
         // v2.772.0 — wall/door material looks (kept in sync with the map editor).
         // v2.787.2 — thicker walls + per-material texture keys.
@@ -2735,6 +2739,7 @@
                 mapId = d.map_id; walls = d.walls || [];
                 hotspots = d.hotspots || []; terrain = d.terrain || [];
                 props = d.props || []; labels = d.labels || []; render();
+                applyWeather(d.weather || '');  // v2.808.0 — start/stop the weather overlay
                 fetchGmPins();  // v2.790.2 — GM-only (no-op for players)
                 if (window._setMapWalls) window._setMapWalls(walls);
                 if (window._setMapLights) window._setMapLights(d.lights || []);
@@ -2832,6 +2837,61 @@
         window._onLabelsUpdate = function (data) {  // v2.804.0
             if (!data) return;
             labels = data.labels || []; render();
+        };
+        // v2.808.0 — ambient weather: a lightweight particle overlay on
+        // #weather-canvas (inside #map-transform, so it pans/zooms with the map).
+        var _wxRAF = null, _wxParts = [], _wxCanvas = null, _wxCtx = null;
+        function _wxSpawn(type, W, H, seed) {
+            if (type === 'rain') return { x: Math.random() * W, y: seed ? Math.random() * H : -12,
+                len: 8 + Math.random() * 12, sp: 9 + Math.random() * 8 };
+            if (type === 'snow') return { x: Math.random() * W, y: seed ? Math.random() * H : -6,
+                r: 1.5 + Math.random() * 2.5, sp: 1 + Math.random() * 2, drift: -0.5 + Math.random(), ph: Math.random() * 6.28 };
+            return { x: Math.random() * W, y: Math.random() * H, r: 60 + Math.random() * 130,
+                vx: 0.2 + Math.random() * 0.6, a: 0.04 + Math.random() * 0.07 };  // fog
+        }
+        function _wxStep(type, W, H) {
+            var c = _wxCtx; if (!c) return;
+            c.clearRect(0, 0, W, H);
+            var i, p;
+            if (type === 'rain') {
+                c.strokeStyle = 'rgba(165,195,235,0.5)'; c.lineWidth = 1.4;
+                for (i = 0; i < _wxParts.length; i++) { p = _wxParts[i];
+                    c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(p.x - 2, p.y + p.len); c.stroke();
+                    p.y += p.sp; p.x -= 0.6;
+                    if (p.y > H) { p.y = -12; p.x = Math.random() * W; } }
+            } else if (type === 'snow') {
+                c.fillStyle = 'rgba(255,255,255,0.85)';
+                for (i = 0; i < _wxParts.length; i++) { p = _wxParts[i];
+                    p.ph += 0.02; p.y += p.sp; p.x += Math.sin(p.ph) * 0.8 + p.drift;
+                    c.beginPath(); c.arc(p.x, p.y, p.r, 0, 6.283); c.fill();
+                    if (p.y > H) { p.y = -6; p.x = Math.random() * W; } }
+            } else if (type === 'fog') {
+                for (i = 0; i < _wxParts.length; i++) { p = _wxParts[i];
+                    p.x += p.vx; if (p.x - p.r > W) p.x = -p.r;
+                    var g = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+                    g.addColorStop(0, 'rgba(202,207,217,' + p.a + ')');
+                    g.addColorStop(1, 'rgba(202,207,217,0)');
+                    c.fillStyle = g; c.beginPath(); c.arc(p.x, p.y, p.r, 0, 6.283); c.fill(); }
+            }
+        }
+        function applyWeather(type) {
+            weather = type || '';
+            if (!_wxCanvas) { _wxCanvas = document.getElementById('weather-canvas');
+                _wxCtx = _wxCanvas ? _wxCanvas.getContext('2d') : null; }
+            if (!_wxCanvas || !_wxCtx) return;
+            if (_wxRAF) { cancelAnimationFrame(_wxRAF); _wxRAF = null; }
+            var W = _wxCanvas.width, H = _wxCanvas.height;
+            _wxCtx.clearRect(0, 0, W, H);
+            if (!weather) { _wxParts = []; return; }
+            var n = (weather === 'fog') ? 16 : Math.max(60, Math.round(W * H / 9000));
+            n = Math.min(n, 600);
+            _wxParts = [];
+            for (var i = 0; i < n; i++) _wxParts.push(_wxSpawn(weather, W, H, true));
+            (function loop() { _wxStep(weather, W, H); _wxRAF = requestAnimationFrame(loop); })();
+        }
+        window._onWeatherUpdate = function (data) {  // v2.808.0
+            if (!data) return;
+            applyWeather(data.weather || '');
         };
         // v2.790.2 — GM-only pins: fetch (GM only) + re-fetch on the signal.
         async function fetchGmPins() {

@@ -5453,6 +5453,11 @@
                 if (msg.data && typeof window._onLabelsUpdate === 'function') {
                     try { window._onLabelsUpdate(msg.data); } catch (_) {}
                 }
+            } else if (msg.type === 'weather_update') {
+                // v2.808.0 — Maps 2.0: start/stop the ambient weather overlay.
+                if (msg.data && typeof window._onWeatherUpdate === 'function') {
+                    try { window._onWeatherUpdate(msg.data); } catch (_) {}
+                }
             } else if (msg.type === 'character_death_save') {
                 _onCharacterDeathSave(msg.data);
             } else if (msg.type === 'character_roll_state') {

@@ -295,6 +295,18 @@
            title="Comma-separated tags for this map">
     <button type="button" id="me-tags-save" class="me-tool-btn" title="Save the map's tags">Save tags</button>
   </div>
+  {# v2.808.0 — ambient weather overlay (animated on the live tabletop). #}
+  <div class="me-group" role="group" aria-label="Weather">
+    <span class="me-grp-lbl">Weather</span>
+    <label style="gap:3px;" title="Ambient weather shown on the live tabletop">
+      <select id="me-weather" style="min-height:32px;font-size:12px;width:100%;">
+        <option value="">∅ None</option>
+        <option value="rain">🌧 Rain</option>
+        <option value="snow">❄ Snow</option>
+        <option value="fog">🌫 Fog</option>
+      </select>
+    </label>
+  </div>
   {# v2.790.3 — per-layer visibility (authoring only; saved locally). #}
   <div class="me-group" role="group" aria-label="Layers">
     <span class="me-grp-lbl">Layers</span>
@@ -2323,6 +2335,19 @@
       body: JSON.stringify({ grid_type: gridType }),
     }).then(function () { setStatus('Saved.'); }).catch(function () { setStatus('Save failed.'); });
   });
+  // v2.808.0 — ambient weather selector (POSTs; the animation plays on the tabletop).
+  var weatherSel = document.getElementById('me-weather');
+  if (weatherSel) {
+    weatherSel.value = {{ (weather or '') | tojson }};
+    weatherSel.addEventListener('change', function (e) {
+      setStatus('Saving…');
+      fetch('/campaign/' + CID + '/settings/maps/' + MID + '/weather', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ weather: e.target.value }),
+      }).then(function () { setStatus('Weather set — shown on the live tabletop.'); })
+        .catch(function () { setStatus('Save failed.'); });
+    });
+  }
   document.getElementById('me-grid-offx').addEventListener('change', function (e) {
     gridOffX = Math.max(0, parseInt(e.target.value, 10) || 0); render(); saveGrid();
   });
