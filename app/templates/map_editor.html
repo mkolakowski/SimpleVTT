@@ -389,6 +389,12 @@
     ln.style.pointerEvents = relocating ? 'none' : 'stroke';
     ln.style.cursor = eraseMode ? 'pointer'
       : ((wallMode || doorMode) ? 'move' : 'context-menu');
+    // v2.786.7 — native hover tooltip identifying a door + its state.
+    if (w.door) {
+      var ttl = document.createElementNS(NS, 'title');
+      ttl.textContent = '🚪 Door — ' + (w.open ? 'open' : 'closed') + ' (click to toggle)';
+      ln.appendChild(ttl);
+    }
     return ln;
   }
   // v2.786.6 — a draggable end-handle for resizing a wall/door.
@@ -434,15 +440,42 @@
       svg.appendChild(ln);
     }
     if (w.door) {
+      // v2.786.7 — draw a real hinged door: jamb frame, a swing arc, and a
+      // leaf that lies in the opening when closed / swings 90° when open.
       var open = !!w.open;
-      seg(st.casing, st.width + 5, 'butt');                       // frame
-      seg(open ? '#46c46a' : st.color, st.width + 1, 'butt');     // door panel
-      seg(open ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.25)', 2, 'butt'); // grain
-      var knob = document.createElementNS(NS, 'circle');
-      knob.setAttribute('cx', (w.x1 + w.x2) / 2); knob.setAttribute('cy', (w.y1 + w.y2) / 2);
-      knob.setAttribute('r', '3.5'); knob.setAttribute('fill', '#f0d060');
-      knob.style.pointerEvents = 'none';
-      svg.appendChild(knob);
+      var hx = w.x1, hy = w.y1, ex = w.x2, ey = w.y2;   // hinge, closed free end
+      var dx = ex - hx, dy = ey - hy, L = Math.hypot(dx, dy) || 1;
+      var ux = dx / L, uy = dy / L, nx = -uy, ny = ux;  // along / perpendicular
+      var ox = hx + nx * L, oy = hy + ny * L;           // open free end (swung 90°)
+      var fx = open ? ox : ex, fy = open ? oy : ey;     // leaf free end
+      function line2(ax, ay, bx, by, color, width, cap, dash) {
+        var ln = document.createElementNS(NS, 'line');
+        ln.setAttribute('x1', ax); ln.setAttribute('y1', ay);
+        ln.setAttribute('x2', bx); ln.setAttribute('y2', by);
+        ln.setAttribute('stroke', color); ln.setAttribute('stroke-width', width);
+        ln.setAttribute('stroke-linecap', cap || 'round');
+        if (dash) ln.setAttribute('stroke-dasharray', dash);
+        ln.style.pointerEvents = 'none'; svg.appendChild(ln);
+      }
+      function dot(cx, cy, r, fill) {
+        var c = document.createElementNS(NS, 'circle');
+        c.setAttribute('cx', cx); c.setAttribute('cy', cy); c.setAttribute('r', r);
+        c.setAttribute('fill', fill); c.style.pointerEvents = 'none'; svg.appendChild(c);
+      }
+      var jamb = Math.max(7, st.width + 3);
+      line2(hx - nx * jamb / 2, hy - ny * jamb / 2, hx + nx * jamb / 2, hy + ny * jamb / 2, st.casing, 5);
+      line2(ex - nx * jamb / 2, ey - ny * jamb / 2, ex + nx * jamb / 2, ey + ny * jamb / 2, st.casing, 5);
+      var arc = document.createElementNS(NS, 'path');
+      arc.setAttribute('d', 'M ' + ex + ' ' + ey + ' A ' + L + ' ' + L + ' 0 0 1 ' + ox + ' ' + oy);
+      arc.setAttribute('fill', 'none');
+      arc.setAttribute('stroke', open ? 'rgba(120,220,150,0.75)' : 'rgba(255,255,255,0.30)');
+      arc.setAttribute('stroke-width', '1.5'); arc.setAttribute('stroke-dasharray', '5 5');
+      arc.style.pointerEvents = 'none'; svg.appendChild(arc);
+      line2(hx, hy, fx, fy, st.casing, st.width + 4);                 // leaf edge/shadow
+      line2(hx, hy, fx, fy, open ? '#4ec978' : st.color, st.width);   // leaf face
+      line2(hx, hy, fx, fy, 'rgba(255,255,255,0.35)', 2);            // sheen
+      dot(hx, hy, 3.2, '#26262c');   // hinge
+      dot(fx, fy, 3.2, '#f0d060');   // knob
     } else {
       seg(st.casing, st.width + 4);                       // casing (depth)
       seg(st.color, st.width);                            // wall face

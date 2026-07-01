@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.786.7] - 2026-06-30 — "The Proper Door"
+
+**Schema version:** 91
+
+**Commit summary:** Draw doors as real hinged doors (frame + swing arc + leaf) and add a hover tooltip showing "Door — open/closed" in the editor + tabletop.
+
+**Description:** Doors no longer render as a coloured bar. They now draw like a proper top-down door — **jamb posts** framing the opening, a **dashed swing arc**, and a **door leaf** that lies across the opening when closed and **swings 90°** (green) when open, with a hinge dot and a knob. Hovering a door (in the **map editor** and the **tabletop**) now shows a native tooltip: **"🚪 Door — open / closed (click to toggle)"**.
+
+### Changed
+- `app/templates/map_editor.html` + `app/templates/tabletop.html` — `drawWallVisual` door branch redrawn as a hinged door (jambs / arc / leaf / hinge / knob); the wall hit-line gains a `<title>` tooltip for doors.
+
+### Added
+- `tests/harness_ui/test_map_editor_door.py` (new, +1) — a door draws a swing-arc `path` and its hit-line `<title>` reports the state, flipping to "open" after a toggle.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.786.6] - 2026-06-30 — "The Stretchable Wall"
 
 **Schema version:** 91
