@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.789.1] - 2026-07-01 — "The Marked Ground"
+
+**Schema version:** 92
+
+**Commit summary:** Terrain-region painting in the map editor (⛰ tool + type picker + right-click edit).
+
+**Description:** The editor gets a **⛰ Terrain** tool + type selector — **Difficult / Water / Lava / Ice / Swamp / Rubble**. Drag a rectangle to paint a region; each renders as a translucent coloured overlay with its label, under the walls/tokens. Right-click a region (in Terrain mode) to **change its type** or **delete** it; Erase mode deletes on click. Regions save via the terrain endpoint, are covered by **undo/redo** and the **Save-all** button.
+
+### Added
+- `app/templates/map_editor.html` — `terrain` state + `TERRAIN_TYPES`; a **Terrain** toolbar group; rect-paint drag; region render (fill + label) + right-click type/delete; `saveTerrain`; terrain in the undo snapshot + `saveAll`.
+- `app/routes/tabletop_routes.py` — the editor page passes `terrain`.
+- `tests/harness_ui/test_map_editor_terrain.py` (new, +1) — painting a water region persists + renders.
+
+### Changed
+- `tests/harness_ui/test_map_editor_toolbar.py` — expects the new **Terrain** group.
+
+### Schema
+- No schema change (still v92).
+
 ## [2.789.0] - 2026-07-01 — "The Shifting Ground"
 
 **Schema version:** 92

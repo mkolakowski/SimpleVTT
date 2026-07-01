@@ -142,6 +142,22 @@
             title="Fog of war: drag to reveal an area; click a revealed area to re-hide it">🌫 Fog</button>
     <label id="me-fog-on-lbl" style="display:none;"><input type="checkbox" id="me-fog-on-cb"> fog on</label>
   </div>
+  {# v2.789.1 — terrain regions. #}
+  <div class="me-group" role="group" aria-label="Terrain">
+    <span class="me-grp-lbl">Terrain</span>
+    <button type="button" id="me-terrain-btn" class="me-tool-btn" aria-pressed="false"
+            title="Terrain: drag a rectangle to mark difficult terrain / water / lava…; right-click a region to change its type or delete">⛰ Terrain</button>
+    <label style="gap:3px;" title="Terrain type for new regions">
+      <select id="me-terrain-type" style="min-height:32px;font-size:12px;width:100%;">
+        <option value="difficult">🟤 Difficult</option>
+        <option value="water">🔵 Water</option>
+        <option value="lava">🔴 Lava</option>
+        <option value="ice">🧊 Ice</option>
+        <option value="swamp">🟢 Swamp</option>
+        <option value="rubble">⚪ Rubble</option>
+      </select>
+    </label>
+  </div>
   <div class="me-group" role="group" aria-label="Tokens">
     <span class="me-grp-lbl">Tokens</span>
     <button type="button" id="me-token-btn" class="me-tool-btn"
@@ -234,7 +250,21 @@
   var lights = {{ lights | tojson }};
   var fogEnabled = {{ 'true' if fog_enabled else 'false' }};
   var fogRevealed = {{ fog_revealed | tojson }};
-  var wallMode = false, doorMode = false, roomMode = false, spotMode = false, lightMode = false, fogMode = false, pending = null, seq = 0;
+  var terrain = {{ terrain | tojson }};   // v2.789.1 — terrain regions
+  // v2.789.1 — terrain region types (colour + label).
+  var TERRAIN_TYPES = [
+    { key: 'difficult', label: 'Difficult', color: '#8a6d3b' },
+    { key: 'water',     label: 'Water',     color: '#3b6ea5' },
+    { key: 'lava',      label: 'Lava',      color: '#d1481f' },
+    { key: 'ice',       label: 'Ice',       color: '#7fc7d9' },
+    { key: 'swamp',     label: 'Swamp',     color: '#4b6b3a' },
+    { key: 'rubble',    label: 'Rubble',    color: '#77726a' },
+  ];
+  function terrainType(key) {
+    for (var i = 0; i < TERRAIN_TYPES.length; i++) if (TERRAIN_TYPES[i].key === key) return TERRAIN_TYPES[i];
+    return TERRAIN_TYPES[0];
+  }
+  var wallMode = false, doorMode = false, roomMode = false, spotMode = false, lightMode = false, fogMode = false, terrainMode = false, pending = null, seq = 0;
   // v2.772.0 — wall/door material looks. Walls draw as a thick casing + face
   // line; doors draw as a panel + knob (open = ajar/green).
   // v2.787.2 — thicker walls + per-material texture keys.
@@ -283,6 +313,7 @@
     return (h % 100000) / 100000;
   }
   var fogDrag = null;
+  var terrainDrag = null;   // v2.789.1 — rect being painted
   var eraseMode = false;       // v2.770.0 — click an object to delete
   var relocating = null;       // {kind, obj} — being repositioned (drag)
   var relocDragging = false;   // v2.775.0 — true while dragging the held object
@@ -761,6 +792,54 @@
       }
       svg.appendChild(g);
     }
+    // v2.789.1 — terrain regions (under walls/tokens): translucent coloured
+    // rects + a label. Interactive only in terrain/erase mode (so they don't
+    // block other tools).
+    terrain.forEach(function (tr, i) {
+      var tt = terrainType(tr.type);
+      var rc = document.createElementNS(NS, 'rect');
+      rc.setAttribute('x', tr.x); rc.setAttribute('y', tr.y);
+      rc.setAttribute('width', tr.w); rc.setAttribute('height', tr.h);
+      rc.setAttribute('fill', tt.color); rc.setAttribute('fill-opacity', '0.28');
+      rc.setAttribute('stroke', tt.color); rc.setAttribute('stroke-width', '2');
+      rc.setAttribute('stroke-dasharray', '7 5');
+      rc.classList.add('me-terrain');
+      var active = (terrainMode || eraseMode);
+      rc.style.pointerEvents = active ? 'all' : 'none';
+      rc.style.cursor = 'pointer';
+      rc.addEventListener('click', function (e) {
+        if (eraseMode) { e.stopPropagation(); terrain.splice(i, 1); saveTerrain(); }
+      });
+      rc.addEventListener('contextmenu', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        var typeItems = TERRAIN_TYPES.map(function (t) {
+          return { label: (tr.type === t.key ? '✓ ' : '   ') + t.label,
+                   fn: function () { tr.type = t.key; saveTerrain(); } };
+        });
+        showMenu(e.clientX, e.clientY, [
+          { label: '⛰ Terrain type', sub: typeItems },
+          { label: '🗑 Delete', fn: function () { terrain.splice(i, 1); saveTerrain(); } },
+        ]);
+      });
+      svg.appendChild(rc);
+      var lbl = document.createElementNS(NS, 'text');
+      lbl.setAttribute('x', tr.x + 5); lbl.setAttribute('y', tr.y + 16);
+      lbl.setAttribute('fill', tt.color); lbl.setAttribute('font-size', '13');
+      lbl.setAttribute('font-weight', '700'); lbl.style.pointerEvents = 'none';
+      lbl.textContent = tt.label;
+      svg.appendChild(lbl);
+    });
+    if (terrainDrag) {  // live paint preview
+      var tpv = document.createElementNS(NS, 'rect');
+      var tx = Math.min(terrainDrag.sx, terrainDrag.cx), ty = Math.min(terrainDrag.sy, terrainDrag.cy);
+      tpv.setAttribute('x', tx); tpv.setAttribute('y', ty);
+      tpv.setAttribute('width', Math.abs(terrainDrag.cx - terrainDrag.sx));
+      tpv.setAttribute('height', Math.abs(terrainDrag.cy - terrainDrag.sy));
+      var tc = terrainType((document.getElementById('me-terrain-type') || {}).value);
+      tpv.setAttribute('fill', tc.color); tpv.setAttribute('fill-opacity', '0.35');
+      tpv.style.pointerEvents = 'none';
+      svg.appendChild(tpv);
+    }
     walls.forEach(function (w) {
       drawWallVisual(w);
       var hit = mkHitLine(w);
@@ -1169,6 +1248,18 @@
     } catch (e) { setStatus('Save failed.'); }
     render();
   }
+  async function saveTerrain() {
+    pushHistory();
+    setStatus('Saving…');
+    try {
+      await fetch('/api/campaign/' + CID + '/map/' + MID + '/terrain', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ terrain: terrain }),
+      });
+      setStatus('Saved.');
+    } catch (e) { setStatus('Save failed.'); }
+    render();
+  }
   // v2.781.0 — commit every layer of the map in one click. Edits already
   // auto-save as you go; this is the explicit "save now" affordance (+ ⌘/Ctrl+S).
   async function saveAll() {
@@ -1181,6 +1272,7 @@
         fetch(base + '/hotspots', { method: 'PUT', headers: J, body: JSON.stringify({ hotspots: hotspots }) }),
         fetch(base + '/lights', { method: 'PUT', headers: J, body: JSON.stringify({ lights: lights }) }),
         fetch(base + '/fog', { method: 'PUT', headers: J, body: JSON.stringify({ enabled: fogEnabled, revealed: fogRevealed }) }),
+        fetch(base + '/terrain', { method: 'PUT', headers: J, body: JSON.stringify({ terrain: terrain }) }),
         fetch('/campaign/' + CID + '/settings/maps/' + MID + '/grid_size', {
           method: 'POST', headers: J,
           body: JSON.stringify({ grid_size_px: gridPx, grid_offset_x: gridOffX, grid_offset_y: gridOffY }) }),
@@ -1193,7 +1285,7 @@
   var _hist = [], _histIdx = -1, _applyingHist = false;
   function _snap() {
     return JSON.stringify({ walls: walls, hotspots: hotspots, lights: lights,
-      fogEnabled: fogEnabled, fogRevealed: fogRevealed });
+      fogEnabled: fogEnabled, fogRevealed: fogRevealed, terrain: terrain });
   }
   function pushHistory() {
     if (_applyingHist) return;
@@ -1209,6 +1301,7 @@
     var o = JSON.parse(s);
     walls = o.walls; hotspots = o.hotspots; lights = o.lights;
     fogEnabled = o.fogEnabled; fogRevealed = o.fogRevealed;
+    if (o.terrain) terrain = o.terrain;
     if (typeof fogOnCb !== 'undefined' && fogOnCb) fogOnCb.checked = fogEnabled;
   }
   async function _applyHistory(idx) {
@@ -1321,10 +1414,12 @@
   });
   var lightBtn = document.getElementById('me-light-btn');
   var fogBtn = document.getElementById('me-fog-btn');
+  var terrainBtn = document.getElementById('me-terrain-btn');
+  if (terrainBtn) terrainBtn.addEventListener('click', function () { setMode(terrainMode ? null : 'terrain'); });
   function syncStageCursor() {
     // The overlay captures empty-area clicks when placing/painting/relocating.
     // (Objects stay individually clickable for erase/right-click regardless.)
-    var on = wallMode || doorMode || roomMode || spotMode || lightMode || fogMode || relocating || resizing;
+    var on = wallMode || doorMode || roomMode || spotMode || lightMode || fogMode || terrainMode || relocating || resizing;
     svg.style.pointerEvents = on ? 'auto' : 'none';
     svg.style.cursor = on ? 'crosshair' : 'default';
   }
@@ -1435,8 +1530,10 @@
   function setMode(mode) {
     wallMode = (mode === 'wall'); doorMode = (mode === 'door'); roomMode = (mode === 'room');
     spotMode = (mode === 'spot'); lightMode = (mode === 'light'); fogMode = (mode === 'fog');
+    terrainMode = (mode === 'terrain');
     wallBtn.setAttribute('aria-pressed', wallMode ? 'true' : 'false');
     if (roomBtn) roomBtn.setAttribute('aria-pressed', roomMode ? 'true' : 'false');
+    if (terrainBtn) terrainBtn.setAttribute('aria-pressed', terrainMode ? 'true' : 'false');
     if (doorBtn) doorBtn.setAttribute('aria-pressed', doorMode ? 'true' : 'false');
     spotBtn.setAttribute('aria-pressed', spotMode ? 'true' : 'false');
     if (lightBtn) lightBtn.setAttribute('aria-pressed', lightMode ? 'true' : 'false');
@@ -1480,6 +1577,13 @@
       render();
       return;
     }
+    if (terrainMode) {  // v2.789.1 — paint a terrain rectangle
+      var tp = toMap(e); if (!tp) return;
+      e.preventDefault();
+      terrainDrag = { sx: tp.x, sy: tp.y, cx: tp.x, cy: tp.y };
+      try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+      return;
+    }
     if (!fogMode) return;
     var p = toMap(e); if (!p) return;
     e.preventDefault();
@@ -1489,6 +1593,10 @@
   svg.addEventListener('pointermove', function (e) {
     if (relocDragging && relocating) {
       var rp = toMap(e); if (rp) { moveObjTo(relocating, snapPoint(rp)); render(); }
+      return;
+    }
+    if (terrainDrag) {
+      var tmp = toMap(e); if (tmp) { terrainDrag.cx = tmp.x; terrainDrag.cy = tmp.y; render(); }
       return;
     }
     if (fogDrag) {
@@ -1512,6 +1620,19 @@
       var r = relocating; relocating = null; relocDragging = false;
       try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
       saveReloc(r); setStatus(''); syncStageCursor();
+      suppressClick = true; setTimeout(function () { suppressClick = false; }, 0);
+      return;
+    }
+    if (terrainDrag) {  // v2.789.1 — commit the painted terrain rect
+      var td = terrainDrag; terrainDrag = null;
+      try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
+      var tx = Math.min(td.sx, td.cx), ty = Math.min(td.sy, td.cy);
+      var tw = Math.abs(td.cx - td.sx), th = Math.abs(td.cy - td.sy);
+      if (tw > 6 && th > 6) {
+        terrain.push({ id: 't' + Date.now() + '_' + (seq++), x: tx, y: ty, w: tw, h: th,
+          type: (document.getElementById('me-terrain-type') || {}).value || 'difficult' });
+        saveTerrain();
+      } else { render(); }
       suppressClick = true; setTimeout(function () { suppressClick = false; }, 0);
       return;
     }

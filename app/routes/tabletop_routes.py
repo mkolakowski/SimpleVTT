@@ -124570,6 +124570,7 @@ def map_editor_page(
         "lights": list(getattr(m, "lights", None) or []),
         "fog_enabled": bool(getattr(m, "fog_enabled", False)),
         "fog_revealed": list(getattr(m, "fog_revealed", None) or []),
+        "terrain": list(getattr(m, "terrain", None) or []),
         "is_active": m.id == campaign.active_map_id,
     })
 
