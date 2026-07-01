@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.787.2] - 2026-07-01 — "The Rough Hewn"
+
+**Schema version:** 91
+
+**Commit summary:** Thicker walls with per-material textures that match their descriptions.
+
+**Description:** Walls are now noticeably **thicker** (≈7→12 px, cave 15) and carry a **material texture** so each style reads at a glance: **stone** shows block joints, **wood** shows grain, **brick** shows mortar courses, **metal** gets a bright sheen strip, and **cave** is a rough dark stipple — in both the editor and the tabletop.
+
+### Changed
+- `app/templates/map_editor.html` + `app/templates/tabletop.html` — `WALL_STYLES` widths increased + `tex` key; `drawWallTexture()` overlays per-material dashes/sheen; `seg()` accepts a dash pattern.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.787.1] - 2026-07-01 — "The Swinging Gate"
 
 **Schema version:** 91

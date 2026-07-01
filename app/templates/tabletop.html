@@ -2396,14 +2396,23 @@
         var grab = null, suppressClick = false;  // v2.759.0 — drag-to-move
 
         // v2.772.0 — wall/door material looks (kept in sync with the map editor).
+        // v2.787.2 — thicker walls + per-material texture keys.
         var WALL_STYLES = {
-            stone: { color: '#aab0b8', casing: '#3a3f47', width: 7 },
-            wood:  { color: '#9a6633', casing: '#3a2510', width: 7 },
-            brick: { color: '#b05547', casing: '#41201b', width: 7 },
-            metal: { color: '#8b97a6', casing: '#2b323c', width: 6 },
-            cave:  { color: '#6f6658', casing: '#241f18', width: 9 },
+            stone: { color: '#b3b9c1', casing: '#33383f', width: 12, tex: 'stone' },
+            wood:  { color: '#9a6633', casing: '#3a2510', width: 12, tex: 'wood' },
+            brick: { color: '#b25546', casing: '#3d1e18', width: 12, tex: 'brick' },
+            metal: { color: '#99a6b6', casing: '#262c34', width: 11, tex: 'metal' },
+            cave:  { color: '#726858', casing: '#20190f', width: 15, tex: 'cave' },
         };
         function wallStyle(w) { return WALL_STYLES[w && w.style] || WALL_STYLES.stone; }
+        function drawWallTexture(seg, st) {
+            var t = st.tex;
+            if (t === 'brick') { seg('rgba(0,0,0,0.42)', st.width, 'butt', '2 13'); }
+            else if (t === 'stone') { seg('rgba(0,0,0,0.30)', st.width, 'butt', '15 7'); }
+            else if (t === 'wood') { seg('rgba(0,0,0,0.24)', 2, 'round', '24 12'); seg('rgba(255,240,210,0.16)', Math.max(1, st.width - 6)); }
+            else if (t === 'metal') { seg('rgba(255,255,255,0.5)', Math.max(2, st.width - 8)); }
+            else if (t === 'cave') { seg('rgba(0,0,0,0.32)', st.width, 'round', '3 6'); }
+        }
         function mkHitLine(w) {
             var ln = document.createElementNS(NS, 'line');
             ln.setAttribute('x1', w.x1); ln.setAttribute('y1', w.y1);
@@ -2445,12 +2454,13 @@
         }
         function drawWallVisual(w) {
             var st = wallStyle(w);
-            function seg(color, width, cap) {
+            function seg(color, width, cap, dash) {
                 var ln = document.createElementNS(NS, 'line');
                 ln.setAttribute('x1', w.x1); ln.setAttribute('y1', w.y1);
                 ln.setAttribute('x2', w.x2); ln.setAttribute('y2', w.y2);
                 ln.setAttribute('stroke', color); ln.setAttribute('stroke-width', width);
                 ln.setAttribute('stroke-linecap', cap || 'round');
+                if (dash) ln.setAttribute('stroke-dasharray', dash);
                 ln.style.pointerEvents = 'none';
                 svg.appendChild(ln);
             }
@@ -2500,7 +2510,8 @@
             } else {
                 seg(st.casing, st.width + 4);
                 seg(st.color, st.width);
-                seg('rgba(255,255,255,0.18)', Math.max(1, st.width - 4));
+                drawWallTexture(seg, st);                            // v2.787.2
+                seg('rgba(255,255,255,0.16)', Math.max(1, st.width - 7));
             }
         }
         function render() {
