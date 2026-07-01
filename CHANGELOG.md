@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.789.2] - 2026-07-01 — "The Living Battlefield"
+
+**Schema version:** 92
+
+**Commit summary:** Render terrain regions on the tabletop (live via `terrain_update`).
+
+**Description:** Terrain regions painted in the editor now show on the **live tabletop** — translucent coloured overlays with a label, under the walls/tokens — for everyone at the table. They arrive with the map bootstrap (`/active-map`) and update live via a new `terrain_update` WebSocket broadcast.
+
+### Added
+- `app/static/tabletop.js` — `terrain_update` WS handler → `window._onTerrainUpdate`.
+- `app/templates/tabletop.html` — `terrain` state + colours; renders regions in the overlay; bootstraps from `/active-map`; `_onTerrainUpdate`.
+- `tests/harness_ui/test_tabletop_terrain.py` (new, +1) — a terrain update renders a coloured region on the tabletop.
+
+### Schema
+- No schema change (still v92).
+
 ## [2.789.1] - 2026-07-01 — "The Marked Ground"
 
 **Schema version:** 92

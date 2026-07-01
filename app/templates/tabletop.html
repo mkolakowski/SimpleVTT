@@ -2394,6 +2394,12 @@
         var mapId = null, walls = [], editMode = false, pending = null, seq = 0;
         var hotspots = [], spotMode = false;  // v2.756.0 — clickable hotspots
         var grab = null, suppressClick = false;  // v2.759.0 — drag-to-move
+        var terrain = [];  // v2.789.2 — terrain regions
+        var TERRAIN_TYPES = {
+            difficult: '#8a6d3b', water: '#3b6ea5', lava: '#d1481f',
+            ice: '#7fc7d9', swamp: '#4b6b3a', rubble: '#77726a',
+        };
+        function terrainColor(t) { return TERRAIN_TYPES[t] || TERRAIN_TYPES.difficult; }
 
         // v2.772.0 — wall/door material looks (kept in sync with the map editor).
         // v2.787.2 — thicker walls + per-material texture keys.
@@ -2545,6 +2551,25 @@
         }
         function render() {
             while (svg.firstChild) svg.removeChild(svg.firstChild);
+            // v2.789.2 — terrain regions (under walls/tokens): translucent
+            // coloured rects + a label; non-interactive.
+            terrain.forEach(function (tr) {
+                var col = terrainColor(tr.type);
+                var rc = document.createElementNS(NS, 'rect');
+                rc.setAttribute('x', tr.x); rc.setAttribute('y', tr.y);
+                rc.setAttribute('width', tr.w); rc.setAttribute('height', tr.h);
+                rc.setAttribute('fill', col); rc.setAttribute('fill-opacity', '0.28');
+                rc.setAttribute('stroke', col); rc.setAttribute('stroke-width', '2');
+                rc.setAttribute('stroke-dasharray', '7 5');
+                rc.style.pointerEvents = 'none';
+                svg.appendChild(rc);
+                var lbl = document.createElementNS(NS, 'text');
+                lbl.setAttribute('x', tr.x + 5); lbl.setAttribute('y', tr.y + 16);
+                lbl.setAttribute('fill', col); lbl.setAttribute('font-size', '13');
+                lbl.setAttribute('font-weight', '700'); lbl.style.pointerEvents = 'none';
+                lbl.textContent = (tr.type || 'difficult').charAt(0).toUpperCase() + (tr.type || 'difficult').slice(1);
+                svg.appendChild(lbl);
+            });
             walls.forEach(function (w) {
                 drawWallVisual(w);
                 var hit = mkHitLine(w);
@@ -2630,7 +2655,7 @@
                 if (!r.ok) return;
                 var d = await r.json();
                 mapId = d.map_id; walls = d.walls || [];
-                hotspots = d.hotspots || []; render();
+                hotspots = d.hotspots || []; terrain = d.terrain || []; render();
                 if (window._setMapWalls) window._setMapWalls(walls);
                 if (window._setMapLights) window._setMapLights(d.lights || []);
                 if (window._setMapFog) window._setMapFog(d.fog_enabled, d.fog_revealed || []);
@@ -2715,6 +2740,10 @@
         window._onHotspotsUpdate = function (data) {
             if (!data) return;
             hotspots = data.hotspots || []; render();
+        };
+        window._onTerrainUpdate = function (data) {  // v2.789.2
+            if (!data) return;
+            terrain = data.terrain || []; render();
         };
 
         if (IS_GM) {

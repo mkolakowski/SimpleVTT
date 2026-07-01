@@ -5432,6 +5432,11 @@
                         window._setMapFog(msg.data.fog_enabled, msg.data.fog_revealed || []);
                     } catch (_) {}
                 }
+            } else if (msg.type === 'terrain_update') {
+                // v2.789.2 — Maps 2.0: re-render terrain regions.
+                if (msg.data && typeof window._onTerrainUpdate === 'function') {
+                    try { window._onTerrainUpdate(msg.data); } catch (_) {}
+                }
             } else if (msg.type === 'character_death_save') {
                 _onCharacterDeathSave(msg.data);
             } else if (msg.type === 'character_roll_state') {
