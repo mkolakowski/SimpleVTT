@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- Top-down bookshelf: frame with coloured book spines. Original art. -->
+  <rect x="10" y="26" width="80" height="48" rx="3" fill="#5c3a1c" stroke="#2e1c0d" stroke-width="3"/>
+  <g stroke="#2e1c0d" stroke-width="1.5">
+    <rect x="16" y="32" width="7" height="36" fill="#b03b3b"/>
+    <rect x="24" y="32" width="6" height="36" fill="#3b7db0"/>
+    <rect x="31" y="32" width="8" height="36" fill="#3ba05a"/>
+    <rect x="40" y="32" width="6" height="36" fill="#c9a23a"/>
+    <rect x="47" y="32" width="7" height="36" fill="#8a4bb0"/>
+    <rect x="55" y="32" width="6" height="36" fill="#b03b3b"/>
+    <rect x="62" y="32" width="8" height="36" fill="#3b7db0"/>
+    <rect x="71" y="32" width="6" height="36" fill="#3ba05a"/>
+    <rect x="78" y="32" width="6" height="36" fill="#c9a23a"/>
+  </g>
+</svg>

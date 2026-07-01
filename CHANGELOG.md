@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.794.0] - 2026-07-01 — "The Prop Cupboard"
+
+**Schema version:** 94
+
+**Commit summary:** Ship an original SVG prop-art library (11 top-down props) + widen the prop `kind` cap so `img:<slug>` references survive.
+
+**Description:** Lays the asset groundwork for **image props** — richer than the emoji glyphs. Ships **11 original, license-clean, top-down SVG illustrations** under `app/static/props/` (table, barrel, crate, chest, bed, rug, bookshelf, campfire, tree, rock, well), drawn as flat vector art so they're offline, scalable, and carry no third-party asset licensing. The prop `kind` sanitizer cap grows from 8 → 40 chars so an `img:<slug>` reference isn't truncated. The editor picker + tabletop `<image>` render land next commit.
+
+### Added
+- `app/static/props/*.svg` (new, 11 files) — original top-down prop illustrations (vector, SRD-license-clean).
+- `tests/harness/test_map_props.py` (+2) — an `img:bookshelf` prop kind round-trips un-truncated; all 11 shipped SVGs serve over `/static/props/`.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `_sanitize_props` `kind` cap 8 → 40 chars (fits `img:<slug>`); docstring notes the emoji-or-image convention.
+
+### Schema
+- No schema change (still v94).
+
 ## [2.793.0] - 2026-07-01 — "The Dressed Stage"
 
 **Schema version:** 94

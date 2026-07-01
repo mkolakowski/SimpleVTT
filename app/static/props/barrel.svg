@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- Top-down barrel: concentric staves + hoop. Original art. -->
+  <circle cx="50" cy="50" r="40" fill="#7a4a22" stroke="#2e1c0d" stroke-width="3"/>
+  <circle cx="50" cy="50" r="33" fill="none" stroke="#c9c9cf" stroke-width="4"/>
+  <circle cx="50" cy="50" r="24" fill="#9a6a34"/>
+  <g stroke="#5c3a1c" stroke-width="2">
+    <line x1="50" y1="26" x2="50" y2="74"/>
+    <line x1="26" y1="50" x2="74" y2="50"/>
+    <line x1="33" y1="33" x2="67" y2="67"/>
+    <line x1="67" y1="33" x2="33" y2="67"/>
+  </g>
+</svg>

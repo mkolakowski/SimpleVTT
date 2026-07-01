@@ -124568,10 +124568,11 @@ async def set_map_gm_pins(
 
 def _sanitize_props(raw) -> list:
     """v2.791.0 — coerce a client prop-stamp list into the stored shape: a list
-    of ``{id, x, y, kind, size, rot}`` decorative emoji props in map-pixel
-    coords. Drops anything without numeric x/y. ``kind`` is a short glyph
-    string (an emoji), ``size`` the render font-size in px (clamped 8..400),
-    ``rot`` the rotation in degrees (0..359)."""
+    of ``{id, x, y, kind, size, rot}`` decorative props in map-pixel coords.
+    Drops anything without numeric x/y. ``kind`` is either a short emoji glyph
+    or an ``img:<slug>`` reference to a shipped SVG prop (v2.794.0); the cap is
+    40 chars so image slugs survive. ``size`` is the render size in px (clamped
+    8..400), ``rot`` the rotation in degrees (0..359)."""
     out = []
     if not isinstance(raw, list):
         return out
@@ -124592,7 +124593,7 @@ def _sanitize_props(raw) -> list:
         except (TypeError, ValueError):
             rot = 0.0
         rot = rot % 360
-        kind = str(p.get("kind") or "").strip()[:8] or "📦"
+        kind = str(p.get("kind") or "").strip()[:40] or "📦"
         out.append({
             "id": (str(p.get("id") or "").strip()[:40] or f"pr{i}"),
             "x": x, "y": y, "kind": kind, "size": size, "rot": rot,

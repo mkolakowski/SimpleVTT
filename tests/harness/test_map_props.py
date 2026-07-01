@@ -48,6 +48,21 @@ async def test_set_and_get_props(gm_client, gm_ws):
             f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/props", json={"props": []})
 
 
+async def test_image_prop_kind_survives(gm_client):
+    """v2.794.0 — an ``img:<slug>`` prop reference must not be truncated (the
+    kind cap is 40 chars, wide enough for the shipped SVG slugs)."""
+    mid = await _active_map_id(gm_client)
+    try:
+        r = await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/props",
+            json={"props": [{"x": 10, "y": 20, "kind": "img:bookshelf"}]})
+        assert r.status_code == 200, r.text
+        assert r.json()["props"][0]["kind"] == "img:bookshelf"
+    finally:
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/props", json={"props": []})
+
+
 async def test_set_props_requires_gm(gm_client, alice_client):
     mid = await _active_map_id(gm_client)
     # A player can read props (needs them to render the scene)...
@@ -63,3 +78,12 @@ async def test_set_props_requires_gm(gm_client, alice_client):
 async def test_props_unknown_map_404(gm_client):
     assert (await gm_client.get(
         f"/api/campaign/{CAMPAIGN_ID}/map/99999999/props")).status_code == 404
+
+
+async def test_shipped_prop_svgs_serve(gm_client):
+    """v2.794.0 — the shipped SVG prop library is served as static assets."""
+    for slug in ("table", "barrel", "crate", "chest", "bed", "rug",
+                 "bookshelf", "campfire", "tree", "rock", "well"):
+        r = await gm_client.get(f"/static/props/{slug}.svg")
+        assert r.status_code == 200, f"{slug}: {r.status_code}"
+        assert "<svg" in r.text, slug

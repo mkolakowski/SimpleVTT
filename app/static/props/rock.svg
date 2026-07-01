@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- Top-down boulder: irregular grey mass with facets. Original art. -->
+  <path d="M22 46 L34 22 L62 18 L84 40 L80 70 L54 86 L26 76 L16 56 Z"
+        fill="#8b8f96" stroke="#4b4f55" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M34 22 L50 44 L62 18 Z" fill="#a2a6ac"/>
+  <path d="M50 44 L80 70 L84 40 Z" fill="#767a80"/>
+  <path d="M50 44 L54 86 L26 76 Z" fill="#9a9ea4"/>
+</svg>
