@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.786.1] - 2026-06-30 — "The Pixel Count"
+
+**Schema version:** 91
+
+**Commit summary:** Show the map's pixel resolution in the editor's View group.
+
+**Description:** The **View** toolbar group now shows the map image's **resolution** (e.g. `1254 × 1254 px`) beneath the zoom controls.
+
+### Changed
+- `app/templates/map_editor.html` — `#me-resolution` readout in the View group.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.786.0] - 2026-06-30 — "The Fixed Address"
 
 **Schema version:** 91
