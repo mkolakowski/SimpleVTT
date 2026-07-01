@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.801.0] - 2026-07-01 — "The Snug Fit"
+
+**Schema version:** 94
+
+**Commit summary:** Prop polish — placed props snap to the grid-cell centre when 🧲 Snap is on.
+
+**Description:** With the editor's **🧲 Snap** toggle on, stamping a prop now drops it in the **centre of the grid cell** you clicked (same cell-centre math as tokens on the tabletop), so furniture and dressing line up cleanly with the grid instead of landing at arbitrary pixels. Turn Snap off to place freely. Honours the per-map grid size + offset and the hex-grid centre math. Final piece of the prop-polish run (flip → opacity → grid-snap).
+
+### Added
+- `app/templates/map_editor.html` — prop placement routes through `snapTokenToGrid` (grid-cell-centre snap, gated by 🧲 Snap).
+- `tests/harness_ui/test_map_editor_prop.py` (+1) — a prop placed with Snap on lands on a cell centre (`(coord − offset) mod g == g/2`).
+
+### Schema
+- No schema change (still v94 — editor placement behaviour only).
+
 ## [2.800.0] - 2026-07-01 — "The Fading Prop"
 
 **Schema version:** 94

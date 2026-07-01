@@ -1981,8 +1981,10 @@
       saveGmPins();
     } else if (propMode) {
       // v2.791.0 — stamp the selected prop glyph at the click point.
+      // v2.801.0 — with 🧲 Snap on, drop it in the grid-cell centre (like a token).
       var pk = (document.getElementById('me-prop-kind') || {}).value || '📦';
-      props.push({ id: 'pr' + Date.now() + '_' + (seq++), x: p.x, y: p.y,
+      var pp = snapTokenToGrid(p);
+      props.push({ id: 'pr' + Date.now() + '_' + (seq++), x: pp.x, y: pp.y,
         kind: pk, size: 40, rot: 0 });
       saveProps();
     }

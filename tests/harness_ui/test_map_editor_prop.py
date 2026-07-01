@@ -36,6 +36,34 @@ def test_place_prop(gm_page: Page) -> None:
             c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/props", json={"props": []})
 
 
+def test_prop_snaps_to_grid(gm_page: Page) -> None:
+    """v2.801.0 — with 🧲 Snap on, a placed prop lands at a grid-cell centre."""
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
+        c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
+        c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/props", json={"props": []})
+        try:
+            gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
+            expect(gm_page.locator("#me-overlay")).to_be_visible()
+            gm_page.wait_for_timeout(400)
+            # Snap is on by default; grid geometry comes from the toolbar inputs.
+            assert gm_page.get_attribute("#me-snap-btn", "aria-pressed") == "true"
+            g = float(gm_page.input_value("#me-grid"))
+            offx = float(gm_page.input_value("#me-grid-offx"))
+            offy = float(gm_page.input_value("#me-grid-offy"))
+            gm_page.locator("#me-prop-btn").click()
+            ov = gm_page.locator("#me-overlay").bounding_box()
+            gm_page.mouse.click(ov["x"] + 150, ov["y"] + 130)
+            gm_page.wait_for_timeout(300)
+            props = c.get(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/props").json()["props"]
+            assert len(props) == 1, props
+            # A cell centre is offset + (k + 0.5)*g, so (coord-offset) mod g == g/2.
+            assert abs(((props[0]["x"] - offx) % g) - g / 2) < 1.0, props[0]
+            assert abs(((props[0]["y"] - offy) % g) - g / 2) < 1.0, props[0]
+        finally:
+            c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/props", json={"props": []})
+
+
 def test_place_image_prop(gm_page: Page) -> None:
     """v2.795.0 — an ``img:`` prop renders as an SVG <image>, not a glyph."""
     with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
