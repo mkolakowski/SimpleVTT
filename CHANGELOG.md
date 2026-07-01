@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.785.9] - 2026-06-30 — "The Labelled Lantern"
+
+**Schema version:** 91
+
+**Commit summary:** Add a "light type" caption above the light-type dropdown.
+
+**Description:** A small **"light type"** caption now sits above the light-type select in the Markers group so it's labelled. The type + B/D radius row bottom-aligns so the dropdown and the radius inputs stay level under the caption.
+
+### Changed
+- `app/templates/map_editor.html` — `.me-cap` caption class; "light type" caption above `#me-light-type`; the type/radius sub-row is `align-items:flex-end`.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.785.8] - 2026-06-30 — "The Stable Anchor"
 
 **Schema version:** 91
