@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.822.0] - 2026-07-01 — "The Frosted Bar"
+
+**Schema version:** 96
+
+**Commit summary:** Make the map-editor edit bar translucent (frosted glass) — a semi-transparent background + backdrop blur.
+
+**Description:** The map-editor toolbar ("edit bar") had a solid `--bg-2` fill. This makes it **translucent**: the background is mixed to ~68% opacity over transparent and a `backdrop-filter: blur(9px)` frosts whatever sits behind it, so the ribbon reads lighter and layered rather than as a solid slab. Purely cosmetic — no controls, IDs, or layout change.
+
+### Changed
+- `app/templates/map_editor.html` — `.me-toolbar` background switched to `color-mix(… 68%, transparent)` with a webkit/standard `backdrop-filter: blur(9px)`.
+- `tests/harness_ui/test_map_editor_toolbar.py` — asserts the edit bar's computed `backdrop-filter` carries a blur.
+
+### Schema
+- No schema change (still v96 — styling only).
+
 ## [2.821.0] - 2026-07-01 — "The Quick Keys"
 
 **Schema version:** 96

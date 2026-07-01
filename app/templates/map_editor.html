@@ -45,9 +45,13 @@
      text in its group. */
   /* v2.785.10 — stretch every group to the tallest one's height (the extra
      space just extends the card/border; controls stay top-aligned + same size). */
+  /* v2.822.0 — translucent "frosted" edit bar: a semi-transparent background
+     + backdrop blur so the page shows through and the ribbon reads lighter. */
   .me-toolbar { display:flex; align-items:stretch; gap:6px; flex-wrap:nowrap;
     padding:6px 8px; border:1px solid var(--border); border-radius:8px;
-    background:var(--bg-2); margin-bottom:10px; overflow-x:auto; }
+    background:color-mix(in srgb, var(--bg-2) 68%, transparent);
+    -webkit-backdrop-filter:blur(9px); backdrop-filter:blur(9px);
+    margin-bottom:10px; overflow-x:auto; }
   .me-toolbar label { font-size:12px; color:var(--fg-mute); display:inline-flex;
     align-items:center; gap:4px; }
   /* small buttons: tight padding; min-height at the 32px dense-panel floor */

@@ -24,6 +24,12 @@ def test_toolbar_grouped(gm_page: Page) -> None:
     zones = [s.upper() for s in gm_page.locator(".me-zone-sep .me-zone-lbl").all_inner_texts()]
     assert zones == ["DRAW", "MAP"], zones
 
+    # v2.822.0 — the edit bar is translucent (frosted): a backdrop blur is set.
+    blur = gm_page.eval_on_selector(
+        ".me-toolbar",
+        "el => getComputedStyle(el).backdropFilter || getComputedStyle(el).webkitBackdropFilter")
+    assert "blur" in (blur or ""), blur
+
     # Every tool still present (grouping preserved the IDs the JS + tests use).
     for sel in ["#me-wall-btn", "#me-door-btn", "#me-wall-style", "#me-spot-btn",
                 "#me-light-btn", "#me-light-type", "#me-fog-btn", "#me-token-btn",
