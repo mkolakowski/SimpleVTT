@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.788.3] - 2026-07-01 — "The Hidden Door"
+
+**Schema version:** 91
+
+**Commit summary:** Secret doors — hidden from players (render as a plain wall) until the GM opens them.
+
+**Description:** Doors/gates gain a **🔒 Secret** toggle. A secret door is marked for the GM (a magenta dashed ring, in the editor and the GM's tabletop view) so they can see it, but to **players** a **closed** secret door renders as an ordinary **wall** and can't be clicked — indistinguishable from the surrounding wall. When the GM **opens** it, it reveals as a normal door to everyone. Occlusion is unchanged (a closed secret door blocks sight like any closed door). Players can never toggle a secret door; only the GM controls it.
+
+### Added
+- `app/templates/map_editor.html` + `app/templates/tabletop.html` — `IS_GM`-aware `hideSecret` (closed secret door → wall for non-GM); GM-only magenta secret marker; a 🔒 Secret menu toggle; hit-line + leaf clicks disabled for players on secret doors.
+- `tests/harness_ui/test_map_editor_gate.py` (+1) — toggling Secret persists `secret` + renders the GM marker.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.788.2] - 2026-07-01 — "The Bay Window"
 
 **Schema version:** 91

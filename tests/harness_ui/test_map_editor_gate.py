@@ -48,6 +48,31 @@ def test_convert_to_gate_and_flip(gm_page: Page) -> None:
             c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
 
 
+def test_secret_door_marker(gm_page: Page) -> None:
+    # v2.788.3 — a secret door shows a magenta dashed marker to the GM (editor).
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
+        c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
+        c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
+            {"id": "d", "x1": 200, "y1": 200, "x2": 200, "y2": 340,
+             "door": True, "open": False, "style": "wood"}]})
+        try:
+            _open(gm_page, mid)
+            box = _hit_box(gm_page)
+            cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+            gm_page.mouse.click(cx, cy, button="right")
+            gm_page.locator("#me-ctx-menu button", has_text="Secret").click()
+            gm_page.wait_for_timeout(300)
+            assert _walls(c, mid)[0]["secret"] is True, _walls(c, mid)
+            # The magenta secret marker (stroke #d264ff) renders for the GM.
+            mark = gm_page.eval_on_selector_all(
+                "#me-overlay circle",
+                "els => els.some(e => (e.getAttribute('stroke')||'').toLowerCase() === '#d264ff')")
+            assert mark is True
+        finally:
+            c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
+
+
 def test_convert_to_window(gm_page: Page) -> None:
     # v2.788.2 — a window is a see-through wall (framed glass).
     with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:

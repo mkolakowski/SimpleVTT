@@ -2421,11 +2421,12 @@
             ln.setAttribute('stroke-width', '16');
             // Doors stay clickable in play mode (toggle open/close); the value
             // re-enables hit-testing even though the overlay svg is none.
-            var clickable = editMode || w.door || w.gate;
+            // v2.788.3 — players can't interact with secret doors (GM-only).
+            var clickable = editMode || ((w.door || w.gate) && (IS_GM || !w.secret));
             ln.style.pointerEvents = clickable ? 'stroke' : 'none';
             ln.style.cursor = clickable ? 'pointer' : 'default';
             // v2.786.7 — native hover tooltip identifying a door/gate + state.
-            if (w.door || w.gate) {
+            if ((w.door || w.gate) && (IS_GM || !w.secret)) {
                 var ttl = document.createElementNS(NS, 'title');
                 ttl.textContent = (w.gate ? '🚪 Gate — ' : '🚪 Door — ') + (w.open ? 'open' : 'closed') + ' (click to toggle)';
                 ln.appendChild(ttl);
@@ -2457,6 +2458,8 @@
             // v2.787.3 — render into an opacity group when the wall is transparent.
             var _wc = svg, _o = (w.opacity == null ? 1 : w.opacity);
             if (_o < 1) { _wc = document.createElementNS(NS, 'g'); _wc.setAttribute('opacity', _o); svg.appendChild(_wc); }
+            // v2.788.3 — a closed secret door reads as a plain wall to players.
+            var hideSecret = w.secret && !w.open && !IS_GM;
             function seg(color, width, cap, dash) {
                 var ln = document.createElementNS(NS, 'line');
                 ln.setAttribute('x1', w.x1); ln.setAttribute('y1', w.y1);
@@ -2482,7 +2485,7 @@
                     ln.setAttribute('stroke', st.casing); ln.setAttribute('stroke-width', '2');
                     ln.style.pointerEvents = 'none'; _wc.appendChild(ln);
                 });
-            } else if (w.door || w.gate) {
+            } else if ((w.door || w.gate) && !hideSecret) {
                 var open = !!w.open;
                 var G = doorGeom(w);
                 function line2(ax, ay, bx, by, color, width) {
@@ -2525,6 +2528,14 @@
                     arc(G.closed, G.open, G.L);
                     leaf(G.hinge, open ? G.open : G.closed);
                 }
+                if (w.secret) {  // v2.788.3 — GM-only "secret" marker
+                    var sm = document.createElementNS(NS, 'circle');
+                    sm.setAttribute('cx', (w.x1 + w.x2) / 2); sm.setAttribute('cy', (w.y1 + w.y2) / 2);
+                    sm.setAttribute('r', Math.max(6, st.width * 0.7));
+                    sm.setAttribute('fill', 'none'); sm.setAttribute('stroke', '#d264ff');
+                    sm.setAttribute('stroke-width', '2'); sm.setAttribute('stroke-dasharray', '3 3');
+                    sm.style.pointerEvents = 'none'; _wc.appendChild(sm);
+                }
             } else {
                 seg(st.casing, st.width + 4);
                 seg(st.color, st.width);
@@ -2559,7 +2570,7 @@
                 svg.appendChild(hit);
                 // v2.787.1 — click-anywhere on an OPEN door/gate in play mode:
                 // a hit-line over the swung leaf toggles it shut.
-                if (!editMode && (w.door || w.gate) && w.open) {
+                if (!editMode && (w.door || w.gate) && w.open && (IS_GM || !w.secret)) {
                     doorLeafSegments(w).forEach(function (sp) {
                         var lh = document.createElementNS(NS, 'line');
                         lh.setAttribute('x1', sp[0][0]); lh.setAttribute('y1', sp[0][1]);

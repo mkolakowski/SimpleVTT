@@ -216,6 +216,7 @@
 (function () {
   var CID = {{ campaign.id }};
   var MID = {{ map.id }};
+  var IS_GM = true;  // v2.788.3 — the editor is a GM-only route; secret doors always show here.
   var NS = 'http://www.w3.org/2000/svg';
   var svg = document.getElementById('me-overlay');
   var img = document.getElementById('me-img');
@@ -467,6 +468,8 @@
     // v2.787.3 — render into an opacity group when the wall is transparent.
     var _wc = svg, _o = (w.opacity == null ? 1 : w.opacity);
     if (_o < 1) { _wc = document.createElementNS(NS, 'g'); _wc.setAttribute('opacity', _o); svg.appendChild(_wc); }
+    // v2.788.3 — a closed secret door reads as a plain wall to non-GMs.
+    var hideSecret = w.secret && !w.open && !IS_GM;
     function seg(color, width, cap, dash) {
       var ln = document.createElementNS(NS, 'line');
       ln.setAttribute('x1', w.x1); ln.setAttribute('y1', w.y1);
@@ -492,7 +495,7 @@
         ln.setAttribute('stroke', st.casing); ln.setAttribute('stroke-width', '2');
         ln.style.pointerEvents = 'none'; _wc.appendChild(ln);
       });
-    } else if (w.door || w.gate) {
+    } else if ((w.door || w.gate) && !hideSecret) {
       var open = !!w.open;
       var G = doorGeom(w);
       function line2(ax, ay, bx, by, color, width) {
@@ -534,6 +537,14 @@
       } else {
         arc(G.closed, G.open, G.L);
         leaf(G.hinge, open ? G.open : G.closed);
+      }
+      if (w.secret) {  // v2.788.3 — magenta dashed marker (GM sees it's secret)
+        var sm = document.createElementNS(NS, 'circle');
+        sm.setAttribute('cx', (w.x1 + w.x2) / 2); sm.setAttribute('cy', (w.y1 + w.y2) / 2);
+        sm.setAttribute('r', Math.max(6, st.width * 0.7));
+        sm.setAttribute('fill', 'none'); sm.setAttribute('stroke', '#d264ff');
+        sm.setAttribute('stroke-width', '2'); sm.setAttribute('stroke-dasharray', '3 3');
+        sm.style.pointerEvents = 'none'; _wc.appendChild(sm);
       }
     } else {
       seg(st.casing, st.width + 4);                       // casing (depth)
@@ -770,6 +781,8 @@
         ];
         if (isDoor || isGate) {
           items.push({ label: '↻ Flip swing', fn: function () { w.flip = !w.flip; saveWalls(); } });
+          items.push({ label: (w.secret ? '✓ ' : '   ') + '🔒 Secret (hidden from players)',
+            fn: function () { w.secret = !w.secret; saveWalls(); } });
         }
         items.push(
           { label: '📋 Copy', fn: function () { copyObj('wall', w); } },
