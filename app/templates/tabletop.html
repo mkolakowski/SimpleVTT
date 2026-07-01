@@ -2400,6 +2400,7 @@
             ice: '#7fc7d9', swamp: '#4b6b3a', rubble: '#77726a',
         };
         function terrainColor(t) { return TERRAIN_TYPES[t] || TERRAIN_TYPES.difficult; }
+        var gmPins = [];  // v2.790.2 — GM-only pins (fetched only when IS_GM)
 
         // v2.772.0 — wall/door material looks (kept in sync with the map editor).
         // v2.787.2 — thicker walls + per-material texture keys.
@@ -2570,6 +2571,28 @@
                 lbl.textContent = (tr.type || 'difficult').charAt(0).toUpperCase() + (tr.type || 'difficult').slice(1);
                 svg.appendChild(lbl);
             });
+            // v2.790.2 — GM-only pins (only the GM ever has this data).
+            if (IS_GM) gmPins.forEach(function (pin) {
+                var pc = document.createElementNS(NS, 'circle');
+                pc.setAttribute('cx', pin.x); pc.setAttribute('cy', pin.y); pc.setAttribute('r', '11');
+                pc.setAttribute('fill', '#f0b429'); pc.setAttribute('stroke', '#7a5200'); pc.setAttribute('stroke-width', '2');
+                pc.style.pointerEvents = 'all'; pc.style.cursor = 'pointer';
+                pc.classList.add('tt-gmpin');
+                var tip = document.createElementNS(NS, 'title');
+                tip.textContent = '📌 ' + (pin.label || 'Pin') + (pin.note ? ' — ' + pin.note : '');
+                pc.appendChild(tip);
+                pc.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    alert('📌 ' + (pin.label || 'Pin') + (pin.note ? '\n\n' + pin.note : '') + '\n\n(GM-only)');
+                });
+                svg.appendChild(pc);
+                var pl = document.createElementNS(NS, 'text');
+                pl.setAttribute('x', pin.x + 14); pl.setAttribute('y', pin.y + 5);
+                pl.setAttribute('fill', '#f0b429'); pl.setAttribute('font-size', '13');
+                pl.setAttribute('font-weight', '700'); pl.style.pointerEvents = 'none';
+                pl.textContent = pin.label || 'Pin';
+                svg.appendChild(pl);
+            });
             walls.forEach(function (w) {
                 drawWallVisual(w);
                 var hit = mkHitLine(w);
@@ -2656,6 +2679,7 @@
                 var d = await r.json();
                 mapId = d.map_id; walls = d.walls || [];
                 hotspots = d.hotspots || []; terrain = d.terrain || []; render();
+                fetchGmPins();  // v2.790.2 — GM-only (no-op for players)
                 if (window._setMapWalls) window._setMapWalls(walls);
                 if (window._setMapLights) window._setMapLights(d.lights || []);
                 if (window._setMapFog) window._setMapFog(d.fog_enabled, d.fog_revealed || []);
@@ -2744,6 +2768,17 @@
         window._onTerrainUpdate = function (data) {  // v2.789.2
             if (!data) return;
             terrain = data.terrain || []; render();
+        };
+        // v2.790.2 — GM-only pins: fetch (GM only) + re-fetch on the signal.
+        async function fetchGmPins() {
+            if (!IS_GM || !mapId) { gmPins = []; return; }
+            try {
+                var r = await fetch('/api/campaign/' + CID + '/map/' + mapId + '/gm_pins');
+                if (r.ok) { gmPins = (await r.json()).gm_pins || []; render(); }
+            } catch (e) {}
+        }
+        window._onGmPinsChanged = function (data) {
+            if (IS_GM && data && data.map_id === mapId) fetchGmPins();
         };
 
         if (IS_GM) {

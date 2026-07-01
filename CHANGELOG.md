@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.790.2] - 2026-07-01 — "The Hidden Marginalia"
+
+**Schema version:** 93
+
+**Commit summary:** GM pins on the live tabletop — the GM sees them; players never receive the data.
+
+**Description:** GM-only pins now show on the **live tabletop for the GM** — amber markers with a hover tooltip + label; clicking one shows the note. The GM fetches them via the GM-gated endpoint on map load and re-fetches on the data-less `gm_pins_changed` signal, so edits from the map editor appear live. **Players never fetch or receive pin data** (the GET is GM-only and the broadcast carries no text).
+
+### Added
+- `app/static/tabletop.js` — `gm_pins_changed` WS handler → `window._onGmPinsChanged`.
+- `app/templates/tabletop.html` — `gmPins` state; `fetchGmPins()` (GM-only) on map bootstrap + on the signal; GM-only render (amber markers `.tt-gmpin` + label + tooltip + click-to-view).
+- `tests/harness_ui/test_tabletop_gmpin.py` (new, +1) — the GM sees a pin and a live edit adds a second.
+
+### Schema
+- No schema change (still v93).
+
 ## [2.790.1] - 2026-07-01 — "The GM's Margin"
 
 **Schema version:** 93
