@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.802.0] - 2026-07-01 — "The Labelled Map"
+
+**Schema version:** 95
+
+**Commit summary:** Substrate for public map text labels — `maps.labels` column + GET/PUT endpoints + `labels_update` broadcast.
+
+**Description:** Lays the foundation for **public text labels** — visible room-name / annotation text you'll place on a map ("The Vault", "Kitchen", "DANGER"), distinct from clickable hotspots and GM-only pins. This commit ships the **data layer**: a new `maps.labels` JSON column (`{id, x, y, text, size, color}`), a sanitizer that requires non-empty text (≤120 chars), clamps size (8–200 px) and validates the `#rrggbb` colour, GET (any member) / PUT (GM-only) endpoints, a `labels_update` WS broadcast, and `labels` in both the `active-map` bootstrap and editor-page context. The editor tool + tabletop render land in the next two commits.
+
+### Added
+- `app/models.py` — `Map.labels` JSON column (default `[]`).
+- `app/database.py` — schema v95 migration: `ALTER TABLE maps ADD COLUMN labels`.
+- `app/routes/tabletop_routes.py` — `_sanitize_labels`; `GET`/`PUT /api/campaign/{cid}/map/{mid}/labels` (PUT GM-only, `labels_update` broadcast); `labels` in `get_active_map` + `map_editor_page` context.
+- `tests/harness/test_map_labels.py` (new, +4) — set/get round-trip (clamps size, drops empty text/no-coords, WS + active-map surfacing), defaults (size 24, invalid colour → white), player-PUT 403, unknown-map 404.
+
+### Schema
+- **Schema version → 95.** New `maps.labels` column; additive, defaults to `[]`.
+
 ## [2.801.0] - 2026-07-01 — "The Snug Fit"
 
 **Schema version:** 94

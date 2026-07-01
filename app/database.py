@@ -1112,6 +1112,16 @@ def _apply_inline_migrations() -> None:
                 "ALTER TABLE maps ADD COLUMN props JSON NOT NULL DEFAULT '[]'"
             ))
 
+    # ---- Schema v95 (2.802.0): maps.labels ----
+    # Public map text labels — a JSON list of {id,x,y,text,size,color}. Additive;
+    # default empty list.
+    maps_cols_v95 = _column_names("maps")
+    with engine.begin() as conn:
+        if maps_cols_v95 and "labels" not in maps_cols_v95:
+            conn.execute(text(
+                "ALTER TABLE maps ADD COLUMN labels JSON NOT NULL DEFAULT '[]'"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

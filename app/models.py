@@ -412,6 +412,9 @@ class Map(Base):
     # v2.791.0 — decorative prop stamps: a JSON list of {id, x, y, kind, size,
     # rot} emoji props (furniture / trees / barrels). Presentation only.
     props: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
+    # v2.802.0 — public map text labels: a JSON list of {id, x, y, text, size,
+    # color} annotations (room names etc.) visible to every player.
+    labels: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     folder: Mapped[Optional[str]] = mapped_column(String(120), nullable=True, default="", server_default="")
     thumbnail_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

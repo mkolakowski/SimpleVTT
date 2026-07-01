@@ -124142,6 +124142,7 @@ def get_active_map(
         "fog_revealed": list(getattr(m, "fog_revealed", None) or []),
         "terrain": list(getattr(m, "terrain", None) or []),
         "props": list(getattr(m, "props", None) or []),
+        "labels": list(getattr(m, "labels", None) or []),
     }
 
 
@@ -124655,6 +124656,87 @@ async def set_map_props(
     return {"ok": True, "map_id": m.id, "props": list(m.props or [])}
 
 
+def _sanitize_labels(raw) -> list:
+    """v2.802.0 — coerce a client text-label list into the stored shape: a list
+    of ``{id, x, y, text, size, color}`` public annotations in map-pixel coords.
+    Drops anything without numeric x/y or empty text. ``text`` is capped at 120
+    chars, ``size`` clamped 8..200 px, ``color`` a ``#rrggbb`` hex (defaults
+    white)."""
+    import re as _re
+    out = []
+    if not isinstance(raw, list):
+        return out
+    for i, l in enumerate(raw):
+        if not isinstance(l, dict):
+            continue
+        try:
+            x = float(l.get("x")); y = float(l.get("y"))
+        except (TypeError, ValueError):
+            continue
+        txt = str(l.get("text") or "").strip()[:120]
+        if not txt:
+            continue
+        try:
+            size = float(l.get("size") or 24)
+        except (TypeError, ValueError):
+            size = 24.0
+        size = max(8.0, min(200.0, size))
+        color = str(l.get("color") or "").strip()
+        if not _re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+            color = "#ffffff"
+        out.append({
+            "id": (str(l.get("id") or "").strip()[:40] or f"lb{i}"),
+            "x": x, "y": y, "text": txt, "size": size, "color": color,
+        })
+    return out
+
+
+@router.get("/api/campaign/{campaign_id}/map/{map_id}/labels")
+def get_map_labels(
+    campaign_id: int,
+    map_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.802.0 — read a map's public text labels (any member)."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    m = db.query(Map).filter(
+        Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404, "Map not found")
+    return {"ok": True, "map_id": m.id,
+            "labels": list(getattr(m, "labels", None) or [])}
+
+
+@router.put("/api/campaign/{campaign_id}/map/{map_id}/labels")
+async def set_map_labels(
+    campaign_id: int,
+    map_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.802.0 — replace a map's public text labels (GM-only). Body:
+    ``{labels: [{x,y,text,size?,color?}]}``. Broadcasts ``labels_update``."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(
+        Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404, "Map not found")
+    body = await request.json()
+    m.labels = _sanitize_labels(body.get("labels"))
+    db.commit()
+    await hub.broadcast(campaign_id, {
+        "type": "labels_update",
+        "data": {"map_id": m.id, "labels": list(m.labels or [])},
+    })
+    return {"ok": True, "map_id": m.id, "labels": list(m.labels or [])}
+
+
 @router.post("/api/campaign/{campaign_id}/map/{map_id}/door/{door_id}/toggle")
 async def toggle_map_door(
     campaign_id: int,
@@ -124733,6 +124815,7 @@ def map_editor_page(
         "terrain": list(getattr(m, "terrain", None) or []),
         "gm_pins": list(getattr(m, "gm_pins", None) or []),
         "props": list(getattr(m, "props", None) or []),
+        "labels": list(getattr(m, "labels", None) or []),
         "is_active": m.id == campaign.active_map_id,
     })
 
