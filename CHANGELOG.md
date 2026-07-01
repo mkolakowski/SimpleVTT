@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.790.3] - 2026-07-01 — "The Overlay Stack"
+
+**Schema version:** 93
+
+**Commit summary:** Layers-visibility panel in the map editor — toggle walls / terrain / lights / hotspots / fog / pins / tokens.
+
+**Description:** The editor gets a **Layers** group with per-layer **visibility checkboxes** — Walls, Terrain, Lights, Hotspots, Fog, Pins, Tokens. Unchecking one hides that layer (and its hit targets) so you can declutter a busy map while authoring, without deleting anything. It's an **authoring-only view preference** (not saved to the map), remembered per map in **localStorage** so it survives reloads.
+
+### Added
+- `app/templates/map_editor.html` — `layers` state (localStorage-backed) + `saveLayers`; a **Layers** toolbar group of checkboxes; every render layer is gated on its flag.
+- `tests/harness_ui/test_map_editor_layers.py` (new, +1) — hiding the Walls layer removes it (+ hit-line), persists across reload, and re-checking restores it.
+
+### Changed
+- `tests/harness_ui/test_map_editor_toolbar.py` — expects the new **Layers** group.
+
+### Schema
+- No schema change (still v93).
+
 ## [2.790.2] - 2026-07-01 — "The Hidden Marginalia"
 
 **Schema version:** 93

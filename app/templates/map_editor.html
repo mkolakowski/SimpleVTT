@@ -213,6 +213,23 @@
            title="Comma-separated tags for this map">
     <button type="button" id="me-tags-save" class="me-tool-btn" title="Save the map's tags">Save tags</button>
   </div>
+  {# v2.790.3 — per-layer visibility (authoring only; saved locally). #}
+  <div class="me-group" role="group" aria-label="Layers">
+    <span class="me-grp-lbl">Layers</span>
+    <div class="me-sub">
+      <label style="gap:3px;"><input type="checkbox" id="me-layer-walls" checked> Walls</label>
+      <label style="gap:3px;"><input type="checkbox" id="me-layer-terrain" checked> Terrain</label>
+    </div>
+    <div class="me-sub">
+      <label style="gap:3px;"><input type="checkbox" id="me-layer-lights" checked> Lights</label>
+      <label style="gap:3px;"><input type="checkbox" id="me-layer-hotspots" checked> Hotspots</label>
+    </div>
+    <div class="me-sub">
+      <label style="gap:3px;"><input type="checkbox" id="me-layer-fog" checked> Fog</label>
+      <label style="gap:3px;"><input type="checkbox" id="me-layer-gmpins" checked> Pins</label>
+    </div>
+    <label style="gap:3px;"><input type="checkbox" id="me-layer-tokens" checked> Tokens</label>
+  </div>
   <div class="me-group me-group--stack" role="group" aria-label="View">
     <span class="me-grp-lbl">View</span>
     {# v2.785.1 — Fit on top, zoom stepper below as one row. #}
@@ -258,6 +275,16 @@
   var fogRevealed = {{ fog_revealed | tojson }};
   var terrain = {{ terrain | tojson }};   // v2.789.1 — terrain regions
   var gmPins = {{ gm_pins | tojson }};    // v2.790.1 — GM-only pins
+  // v2.790.3 — per-layer visibility (authoring only; saved to localStorage).
+  var layers = (function () {
+    var def = { walls: true, terrain: true, lights: true, hotspots: true, fog: true, gmpins: true, tokens: true };
+    try {
+      var s = localStorage.getItem('me-layers-' + MID);
+      if (s) { var o = JSON.parse(s); for (var k in def) if (k in o) def[k] = !!o[k]; }
+    } catch (e) {}
+    return def;
+  })();
+  function saveLayers() { try { localStorage.setItem('me-layers-' + MID, JSON.stringify(layers)); } catch (e) {} }
   // v2.789.1 — terrain region types (colour + label).
   var TERRAIN_TYPES = [
     { key: 'difficult', label: 'Difficult', color: '#8a6d3b' },
@@ -802,7 +829,7 @@
     // v2.789.1 — terrain regions (under walls/tokens): translucent coloured
     // rects + a label. Interactive only in terrain/erase mode (so they don't
     // block other tools).
-    terrain.forEach(function (tr, i) {
+    if (layers.terrain) terrain.forEach(function (tr, i) {
       var tt = terrainType(tr.type);
       var rc = document.createElementNS(NS, 'rect');
       rc.setAttribute('x', tr.x); rc.setAttribute('y', tr.y);
@@ -847,7 +874,7 @@
       tpv.style.pointerEvents = 'none';
       svg.appendChild(tpv);
     }
-    walls.forEach(function (w) {
+    if (layers.walls) walls.forEach(function (w) {
       drawWallVisual(w);
       var hit = mkHitLine(w);
       hit.addEventListener('pointerdown', function (e) {
@@ -945,7 +972,7 @@
       c.setAttribute('r', '6'); c.setAttribute('fill', '#e05a4a');
       c.style.pointerEvents = 'none'; svg.appendChild(c);
     }
-    hotspots.forEach(function (h) {
+    if (layers.hotspots) hotspots.forEach(function (h) {
       var mk = document.createElementNS(NS, 'circle');
       mk.setAttribute('cx', h.x); mk.setAttribute('cy', h.y);
       mk.setAttribute('r', '11');
@@ -972,7 +999,7 @@
       svg.appendChild(mk);
     });
     // v2.790.1 — GM-only pins: amber markers (📌) with a hover note tooltip.
-    gmPins.forEach(function (pin, i) {
+    if (layers.gmpins) gmPins.forEach(function (pin, i) {
       var pg = document.createElementNS(NS, 'g');
       var pc = document.createElementNS(NS, 'circle');
       pc.setAttribute('cx', pin.x); pc.setAttribute('cy', pin.y); pc.setAttribute('r', '11');
@@ -1017,7 +1044,7 @@
     }
     // v2.765.0 — light sources: bright + dim radius rings (in ft → px) + a
     // range label; click the center to delete (in light-edit mode).
-    lights.forEach(function (L) {
+    if (layers.lights) lights.forEach(function (L) {
       var bpx = (L.bright_ft || 0) * pxPerFt, dpx = (L.dim_ft || 0) * pxPerFt;
       var col = L.color || '#ffd27f';
       function ring(r, dash) {
@@ -1094,7 +1121,7 @@
     // v2.766.0 — fog-of-war editor preview: a faint dark veil over the whole
     // map with the revealed rectangles cut out (lighter); click a reveal (in
     // fog mode) to re-hide it.
-    if (fogEnabled) {
+    if (layers.fog && fogEnabled) {
       var W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
       var veil = document.createElementNS(NS, 'rect');
       veil.setAttribute('x', 0); veil.setAttribute('y', 0);
@@ -1131,7 +1158,7 @@
     }
     drawEditorLighting();  // v2.774.0 — refresh the lighting preview
     // v2.777.0 — sample tokens render last so they sit above everything.
-    sampleTokens.forEach(function (t) { svg.appendChild(mkToken(t)); });
+    if (layers.tokens) sampleTokens.forEach(function (t) { svg.appendChild(mkToken(t)); });
     // v2.779.0 — harness hooks for the grid-snap test (token coords are
     // live map-pixels; grid params can change via the toolbar).
     window.__meTokens = sampleTokens;
@@ -1880,6 +1907,13 @@
     ]);
   });
 
+  // v2.790.3 — layer-visibility checkboxes (reflect + persist localStorage).
+  ['walls', 'terrain', 'lights', 'hotspots', 'fog', 'gmpins', 'tokens'].forEach(function (k) {
+    var cb = document.getElementById('me-layer-' + k);
+    if (!cb) return;
+    cb.checked = layers[k];
+    cb.addEventListener('change', function () { layers[k] = cb.checked; saveLayers(); render(); });
+  });
   // Show the whole map on load.
   if (img.complete) fitContain(); else img.addEventListener('load', fitContain);
   window.addEventListener('resize', syncOverlay);
