@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- Top-down pit: dark shaft with a rough rock rim. Original art. -->
+  <circle cx="50" cy="50" r="42" fill="#5a5d63" stroke="#3a3d42" stroke-width="3"/>
+  <path d="M50 12 L58 22 L70 18 L72 32 L86 40 L76 50 L86 62 L70 66 L64 80 L50 74 L36 82 L30 66 L14 62 L24 50 L14 38 L30 32 L32 18 L44 22 Z"
+        fill="#26292e"/>
+  <circle cx="50" cy="50" r="26" fill="#15181c"/>
+  <circle cx="50" cy="50" r="14" fill="#000000"/>
+</svg>

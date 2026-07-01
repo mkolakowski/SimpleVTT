@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- Top-down trapdoor: planked hatch with iron ring + hinges. Original art. -->
+  <rect x="18" y="18" width="64" height="64" rx="3" fill="#3a2510" stroke="#1a0f06" stroke-width="3"/>
+  <rect x="24" y="24" width="52" height="52" rx="2" fill="#6f4a24"/>
+  <g stroke="#3a2510" stroke-width="2">
+    <line x1="41" y1="24" x2="41" y2="76"/><line x1="58" y1="24" x2="58" y2="76"/>
+  </g>
+  <g fill="#4b4f55">
+    <rect x="24" y="30" width="8" height="4"/><rect x="24" y="66" width="8" height="4"/>
+  </g>
+  <circle cx="66" cy="50" r="7" fill="none" stroke="#2b2f34" stroke-width="4"/>
+</svg>

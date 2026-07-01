@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- Top-down floor lever: stone base plate + iron handle. Original art. -->
+  <rect x="28" y="30" width="44" height="40" rx="5" fill="#7a7d83" stroke="#3a3d42" stroke-width="3"/>
+  <rect x="34" y="36" width="32" height="28" rx="3" fill="#5a5d63"/>
+  <rect x="46" y="34" width="8" height="6" rx="2" fill="#3a3d42"/>
+  <line x1="50" y1="40" x2="66" y2="58" stroke="#4b4f55" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="66" cy="58" r="7" fill="#b03b3b" stroke="#5a1c1c" stroke-width="2"/>
+</svg>

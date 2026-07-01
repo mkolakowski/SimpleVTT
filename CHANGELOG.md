@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.798.0] - 2026-07-01 — "The Full Inventory"
+
+**Schema version:** 94
+
+**Commit summary:** Add 10 more SVG prop illustrations — the image-prop library grows from 32 to 42.
+
+**Description:** A fourth batch of **10 original top-down SVG props**: portcullis, lever, trapdoor, lectern, cage, pit, obelisk, banner, bench, and wardrobe. Same flat, license-clean vector style; all appear in the editor's 🖼 Images picker and render via the existing `img:<slug>` path. The library now covers 42 props — dungeon mechanisms and furniture round out the set.
+
+### Added
+- `app/static/props/*.svg` (new, 10 files) — portcullis, lever, trapdoor, lectern, cage, pit, obelisk, banner, bench, wardrobe (original top-down vector art).
+- `app/templates/map_editor.html` — 10 new options in the 🖼 Images prop picker.
+
+### Changed
+- `tests/harness/test_map_props.py` — the serve-check now asserts all 42 shipped prop SVGs serve.
+
+### Schema
+- No schema change (still v94).
+
 ## [2.797.0] - 2026-07-01 — "The Stocked Storeroom"
 
 **Schema version:** 94
