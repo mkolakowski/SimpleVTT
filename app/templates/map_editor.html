@@ -230,6 +230,12 @@
       </select>
     </label>
   </div>
+  {# v2.802.0 — public text labels (room names, visible to everyone). #}
+  <div class="me-group" role="group" aria-label="Labels">
+    <span class="me-grp-lbl">Labels</span>
+    <button type="button" id="me-label-btn" class="me-tool-btn" aria-pressed="false"
+            title="Text label: click the map to write a visible label (room name etc.); right-click to edit, recolour, resize, or delete">🔤 Label</button>
+  </div>
   {# v2.790.1 — GM-only pins (never shown to players). #}
   <div class="me-group" role="group" aria-label="GM pins">
     <span class="me-grp-lbl">GM</span>
@@ -302,8 +308,9 @@
     </div>
     <div class="me-sub">
       <label style="gap:3px;"><input type="checkbox" id="me-layer-props" checked> Props</label>
-      <label style="gap:3px;"><input type="checkbox" id="me-layer-tokens" checked> Tokens</label>
+      <label style="gap:3px;"><input type="checkbox" id="me-layer-labels" checked> Labels</label>
     </div>
+    <label style="gap:3px;"><input type="checkbox" id="me-layer-tokens" checked> Tokens</label>
   </div>
   <div class="me-group me-group--stack" role="group" aria-label="View">
     <span class="me-grp-lbl">View</span>
@@ -351,9 +358,10 @@
   var terrain = {{ terrain | tojson }};   // v2.789.1 — terrain regions
   var gmPins = {{ gm_pins | tojson }};    // v2.790.1 — GM-only pins
   var props = {{ props | tojson }};       // v2.791.0 — decorative prop stamps
+  var labels = {{ labels | tojson }};     // v2.802.0 — public text labels
   // v2.790.3 — per-layer visibility (authoring only; saved to localStorage).
   var layers = (function () {
-    var def = { walls: true, terrain: true, lights: true, hotspots: true, fog: true, gmpins: true, props: true, tokens: true };
+    var def = { walls: true, terrain: true, lights: true, hotspots: true, fog: true, gmpins: true, props: true, labels: true, tokens: true };
     try {
       var s = localStorage.getItem('me-layers-' + MID);
       if (s) { var o = JSON.parse(s); for (var k in def) if (k in o) def[k] = !!o[k]; }
@@ -374,7 +382,7 @@
     for (var i = 0; i < TERRAIN_TYPES.length; i++) if (TERRAIN_TYPES[i].key === key) return TERRAIN_TYPES[i];
     return TERRAIN_TYPES[0];
   }
-  var wallMode = false, doorMode = false, roomMode = false, spotMode = false, lightMode = false, fogMode = false, terrainMode = false, pinMode = false, propMode = false, pending = null, seq = 0;
+  var wallMode = false, doorMode = false, roomMode = false, spotMode = false, lightMode = false, fogMode = false, terrainMode = false, pinMode = false, propMode = false, labelMode = false, pending = null, seq = 0;
   // v2.772.0 — wall/door material looks. Walls draw as a thick casing + face
   // line; doors draw as a panel + knob (open = ajar/green).
   // v2.787.2 — thicker walls + per-material texture keys.
@@ -1174,6 +1182,47 @@
       pg.appendChild(pl);
       svg.appendChild(pg);
     });
+    // v2.802.0 — public text labels (room names): centred outlined text so it
+    // reads over any background; interactive in label / erase mode + right-click.
+    if (layers.labels) labels.forEach(function (lb, i) {
+      var t = document.createElementNS(NS, 'text');
+      t.setAttribute('x', lb.x); t.setAttribute('y', lb.y);
+      t.setAttribute('font-size', lb.size || 24);
+      t.setAttribute('text-anchor', 'middle');
+      t.setAttribute('dominant-baseline', 'central');
+      t.setAttribute('font-weight', '700');
+      t.setAttribute('fill', lb.color || '#ffffff');
+      t.setAttribute('stroke', '#000000');
+      t.setAttribute('stroke-width', Math.max(1, (lb.size || 24) / 12));
+      t.style.paintOrder = 'stroke';
+      t.style.strokeLinejoin = 'round';
+      t.style.pointerEvents = relocating ? 'none' : 'all';
+      t.style.cursor = 'pointer';
+      t.style.userSelect = 'none';
+      t.classList.add('me-label');
+      t.textContent = lb.text || '';
+      t.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (eraseMode) { labels.splice(i, 1); saveLabels(); }
+      });
+      t.addEventListener('contextmenu', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        var colors = [['White', '#ffffff'], ['Yellow', '#ffd23a'], ['Red', '#e03a3a'],
+                      ['Cyan', '#5ad6e0'], ['Green', '#5ac46a'], ['Black', '#111111']];
+        showMenu(e.clientX, e.clientY, [
+          { label: '🔤 Label — ↔ Move', fn: function () { startMove('label', lb); } },
+          { label: '✎ Edit text', fn: function () { editLabel(lb); } },
+          { label: '➕ Bigger', fn: function () { lb.size = Math.min(200, (lb.size || 24) * 1.25); saveLabels(); } },
+          { label: '➖ Smaller', fn: function () { lb.size = Math.max(8, (lb.size || 24) * 0.8); saveLabels(); } },
+          { label: '🎨 Colour', sub: colors.map(function (c) {
+              return { label: (lb.color === c[1] ? '✓ ' : '') + c[0], fn: function () { lb.color = c[1]; saveLabels(); } };
+            }) },
+          { label: '📋 Copy', fn: function () { copyObj('label', lb); } },
+          { label: '🗑 Delete', fn: function () { labels.splice(i, 1); saveLabels(); } },
+        ]);
+      });
+      svg.appendChild(t);
+    });
     // v2.784.1 — shared soft-glow blur filter for light markers.
     if (lights.length) {
       var ldefs = document.createElementNS(NS, 'defs');
@@ -1494,6 +1543,26 @@
     } catch (e) { setStatus('Save failed.'); }
     render();
   }
+  async function saveLabels() {
+    pushHistory();
+    setStatus('Saving…');
+    try {
+      await fetch('/api/campaign/' + CID + '/map/' + MID + '/labels', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ labels: labels }),
+      });
+      setStatus('Saved.');
+    } catch (e) { setStatus('Save failed.'); }
+    render();
+  }
+  function editLabel(lb) {
+    var t = window.prompt('Label text:', lb.text || '');
+    if (t === null) return;
+    t = t.trim().slice(0, 120);
+    if (!t) return;  // empty text would be dropped server-side
+    lb.text = t;
+    saveLabels();
+  }
   function editGmPin(pin) {
     var label = window.prompt('Pin label:', pin.label || '');
     if (label === null) return;
@@ -1518,6 +1587,7 @@
         fetch(base + '/terrain', { method: 'PUT', headers: J, body: JSON.stringify({ terrain: terrain }) }),
         fetch(base + '/gm_pins', { method: 'PUT', headers: J, body: JSON.stringify({ gm_pins: gmPins }) }),
         fetch(base + '/props', { method: 'PUT', headers: J, body: JSON.stringify({ props: props }) }),
+        fetch(base + '/labels', { method: 'PUT', headers: J, body: JSON.stringify({ labels: labels }) }),
         fetch('/campaign/' + CID + '/settings/maps/' + MID + '/grid_size', {
           method: 'POST', headers: J,
           body: JSON.stringify({ grid_size_px: gridPx, grid_offset_x: gridOffX, grid_offset_y: gridOffY }) }),
@@ -1531,7 +1601,7 @@
   function _snap() {
     return JSON.stringify({ walls: walls, hotspots: hotspots, lights: lights,
       fogEnabled: fogEnabled, fogRevealed: fogRevealed, terrain: terrain,
-      gmPins: gmPins, props: props });
+      gmPins: gmPins, props: props, labels: labels });
   }
   function pushHistory() {
     if (_applyingHist) return;
@@ -1550,6 +1620,7 @@
     if (o.terrain) terrain = o.terrain;
     if (o.gmPins) gmPins = o.gmPins;
     if (o.props) props = o.props;
+    if (o.labels) labels = o.labels;
     if (typeof fogOnCb !== 'undefined' && fogOnCb) fogOnCb.checked = fogEnabled;
   }
   async function _applyHistory(idx) {
@@ -1590,6 +1661,7 @@
     else if (r.kind === 'light') saveLights();
     else if (r.kind === 'gmpin') saveGmPins();
     else if (r.kind === 'prop') saveProps();
+    else if (r.kind === 'label') saveLabels();
   }
   // v2.775.0 — copy/paste objects via the right-click menu.
   var clipboard = null;
@@ -1624,6 +1696,10 @@
         size: d.size || 40, rot: d.rot || 0, flip: !!d.flip,
         op: (d.op == null ? 1 : d.op) });
       saveProps();
+    } else if (clipboard.kind === 'label') {
+      labels.push({ id: newId('lb'), x: p.x, y: p.y, text: d.text || 'Label',
+        size: d.size || 24, color: d.color || '#ffffff' });
+      saveLabels();
     }
   }
   // v2.775.0 — edit an object's properties from the right-click menu.
@@ -1675,10 +1751,12 @@
   if (pinBtn) pinBtn.addEventListener('click', function () { setMode(pinMode ? null : 'pin'); });
   var propBtn = document.getElementById('me-prop-btn');
   if (propBtn) propBtn.addEventListener('click', function () { setMode(propMode ? null : 'prop'); });
+  var labelBtn = document.getElementById('me-label-btn');
+  if (labelBtn) labelBtn.addEventListener('click', function () { setMode(labelMode ? null : 'label'); });
   function syncStageCursor() {
     // The overlay captures empty-area clicks when placing/painting/relocating.
     // (Objects stay individually clickable for erase/right-click regardless.)
-    var on = wallMode || doorMode || roomMode || spotMode || lightMode || fogMode || terrainMode || pinMode || propMode || relocating || resizing;
+    var on = wallMode || doorMode || roomMode || spotMode || lightMode || fogMode || terrainMode || pinMode || propMode || labelMode || relocating || resizing;
     svg.style.pointerEvents = on ? 'auto' : 'none';
     svg.style.cursor = on ? 'crosshair' : 'default';
   }
@@ -1790,12 +1868,13 @@
     wallMode = (mode === 'wall'); doorMode = (mode === 'door'); roomMode = (mode === 'room');
     spotMode = (mode === 'spot'); lightMode = (mode === 'light'); fogMode = (mode === 'fog');
     terrainMode = (mode === 'terrain'); pinMode = (mode === 'pin');
-    propMode = (mode === 'prop');
+    propMode = (mode === 'prop'); labelMode = (mode === 'label');
     wallBtn.setAttribute('aria-pressed', wallMode ? 'true' : 'false');
     if (roomBtn) roomBtn.setAttribute('aria-pressed', roomMode ? 'true' : 'false');
     if (terrainBtn) terrainBtn.setAttribute('aria-pressed', terrainMode ? 'true' : 'false');
     if (pinBtn) pinBtn.setAttribute('aria-pressed', pinMode ? 'true' : 'false');
     if (propBtn) propBtn.setAttribute('aria-pressed', propMode ? 'true' : 'false');
+    if (labelBtn) labelBtn.setAttribute('aria-pressed', labelMode ? 'true' : 'false');
     if (doorBtn) doorBtn.setAttribute('aria-pressed', doorMode ? 'true' : 'false');
     spotBtn.setAttribute('aria-pressed', spotMode ? 'true' : 'false');
     if (lightBtn) lightBtn.setAttribute('aria-pressed', lightMode ? 'true' : 'false');
@@ -1987,6 +2066,15 @@
       props.push({ id: 'pr' + Date.now() + '_' + (seq++), x: pp.x, y: pp.y,
         kind: pk, size: 40, rot: 0 });
       saveProps();
+    } else if (labelMode) {
+      // v2.802.0 — write a public text label at the click point.
+      var lt = window.prompt('Label text (visible to everyone):', '');
+      if (lt === null) return;
+      lt = lt.trim().slice(0, 120);
+      if (!lt) return;
+      labels.push({ id: 'lb' + Date.now() + '_' + (seq++), x: p.x, y: p.y,
+        text: lt, size: 24, color: '#ffffff' });
+      saveLabels();
     }
   });
 
@@ -2083,7 +2171,7 @@
   });
 
   // v2.790.3 — layer-visibility checkboxes (reflect + persist localStorage).
-  ['walls', 'terrain', 'lights', 'hotspots', 'fog', 'gmpins', 'props', 'tokens'].forEach(function (k) {
+  ['walls', 'terrain', 'lights', 'hotspots', 'fog', 'gmpins', 'props', 'labels', 'tokens'].forEach(function (k) {
     var cb = document.getElementById('me-layer-' + k);
     if (!cb) return;
     cb.checked = layers[k];

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.803.0] - 2026-07-01 — "The Named Room"
+
+**Schema version:** 95
+
+**Commit summary:** Text-label tool in the map editor — click to write a visible label; edit / recolour / resize / move / delete.
+
+**Description:** The editor gets a **Labels** group with a **🔤 Label** tool. Click the map to write a public text label (prompts for text); labels render as **centred, outlined text** (dark stroke via `paint-order` so they read over any background). Right-click a label for **↔ Move / ✎ Edit text / ➕ Bigger / ➖ Smaller / 🎨 Colour (6 presets) / 📋 Copy / 🗑 Delete** (Erase-click deletes, drag repositions). Labels join **undo/redo** + **Save-all** + copy/paste and get their own **Layers** toggle. Renders in the editor this commit; the live-tabletop render lands next.
+
+### Added
+- `app/templates/map_editor.html` — `labels` state; a **Labels** toolbar group + tool; label placement (text prompt), outlined-text render, right-click Move/Edit/Resize/Colour/Copy/Delete; `saveLabels` / `editLabel`; labels in the undo snapshot + `saveAll` + relocation + copy/paste; a **Labels** Layers checkbox.
+- `tests/harness_ui/test_map_editor_label.py` (new, +1) — placing a label persists the text, renders `text.me-label`, and the Labels layer toggle hides it.
+
+### Changed
+- `tests/harness_ui/test_map_editor_toolbar.py` — expects the new **Labels** group.
+
+### Schema
+- No schema change (still v95 — the column shipped in v2.802.0).
+
 ## [2.802.0] - 2026-07-01 — "The Labelled Map"
 
 **Schema version:** 95
