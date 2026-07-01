@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.786.3] - 2026-06-30 — "The Fading Grid"
+
+**Schema version:** 91
+
+**Commit summary:** Fade the editor grid as the ambient light drops so it blends into the darkened map.
+
+**Description:** The grid overlay sits above the lighting veil, so on a dim/dark map it used to glow at full strength. Its line opacity now scales with the ambient — **bright 0.18 → dim 0.11 → dark 0.07** — so it recedes into the darkened map instead of standing out. Changing the Ambient select refades it live.
+
+### Changed
+- `app/templates/map_editor.html` — grid line alpha derived from `ambient`; the ambient change handler re-renders (so the grid refades).
+
+### Added
+- `tests/harness_ui/test_map_editor_grid_fade.py` (new, +1) — the grid line opacity drops when ambient goes from bright to dark.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.786.2] - 2026-06-30 — "The Named Map"
 
 **Schema version:** 91

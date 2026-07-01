@@ -531,11 +531,14 @@
       var H = img.naturalHeight || img.height || 2000;
       var g = document.createElementNS(NS, 'g');
       g.style.pointerEvents = 'none';
+      // v2.786.3 — fade the grid as the ambient light drops so it blends into
+      // the darkened map instead of glowing over the veil.
+      var gridAlpha = ambient === 'dark' ? 0.07 : (ambient === 'dim' ? 0.11 : 0.18);
       function gridLine(x1, y1, x2, y2) {
         var ln = document.createElementNS(NS, 'line');
         ln.setAttribute('x1', x1); ln.setAttribute('y1', y1);
         ln.setAttribute('x2', x2); ln.setAttribute('y2', y2);
-        ln.setAttribute('stroke', 'rgba(255,255,255,0.18)');
+        ln.setAttribute('stroke', 'rgba(255,255,255,' + gridAlpha + ')');
         ln.setAttribute('stroke-width', '1');
         g.appendChild(ln);
       }
@@ -1265,7 +1268,7 @@
   });
   document.getElementById('me-ambient').addEventListener('change', function (e) {
     ambient = e.target.value;            // v2.774.0 — update the lighting preview
-    drawEditorLighting();
+    render();                            // v2.786.3 — refade the grid for the new ambient
     setStatus('Saving…');
     fetch('/campaign/' + CID + '/settings/maps/' + MID + '/ambient_light', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
