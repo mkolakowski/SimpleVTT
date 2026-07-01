@@ -2575,18 +2575,30 @@
             // v2.793.0 — decorative prop stamps (emoji glyphs), above terrain
             // and below tokens; visible to everyone, non-interactive.
             props.forEach(function (pr) {
-                var sz = pr.size || 40, rot = pr.rot || 0;
-                var gl = document.createElementNS(NS, 'text');
-                gl.setAttribute('x', pr.x); gl.setAttribute('y', pr.y);
-                gl.setAttribute('font-size', sz);
-                gl.setAttribute('text-anchor', 'middle');
-                gl.setAttribute('dominant-baseline', 'central');
-                if (rot) gl.setAttribute('transform', 'rotate(' + rot + ' ' + pr.x + ' ' + pr.y + ')');
-                gl.style.pointerEvents = 'none';
-                gl.style.userSelect = 'none';
-                gl.classList.add('tt-prop');
-                gl.textContent = pr.kind || '📦';
-                svg.appendChild(gl);
+                var sz = pr.size || 40, rot = pr.rot || 0, kind = pr.kind || '📦';
+                var el;
+                if (kind.indexOf('img:') === 0) {
+                    // v2.795.0 — a shipped SVG prop illustration.
+                    var isz = sz * 1.6;
+                    el = document.createElementNS(NS, 'image');
+                    el.setAttribute('x', pr.x - isz / 2); el.setAttribute('y', pr.y - isz / 2);
+                    el.setAttribute('width', isz); el.setAttribute('height', isz);
+                    el.setAttributeNS('http://www.w3.org/1999/xlink', 'href',
+                        '/static/props/' + kind.slice(4) + '.svg');
+                    el.setAttribute('href', '/static/props/' + kind.slice(4) + '.svg');
+                } else {
+                    el = document.createElementNS(NS, 'text');
+                    el.setAttribute('x', pr.x); el.setAttribute('y', pr.y);
+                    el.setAttribute('font-size', sz);
+                    el.setAttribute('text-anchor', 'middle');
+                    el.setAttribute('dominant-baseline', 'central');
+                    el.textContent = kind;
+                }
+                if (rot) el.setAttribute('transform', 'rotate(' + rot + ' ' + pr.x + ' ' + pr.y + ')');
+                el.style.pointerEvents = 'none';
+                el.style.userSelect = 'none';
+                el.classList.add('tt-prop');
+                svg.appendChild(el);
             });
             // v2.790.2 — GM-only pins (only the GM ever has this data).
             if (IS_GM) gmPins.forEach(function (pin) {

@@ -27,3 +27,23 @@ def test_tabletop_renders_props(gm_page: Page) -> None:
             assert "🌲" in glyphs, glyphs
         finally:
             c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/props", json={"props": []})
+
+
+def test_tabletop_renders_image_prop(gm_page: Page) -> None:
+    """v2.795.0 — an ``img:`` prop renders as an SVG <image> on the tabletop."""
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
+        c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
+        try:
+            gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}")
+            gm_page.wait_for_function(
+                "() => typeof window._onPropsUpdate === 'function'", timeout=8000)
+            gm_page.evaluate("""() => window._onPropsUpdate({ props: [
+                { id: 'pr', x: 120, y: 130, kind: 'img:chest', size: 48, rot: 0 }] })""")
+            gm_page.wait_for_timeout(200)
+            hrefs = gm_page.eval_on_selector_all(
+                "#wall-overlay image.tt-prop",
+                "els => els.map(e => e.getAttribute('href'))")
+            assert any(h and "chest.svg" in h for h in hrefs), hrefs
+        finally:
+            c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/props", json={"props": []})

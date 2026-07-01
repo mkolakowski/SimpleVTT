@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.795.0] - 2026-07-01 — "The Painted Scenery"
+
+**Schema version:** 94
+
+**Commit summary:** Render image props — the editor picker gains an "Images" group and `img:<slug>` props draw as SVG `<image>` in the editor + tabletop.
+
+**Description:** Completes the **prop image library**. The editor prop picker gains an **🖼 Images** optgroup listing all 11 shipped SVG props; picking one and stamping stores `kind: "img:<slug>"`. Both the editor and the live tabletop now branch on the kind: an `img:` prop renders as a rotated, sized SVG `<image>` (scaled 1.6× so illustrations read at parity with emoji), while plain glyphs still render as `<text>`. Image props share the same drag / rotate / resize / delete / Layers / undo plumbing as emoji props (the right-click menu shows a friendly `🖼 <slug>` label).
+
+### Added
+- `app/templates/map_editor.html` — 🖼 Images optgroup in the prop picker; `img:` render branch (`<image>` + matched hit box); friendly image label in the right-click menu.
+- `app/templates/tabletop.html` — `img:` render branch (rotated/sized `<image class="tt-prop">`).
+- `tests/harness_ui/test_map_editor_prop.py` (+1) — placing an `img:barrel` prop renders an `<image>` with the right `href`.
+- `tests/harness_ui/test_tabletop_prop.py` (+1) — an `img:chest` `props_update` renders an `image.tt-prop` on the tabletop.
+
+### Schema
+- No schema change (still v94).
+
 ## [2.794.0] - 2026-07-01 — "The Prop Cupboard"
 
 **Schema version:** 94

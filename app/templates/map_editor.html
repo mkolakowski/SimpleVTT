@@ -183,6 +183,19 @@
         <option value="🪨">🪨 Rock</option>
         <option value="⛲">⛲ Fountain</option>
         <option value="🗿">🗿 Statue</option>
+        <optgroup label="🖼 Images">
+          <option value="img:table">🖼 Table</option>
+          <option value="img:barrel">🖼 Barrel</option>
+          <option value="img:crate">🖼 Crate</option>
+          <option value="img:chest">🖼 Chest</option>
+          <option value="img:bed">🖼 Bed</option>
+          <option value="img:rug">🖼 Rug</option>
+          <option value="img:bookshelf">🖼 Bookshelf</option>
+          <option value="img:campfire">🖼 Campfire</option>
+          <option value="img:tree">🖼 Tree</option>
+          <option value="img:rock">🖼 Rock</option>
+          <option value="img:well">🖼 Well</option>
+        </optgroup>
       </select>
     </label>
   </div>
@@ -913,19 +926,34 @@
       var pg = document.createElementNS(NS, 'g');
       var rot = pr.rot || 0, sz = pr.size || 40;
       pg.setAttribute('transform', 'rotate(' + rot + ' ' + pr.x + ' ' + pr.y + ')');
-      var gl = document.createElementNS(NS, 'text');
-      gl.setAttribute('x', pr.x); gl.setAttribute('y', pr.y);
-      gl.setAttribute('font-size', sz);
-      gl.setAttribute('text-anchor', 'middle');
-      gl.setAttribute('dominant-baseline', 'central');
-      gl.style.pointerEvents = 'none';
-      gl.style.userSelect = 'none';
-      gl.textContent = pr.kind || '📦';
-      pg.appendChild(gl);
-      // Transparent hit box (square around the glyph) for click/right-click.
+      var kind = pr.kind || '📦';
+      if (kind.indexOf('img:') === 0) {
+        // v2.795.0 — a shipped SVG prop illustration, centred on its point.
+        var im = document.createElementNS(NS, 'image');
+        var isz = sz * 1.6;  // images read smaller than emoji at the same px
+        im.setAttribute('x', pr.x - isz / 2); im.setAttribute('y', pr.y - isz / 2);
+        im.setAttribute('width', isz); im.setAttribute('height', isz);
+        im.setAttributeNS('http://www.w3.org/1999/xlink', 'href',
+          '/static/props/' + kind.slice(4) + '.svg');
+        im.setAttribute('href', '/static/props/' + kind.slice(4) + '.svg');
+        im.style.pointerEvents = 'none';
+        pg.appendChild(im);
+      } else {
+        var gl = document.createElementNS(NS, 'text');
+        gl.setAttribute('x', pr.x); gl.setAttribute('y', pr.y);
+        gl.setAttribute('font-size', sz);
+        gl.setAttribute('text-anchor', 'middle');
+        gl.setAttribute('dominant-baseline', 'central');
+        gl.style.pointerEvents = 'none';
+        gl.style.userSelect = 'none';
+        gl.textContent = kind;
+        pg.appendChild(gl);
+      }
+      // Transparent hit box (square around the glyph/image) for click/right-click.
+      var hbsz = (kind.indexOf('img:') === 0) ? sz * 1.6 : sz;
       var hb = document.createElementNS(NS, 'rect');
-      hb.setAttribute('x', pr.x - sz / 2); hb.setAttribute('y', pr.y - sz / 2);
-      hb.setAttribute('width', sz); hb.setAttribute('height', sz);
+      hb.setAttribute('x', pr.x - hbsz / 2); hb.setAttribute('y', pr.y - hbsz / 2);
+      hb.setAttribute('width', hbsz); hb.setAttribute('height', hbsz);
       hb.setAttribute('fill', 'transparent');
       hb.style.pointerEvents = relocating ? 'none' : 'all';
       hb.style.cursor = 'pointer';
@@ -936,7 +964,7 @@
       hb.addEventListener('contextmenu', function (e) {
         e.preventDefault(); e.stopPropagation();
         showMenu(e.clientX, e.clientY, [
-          { label: (pr.kind || '📦') + ' Prop — ↔ Move', fn: function () { startMove('prop', pr); } },
+          { label: (kind.indexOf('img:') === 0 ? '🖼 ' + kind.slice(4) : kind) + ' Prop — ↔ Move', fn: function () { startMove('prop', pr); } },
           { label: '⟳ Rotate 45°', fn: function () { pr.rot = ((pr.rot || 0) + 45) % 360; saveProps(); } },
           { label: '➕ Bigger', fn: function () { pr.size = Math.min(400, (pr.size || 40) * 1.25); saveProps(); } },
           { label: '➖ Smaller', fn: function () { pr.size = Math.max(8, (pr.size || 40) * 0.8); saveProps(); } },
