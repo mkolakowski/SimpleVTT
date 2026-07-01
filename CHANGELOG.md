@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.786.10] - 2026-07-01 — "The Nested Lamp"
+
+**Schema version:** 91
+
+**Commit summary:** Move the light-type presets into a hover flyout submenu (matching wall materials).
+
+**Description:** A light's right-click menu listed all seven type presets inline (a long flat list). They're now folded into a single **💡 Type ▸** entry that hovers out a **side flyout** with the presets (current check-marked) + **✎ Custom range…**, matching the wall-material submenu — so the light menu is short and its type selection is a proper submenu.
+
+### Changed
+- `app/templates/map_editor.html` — the light context menu uses a `sub` flyout for the type presets + Custom range.
+- `tests/harness_ui/test_map_light_types.py` — the type tests hover **Type** then click the preset in the flyout.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.786.9] - 2026-07-01 — "The Gentle Glow"
 
 **Schema version:** 91

@@ -799,17 +799,19 @@
       });
       hit.addEventListener('contextmenu', function (e) {
         e.preventDefault(); e.stopPropagation();
+        // v2.786.10 — light type lives in a hover flyout submenu (like walls).
         var typeItems = LIGHT_TYPES.map(function (t) {
-          return { label: t.label + ' (' + t.bright + '/' + t.dim + ')',
+          return { label: (L.type === t.key ? '✓ ' : '   ') + t.label
+                     + ' (' + t.bright + '/' + t.dim + ')',
                    fn: function () { applyLightType(L, t); } };
         });
+        typeItems.push({ label: '✎ Custom range…', fn: function () { editLight(L); } });
         showMenu(e.clientX, e.clientY, [
           { label: '💡 Light — ↔ Move', fn: function () { startMove('light', L); } },
-          { label: '✎ Custom range…', fn: function () { editLight(L); } },
-        ].concat(typeItems).concat([
+          { label: '💡 Type', sub: typeItems },
           { label: '📋 Copy', fn: function () { copyObj('light', L); } },
           { label: '🗑 Delete', fn: function () { deleteLight(L); } },
-        ]));
+        ]);
       });
       g.appendChild(hit);
       svg.appendChild(g);

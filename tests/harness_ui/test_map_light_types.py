@@ -72,7 +72,8 @@ def test_light_marker_flicker_matches_type(gm_page: Page) -> None:
             torch_dur = durs[0]
             gm_page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2,
                                 button="right")
-            gm_page.locator("#me-ctx-menu button", has_text="Candle").click()
+            gm_page.locator("#me-ctx-menu button", has_text="Type").hover()
+            gm_page.locator(".me-ctx-fly button", has_text="Candle").click()
             gm_page.wait_for_timeout(300)
             candle_dur = float(gm_page.locator("#me-overlay animate").first
                                .get_attribute("dur").rstrip("s"))
@@ -94,7 +95,8 @@ def test_right_click_changes_light_type(gm_page: Page) -> None:
             box = dot.bounding_box()
             gm_page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2,
                                 button="right")
-            gm_page.locator("#me-ctx-menu button", has_text="Daylight").click()
+            gm_page.locator("#me-ctx-menu button", has_text="Type").hover()
+            gm_page.locator(".me-ctx-fly button", has_text="Daylight").click()
             gm_page.wait_for_timeout(350)
             ls = _lights(c, mid)
             assert ls[0]["type"] == "daylight", ls
