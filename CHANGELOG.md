@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.793.0] - 2026-07-01 — "The Dressed Stage"
+
+**Schema version:** 94
+
+**Commit summary:** Decorative prop stamps render on the live tabletop + refresh over the `props_update` WS broadcast.
+
+**Description:** The **prop stamps** authored in the map editor now show on the **live tabletop** for everyone — emoji glyphs drawn above terrain and below tokens, rotated + sized as placed, and non-interactive (pure scenery). They load with the map (`active-map` bootstrap) and refresh live when the GM edits them, via the new `props_update` broadcast handler. This completes the prop-stamp feature: substrate (v2.791.0) → editor tool (v2.792.0) → tabletop render (this commit).
+
+### Added
+- `app/templates/tabletop.html` — `props` state; prop render (rotated emoji `<text.tt-prop>` above terrain, below tokens); `props` in the `active-map` bootstrap; `window._onPropsUpdate` handler.
+- `app/static/tabletop.js` — `props_update` WS case → `window._onPropsUpdate`.
+- `tests/harness_ui/test_tabletop_prop.py` (new, +1) — a `props_update` renders the glyph as a `text.tt-prop` in the overlay.
+
+### Schema
+- No schema change (still v94).
+
 ## [2.792.0] - 2026-07-01 — "The Stamp Set"
 
 **Schema version:** 94

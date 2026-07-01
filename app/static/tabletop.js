@@ -5443,6 +5443,11 @@
                 if (msg.data && typeof window._onGmPinsChanged === 'function') {
                     try { window._onGmPinsChanged(msg.data); } catch (_) {}
                 }
+            } else if (msg.type === 'props_update') {
+                // v2.793.0 — Maps 2.0: re-render decorative prop stamps.
+                if (msg.data && typeof window._onPropsUpdate === 'function') {
+                    try { window._onPropsUpdate(msg.data); } catch (_) {}
+                }
             } else if (msg.type === 'character_death_save') {
                 _onCharacterDeathSave(msg.data);
             } else if (msg.type === 'character_roll_state') {

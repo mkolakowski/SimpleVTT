@@ -2401,6 +2401,7 @@
         };
         function terrainColor(t) { return TERRAIN_TYPES[t] || TERRAIN_TYPES.difficult; }
         var gmPins = [];  // v2.790.2 — GM-only pins (fetched only when IS_GM)
+        var props = [];   // v2.793.0 — decorative prop stamps (emoji glyphs)
 
         // v2.772.0 — wall/door material looks (kept in sync with the map editor).
         // v2.787.2 — thicker walls + per-material texture keys.
@@ -2571,6 +2572,22 @@
                 lbl.textContent = (tr.type || 'difficult').charAt(0).toUpperCase() + (tr.type || 'difficult').slice(1);
                 svg.appendChild(lbl);
             });
+            // v2.793.0 — decorative prop stamps (emoji glyphs), above terrain
+            // and below tokens; visible to everyone, non-interactive.
+            props.forEach(function (pr) {
+                var sz = pr.size || 40, rot = pr.rot || 0;
+                var gl = document.createElementNS(NS, 'text');
+                gl.setAttribute('x', pr.x); gl.setAttribute('y', pr.y);
+                gl.setAttribute('font-size', sz);
+                gl.setAttribute('text-anchor', 'middle');
+                gl.setAttribute('dominant-baseline', 'central');
+                if (rot) gl.setAttribute('transform', 'rotate(' + rot + ' ' + pr.x + ' ' + pr.y + ')');
+                gl.style.pointerEvents = 'none';
+                gl.style.userSelect = 'none';
+                gl.classList.add('tt-prop');
+                gl.textContent = pr.kind || '📦';
+                svg.appendChild(gl);
+            });
             // v2.790.2 — GM-only pins (only the GM ever has this data).
             if (IS_GM) gmPins.forEach(function (pin) {
                 var pc = document.createElementNS(NS, 'circle');
@@ -2678,7 +2695,8 @@
                 if (!r.ok) return;
                 var d = await r.json();
                 mapId = d.map_id; walls = d.walls || [];
-                hotspots = d.hotspots || []; terrain = d.terrain || []; render();
+                hotspots = d.hotspots || []; terrain = d.terrain || [];
+                props = d.props || []; render();
                 fetchGmPins();  // v2.790.2 — GM-only (no-op for players)
                 if (window._setMapWalls) window._setMapWalls(walls);
                 if (window._setMapLights) window._setMapLights(d.lights || []);
@@ -2768,6 +2786,10 @@
         window._onTerrainUpdate = function (data) {  // v2.789.2
             if (!data) return;
             terrain = data.terrain || []; render();
+        };
+        window._onPropsUpdate = function (data) {  // v2.793.0
+            if (!data) return;
+            props = data.props || []; render();
         };
         // v2.790.2 — GM-only pins: fetch (GM only) + re-fetch on the signal.
         async function fetchGmPins() {
