@@ -2594,7 +2594,11 @@
                     el.setAttribute('dominant-baseline', 'central');
                     el.textContent = kind;
                 }
-                if (rot) el.setAttribute('transform', 'rotate(' + rot + ' ' + pr.x + ' ' + pr.y + ')');
+                if (rot || pr.flip) {
+                    var ptf = 'rotate(' + rot + ' ' + pr.x + ' ' + pr.y + ')';
+                    if (pr.flip) ptf += ' translate(' + pr.x + ' ' + pr.y + ') scale(-1 1) translate(' + (-pr.x) + ' ' + (-pr.y) + ')';
+                    el.setAttribute('transform', ptf);
+                }
                 el.style.pointerEvents = 'none';
                 el.style.userSelect = 'none';
                 el.classList.add('tt-prop');

@@ -63,6 +63,24 @@ async def test_image_prop_kind_survives(gm_client):
             f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/props", json={"props": []})
 
 
+async def test_prop_flip_roundtrips(gm_client):
+    """v2.799.0 — a prop's ``flip`` (horizontal mirror) flag round-trips and
+    defaults to False."""
+    mid = await _active_map_id(gm_client)
+    try:
+        r = await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/props",
+            json={"props": [
+                {"x": 10, "y": 20, "kind": "🌲", "flip": True},
+                {"x": 30, "y": 40, "kind": "🪑"}]})
+        ps = r.json()["props"]
+        assert ps[0]["flip"] is True
+        assert ps[1]["flip"] is False  # default
+    finally:
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/props", json={"props": []})
+
+
 async def test_set_props_requires_gm(gm_client, alice_client):
     mid = await _active_map_id(gm_client)
     # A player can read props (needs them to render the scene)...

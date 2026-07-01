@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.799.0] - 2026-07-01 — "The Mirror Image"
+
+**Schema version:** 94
+
+**Commit summary:** Prop polish — flip a placed prop horizontally (mirror its art / glyph).
+
+**Description:** Props gain a **🔄 Flip** action in their right-click menu that mirrors the prop horizontally about its own centre — useful for facing a chair, cart, or signpost the other way, or breaking up repetition in a row of props. The flag composes with rotation and persists per prop; both the editor and live tabletop honour it, and it survives copy/paste. First of a short prop-polish run (flip → opacity → grid-snap).
+
+### Added
+- `app/routes/tabletop_routes.py` — `_sanitize_props` stores a `flip` bool (defaults False).
+- `app/templates/map_editor.html` — flip mirror in the prop render transform; **🔄 Flip** right-click toggle (with a ✓ when on); `flip` carried through copy/paste.
+- `app/templates/tabletop.html` — flip mirror in the tabletop prop render transform.
+- `tests/harness/test_map_props.py` (+1) — the `flip` flag round-trips and defaults to False.
+
+### Schema
+- No schema change (still v94 — `flip` is an additive JSON field).
+
 ## [2.798.0] - 2026-07-01 — "The Full Inventory"
 
 **Schema version:** 94

@@ -956,7 +956,10 @@
     if (layers.props) props.forEach(function (pr, i) {
       var pg = document.createElementNS(NS, 'g');
       var rot = pr.rot || 0, sz = pr.size || 40;
-      pg.setAttribute('transform', 'rotate(' + rot + ' ' + pr.x + ' ' + pr.y + ')');
+      var ptf = 'rotate(' + rot + ' ' + pr.x + ' ' + pr.y + ')';
+      // v2.799.0 — mirror about the prop's centre when flipped.
+      if (pr.flip) ptf += ' translate(' + pr.x + ' ' + pr.y + ') scale(-1 1) translate(' + (-pr.x) + ' ' + (-pr.y) + ')';
+      pg.setAttribute('transform', ptf);
       var kind = pr.kind || '📦';
       if (kind.indexOf('img:') === 0) {
         // v2.795.0 — a shipped SVG prop illustration, centred on its point.
@@ -997,6 +1000,7 @@
         showMenu(e.clientX, e.clientY, [
           { label: (kind.indexOf('img:') === 0 ? '🖼 ' + kind.slice(4) : kind) + ' Prop — ↔ Move', fn: function () { startMove('prop', pr); } },
           { label: '⟳ Rotate 45°', fn: function () { pr.rot = ((pr.rot || 0) + 45) % 360; saveProps(); } },
+          { label: (pr.flip ? '✓ ' : '') + '🔄 Flip', fn: function () { pr.flip = !pr.flip; saveProps(); } },
           { label: '➕ Bigger', fn: function () { pr.size = Math.min(400, (pr.size || 40) * 1.25); saveProps(); } },
           { label: '➖ Smaller', fn: function () { pr.size = Math.max(8, (pr.size || 40) * 0.8); saveProps(); } },
           { label: '📋 Copy', fn: function () { copyObj('prop', pr); } },
@@ -1611,7 +1615,7 @@
       saveLights();
     } else if (clipboard.kind === 'prop') {
       props.push({ id: newId('pr'), x: p.x, y: p.y, kind: d.kind || '📦',
-        size: d.size || 40, rot: d.rot || 0 });
+        size: d.size || 40, rot: d.rot || 0, flip: !!d.flip });
       saveProps();
     }
   }

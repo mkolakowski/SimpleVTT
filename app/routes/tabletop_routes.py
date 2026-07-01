@@ -124597,6 +124597,8 @@ def _sanitize_props(raw) -> list:
         out.append({
             "id": (str(p.get("id") or "").strip()[:40] or f"pr{i}"),
             "x": x, "y": y, "kind": kind, "size": size, "rot": rot,
+            # v2.799.0 — mirror the prop horizontally (flip its art / glyph).
+            "flip": bool(p.get("flip")),
         })
     return out
 
