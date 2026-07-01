@@ -68,3 +68,32 @@ def test_layers_all_none_toggle(gm_page: Page) -> None:
     gm_page.wait_for_timeout(120)
     for sel in _LAYER_IDS:
         assert gm_page.locator(sel).is_checked(), sel
+
+
+def test_layer_solo_shift_click(gm_page: Page) -> None:
+    """v2.819.0 — shift-click a layer shows only it; shift-click again restores all."""
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
+        c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
+    gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
+    expect(gm_page.locator("#me-overlay")).to_be_visible()
+    gm_page.wait_for_timeout(300)
+
+    # Start from a known all-on state.
+    for sel in _LAYER_IDS:
+        if not gm_page.locator(sel).is_checked():
+            gm_page.check(sel)
+
+    # Shift-click Walls → only Walls stays checked, the other eight go off.
+    gm_page.locator("#me-layer-walls").click(modifiers=["Shift"])
+    gm_page.wait_for_timeout(120)
+    assert gm_page.locator("#me-layer-walls").is_checked()
+    for sel in _LAYER_IDS:
+        if sel != "#me-layer-walls":
+            assert gm_page.locator(sel).is_checked() is False, sel
+
+    # Shift-click the soloed Walls layer again → every layer restored.
+    gm_page.locator("#me-layer-walls").click(modifiers=["Shift"])
+    gm_page.wait_for_timeout(120)
+    for sel in _LAYER_IDS:
+        assert gm_page.locator(sel).is_checked(), sel

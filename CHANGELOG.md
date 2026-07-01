@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.819.0] - 2026-07-01 — "The Solo Spotlight"
+
+**Schema version:** 96
+
+**Commit summary:** Shift/alt-click a map-editor Layers checkbox to solo that layer (show only it); a second solo-click restores every layer.
+
+**Description:** The companion to the v2.818.0 **All / None** toggle. To focus on a single overlay — say, just the walls, or just the lights — a GM can now **shift-click (or alt-click) that layer's checkbox** to show *only* it and hide the other eight in one gesture. Shift-clicking the already-soloed layer again restores every layer. The modified click suppresses the checkbox's normal toggle, reflects the new state into all nine boxes, persists to `localStorage`, and re-renders live. The tip is surfaced in the All / None button's tooltip. Authoring-only — nothing about saved map data changes.
+
+### Added
+- `app/templates/map_editor.html` — a modifier-aware `click` handler on each layer checkbox that solos the layer (or un-solos it back to all-on), plus a discoverability hint in the All / None tooltip.
+- `tests/harness_ui/test_map_editor_layers.py` — `test_layer_solo_shift_click` (+1): shift-clicking Walls leaves only Walls checked; a second shift-click restores all nine.
+
+### Schema
+- No schema change (still v96 — client-side authoring interaction only).
+
 ## [2.818.0] - 2026-07-01 — "The Bare Map"
 
 **Schema version:** 96

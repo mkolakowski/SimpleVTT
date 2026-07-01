@@ -355,7 +355,7 @@
     <span class="me-grp-lbl">Layers</span>
     {# v2.818.0 — one click hides/shows every overlay (isolate the bare map). #}
     <button type="button" id="me-layers-toggle" class="me-tool-btn" style="font-size:11px;"
-            title="Show or hide every overlay at once — handy for eyeballing the bare map image">👁 All / None</button>
+            title="Show or hide every overlay at once — handy for eyeballing the bare map image (tip: shift-click a layer below to show only that one)">👁 All / None</button>
     {# v2.814.0 — uniform 2-column checkbox grid. #}
     <div class="me-layers-grid">
       <label style="gap:4px;"><input type="checkbox" id="me-layer-walls" checked> Walls</label>
@@ -2463,6 +2463,20 @@
     if (!cb) return;
     cb.checked = layers[k];
     cb.addEventListener('change', function () { layers[k] = cb.checked; saveLayers(); render(); });
+    // v2.819.0 — shift/alt-click solos this layer (show only it); a second
+    // solo-click on the already-solo layer restores every layer.
+    cb.addEventListener('click', function (ev) {
+      if (!ev.shiftKey && !ev.altKey) return;
+      ev.preventDefault();
+      var isSolo = layers[k] && LAYER_KEYS.every(function (j) { return j === k ? layers[j] : !layers[j]; });
+      LAYER_KEYS.forEach(function (j) {
+        layers[j] = isSolo ? true : (j === k);
+        var other = document.getElementById('me-layer-' + j);
+        if (other) other.checked = layers[j];
+      });
+      saveLayers();
+      render();
+    });
   });
   // v2.818.0 — All / None flips every layer at once: if anything is shown,
   // hide them all (isolate the bare map); otherwise show them all.
