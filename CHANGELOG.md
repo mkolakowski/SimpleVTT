@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.797.0] - 2026-07-01 — "The Stocked Storeroom"
+
+**Schema version:** 94
+
+**Commit summary:** Add 10 more SVG prop illustrations — the image-prop library grows from 22 to 32.
+
+**Description:** A third batch of **10 original top-down SVG props**: door, tent, signpost, bridge, ladder, stairs, sarcophagus, crystal, mushroom, and pool. Same flat, license-clean vector style; all appear in the editor's 🖼 Images picker and render via the existing `img:<slug>` path. The library now covers 32 props spanning furniture, containers, nature, dungeon dressing, and terrain features.
+
+### Added
+- `app/static/props/*.svg` (new, 10 files) — door, tent, signpost, bridge, ladder, stairs, sarcophagus, crystal, mushroom, pool (original top-down vector art).
+- `app/templates/map_editor.html` — 10 new options in the 🖼 Images prop picker.
+
+### Changed
+- `tests/harness/test_map_props.py` — the serve-check now asserts all 32 shipped prop SVGs serve.
+
+### Schema
+- No schema change (still v94).
+
 ## [2.796.0] - 2026-07-01 — "The Deeper Cupboard"
 
 **Schema version:** 94

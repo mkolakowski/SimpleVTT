@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- Top-down wooden plank bridge with side rails. Original art. -->
+  <rect x="6" y="30" width="88" height="40" fill="#8a5a2b" stroke="#3a2510" stroke-width="2"/>
+  <g stroke="#5c3a1c" stroke-width="3">
+    <line x1="18" y1="30" x2="18" y2="70"/><line x1="30" y1="30" x2="30" y2="70"/>
+    <line x1="42" y1="30" x2="42" y2="70"/><line x1="54" y1="30" x2="54" y2="70"/>
+    <line x1="66" y1="30" x2="66" y2="70"/><line x1="78" y1="30" x2="78" y2="70"/>
+  </g>
+  <rect x="6" y="26" width="88" height="7" fill="#6f4a24" stroke="#2e1c0d" stroke-width="2"/>
+  <rect x="6" y="67" width="88" height="7" fill="#6f4a24" stroke="#2e1c0d" stroke-width="2"/>
+</svg>

@@ -86,7 +86,8 @@ async def test_shipped_prop_svgs_serve(gm_client):
                  "bookshelf", "campfire", "tree", "rock", "well",
                  "statue", "altar", "bones", "weaponrack", "anvil",
                  "cauldron", "gravestone", "throne", "brazier", "pillar",
-                 "cart"):
+                 "cart", "door", "tent", "signpost", "bridge", "ladder",
+                 "stairs", "sarcophagus", "crystal", "mushroom", "pool"):
         r = await gm_client.get(f"/static/props/{slug}.svg")
         assert r.status_code == 200, f"{slug}: {r.status_code}"
         assert "<svg" in r.text, slug

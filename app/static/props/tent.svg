@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- Top-down tent: canvas diamond with a ridge line + entrance flap. Original art. -->
+  <path d="M50 12 L86 50 L50 88 L14 50 Z" fill="#8a7a4a" stroke="#4f4527" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M50 12 L50 88" stroke="#5f5432" stroke-width="3"/>
+  <path d="M50 12 L68 50 L50 60 L32 50 Z" fill="#9a8a58"/>
+  <path d="M50 60 L42 88 M50 60 L58 88" stroke="#4f4527" stroke-width="2"/>
+  <path d="M50 60 L44 88 L56 88 Z" fill="#3a3320"/>
+</svg>

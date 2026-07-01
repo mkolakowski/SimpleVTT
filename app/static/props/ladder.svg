@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- Top-down ladder: two rails + rungs. Original art. -->
+  <rect x="34" y="10" width="7" height="80" rx="3" fill="#9a6a34" stroke="#3a2510" stroke-width="2"/>
+  <rect x="59" y="10" width="7" height="80" rx="3" fill="#9a6a34" stroke="#3a2510" stroke-width="2"/>
+  <g fill="#b07d40" stroke="#5c3a1c" stroke-width="1.5">
+    <rect x="41" y="16" width="18" height="6"/><rect x="41" y="30" width="18" height="6"/>
+    <rect x="41" y="44" width="18" height="6"/><rect x="41" y="58" width="18" height="6"/>
+    <rect x="41" y="72" width="18" height="6"/>
+  </g>
+</svg>
