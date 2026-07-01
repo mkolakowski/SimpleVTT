@@ -401,6 +401,10 @@ class Map(Base):
         Boolean, default=False, server_default="false")
     fog_revealed: Mapped[list] = mapped_column(
         JSON, default=list, server_default="[]")
+    # v2.789.0 — Maps 2.0 terrain regions: a JSON list of coloured/labelled
+    # rectangles ({id, x, y, w, h, type}) marking difficult terrain / water /
+    # lava / etc. Presentation + reference only (movement isn't enforced).
+    terrain: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     folder: Mapped[Optional[str]] = mapped_column(String(120), nullable=True, default="", server_default="")
     thumbnail_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

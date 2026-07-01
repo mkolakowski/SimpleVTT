@@ -1082,6 +1082,16 @@ def _apply_inline_migrations() -> None:
                 "ALTER TABLE maps ADD COLUMN fog_revealed JSON NOT NULL DEFAULT '[]'"
             ))
 
+    # ---- Schema v92 (2.789.0): maps.terrain ----
+    # Maps 2.0 terrain regions — a JSON list of {id,x,y,w,h,type} rectangles.
+    # Additive; default empty list.
+    maps_cols_v92 = _column_names("maps")
+    with engine.begin() as conn:
+        if maps_cols_v92 and "terrain" not in maps_cols_v92:
+            conn.execute(text(
+                "ALTER TABLE maps ADD COLUMN terrain JSON NOT NULL DEFAULT '[]'"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

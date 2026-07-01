@@ -124140,6 +124140,7 @@ def get_active_map(
         "lights": list(getattr(m, "lights", None) or []),
         "fog_enabled": bool(getattr(m, "fog_enabled", False)),
         "fog_revealed": list(getattr(m, "fog_revealed", None) or []),
+        "terrain": list(getattr(m, "terrain", None) or []),
     }
 
 
@@ -124420,6 +124421,78 @@ async def set_map_fog(
     return {"ok": True, "map_id": m.id,
             "fog_enabled": bool(m.fog_enabled),
             "fog_revealed": list(m.fog_revealed or [])}
+
+
+def _sanitize_terrain(raw) -> list:
+    """v2.789.0 — coerce a client terrain list into the stored shape: a list of
+    ``{id, x, y, w, h, type}`` rectangles in map-pixel coords. Drops anything
+    without four numeric fields or a non-positive size; ``type`` is a short
+    free-form key (difficult / water / lava / …), capped."""
+    out = []
+    if not isinstance(raw, list):
+        return out
+    for i, r in enumerate(raw):
+        if not isinstance(r, dict):
+            continue
+        try:
+            x = float(r.get("x")); y = float(r.get("y"))
+            w = float(r.get("w")); h = float(r.get("h"))
+        except (TypeError, ValueError):
+            continue
+        if w <= 0 or h <= 0:
+            continue
+        typ = (str(r.get("type") or "difficult").strip().lower()[:20]) or "difficult"
+        out.append({
+            "id": (str(r.get("id") or "").strip()[:40] or f"t{i}"),
+            "x": x, "y": y, "w": w, "h": h, "type": typ,
+        })
+    return out
+
+
+@router.get("/api/campaign/{campaign_id}/map/{map_id}/terrain")
+def get_map_terrain(
+    campaign_id: int,
+    map_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.789.0 — read a map's terrain regions (any member)."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    m = db.query(Map).filter(
+        Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404, "Map not found")
+    return {"ok": True, "map_id": m.id,
+            "terrain": list(getattr(m, "terrain", None) or [])}
+
+
+@router.put("/api/campaign/{campaign_id}/map/{map_id}/terrain")
+async def set_map_terrain(
+    campaign_id: int,
+    map_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.789.0 — replace a map's terrain regions (GM-only). Body:
+    ``{terrain: [{x,y,w,h,type?}]}``. Broadcasts ``terrain_update``."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(
+        Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404, "Map not found")
+    body = await request.json()
+    m.terrain = _sanitize_terrain(body.get("terrain"))
+    db.commit()
+    await hub.broadcast(campaign_id, {
+        "type": "terrain_update",
+        "data": {"map_id": m.id, "terrain": list(m.terrain or [])},
+    })
+    return {"ok": True, "map_id": m.id, "terrain": list(m.terrain or [])}
 
 
 @router.post("/api/campaign/{campaign_id}/map/{map_id}/door/{door_id}/toggle")

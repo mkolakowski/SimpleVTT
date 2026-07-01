@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.789.0] - 2026-07-01 — "The Shifting Ground"
+
+**Schema version:** 92
+
+**Commit summary:** Terrain-regions substrate — a `maps.terrain` layer of `{id,x,y,w,h,type}` rects + GET/PUT endpoints (schema v92).
+
+**Description:** Foundation for **terrain regions** (difficult terrain / water / lava / …). Adds a `terrain` JSON column to `maps` (schema **v92**), a sanitizer, and `GET`/`PUT /api/campaign/{cid}/map/{id}/terrain` (PUT GM-only, broadcasts `terrain_update`); terrain is also surfaced on `GET /active-map`. Regions are coloured/labelled rectangles — presentation + reference only (movement isn't enforced). Editor painting + tabletop rendering land next.
+
+### Added
+- `app/models.py` + `app/database.py` — `maps.terrain` JSON column + schema-v92 migration.
+- `app/routes/tabletop_routes.py` — `_sanitize_terrain`, terrain GET/PUT + `terrain_update` broadcast; `terrain` in `active-map`.
+- `tests/harness/test_map_terrain.py` (new, +4) — set/get + broadcast, type default, GM-gate, unknown-map 404.
+
+### Schema
+- **Schema v92:** `maps.terrain` (JSON, default `[]`). Additive; SCHEMA_VERSION 91 → 92.
+
 ## [2.788.4] - 2026-07-01 — "The Honeycomb"
 
 **Schema version:** 91
