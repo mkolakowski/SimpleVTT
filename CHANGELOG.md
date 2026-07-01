@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.813.0] - 2026-07-01 — "The Raised Curtain"
+
+**Schema version:** 96
+
+**Commit summary:** Slim editor top bar — map title + rename move up into the nav (no version stamp), Save drops into the History group; more of the map is visible.
+
+**Description:** Reclaims a whole header row in the map editor so the GM sees more of the map. The editor now **overrides the top nav bar**: it drops the version stamp and instead carries the **map title + inline ✎ rename** up top, and moves **← Back to settings** into the nav (to the **left of Wiki**). The old `.me-head` row beneath the nav is gone; the **💾 Save** button moves down into the **History** toolbar group (next to Undo/Redo). All the same controls — just packed into the existing bars instead of their own row.
+
+### Changed
+- `app/templates/map_editor.html` — overrides `{% block topnav %}` with a slim editor header (no version; map title + rename; Back-to-settings before Wiki); removed the `.me-head` row; `#me-save-btn` relocated into the History group. All element IDs (rename / save wiring) unchanged.
+
+### Added
+- `tests/harness_ui/test_map_editor_topbar.py` (new, +1) — asserts the title + rename sit in the top nav, no version stamp on the page, Back-to-settings precedes Wiki, Save lives in the History group, and the old header row is gone.
+
+### Schema
+- No schema change (still v96 — layout only).
+
 ## [2.812.0] - 2026-07-01 — "The Weathered Corner"
 
 **Schema version:** 96

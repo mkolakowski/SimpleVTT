@@ -1,5 +1,35 @@
 {% extends "base.html" %}
 {% block title %}Edit map — {{ map.name }}{% endblock %}
+{# v2.813.0 — reclaim vertical space: a slim editor top bar (no version stamp)
+   carrying the map title + inline rename; "Back to settings" sits left of Wiki.
+   The Save button moves down into the History toolbar group. #}
+{% block topnav %}
+<header class="topnav">
+  <a href="/" class="brand">SimpleVTT</a>
+  <span style="display:inline-flex;align-items:center;gap:8px;margin-left:12px;flex-wrap:wrap;">
+    <span style="font-size:15px;">🗺</span>
+    <span id="me-map-name" style="font-size:18px;font-weight:800;color:var(--fg);">{{ map.name }}</span>
+    <input type="text" id="me-map-name-input" value="{{ map.name }}" maxlength="120"
+           style="display:none;font-size:16px;font-weight:700;min-height:32px;width:min(40vw,300px);">
+    <button type="button" id="me-rename-btn" class="me-tool-btn" title="Rename this map">✎</button>
+    <button type="button" id="me-rename-save" class="me-tool-btn" style="display:none;background:var(--accent);color:#fff;">Save</button>
+    <button type="button" id="me-rename-cancel" class="me-tool-btn" style="display:none;">Cancel</button>
+    {% if is_active %}<span style="color:#6cb;font-size:12px;">· Active</span>{% endif %}
+  </span>
+  <nav>
+    <a href="/campaign/{{ campaign.id }}/settings#maps" title="Back to campaign settings">← Back to settings</a>
+    <a href="/wiki" target="_blank" rel="noopener noreferrer" title="Open the wiki in a new tab">Wiki</a>
+    {% if user %}
+      <span class="user">{{ user.display_name }}{% if user.is_admin %} <em>(admin)</em>{% endif %}</span>
+      <a href="/characters">My Characters</a>
+      <a href="/settings">Settings</a>
+      {% if user.is_admin %}<a href="/admin" title="Admin portal">Admin</a>{% endif %}
+      <a href="/my-suggestions" title="Suggest a feature, report an issue, or track your reports">💡 Feedback</a>
+      <a href="/logout">Logout</a>
+    {% endif %}
+  </nav>
+</header>
+{% endblock %}
 {% block content %}
 <div style="max-width:1700px;margin:0 auto;padding:0 14px;">
 <style>
@@ -61,25 +91,8 @@
   .m4hint { font-size:12px; color:var(--fg-mute); margin:8px 0 0; }
 </style>
 
-<div class="me-head">
-  {# v2.786.2 — larger map name in display mode + an inline rename (✎). #}
-  <h1 style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;">🗺 Edit map
-    <span id="me-map-name" style="font-size:26px;font-weight:800;color:var(--fg);">{{ map.name }}</span>
-    <input type="text" id="me-map-name-input" value="{{ map.name }}" maxlength="120"
-           style="display:none;font-size:20px;font-weight:700;min-height:36px;width:min(60vw,360px);">
-    <button type="button" id="me-rename-btn" class="me-tool-btn" title="Rename this map">✎</button>
-    <button type="button" id="me-rename-save" class="me-tool-btn" style="display:none;background:var(--accent);color:#fff;">Save</button>
-    <button type="button" id="me-rename-cancel" class="me-tool-btn" style="display:none;">Cancel</button>
-    {% if is_active %}<span style="color:#6cb;font-size:13px;">· Active</span>{% endif %}</h1>
-  <span style="display:inline-flex;gap:12px;align-items:center;">
-    {# v2.781.0 — explicit Save (edits also auto-save; this commits everything
-       in one click + Cmd/Ctrl+S). #}
-    <button type="button" id="me-save-btn" style="background:var(--accent);color:#fff;font-weight:600;"
-            title="Commit all map changes now (⌘/Ctrl+S) — edits also save automatically">💾 Save map</button>
-    <a href="/campaign/{{ campaign.id }}/settings#maps">← Back to settings</a>
-  </span>
-</div>
-
+{# v2.813.0 — the old .me-head row is gone: title + rename moved to the top bar,
+   Save into the History group, "Back to settings" into the top nav. #}
 <div class="me-toolbar">
   {# v2.783.0 — controls organised into labelled sub-groups: Walls · Markers ·
      Fog · Tokens · Tools · Grid · Lighting · View. #}
@@ -88,6 +101,9 @@
     <span class="me-grp-lbl">History</span>
     <button type="button" id="me-undo-btn" class="me-tool-btn" title="Undo (⌘/Ctrl+Z)" disabled>↶ Undo</button>
     <button type="button" id="me-redo-btn" class="me-tool-btn" title="Redo (⌘/Ctrl+Shift+Z)" disabled>↷ Redo</button>
+    {# v2.813.0 — Save moved here from the (removed) header row. #}
+    <button type="button" id="me-save-btn" class="me-tool-btn" style="background:var(--accent);color:#fff;font-weight:600;"
+            title="Commit all map changes now (⌘/Ctrl+S) — edits also save automatically">💾 Save</button>
   </div>
   <div class="me-group" role="group" aria-label="Walls">
     <span class="me-grp-lbl">Walls</span>
