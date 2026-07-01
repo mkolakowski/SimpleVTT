@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.785.10] - 2026-06-30 — "The Even Cards"
+
+**Schema version:** 91
+
+**Commit summary:** Make all toolbar groups the same height (the shorter cards' borders extend), without enlarging any control.
+
+**Description:** Every `.me-group` card in the editor toolbar now stretches to the tallest group's height, so their bottom borders line up in one clean row. Controls stay top-aligned and unchanged in size — only the empty card space (and its border) extends.
+
+### Changed
+- `app/templates/map_editor.html` — `.me-toolbar` uses `align-items:stretch` (was `flex-start`); groups equalise to the tallest.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.785.9] - 2026-06-30 — "The Labelled Lantern"
 
 **Schema version:** 91
