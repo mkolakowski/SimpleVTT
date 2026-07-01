@@ -72,7 +72,7 @@ def test_copy_paste_wall(gm_page: Page) -> None:
 
 
 def test_edit_wall_material(gm_page: Page) -> None:
-    gm_page.on("dialog", lambda d: d.accept("wood"))
+    # v2.786.4 — material is set from the right-click menu directly (no prompt).
     with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
@@ -83,7 +83,7 @@ def test_edit_wall_material(gm_page: Page) -> None:
             box = _hit_box(gm_page)
             gm_page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2,
                                 button="right")
-            gm_page.locator("#me-ctx-menu button", has_text="Edit").click()
+            gm_page.locator("#me-ctx-menu button", has_text="Wood").click()
             gm_page.wait_for_timeout(300)
             assert _walls(c, mid)[0]["style"] == "wood", _walls(c, mid)
         finally:

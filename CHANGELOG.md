@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.786.4] - 2026-06-30 — "The Material Menu"
+
+**Schema version:** 91
+
+**Commit summary:** Set a wall/door's material from the right-click menu directly — no prompt popup.
+
+**Description:** Changing a wall or door's material no longer opens a text `prompt()`. The right-click menu now lists the materials inline — **🧱 Stone / Wood / Brick / Metal / Cave** (the current one check-marked) — and clicking one applies it immediately, matching how light types work.
+
+### Changed
+- `app/templates/map_editor.html` — the wall/door context menu lists the `WALL_STYLES` materials as clickable items; removed the prompt-based `editWall`.
+- `tests/harness_ui/test_map_editor_interactions.py` — the material test clicks the **Wood** menu item instead of answering a dialog.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.786.3] - 2026-06-30 — "The Fading Grid"
 
 **Schema version:** 91

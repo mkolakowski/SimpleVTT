@@ -571,12 +571,19 @@
       });
       hit.addEventListener('contextmenu', function (e) {
         e.preventDefault(); e.stopPropagation();
+        // v2.786.4 — set the material directly from the menu (no prompt popup).
+        var cur = w.style || 'stone';
+        var matItems = Object.keys(WALL_STYLES).map(function (key) {
+          return { label: (cur === key ? '✓ ' : '   ') + '🧱 '
+                     + key.charAt(0).toUpperCase() + key.slice(1),
+                   fn: function () { w.style = key; saveWalls(); } };
+        });
         showMenu(e.clientX, e.clientY, [
           { label: (w.door ? '🚪 Door' : '🧱 Wall') + ' — ↔ Move', fn: function () { startMove('wall', w); } },
-          { label: '✎ Edit (material)', fn: function () { editWall(w); } },
+        ].concat(matItems).concat([
           { label: '📋 Copy', fn: function () { copyObj('wall', w); } },
           { label: '🗑 Delete', fn: function () { deleteWall(w); } },
-        ]);
+        ]));
       });
       svg.appendChild(hit);
     });
@@ -958,12 +965,7 @@
     }
   }
   // v2.775.0 — edit an object's properties from the right-click menu.
-  function editWall(w) {
-    var s = window.prompt('Material (stone / wood / brick / metal / cave):', w.style || 'stone');
-    if (s === null) return;
-    w.style = (s || 'stone').trim().toLowerCase().slice(0, 20) || 'stone';
-    saveWalls();
-  }
+  // (v2.786.4 — wall material is now set directly from the menu, no prompt.)
   function editHotspot(h) {
     var label = window.prompt('Hotspot label:', h.label || '');
     if (label === null) return;
