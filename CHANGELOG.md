@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.786.8] - 2026-07-01 — "The Restless Flames"
+
+**Schema version:** 91
+
+**Commit summary:** Each light flickers at its own rate + phase so they never pulse in unison.
+
+**Description:** Previously every light of a given type shared one flicker rate and phase, so a row of torches pulsed in lockstep. Each light now gets its **own rate (±35%) and phase offset**, derived from a stable per-light seed (its id/position), so they all shimmer independently — but consistently across re-renders (no reseed jump on edits), and the light **type still sets the base speed** (a candle still jitters faster than a lantern).
+
+### Changed
+- `app/templates/map_editor.html` — `lightSeed()` (stable per-light pseudo-random); the glow flicker `dur` is jittered per light and `begin` offsets the phase.
+- `tests/harness_ui/test_map_light_types.py` — asserts two same-type lights have different `dur`/`begin`, and that re-typing to Candle flickers faster than a Torch.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.786.7] - 2026-06-30 — "The Proper Door"
 
 **Schema version:** 91

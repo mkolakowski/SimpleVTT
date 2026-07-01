@@ -45,28 +45,38 @@ def test_place_light_with_preset(gm_page: Page) -> None:
 
 
 def test_light_marker_flicker_matches_type(gm_page: Page) -> None:
-    # v2.784.1 — the marker has a larger hit target + a per-type flicker
-    # animation; changing the type changes the flicker.
+    # v2.784.1 larger hit target; v2.786.8 — each light flickers at its own
+    # rate + phase, but the light type still sets the base speed.
     with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
         c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lights", json={"lights": [
-            {"id": "l1", "x": 300, "y": 300, "bright_ft": 20, "dim_ft": 20,
-             "color": "#ffb347", "type": "torch"}]})
+            {"id": "l1", "x": 250, "y": 250, "bright_ft": 20, "dim_ft": 20, "color": "#ffb347", "type": "torch"},
+            {"id": "l2", "x": 500, "y": 500, "bright_ft": 20, "dim_ft": 20, "color": "#ffb347", "type": "torch"},
+        ]})
         try:
             _open_editor(gm_page, mid)
             # Larger right-click target.
+            assert float(gm_page.locator("#me-overlay circle.me-light").first
+                         .get_attribute("r")) >= 24
+            # Two same-type lights flicker at different rates AND phases.
+            fx = gm_page.eval_on_selector_all("#me-overlay animate",
+                "els => els.map(e => e.getAttribute('dur') + '|' + e.getAttribute('begin'))")
+            assert len(fx) == 2 and fx[0] != fx[1], fx
+            durs = [float(x.split("|")[0].rstrip("s")) for x in fx]
+            for d in durs:  # torch base 0.7, jittered ±35%
+                assert 0.45 <= d <= 1.0, durs
+            # Re-typing one to Candle (base 0.45) makes it flicker faster than a torch.
             hit = gm_page.locator("#me-overlay circle.me-light").first
-            assert float(hit.get_attribute("r")) >= 24, hit.get_attribute("r")
-            # Torch flicker speed.
-            assert gm_page.locator("#me-overlay animate").first.get_attribute("dur") == "0.7s"
-            # Re-type to Candle → faster flicker.
             box = hit.bounding_box()
+            torch_dur = durs[0]
             gm_page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2,
                                 button="right")
             gm_page.locator("#me-ctx-menu button", has_text="Candle").click()
             gm_page.wait_for_timeout(300)
-            assert gm_page.locator("#me-overlay animate").first.get_attribute("dur") == "0.45s"
+            candle_dur = float(gm_page.locator("#me-overlay animate").first
+                               .get_attribute("dur").rstrip("s"))
+            assert candle_dur < torch_dur, (candle_dur, torch_dur)
         finally:
             c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lights", json={"lights": []})
 
