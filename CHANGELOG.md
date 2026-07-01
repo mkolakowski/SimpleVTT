@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.786.2] - 2026-06-30 — "The Named Map"
+
+**Schema version:** 91
+
+**Commit summary:** Inline map rename (larger name + ✎ in the header) and a Tags group in the editor toolbar.
+
+**Description:** Two bits of map-metadata editing in the map editor:
+- **Rename** — the map name in the header is now shown **larger** (26 px, bold) with an **✎** button beside it; clicking it swaps to an input with **Save** / **Cancel** (Enter saves, Esc cancels) and persists via the existing rename endpoint.
+- **Tags** — a new **Tags** toolbar group with a comma-separated tags field + **Save tags**, persisting via the existing map-tags endpoint.
+
+### Added
+- `app/templates/map_editor.html` — larger `#me-map-name` + inline rename controls wired to `POST …/maps/{id}/rename`; a **Tags** `.me-group` wired to `POST …/maps/{id}/tags`.
+- `tests/harness_ui/test_map_editor_meta.py` (new, +2) — rename persists across reload; tags save + persist.
+
+### Changed
+- `tests/harness_ui/test_map_editor_toolbar.py` — expects the new **Tags** group.
+
+### Schema
+- No schema change (still v91).
+
 ## [2.786.1] - 2026-06-30 — "The Pixel Count"
 
 **Schema version:** 91

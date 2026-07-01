@@ -57,7 +57,14 @@
 </style>
 
 <div class="me-head">
-  <h1>🗺 Edit map <span class="muted" style="font-size:14px;">{{ map.name }}</span>
+  {# v2.786.2 — larger map name in display mode + an inline rename (✎). #}
+  <h1 style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;">🗺 Edit map
+    <span id="me-map-name" style="font-size:26px;font-weight:800;color:var(--fg);">{{ map.name }}</span>
+    <input type="text" id="me-map-name-input" value="{{ map.name }}" maxlength="120"
+           style="display:none;font-size:20px;font-weight:700;min-height:36px;width:min(60vw,360px);">
+    <button type="button" id="me-rename-btn" class="me-tool-btn" title="Rename this map">✎</button>
+    <button type="button" id="me-rename-save" class="me-tool-btn" style="display:none;background:var(--accent);color:#fff;">Save</button>
+    <button type="button" id="me-rename-cancel" class="me-tool-btn" style="display:none;">Cancel</button>
     {% if is_active %}<span style="color:#6cb;font-size:13px;">· Active</span>{% endif %}</h1>
   <span style="display:inline-flex;gap:12px;align-items:center;">
     {# v2.781.0 — explicit Save (edits also auto-save; this commits everything
@@ -158,6 +165,15 @@
       <label style="gap:3px;">x<input type="number" id="me-grid-offx" min="0" value="{{ map.grid_offset_x }}" style="width:48px;min-height:32px;" title="Grid offset X (align the grid to the image)"></label>
       <label style="gap:3px;">y<input type="number" id="me-grid-offy" min="0" value="{{ map.grid_offset_y }}" style="width:48px;min-height:32px;" title="Grid offset Y"></label>
     </div>
+  </div>
+  {# v2.786.2 — map tags. #}
+  <div class="me-group" role="group" aria-label="Tags">
+    <span class="me-grp-lbl">Tags</span>
+    <input type="text" id="me-tags-input" placeholder="tag1, tag2…"
+           value="{{ (map.tags or []) | join(', ') }}" maxlength="400"
+           style="min-height:32px;width:150px;font-size:12px;"
+           title="Comma-separated tags for this map">
+    <button type="button" id="me-tags-save" class="me-tool-btn" title="Save the map's tags">Save tags</button>
   </div>
   <div class="me-group me-group--stack" role="group" aria-label="View">
     <span class="me-grp-lbl">View</span>
@@ -1030,6 +1046,52 @@
   // v2.781.0 — explicit Save button + ⌘/Ctrl+S.
   var saveBtn = document.getElementById('me-save-btn');
   if (saveBtn) saveBtn.addEventListener('click', saveAll);
+  // v2.786.2 — inline map rename (header ✎).
+  var nameSpan = document.getElementById('me-map-name');
+  var nameInput = document.getElementById('me-map-name-input');
+  var renameBtn = document.getElementById('me-rename-btn');
+  var renameSave = document.getElementById('me-rename-save');
+  var renameCancel = document.getElementById('me-rename-cancel');
+  function renameMode(on) {
+    if (nameSpan) nameSpan.style.display = on ? 'none' : '';
+    if (renameBtn) renameBtn.style.display = on ? 'none' : '';
+    if (nameInput) nameInput.style.display = on ? '' : 'none';
+    if (renameSave) renameSave.style.display = on ? '' : 'none';
+    if (renameCancel) renameCancel.style.display = on ? '' : 'none';
+    if (on && nameInput) { nameInput.value = nameSpan.textContent; nameInput.focus(); nameInput.select(); }
+  }
+  if (renameBtn) renameBtn.addEventListener('click', function () { renameMode(true); });
+  if (renameCancel) renameCancel.addEventListener('click', function () { renameMode(false); });
+  async function doRename() {
+    var nm = (nameInput.value || '').trim();
+    if (!nm) { renameMode(false); return; }
+    try {
+      var r = await fetch('/campaign/' + CID + '/settings/maps/' + MID + '/rename', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: nm }) });
+      if (r.ok) { var d = await r.json(); nameSpan.textContent = d.name; document.title = 'Edit map — ' + d.name; setStatus('Renamed ✓'); }
+      else setStatus('Rename failed.');
+    } catch (e) { setStatus('Rename failed.'); }
+    renameMode(false);
+  }
+  if (renameSave) renameSave.addEventListener('click', doRename);
+  if (nameInput) nameInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); doRename(); }
+    else if (e.key === 'Escape') { renameMode(false); }
+  });
+  // v2.786.2 — map tags.
+  var tagsInput = document.getElementById('me-tags-input');
+  var tagsSave = document.getElementById('me-tags-save');
+  async function doSaveTags() {
+    setStatus('Saving tags…');
+    try {
+      var r = await fetch('/campaign/' + CID + '/settings/maps/' + MID + '/tags', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tags: tagsInput.value }) });
+      if (r.ok) { var d = await r.json(); tagsInput.value = (d.tags || []).join(', '); setStatus('Tags saved ✓'); }
+      else setStatus('Tags save failed.');
+    } catch (e) { setStatus('Tags save failed.'); }
+  }
+  if (tagsSave) tagsSave.addEventListener('click', doSaveTags);
+  if (tagsInput) tagsInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doSaveTags(); } });
   document.addEventListener('keydown', function (e) {
     if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
       e.preventDefault(); saveAll();
