@@ -2042,6 +2042,19 @@
   }
   if (tagsSave) tagsSave.addEventListener('click', doSaveTags);
   if (tagsInput) tagsInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doSaveTags(); } });
+  // v2.821.0 — single-key tool hotkeys. Each key just clicks the matching
+  // toolbar button, so its toggle + side-effects (e.g. fog auto-enable) are
+  // preserved. Ignored while typing in a field or with a modifier held.
+  var TOOL_KEYS = {
+    w: 'me-wall-btn', d: 'me-door-btn', r: 'me-room-btn', l: 'me-light-btn',
+    f: 'me-fog-btn', t: 'me-terrain-btn', m: 'me-measure-btn', v: 'me-select-btn',
+    p: 'me-spot-btn', g: 'me-pin-btn', e: 'me-erase-btn',
+  };
+  // Surface each shortcut in its button's tooltip so it's discoverable.
+  Object.keys(TOOL_KEYS).forEach(function (k) {
+    var b = document.getElementById(TOOL_KEYS[k]);
+    if (b) b.setAttribute('title', (b.getAttribute('title') || '') + '  ·  shortcut: ' + k.toUpperCase());
+  });
   document.addEventListener('keydown', function (e) {
     if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
       e.preventDefault(); saveAll(); return;
@@ -2058,6 +2071,14 @@
     var typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '');
     if ((e.key === 'Delete' || e.key === 'Backspace') && selection.length && !typing) {
       e.preventDefault(); deleteSelection(); return;
+    }
+    // v2.821.0 — single-key tool hotkeys (no modifier, not while typing).
+    if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      var tkId = TOOL_KEYS[(e.key || '').toLowerCase()];
+      if (tkId) {
+        var tkBtn = document.getElementById(tkId);
+        if (tkBtn) { e.preventDefault(); tkBtn.click(); return; }
+      }
     }
     // v2.788.1 — Esc finishes a wall/room chain or clears the selection.
     if (e.key === 'Escape') {

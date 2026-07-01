@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.821.0] - 2026-07-01 — "The Quick Keys"
+
+**Schema version:** 96
+
+**Commit summary:** Add single-key tool hotkeys to the map editor (W wall, D door, R room, L light, F fog, T terrain, M measure, V select, P spot, G pin, E erase).
+
+**Description:** The editor previously only had modifier shortcuts (⌘S save, ⌘Z / ⌘⇧Z undo/redo). This adds **single-key hotkeys for the drawing tools** so a GM can switch tools without reaching for the ribbon: **W** wall · **D** door · **R** room · **L** light · **F** fog · **T** terrain · **M** measure · **V** select · **P** spot · **G** pin · **E** erase. Each key simply **clicks the matching toolbar button**, so every existing behaviour is preserved for free — the tool toggles off if it's already active, only one mode is live at a time, and side-effects like fog auto-enabling still fire. Keys are ignored while typing in a field or with a modifier held (so ⌘R still reloads), and each shortcut is appended to its button's tooltip for discoverability. Esc still exits the current tool.
+
+### Added
+- `app/templates/map_editor.html` — a `TOOL_KEYS` map + a keydown branch that clicks the matching button; each button's tooltip gains its `· shortcut: X` hint.
+- `tests/harness_ui/test_map_editor_hotkeys.py` (new, +2) — `test_tool_hotkey_toggles_mode` (W activates Wall, D switches to Door then toggles it off, tooltip carries the hint) and `test_hotkey_ignored_while_typing` (a keypress in a numeric field does not switch tools).
+
+### Schema
+- No schema change (still v96 — client-side authoring interaction only).
+
 ## [2.820.0] - 2026-07-01 — "The Concertina"
 
 **Schema version:** 96
