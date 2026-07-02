@@ -428,6 +428,8 @@
   <canvas id="me-light-canvas" style="position:absolute;top:0;left:0;pointer-events:none;"></canvas>
   {# v2.780.0 — token line-of-sight preview (veils what a clicked token can't see). #}
   <canvas id="me-vision-canvas" style="position:absolute;top:0;left:0;pointer-events:none;"></canvas>
+  {# v2.831.0 — ambient weather particle preview (rain / snow / fog), mirrors the tabletop. #}
+  <canvas id="me-weather-canvas" style="position:absolute;top:0;left:0;pointer-events:none;"></canvas>
   <svg id="me-overlay" width="{{ map.width_px }}" height="{{ map.height_px }}"
        viewBox="0 0 {{ map.width_px }} {{ map.height_px }}"></svg>
 </div>
@@ -675,6 +677,7 @@
     svg.style.width = img.clientWidth + 'px';
     svg.style.height = img.clientHeight + 'px';
     drawEditorLighting();  // v2.774.0 — rescale the lighting canvas to match
+    if (typeof sizeWeatherCanvas === 'function') sizeWeatherCanvas();  // v2.831.0
   }
 
   // v2.772.0 — transparent wide hit-line (the click/drag/right-click target).
@@ -2454,16 +2457,79 @@
       body: JSON.stringify({ grid_type: gridType }),
     }).then(function () { setStatus('Saved.'); }).catch(function () { setStatus('Save failed.'); });
   });
-  // v2.808.0 — ambient weather selector (POSTs; the animation plays on the tabletop).
+  // v2.831.0 — ambient weather PREVIEW in the editor: a particle overlay on
+  // #me-weather-canvas (rain / snow / fog), mirroring the live tabletop so the
+  // GM sees the effect while authoring instead of only on the table.
+  var _wxRAF = null, _wxParts = [], _wxCanvas = null, _wxCtx = null, _wxType = '';
+  function _wxSpawn(type, W, H, seed) {
+    if (type === 'rain') return { x: Math.random() * W, y: seed ? Math.random() * H : -12,
+      len: 8 + Math.random() * 12, sp: 9 + Math.random() * 8 };
+    if (type === 'snow') return { x: Math.random() * W, y: seed ? Math.random() * H : -6,
+      r: 1.5 + Math.random() * 2.5, sp: 1 + Math.random() * 2, drift: -0.5 + Math.random(), ph: Math.random() * 6.28 };
+    return { x: Math.random() * W, y: Math.random() * H, r: 60 + Math.random() * 130,
+      vx: 0.2 + Math.random() * 0.6, a: 0.04 + Math.random() * 0.07 };  // fog
+  }
+  function _wxStep(type, W, H) {
+    var c = _wxCtx; if (!c) return;
+    c.clearRect(0, 0, W, H);
+    var i, p;
+    if (type === 'rain') {
+      c.strokeStyle = 'rgba(165,195,235,0.5)'; c.lineWidth = 1.4;
+      for (i = 0; i < _wxParts.length; i++) { p = _wxParts[i];
+        c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(p.x - 2, p.y + p.len); c.stroke();
+        p.y += p.sp; p.x -= 0.6;
+        if (p.y > H) { p.y = -12; p.x = Math.random() * W; } }
+    } else if (type === 'snow') {
+      c.fillStyle = 'rgba(255,255,255,0.85)';
+      for (i = 0; i < _wxParts.length; i++) { p = _wxParts[i];
+        p.ph += 0.02; p.y += p.sp; p.x += Math.sin(p.ph) * 0.8 + p.drift;
+        c.beginPath(); c.arc(p.x, p.y, p.r, 0, 6.283); c.fill();
+        if (p.y > H) { p.y = -6; p.x = Math.random() * W; } }
+    } else if (type === 'fog') {
+      for (i = 0; i < _wxParts.length; i++) { p = _wxParts[i];
+        p.x += p.vx; if (p.x - p.r > W) p.x = -p.r;
+        var g = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+        g.addColorStop(0, 'rgba(202,207,217,' + p.a + ')');
+        g.addColorStop(1, 'rgba(202,207,217,0)');
+        c.fillStyle = g; c.beginPath(); c.arc(p.x, p.y, p.r, 0, 6.283); c.fill(); }
+    }
+  }
+  function sizeWeatherCanvas() {
+    if (!_wxCanvas) return;
+    var W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
+    if (W && _wxCanvas.width !== W) _wxCanvas.width = W;
+    if (H && _wxCanvas.height !== H) _wxCanvas.height = H;
+    _wxCanvas.style.width = (img.clientWidth || W) + 'px';
+    _wxCanvas.style.height = (img.clientHeight || H) + 'px';
+  }
+  function applyEditorWeather(type) {
+    _wxType = type || '';
+    if (!_wxCanvas) { _wxCanvas = document.getElementById('me-weather-canvas');
+      _wxCtx = _wxCanvas ? _wxCanvas.getContext('2d') : null; }
+    if (!_wxCanvas || !_wxCtx) return;
+    sizeWeatherCanvas();
+    if (_wxRAF) { cancelAnimationFrame(_wxRAF); _wxRAF = null; }
+    var W = _wxCanvas.width, H = _wxCanvas.height;
+    _wxCtx.clearRect(0, 0, W, H);
+    if (!_wxType) { _wxParts = []; return; }
+    var n = (_wxType === 'fog') ? 16 : Math.max(60, Math.round(W * H / 9000));
+    n = Math.min(n, 600);
+    _wxParts = [];
+    for (var i = 0; i < n; i++) _wxParts.push(_wxSpawn(_wxType, W, H, true));
+    (function loop() { _wxStep(_wxType, W, H); _wxRAF = requestAnimationFrame(loop); })();
+  }
+  // v2.808.0/v2.831.0 — ambient weather selector: POSTs to persist AND previews live in-editor.
   var weatherSel = document.getElementById('me-weather');
   if (weatherSel) {
     weatherSel.value = {{ (weather or '') | tojson }};
+    applyEditorWeather(weatherSel.value);  // preview the saved weather on load
     weatherSel.addEventListener('change', function (e) {
+      applyEditorWeather(e.target.value);  // live preview as the GM picks
       setStatus('Saving…');
       fetch('/campaign/' + CID + '/settings/maps/' + MID + '/weather', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ weather: e.target.value }),
-      }).then(function () { setStatus('Weather set — shown on the live tabletop.'); })
+      }).then(function () { setStatus('Weather set — previewed here + shown on the live tabletop.'); })
         .catch(function () { setStatus('Save failed.'); });
     });
   }
@@ -2503,8 +2569,10 @@
     svg.style.transform = t;
     var lc = document.getElementById('me-light-canvas');
     var vc = document.getElementById('me-vision-canvas');
+    var wc = document.getElementById('me-weather-canvas');
     if (lc) lc.style.transform = t;
     if (vc) vc.style.transform = t;
+    if (wc) wc.style.transform = t;  // v2.831.0 — weather pans/zooms with the map
   }
   function panBy(dx, dy) { panX += dx; panY += dy; applyPan(); }
   function centerMap() {  // centre the (possibly smaller-than-frame) map

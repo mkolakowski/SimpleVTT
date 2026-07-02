@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.831.0] - 2026-07-01 — "The Weather Eye"
+
+**Schema version:** 96
+
+**Commit summary:** Preview ambient weather (rain / snow / fog) live in the map editor, not just on the tabletop.
+
+**Description:** The editor's Weather selector previously only persisted the choice — the animated overlay played on the live tabletop only, so a GM couldn't see what they were setting while authoring. This adds the **same particle system to the editor**: a `#me-weather-canvas` layer that animates **rain, snow, or fog** exactly like the tabletop (`_wxSpawn`/`_wxStep` ported over), driven by the existing selector. It previews the map's saved weather on load and updates live the instant the GM picks a value (in addition to POSTing to persist it). The weather canvas rides the v2.828.0 transform camera, so it pans and zooms with the map, and rescales with the fit/zoom via `syncOverlay`.
+
+### Added
+- `app/templates/map_editor.html` — `#me-weather-canvas` in the stage; `_wxSpawn`/`_wxStep`/`sizeWeatherCanvas`/`applyEditorWeather` renderer; weather canvas folded into `applyPan()` (pan/zoom) and `syncOverlay()` (rescale).
+- `tests/harness_ui/test_map_editor_weather.py` — `test_editor_weather_previews` (+1): the editor's weather canvas is blank with no weather, draws particles on `rain`, and clears when set back to none.
+
+### Changed
+- `app/templates/map_editor.html` — the `#me-weather` change handler now previews in-editor as well as saving.
+
+### Schema
+- No schema change (still v96 — client-side preview only).
+
 ## [2.830.0] - 2026-07-01 — "The Rolling Lens"
 
 **Schema version:** 96
