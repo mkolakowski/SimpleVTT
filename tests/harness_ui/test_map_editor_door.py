@@ -12,7 +12,7 @@ def test_door_visual_and_tooltip(gm_page: Page) -> None:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
         c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
-            {"id": "d", "x1": 200, "y1": 700, "x2": 200, "y2": 840,  # v2.838.0 — below the toolbar
+            {"id": "d", "x1": 200, "y1": 200, "x2": 200, "y2": 340,
              "door": True, "open": False, "style": "wood"}]})
         try:
             gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")

@@ -12,9 +12,8 @@ from .conftest import BASE_URL, CAMPAIGN_ID
 
 
 def _seed_walls(c, mid, n):
-    # v2.838.0 — seed in the lower map, clear of the floating toolbar.
-    walls = [{"id": f"w{i}", "x1": 120 + i * 80, "y1": 640,
-              "x2": 120 + i * 80, "y2": 860} for i in range(n)]
+    walls = [{"id": f"w{i}", "x1": 120 + i * 80, "y1": 120,
+              "x2": 120 + i * 80, "y2": 360} for i in range(n)]
     c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": walls})
 
 

@@ -32,9 +32,8 @@ def test_draw_door_with_style(gm_page: Page) -> None:
 
             # Draw a door (two clicks).
             box = gm_page.locator("#me-overlay").bounding_box()
-            # v2.838.0 — draw in the lower map, clear of the floating toolbar.
-            gm_page.mouse.click(box["x"] + 100, box["y"] + 420)
-            gm_page.mouse.click(box["x"] + 220, box["y"] + 420)
+            gm_page.mouse.click(box["x"] + 100, box["y"] + 100)
+            gm_page.mouse.click(box["x"] + 220, box["y"] + 100)
             gm_page.wait_for_timeout(400)
 
             walls = c.get(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls").json()["walls"]

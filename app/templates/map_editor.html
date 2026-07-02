@@ -2585,9 +2585,19 @@
     if (wc) wc.style.transform = t;  // v2.831.0 — weather pans/zooms with the map
   }
   function panBy(dx, dy) { panX += dx; panY += dy; applyPan(); }
-  function centerMap() {  // centre the (possibly smaller-than-frame) map
+  // v2.839.0 — the floating toolbar overlays the top of the map, so the default
+  // view reserves its height: the map is fit + centred in the area BELOW the bar
+  // so the whole map is visible on load (not tucked behind the ribbon).
+  function _topInset() {
+    var tb = document.querySelector('.me-toolbar');
+    if (!tb) return 8;
+    return tb.offsetTop + tb.offsetHeight + 8;  // bar bottom (stage coords) + gap
+  }
+  function centerMap() {  // centre the map in the visible area below the toolbar
+    var top = _topInset();
+    var availH = Math.max(40, stage.clientHeight - top - 8);
     panX = Math.round((stage.clientWidth - img.clientWidth) / 2);
-    panY = Math.round((stage.clientHeight - img.clientHeight) / 2);
+    panY = Math.round(top + (availH - img.clientHeight) / 2);
     applyPan();
   }
   // v2.830.0 — zoom toward a stage-local point (sx, sy): keep the map pixel under
@@ -2623,8 +2633,10 @@
   function fitContain() {
     var nw = img.naturalWidth || img.width, nh = img.naturalHeight || img.height;
     if (!nw || !nh) { setZoom(1); centerMap(); return; }
-    var availW = (stage.clientWidth || 800) - 6;
-    var availH = (stage.clientHeight || Math.max(240, window.innerHeight * 0.86)) - 6;
+    // v2.839.0 — fit the WHOLE map into the area BELOW the floating toolbar so
+    // it's fully visible on load, not partly hidden behind the bar.
+    var availW = (stage.clientWidth || 800) - 12;
+    var availH = Math.max(120, stage.clientHeight - _topInset() - 12);
     setZoom(Math.min(availW / nw, availH / nh));
     centerMap();  // v2.828.0 — recentre the camera after a fit
   }

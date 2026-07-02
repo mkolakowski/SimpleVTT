@@ -24,10 +24,9 @@ def test_marquee_select_move_delete(gm_page: Page) -> None:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
         # Seed two well-separated props so they load with the editor.
-        # v2.838.0 — seed in the lower map, clear of the floating toolbar.
         c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/props", json={"props": [
-            {"x": 300, "y": 700, "kind": "🌲"},
-            {"x": 420, "y": 700, "kind": "🪑"}]})
+            {"x": 300, "y": 300, "kind": "🌲"},
+            {"x": 420, "y": 300, "kind": "🪑"}]})
         try:
             gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
             expect(gm_page.locator("#me-overlay")).to_be_visible()
@@ -37,8 +36,8 @@ def test_marquee_select_move_delete(gm_page: Page) -> None:
                 return gm_page.evaluate(_MAP_TO_SCREEN, [mx, my])
 
             gm_page.locator("#me-select-btn").click()
-            # Marquee a box (map 250,650 → 470,760) around both props.
-            a, b = scr(250, 650), scr(470, 760)
+            # Marquee a box (map 250,250 → 470,360) around both props.
+            a, b = scr(250, 250), scr(470, 360)
             gm_page.mouse.move(a[0], a[1])
             gm_page.mouse.down()
             gm_page.mouse.move(b[0], b[1], steps=6)
@@ -49,15 +48,15 @@ def test_marquee_select_move_delete(gm_page: Page) -> None:
                 "els => els.filter(e => e.getAttribute('stroke') === '#6cf').length")
             assert rings >= 2, rings
 
-            # Drag from inside the selection (map 360,700 → 360,840) to move both.
-            s, e = scr(360, 700), scr(360, 840)
+            # Drag from inside the selection (map 360,300 → 360,440) to move both.
+            s, e = scr(360, 300), scr(360, 440)
             gm_page.mouse.move(s[0], s[1])
             gm_page.mouse.down()
             gm_page.mouse.move(e[0], e[1], steps=6)
             gm_page.mouse.up()
             gm_page.wait_for_timeout(300)
             moved = _props(c, mid)
-            assert all(p["y"] > 720 for p in moved), moved  # shifted well below 700
+            assert all(p["y"] > 320 for p in moved), moved  # shifted well below 300
 
             gm_page.keyboard.press("Delete")
             gm_page.wait_for_timeout(300)

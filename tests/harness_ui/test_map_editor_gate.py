@@ -28,7 +28,7 @@ def test_convert_to_gate_and_flip(gm_page: Page) -> None:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
         c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
-            {"id": "w", "x1": 200, "y1": 700, "x2": 340, "y2": 700, "style": "wood"}]})
+            {"id": "w", "x1": 200, "y1": 200, "x2": 340, "y2": 200, "style": "wood"}]})
         try:
             _open(gm_page, mid)
             box = _hit_box(gm_page)
@@ -54,7 +54,7 @@ def test_secret_door_marker(gm_page: Page) -> None:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
         c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
-            {"id": "d", "x1": 200, "y1": 700, "x2": 200, "y2": 840,  # v2.838.0 — below the toolbar
+            {"id": "d", "x1": 200, "y1": 200, "x2": 200, "y2": 340,
              "door": True, "open": False, "style": "wood"}]})
         try:
             _open(gm_page, mid)
@@ -79,7 +79,7 @@ def test_convert_to_window(gm_page: Page) -> None:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
         c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
-            {"id": "w", "x1": 200, "y1": 700, "x2": 340, "y2": 700, "style": "stone"}]})
+            {"id": "w", "x1": 200, "y1": 200, "x2": 340, "y2": 200, "style": "stone"}]})
         try:
             _open(gm_page, mid)
             box = _hit_box(gm_page)
@@ -104,7 +104,7 @@ def test_wall_transparency_submenu(gm_page: Page) -> None:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
         c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
-            {"id": "w", "x1": 200, "y1": 700, "x2": 340, "y2": 700, "style": "stone"}]})
+            {"id": "w", "x1": 200, "y1": 200, "x2": 340, "y2": 200, "style": "stone"}]})
         try:
             _open(gm_page, mid)
             box = _hit_box(gm_page)
@@ -127,7 +127,7 @@ def test_open_door_leaf_click_closes(gm_page: Page) -> None:
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
         # A vertical open door: hinge (200,200), leaf swings to ~ (340,200) area.
         c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
-            {"id": "d", "x1": 200, "y1": 700, "x2": 200, "y2": 840,  # v2.838.0 — below the toolbar
+            {"id": "d", "x1": 200, "y1": 200, "x2": 200, "y2": 340,
              "door": True, "open": True, "style": "wood"}]})
         try:
             _open(gm_page, mid)

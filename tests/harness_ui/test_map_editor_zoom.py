@@ -36,13 +36,11 @@ def test_zoom_keeps_drawing_correct(gm_page: Page) -> None:
                 gm_page.locator("#me-zoom-in").click()
             assert _zoom_pct() > before, (before, _zoom_pct())
 
-            # Draw a wall at the zoomed scale, in the lower-centre of the stage
-            # (v2.838.0 — clear of the floating toolbar; the zoomed map fills it).
+            # Draw a wall at the zoomed scale.
             gm_page.locator("#me-wall-btn").click()
-            box = gm_page.locator("#me-stage").bounding_box()
-            wy = box["y"] + box["height"] * 0.7
-            gm_page.mouse.click(box["x"] + box["width"] * 0.4, wy)
-            gm_page.mouse.click(box["x"] + box["width"] * 0.4 + 130, wy)
+            box = gm_page.locator("#me-overlay").bounding_box()
+            gm_page.mouse.click(box["x"] + 90, box["y"] + 90)
+            gm_page.mouse.click(box["x"] + 220, box["y"] + 90)
             gm_page.wait_for_timeout(400)
 
             walls = c.get(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls").json()["walls"]

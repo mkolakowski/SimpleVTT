@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.839.0] - 2026-07-02 — "The Whole Map"
+
+**Schema version:** 96
+
+**Commit summary:** Default the editor view to fit the whole map below the floating toolbar so it's fully visible on load.
+
+**Description:** After v2.838.0 floated the toolbar over the map, the map's top sat behind the bar. This makes the **default view fit the entire map into the area below the toolbar**, so the whole map is visible the moment the editor opens — nothing tucked behind the ribbon. `fitContain`/`centerMap` now reserve the toolbar's height (measured live from `.me-toolbar`, so it adapts as groups collapse) as a top inset and centre the map in the remaining space. The map still runs edge-to-edge behind the transparent bar (v2.838.0) and pans/zooms freely — this only changes where the camera starts and where "Fit" lands. Because the whole map now sits below the bar, the drawing/interaction harness tests that v2.838.0 had shifted downward are restored to their original coordinates.
+
+### Changed
+- `app/templates/map_editor.html` — new `_topInset()` (toolbar bottom + gap); `centerMap()` centres the map in the below-toolbar area; `fitContain()` fits the map into that area.
+- 11 harness tests reverted to their pre-v2.838.0 coordinates (the whole map is visible below the bar again).
+
+### Schema
+- No schema change (still v96 — camera default only).
+
 ## [2.838.0] - 2026-07-02 — "The Map Behind Glass"
 
 **Schema version:** 96
