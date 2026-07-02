@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.830.0] - 2026-07-01 — "The Rolling Lens"
+
+**Schema version:** 96
+
+**Commit summary:** The map-editor scroll wheel now zooms the map (toward the cursor) instead of panning.
+
+**Description:** Changes the scroll-wheel binding so it **zooms** the map in and out — the standard gesture for a map editor — rather than panning (which v2.828.0 had briefly mapped to a plain wheel). Wheel-up zooms in, wheel-down zooms out, and the zoom **homes on the cursor**: the map pixel under the pointer stays put while the scale changes (a new `zoomAt()` keeps that point fixed by adjusting the transform camera's offset). No modifier needed. Panning is still available by dragging (left-drag with no tool, or the middle button anytime).
+
+### Changed
+- `app/templates/map_editor.html` — the stage `wheel` handler now calls `zoomAt(factor, cursorX, cursorY)` for every wheel event (no ⌘/Ctrl needed); new `zoomAt()` zoom-toward-cursor helper.
+
+### Added
+- `tests/harness_ui/test_map_editor_zoom.py` — `test_scroll_wheel_zooms` (+1): wheel-up over the stage raises the zoom %, wheel-down lowers it.
+
+### Schema
+- No schema change (still v96 — client-side viewport interaction only).
+
 ## [2.829.0] - 2026-07-01 — "The Open Table"
 
 **Schema version:** 96

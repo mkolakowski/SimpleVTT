@@ -2512,9 +2512,22 @@
     panY = Math.round((stage.clientHeight - img.clientHeight) / 2);
     applyPan();
   }
+  // v2.830.0 — zoom toward a stage-local point (sx, sy): keep the map pixel under
+  // that point fixed while the zoom changes, so scroll-wheel zoom homes on the
+  // cursor instead of the top-left corner.
+  function zoomAt(factor, sx, sy) {
+    var z0 = zoom;
+    setZoom(zoom * factor);   // clamps to [0.2, 5]
+    if (zoom === z0) return;  // hit a clamp — nothing moved
+    var r = zoom / z0;
+    panX = sx - (sx - panX) * r;
+    panY = sy - (sy - panY) * r;
+    applyPan();
+  }
   // v2.767.0 — zoom. The image is displayed at naturalWidth × zoom; the SVG
   // overlay follows via syncOverlay, and getScreenCTM keeps click→map coords
-  // correct at any zoom. ⌘/Ctrl-wheel zooms; plain wheel + drag pan the camera.
+  // correct at any zoom. The scroll wheel zooms (v2.830.0); drag / middle-button
+  // pan the camera.
   var zoom = 1;
   function applyZoom() {
     var nw = img.naturalWidth || img.width, nh = img.naturalHeight || img.height;
@@ -2540,12 +2553,11 @@
   document.getElementById('me-zoom-fit').addEventListener('click', fitContain);
   var stage = document.getElementById('me-stage');
   stage.addEventListener('wheel', function (e) {
+    // v2.830.0 — the scroll wheel zooms the map (toward the cursor). Drag / the
+    // middle button still pan. Trackpad + mouse wheel both roll deltaY.
     e.preventDefault();
-    if (e.ctrlKey || e.metaKey) {         // ⌘/Ctrl-wheel zooms
-      setZoom(zoom * (e.deltaY < 0 ? 1.1 : 0.9));
-    } else {                              // v2.828.0 — plain wheel pans the camera
-      panBy(-e.deltaX, -e.deltaY);
-    }
+    var rect = stage.getBoundingClientRect();
+    zoomAt(e.deltaY < 0 ? 1.1 : 0.9, e.clientX - rect.left, e.clientY - rect.top);
   }, { passive: false });
   // v2.823.0 — grab-and-drag panning of the map, like the tabletop. In the
   // default (no-tool) state the SVG overlay is pointer-events:none, so a press

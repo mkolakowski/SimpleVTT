@@ -53,3 +53,34 @@ def test_zoom_keeps_drawing_correct(gm_page: Page) -> None:
             c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
 
     assert not errors, f"JS errors: {errors}"
+
+
+def test_scroll_wheel_zooms(gm_page: Page) -> None:
+    """v2.830.0 — the scroll wheel zooms the map in and out."""
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
+        c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
+    gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
+    expect(gm_page.locator("#me-overlay")).to_be_visible()
+    gm_page.wait_for_timeout(400)
+
+    def _pct() -> int:
+        return int(gm_page.locator("#me-zoom-lbl").inner_text().rstrip("%"))
+
+    box = gm_page.locator("#me-stage").bounding_box()
+    cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    gm_page.mouse.move(cx, cy)
+
+    before = _pct()
+    # Wheel up (negative deltaY) zooms in.
+    for _ in range(3):
+        gm_page.mouse.wheel(0, -120)
+        gm_page.wait_for_timeout(40)
+    zoomed_in = _pct()
+    assert zoomed_in > before, (before, zoomed_in)
+
+    # Wheel down (positive deltaY) zooms back out.
+    for _ in range(3):
+        gm_page.mouse.wheel(0, 120)
+        gm_page.wait_for_timeout(40)
+    assert _pct() < zoomed_in, (zoomed_in, _pct())
