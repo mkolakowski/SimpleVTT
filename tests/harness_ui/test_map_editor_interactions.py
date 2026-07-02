@@ -28,7 +28,7 @@ def test_door_click_toggles(gm_page: Page) -> None:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
         c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
-            {"id": "d", "x1": 200, "y1": 200, "x2": 200, "y2": 360,
+            {"id": "d", "x1": 200, "y1": 700, "x2": 200, "y2": 860,  # v2.838.0 — below the toolbar
              "door": True, "open": False, "style": "wood"}]})
         try:
             _open_editor(gm_page, mid)
@@ -50,7 +50,7 @@ def test_copy_paste_wall(gm_page: Page) -> None:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
         c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
-            {"id": "w", "x1": 150, "y1": 150, "x2": 300, "y2": 150, "style": "stone"}]})
+            {"id": "w", "x1": 150, "y1": 700, "x2": 300, "y2": 700, "style": "stone"}]})
         try:
             _open_editor(gm_page, mid)
             box = _hit_box(gm_page)
@@ -58,10 +58,10 @@ def test_copy_paste_wall(gm_page: Page) -> None:
             gm_page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2,
                                 button="right")
             gm_page.locator("#me-ctx-menu button", has_text="Copy").click()
-            # Right-click an empty, visible part of the map (near the top, to
-            # the right of the wall — the tall toolbar can push the centre off).
+            # Right-click an empty, visible part of the map, well below the
+            # floating toolbar (v2.838.0).
             ov = gm_page.locator("#me-overlay").bounding_box()
-            gm_page.mouse.click(ov["x"] + ov["width"] * 0.6, ov["y"] + 110,
+            gm_page.mouse.click(ov["x"] + ov["width"] * 0.6, ov["y"] + 420,
                                 button="right")
             gm_page.locator("#me-ctx-menu button", has_text="Paste").click()
             gm_page.wait_for_timeout(300)
@@ -77,7 +77,7 @@ def test_edit_wall_material(gm_page: Page) -> None:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
         c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
-            {"id": "w", "x1": 150, "y1": 150, "x2": 300, "y2": 150, "style": "stone"}]})
+            {"id": "w", "x1": 150, "y1": 700, "x2": 300, "y2": 700, "style": "stone"}]})
         try:
             _open_editor(gm_page, mid)
             box = _hit_box(gm_page)
@@ -99,7 +99,7 @@ def test_right_click_works_in_draw_mode(gm_page: Page) -> None:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
         c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
-            {"id": "w", "x1": 150, "y1": 150, "x2": 320, "y2": 150, "style": "stone"}]})
+            {"id": "w", "x1": 150, "y1": 700, "x2": 320, "y2": 700, "style": "stone"}]})
         try:
             _open_editor(gm_page, mid)
             gm_page.locator("#me-wall-btn").click()   # enter wall (draw) mode
@@ -122,7 +122,7 @@ def test_left_click_in_draw_mode_keeps_wall(gm_page: Page) -> None:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
         c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
-            {"id": "w", "x1": 150, "y1": 150, "x2": 320, "y2": 150, "style": "stone"}]})
+            {"id": "w", "x1": 150, "y1": 700, "x2": 320, "y2": 700, "style": "stone"}]})
         try:
             _open_editor(gm_page, mid)
             gm_page.locator("#me-wall-btn").click()   # enter wall (draw) mode
@@ -140,7 +140,7 @@ def test_resize_wall_end_handle(gm_page: Page) -> None:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
         c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
-            {"id": "w", "x1": 150, "y1": 150, "x2": 320, "y2": 150, "style": "stone"}]})
+            {"id": "w", "x1": 150, "y1": 700, "x2": 320, "y2": 700, "style": "stone"}]})
         try:
             _open_editor(gm_page, mid)
             box = _hit_box(gm_page)
@@ -169,7 +169,7 @@ def test_move_drags_object(gm_page: Page) -> None:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
         c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
-            {"id": "w", "x1": 150, "y1": 150, "x2": 300, "y2": 150, "style": "stone"}]})
+            {"id": "w", "x1": 150, "y1": 700, "x2": 300, "y2": 700, "style": "stone"}]})
         try:
             _open_editor(gm_page, mid)
             box = _hit_box(gm_page)
@@ -184,6 +184,6 @@ def test_move_drags_object(gm_page: Page) -> None:
             gm_page.mouse.up()
             gm_page.wait_for_timeout(300)
             after = _walls(c, mid)[0]
-            assert after["x1"] != before or after["y1"] != 150, after  # it moved
+            assert after["x1"] != before or after["y1"] != 700, after  # it moved (v2.838.0 seed y)
         finally:
             c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})

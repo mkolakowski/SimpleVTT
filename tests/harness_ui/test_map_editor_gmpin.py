@@ -20,7 +20,7 @@ def test_place_gm_pin(gm_page: Page) -> None:
             gm_page.wait_for_timeout(400)
             gm_page.locator("#me-pin-btn").click()
             ov = gm_page.locator("#me-overlay").bounding_box()
-            gm_page.mouse.click(ov["x"] + 120, ov["y"] + 90)
+            gm_page.mouse.click(ov["x"] + 120, ov["y"] + 420)  # v2.838.0 — below the floating toolbar
             gm_page.wait_for_timeout(300)
             pins = c.get(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/gm_pins").json()["gm_pins"]
             assert len(pins) == 1, pins

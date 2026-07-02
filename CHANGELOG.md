@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.838.0] - 2026-07-02 — "The Map Behind Glass"
+
+**Schema version:** 96
+
+**Commit summary:** The map runs edge-to-edge in the editor with the transparent toolbar floating over its top, like the main VTT.
+
+**Description:** Makes the editor truly full-bleed. The map **stage fills the whole editor edge-to-edge** (absolute `inset:0`, no margins), and the frosted-glass toolbar **floats over the top of the map** as an overlay rather than sitting above it — so the map runs behind the bar exactly like the tabletop. The trick that keeps this usable (the same one the tabletop uses): the toolbar container is `pointer-events:none`, so presses fall **through the bar and its group-card gaps to the map behind it**; only the actual controls (buttons, selects, inputs, labels, group/zone labels) re-enable pointer events. So you can still pan the map beneath the bar and draw through the gaps, and the map is visible edge-to-edge behind the translucent glass.
+
+### Changed
+- `app/templates/map_editor.html` — `.me-stage` → `position:absolute; inset:0` (edge-to-edge, no margin/radius); `.me-toolbar` → `position:absolute` floating overlay with `pointer-events:none`; interactive controls re-enable `pointer-events:auto`; `.me-editor` no longer a flex column.
+- `tests/harness_ui/test_map_editor_fullbleed.py` — asserts the overlay layout: map fills the editor edge-to-edge, toolbar is `absolute` over the map with `pointer-events:none` (controls `auto`).
+- 10 harness tests (`test_map_editor`, `_door`, `_door_style`, `_erase_menu`, `_gate`, `_gmpin`, `_interactions`, `_save`, `_select`, `_undo`, `_zoom`) — draw/seed in the **lower** portion of the map, clear of the floating toolbar, since the top band now sits behind the bar.
+
+### Schema
+- No schema change (still v96 — layout only).
+
 ## [2.837.0] - 2026-07-02 — "The Two-Finger Table"
 
 **Schema version:** 96

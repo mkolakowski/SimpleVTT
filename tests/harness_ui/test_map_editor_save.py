@@ -24,8 +24,9 @@ def test_save_button_commits(gm_page: Page) -> None:
             # Draw a wall (two clicks in wall mode).
             gm_page.locator("#me-wall-btn").click()
             ov = gm_page.locator("#me-overlay").bounding_box()
-            gm_page.mouse.click(ov["x"] + 80, ov["y"] + 80)
-            gm_page.mouse.click(ov["x"] + 220, ov["y"] + 80)
+            # v2.838.0 — draw in the lower map, clear of the floating toolbar.
+            gm_page.mouse.click(ov["x"] + 80, ov["y"] + 420)
+            gm_page.mouse.click(ov["x"] + 220, ov["y"] + 420)
             gm_page.wait_for_timeout(200)
 
             # Explicit Save → confirmation status.

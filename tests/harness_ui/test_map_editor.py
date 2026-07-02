@@ -31,8 +31,9 @@ def test_editor_draws_wall(gm_page: Page) -> None:
             # Click two points on the overlay to draw a segment.
             box = overlay.bounding_box()
             assert box, "overlay should have a box"
-            gm_page.mouse.click(box["x"] + 80, box["y"] + 80)
-            gm_page.mouse.click(box["x"] + 200, box["y"] + 80)
+            # v2.838.0 — draw in the lower map, clear of the floating toolbar.
+            gm_page.mouse.click(box["x"] + 80, box["y"] + 420)
+            gm_page.mouse.click(box["x"] + 200, box["y"] + 420)
             gm_page.wait_for_timeout(400)  # let the PUT settle
 
             walls = c.get(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls").json()["walls"]
