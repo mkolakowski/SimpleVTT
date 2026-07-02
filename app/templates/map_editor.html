@@ -108,10 +108,13 @@
   .me-toolbar input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
   /* v2.823.0 — grab cursor hints the map is drag-pannable (tabletop-style);
      JS swaps to 'grabbing' while a pan is in progress. An active drawing tool
-     puts its own crosshair on the SVG overlay, which covers this. */
+     puts its own crosshair on the SVG overlay, which covers this.
+     v2.828.0 — overflow:hidden + a CSS-transform camera (like the tabletop) so
+     the map pans even when it fits the frame; touch-action:none lets a finger
+     drag pan instead of scrolling the page. Fixed height = a stable viewport. */
   .me-stage { position:relative; display:block; width:100%; box-sizing:border-box;
-    border:1px solid var(--border); border-radius:6px; overflow:auto;
-    max-height:86vh; background:#0b0d16; cursor:grab; }
+    border:1px solid var(--border); border-radius:6px; overflow:hidden;
+    height:86vh; background:#0b0d16; cursor:grab; touch-action:none; }
   .me-stage img { display:block; }
   #me-overlay { position:absolute; top:0; left:0; overflow:visible; }
   .me-status { font-size:12px; color:var(--fg-mute); margin-left:auto; }
@@ -2472,10 +2475,30 @@
     }).then(function () { setStatus('Saved.'); }).catch(function () { setStatus('Save failed.'); });
   });
 
+  // v2.828.0 — CSS-transform camera (like the tabletop). The map layers (image,
+  // lighting + vision canvases, and the SVG editing overlay) are translated
+  // together by (panX, panY); getScreenCTM() folds the transform into the SVG's
+  // screen matrix, so click→map coords stay correct. Because it's a transform
+  // (not scroll), the map pans freely even when it fits the frame.
+  var panX = 0, panY = 0;
+  function applyPan() {
+    var t = 'translate(' + Math.round(panX) + 'px,' + Math.round(panY) + 'px)';
+    img.style.transform = t;
+    svg.style.transform = t;
+    var lc = document.getElementById('me-light-canvas');
+    var vc = document.getElementById('me-vision-canvas');
+    if (lc) lc.style.transform = t;
+    if (vc) vc.style.transform = t;
+  }
+  function panBy(dx, dy) { panX += dx; panY += dy; applyPan(); }
+  function centerMap() {  // centre the (possibly smaller-than-frame) map
+    panX = Math.round((stage.clientWidth - img.clientWidth) / 2);
+    panY = Math.round((stage.clientHeight - img.clientHeight) / 2);
+    applyPan();
+  }
   // v2.767.0 — zoom. The image is displayed at naturalWidth × zoom; the SVG
   // overlay follows via syncOverlay, and getScreenCTM keeps click→map coords
-  // correct at any zoom. Plain wheel scrolls (pans) the overflow:auto stage;
-  // ⌘/Ctrl-wheel zooms.
+  // correct at any zoom. ⌘/Ctrl-wheel zooms; plain wheel + drag pan the camera.
   var zoom = 1;
   function applyZoom() {
     var nw = img.naturalWidth || img.width, nh = img.naturalHeight || img.height;
@@ -2492,21 +2515,25 @@
   // stage so you see it all at once, instead of fitting to width only.
   function fitContain() {
     var nw = img.naturalWidth || img.width, nh = img.naturalHeight || img.height;
-    if (!nw || !nh) { setZoom(1); return; }
+    if (!nw || !nh) { setZoom(1); centerMap(); return; }
     var availW = (stage.clientWidth || 800) - 6;
-    var availH = Math.max(240, window.innerHeight * 0.86) - 6;
+    var availH = (stage.clientHeight || Math.max(240, window.innerHeight * 0.86)) - 6;
     setZoom(Math.min(availW / nw, availH / nh));
+    centerMap();  // v2.828.0 — recentre the camera after a fit
   }
   document.getElementById('me-zoom-fit').addEventListener('click', fitContain);
   var stage = document.getElementById('me-stage');
   stage.addEventListener('wheel', function (e) {
-    if (!e.ctrlKey && !e.metaKey) return;  // plain wheel = scroll/pan
     e.preventDefault();
-    setZoom(zoom * (e.deltaY < 0 ? 1.1 : 0.9));
+    if (e.ctrlKey || e.metaKey) {         // ⌘/Ctrl-wheel zooms
+      setZoom(zoom * (e.deltaY < 0 ? 1.1 : 0.9));
+    } else {                              // v2.828.0 — plain wheel pans the camera
+      panBy(-e.deltaX, -e.deltaY);
+    }
   }, { passive: false });
   // v2.823.0 — grab-and-drag panning of the map, like the tabletop. In the
   // default (no-tool) state the SVG overlay is pointer-events:none, so a press
-  // on the map reaches the stage; we pan by scrolling the overflow:auto stage.
+  // on the map reaches the stage; we pan the CSS-transform camera (below).
   // A pan needs >3px of movement to engage, so a plain tap still reaches the
   // object under it (e.g. a door toggle). Listens on window so the drag
   // survives the pointer leaving the stage bounds.
@@ -2519,7 +2546,7 @@
     var leftFree = (e.button === 0 && svg.style.pointerEvents !== 'auto');  // no tool active
     if (!middle && !leftFree) return;
     if (middle) e.preventDefault();  // suppress the browser's middle-click autoscroll
-    stagePan = { x: e.clientX, y: e.clientY, sl: stage.scrollLeft, st: stage.scrollTop, active: false };
+    stagePan = { x: e.clientX, y: e.clientY, px: panX, py: panY, active: false };
   });
   window.addEventListener('pointermove', function (e) {
     if (!stagePan) return;
@@ -2529,8 +2556,10 @@
       stagePan.active = true;
       stage.style.cursor = 'grabbing';
     }
-    stage.scrollLeft = stagePan.sl - dx;
-    stage.scrollTop = stagePan.st - dy;
+    // The map follows the pointer (grab-and-drag), so the camera offset tracks
+    // the raw delta from where the press began.
+    panX = stagePan.px + dx; panY = stagePan.py + dy;
+    applyPan();
   });
   window.addEventListener('pointerup', function () {
     if (!stagePan) return;

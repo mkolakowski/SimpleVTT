@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.828.0] - 2026-07-01 — "The Free Camera"
+
+**Schema version:** 96
+
+**Commit summary:** Fix map-editor panning so it works even when the map fits — switch from scroll-based to a CSS-transform camera like the tabletop.
+
+**Description:** The v2.823.0 grab-drag pan scrolled the `overflow:auto` stage, so it only did anything when the map was zoomed in far enough to **overflow** the frame — at the default "Fit" zoom the map fits exactly, nothing overflowed, and dragging appeared to do nothing (the reported bug). This replaces scroll-panning with a **CSS-transform camera** matching the tabletop: the map image, the lighting/vision canvases, and the SVG editing overlay are translated together by a `(panX, panY)` offset, so the view pans **freely in any direction even when the map fits** the frame. `getScreenCTM()` folds the transform into the overlay's screen matrix, so click→map coordinates stay exact at any pan/zoom. The stage is now `overflow:hidden` with a stable `86vh` height and `touch-action:none` (a finger drag pans instead of scrolling the page), Fit recentres the camera, and a plain mouse wheel pans (⌘/Ctrl-wheel still zooms). Left-drag pans when no tool is active; the middle button pans regardless of tool.
+
+### Fixed
+- `app/templates/map_editor.html` — panning no longer requires the map to overflow the frame; the map moves under a grab-drag / middle-drag / wheel even at Fit zoom.
+
+### Changed
+- `app/templates/map_editor.html` — `.me-stage` → `overflow:hidden`, fixed `height:86vh`, `touch-action:none`; new `panX/panY` + `applyPan()`/`panBy()`/`centerMap()` transform camera; `fitContain()` recentres; wheel pans on plain scroll; the pan-drag handler drives the transform instead of `scrollLeft/scrollTop`.
+- `tests/harness_ui/test_map_editor_pan.py` — asserts the overlay's computed transform translate grows after a drag (was asserting `scrollLeft/scrollTop`); no longer needs to zoom-to-overflow first.
+
+### Schema
+- No schema change (still v96 — client-side viewport model only).
+
 ## [2.827.0] - 2026-07-01 — "The Cleared Footer"
 
 **Schema version:** 96
