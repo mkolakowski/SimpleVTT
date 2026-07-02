@@ -130,8 +130,11 @@
      drag pan instead of scrolling the page. Fixed height = a stable viewport. */
   .me-stage { position:relative; flex:1; min-height:0; box-sizing:border-box;
     margin:0 8px 8px; border-radius:6px; overflow:hidden;
-    background:#0b0d16; cursor:grab; touch-action:none; }
-  .me-stage img { display:block; }
+    background:#0b0d16; cursor:grab; touch-action:none; user-select:none; }
+  /* v2.834.0 — stop the browser's native image drag-and-drop (the "ghost image
+     follows the cursor" pickup feel) so a press-drag pans the camera instead. */
+  .me-stage img { display:block; -webkit-user-drag:none; user-drag:none;
+    -webkit-user-select:none; user-select:none; }
   #me-overlay { position:absolute; top:0; left:0; overflow:visible; }
   .me-status { font-size:12px; color:var(--fg-mute); margin-left:auto; }
   /* v2.825.0 — transient toast popup (shown on an explicit save). */
@@ -421,7 +424,7 @@
 </div>
 
 <div class="me-stage" id="me-stage">
-  <img id="me-img" src="{{ map.image_url }}" alt="{{ map.name }}"
+  <img id="me-img" src="{{ map.image_url }}" alt="{{ map.name }}" draggable="false"
        width="{{ map.width_px }}" height="{{ map.height_px }}">
   {# v2.774.0 — lighting preview canvas (veil + light punches + wall shadows),
      mirrors the tabletop. Sits above the image, below the editing overlay. #}
@@ -2706,7 +2709,9 @@
     var middle = (e.button === 1);                                  // always pans
     var leftFree = (e.button === 0 && svg.style.pointerEvents !== 'auto');  // no tool active
     if (!middle && !leftFree) return;
-    if (middle) e.preventDefault();  // suppress the browser's middle-click autoscroll
+    // v2.834.0 — preventDefault suppresses the native image drag (left) and the
+    // middle-click autoscroll, so a press-drag pans instead of "picking up" the map.
+    e.preventDefault();
     stagePan = { x: e.clientX, y: e.clientY, px: panX, py: panY, active: false };
   });
   window.addEventListener('pointermove', function (e) {

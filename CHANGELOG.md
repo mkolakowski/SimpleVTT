@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.834.0] - 2026-07-01 — "The Sure Grip"
+
+**Schema version:** 96
+
+**Commit summary:** Fix map-editor panning that felt like "pick up and drag" — suppress the native image drag so press-drag pans directly.
+
+**Description:** Panning felt like a click-to-pick-up / click-to-drop instead of a clean press-hold-drag. The cause was the browser's **native image drag-and-drop**: the map `<img>` is draggable by default, so pressing and dragging it started a ghost-image DnD that fought the pan. This disables it three ways — `draggable="false"` on the image, `user-drag:none` / `user-select:none` CSS on the stage + image, and `preventDefault()` on the pan pointerdown (left and middle). Now a press-drag grabs and moves the map immediately with no ghost/pickup.
+
+### Fixed
+- `app/templates/map_editor.html` — press-drag panning no longer triggers the browser's native image drag; the map follows the cursor directly while held.
+
+### Changed
+- `app/templates/map_editor.html` — `#me-img` gains `draggable="false"`; `.me-stage` / `.me-stage img` get `user-select`/`user-drag: none`; the pan `pointerdown` now `preventDefault()`s for the left button too.
+- `tests/harness_ui/test_map_editor_pan.py` — asserts `#me-img` is not draggable and that a pan fires zero native `dragstart` events.
+
+### Schema
+- No schema change (still v96 — client-side interaction only).
+
 ## [2.833.0] - 2026-07-01 — "The Thicker Fog"
 
 **Schema version:** 96

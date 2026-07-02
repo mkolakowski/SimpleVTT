@@ -27,12 +27,13 @@ def _open(gm_page: Page) -> None:
 
 def _drag(gm_page: Page, button: str = "left") -> None:
     box = gm_page.locator("#me-stage").bounding_box()
-    # Grab near the top edge (in-viewport) and drag down-right so the camera
-    # offset grows in both axes and the end point stays on-screen.
-    sx, sy = box["x"] + box["width"] / 2, box["y"] + 80
+    # Grab the middle of the map — BELOW the floating toolbar (which overlays the
+    # top of the stage, v2.829.0) — and drag down-right so the camera offset
+    # grows in both axes and the end point stays on-screen.
+    sx, sy = box["x"] + box["width"] / 2, box["y"] + box["height"] * 0.5
     gm_page.mouse.move(sx, sy)
     gm_page.mouse.down(button=button)
-    gm_page.mouse.move(sx + 150, sy + 150, steps=12)
+    gm_page.mouse.move(sx + 120, sy + 120, steps=12)
     gm_page.mouse.up(button=button)
     gm_page.wait_for_timeout(120)
 
@@ -43,12 +44,23 @@ def test_drag_pans_the_map(gm_page: Page) -> None:
     # The stage advertises itself as pannable with a grab cursor.
     assert gm_page.eval_on_selector("#me-stage", "el => getComputedStyle(el).cursor") == "grab"
 
+    # v2.834.0 — the map image must not be natively draggable (that "pickup"
+    # ghost-drag is what broke the press-drag pan feel).
+    assert gm_page.get_attribute("#me-img", "draggable") == "false"
+    gm_page.evaluate("""() => {
+        window.__dragstarts = 0;
+        document.getElementById('me-img').addEventListener(
+            'dragstart', () => { window.__dragstarts++; });
+    }""")
+
     before = gm_page.eval_on_selector("#me-overlay", _PAN_JS)
     _drag(gm_page)  # no tool active → left-drag pans
     after = gm_page.eval_on_selector("#me-overlay", _PAN_JS)
     # Dragging down-right moves the camera down-right: both offsets grow.
     assert after["x"] > before["x"] + 40, (before, after)
     assert after["y"] > before["y"] + 40, (before, after)
+    # No native image drag-and-drop was triggered by the pan.
+    assert gm_page.evaluate("() => window.__dragstarts") == 0
 
 
 def test_middle_button_pans_with_tool_active(gm_page: Page) -> None:
