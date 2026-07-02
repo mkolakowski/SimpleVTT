@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.832.0] - 2026-07-01 — "The Shifting Shore"
+
+**Schema version:** 96
+
+**Commit summary:** Resize terrain regions by dragging corner handles (like walls/doors), plus a Move option, from the terrain right-click menu.
+
+**Description:** Terrain regions could only be painted, retyped, or deleted — never reshaped. This adds **resize + move** to the terrain right-click menu, mirroring the wall/door resize UX. Right-clicking a region now offers **"↔ Resize (drag corners)"**, which shows four yellow corner handles; dragging a handle reshapes the rectangle with the opposite corner anchored (snapping to the grid, staying a minimum size). It also adds **"↔ Move"** to slide the whole region. Both persist through the existing `saveTerrain()` (with undo history) and a click on the empty map finishes the resize — exactly like wall resize. Terrain regions are now also right-clickable in the default no-tool state (not just Terrain/Erase mode), so you can edit a region without first re-entering the paint tool; a left-press still falls through to pan.
+
+### Added
+- `app/templates/map_editor.html` — `resizingTerrain` state + `mkTerrainHandle()` corner-drag handles; terrain right-click menu gains "Resize (drag corners)" and "Move"; `moveObjTo`/`saveReloc` gain a `terrain` case; a map click finishes terrain resize.
+- `tests/harness_ui/test_map_editor_terrain_resize.py` (new, +1) — right-clicks a region, enters Resize (asserts four corner handles), drags the SE handle, and asserts the region's width grew.
+
+### Changed
+- `app/templates/map_editor.html` — terrain rects are interactive in the default no-tool state (so they're right-clickable), inert while another drawing tool or a relocate is active.
+
+### Schema
+- No schema change (still v96 — client-side editing only; the terrain data shape is unchanged).
+
 ## [2.831.0] - 2026-07-01 — "The Weather Eye"
 
 **Schema version:** 96

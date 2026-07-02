@@ -538,6 +538,7 @@
   var relocDragging = false;   // v2.775.0 — true while dragging the held object
   var sampleTokens = [];       // v2.777.0 — ephemeral preview tokens (not saved)
   var resizing = null;         // v2.786.6 — a wall/door whose ends are draggable
+  var resizingTerrain = null;  // v2.832.0 — a terrain region whose corners are draggable
 
   // v2.770.0 — right-click context menu for map objects.
   function hideMenu() {
@@ -722,6 +723,42 @@
         window.removeEventListener('pointermove', mv);
         window.removeEventListener('pointerup', up);
         saveWalls();
+      }
+      window.addEventListener('pointermove', mv);
+      window.addEventListener('pointerup', up);
+    });
+    return h;
+  }
+  // v2.832.0 — a draggable corner-handle for resizing a terrain rectangle. The
+  // opposite corner stays anchored while the dragged corner follows the cursor;
+  // x/y/w/h re-normalise so width/height stay positive. Same self-contained
+  // window-listener pattern as mkResizeHandle.
+  function mkTerrainHandle(tr, hx, hy, corner) {
+    var h = document.createElementNS(NS, 'circle');
+    h.setAttribute('cx', hx); h.setAttribute('cy', hy);
+    h.setAttribute('r', Math.max(7, (gridPx || 70) * 0.13));
+    h.setAttribute('fill', '#ffd24a'); h.setAttribute('stroke', '#000');
+    h.setAttribute('stroke-width', '1.5');
+    h.style.pointerEvents = 'all';
+    h.style.cursor = (corner === 'nw' || corner === 'se') ? 'nwse-resize' : 'nesw-resize';
+    h.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      e.stopPropagation(); e.preventDefault();
+      // Anchor = the corner diagonally opposite the one being dragged.
+      var ax = (corner === 'nw' || corner === 'sw') ? tr.x + tr.w : tr.x;
+      var ay = (corner === 'nw' || corner === 'ne') ? tr.y + tr.h : tr.y;
+      function mv(ev) {
+        var p = toMap(ev); if (!p) return;
+        var s = snapPoint(p);
+        var nw = Math.abs(s.x - ax), nh = Math.abs(s.y - ay);
+        if (nw < 4 || nh < 4) return;  // keep a minimum size
+        tr.x = Math.min(ax, s.x); tr.y = Math.min(ay, s.y); tr.w = nw; tr.h = nh;
+        render();
+      }
+      function up() {
+        window.removeEventListener('pointermove', mv);
+        window.removeEventListener('pointerup', up);
+        saveTerrain();
       }
       window.addEventListener('pointermove', mv);
       window.addEventListener('pointerup', up);
@@ -1041,7 +1078,13 @@
       rc.setAttribute('stroke', tt.color); rc.setAttribute('stroke-width', '2');
       rc.setAttribute('stroke-dasharray', '7 5');
       rc.classList.add('me-terrain');
-      var active = (terrainMode || eraseMode);
+      // v2.832.0 — interactive in terrain/erase mode AND the default no-tool
+      // state (so you can right-click a region to Resize/Move/retype it), but
+      // inert while another drawing tool or a relocate is active. A left-press
+      // has no handler here, so it still bubbles to the stage for panning.
+      var noTool = !(wallMode || doorMode || roomMode || spotMode || lightMode
+        || fogMode || pinMode || propMode || labelMode || measureMode || selectMode);
+      var active = (terrainMode || eraseMode || noTool) && !relocating;
       rc.style.pointerEvents = active ? 'all' : 'none';
       rc.style.cursor = 'pointer';
       rc.addEventListener('click', function (e) {
@@ -1053,7 +1096,16 @@
           return { label: (tr.type === t.key ? '✓ ' : '   ') + t.label,
                    fn: function () { tr.type = t.key; saveTerrain(); } };
         });
+        var isResizing = resizingTerrain && resizingTerrain.id === tr.id;
         showMenu(e.clientX, e.clientY, [
+          { label: (isResizing ? '↔ Resize (done)' : '↔ Resize (drag corners)'),
+            fn: function () {
+              resizingTerrain = isResizing ? null : tr;
+              setStatus(resizingTerrain
+                ? 'Drag the yellow corner-handles to resize; click the map to finish.' : '');
+              syncStageCursor(); render();
+            } },
+          { label: '⛰ Terrain — ↔ Move', fn: function () { startMove('terrain', tr); } },
           { label: '⛰ Terrain type', sub: typeItems },
           { label: '🗑 Delete', fn: function () { terrain.splice(i, 1); saveTerrain(); } },
         ]);
@@ -1065,6 +1117,13 @@
       lbl.setAttribute('font-weight', '700'); lbl.style.pointerEvents = 'none';
       lbl.textContent = tt.label;
       svg.appendChild(lbl);
+      // v2.832.0 — draggable corner handles while this region is being resized.
+      if (resizingTerrain && resizingTerrain.id === tr.id) {
+        svg.appendChild(mkTerrainHandle(tr, tr.x, tr.y, 'nw'));
+        svg.appendChild(mkTerrainHandle(tr, tr.x + tr.w, tr.y, 'ne'));
+        svg.appendChild(mkTerrainHandle(tr, tr.x, tr.y + tr.h, 'sw'));
+        svg.appendChild(mkTerrainHandle(tr, tr.x + tr.w, tr.y + tr.h, 'se'));
+      }
     });
     if (terrainDrag) {  // live paint preview
       var tpv = document.createElementNS(NS, 'rect');
@@ -1900,6 +1959,8 @@
       var mx = (r.obj.x1 + r.obj.x2) / 2, my = (r.obj.y1 + r.obj.y2) / 2;
       var dx = p.x - mx, dy = p.y - my;
       r.obj.x1 += dx; r.obj.y1 += dy; r.obj.x2 += dx; r.obj.y2 += dy;
+    } else if (r.kind === 'terrain') {  // v2.832.0 — centre the rect on the cursor
+      r.obj.x = p.x - r.obj.w / 2; r.obj.y = p.y - r.obj.h / 2;
     } else { r.obj.x = p.x; r.obj.y = p.y; }
   }
   function saveReloc(r) {
@@ -1909,6 +1970,7 @@
     else if (r.kind === 'gmpin') saveGmPins();
     else if (r.kind === 'prop') saveProps();
     else if (r.kind === 'label') saveLabels();
+    else if (r.kind === 'terrain') saveTerrain();  // v2.832.0
   }
   // v2.775.0 — copy/paste objects via the right-click menu.
   var clipboard = null;
@@ -2007,7 +2069,7 @@
   function syncStageCursor() {
     // The overlay captures empty-area clicks when placing/painting/relocating.
     // (Objects stay individually clickable for erase/right-click regardless.)
-    var on = wallMode || doorMode || roomMode || spotMode || lightMode || fogMode || terrainMode || pinMode || propMode || labelMode || measureMode || selectMode || relocating || resizing;
+    var on = wallMode || doorMode || roomMode || spotMode || lightMode || fogMode || terrainMode || pinMode || propMode || labelMode || measureMode || selectMode || relocating || resizing || resizingTerrain;
     svg.style.pointerEvents = on ? 'auto' : 'none';
     svg.style.cursor = on ? 'crosshair' : 'default';
   }
@@ -2355,7 +2417,10 @@
   svg.addEventListener('click', function (e) {
     if (suppressClick) return;
     // v2.786.6 — a click on the empty map finishes a resize.
-    if (resizing) { resizing = null; setStatus(''); syncStageCursor(); render(); return; }
+    if (resizing || resizingTerrain) {
+      resizing = null; resizingTerrain = null;  // v2.832.0
+      setStatus(''); syncStageCursor(); render(); return;
+    }
     var p = toMap(e); if (!p) return;
     if (wallMode || doorMode) {
       p = snapPoint(p);
