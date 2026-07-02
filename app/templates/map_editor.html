@@ -30,9 +30,21 @@
   </nav>
 </header>
 {% endblock %}
+{# v2.829.0 — full-bleed, tabletop-style editor: suppress the version footer so
+   the map fills to the bottom of the screen. #}
+{% block footer %}{% endblock %}
 {% block content %}
-<div style="max-width:1700px;margin:0 auto;padding:0 14px;">
+<div class="me-editor">
 <style>
+  /* v2.829.0 — full-bleed, tabletop-style editor. Override the page container
+     to fill the viewport (like the tabletop's .container). The editor is a flex
+     column: a transparent toolbar strip on top, then the map filling ALL the
+     remaining screen below it (edge-to-edge), pannable anywhere with the
+     transform camera. The toolbar stays in flow (not overlaying the canvas) so
+     it never blocks drawing on the map beneath it. */
+  .container { padding:0; overflow:hidden; display:flex; flex-direction:column; }
+  .me-editor { position:relative; flex:1; min-height:0;
+    display:flex; flex-direction:column; }
   .me-head { display:flex; align-items:center; justify-content:space-between;
     flex-wrap:wrap; gap:12px; margin:16px 0 12px; }
   .me-head h1 { margin:0; font-size:20px; }
@@ -46,12 +58,16 @@
   /* v2.785.10 — stretch every group to the tallest one's height (the extra
      space just extends the card/border; controls stay top-aligned + same size). */
   /* v2.822.0 — translucent "frosted" edit bar: a semi-transparent background
-     + backdrop blur so the page shows through and the ribbon reads lighter. */
-  .me-toolbar { display:flex; align-items:stretch; gap:6px; flex-wrap:nowrap;
+     + backdrop blur so the page shows through and the ribbon reads lighter.
+     v2.829.0 — a transparent strip at the top of the full-bleed editor; the map
+     fills the screen beneath it. flex:0 0 auto keeps it to its own height so the
+     map takes the rest. */
+  .me-toolbar { flex:0 0 auto; margin:8px 8px 6px;
+    display:flex; align-items:stretch; gap:6px; flex-wrap:nowrap;
     padding:6px 8px; border:1px solid var(--border); border-radius:8px;
-    background:color-mix(in srgb, var(--bg-2) 68%, transparent);
-    -webkit-backdrop-filter:blur(9px); backdrop-filter:blur(9px);
-    margin-bottom:10px; overflow-x:auto; }
+    background:color-mix(in srgb, var(--bg-2) 60%, transparent);
+    -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
+    box-shadow:0 4px 18px rgba(0,0,0,.28); overflow-x:auto; }
   .me-toolbar label { font-size:12px; color:var(--fg-mute); display:inline-flex;
     align-items:center; gap:4px; }
   /* small buttons: tight padding; min-height at the 32px dense-panel floor */
@@ -112,9 +128,9 @@
      v2.828.0 — overflow:hidden + a CSS-transform camera (like the tabletop) so
      the map pans even when it fits the frame; touch-action:none lets a finger
      drag pan instead of scrolling the page. Fixed height = a stable viewport. */
-  .me-stage { position:relative; display:block; width:100%; box-sizing:border-box;
-    border:1px solid var(--border); border-radius:6px; overflow:hidden;
-    height:86vh; background:#0b0d16; cursor:grab; touch-action:none; }
+  .me-stage { position:relative; flex:1; min-height:0; box-sizing:border-box;
+    margin:0 8px 8px; border-radius:6px; overflow:hidden;
+    background:#0b0d16; cursor:grab; touch-action:none; }
   .me-stage img { display:block; }
   #me-overlay { position:absolute; top:0; left:0; overflow:visible; }
   .me-status { font-size:12px; color:var(--fg-mute); margin-left:auto; }

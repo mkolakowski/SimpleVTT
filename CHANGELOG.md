@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.829.0] - 2026-07-01 — "The Open Table"
+
+**Schema version:** 96
+
+**Commit summary:** Full-bleed, tabletop-style map editor — the map fills the whole screen below a transparent toolbar strip.
+
+**Description:** Reworks the editor layout to match the tabletop's full-bleed feel. The old `max-width:1700px` letterboxed wrapper is gone; the page `.container` is overridden to a full-height flex column (the same technique the tabletop uses) and the editor is a flex column with a **transparent toolbar strip on top** and the **map filling ALL the remaining screen below it** (edge-to-edge, footer suppressed). The map is pannable anywhere with the v2.828.0 transform camera. The toolbar keeps its translucent/blurred styling (bumped a touch more transparent) but stays **in normal flow above the canvas rather than overlaying it** — a full-width bar floating over a drawing surface would block drawing on the top of the map, so it sits above the map instead. The result: a much larger working map that fills the viewport, with a light transparent control strip over it.
+
+### Changed
+- `app/templates/map_editor.html` — `{% block footer %}` suppressed; page `.container` → full-height flex column; new `.me-editor` flex-column frame; `.me-stage` → `flex:1` filling the viewport below the toolbar; `.me-toolbar` → a `flex:0 0 auto` transparent strip (~60% opacity, blur, drop shadow); dropped the letterbox wrapper.
+
+### Added
+- `tests/harness_ui/test_map_editor_fullbleed.py` (new, +1) — asserts the map stage fills the screen, the transparent (blurred) toolbar sits above the canvas (never over it), and the footer is suppressed.
+
+### Schema
+- No schema change (still v96 — layout only).
+
 ## [2.828.0] - 2026-07-01 — "The Free Camera"
 
 **Schema version:** 96
