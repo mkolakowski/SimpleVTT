@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.833.0] - 2026-07-01 — "The Thicker Fog"
+
+**Schema version:** 96
+
+**Commit summary:** Make the fog weather effect noticeably denser (more, larger, more opaque blobs) in both the editor preview and the tabletop.
+
+**Description:** The `fog` weather effect was very faint — 16 soft blobs at 4–11% opacity that barely read on a busy map. This makes it **more noticeable**: 26 blobs (was 16), larger radius (70–230px, was 60–190), and roughly double the opacity (10–24%, was 4–11%). Applied identically to the editor's new preview canvas (v2.831.0) and the live tabletop overlay so they match. Rain and snow are unchanged.
+
+### Changed
+- `app/templates/map_editor.html` — `_wxSpawn` fog blob radius/opacity + `applyEditorWeather` fog count bumped.
+- `app/templates/tabletop.html` — the same fog params in `_wxSpawn` + `applyWeather`, kept in sync.
+
+### Added
+- `tests/harness_ui/test_map_editor_weather.py` — the editor preview test now also asserts `fog` draws pixels.
+
+### Schema
+- No schema change (still v96 — visual tuning only).
+
 ## [2.832.0] - 2026-07-01 — "The Shifting Shore"
 
 **Schema version:** 96

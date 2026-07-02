@@ -52,6 +52,11 @@ def test_editor_weather_previews(gm_page: Page) -> None:
             gm_page.wait_for_timeout(400)
             assert gm_page.evaluate(_has_pixels) is True, "rain should draw in the editor"
 
+            # Fog also renders (v2.833.0 — denser/more noticeable blobs).
+            gm_page.select_option("#me-weather", "fog")
+            gm_page.wait_for_timeout(400)
+            assert gm_page.evaluate(_has_pixels) is True, "fog should draw in the editor"
+
             # Turning it off clears the canvas.
             gm_page.select_option("#me-weather", "")
             gm_page.wait_for_timeout(250)
