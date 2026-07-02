@@ -61,13 +61,17 @@
      + backdrop blur so the page shows through and the ribbon reads lighter.
      v2.829.0 — a transparent strip at the top of the full-bleed editor; the map
      fills the screen beneath it. flex:0 0 auto keeps it to its own height so the
-     map takes the rest. */
+     map takes the rest.
+     v2.836.0 — matches the tabletop sidebar's frosted-glass recipe exactly:
+     var(--bg) at --glass-alpha (default 42%) + blur(16px) saturate(160%), so it
+     honours the user's glass preference and reads the same as the VTT sidebar. */
   .me-toolbar { flex:0 0 auto; margin:8px 8px 6px;
     display:flex; align-items:stretch; gap:6px; flex-wrap:nowrap;
     padding:6px 8px; border:1px solid var(--border); border-radius:8px;
-    background:color-mix(in srgb, var(--bg-2) 60%, transparent);
-    -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
-    box-shadow:0 4px 18px rgba(0,0,0,.28); overflow-x:auto; }
+    background:color-mix(in srgb, var(--bg) var(--glass-alpha, 42%), transparent);
+    -webkit-backdrop-filter:blur(16px) saturate(160%);
+    backdrop-filter:blur(16px) saturate(160%);
+    box-shadow:0 3px 14px rgba(0,0,0,.22); overflow-x:auto; }
   .me-toolbar label { font-size:12px; color:var(--fg-mute); display:inline-flex;
     align-items:center; gap:4px; }
   /* small buttons: tight padding; min-height at the 32px dense-panel floor */

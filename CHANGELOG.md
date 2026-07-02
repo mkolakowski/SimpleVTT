@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.836.0] - 2026-07-01 — "The Matched Glass"
+
+**Schema version:** 96
+
+**Commit summary:** Give the editor's options bar the same frosted-glass transparency as the tabletop sidebar.
+
+**Description:** The editor toolbar had its own translucency recipe (`--bg-2` at 60% + `blur(10px)`). This changes it to the **exact frosted-glass recipe the tabletop sidebar cards use** — `background: color-mix(in srgb, var(--bg) var(--glass-alpha, 42%), transparent)` with `backdrop-filter: blur(16px) saturate(160%)` — so the options bar reads identically to the VTT sidebar and, like it, honours the user's `--glass-alpha` glass preference. Slightly softer shadow to match too.
+
+### Changed
+- `app/templates/map_editor.html` — `.me-toolbar` background + backdrop-filter switched to the tabletop sidebar's glass recipe (`var(--bg)` / `--glass-alpha` / `blur(16px) saturate(160%)`).
+
+### Schema
+- No schema change (still v96 — styling only).
+
 ## [2.835.0] - 2026-07-01 — "The Parked Props"
 
 **Schema version:** 96
