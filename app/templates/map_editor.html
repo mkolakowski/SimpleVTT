@@ -2634,8 +2634,9 @@
   // v2.824.0 — the MIDDLE button pans regardless of the active tool (like the
   // tabletop, and standard in map/CAD editors), so you can reposition the view
   // without leaving the tool you're drawing with.
-  var stagePan = null;
+  var stagePan = null, touchPinch = null;
   stage.addEventListener('pointerdown', function (e) {
+    if (touchPinch) return;                                         // two-finger pinch owns the gesture
     var middle = (e.button === 1);                                  // always pans
     var leftFree = (e.button === 0 && svg.style.pointerEvents !== 'auto');  // no tool active
     if (!middle && !leftFree) return;
@@ -2645,7 +2646,7 @@
     stagePan = { x: e.clientX, y: e.clientY, px: panX, py: panY, active: false };
   });
   window.addEventListener('pointermove', function (e) {
-    if (!stagePan) return;
+    if (touchPinch || !stagePan) return;
     var dx = e.clientX - stagePan.x, dy = e.clientY - stagePan.y;
     if (!stagePan.active) {
       if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;  // below the drag threshold
@@ -2662,6 +2663,54 @@
     stagePan = null;
     stage.style.cursor = '';
   });
+  // v2.837.0 — touch controls matching the tabletop: one-finger drag pans (via
+  // the pointer-event pan above — pointer events already unify touch), and TWO
+  // fingers pinch-to-zoom, anchored at the pinch midpoint. When a pinch ends
+  // with one finger still down, that finger takes over panning. touch-action:none
+  // on the stage (v2.828.0) is what routes the gestures here instead of the page.
+  function _touchDist(a, b) {
+    return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+  }
+  stage.addEventListener('touchstart', function (e) {
+    if (e.touches.length === 2) {
+      stagePan = null;  // a one-finger pointer-pan may have started — pinch wins
+      var t1 = e.touches[0], t2 = e.touches[1];
+      var rect = stage.getBoundingClientRect();
+      touchPinch = {
+        startDist: _touchDist(t1, t2), startZoom: zoom,
+        startPanX: panX, startPanY: panY,
+        cx: (t1.clientX + t2.clientX) / 2 - rect.left,
+        cy: (t1.clientY + t2.clientY) / 2 - rect.top,
+      };
+      e.preventDefault();
+    }
+  }, { passive: false });
+  stage.addEventListener('touchmove', function (e) {
+    if (touchPinch && e.touches.length >= 2 && touchPinch.startDist > 0) {
+      var t1 = e.touches[0], t2 = e.touches[1];
+      var newZoom = Math.max(0.2, Math.min(5,
+        touchPinch.startZoom * (_touchDist(t1, t2) / touchPinch.startDist)));
+      var factor = newZoom / touchPinch.startZoom;
+      // Keep the map point under the pinch midpoint fixed (same anchor math as
+      // the wheel zoom), recomputed from the gesture start to avoid drift.
+      panX = touchPinch.cx - (touchPinch.cx - touchPinch.startPanX) * factor;
+      panY = touchPinch.cy - (touchPinch.cy - touchPinch.startPanY) * factor;
+      zoom = newZoom; applyZoom(); applyPan();
+      e.preventDefault();
+    }
+  }, { passive: false });
+  function _endTouch(e) {
+    if (touchPinch && e.touches.length < 2) {
+      touchPinch = null;
+      // One finger left after a pinch → hand it to the pan (like the tabletop).
+      if (e.touches.length === 1 && svg.style.pointerEvents !== 'auto') {
+        var t = e.touches[0];
+        stagePan = { x: t.clientX, y: t.clientY, px: panX, py: panY, active: true };
+      }
+    }
+  }
+  stage.addEventListener('touchend', _endTouch);
+  stage.addEventListener('touchcancel', _endTouch);
   // v2.775.0 — right-click the empty map to paste a copied object. (Object
   // right-clicks stopPropagation, so this only fires on the background.)
   stage.addEventListener('contextmenu', function (e) {

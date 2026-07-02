@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.837.0] - 2026-07-02 — "The Two-Finger Table"
+
+**Schema version:** 96
+
+**Commit summary:** Add tabletop-style touch controls to the map editor — one-finger pan and two-finger pinch-to-zoom.
+
+**Description:** Brings the tabletop's touch gestures to the editor. **One-finger drag pans** the map (this already worked, since the pan uses pointer events which unify mouse/pen/touch, with `touch-action:none` routing the gesture to the canvas). This commit adds **two-finger pinch-to-zoom**, anchored at the pinch midpoint so the map pixel between your fingers stays put — the same anchor math the scroll-wheel zoom uses — and recomputed from the gesture start each frame to avoid drift. When a pinch ends with one finger still down, that finger takes over panning (matching the tabletop's pinch→pan handoff). The pointer-based pan is suppressed while a pinch is active so the two don't fight.
+
+### Added
+- `app/templates/map_editor.html` — `touchstart`/`touchmove`/`touchend`/`touchcancel` handlers on `#me-stage` implementing two-finger pinch-zoom + pinch→pan handoff; `touchPinch` guards added to the pointer pan handlers.
+- `tests/harness_ui/test_map_editor_touch.py` (new, +1) — dispatches synthetic two-finger TouchEvents: spreading the fingers zooms in, pinching them together zooms out.
+
+### Schema
+- No schema change (still v96 — client-side interaction only).
+
 ## [2.836.0] - 2026-07-01 — "The Matched Glass"
 
 **Schema version:** 96
