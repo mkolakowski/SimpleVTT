@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.835.0] - 2026-07-01 — "The Parked Props"
+
+**Schema version:** 96
+
+**Commit summary:** Remove the decorative Props tool from the map editor for now (data + rendering kept so it's easy to restore).
+
+**Description:** Parks the **Props** feature in the editor UI. The **Props toolbar group** (the 🪑 Prop tool + its 50+ glyph/image picker) and the **Props layer checkbox** are removed. The prop **data model, rendering, save endpoint, and tabletop display are untouched** — any props already placed on a map still render, and the whole placement UI can be dropped back in later. The Draw zone's collapse membership drops Props, and the All/None + solo layer controls still govern prop visibility internally (there's just no dedicated checkbox). No prop data is deleted.
+
+### Removed
+- `app/templates/map_editor.html` — the Props toolbar group markup + the `#me-layer-props` layer checkbox; `Props` dropped from `ZONE_MEMBERS.Draw`.
+
+### Changed
+- `tests/harness_ui/test_map_editor_toolbar.py` / `test_map_editor_collapse.py` / `test_map_editor_layers.py` / `test_map_editor_captions.py` — updated for the removed group / checkbox / caption.
+- `tests/harness_ui/test_map_editor_prop.py` — skipped (feature parked; restore with the tool). The prop data layer is still exercised by `test_map_editor_select.py` (API-seeded props render + select).
+
+### Schema
+- No schema change (still v96 — UI removal only; prop data shape and endpoints unchanged).
+
 ## [2.834.0] - 2026-07-01 — "The Sure Grip"
 
 **Schema version:** 96

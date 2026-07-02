@@ -282,79 +282,6 @@
       </select>
     </label>
   </div>
-  {# v2.791.0 — decorative prop stamps (emoji furniture / nature). #}
-  <div class="me-group" role="group" aria-label="Props">
-    <span class="me-grp-lbl">Props</span>
-    <button type="button" id="me-prop-btn" class="me-tool-btn" aria-pressed="false"
-            title="Prop stamp: pick a glyph and click the map to place it; drag to move, right-click to rotate / resize / delete">🪑 Prop</button>
-    <label class="me-capsel" title="Prop glyph to place">
-      <span class="me-cap">prop</span>
-      <select id="me-prop-kind" style="min-height:32px;font-size:14px;width:100%;">
-        <option value="🪑">🪑 Chair</option>
-        <option value="🛏">🛏 Bed</option>
-        <option value="🛋">🛋 Couch</option>
-        <option value="🪟">🪟 Window</option>
-        <option value="📦">📦 Crate</option>
-        <option value="🛢">🛢 Barrel</option>
-        <option value="🗄">🗄 Cabinet</option>
-        <option value="📚">📚 Books</option>
-        <option value="🏺">🏺 Vase</option>
-        <option value="💰">💰 Treasure</option>
-        <option value="⚰">⚰ Coffin</option>
-        <option value="🔥">🔥 Campfire</option>
-        <option value="🌲">🌲 Pine</option>
-        <option value="🌳">🌳 Oak</option>
-        <option value="🌿">🌿 Bush</option>
-        <option value="🪨">🪨 Rock</option>
-        <option value="⛲">⛲ Fountain</option>
-        <option value="🗿">🗿 Statue</option>
-        <optgroup label="🖼 Images">
-          <option value="img:table">🖼 Table</option>
-          <option value="img:barrel">🖼 Barrel</option>
-          <option value="img:crate">🖼 Crate</option>
-          <option value="img:chest">🖼 Chest</option>
-          <option value="img:bed">🖼 Bed</option>
-          <option value="img:rug">🖼 Rug</option>
-          <option value="img:bookshelf">🖼 Bookshelf</option>
-          <option value="img:campfire">🖼 Campfire</option>
-          <option value="img:tree">🖼 Tree</option>
-          <option value="img:rock">🖼 Rock</option>
-          <option value="img:well">🖼 Well</option>
-          <option value="img:statue">🖼 Statue</option>
-          <option value="img:altar">🖼 Altar</option>
-          <option value="img:bones">🖼 Bones</option>
-          <option value="img:weaponrack">🖼 Weapon rack</option>
-          <option value="img:anvil">🖼 Anvil</option>
-          <option value="img:cauldron">🖼 Cauldron</option>
-          <option value="img:gravestone">🖼 Gravestone</option>
-          <option value="img:throne">🖼 Throne</option>
-          <option value="img:brazier">🖼 Brazier</option>
-          <option value="img:pillar">🖼 Pillar</option>
-          <option value="img:cart">🖼 Cart</option>
-          <option value="img:door">🖼 Door</option>
-          <option value="img:tent">🖼 Tent</option>
-          <option value="img:signpost">🖼 Signpost</option>
-          <option value="img:bridge">🖼 Bridge</option>
-          <option value="img:ladder">🖼 Ladder</option>
-          <option value="img:stairs">🖼 Stairs</option>
-          <option value="img:sarcophagus">🖼 Sarcophagus</option>
-          <option value="img:crystal">🖼 Crystal</option>
-          <option value="img:mushroom">🖼 Mushroom</option>
-          <option value="img:pool">🖼 Pool</option>
-          <option value="img:portcullis">🖼 Portcullis</option>
-          <option value="img:lever">🖼 Lever</option>
-          <option value="img:trapdoor">🖼 Trapdoor</option>
-          <option value="img:lectern">🖼 Lectern</option>
-          <option value="img:cage">🖼 Cage</option>
-          <option value="img:pit">🖼 Pit</option>
-          <option value="img:obelisk">🖼 Obelisk</option>
-          <option value="img:banner">🖼 Banner</option>
-          <option value="img:bench">🖼 Bench</option>
-          <option value="img:wardrobe">🖼 Wardrobe</option>
-        </optgroup>
-      </select>
-    </label>
-  </div>
   {# v2.810.0 — Labels + GM pin tools moved into the Markers group. #}
   <div class="me-group" role="group" aria-label="Tokens">
     <span class="me-grp-lbl">Tokens</span>
@@ -402,7 +329,6 @@
       <label style="gap:4px;"><input type="checkbox" id="me-layer-hotspots" checked> Hotspots</label>
       <label style="gap:4px;"><input type="checkbox" id="me-layer-fog" checked> Fog</label>
       <label style="gap:4px;"><input type="checkbox" id="me-layer-gmpins" checked> Pins</label>
-      <label style="gap:4px;"><input type="checkbox" id="me-layer-props" checked> Props</label>
       <label style="gap:4px;"><input type="checkbox" id="me-layer-labels" checked> Labels</label>
       <label style="gap:4px;"><input type="checkbox" id="me-layer-tokens" checked> Tokens</label>
     </div>
@@ -2807,7 +2733,7 @@
   // that zone at once (the bulk version of the per-group collapse above). Reuses
   // the same collapsedGroups store so per-group + per-zone state stay in sync.
   var ZONE_MEMBERS = {
-    Draw: ['Walls', 'Markers', 'Environment', 'Props', 'Tokens'],
+    Draw: ['Walls', 'Markers', 'Environment', 'Tokens'],  // v2.835.0 — Props removed
     Map: ['Grid', 'Layers', 'View'],  // v2.826.0 — Tags moved to the File group
   };
   Array.prototype.forEach.call(document.querySelectorAll('.me-zone-sep > .me-zone-lbl'), function (lbl) {

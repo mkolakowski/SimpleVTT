@@ -43,7 +43,7 @@ def test_zone_divider_collapses_whole_zone(gm_page: Page) -> None:
     gm_page.wait_for_timeout(300)
 
     # The Draw zone spans Walls · Markers · Environment · Props · Tokens.
-    draw_groups = ["Walls", "Markers", "Environment", "Props", "Tokens"]
+    draw_groups = ["Walls", "Markers", "Environment", "Tokens"]  # v2.835.0 — Props removed
     for g in draw_groups:
         assert "me-collapsed" not in (
             gm_page.locator(f'.me-group[aria-label="{g}"]').get_attribute("class") or "")

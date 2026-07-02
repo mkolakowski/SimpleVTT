@@ -1,10 +1,19 @@
-"""v2.792.0 — placing decorative prop stamps in the map editor."""
+"""v2.792.0 — placing decorative prop stamps in the map editor.
+
+v2.835.0 — the Props placement tool was removed from the editor "for the time
+being"; the prop data layer + rendering stay intact (so existing props still
+show and this is easy to restore), but there's no UI to place new ones. These
+tests are skipped until the tool comes back rather than deleted.
+"""
 from __future__ import annotations
 
 import httpx
+import pytest
 from playwright.sync_api import Page, expect
 
 from .conftest import BASE_URL, CAMPAIGN_ID
+
+pytestmark = pytest.mark.skip(reason="v2.835.0 — Props placement tool parked; UI removed")
 
 
 def test_place_prop(gm_page: Page) -> None:

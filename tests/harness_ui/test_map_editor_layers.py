@@ -36,9 +36,10 @@ def test_layer_toggle_hides_walls(gm_page: Page) -> None:
             c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
 
 
+# v2.835.0 — the Props layer checkbox was removed with the Props tool.
 _LAYER_IDS = [
     "#me-layer-walls", "#me-layer-terrain", "#me-layer-lights", "#me-layer-hotspots",
-    "#me-layer-fog", "#me-layer-gmpins", "#me-layer-props", "#me-layer-labels",
+    "#me-layer-fog", "#me-layer-gmpins", "#me-layer-labels",
     "#me-layer-tokens",
 ]
 

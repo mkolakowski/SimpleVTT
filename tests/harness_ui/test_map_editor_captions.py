@@ -27,5 +27,5 @@ def test_every_dropdown_has_a_caption(gm_page: Page) -> None:
 
     # (CSS upper-cases the captions, so compare case-insensitively.)
     caps = [t.strip().lower() for t in gm_page.locator(".me-toolbar .me-capsel > .me-cap").all_inner_texts()]
-    for expected in ["material", "ambient", "terrain", "weather", "prop", "grid type"]:
+    for expected in ["material", "ambient", "terrain", "weather", "grid type"]:  # v2.835.0 — prop removed
         assert expected in caps, (expected, caps)
