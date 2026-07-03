@@ -273,7 +273,7 @@
       <button type="button" id="me-fog-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
               title="Fog of war: drag to reveal an area; click a revealed area to re-hide it">🌫 Fog</button>
       <button type="button" id="me-terrain-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
-              title="Terrain: drag a rectangle to mark difficult terrain / water / lava…; right-click a region to change its type or delete">⛰ Terrain</button>
+              title="Terrain: drag a rectangle to mark difficult terrain / water / lava…; on a gridless map, click four dots to place a free-form quad instead; right-click a region to change its type, resize by its corners, or delete">⛰ Terrain</button>
     </div>
     <label id="me-fog-on-lbl" style="display:none;"><input type="checkbox" id="me-fog-on-cb"> fog on</label>
     {# v2.845.0 — exploration-tracking fog: auto-reveal what the party's tokens
@@ -480,6 +480,7 @@
   }
   var fogDrag = null;
   var terrainDrag = null;   // v2.789.1 — rect being painted
+  var terrainDots = [];     // v2.848.0 — gridless four-dot quad placement (pending corners)
   var measureMode = false;  // v2.805.0 — ruler tool
   var measureDrag = null;   // the line being dragged
   var measureLine = null;   // the last committed measurement (stays shown)
@@ -580,6 +581,10 @@
       });
     });
     if (best) return best;
+    // v2.848.0 — gridless maps have no lattice to snap to: wall-endpoint
+    // snapping above still applies (chaining walls), but points otherwise
+    // place freely instead of rounding to an invisible 70 px grid.
+    if (gridType === 'none') return p;
     var g = gridPx || 70;
     return { x: Math.round(p.x / g) * g, y: Math.round(p.y / g) * g };
   }
@@ -687,6 +692,19 @@
   // opposite corner stays anchored while the dragged corner follows the cursor;
   // x/y/w/h re-normalise so width/height stay positive. Same self-contained
   // window-listener pattern as mkResizeHandle.
+  // v2.848.0 — free-form quads: ``corner`` may be a numeric point index (the
+  // region has ``points``), in which case the handle drags ONLY that corner.
+  // On a gridless map, dragging a compass handle of a plain rect first
+  // converts it to a 4-point quad (NW/NE/SE/SW) so every corner moves freely —
+  // "size is controlled by the four corners". Gridded rects keep the anchored
+  // resize. ``x/y/w/h`` always track the quad's bounding box.
+  function terrainBBox(tr) {
+    var xs = tr.points.map(function (p) { return p[0]; });
+    var ys = tr.points.map(function (p) { return p[1]; });
+    tr.x = Math.min.apply(null, xs); tr.y = Math.min.apply(null, ys);
+    tr.w = Math.max.apply(null, xs) - tr.x; tr.h = Math.max.apply(null, ys) - tr.y;
+  }
+  var _COMPASS_TO_IDX = { nw: 0, ne: 1, se: 2, sw: 3 };
   function mkTerrainHandle(tr, hx, hy, corner) {
     var h = document.createElementNS(NS, 'circle');
     h.setAttribute('cx', hx); h.setAttribute('cy', hy);
@@ -694,10 +712,39 @@
     h.setAttribute('fill', '#ffd24a'); h.setAttribute('stroke', '#000');
     h.setAttribute('stroke-width', '1.5');
     h.style.pointerEvents = 'all';
-    h.style.cursor = (corner === 'nw' || corner === 'se') ? 'nwse-resize' : 'nesw-resize';
+    var freeCorner = (typeof corner === 'number');
+    h.style.cursor = freeCorner ? 'move'
+      : (corner === 'nw' || corner === 'se') ? 'nwse-resize' : 'nesw-resize';
     h.addEventListener('pointerdown', function (e) {
       if (e.button !== 0) return;
       e.stopPropagation(); e.preventDefault();
+      var idx = freeCorner ? corner : -1;
+      if (!freeCorner && gridType === 'none') {
+        // Gridless: first corner-drag converts the rect to a free quad.
+        if (!Array.isArray(tr.points) || tr.points.length !== 4) {
+          tr.points = [[tr.x, tr.y], [tr.x + tr.w, tr.y],
+                       [tr.x + tr.w, tr.y + tr.h], [tr.x, tr.y + tr.h]];
+        }
+        idx = _COMPASS_TO_IDX[corner];
+      }
+      if (idx >= 0) {
+        // Free-corner drag: move only this point; bbox follows.
+        function mvq(ev) {
+          var p = toMap(ev); if (!p) return;
+          var s = snapPoint(p);
+          tr.points[idx] = [s.x, s.y];
+          terrainBBox(tr);
+          render();
+        }
+        function upq() {
+          window.removeEventListener('pointermove', mvq);
+          window.removeEventListener('pointerup', upq);
+          saveTerrain();
+        }
+        window.addEventListener('pointermove', mvq);
+        window.addEventListener('pointerup', upq);
+        return;
+      }
       // Anchor = the corner diagonally opposite the one being dragged.
       var ax = (corner === 'nw' || corner === 'sw') ? tr.x + tr.w : tr.x;
       var ay = (corner === 'nw' || corner === 'ne') ? tr.y + tr.h : tr.y;
@@ -1025,9 +1072,20 @@
     // block other tools).
     if (layers.terrain) terrain.forEach(function (tr, i) {
       var tt = terrainType(tr.type);
-      var rc = document.createElementNS(NS, 'rect');
-      rc.setAttribute('x', tr.x); rc.setAttribute('y', tr.y);
-      rc.setAttribute('width', tr.w); rc.setAttribute('height', tr.h);
+      // v2.848.0 — a region with ``points`` (4 corner pairs, authored on
+      // gridless maps) renders as a free-form quad; plain regions stay rects.
+      var isQuad = Array.isArray(tr.points) && tr.points.length === 4;
+      var rc;
+      if (isQuad) {
+        rc = document.createElementNS(NS, 'polygon');
+        rc.setAttribute('points', tr.points.map(function (p) {
+          return p[0] + ',' + p[1];
+        }).join(' '));
+      } else {
+        rc = document.createElementNS(NS, 'rect');
+        rc.setAttribute('x', tr.x); rc.setAttribute('y', tr.y);
+        rc.setAttribute('width', tr.w); rc.setAttribute('height', tr.h);
+      }
       rc.setAttribute('fill', tt.color); rc.setAttribute('fill-opacity', '0.28');
       rc.setAttribute('stroke', tt.color); rc.setAttribute('stroke-width', '2');
       rc.setAttribute('stroke-dasharray', '7 5');
@@ -1072,11 +1130,20 @@
       lbl.textContent = tt.label;
       svg.appendChild(lbl);
       // v2.832.0 — draggable corner handles while this region is being resized.
+      // v2.848.0 — quads get one handle per corner point (each drags freely);
+      // rects keep the four bbox-corner handles (anchored resize on gridded
+      // maps, free-corner conversion on gridless — see mkTerrainHandle).
       if (resizingTerrain && resizingTerrain.id === tr.id) {
-        svg.appendChild(mkTerrainHandle(tr, tr.x, tr.y, 'nw'));
-        svg.appendChild(mkTerrainHandle(tr, tr.x + tr.w, tr.y, 'ne'));
-        svg.appendChild(mkTerrainHandle(tr, tr.x, tr.y + tr.h, 'sw'));
-        svg.appendChild(mkTerrainHandle(tr, tr.x + tr.w, tr.y + tr.h, 'se'));
+        if (isQuad) {
+          tr.points.forEach(function (p, k) {
+            svg.appendChild(mkTerrainHandle(tr, p[0], p[1], k));
+          });
+        } else {
+          svg.appendChild(mkTerrainHandle(tr, tr.x, tr.y, 'nw'));
+          svg.appendChild(mkTerrainHandle(tr, tr.x + tr.w, tr.y, 'ne'));
+          svg.appendChild(mkTerrainHandle(tr, tr.x, tr.y + tr.h, 'sw'));
+          svg.appendChild(mkTerrainHandle(tr, tr.x + tr.w, tr.y + tr.h, 'se'));
+        }
       }
     });
     if (terrainDrag) {  // live paint preview
@@ -1089,6 +1156,30 @@
       tpv.setAttribute('fill', tc.color); tpv.setAttribute('fill-opacity', '0.35');
       tpv.style.pointerEvents = 'none';
       svg.appendChild(tpv);
+    }
+    // v2.848.0 — pending quad-corner dots (gridless four-dot placement):
+    // numbered dots + a dashed polyline connecting them, in the terrain colour.
+    if (terrainDots.length) {
+      var qc = terrainType((document.getElementById('me-terrain-type') || {}).value);
+      if (terrainDots.length > 1) {
+        var pl = document.createElementNS(NS, 'polyline');
+        pl.setAttribute('points', terrainDots.map(function (p) {
+          return p[0] + ',' + p[1];
+        }).join(' '));
+        pl.setAttribute('fill', 'none'); pl.setAttribute('stroke', qc.color);
+        pl.setAttribute('stroke-width', '2'); pl.setAttribute('stroke-dasharray', '5 4');
+        pl.style.pointerEvents = 'none';
+        svg.appendChild(pl);
+      }
+      terrainDots.forEach(function (p) {
+        var d = document.createElementNS(NS, 'circle');
+        d.setAttribute('cx', p[0]); d.setAttribute('cy', p[1]);
+        d.setAttribute('r', 6); d.setAttribute('fill', qc.color);
+        d.setAttribute('stroke', '#000'); d.setAttribute('stroke-width', '1.5');
+        d.classList.add('me-terrain-dot');
+        d.style.pointerEvents = 'none';
+        svg.appendChild(d);
+      });
     }
     // v2.791.0 — decorative prop stamps (emoji glyphs) above terrain, below
     // walls/tokens. Each renders as a rotated <text> centred on its point with
@@ -1916,7 +2007,12 @@
       var dx = p.x - mx, dy = p.y - my;
       r.obj.x1 += dx; r.obj.y1 += dy; r.obj.x2 += dx; r.obj.y2 += dy;
     } else if (r.kind === 'terrain') {  // v2.832.0 — centre the rect on the cursor
-      r.obj.x = p.x - r.obj.w / 2; r.obj.y = p.y - r.obj.h / 2;
+      var ndx = (p.x - r.obj.w / 2) - r.obj.x, ndy = (p.y - r.obj.h / 2) - r.obj.y;
+      r.obj.x += ndx; r.obj.y += ndy;
+      // v2.848.0 — a free-form quad translates all four corners together.
+      if (Array.isArray(r.obj.points)) {
+        r.obj.points = r.obj.points.map(function (q) { return [q[0] + ndx, q[1] + ndy]; });
+      }
     } else { r.obj.x = p.x; r.obj.y = p.y; }
   }
   function saveReloc(r) {
@@ -2157,8 +2253,10 @@
       }
     }
     // v2.788.1 — Esc finishes a wall/room chain or clears the selection.
+    // v2.848.0 — also cancels pending quad-corner dots.
     if (e.key === 'Escape') {
-      if (pending) { pending = null; render(); }
+      if (terrainDots.length) { terrainDots = []; setStatus(''); render(); }
+      else if (pending) { pending = null; render(); }
       else if (selection.length) { selection = []; render(); }
     }
   });
@@ -2188,7 +2286,9 @@
     // v2.845.0 — the dynamic-fog toggle + reset button ride alongside "fog on".
     if (fogDynLbl) fogDynLbl.style.display = fogMode ? 'inline-flex' : 'none';
     if (fogResetBtn) fogResetBtn.style.display = (fogMode && fogDynamic) ? 'inline-flex' : 'none';
-    pending = null; fogDrag = null; syncStageCursor(); render();
+    pending = null; fogDrag = null;
+    terrainDots = [];  // v2.848.0 — abandon a half-placed quad on tool change
+    syncStageCursor(); render();
   }
   var fogOnLbl = document.getElementById('me-fog-on-lbl');
   var fogOnCb = document.getElementById('me-fog-on-cb');
@@ -2365,7 +2465,30 @@
       if (tw > 6 && th > 6) {
         terrain.push({ id: 't' + Date.now() + '_' + (seq++), x: tx, y: ty, w: tw, h: th,
           type: (document.getElementById('me-terrain-type') || {}).value || 'difficult' });
+        terrainDots = [];   // a drag supersedes any pending quad dots
         saveTerrain();
+      } else if (gridType === 'none') {
+        // v2.848.0 — gridless four-dot placement: a click (not a drag) drops a
+        // quad corner; the 4th corner completes a free-form region. The bbox
+        // (x/y/w/h) rides along for label anchors + legacy readers.
+        terrainDots.push([td.sx, td.sy]);
+        if (terrainDots.length >= 4) {
+          var qxs = terrainDots.map(function (p) { return p[0]; });
+          var qys = terrainDots.map(function (p) { return p[1]; });
+          var qx = Math.min.apply(null, qxs), qy = Math.min.apply(null, qys);
+          var qw = Math.max.apply(null, qxs) - qx, qh = Math.max.apply(null, qys) - qy;
+          if (qw > 6 && qh > 6) {
+            terrain.push({ id: 't' + Date.now() + '_' + (seq++),
+              x: qx, y: qy, w: qw, h: qh, points: terrainDots,
+              type: (document.getElementById('me-terrain-type') || {}).value || 'difficult' });
+            terrainDots = [];
+            saveTerrain();
+          } else { terrainDots = []; render(); }  // degenerate — discard
+        } else {
+          setStatus('Quad corner ' + terrainDots.length + '/4 placed — ' +
+            (4 - terrainDots.length) + ' more to finish (Esc cancels).');
+          render();
+        }
       } else { render(); }
       suppressClick = true; setTimeout(function () { suppressClick = false; }, 0);
       return;

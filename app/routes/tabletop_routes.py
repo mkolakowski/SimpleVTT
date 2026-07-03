@@ -124570,25 +124570,52 @@ def _sanitize_terrain(raw) -> list:
     """v2.789.0 — coerce a client terrain list into the stored shape: a list of
     ``{id, x, y, w, h, type}`` rectangles in map-pixel coords. Drops anything
     without four numeric fields or a non-positive size; ``type`` is a short
-    free-form key (difficult / water / lava / …), capped."""
+    free-form key (difficult / water / lava / …), capped.
+
+    v2.848.0 — a region may also carry ``points``: exactly 4 numeric ``[x, y]``
+    corner pairs making it a free-form quadrilateral (authored on gridless
+    maps). When valid, ``x/y/w/h`` are recomputed as the quad's bounding box so
+    every legacy rect reader (labels, hit anchors) keeps working; malformed
+    ``points`` are dropped and the record falls back to its rect fields."""
     out = []
     if not isinstance(raw, list):
         return out
     for i, r in enumerate(raw):
         if not isinstance(r, dict):
             continue
-        try:
-            x = float(r.get("x")); y = float(r.get("y"))
-            w = float(r.get("w")); h = float(r.get("h"))
-        except (TypeError, ValueError):
-            continue
-        if w <= 0 or h <= 0:
-            continue
+        # Optional free-form quad corners.
+        points = None
+        rawpts = r.get("points")
+        if isinstance(rawpts, list) and len(rawpts) == 4:
+            try:
+                pts = [[float(p[0]), float(p[1])] for p in rawpts
+                       if isinstance(p, (list, tuple)) and len(p) == 2]
+                if len(pts) == 4:
+                    points = pts
+            except (TypeError, ValueError, IndexError):
+                points = None
+        if points is not None:
+            xs = [p[0] for p in points]; ys = [p[1] for p in points]
+            x, y = min(xs), min(ys)
+            w, h = max(xs) - x, max(ys) - y
+            if w <= 0 or h <= 0:   # degenerate quad (all corners collinear)
+                continue
+        else:
+            try:
+                x = float(r.get("x")); y = float(r.get("y"))
+                w = float(r.get("w")); h = float(r.get("h"))
+            except (TypeError, ValueError):
+                continue
+            if w <= 0 or h <= 0:
+                continue
         typ = (str(r.get("type") or "difficult").strip().lower()[:20]) or "difficult"
-        out.append({
+        rec = {
             "id": (str(r.get("id") or "").strip()[:40] or f"t{i}"),
             "x": x, "y": y, "w": w, "h": h, "type": typ,
-        })
+        }
+        if points is not None:
+            rec["points"] = points
+        out.append(rec)
     return out
 
 

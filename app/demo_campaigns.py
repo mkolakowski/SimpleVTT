@@ -261,7 +261,11 @@ _STORM_SALTMARSH = {
             "fog_revealed": [{"x": 59, "y": 214, "w": 1483, "h": 660}],
             "terrain": [
                 {"id": "dr-t1", "x": 127, "y": 781, "w": 1352, "h": 204, "type": "water"},
-                {"id": "dr-t2", "x": 991, "y": 198, "w": 337, "h": 368, "type": "difficult"}],
+                # v2.848.0 — the kelp forest is a free-form quad (four corner
+                # points; the sanitizer recomputes x/y/w/h as its bbox) so the
+                # demo shows off gridless four-corner terrain.
+                {"id": "dr-t2", "type": "difficult",
+                 "points": [[1004, 213], [1341, 259], [1296, 588], [963, 512]]}],
             "labels": [
                 {"id": "dr-lb1", "x": 218, "y": 851, "text": "Deep channel",
                  "size": 32, "color": "#bae6fd"},

@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.848.0] - 2026-07-03 — "The Four Corners"
+
+**Schema version:** 97
+
+**Commit summary:** Free-form four-corner terrain quads on gridless maps — placed by clicking four dots or by converting a dragged rect's corners.
+
+**Description:** Rectangles fit grids, not coastlines. On a **gridless** map the terrain tool now places **free-form quadrilaterals**: click **four dots** (numbered preview dots + dashed outline; Esc cancels) and the region completes with the selected type — or drag a rectangle as before and then, in **Resize**, drag any corner **independently** (the first corner-drag converts the rect to a quad). Quads render as polygons on both the editor and the live tabletop, with the same colours, dashes, right-click menu (type/move/delete), and Move translating all four corners together. The stored record gains an optional `points` field (exactly 4 `[x,y]` pairs) validated by the terrain sanitizer, which recomputes `x/y/w/h` as the quad's bounding box so every legacy rect reader (labels, anchors) keeps working — no schema change. Gridded maps keep the exact rect behavior (anchored corner resize, no dot placement). Bonus gridless fix: `snapPoint` no longer rounds to the invisible 70 px lattice on gridless maps (wall-endpoint snapping stays). The Drowned Reef demo's kelp forest now ships as a quad to show it off.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_sanitize_terrain` accepts/validates optional `points` (4 numeric pairs → bbox recomputed; malformed → rect fallback or drop).
+- `app/templates/map_editor.html` — four-dot placement (gridless terrain mode), pending-dot preview, quad `<polygon>` render, independent-corner handles (`mkTerrainHandle` free-corner path + rect→quad conversion on gridless), quad-aware Move, gridless `snapPoint`, toolbar hint.
+- `app/templates/tabletop.html` — terrain `<polygon>` render branch.
+- `tests/harness/test_map_terrain.py` — `test_terrain_quad_points_round_trip` (+1): points round-trip + bbox recompute + malformed-points fallback/drop through PUT/GET/broadcast.
+- `tests/harness_ui/test_map_editor_terrain_quad.py` (new, +1) — four clicks on a gridless map create a 4-point quad; Resize shows 4 handles and dragging one moves only that corner. Restores grid_type after.
+
+### Changed
+- `app/demo_campaigns.py` — the Drowned Reef kelp forest (`dr-t2`) is now a free-form quad.
+- `docs/wiki/map-editor-tour.md` — Terrain row documents four-dot quads on gridless maps.
+
+### Schema
+- No schema change (still v97 — additive JSON field on the existing `terrain` column).
+
 ## [2.847.0] - 2026-07-03 — "The Unruled Table"
 
 **Schema version:** 97

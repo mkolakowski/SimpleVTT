@@ -2559,12 +2559,21 @@
         function render() {
             while (svg.firstChild) svg.removeChild(svg.firstChild);
             // v2.789.2 — terrain regions (under walls/tokens): translucent
-            // coloured rects + a label; non-interactive.
+            // coloured rects + a label; non-interactive. v2.848.0 — a region
+            // with ``points`` (4 corner pairs) renders as a free-form quad.
             terrain.forEach(function (tr) {
                 var col = terrainColor(tr.type);
-                var rc = document.createElementNS(NS, 'rect');
-                rc.setAttribute('x', tr.x); rc.setAttribute('y', tr.y);
-                rc.setAttribute('width', tr.w); rc.setAttribute('height', tr.h);
+                var rc;
+                if (Array.isArray(tr.points) && tr.points.length === 4) {
+                    rc = document.createElementNS(NS, 'polygon');
+                    rc.setAttribute('points', tr.points.map(function (p) {
+                        return p[0] + ',' + p[1];
+                    }).join(' '));
+                } else {
+                    rc = document.createElementNS(NS, 'rect');
+                    rc.setAttribute('x', tr.x); rc.setAttribute('y', tr.y);
+                    rc.setAttribute('width', tr.w); rc.setAttribute('height', tr.h);
+                }
                 rc.setAttribute('fill', col); rc.setAttribute('fill-opacity', '0.28');
                 rc.setAttribute('stroke', col); rc.setAttribute('stroke-width', '2');
                 rc.setAttribute('stroke-dasharray', '7 5');
