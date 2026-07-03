@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.841.0] - 2026-07-02 — "The Guided Tour"
+
+**Schema version:** 96
+
+**Commit summary:** Add a "Map editor tour" wiki guide that walks the editor's element families with the furnished demo maps as worked examples.
+
+**Description:** Companion to v2.840.0. Now that every demo map ships furnished with editor elements, this adds a **`/wiki/map-editor-tour`** guide that teaches the map editor: how to open it, a table of every element family (walls/doors, lights, terrain, fog of war, hotspots, GM pins, labels) with which demo map to see each on, a worked walk-through of the Sundered Tavern's layout, and practical tips (snap-to-grid, generous fog reveals, dark-ambient vision). Props are noted as parked. Surfaced through the wiki per the doc-discovery rule: landing-page table, on-disk index, and a per-slug render test.
+
+### Added
+- `docs/wiki/map-editor-tour.md` (new) — the guide.
+- `app/templates/wiki.html` + `docs/wiki/README.md` — "Available guides" rows linking `/wiki/map-editor-tour`.
+- `tests/harness/test_wiki.py` — `test_wiki_map_editor_tour_guide_renders` (new, +1) asserts the slug serves 200 with the H1 + nav injected; the slug added to `test_wiki_home_renders`'s landing-page assertions.
+
+### Schema
+- No schema change (still v96 — doc + wiki surfacing only).
+
 ## [2.840.0] - 2026-07-02 — "The Furnished Board"
 
 **Schema version:** 96

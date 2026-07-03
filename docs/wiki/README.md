@@ -35,6 +35,7 @@ How much of the SRD 5.1 ruleset SimpleVTT mechanically automates, by content cat
 | [Player onboarding — your first session](player-onboarding.md) | Markdown (how-to · screenshots) | Players | ✅ shipped (v2.634.0) — illustrated first-session walkthrough, 11 screenshots |
 | [Inviting players to your campaign](inviting-players.md) | Markdown (how-to · screenshots) | GMs + Operators | ✅ shipped (v2.635.0) — account → add-member → roll colors → co-GM → portraits, 4 screenshots |
 | [Theming & display preferences](theming.md) | Markdown (how-to · screenshots) | Everyone | ✅ shipped (v2.636.0) — 14 themes + fonts + scale + accessibility notes, 5 screenshots |
+| [Map editor tour](map-editor-tour.md) | Markdown (how-to) | GMs | ✅ shipped (v2.841.0) — the editor's element families (walls/doors, lights, terrain, fog, hotspots, GM pins, labels) with the furnished demo maps as worked examples |
 | [Maps, grids & tokens](maps-grids-tokens.md) | Markdown (how-to · screenshots) | GMs | ✅ shipped (v2.637.0) — upload maps, grid overlay, the board, placing tokens, the token tracker, 4 screenshots |
 | [Building an encounter](building-an-encounter.md) | Markdown (how-to · screenshots) | GMs | ✅ shipped (v2.639.0) — encounter library, token templates, bestiary import, spawn points, auto-load, 4 screenshots |
 | [Demo mode](demo-mode.md) | Markdown (how-to) | Operators | ✅ shipped (v2.43.21) |

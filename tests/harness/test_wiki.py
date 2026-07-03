@@ -54,6 +54,7 @@ async def test_wiki_home_renders():
     assert "/wiki/player-onboarding" in resp.text   # v2.634.0
     assert "/wiki/inviting-players" in resp.text     # v2.635.0
     assert "/wiki/theming" in resp.text              # v2.636.0
+    assert "/wiki/map-editor-tour" in resp.text        # v2.841.0
     assert "/wiki/maps-grids-tokens" in resp.text     # v2.637.0
     assert "/wiki/building-an-encounter" in resp.text # v2.639.0
     # v2.638.0: audience filter buttons on the guides table + the Format
@@ -220,6 +221,22 @@ async def test_wiki_reactions_guide_renders():
     # H1 contains "Reactions Automation".
     assert "reactions" in resp.text.lower()
     assert "trigger event" in resp.text.lower()
+    assert "<h1" in resp.text
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_map_editor_tour_guide_renders():
+    """v2.841.0: GET /wiki/map-editor-tour — markdown GM how-to under
+    docs/wiki/ rendered + wrapped + nav-injected. Tours the map editor's
+    element families using the furnished demo maps as worked examples."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/map-editor-tour")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    # H1 + a couple of element families the tour catalogs.
+    assert "map editor tour" in resp.text.lower()
+    assert "fog of war" in resp.text.lower()
+    assert "secret" in resp.text.lower()          # secret-door callout
     assert "<h1" in resp.text
     assert 'class="wiki-nav"' in resp.text
 
