@@ -326,6 +326,28 @@
       </select>
     </label>
   </div>
+  {# v2.870.0 — Lair zones: labelled areas bound to a creature's lair actions.
+     Drawn like terrain (rect drag, or ⬡ free polygon); each zone carries a
+     label + a comma-separated list of lair-action ids it targets. On the
+     tabletop the GM/players toggle the overlay and triggering a bound lair
+     action pre-selects the tokens inside the zone. #}
+  <div class="me-group" role="group" aria-label="Lair zones">
+    <span class="me-grp-lbl">Lair</span>
+    <div class="me-sub">
+      <button type="button" id="me-lairzone-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
+              title="Lair zone: drag a rectangle (or use ⬡ Free polygon) to mark where a lair action strikes; set its label + the lair-action ids it targets below. Double-click a zone to edit it; Delete removes the selected zone.">🎯 Lair Zone</button>
+    </div>
+    <button type="button" id="me-lairzone-poly-btn" class="me-tool-btn" aria-pressed="false"
+            title="Free polygon lair zone: when on, click to drop zone vertices and click the first dot to close the shape — instead of dragging a rectangle.">⬡ Free polygon</button>
+    <label class="me-capsel" title="Label for the selected zone (or new zones)">
+      <span class="me-cap">label</span>
+      <input type="text" id="me-lairzone-label" placeholder="e.g. Magma vent" style="min-height:32px;font-size:12px;width:100%;">
+    </label>
+    <label class="me-capsel" title="Lair-action ids this zone targets, comma-separated (e.g. magma-erupts, tremor). Triggering one of these pre-selects the tokens inside the zone.">
+      <span class="me-cap">actions</span>
+      <input type="text" id="me-lairzone-actions" placeholder="magma-erupts, tremor" style="min-height:32px;font-size:12px;width:100%;">
+    </label>
+  </div>
   {# v2.810.0 — Labels + GM pin tools moved into the Markers group. #}
   <div class="me-group" role="group" aria-label="Tokens">
     <span class="me-grp-lbl">Tokens</span>
@@ -374,6 +396,7 @@
       <label style="gap:4px;"><input type="checkbox" id="me-layer-fog" checked> Fog</label>
       <label style="gap:4px;"><input type="checkbox" id="me-layer-gmpins" checked> Pins</label>
       <label style="gap:4px;"><input type="checkbox" id="me-layer-labels" checked> Labels</label>
+      <label style="gap:4px;"><input type="checkbox" id="me-layer-lairzones" checked> Lair zones</label>
       <label style="gap:4px;"><input type="checkbox" id="me-layer-tokens" checked> Tokens</label>
     </div>
   </div>
@@ -424,12 +447,17 @@
   var fogDynamic = {{ 'true' if fog_dynamic else 'false' }};  // v2.845.0 — exploration mode
   var fogRevealed = {{ fog_revealed | tojson }};
   var terrain = {{ terrain | tojson }};   // v2.789.1 — terrain regions
+  var lairZones = {{ lair_zones | tojson }};  // v2.870.0 — lair-action zones
+  var lairZoneDrag = null;    // rect being painted
+  var lairZoneDots = [];      // pending free-polygon vertices
+  var lairZonePolyOn = false; // free-polygon placement mode
+  var selectedLairZone = null;
   var gmPins = {{ gm_pins | tojson }};    // v2.790.1 — GM-only pins
   var props = {{ props | tojson }};       // v2.791.0 — decorative prop stamps
   var labels = {{ labels | tojson }};     // v2.802.0 — public text labels
   // v2.790.3 — per-layer visibility (authoring only; saved to localStorage).
   var layers = (function () {
-    var def = { walls: true, terrain: true, lights: true, hotspots: true, fog: true, gmpins: true, props: true, labels: true, tokens: true };
+    var def = { walls: true, terrain: true, lights: true, hotspots: true, fog: true, gmpins: true, props: true, labels: true, lairzones: true, tokens: true };
     try {
       var s = localStorage.getItem('me-layers-' + MID);
       if (s) { var o = JSON.parse(s); for (var k in def) if (k in o) def[k] = !!o[k]; }
@@ -450,7 +478,7 @@
     for (var i = 0; i < TERRAIN_TYPES.length; i++) if (TERRAIN_TYPES[i].key === key) return TERRAIN_TYPES[i];
     return TERRAIN_TYPES[0];
   }
-  var wallMode = false, doorMode = false, roomMode = false, spotMode = false, lightMode = false, fogMode = false, terrainMode = false, pinMode = false, propMode = false, labelMode = false, pending = null, seq = 0;
+  var wallMode = false, doorMode = false, roomMode = false, spotMode = false, lightMode = false, fogMode = false, terrainMode = false, pinMode = false, propMode = false, labelMode = false, lairZoneMode = false, pending = null, seq = 0;
   // v2.772.0 — wall/door material looks. Walls draw as a thick casing + face
   // line; doors draw as a panel + knob (open = ajar/green).
   // v2.787.2 — thicker walls + per-material texture keys.
@@ -1166,7 +1194,8 @@
       // inert while another drawing tool or a relocate is active. A left-press
       // has no handler here, so it still bubbles to the stage for panning.
       var noTool = !(wallMode || doorMode || roomMode || spotMode || lightMode
-        || fogMode || pinMode || propMode || labelMode || measureMode || selectMode);
+        || fogMode || pinMode || propMode || labelMode || measureMode || selectMode
+        || lairZoneMode);  // v2.870.0 — don't let terrain grab lair-zone drags
       var active = (terrainMode || eraseMode || noTool) && !relocating;
       rc.style.pointerEvents = active ? 'all' : 'none';
       rc.style.cursor = 'pointer';
@@ -1277,6 +1306,89 @@
         d.classList.add('me-terrain-dot');
         d.style.pointerEvents = 'none';
         svg.appendChild(d);
+      });
+    }
+    // v2.870.0 — lair-action zones (above terrain): translucent crimson areas
+    // with a 🎯 label + a bound-action count. Interactive in lairzone/erase
+    // mode: click selects (mirrors the toolbar label/actions) or deletes.
+    if (layers.lairzones) lairZones.forEach(function (lz, i) {
+      var lzColor = '#d24b3a';
+      var lzPoly = Array.isArray(lz.points) && lz.points.length >= 3;
+      var zc;
+      if (lzPoly) {
+        zc = document.createElementNS(NS, 'polygon');
+        zc.setAttribute('points', lz.points.map(function (p) { return p[0] + ',' + p[1]; }).join(' '));
+      } else {
+        zc = document.createElementNS(NS, 'rect');
+        zc.setAttribute('x', lz.x); zc.setAttribute('y', lz.y);
+        zc.setAttribute('width', lz.w); zc.setAttribute('height', lz.h);
+      }
+      zc.setAttribute('fill', lzColor); zc.setAttribute('fill-opacity', '0.20');
+      zc.setAttribute('stroke', lzColor); zc.setAttribute('stroke-width', '2');
+      zc.setAttribute('stroke-dasharray', '2 5');
+      zc.classList.add('me-lairzone');
+      var zActive = (lairZoneMode || eraseMode) && !relocating;
+      zc.style.pointerEvents = zActive ? 'all' : 'none';
+      zc.style.cursor = 'pointer';
+      zc.addEventListener('click', function (e) {
+        if (eraseMode) {
+          e.stopPropagation();
+          if (selectedLairZone === lz) selectedLairZone = null;
+          lairZones.splice(i, 1); saveLairZones(); return;
+        }
+        if (lairZoneMode) {
+          e.stopPropagation();
+          selectedLairZone = lz; syncLairZoneToolbar(); render();
+        }
+      });
+      svg.appendChild(zc);
+      if (selectedLairZone === lz) {
+        var zSel = zc.cloneNode(false);
+        zSel.setAttribute('fill', 'none');
+        zSel.setAttribute('stroke', '#fff'); zSel.setAttribute('stroke-width', '2');
+        zSel.setAttribute('stroke-dasharray', '5 4');
+        zSel.style.pointerEvents = 'none';
+        zSel.classList.remove('me-lairzone');
+        svg.appendChild(zSel);
+      }
+      var zt = document.createElementNS(NS, 'text');
+      zt.setAttribute('x', lz.x + 5); zt.setAttribute('y', lz.y + 16);
+      zt.setAttribute('fill', lzColor); zt.setAttribute('font-size', '13');
+      zt.setAttribute('font-weight', '700'); zt.style.pointerEvents = 'none';
+      var zna = (lz.actions || []).length;
+      zt.textContent = '🎯 ' + (lz.label || 'Lair zone') + (zna ? ' (' + zna + ')' : '');
+      svg.appendChild(zt);
+    });
+    if (lairZoneDrag && !lairZonePolyOn) {   // live rect preview
+      var zpv = document.createElementNS(NS, 'rect');
+      var zpx = Math.min(lairZoneDrag.sx, lairZoneDrag.cx), zpy = Math.min(lairZoneDrag.sy, lairZoneDrag.cy);
+      zpv.setAttribute('x', zpx); zpv.setAttribute('y', zpy);
+      zpv.setAttribute('width', Math.abs(lairZoneDrag.cx - lairZoneDrag.sx));
+      zpv.setAttribute('height', Math.abs(lairZoneDrag.cy - lairZoneDrag.sy));
+      zpv.setAttribute('fill', '#d24b3a'); zpv.setAttribute('fill-opacity', '0.25');
+      zpv.style.pointerEvents = 'none';
+      svg.appendChild(zpv);
+    }
+    if (lairZoneDots.length) {   // pending free-polygon vertices
+      var zClosable = lairZonePolyOn && lairZoneDots.length >= 3;
+      if (lairZoneDots.length > 1) {
+        var zpl = document.createElementNS(NS, zClosable ? 'polygon' : 'polyline');
+        zpl.setAttribute('points', lairZoneDots.map(function (p) { return p[0] + ',' + p[1]; }).join(' '));
+        zpl.setAttribute('fill', 'none'); zpl.setAttribute('stroke', '#d24b3a');
+        zpl.setAttribute('stroke-width', '2'); zpl.setAttribute('stroke-dasharray', '5 4');
+        zpl.style.pointerEvents = 'none';
+        svg.appendChild(zpl);
+      }
+      lairZoneDots.forEach(function (p, di) {
+        var zd = document.createElementNS(NS, 'circle');
+        zd.setAttribute('cx', p[0]); zd.setAttribute('cy', p[1]);
+        var zfirst = zClosable && di === 0;
+        zd.setAttribute('r', zfirst ? 10 : 6);
+        zd.setAttribute('fill', zfirst ? 'none' : '#d24b3a');
+        zd.setAttribute('stroke', zfirst ? '#d24b3a' : '#000');
+        zd.setAttribute('stroke-width', zfirst ? '3' : '1.5');
+        zd.style.pointerEvents = 'none';
+        svg.appendChild(zd);
       });
     }
     // v2.791.0 — decorative prop stamps (emoji glyphs) above terrain, below
@@ -2040,6 +2152,18 @@
     } catch (e) { setStatus('Save failed.'); }
     render();
   }
+  async function saveLairZones() {   // v2.870.0
+    pushHistory();
+    setStatus('Saving…');
+    try {
+      await fetch('/api/campaign/' + CID + '/map/' + MID + '/lair_zones', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lair_zones: lairZones }),
+      });
+      setStatus('Saved.');
+    } catch (e) { setStatus('Save failed.'); }
+    render();
+  }
   async function saveGmPins() {
     pushHistory();
     setStatus('Saving…');
@@ -2107,6 +2231,7 @@
         fetch(base + '/lights', { method: 'PUT', headers: J, body: JSON.stringify({ lights: lights }) }),
         fetch(base + '/fog', { method: 'PUT', headers: J, body: JSON.stringify({ enabled: fogEnabled, dynamic: fogDynamic, revealed: fogRevealed }) }),
         fetch(base + '/terrain', { method: 'PUT', headers: J, body: JSON.stringify({ terrain: terrain }) }),
+        fetch(base + '/lair_zones', { method: 'PUT', headers: J, body: JSON.stringify({ lair_zones: lairZones }) }),
         fetch(base + '/gm_pins', { method: 'PUT', headers: J, body: JSON.stringify({ gm_pins: gmPins }) }),
         fetch(base + '/props', { method: 'PUT', headers: J, body: JSON.stringify({ props: props }) }),
         fetch(base + '/labels', { method: 'PUT', headers: J, body: JSON.stringify({ labels: labels }) }),
@@ -2481,6 +2606,34 @@
   if (terrainTypeSelEl) terrainTypeSelEl.addEventListener('change', function () {
     if (selectedTerrain) { selectedTerrain.type = terrainTypeSelEl.value; saveTerrain(); }
   });
+  // v2.870.0 — lair-zone tool wiring.
+  var lairZoneBtn = document.getElementById('me-lairzone-btn');
+  var lairZonePolyBtn = document.getElementById('me-lairzone-poly-btn');
+  var lairZoneLabelEl = document.getElementById('me-lairzone-label');
+  var lairZoneActionsEl = document.getElementById('me-lairzone-actions');
+  function _parseZoneActions(s) {
+    return String(s || '').split(',').map(function (a) { return a.trim(); }).filter(Boolean).slice(0, 24);
+  }
+  function syncLairZoneToolbar() {
+    if (lairZoneLabelEl && selectedLairZone) lairZoneLabelEl.value = selectedLairZone.label || '';
+    if (lairZoneActionsEl && selectedLairZone) lairZoneActionsEl.value = (selectedLairZone.actions || []).join(', ');
+  }
+  if (lairZoneBtn) lairZoneBtn.addEventListener('click', function () { setMode(lairZoneMode ? null : 'lairzone'); });
+  if (lairZonePolyBtn) lairZonePolyBtn.addEventListener('click', function () {
+    lairZonePolyOn = !lairZonePolyOn;
+    lairZonePolyBtn.setAttribute('aria-pressed', lairZonePolyOn ? 'true' : 'false');
+    lairZoneDots = [];
+    if (lairZonePolyOn && !lairZoneMode) setMode('lairzone');
+    setStatus(lairZonePolyOn
+      ? 'Free polygon ON — click zone vertices, then click the first dot to close.' : '');
+    render();
+  });
+  if (lairZoneLabelEl) lairZoneLabelEl.addEventListener('change', function () {
+    if (selectedLairZone) { selectedLairZone.label = lairZoneLabelEl.value.trim().slice(0, 60); saveLairZones(); }
+  });
+  if (lairZoneActionsEl) lairZoneActionsEl.addEventListener('change', function () {
+    if (selectedLairZone) { selectedLairZone.actions = _parseZoneActions(lairZoneActionsEl.value); saveLairZones(); }
+  });
   var spotBtn = document.getElementById('me-spot-btn');
   var snapBtn = document.getElementById('me-snap-btn');
   if (snapBtn) snapBtn.addEventListener('click', function () {
@@ -2528,7 +2681,7 @@
   function syncStageCursor() {
     // The overlay captures empty-area clicks when placing/painting/relocating.
     // (Objects stay individually clickable for erase/right-click regardless.)
-    var on = wallMode || doorMode || roomMode || spotMode || lightMode || fogMode || terrainMode || pinMode || propMode || labelMode || measureMode || selectMode || relocating || resizing || resizingTerrain;
+    var on = wallMode || doorMode || roomMode || spotMode || lightMode || fogMode || terrainMode || lairZoneMode || pinMode || propMode || labelMode || measureMode || selectMode || relocating || resizing || resizingTerrain;
     svg.style.pointerEvents = on ? 'auto' : 'none';
     svg.style.cursor = on ? 'crosshair' : 'default';
   }
@@ -2650,6 +2803,13 @@
     // v2.806.0 — Delete/Backspace removes the current multi-selection (unless
     // you're typing in a field).
     var typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '');
+    // v2.870.0 — Delete removes the selected lair zone.
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedLairZone && !typing) {
+      e.preventDefault();
+      var _zi = lairZones.indexOf(selectedLairZone);
+      if (_zi >= 0) lairZones.splice(_zi, 1);
+      selectedLairZone = null; saveLairZones(); return;
+    }
     if ((e.key === 'Delete' || e.key === 'Backspace') && selection.length && !typing) {
       e.preventDefault(); deleteSelection(); return;
     }
@@ -2665,9 +2825,11 @@
     // v2.848.0 — also cancels pending quad-corner dots.
     // v2.850.0/v2.851.0 — also deselects the dbl-click-selected object.
     if (e.key === 'Escape') {
-      if (terrainDots.length) { terrainDots = []; setStatus(''); render(); }
+      if (lairZoneDots.length) { lairZoneDots = []; setStatus(''); render(); }  // v2.870.0
+      else if (terrainDots.length) { terrainDots = []; setStatus(''); render(); }
       else if (pending) { pending = null; render(); }
       else if (clearObjectSelection()) { /* light/wall/terrain deselected */ }
+      else if (selectedLairZone) { selectedLairZone = null; render(); }  // v2.870.0
       else if (selection.length) { selection = []; render(); }
     }
   });
@@ -2677,6 +2839,7 @@
     spotMode = (mode === 'spot'); lightMode = (mode === 'light'); fogMode = (mode === 'fog');
     terrainMode = (mode === 'terrain'); pinMode = (mode === 'pin');
     propMode = (mode === 'prop'); labelMode = (mode === 'label');
+    lairZoneMode = (mode === 'lairzone');   // v2.870.0
     measureMode = (mode === 'measure');
     if (!measureMode) { measureDrag = null; measureLine = null; }  // clear ruler on tool change
     if (measureBtn) measureBtn.setAttribute('aria-pressed', measureMode ? 'true' : 'false');
@@ -2689,6 +2852,7 @@
     if (pinBtn) pinBtn.setAttribute('aria-pressed', pinMode ? 'true' : 'false');
     if (propBtn) propBtn.setAttribute('aria-pressed', propMode ? 'true' : 'false');
     if (labelBtn) labelBtn.setAttribute('aria-pressed', labelMode ? 'true' : 'false');
+    if (lairZoneBtn) lairZoneBtn.setAttribute('aria-pressed', lairZoneMode ? 'true' : 'false');
     if (doorBtn) doorBtn.setAttribute('aria-pressed', doorMode ? 'true' : 'false');
     spotBtn.setAttribute('aria-pressed', spotMode ? 'true' : 'false');
     if (lightBtn) lightBtn.setAttribute('aria-pressed', lightMode ? 'true' : 'false');
@@ -2703,6 +2867,8 @@
     // (incl. the unified selectedObj + its armed resize handles).
     selectedLight = null; selectedWall = null; selectedTerrain = null;
     selectedObj = null; resizing = null; resizingTerrain = null;
+    selectedLairZone = null; lairZoneDots = [];   // v2.870.0
+    syncLairZoneToolbar();
     syncLightToolbar();
     syncStageCursor(); render();
   }
@@ -2792,6 +2958,13 @@
       try { svg.setPointerCapture(e.pointerId); } catch (_) {}
       return;
     }
+    if (lairZoneMode) {  // v2.870.0 — paint a lair-zone rectangle / polygon
+      var lzp = toMap(e); if (!lzp) return;
+      e.preventDefault();
+      lairZoneDrag = { sx: lzp.x, sy: lzp.y, cx: lzp.x, cy: lzp.y };
+      try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+      return;
+    }
     if (measureMode) {  // v2.805.0 — drag a ruler line
       var mp = toMap(e); if (!mp) return;
       e.preventDefault();
@@ -2850,6 +3023,10 @@
     }
     if (terrainDrag) {
       var tmp = toMap(e); if (tmp) { terrainDrag.cx = tmp.x; terrainDrag.cy = tmp.y; render(); }
+      return;
+    }
+    if (lairZoneDrag) {   // v2.870.0
+      var lzm = toMap(e); if (lzm) { lairZoneDrag.cx = lzm.x; lairZoneDrag.cy = lzm.y; render(); }
       return;
     }
     if (measureDrag) {
@@ -2931,6 +3108,39 @@
       } else { selection = []; }  // a click (no drag) clears the selection
       render();
       suppressClick = true; setTimeout(function () { suppressClick = false; }, 0);
+      return;
+    }
+    if (lairZoneDrag) {  // v2.870.0 — commit the painted lair zone (rect / polygon)
+      var lz = lairZoneDrag; lairZoneDrag = null;
+      try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
+      var lzx = Math.min(lz.sx, lz.cx), lzy = Math.min(lz.sy, lz.cy);
+      var lzw = Math.abs(lz.cx - lz.sx), lzh = Math.abs(lz.cy - lz.sy);
+      var _lbl = (lairZoneLabelEl && lairZoneLabelEl.value.trim().slice(0, 60)) || '';
+      var _acts = lairZoneActionsEl ? _parseZoneActions(lairZoneActionsEl.value) : [];
+      if (lairZonePolyOn) {
+        var lzclose = Math.max(14, (gridPx || 70) * 0.35);
+        if (lairZoneDots.length >= 3
+            && Math.hypot(lz.sx - lairZoneDots[0][0], lz.sy - lairZoneDots[0][1]) <= lzclose) {
+          var zxs = lairZoneDots.map(function (p) { return p[0]; });
+          var zys = lairZoneDots.map(function (p) { return p[1]; });
+          var zx0 = Math.min.apply(null, zxs), zy0 = Math.min.apply(null, zys);
+          var zw = Math.max.apply(null, zxs) - zx0, zh = Math.max.apply(null, zys) - zy0;
+          if (zw > 6 && zh > 6) {
+            lairZones.push({ id: 'lz' + Date.now() + '_' + (seq++),
+              x: zx0, y: zy0, w: zw, h: zh, points: lairZoneDots, label: _lbl, actions: _acts });
+            lairZoneDots = []; setStatus(''); saveLairZones();
+          } else { lairZoneDots = []; render(); }
+        } else {
+          lairZoneDots.push([lz.sx, lz.sy]);
+          setStatus(lairZoneDots.length + ' point' + (lairZoneDots.length === 1 ? '' : 's')
+            + ' — click more, then click the first dot to close (Esc cancels).');
+          render();
+        }
+      } else if (lzw > 6 && lzh > 6) {
+        lairZones.push({ id: 'lz' + Date.now() + '_' + (seq++),
+          x: lzx, y: lzy, w: lzw, h: lzh, label: _lbl, actions: _acts });
+        lairZoneDots = []; saveLairZones();
+      } else { render(); }
       return;
     }
     if (terrainDrag) {  // v2.789.1 — commit the painted terrain rect
@@ -3416,7 +3626,7 @@
   });
 
   // v2.790.3 — layer-visibility checkboxes (reflect + persist localStorage).
-  var LAYER_KEYS = ['walls', 'terrain', 'lights', 'hotspots', 'fog', 'gmpins', 'props', 'labels', 'tokens'];
+  var LAYER_KEYS = ['walls', 'terrain', 'lights', 'hotspots', 'fog', 'gmpins', 'props', 'labels', 'lairzones', 'tokens'];
   LAYER_KEYS.forEach(function (k) {
     var cb = document.getElementById('me-layer-' + k);
     if (!cb) return;

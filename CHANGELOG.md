@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.870.0] - 2026-07-03 — "The Painted Zone"
+
+**Schema version:** 99
+
+**Commit summary:** The map editor gets a Lair Zone tool — place areas (like terrain) and bind lair actions to them.
+
+**Description:** Phase 2 of the lair-action layer. A new **🎯 Lair Zone** tool (its own "Lair" toolbar group) places areas exactly like terrain — drag a rectangle, or toggle **⬡ Free polygon** to click vertices and close on the first. A **label** input names the zone and an **actions** input binds the comma-separated lair-action ids the zone targets; both apply to new zones and live-edit the selected one. Zones render as translucent crimson areas with a 🎯 label + bound-action count, save through the Phase-1 `PUT /map/{id}/lair_zones` (and the editor's bulk "save all"), and have a **Lair zones** layer-visibility checkbox. Double-click a zone to select + edit it, Delete removes it, Esc cancels a pending polygon. Fixes along the way: `syncStageCursor` + the terrain `noTool` guard now include lair-zone mode, so the stage stays interactive and terrain regions don't grab a zone drag.
+
+### Added
+- `app/templates/map_editor.html` — the Lair Zone tool: toolbar group (button + free-polygon toggle + label/actions inputs), `lairZones` state + mode, rect/polygon placement, render + select/delete, `saveLairZones`, bulk-save entry, and the Layers checkbox.
+- `tests/harness_ui/test_map_editor_lair_zone.py` — rect placement carries the label + parsed actions and renders `.me-lairzone`; free-polygon placement saves a 5-vertex zone.
+
+### Fixed
+- `app/templates/map_editor.html` — `syncStageCursor` keeps the overlay interactive in lair-zone mode; the terrain-interactivity `noTool` guard excludes lair-zone mode so terrain can't intercept a zone drag.
+
+### Schema
+- No schema change (still v99 — reuses the Phase-1 `lair_zones` column + endpoint).
+
 ## [2.869.0] - 2026-07-03 — "The Marked Ground"
 
 **Schema version:** 99

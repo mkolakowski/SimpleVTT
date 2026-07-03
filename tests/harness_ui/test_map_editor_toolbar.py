@@ -19,8 +19,9 @@ def test_toolbar_grouped(gm_page: Page) -> None:
     # v2.816.0 — zoned: Actions (File · Tools) · Draw (Walls…Tokens) · Map (Grid…View).
     # v2.826.0 — History renamed "File" with Tags folded in; standalone Tags gone.
     # v2.835.0 — Props group removed (feature parked).
+    # v2.870.0 — Lair group added (lair-action zones) between Environment + Tokens.
     assert labels == ["FILE", "TOOLS", "WALLS", "MARKERS", "ENVIRONMENT",
-                      "TOKENS", "GRID", "LAYERS", "VIEW"], labels
+                      "LAIR", "TOKENS", "GRID", "LAYERS", "VIEW"], labels
 
     # v2.817.0 — two zone dividers make the Actions │ Draw │ Map zoning visible.
     zones = [s.upper() for s in gm_page.locator(".me-zone-sep .me-zone-lbl").all_inner_texts()]
