@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.849.0] - 2026-07-03 — "The Twin Flame"
+
+**Schema version:** 97
+
+**Commit summary:** Two-colour flicker lights — every light source carries a colour pair, and the tabletop renders a torch-like flickering glow between them.
+
+**Description:** First phase of the living-lights arc. Each map light gains an optional **`color2`** (sanitizer-preserved; JSON column, no migration) and every **preset** now defines a colour pair (torch `#ffb347→#ff7a1a`, candle, lamp, lantern, bullseye, cantrip; daylight's pair is identical = steady). The headline: **light colour is now visible on the live tabletop** — a new `#light-glow-canvas` layer (inside `#map-transform`, so it pans/zooms free) draws a radial coloured glow at each source and a rAF loop (modeled on the weather overlay) animates it **torch-like** between the two colours using two incommensurate sines seeded per light, so every flame dances at its own phase. The veil-punch lighting canvas is untouched (its alpha-sampling tests stay exact). The **editor markers** flicker too: two-colour lights get their glow/core fills re-tinted by a rAF loop (the SMIL opacity animation — and its test-asserted `<animate>` count — unchanged). All 18 seeded demo lights gain theme-matched pairs (ember torches, violet Shadowfell braziers, red-orange caldera flames).
+
+### Added
+- `app/routes/tabletop_routes.py` — `_sanitize_lights` preserves `color2` (16-char cap, absent → `""`).
+- `app/templates/map_editor.html` — `LIGHT_TYPES` colour pairs; placement + `applyLightType` copy `color2`; `hexToRgb`/`flickerColorAt` mix helpers + marker-fill rAF preview loop (class-tagged `me-light-flick`).
+- `app/templates/tabletop.html` — `#light-glow-canvas` + `window._onLightsGlow` rAF glow loop (composite `lighter`, low-alpha radial gradients out to the light's dim radius).
+- `app/static/tabletop.js` — `_setMapLights` feeds `_onLightsGlow` on bootstrap + every `lights_update`.
+- `app/demo_campaigns.py` / `app/demo_seed.py` — all 18 seeded lights gain theme-matched `color2` pairs.
+- `tests/harness/test_map_lights.py` — `test_light_color2_round_trips` (+1). `tests/harness_ui/test_map_light_flicker.py` (new, +2) — the glow canvas draws at the light and its sampled colour changes across ~1s; a two-colour editor marker's fill animates.
+
+### Schema
+- No schema change (still v97 — additive JSON field on the existing `lights` column).
+
 ## [2.848.0] - 2026-07-03 — "The Four Corners"
 
 **Schema version:** 97

@@ -77,11 +77,11 @@ _GOBLIN_WARRENS = {
             "ambient_light": "dark",
             "lights": [
                 {"id": "gw-l1", "x": 293, "y": 287, "bright_ft": 15, "dim_ft": 30,
-                 "color": "#f59e0b", "type": "torch"},
+                 "color": "#f59e0b", "color2": "#ff7a1a", "type": "torch"},
                 {"id": "gw-l2", "x": 622, "y": 501, "bright_ft": 15, "dim_ft": 30,
-                 "color": "#f59e0b", "type": "torch"},
+                 "color": "#f59e0b", "color2": "#ff7a1a", "type": "torch"},
                 {"id": "gw-l3", "x": 988, "y": 343, "bright_ft": 20, "dim_ft": 40,
-                 "color": "#fbbf24", "type": "lantern"}],
+                 "color": "#fbbf24", "color2": "#f59e0b", "type": "lantern"}],
             "fog_enabled": True, "fog_dynamic": True,
             "fog_revealed": [{"x": 56, "y": 188, "w": 1288, "h": 672}],
             "walls": [
@@ -254,9 +254,9 @@ _STORM_SALTMARSH = {
             "ambient_light": "dim",
             "lights": [
                 {"id": "dr-l1", "x": 716, "y": 478, "bright_ft": 20, "dim_ft": 40,
-                 "color": "#fde68a", "type": "lantern"},
+                 "color": "#fde68a", "color2": "#ffb347", "type": "lantern"},
                 {"id": "dr-l2", "x": 1178, "y": 337, "bright_ft": 15, "dim_ft": 30,
-                 "color": "#fde68a", "type": "lantern"}],
+                 "color": "#fde68a", "color2": "#ffb347", "type": "lantern"}],
             "fog_enabled": True, "fog_dynamic": True,
             "fog_revealed": [{"x": 59, "y": 214, "w": 1483, "h": 660}],
             "terrain": [
@@ -443,13 +443,13 @@ _SHADOWFELL_SPIRE = {
             "ambient_light": "dark",
             "lights": [
                 {"id": "ss-l1", "x": 338, "y": 362, "bright_ft": 20, "dim_ft": 40,
-                 "color": "#a855f7", "type": "torch"},
+                 "color": "#a855f7", "color2": "#6d28d9", "type": "torch"},
                 {"id": "ss-l2", "x": 1263, "y": 341, "bright_ft": 20, "dim_ft": 40,
-                 "color": "#a855f7", "type": "torch"},
+                 "color": "#a855f7", "color2": "#6d28d9", "type": "torch"},
                 {"id": "ss-l3", "x": 786, "y": 713, "bright_ft": 15, "dim_ft": 30,
-                 "color": "#38bdf8", "type": "candle"},
+                 "color": "#38bdf8", "color2": "#22d3ee", "type": "candle"},
                 {"id": "ss-l4", "x": 808, "y": 337, "bright_ft": 25, "dim_ft": 50,
-                 "color": "#22d3ee", "type": "daylight"}],
+                 "color": "#22d3ee", "color2": "#22d3ee", "type": "daylight"}],
             "fog_enabled": True, "fog_dynamic": True,
             "fog_revealed": [{"x": 56, "y": 580, "w": 1488, "h": 560}],
             "gm_pins": [
@@ -632,11 +632,11 @@ _DRAGONS_APOTHEOSIS = {
                 {"id": "ct-t2", "x": 781, "y": 198, "w": 263, "h": 291, "type": "lava"}],
             "lights": [
                 {"id": "ct-l1", "x": 287, "y": 1041, "bright_ft": 15, "dim_ft": 30,
-                 "color": "#f97316", "type": "torch"},
+                 "color": "#f97316", "color2": "#dc2626", "type": "torch"},
                 {"id": "ct-l2", "x": 1526, "y": 1019, "bright_ft": 15, "dim_ft": 30,
-                 "color": "#f97316", "type": "torch"},
+                 "color": "#f97316", "color2": "#dc2626", "type": "torch"},
                 {"id": "ct-l3", "x": 897, "y": 336, "bright_ft": 20, "dim_ft": 40,
-                 "color": "#fb923c", "type": "lamp"}],
+                 "color": "#fb923c", "color2": "#fde047", "type": "lamp"}],
             "labels": [
                 {"id": "ct-lb1", "x": 712, "y": 968, "text": "Lava flow",
                  "size": 34, "color": "#fdba74"}],
@@ -827,11 +827,11 @@ _TIDEWRACKED_CATACOMBS = {
                 {"id": "tc-t1", "x": 131, "y": 624, "w": 1138, "h": 221, "type": "water"}],
             "lights": [
                 {"id": "tc-l1", "x": 681, "y": 407, "bright_ft": 20, "dim_ft": 40,
-                 "color": "#fde68a", "type": "lantern"},
+                 "color": "#fde68a", "color2": "#ffb347", "type": "lantern"},
                 {"id": "tc-l2", "x": 272, "y": 291, "bright_ft": 15, "dim_ft": 30,
-                 "color": "#f59e0b", "type": "torch"},
+                 "color": "#f59e0b", "color2": "#ff7a1a", "type": "torch"},
                 {"id": "tc-l3", "x": 1063, "y": 483, "bright_ft": 15, "dim_ft": 30,
-                 "color": "#fde68a", "type": "lantern"}],
+                 "color": "#fde68a", "color2": "#ffb347", "type": "lantern"}],
             "fog_enabled": True, "fog_dynamic": True,
             "fog_revealed": [{"x": 63, "y": 217, "w": 1274, "h": 610}]},
     # Organic token placement (parallel to "party" / "npc_tokens" below).

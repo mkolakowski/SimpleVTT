@@ -114,6 +114,9 @@
     let mapLights = [];
     window._setMapLights = function (l) {
         mapLights = Array.isArray(l) ? l : [];
+        // v2.849.0 — feed the colored flicker-glow overlay (tabletop.html owns
+        // the canvas + rAF loop; this fires on bootstrap AND every lights_update).
+        try { window._onLightsGlow && window._onLightsGlow(mapLights); } catch (_) {}
         try { render(); } catch (_) {}
     };
     // v2.766.0 — fog of war. Players see the map obscured except inside the

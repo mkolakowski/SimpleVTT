@@ -444,14 +444,16 @@
   function wallStyle(w) { return WALL_STYLES[w && w.style] || WALL_STYLES.stone; }
   // v2.778.0 — light-source presets (SRD radii + a warm/white tint). Used for
   // placement (the toolbar select) + the light right-click menu.
+  // v2.849.0 — each preset carries TWO flicker colours: the glow animates
+  // torch-like between ``color`` and ``color2`` (identical pair = steady).
   var LIGHT_TYPES = [
-    { key: 'candle',   label: '🕯 Candle',          bright: 5,  dim: 5,  color: '#ffcf8a' },
-    { key: 'torch',    label: '🔥 Torch',           bright: 20, dim: 20, color: '#ffb347' },
-    { key: 'lamp',     label: '💡 Lamp',            bright: 15, dim: 45, color: '#ffd27f' },
-    { key: 'lantern',  label: '🏮 Hooded lantern',  bright: 30, dim: 30, color: '#ffd27f' },
-    { key: 'bullseye', label: '🔦 Bullseye lantern', bright: 60, dim: 60, color: '#fff0c2' },
-    { key: 'light',    label: '✨ Light cantrip',   bright: 20, dim: 20, color: '#fff4cc' },
-    { key: 'daylight', label: '☀ Daylight',         bright: 60, dim: 60, color: '#ffffff' },
+    { key: 'candle',   label: '🕯 Candle',          bright: 5,  dim: 5,  color: '#ffcf8a', color2: '#ff9d45' },
+    { key: 'torch',    label: '🔥 Torch',           bright: 20, dim: 20, color: '#ffb347', color2: '#ff7a1a' },
+    { key: 'lamp',     label: '💡 Lamp',            bright: 15, dim: 45, color: '#ffd27f', color2: '#ffe9b8' },
+    { key: 'lantern',  label: '🏮 Hooded lantern',  bright: 30, dim: 30, color: '#ffd27f', color2: '#ffb347' },
+    { key: 'bullseye', label: '🔦 Bullseye lantern', bright: 60, dim: 60, color: '#fff0c2', color2: '#ffe9a8' },
+    { key: 'light',    label: '✨ Light cantrip',   bright: 20, dim: 20, color: '#fff4cc', color2: '#ffffff' },
+    { key: 'daylight', label: '☀ Daylight',         bright: 60, dim: 60, color: '#ffffff', color2: '#ffffff' },
   ];
   function lightType(key) {
     for (var i = 0; i < LIGHT_TYPES.length; i++) if (LIGHT_TYPES[i].key === key) return LIGHT_TYPES[i];
@@ -478,6 +480,43 @@
     for (var i = 0; i < s.length; i++) { h = (h ^ s.charCodeAt(i)) >>> 0; h = (h * 16777619) >>> 0; }
     return (h % 100000) / 100000;
   }
+  // v2.849.0 — two-colour flicker: mix ``color``→``color2`` by a torch-like
+  // irregular waveform (two incommensurate sines, seeded per light so each
+  // flame dances at its own phase/rate). t is seconds; returns "#rrggbb".
+  function hexToRgb(hex) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+    if (!m) return null;
+    var n = parseInt(m[1], 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  function flickerColorAt(L, t) {
+    var a = hexToRgb(L.color) || [255, 210, 127];
+    var b = hexToRgb(L.color2);
+    if (!b || L.color2 === L.color) return L.color || '#ffd27f';
+    var s1 = lightSeed(L, 'f1'), s2 = lightSeed(L, 'f2');
+    var f1 = 1.7 + s1 * 2.3, f2 = 4.1 + s2 * 3.7;   // Hz-ish, incommensurate
+    var mix = 0.5 + 0.35 * Math.sin(t * f1 * 2 * Math.PI + s1 * 6.28)
+                  + 0.15 * Math.sin(t * f2 * 2 * Math.PI + s2 * 6.28);
+    mix = Math.max(0, Math.min(1, mix));
+    var r = Math.round(a[0] + (b[0] - a[0]) * mix);
+    var g = Math.round(a[1] + (b[1] - a[1]) * mix);
+    var bl = Math.round(a[2] + (b[2] - a[2]) * mix);
+    return 'rgb(' + r + ',' + g + ',' + bl + ')';
+  }
+  // v2.849.0 — flicker preview loop: re-tints the class-tagged marker fills
+  // each frame. Idles (cheap setTimeout poll) while no two-colour light is on
+  // the map; render() re-tags elements after every redraw, so the loop only
+  // ever queries the live SVG.
+  (function flickLoop() {
+    var els = document.querySelectorAll('.me-light-flick');
+    if (!els.length) { setTimeout(flickLoop, 500); return; }
+    var t = performance.now() / 1000;
+    els.forEach(function (el) {
+      var L = lights[parseInt(el.getAttribute('data-li'), 10)];
+      if (L) el.setAttribute('fill', flickerColorAt(L, t));
+    });
+    requestAnimationFrame(flickLoop);
+  })();
   var fogDrag = null;
   var terrainDrag = null;   // v2.789.1 — rect being painted
   var terrainDots = [];     // v2.848.0 — gridless four-dot quad placement (pending corners)
@@ -1460,7 +1499,7 @@
     }
     // v2.765.0 — light sources: bright + dim radius rings (in ft → px) + a
     // range label; click the center to delete (in light-edit mode).
-    if (layers.lights) lights.forEach(function (L) {
+    if (layers.lights) lights.forEach(function (L, i) {
       var bpx = (L.bright_ft || 0) * pxPerFt, dpx = (L.dim_ft || 0) * pxPerFt;
       var col = L.color || '#ffd27f';
       function ring(r, dash) {
@@ -1492,6 +1531,11 @@
       glow.setAttribute('cx', L.x); glow.setAttribute('cy', L.y); glow.setAttribute('r', glowR);
       glow.setAttribute('fill', col); glow.setAttribute('filter', 'url(#me-glowblur)');
       glow.setAttribute('opacity', '0.6'); glow.style.pointerEvents = 'none';
+      // v2.849.0 — two-colour flicker preview: the rAF loop below re-tints
+      // these fills between color/color2 (class-tagged; SMIL opacity untouched).
+      if (L.color2 && L.color2 !== L.color) {
+        glow.classList.add('me-light-flick'); glow.setAttribute('data-li', i);
+      }
       var an = document.createElementNS(NS, 'animate');
       an.setAttribute('attributeName', 'opacity'); an.setAttribute('values', fx.op);
       // v2.786.8 — jitter the rate ±35% per light + offset the phase so lights
@@ -1506,6 +1550,9 @@
       core.setAttribute('cx', L.x); core.setAttribute('cy', L.y); core.setAttribute('r', '9');
       core.setAttribute('fill', col); core.setAttribute('stroke', '#fff'); core.setAttribute('stroke-width', '2');
       core.style.pointerEvents = 'none';
+      if (L.color2 && L.color2 !== L.color) {
+        core.classList.add('me-light-flick'); core.setAttribute('data-li', i);
+      }
       g.appendChild(core);
       var hit = document.createElementNS(NS, 'circle');
       hit.setAttribute('cx', L.x); hit.setAttribute('cy', L.y); hit.setAttribute('r', hitR);
@@ -2088,8 +2135,10 @@
     saveLights();
   }
   // v2.778.0 — set a placed light to a preset type from the right-click menu.
+  // v2.849.0 — presets also carry the second flicker colour.
   function applyLightType(L, t) {
-    L.bright_ft = t.bright; L.dim_ft = t.dim; L.color = t.color; L.type = t.key;
+    L.bright_ft = t.bright; L.dim_ft = t.dim;
+    L.color = t.color; L.color2 = t.color2 || t.color; L.type = t.key;
     saveLights();
   }
 
@@ -2567,7 +2616,8 @@
       if (isNaN(bv)) bv = t.bright;
       if (isNaN(dv)) dv = t.dim;
       lights.push({ id: 'l' + Date.now() + '_' + (seq++), x: p.x, y: p.y,
-        bright_ft: Math.max(0, bv), dim_ft: Math.max(0, dv), color: t.color, type: t.key });
+        bright_ft: Math.max(0, bv), dim_ft: Math.max(0, dv),
+        color: t.color, color2: t.color2 || t.color, type: t.key });
       saveLights();
     } else if (pinMode) {
       // v2.790.1 — drop a GM-only pin (label + private note).

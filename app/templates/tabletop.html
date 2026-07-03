@@ -2372,6 +2372,12 @@
             <svg id="wall-overlay" width="{{ active_map.width_px }}" height="{{ active_map.height_px }}"
                  viewBox="0 0 {{ active_map.width_px }} {{ active_map.height_px }}"
                  style="position:absolute;top:0;left:0;z-index:3;pointer-events:none;overflow:visible;"></svg>
+            {# v2.849.0 — light-glow overlay: colored, torch-flickering glows at
+               each map light source (the lighting veil on the main canvas only
+               punches colorless holes — this layer is where light COLOR shows).
+               Map coords; the wrapper transform pans/zooms it with the map. #}
+            <canvas id="light-glow-canvas" width="{{ active_map.width_px }}" height="{{ active_map.height_px }}"
+                    style="position:absolute;top:0;left:0;z-index:3;pointer-events:none;"></canvas>
             {# v2.808.0 — ambient weather overlay (rain / snow / fog), animated. #}
             <canvas id="weather-canvas" width="{{ active_map.width_px }}" height="{{ active_map.height_px }}"
                     style="position:absolute;top:0;left:0;z-index:4;pointer-events:none;"></canvas>
@@ -2752,6 +2758,11 @@
                 fetchGmPins();  // v2.790.2 — GM-only (no-op for players)
                 if (window._setMapWalls) window._setMapWalls(walls);
                 if (window._setMapLights) window._setMapLights(d.lights || []);
+                // v2.849.0 — feed the flicker-glow layer directly too: it lives
+                // in THIS script, so the call can't lose the parse-vs-fetch race
+                // that the tabletop.js guards above can (lights_update WS keeps
+                // it fresh afterwards via _setMapLights).
+                if (window._onLightsGlow) window._onLightsGlow(d.lights || []);
                 // v2.844.0 — pass the exploration-fog fields so dynamic maps
                 // bootstrap their explored memory + compute initial visibility.
                 if (window._setMapFog) window._setMapFog(
@@ -2906,6 +2917,69 @@
         window._onWeatherUpdate = function (data) {  // v2.808.0
             if (!data) return;
             applyWeather(data.weather || '');
+        };
+        // v2.849.0 — light-glow overlay: colored, torch-flickering glows for
+        // map light sources. The main canvas's lighting veil only punches
+        // colorless holes; THIS layer is where a light's colour shows. Each
+        // light glows in `color`, flickering torch-like toward `color2` when
+        // the pair differs (two incommensurate sines, seeded per light).
+        // Modeled on the weather rAF loop above; map coords, so the
+        // #map-transform wrapper pans/zooms it for free.
+        var _lgCanvas = null, _lgCtx = null, _lgRAF = null, _lgLights = [];
+        var _LG_PX_PER_FT = {{ active_map.grid_size_px if active_map else 70 }} / 5;
+        function _lgHexToRgb(hex) {
+            var m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+            if (!m) return null;
+            var n = parseInt(m[1], 16);
+            return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+        }
+        function _lgSeed(L, salt) {
+            var s = String((L && L.id) || '') + (salt || '');
+            var h = 2166136261;
+            for (var i = 0; i < s.length; i++) { h = (h ^ s.charCodeAt(i)) >>> 0; h = (h * 16777619) >>> 0; }
+            return (h % 100000) / 100000;
+        }
+        function _lgColorAt(L, t) {
+            var a = _lgHexToRgb(L.color) || [255, 210, 127];
+            var b = _lgHexToRgb(L.color2);
+            if (!b || L.color2 === L.color) return a;
+            var s1 = _lgSeed(L, 'f1'), s2 = _lgSeed(L, 'f2');
+            var f1 = 1.7 + s1 * 2.3, f2 = 4.1 + s2 * 3.7;
+            var mix = 0.5 + 0.35 * Math.sin(t * f1 * 6.283 + s1 * 6.28)
+                          + 0.15 * Math.sin(t * f2 * 6.283 + s2 * 6.28);
+            mix = Math.max(0, Math.min(1, mix));
+            return [Math.round(a[0] + (b[0] - a[0]) * mix),
+                    Math.round(a[1] + (b[1] - a[1]) * mix),
+                    Math.round(a[2] + (b[2] - a[2]) * mix)];
+        }
+        function _lgStep() {
+            var c = _lgCtx; if (!c) return;
+            var W = _lgCanvas.width, H = _lgCanvas.height;
+            c.clearRect(0, 0, W, H);
+            c.globalCompositeOperation = 'lighter';
+            var t = performance.now() / 1000;
+            for (var i = 0; i < _lgLights.length; i++) {
+                var L = _lgLights[i];
+                var rpx = Math.max(Number(L.bright_ft || 0), Number(L.dim_ft || 0)) * _LG_PX_PER_FT;
+                if (rpx <= 0) continue;
+                var rgb = _lgColorAt(L, t);
+                var g = c.createRadialGradient(L.x, L.y, 0, L.x, L.y, rpx);
+                g.addColorStop(0, 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',0.22)');
+                g.addColorStop(0.55, 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',0.10)');
+                g.addColorStop(1, 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',0)');
+                c.fillStyle = g;
+                c.beginPath(); c.arc(L.x, L.y, rpx, 0, 6.283); c.fill();
+            }
+            c.globalCompositeOperation = 'source-over';
+        }
+        window._onLightsGlow = function (lightList) {
+            _lgLights = Array.isArray(lightList) ? lightList : [];
+            if (!_lgCanvas) { _lgCanvas = document.getElementById('light-glow-canvas');
+                _lgCtx = _lgCanvas ? _lgCanvas.getContext('2d') : null; }
+            if (!_lgCanvas || !_lgCtx) return;
+            if (_lgRAF) { cancelAnimationFrame(_lgRAF); _lgRAF = null; }
+            if (!_lgLights.length) { _lgCtx.clearRect(0, 0, _lgCanvas.width, _lgCanvas.height); return; }
+            (function loop() { _lgStep(); _lgRAF = requestAnimationFrame(loop); })();
         };
         // v2.809.0 — live GM weather control (POSTs the active map's weather;
         // the broadcast updates every client including this one).

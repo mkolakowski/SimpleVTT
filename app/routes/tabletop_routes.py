@@ -124312,7 +124312,11 @@ def _sanitize_lights(raw) -> list:
 
     v2.778.0 — also preserves an optional ``type`` tag (the light-source
     preset key, e.g. ``torch`` / ``daylight``) for the editor's right-click
-    menu; purely cosmetic, defaults to empty."""
+    menu; purely cosmetic, defaults to empty.
+
+    v2.849.0 — also preserves an optional ``color2``: the second flicker
+    colour. The tabletop's glow layer animates torch-like between ``color``
+    and ``color2``; empty/equal values render a steady glow."""
     out = []
     if not isinstance(raw, list):
         return out
@@ -124334,6 +124338,7 @@ def _sanitize_lights(raw) -> list:
             "bright_ft": _ft("bright_ft"),
             "dim_ft": _ft("dim_ft"),
             "color": str(h.get("color") or "").strip()[:16],
+            "color2": str(h.get("color2") or "").strip()[:16],
             "type": str(h.get("type") or "").strip()[:20],
         })
     return out

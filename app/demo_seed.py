@@ -438,11 +438,11 @@ def seed_map(db: Session, camp: Campaign) -> Map:
         ],
         "lights": [
             {"id": "tv-l1", "x": 350, "y": 350, "bright_ft": 20, "dim_ft": 40,
-             "color": "#f59e0b", "type": "torch"},
+             "color": "#f59e0b", "color2": "#ff7a1a", "type": "torch"},
             {"id": "tv-l2", "x": 910, "y": 350, "bright_ft": 10, "dim_ft": 20,
-             "color": "#fbbf24", "type": "candle"},
+             "color": "#fbbf24", "color2": "#ff9d45", "type": "candle"},
             {"id": "tv-l3", "x": 630, "y": 630, "bright_ft": 25, "dim_ft": 50,
-             "color": "#fcd34d", "type": "lamp"},
+             "color": "#fcd34d", "color2": "#ffe9b8", "type": "lamp"},
         ],
         "labels": [
             {"id": "tv-lb1", "x": 350, "y": 490, "text": "Hearth", "size": 30, "color": "#fca5a5"},
