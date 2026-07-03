@@ -167,8 +167,11 @@ def test_lair_panel_toggle_renders(gm_page: Page):
 
     panel = gm_page.locator("#_lair_action_panel")
     expect(panel).to_be_visible(timeout=3000)
-    expect(panel).to_contain_text("Lair Actions")
-    expect(panel).to_contain_text("Ancient Red Dragon")
+    # v2.868.0 — the title + owner caption live in the collapsible <details>
+    # summary; the toggle + trigger buttons live in the body.
+    det = gm_page.locator("#_lair_action_details")
+    expect(det).to_contain_text("Lair Actions")
+    expect(det).to_contain_text("Ancient Red Dragon")
     toggle = panel.locator("#_lair_toggle_btn")
     expect(toggle).to_contain_text("Enter lair")
     # Out of lair → no action Trigger buttons yet.
@@ -183,7 +186,8 @@ def test_lair_panel_lives_in_battle_drawer(gm_page: Page):
     gm_page.goto(tabletop_url())
 
     # The scoped selector only matches if the panel is inside the drawer.
-    scoped = gm_page.locator("#players-drawer #_lair_action_panel")
+    # v2.868.0 — the title lives in the collapsible <details> summary.
+    scoped = gm_page.locator("#players-drawer #_lair_action_details")
     expect(scoped).to_be_visible(timeout=5000)
     expect(scoped).to_contain_text("Lair Actions")
 
@@ -203,6 +207,27 @@ def test_lair_panel_lives_in_battle_drawer(gm_page: Page):
         }"""
     )
     assert order == ["gm-reactions-panel", "_lair_action_panel"], order
+
+
+def test_lair_panel_is_collapsible(gm_page: Page):
+    """v2.868.0 — the lair-action panel is a native <details> the GM can fold
+    away; it's open by default and clicking the summary collapses it (state
+    the browser preserves across re-renders)."""
+    _seed_battle(gm_page, in_lair=False)
+    gm_page.goto(tabletop_url())
+
+    det = gm_page.locator("#_lair_action_details")
+    expect(det).to_be_visible(timeout=5000)
+    # Open by default → the Enter-lair toggle in the body is visible.
+    assert det.evaluate("el => el.open") is True
+    expect(gm_page.locator("#_lair_toggle_btn")).to_be_visible()
+
+    # Collapse via the summary → body hidden, summary + title still shown.
+    det.locator("summary").click()
+    gm_page.wait_for_timeout(150)
+    assert det.evaluate("el => el.open") is False
+    expect(gm_page.locator("#_lair_toggle_btn")).to_be_hidden()
+    expect(det.locator("summary")).to_contain_text("Lair Actions")
 
 
 def test_lair_strip_renders_on_mini_sheet(gm_page: Page):

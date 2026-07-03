@@ -3660,8 +3660,28 @@
            glow (which sets host.style.borderColor / boxShadow directly)
            still reads, and so the lair card stands apart from the frosted
            init rows below it. #}
-        <div id="_lair_action_panel"
-             style="display:none;margin:0 0 8px;background:rgba(28,18,12,0.93);color:#fbe9dc;border:2px solid #c2541f;border-radius:10px;padding:10px 14px;font-size:14px;box-shadow:0 3px 14px rgba(0,0,0,.35);"></div>
+        {# v2.868.0 — collapsible: a native <details> so the GM can fold the
+           lair card away (state preserved by the browser across re-renders,
+           since the renderer only rewrites the inner #_lair_action_panel body).
+           The <details> wrapper carries the volcanic card styling + the init-20
+           glow; _renderLairActionPanel shows/hides the wrapper and updates the
+           summary caption. #}
+        <style>
+          #_lair_action_details > summary { list-style: none; }
+          #_lair_action_details > summary::-webkit-details-marker { display: none; }
+          #_lair_action_details .lair-chevron { transition: transform .15s; }
+          #_lair_action_details:not([open]) .lair-chevron { transform: rotate(-90deg); }
+        </style>
+        <details id="_lair_action_details" open
+             style="display:none;margin:0 0 8px;background:rgba(28,18,12,0.93);color:#fbe9dc;border:2px solid #c2541f;border-radius:10px;box-shadow:0 3px 14px rgba(0,0,0,.35);overflow:hidden;">
+          <summary style="cursor:pointer;padding:9px 14px;display:flex;align-items:center;gap:8px;font-size:14px;-webkit-user-select:none;user-select:none;touch-action:manipulation;">
+            <span class="lair-chevron" style="font-size:9px;opacity:0.8;">▼</span>
+            <span style="font-size:18px;">🌋</span>
+            <strong>Lair Actions</strong>
+            <span id="_lair_action_cap" style="font-size:11px;opacity:0.75;margin-left:auto;"></span>
+          </summary>
+          <div id="_lair_action_panel" style="padding:2px 14px 12px;font-size:14px;"></div>
+        </details>
         {% endif %}
 
         {# v2.863.0 — the player's read-only regional-effects atmosphere
@@ -11055,7 +11075,9 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             // v2.862.0 — the host is now a static element in the Battle
             // drawer (not a body-appended float), so hide it rather than
             // removing it — removal would delete the drawer slot for good.
-            if (host) host.style.display = 'none';
+            // v2.868.0 — hide the collapsible <details> wrapper.
+            const _wrap = document.getElementById('_lair_action_details');
+            if (_wrap) _wrap.style.display = 'none';
             const _pp = document.getElementById('_regional_effects_panel');
             if (_pp) _pp.style.display = 'none';  // v2.863.0 — static host: hide, don't remove
             return;
@@ -11093,18 +11115,15 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             );
             document.body.appendChild(host);
         }
-        // The drawer host starts hidden; reveal it now that a lair owner
-        // is on the field.
-        host.style.display = '';
-
+        // v2.868.0 — reveal the collapsible wrapper + label its summary; the
+        // 🌋 header now lives in the always-visible <summary>, so the body no
+        // longer repeats it.
         const ownerName = _escH(owner.name || 'Creature');
-        const header = (
-            '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
-            + '<span style="font-size:18px;">🌋</span>'
-            + '<strong>Lair Actions</strong>'
-            + '<span style="font-size:11px;opacity:0.75;">init 20 · ' + ownerName + '</span>'
-            + '</div>'
-        );
+        const _wrap = document.getElementById('_lair_action_details');
+        if (_wrap) _wrap.style.display = '';
+        const _cap = document.getElementById('_lair_action_cap');
+        if (_cap) _cap.textContent = 'init 20 · ' + (owner.name || 'Creature');
+        const header = '';
 
         const toggleBtn = (
             '<button id="_lair_toggle_btn" style="width:100%;margin-bottom:'
@@ -11281,13 +11300,15 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         // server-driven as of v2.175.0 (the `lair_init_20_reached` WS
         // broadcast, deduped per round on the server) so it can't double-
         // fire across renders; this block only handles the visual glow.
+        // v2.868.0 — the glow lives on the <details> wrapper (the card) now.
+        const _glowEl = _wrap || host;
         const _init20Live = inLair && init20Reached && !actedThisRound;
         if (_init20Live) {
-            host.style.borderColor = '#ff8a3d';
-            host.style.boxShadow = '0 0 14px rgba(255,138,61,0.7), 0 6px 18px rgba(0,0,0,0.5)';
+            _glowEl.style.borderColor = '#ff8a3d';
+            _glowEl.style.boxShadow = '0 0 14px rgba(255,138,61,0.7), 0 6px 18px rgba(0,0,0,0.5)';
         } else {
-            host.style.borderColor = '#c2541f';
-            host.style.boxShadow = '0 6px 18px rgba(0,0,0,0.5)';
+            _glowEl.style.borderColor = '#c2541f';
+            _glowEl.style.boxShadow = '0 6px 18px rgba(0,0,0,0.5)';
         }
 
         const _toggleEl = host.querySelector('#_lair_toggle_btn');

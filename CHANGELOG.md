@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.868.0] - 2026-07-03 — "The Folded Lair"
+
+**Schema version:** 98
+
+**Commit summary:** The Battle-drawer lair-action panel is now collapsible.
+
+**Description:** First half of the lair-actions request. The GM lair-action panel (`#_lair_action_panel`, relocated into the Battle drawer in v2.862.0) was always fully expanded, taking real estate above the initiative list even when the GM wasn't firing lair actions. It's now a native **collapsible `<details>`** with a 🌋 summary header (a rotating chevron + the "init 20 · &lt;owner&gt;" caption) — click to fold it away, open by default. Because the browser owns the open/closed state and the renderer only rewrites the inner body, the fold survives every re-render (WS lair events, battle updates). The volcanic card styling and the init-20 border glow moved onto the `<details>` wrapper.
+
+### Changed
+- `app/templates/tabletop.html` — `#_lair_action_panel` host wrapped in a collapsible `<details id="_lair_action_details">` (summary + chevron + caption); `_renderLairActionPanel` shows/hides the wrapper, sets the summary caption, drops the now-duplicate body header, and glows the wrapper.
+- `tests/harness_ui/test_lair_action_ui.py` — `test_lair_panel_is_collapsible` asserts the panel is a `<details>`, open by default, and the summary toggles it.
+
+### Schema
+- No schema change (still v98 — client panel only).
+
 ## [2.867.0] - 2026-07-03 — "The Soft Falloff"
 
 **Schema version:** 98
