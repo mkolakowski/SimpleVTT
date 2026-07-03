@@ -205,6 +205,52 @@ def test_lair_panel_lives_in_battle_drawer(gm_page: Page):
     assert order == ["gm-reactions-panel", "_lair_action_panel"], order
 
 
+def test_lair_strip_renders_on_mini_sheet(gm_page: Page):
+    """v2.864.0 — the lair owner's init-tracker mini-sheet carries a 🌋 Lair
+    strip with a Trigger button per lair action while the battle is in-lair."""
+    _seed_battle(gm_page, in_lair=True, turn_index=0)
+    gm_page.goto(tabletop_url())
+
+    entry = gm_page.locator(f'.init-entry[data-char-id="{_DRAGON_ID}"]')
+    expect(entry).to_be_visible(timeout=5000)
+    strip = entry.locator(".lair-strip")
+    expect(strip).to_be_visible(timeout=3000)
+    expect(strip).to_contain_text("Lair")
+    btns = strip.locator(".lair-act-btn")
+    expect(btns).to_have_count(2)  # Magma Erupts + Tremor
+    expect(btns.first).to_contain_text("Magma Erupts")
+    # In-lair, not yet acted → the buttons are live.
+    expect(btns.first).to_be_enabled()
+
+
+def test_lair_strip_hidden_when_not_in_lair(gm_page: Page):
+    """v2.864.0 — no mini-sheet lair strip out of lair (the Enter-lair toggle
+    lives in the Battle-drawer panel, not on the creature's row)."""
+    _seed_battle(gm_page, in_lair=False)
+    gm_page.goto(tabletop_url())
+
+    entry = gm_page.locator(f'.init-entry[data-char-id="{_DRAGON_ID}"]')
+    expect(entry).to_be_visible(timeout=5000)
+    expect(entry.locator(".lair-strip")).to_have_count(0)
+
+
+def test_lair_strip_disables_after_acting(gm_page: Page):
+    """v2.864.0 — once the lair acts this round (lair_action_resolved carrying
+    lair_acted_round === round), the mini-sheet Trigger buttons disable
+    (RAW MM p.11: one lair action per round). The WS handler re-renders the
+    init tracker so the strip reflects it live."""
+    _seed_battle(gm_page, in_lair=True, turn_index=0)
+    gm_page.goto(tabletop_url())
+
+    entry = gm_page.locator(f'.init-entry[data-char-id="{_DRAGON_ID}"]')
+    first_btn = entry.locator(".lair-act-btn").first
+    expect(first_btn).to_be_enabled(timeout=5000)
+
+    _dispatch_lair_action_resolved(gm_page, "magma-erupts", acted_round=1)
+    gm_page.wait_for_timeout(300)
+    expect(entry.locator(".lair-act-btn").first).to_be_disabled()
+
+
 def test_in_lair_changed_shows_action_list(gm_page: Page):
     """An in_lair_changed WS message flips the panel into the in-lair
     state, listing each lair action with a Trigger button and an

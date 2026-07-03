@@ -1475,6 +1475,55 @@
         color: #ffe0a0;
         font-variant-numeric: tabular-nums;
     }
+    /* v2.864.0 — lair-action strip on the lair owner's mini-sheet. Same
+       compact layout as the legendary strip, but a volcanic-orange palette
+       (matching the lair panel) so it reads as the init-count-20 lair
+       mechanic, distinct from the gold legendary strip. GM-only; only
+       rendered when the battle is in-lair. 32px dense-panel floor per
+       CLAUDE.md's compact row-based-UI exception. */
+    .lair-strip {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 4px;
+        flex-wrap: wrap;
+    }
+    .lair-strip-label {
+        font-size: 10px;
+        font-weight: 700;
+        line-height: 1;
+        letter-spacing: 1px;
+        color: #f0955a;
+        white-space: nowrap;
+    }
+    .lair-btns { display: flex; gap: 4px; flex-wrap: wrap; }
+    .lair-act-btn {
+        font-size: 10px;
+        font-weight: 600;
+        line-height: 1;
+        padding: 4px 6px;
+        min-height: 32px;
+        border: 1px solid rgba(240,149,90,.5);
+        border-radius: 3px;
+        background: rgba(240,149,90,.12);
+        color: #f0955a;
+        cursor: pointer;
+        touch-action: manipulation;
+        -webkit-user-select: none;
+        user-select: none;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .lair-act-btn:hover:not(:disabled) {
+        background: rgba(240,149,90,.24);
+        border-color: rgba(240,149,90,.75);
+    }
+    .lair-act-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
     /* v2.4.21: roll-state pill + death-saves tracker share one row. The
        roll pill shrinks to content; the death-saves tracker auto-hides
        its 6-pip row when the character is alive. */
@@ -8921,6 +8970,42 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         ${_meter}${_lrBadge}${_btnsHtml}
                     </div>`;
                 }
+                // v2.864.0 — lair-action strip on the lair owner's mini-sheet.
+                // GM-only, and only while the battle is in-lair (the Enter/Exit
+                // toggle lives in the Battle-drawer lair panel). One Trigger
+                // button per lair action, reusing the /trigger_lair_action
+                // endpoint + the panel's RAW MM p.11 disable rules: a button is
+                // disabled when the lair already acted this round or when its
+                // action was used last round (no same action two rounds in a
+                // row). The handler (below) opens the multi-target picker then
+                // POSTs; success rides the lair_action_resolved WS.
+                let lairStrip = '';
+                const _lairActs = Array.isArray(c.lair_actions) ? c.lair_actions : [];
+                if (IS_GM && _lairActs.length && battle && battle.in_lair) {
+                    const _curRound = (battle.round != null) ? battle.round : null;
+                    const _actedRound = (battle.lair_acted_round != null) ? battle.lair_acted_round : null;
+                    const _actedThisRound = (_actedRound != null) && (_actedRound === _curRound);
+                    const _lastId = battle.last_lair_action_id || '';
+                    const _lairSlug = String(battle.lair_slug || c.lair_slug || '').replace(/"/g, '&quot;');
+                    const _lBtns = _lairActs.map(a => {
+                        const _aid = String(a.id || '').replace(/"/g, '&quot;');
+                        const _anm = String(a.name || 'Lair action').replace(/"/g, '&quot;');
+                        const _usedLast = (a.id || '') === _lastId && _lastId !== '';
+                        const _dis = _actedThisRound || _usedLast;
+                        const _ttl = _actedThisRound
+                            ? 'The lair already acted this round (init 20)'
+                            : (_usedLast
+                                ? 'Used last round — pick a different lair action'
+                                : 'Trigger this lair action (initiative count 20)');
+                        return `<button type="button" class="lair-act-btn" data-idx="${i}"
+                            data-action-id="${_aid}" data-action-name="${_anm}" data-lair-slug="${_lairSlug}"
+                            ${_dis ? 'disabled' : ''} title="${_ttl}">${_anm}</button>`;
+                    }).join('');
+                    lairStrip = `<div class="lair-strip">
+                        <span class="lair-strip-label" title="Lair actions — initiative count 20">🌋 Lair</span>
+                        <div class="lair-btns">${_lBtns}</div>
+                    </div>`;
+                }
                 // v2.49.96 — Init/HP text + action-economy chips share
                 // one wrapping flex row so the chip strip sits inline with
                 // the stat line instead of stacking below it. Saves ~24 px
@@ -8945,6 +9030,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                             </div>
                             ${buffChips}
                             ${legendaryStrip}
+                            ${lairStrip}
                         </div>
                         ${sheetBtn}${promptBtn}
                     </div>
@@ -9181,6 +9267,57 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // the WS handler updates c.legendary_actions + re-renders.
             } catch (e) {
                 console.warn('use_legendary_action fetch failed:', e);
+                renderBattle();
+            }
+        }));
+
+        // v2.864.0 — lair-action Trigger buttons on the lair owner's
+        // mini-sheet. Mirrors the Battle-drawer lair panel's trigger flow:
+        // open the multi-target picker (cancel aborts), then POST
+        // /trigger_lair_action. The server is the authoritative gate
+        // (once-per-round / no-repeat); on a 409 we toast + re-render, on
+        // success the lair_action_resolved WS surfaces the card + re-renders.
+        // stopPropagation keeps the click from toggling the card.
+        list.querySelectorAll('.lair-act-btn').forEach(btn => btn.addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            if (btn.disabled) return;
+            const idx = parseInt(btn.dataset.idx, 10);
+            const c = battle.combatants[idx];
+            if (!c || !c.id) return;
+            const actionName = btn.dataset.actionName || 'Lair action';
+            let targetIds = [];
+            if (typeof window.vttOpenMultiTargetPicker === 'function') {
+                const picked = await window.vttOpenMultiTargetPicker({
+                    required: 12, spellName: actionName, casterCombatantId: c.id,
+                });
+                if (picked === null) return;  // cancelled
+                targetIds = Array.isArray(picked) ? picked : [];
+            }
+            btn.disabled = true;
+            try {
+                const r = await fetch(`/api/campaign/${CAMPAIGN_ID}/trigger_lair_action`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action_id: btn.dataset.actionId || '',
+                        lair_slug: btn.dataset.lairSlug || '',
+                        aoe_target_combatant_ids: targetIds,
+                    }),
+                });
+                if (!r.ok) {
+                    const txt = await r.text();
+                    if (r.status === 409 && txt.indexOf('lair_action_repeated') !== -1) {
+                        (window.showToast || function (m) { console.log(m); })(
+                            '🌋 ' + actionName + ' was used last round — pick a different lair action.', 'warn');
+                    } else if (r.status === 409 && txt.indexOf('lair_already_acted_this_round') !== -1) {
+                        (window.showToast || function (m) { console.log(m); })(
+                            '🌋 The lair has already acted this round (one lair action per round).', 'warn');
+                    }
+                    renderBattle();  // restore the button (server rejected)
+                }
+                // Success → lair_action_resolved WS surfaces the card + re-renders.
+            } catch (e) {
+                console.warn('trigger_lair_action fetch failed:', e);
                 renderBattle();
             }
         }));
@@ -9740,6 +9877,9 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 battle.lair_acted_round = (data.lair_acted_round == null)
                     ? null : data.lair_acted_round;
             }
+            // v2.864.0 — re-render the init tracker so the lair owner's
+            // mini-sheet lair-action strip appears/disappears with the toggle.
+            renderBattle();
             if (typeof window._renderLairActionPanel === 'function') {
                 window._renderLairActionPanel();
             }
@@ -9779,6 +9919,9 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     battle.lair_acted_round = data.lair_acted_round;
                 }
             }
+            // v2.864.0 — re-render so the mini-sheet lair strip disables the
+            // just-fired action (no-repeat) + reflects acted-this-round.
+            renderBattle();
             if (typeof window._renderLairActionPanel === 'function') {
                 window._renderLairActionPanel();
             }

@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.864.0] - 2026-07-03 — "The Stat-Block Roar"
+
+**Schema version:** 98
+
+**Commit summary:** Lair actions get first-class Trigger buttons on the lair owner's mini-sheet, alongside the legendary-action strip.
+
+**Description:** Follow-up to the lair-action relocation (v2.862.0). Legendary actions already had a spend-button strip on each NPC's init-tracker mini-sheet (v2.160.0); lair actions only had Trigger buttons in the separate lair panel. Now the **lair owner's mini-sheet also carries a 🌋 Lair strip** — one Trigger button per lair action — so the GM can fire a lair action straight from the creature's row in the initiative tracker, without hunting for the panel. It's GM-only and renders only while the battle is **in-lair** (the Enter/Exit toggle stays in the Battle-drawer lair panel), with the same RAW MM p.11 discipline as the panel: a button is disabled when the lair already acted this round or when its action was used the previous round (no same action two rounds in a row). Clicking opens the multi-target picker then reuses the existing `/trigger_lair_action` endpoint — no new server surface; the `in_lair_changed` and `lair_action_resolved` WS handlers now also re-render the init tracker so the strip appears/updates live.
+
+### Added
+- `app/templates/tabletop.html` — `.lair-strip` / `.lair-act-btn` mini-sheet strip (volcanic-orange, mirroring the gold legendary strip) rendered for the in-lair owner in `renderBattle`, plus a delegated `.lair-act-btn` click handler that opens the target picker and POSTs `/trigger_lair_action`.
+
+### Changed
+- `app/templates/tabletop.html` — the `in_lair_changed` + `lair_action_resolved` WS handlers now call `renderBattle()` so the mini-sheet lair strip toggles/updates with lair state.
+
+### Schema
+- No schema change (still v98 — reuses the existing lair-action endpoint).
+
 ## [2.863.0] - 2026-07-03 — "The Felt Presence"
 
 **Schema version:** 98
