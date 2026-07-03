@@ -228,9 +228,11 @@
               title="Click the map to place a light source of the chosen type; click a light to delete">💡 Lights</button>
     </div>
     {# v2.785.1 — light type + bright + dim share one line.
-       v2.785.9 — "light type" caption above the dropdown. #}
+       v2.785.9 — "light type" caption above the dropdown.
+       v2.850.0 — double-click a placed light to SELECT it: these controls then
+       mirror + live-edit the selection (edits flip its type to custom). #}
     <div class="me-sub" style="align-items:flex-end;">
-      <label style="display:flex;flex-direction:column;align-items:stretch;gap:1px;flex:1 1 auto;" title="Light type for new lights (sets its look + flicker; right-click a light to change it)">
+      <label style="display:flex;flex-direction:column;align-items:stretch;gap:1px;flex:1 1 auto;" title="Light type for new lights — or for the double-click-selected light (sets radii + flicker colours)">
         <span class="me-cap">light type</span>
         <select id="me-light-type" style="min-height:32px;font-size:12px;width:100%;">
           <option value="candle">🕯 Candle</option>
@@ -240,14 +242,23 @@
           <option value="bullseye">🔦 Bullseye</option>
           <option value="light">✨ Light cantrip</option>
           <option value="daylight">☀ Daylight</option>
+          <option value="custom">✎ Custom</option>
         </select>
       </label>
-      <label style="gap:2px;" title="Bright light radius (ft) for new lights">B<input
+      <label style="gap:2px;" title="Bright light radius (ft) — for new lights, or the selected light">B<input
           type="number" id="me-light-bright" min="0" max="500" value="20"
           style="width:60px;min-height:32px;"></label>
-      <label style="gap:2px;" title="Dim light radius (ft) for new lights">D<input
+      <label style="gap:2px;" title="Dim light radius (ft) — for new lights, or the selected light">D<input
           type="number" id="me-light-dim" min="0" max="500" value="20"
           style="width:60px;min-height:32px;"></label>
+    </div>
+    {# v2.850.0 — the two flicker colours (the glow wavers between them). #}
+    <div class="me-sub" style="align-items:center;">
+      <span class="me-cap" style="flex:1 1 auto;" id="me-light-sel-cap">flicker colours</span>
+      <input type="color" id="me-light-c1" value="#ffb347" title="Flicker colour 1 — for new lights, or the selected light"
+             style="width:44px;height:32px;padding:1px;border-radius:6px;">
+      <input type="color" id="me-light-c2" value="#ff7a1a" title="Flicker colour 2 — for new lights, or the selected light"
+             style="width:44px;height:32px;padding:1px;border-radius:6px;">
     </div>
     {# v2.810.0 — Label + GM pin tools folded into Markers. #}
     <div class="me-sub">
@@ -549,13 +560,21 @@
     var b = document.createElement('button');
     b.type = 'button'; b.className = 'sheet-section-btn';
     b.style.cssText = _MENU_BTN_CSS;
-    if (it.sub) {
+    if (it.sub || it.render) {
       // v2.786.5 — a hover flyout of sub-buttons (e.g. wall materials).
+      // v2.850.0 — or a custom-rendered flyout (it.render(fly) appends its own
+      // controls, e.g. the light flicker-colour pickers); clicks inside it
+      // don't dismiss the menu so inputs stay usable.
       b.textContent = it.label + '  ▸';
       var fly = document.createElement('div');
       fly.className = 'me-ctx-fly';
       fly.style.cssText = 'position:fixed;z-index:9601;display:none;' + _MENU_PANEL_CSS;
-      it.sub.forEach(function (sit) { fly.appendChild(_menuBtn(sit)); });
+      if (it.render) {
+        it.render(fly);
+        fly.addEventListener('click', function (e) { e.stopPropagation(); });
+      } else {
+        it.sub.forEach(function (sit) { fly.appendChild(_menuBtn(sit)); });
+      }
       document.body.appendChild(fly);
       var timer;
       function place() {
@@ -1554,6 +1573,17 @@
         core.classList.add('me-light-flick'); core.setAttribute('data-li', i);
       }
       g.appendChild(core);
+      // v2.850.0 — selection ring: the dbl-click-selected light gets a dashed
+      // white halo so it's obvious which light the toolbar is editing.
+      if (selectedLight === L) {
+        var selRing = document.createElementNS(NS, 'circle');
+        selRing.setAttribute('cx', L.x); selRing.setAttribute('cy', L.y);
+        selRing.setAttribute('r', hitR + 4);
+        selRing.setAttribute('fill', 'none'); selRing.setAttribute('stroke', '#fff');
+        selRing.setAttribute('stroke-width', '2'); selRing.setAttribute('stroke-dasharray', '5 4');
+        selRing.style.pointerEvents = 'none';
+        g.appendChild(selRing);
+      }
       var hit = document.createElementNS(NS, 'circle');
       hit.setAttribute('cx', L.x); hit.setAttribute('cy', L.y); hit.setAttribute('r', hitR);
       hit.setAttribute('fill', 'transparent'); hit.classList.add('me-light');
@@ -1561,6 +1591,11 @@
       hit.addEventListener('click', function (e) {
         e.stopPropagation();
         if (eraseMode) deleteLight(L);
+      });
+      // v2.850.0 — double-click selects (the Markers controls then edit it).
+      hit.addEventListener('dblclick', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        selectLight(selectedLight === L ? null : L);
       });
       hit.addEventListener('contextmenu', function (e) {
         e.preventDefault(); e.stopPropagation();
@@ -1574,6 +1609,30 @@
         showMenu(e.clientX, e.clientY, [
           { label: '💡 Light — ↔ Move', fn: function () { startMove('light', L); } },
           { label: '💡 Type', sub: typeItems },
+          // v2.850.0 — pop-out flicker-colour editor (edits this light live;
+          // any change flips its type to custom unless it matches a preset).
+          { label: '🎨 Flicker colours', render: function (fly) {
+              function mkPick(labelTxt, key) {
+                var row = document.createElement('label');
+                row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:2px 4px;font-size:12px;';
+                var sp = document.createElement('span');
+                sp.textContent = labelTxt; sp.style.flex = '1 1 auto';
+                var inp = document.createElement('input');
+                inp.type = 'color'; inp.className = 'me-light-fly-' + key;
+                inp.style.cssText = 'width:44px;height:32px;padding:1px;border-radius:6px;';
+                if (/^#[0-9a-f]{6}$/i.test(L[key] || '')) inp.value = L[key];
+                inp.addEventListener('change', function () {
+                  L[key] = inp.value;
+                  L.type = matchLightPreset(L) || 'custom';
+                  if (selectedLight === L) syncLightToolbar();
+                  saveLights();
+                });
+                row.appendChild(sp); row.appendChild(inp);
+                return row;
+              }
+              fly.appendChild(mkPick('Colour 1', 'color'));
+              fly.appendChild(mkPick('Colour 2', 'color2'));
+            } },
           { label: '📋 Copy', fn: function () { copyObj('light', L); } },
           { label: '🗑 Delete', fn: function () { deleteLight(L); } },
         ]);
@@ -2039,7 +2098,11 @@
   // v2.770.0 — object delete + move (via erase mode / right-click menu).
   function deleteWall(w) { walls = walls.filter(function (x) { return x.id !== w.id; }); saveWalls(); }
   function deleteHotspot(h) { hotspots = hotspots.filter(function (x) { return x.id !== h.id; }); saveHotspots(); }
-  function deleteLight(L) { lights = lights.filter(function (x) { return x.id !== L.id; }); saveLights(); }
+  function deleteLight(L) {
+    if (selectedLight === L) selectLight(null);  // v2.850.0
+    lights = lights.filter(function (x) { return x.id !== L.id; });
+    saveLights();
+  }
   function startMove(kind, obj) {
     // v2.775.0 — drag to reposition: while relocating, other objects are
     // non-interactive (render() drops their pointer-events) so you can't
@@ -2132,6 +2195,7 @@
     L.bright_ft = Math.max(0, parseFloat(b) || 0);
     L.dim_ft = Math.max(0, parseFloat(d) || 0);
     L.type = 'custom';
+    if (selectedLight === L) syncLightToolbar();  // v2.850.0
     saveLights();
   }
   // v2.778.0 — set a placed light to a preset type from the right-click menu.
@@ -2139,7 +2203,55 @@
   function applyLightType(L, t) {
     L.bright_ft = t.bright; L.dim_ft = t.dim;
     L.color = t.color; L.color2 = t.color2 || t.color; L.type = t.key;
+    if (selectedLight === L) syncLightToolbar();
     saveLights();
+  }
+  // v2.850.0 — double-click-selected light: the Markers-group controls mirror
+  // and live-edit it. Edits that no longer match a preset flip type → custom.
+  var selectedLight = null;
+  function matchLightPreset(L) {
+    for (var i = 0; i < LIGHT_TYPES.length; i++) {
+      var t = LIGHT_TYPES[i];
+      if (Number(L.bright_ft) === t.bright && Number(L.dim_ft) === t.dim
+          && L.color === t.color && (L.color2 || t.color) === (t.color2 || t.color)) {
+        return t.key;
+      }
+    }
+    return null;
+  }
+  function syncLightToolbar() {
+    var sel = document.getElementById('me-light-type');
+    var bi = document.getElementById('me-light-bright'), di = document.getElementById('me-light-dim');
+    var c1 = document.getElementById('me-light-c1'), c2 = document.getElementById('me-light-c2');
+    var cap = document.getElementById('me-light-sel-cap');
+    if (selectedLight) {
+      var L = selectedLight;
+      if (sel) sel.value = matchLightPreset(L) || 'custom';
+      if (bi) bi.value = L.bright_ft || 0;
+      if (di) di.value = L.dim_ft || 0;
+      if (c1 && /^#[0-9a-f]{6}$/i.test(L.color || '')) c1.value = L.color;
+      if (c2 && /^#[0-9a-f]{6}$/i.test(L.color2 || '')) c2.value = L.color2;
+      if (cap) cap.textContent = 'editing selected light';
+    } else if (cap) {
+      cap.textContent = 'flicker colours';
+    }
+  }
+  function selectLight(L) {
+    selectedLight = L;
+    syncLightToolbar();
+    setStatus(L ? 'Light selected — the Markers controls edit it (Esc deselects).' : '');
+    render();
+  }
+  // Live edits from the toolbar onto the selection: any divergence from every
+  // preset flips the light to custom.
+  function editSelectedLight(mut) {
+    if (!selectedLight) return false;
+    mut(selectedLight);
+    selectedLight.type = matchLightPreset(selectedLight) || 'custom';
+    var sel = document.getElementById('me-light-type');
+    if (sel) sel.value = selectedLight.type;
+    saveLights();
+    return true;
   }
 
   // Toolbar wiring.
@@ -2303,9 +2415,11 @@
     }
     // v2.788.1 — Esc finishes a wall/room chain or clears the selection.
     // v2.848.0 — also cancels pending quad-corner dots.
+    // v2.850.0 — also deselects the dbl-click-selected light.
     if (e.key === 'Escape') {
       if (terrainDots.length) { terrainDots = []; setStatus(''); render(); }
       else if (pending) { pending = null; render(); }
+      else if (selectedLight) { selectLight(null); }
       else if (selection.length) { selection = []; render(); }
     }
   });
@@ -2337,6 +2451,7 @@
     if (fogResetBtn) fogResetBtn.style.display = (fogMode && fogDynamic) ? 'inline-flex' : 'none';
     pending = null; fogDrag = null;
     terrainDots = [];  // v2.848.0 — abandon a half-placed quad on tool change
+    if (selectedLight) { selectedLight = null; syncLightToolbar(); }  // v2.850.0
     syncStageCursor(); render();
   }
   var fogOnLbl = document.getElementById('me-fog-on-lbl');
@@ -2367,11 +2482,36 @@
   if (lightBtn) lightBtn.addEventListener('click', function () { setMode(lightMode ? null : 'light'); });
   // v2.784.0 — picking a light type fills the radius fields with its preset
   // (the user can then tweak the numbers independently of the type).
+  // v2.850.0 — also fills the flicker-colour pickers, and applies the preset
+  // to the double-click-selected light when there is one.
   var lightTypeSel = document.getElementById('me-light-type');
   if (lightTypeSel) lightTypeSel.addEventListener('change', function () {
-    var t = lightType(this.value); if (!t) return;
+    var t = lightType(this.value);
+    if (!t) {  // "custom" picked — leave fields as-is; flag a selection custom.
+      if (selectedLight) { selectedLight.type = 'custom'; saveLights(); }
+      return;
+    }
     var bi = document.getElementById('me-light-bright'), di = document.getElementById('me-light-dim');
+    var c1 = document.getElementById('me-light-c1'), c2 = document.getElementById('me-light-c2');
     if (bi) bi.value = t.bright; if (di) di.value = t.dim;
+    if (c1) c1.value = t.color; if (c2) c2.value = t.color2 || t.color;
+    if (selectedLight) applyLightType(selectedLight, t);
+  });
+  // v2.850.0 — live-edit the selected light from the toolbar fields; on a
+  // divergence from every preset the light's type flips to custom.
+  ['me-light-bright', 'me-light-dim'].forEach(function (id, k) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('change', function () {
+      var v = Math.max(0, parseFloat(el.value) || 0);
+      editSelectedLight(function (L) { if (k === 0) L.bright_ft = v; else L.dim_ft = v; });
+    });
+  });
+  ['me-light-c1', 'me-light-c2'].forEach(function (id, k) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('change', function () {
+      var v = el.value;
+      editSelectedLight(function (L) { if (k === 0) L.color = v; else L.color2 = v; });
+    });
   });
   if (fogBtn) fogBtn.addEventListener('click', function () {
     var entering = !fogMode;
@@ -2615,9 +2755,15 @@
       var dv = parseFloat((document.getElementById('me-light-dim') || {}).value);
       if (isNaN(bv)) bv = t.bright;
       if (isNaN(dv)) dv = t.dim;
-      lights.push({ id: 'l' + Date.now() + '_' + (seq++), x: p.x, y: p.y,
+      // v2.850.0 — colours come from the toolbar pickers; a new light whose
+      // values no longer match any preset is placed as type "custom".
+      var nc1 = (document.getElementById('me-light-c1') || {}).value || t.color;
+      var nc2 = (document.getElementById('me-light-c2') || {}).value || t.color2 || t.color;
+      var nl = { id: 'l' + Date.now() + '_' + (seq++), x: p.x, y: p.y,
         bright_ft: Math.max(0, bv), dim_ft: Math.max(0, dv),
-        color: t.color, color2: t.color2 || t.color, type: t.key });
+        color: nc1, color2: nc2, type: t.key };
+      nl.type = matchLightPreset(nl) || 'custom';
+      lights.push(nl);
       saveLights();
     } else if (pinMode) {
       // v2.790.1 — drop a GM-only pin (label + private note).
@@ -2847,6 +2993,12 @@
   }
   document.getElementById('me-zoom-fit').addEventListener('click', fitContain);
   var stage = document.getElementById('me-stage');
+  // v2.850.0 — double-clicking empty map deselects the selected light (the
+  // light hit-circles stopPropagation their own dblclick, so this only fires
+  // for non-light double-clicks).
+  stage.addEventListener('dblclick', function () {
+    if (selectedLight) selectLight(null);
+  });
   stage.addEventListener('wheel', function (e) {
     // v2.830.0 — the scroll wheel zooms the map (toward the cursor). Drag / the
     // middle button still pan. Trackpad + mouse wheel both roll deltaY.

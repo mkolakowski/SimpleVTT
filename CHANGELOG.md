@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.850.0] - 2026-07-03 — "The Chosen Flame"
+
+**Schema version:** 97
+
+**Commit summary:** Lights editor UX — flicker-colour pickers in the Markers group, double-click-select a light to edit it live, a right-click pop-out colour editor, and custom-type flips.
+
+**Description:** Second phase of the living-lights arc — the authoring surface. The Markers group gains **two flicker-colour pickers** beside the type select; picking a preset fills radii + both colours, and new lights are placed with the pickers' values (a light whose values no longer match any preset is placed as **`custom`** — new option in the type select). **Double-clicking a placed light selects it** (dashed white halo; the group caption flips to "editing selected light"): the type select, both pickers, and the B/D radius fields mirror the light's values and **live-edit it** — any divergence from every preset flips its type to `custom`, while picking a preset applies that preset wholesale. Esc, tool change, deleting the light, or double-clicking empty map deselects. The light's right-click menu gains a **🎨 Flicker colours pop-out** (the context-menu system now supports custom-HTML flyouts) hosting the two pickers for direct edits.
+
+### Added
+- `app/templates/map_editor.html` — `#me-light-c1`/`#me-light-c2` pickers + selected-light caption; `selectedLight` state with `matchLightPreset` / `syncLightToolbar` / `selectLight` / `editSelectedLight`; dblclick select + dashed selection halo; toolbar live-edit wiring; placement derives preset-vs-custom; `_menuBtn` supports `render:` custom-HTML flyouts; the light menu's 🎨 pop-out; deselect on Esc / setMode / delete / empty-map dblclick.
+- `tests/harness_ui/test_map_editor_light_select.py` (new, +2) — dblclick mirrors values into the toolbar, editing bright persists + flips type to custom, the toolbar colour picker persists, Esc deselects; the right-click pop-out edits `color2` + flips to custom.
+
+### Schema
+- No schema change (still v97 — editor UX only).
+
 ## [2.849.0] - 2026-07-03 — "The Twin Flame"
 
 **Schema version:** 97
