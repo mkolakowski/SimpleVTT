@@ -1,6 +1,6 @@
 # Exploration-tracking fog of war
 
-**Status:** 🟠 partial · Phase 1 (engine + persistence) shipped v2.843.0.
+**Status:** ✅ shipped — Phase 1 (engine + persistence) v2.843.0 · Phase 2 (client vision + three-state render) v2.844.0 · Phase 3 (editor toggle + demo) v2.845.0.
 **Extends:** [vision-and-light.md](vision-and-light.md) — reuses that engine's wall model and the client lighting overlay's shadow-casting.
 
 ## Problem
@@ -45,7 +45,7 @@ render as a dimmed "memory."
 - Extended: `PUT …/fog` accepts `dynamic`; the fog GET, `get_active_map`, the map-editor page
   context, and every `fog_update` broadcast now carry `fog_dynamic` + `fog_explored`.
 
-## Client (`app/static/tabletop.js`) — Phase 2
+## Client (`app/static/tabletop.js`) — Phase 2 (shipped v2.844.0)
 
 - Refactor the `drawLighting` closure `_eraseWallShadows(sctx, sx, sy)` into a reusable helper.
 - `computeVisibleCells()` — per party token (`team === 'hero'` or `controller_user_id`, not
@@ -57,7 +57,7 @@ render as a dimmed "memory."
 - Three-state `drawFog()`: base veil → partial `destination-out` over explored cells (dim
   memory) + GM rects → full `destination-out` over currently-visible cells.
 
-## Editor + demo — Phase 3
+## Editor + demo — Phase 3 (shipped v2.845.0)
 
 - Map editor: "Dynamic fog (explore)" toggle + "Reset explored" button, wired to the fog PUT
   (`dynamic`) and `…/fog/reset`.

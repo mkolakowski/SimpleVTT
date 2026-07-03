@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.845.1] - 2026-07-03 — "The Settled Fog"
+
+**Schema version:** 97
+
+**Commit summary:** Mark the exploration-fog design doc + wiki index as fully shipped now that all three phases have landed.
+
+**Description:** Doc-only follow-up to the v2.843.0–v2.845.0 exploration-fog arc. Flips `docs/plans/exploration-fog.md` and its two wiki index rows (`wiki_plans.html`, `docs/wiki/README.md`) from "🟠 partial · Phase 1" to "✅ all phases shipped," and stamps the per-phase version on each section heading so a reader lands on the accurate status.
+
+### Changed
+- `docs/plans/exploration-fog.md` — status line + Phase 2/3 heading version stamps.
+- `app/templates/wiki_plans.html` + `docs/wiki/README.md` — status cells → ✅ all phases shipped (v2.843.0–v2.845.0).
+
+### Schema
+- No schema change (still v97 — doc status only).
+
 ## [2.845.0] - 2026-07-03 — "The Lifting Veil"
 
 **Schema version:** 97
