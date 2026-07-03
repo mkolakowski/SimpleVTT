@@ -11,6 +11,8 @@ The editor lives at **`/campaign/<id>/map/<map_id>/edit`** — reach it from **C
 
 Everything you place is stored per-map and broadcast live to the tabletop the instant you **Save** — players see the walls occlude, the lights glow, and the labels appear without a reload.
 
+![The map editor: the floating toolbar over the furnished Sundered Tavern — room walls, three lights showing their bright/dim radius rings, and the room-name labels](/static/docs/map-editor/01-editor-overview.png)
+
 ## The element families
 
 The toolbar groups the editor's tools by what they place. Each family is one persisted layer you can toggle in the **Layers** group.
@@ -28,6 +30,8 @@ The toolbar groups the editor's tools by what they place. Each family is one per
 
 > **Props** are intentionally absent from the toolbar right now — the decorative-stamp tool is parked (v2.835.0), so this tour skips it.
 
+![The Shadowfell Spire editor on a dark-ambient map — violet braziers carve glowing pools out of the black, showing how lights read against darkness](/static/docs/map-editor/02-lights-dark.png)
+
 ## A worked example: the Sundered Tavern
 
 Open the flagship demo map's editor and you'll find the pattern most interior maps use:
@@ -40,6 +44,10 @@ Open the flagship demo map's editor and you'll find the pattern most interior ma
 
 Toggle the **Layers** checkboxes to isolate each family, then **Erase** + redraw to feel out the tools. Because it's a demo map, the hourly reseed restores the original set — experiment freely.
 
+For a very different starting point, open the **Goblin Warrens** editor — cave-material walls, a secret door, torch lights, dynamic fog, and GM pins staging an ambush:
+
+![The Goblin Warrens editor — cave-material walls, torch lights, dynamic fog of war, and GM-only pins](/static/docs/map-editor/04-caves-markers.png)
+
 ## Select to edit
 
 **Double-click** any placed light, wall, or terrain region to **select** it (dashed white
@@ -47,6 +55,8 @@ highlight): the matching toolbar control then mirrors its values and edits it li
 type/radii/colour pickers for lights, the **material** select for walls, the **terrain type**
 select for terrain. Double-click again, press **Esc**, or switch tools to deselect; with nothing
 selected the same controls set the defaults for *new* placements, exactly as before.
+
+![The Tide-Wracked Catacombs editor — a dark map with fog of war (a revealed rectangle amid the veil), light glow, and a blue-shaded water terrain region](/static/docs/map-editor/03-terrain-fog.png)
 
 ## The Tools group
 

@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.866.2] - 2026-07-03 — "The Illustrated Tour"
+
+**Schema version:** 98
+
+**Commit summary:** Add four screenshots to the map-editor tour so it matches the illustrated sibling map guides.
+
+**Description:** The [map-editor tour](docs/wiki/map-editor-tour.md) shipped with zero screenshots while its siblings ([Maps, grids & tokens](docs/wiki/maps-grids-tokens.md), [Building an encounter](docs/wiki/building-an-encounter.md)) each carry four — so the tour read as a wall of text. Adds four captures of the live editor across the demo fleet, following the same `app/static/docs/<slug>/NN-name.png` convention: **(1)** the furnished Sundered Tavern with the full toolbar, three lights showing their radius rings, and room labels; **(2)** the dark-ambient Shadowfell Spire where braziers carve glowing pools out of the black; **(3)** the Tide-Wracked Catacombs showing fog of war (a revealed rectangle amid the veil) plus a blue water-terrain region; **(4)** the Goblin Warrens' cave walls, torch lights, dynamic fog, and GM pins. Captured at 1440×900 to match the sibling guides.
+
+### Added
+- `app/static/docs/map-editor/01-editor-overview.png`, `02-lights-dark.png`, `03-terrain-fog.png`, `04-caves-markers.png` — editor screenshots, embedded at four natural break points in `docs/wiki/map-editor-tour.md`.
+
+### Schema
+- No schema change (still v98 — documentation assets only).
+
 ## [2.866.1] - 2026-07-03 — "The Redlined Tour"
 
 **Schema version:** 98
