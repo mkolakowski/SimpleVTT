@@ -47,6 +47,12 @@ async def test_goblin_warrens_ships_walls_and_hotspots(gm_client):
     hotspots = am["hotspots"]
     assert hotspots and hotspots[0]["label"], "expected a labelled hotspot"
 
+    # v2.842.0 — the warren is a dark, torch-lit, fog-explored dungeon.
+    assert am["ambient_light"] == "dark", am["ambient_light"]
+    assert am["lights"], "expected seeded torch/lantern lights"
+    assert am["fog_enabled"] is True, "expected fog of war enabled"
+    assert am["fog_revealed"], "expected a revealed fog region over the play area"
+
 
 async def test_caldera_throne_ships_terrain_lights_labels(gm_client):
     cids = await _demo_campaign_ids(gm_client)
@@ -71,6 +77,9 @@ async def test_caldera_throne_ships_terrain_lights_labels(gm_client):
     labels = am["labels"]
     assert labels and labels[0]["text"], "expected a public text label"
     assert labels[0]["color"].startswith("#")
+
+    # v2.842.0 — the throne is lit by its own lava (dim ambient).
+    assert am["ambient_light"] == "dim", am["ambient_light"]
 
 
 async def test_demo_elements_visible_to_players(gm_client, alice_client):

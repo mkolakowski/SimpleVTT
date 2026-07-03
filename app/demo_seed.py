@@ -421,8 +421,11 @@ def seed_map(db: Session, camp: Campaign) -> Map:
     # cellar door, hearth/candle lights, and public labels. Routed through the
     # shared applicator (which runs each list through the tabletop_routes
     # sanitizers) so the stored shape matches a real editor save.
+    # v2.842.0 — a cosy tavern at dusk: dim ambient so the hearth/candle/
+    # chandelier lights read warmly against the gloom.
     from .demo_campaigns import _apply_map_elements
     _apply_map_elements(m, {
+        "ambient_light": "dim",
         "walls": [
             {"id": "tv-w1", "x1": 210, "y1": 210, "x2": 1050, "y2": 210, "style": "wood"},
             {"id": "tv-w2", "x1": 210, "y1": 210, "x2": 210, "y2": 1050, "style": "wood"},
@@ -438,6 +441,8 @@ def seed_map(db: Session, camp: Campaign) -> Map:
              "color": "#f59e0b", "type": "torch"},
             {"id": "tv-l2", "x": 910, "y": 350, "bright_ft": 10, "dim_ft": 20,
              "color": "#fbbf24", "type": "candle"},
+            {"id": "tv-l3", "x": 630, "y": 630, "bright_ft": 25, "dim_ft": 50,
+             "color": "#fcd34d", "type": "lamp"},
         ],
         "labels": [
             {"id": "tv-lb1", "x": 350, "y": 490, "text": "Hearth", "size": 30, "color": "#fca5a5"},

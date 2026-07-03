@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.842.0] - 2026-07-02 — "The Low Lantern"
+
+**Schema version:** 96
+
+**Commit summary:** Enrich the demo maps' lighting — more light sources, fog of war on more maps, and varied ambient light levels.
+
+**Description:** Deepens the v2.840.0 furnishing so the editor's **lighting** features are front and centre. **Every** demo map now carries light sources (the Goblin Warrens and Drowned Reef gained torches/lanterns; the Catacombs and Tavern gained more). **Fog of war** now covers four maps (Goblin Warrens, Tide-Wracked Catacombs, Drowned Reef, Shadowfell Spire) instead of two — each revealed generously over the play area so the live view stays visible. And the fleet now spans all three **ambient-light levels** so the lighting-level control is demonstrable: **dim** on the Sundered Tavern (dusk), Drowned Reef (storm), and Caldera Throne (lava-lit); **dark** on the Goblin Warrens, Catacombs, and Shadowfell Spire (lit only by their own light sources). Coloured lights read against the gloom — warm torches/lanterns in the dungeons, a cyan daylight mote on the Spire.
+
+### Changed
+- `app/demo_campaigns.py` — the five leveled specs gain `ambient_light` + extra `lights`; Goblin Warrens and Drowned Reef gain `fog_enabled`/`fog_revealed`.
+- `app/demo_seed.py` — the flagship Sundered Tavern gains `ambient_light: dim` and a third (chandelier) light.
+- `docs/wiki/map-editor-tour.md` — Lights / Fog / Ambient rows + the tavern worked example updated to the richer state (kept in sync per the wiki rule).
+- `tests/harness/test_demo_map_elements.py` — the Goblin Warrens test now also asserts `ambient_light: dark` + enabled fog + a revealed region; the Caldera test asserts `ambient_light: dim`.
+
+### Schema
+- No schema change (still v96 — demo seed content only; reuses existing `ambient_light` / `lights` / `fog_*` columns).
+
 ## [2.841.0] - 2026-07-02 — "The Guided Tour"
 
 **Schema version:** 96

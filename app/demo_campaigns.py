@@ -66,8 +66,19 @@ _GOBLIN_WARRENS = {
              "campaign — resets on a fixed interval."),
     # v2.840.0 — dungeon showcase: cave walls with a swinging door + a hidden
     # secret door, a trapped-floor hotspot, and a GM-only ambush pin.
+    # v2.842.0 — dark warren lit only by wall torches, explored under fog.
     "map": {"name": "The Goblin Warrens (entrance)", "width": 1400, "height": 1000,
             "image": "/static/demo/maps/goblin-warrens.png",
+            "ambient_light": "dark",
+            "lights": [
+                {"id": "gw-l1", "x": 280, "y": 280, "bright_ft": 15, "dim_ft": 30,
+                 "color": "#f59e0b", "type": "torch"},
+                {"id": "gw-l2", "x": 630, "y": 490, "bright_ft": 15, "dim_ft": 30,
+                 "color": "#f59e0b", "type": "torch"},
+                {"id": "gw-l3", "x": 980, "y": 350, "bright_ft": 20, "dim_ft": 40,
+                 "color": "#fbbf24", "type": "lantern"}],
+            "fog_enabled": True,
+            "fog_revealed": [{"x": 70, "y": 200, "w": 1260, "h": 560}],
             "walls": [
                 {"id": "gw-w1", "x1": 140, "y1": 140, "x2": 700, "y2": 140, "style": "cave"},
                 {"id": "gw-w2", "x1": 140, "y1": 140, "x2": 140, "y2": 700, "style": "cave"},
@@ -224,8 +235,18 @@ _STORM_SALTMARSH = {
              "resets on a fixed interval."),
     # v2.840.0 — open-water showcase: water + difficult (kelp) terrain regions,
     # public text labels, and a hotspot marking the sunken wreck.
+    # v2.842.0 — storm-darkened daylight (dim ambient) with swaying lanterns and
+    # rolling sea-fog over the reef.
     "map": {"name": "The Drowned Reef", "width": 1600, "height": 1100,
             "image": "/static/demo/maps/drowned-reef.png",
+            "ambient_light": "dim",
+            "lights": [
+                {"id": "dr-l1", "x": 700, "y": 490, "bright_ft": 20, "dim_ft": 40,
+                 "color": "#fde68a", "type": "lantern"},
+                {"id": "dr-l2", "x": 1190, "y": 350, "bright_ft": 15, "dim_ft": 30,
+                 "color": "#fde68a", "type": "lantern"}],
+            "fog_enabled": True,
+            "fog_revealed": [{"x": 70, "y": 200, "w": 1460, "h": 620}],
             "terrain": [
                 {"id": "dr-t1", "x": 140, "y": 770, "w": 1330, "h": 210, "type": "water"},
                 {"id": "dr-t2", "x": 980, "y": 210, "w": 350, "h": 350, "type": "difficult"}],
@@ -401,7 +422,9 @@ _SHADOWFELL_SPIRE = {
                 {"id": "ss-l2", "x": 1250, "y": 350, "bright_ft": 20, "dim_ft": 40,
                  "color": "#a855f7", "type": "torch"},
                 {"id": "ss-l3", "x": 800, "y": 700, "bright_ft": 15, "dim_ft": 30,
-                 "color": "#38bdf8", "type": "candle"}],
+                 "color": "#38bdf8", "type": "candle"},
+                {"id": "ss-l4", "x": 800, "y": 350, "bright_ft": 25, "dim_ft": 50,
+                 "color": "#22d3ee", "type": "daylight"}],
             "fog_enabled": True,
             "fog_revealed": [{"x": 70, "y": 200, "w": 1460, "h": 560}],
             "gm_pins": [
@@ -567,8 +590,11 @@ _DRAGONS_APOTHEOSIS = {
              "on a fixed interval."),
     # v2.840.0 — volcano showcase: lava terrain regions, fiery glow lights, a
     # public warning label, and a hotspot for the erupting vent.
+    # v2.842.0 — the throne is lit by its own lava (dim ambient), so the
+    # fire-glow lights read against the gloom.
     "map": {"name": "The Caldera Throne", "width": 1800, "height": 1300,
             "image": "/static/demo/maps/caldera-throne.png",
+            "ambient_light": "dim",
             "terrain": [
                 {"id": "ct-t1", "x": 140, "y": 910, "w": 1520, "h": 250, "type": "lava"},
                 {"id": "ct-t2", "x": 770, "y": 210, "w": 280, "h": 280, "type": "lava"}],
@@ -754,12 +780,19 @@ _TIDEWRACKED_CATACOMBS = {
              "is kept as an archived example. Resets on a fixed interval."),
     # v2.840.0 — flooded-crypt showcase: standing-water terrain, fog of war
     # (revealed generously over the play area), and a lantern light source.
+    # v2.842.0 — pitch-dark crypt (dark ambient): only the party's lanterns and
+    # a guttering wall torch carve pools of light out of the black.
     "map": {"name": "The Tide-Wracked Catacombs", "width": 1400, "height": 1000,
             "image": "/static/demo/maps/tide-wracked-catacombs.png",
+            "ambient_light": "dark",
             "terrain": [
                 {"id": "tc-t1", "x": 140, "y": 630, "w": 1120, "h": 210, "type": "water"}],
             "lights": [
                 {"id": "tc-l1", "x": 700, "y": 420, "bright_ft": 20, "dim_ft": 40,
+                 "color": "#fde68a", "type": "lantern"},
+                {"id": "tc-l2", "x": 280, "y": 280, "bright_ft": 15, "dim_ft": 30,
+                 "color": "#f59e0b", "type": "torch"},
+                {"id": "tc-l3", "x": 1050, "y": 490, "bright_ft": 15, "dim_ft": 30,
                  "color": "#fde68a", "type": "lantern"}],
             "fog_enabled": True,
             "fog_revealed": [{"x": 70, "y": 200, "w": 1260, "h": 560}]},
