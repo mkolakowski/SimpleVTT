@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.866.0] - 2026-07-03 — "The Last Shortcut"
+
+**Schema version:** 98
+
+**Commit summary:** The map editor's Label tool gets the `a` keyboard shortcut — the last placement tool that lacked one.
+
+**Description:** Small map-editor polish. The single-key tool hotkeys (v2.821.0) covered every map-element placement tool — Wall (`w`), Door (`d`), Room (`r`), Light (`l`), Fog (`f`), Terrain (`t`), Measure (`m`), Select (`v`), Spot (`p`), Pin (`g`), Erase (`e`) — except the 🔤 **Label** tool, an odd gap given Pin (its sibling in the Markers group) already had one. Label now binds to `a` (mnemonic for its A·B·C glyph). Because the hotkey handler and the tooltip-annotation loop are both data-driven from the `TOOL_KEYS` map, the one-line addition auto-wires the shortcut *and* advertises it in the button's tooltip ("… · shortcut: A"). It's ignored while typing in a field or with a modifier held, like the rest.
+
+### Added
+- `app/templates/map_editor.html` — `a: 'me-label-btn'` in `TOOL_KEYS`, giving the Label tool a keyboard shortcut.
+- `tests/harness_ui/test_map_editor_hotkeys.py` — `test_label_tool_hotkey` asserts `a` toggles the Label tool and the tooltip advertises the shortcut.
+
+### Schema
+- No schema change (still v98 — client hotkey only).
+
 ## [2.865.0] - 2026-07-03 — "The Unsealed Grimoire"
 
 **Schema version:** 98

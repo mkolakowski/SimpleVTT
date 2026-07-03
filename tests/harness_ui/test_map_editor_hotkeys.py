@@ -42,6 +42,24 @@ def test_tool_hotkey_toggles_mode(gm_page: Page) -> None:
     assert "shortcut: W" in (wall.get_attribute("title") or "")
 
 
+def test_label_tool_hotkey(gm_page: Page) -> None:
+    """v2.866.0 — the Label tool ('a') was the last placement tool without a
+    hotkey; 'a' now activates it and the tooltip advertises the shortcut."""
+    _open_editor(gm_page)
+    label = gm_page.locator("#me-label-btn")
+    assert label.get_attribute("aria-pressed") == "false"
+
+    gm_page.keyboard.press("a")
+    gm_page.wait_for_timeout(80)
+    assert label.get_attribute("aria-pressed") == "true"
+    assert "shortcut: A" in (label.get_attribute("title") or "")
+
+    # 'a' again toggles it back off (one mode at a time).
+    gm_page.keyboard.press("a")
+    gm_page.wait_for_timeout(80)
+    assert label.get_attribute("aria-pressed") == "false"
+
+
 def test_hotkey_ignored_while_typing(gm_page: Page) -> None:
     _open_editor(gm_page)
     wall = gm_page.locator("#me-wall-btn")

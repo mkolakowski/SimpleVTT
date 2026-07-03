@@ -2621,10 +2621,12 @@
   // v2.821.0 — single-key tool hotkeys. Each key just clicks the matching
   // toolbar button, so its toggle + side-effects (e.g. fog auto-enable) are
   // preserved. Ignored while typing in a field or with a modifier held.
+  // v2.866.0 — 'a' for the Label tool (🔤/ABC), the last placement tool that
+  // lacked a hotkey — every other map-element tool already had one.
   var TOOL_KEYS = {
     w: 'me-wall-btn', d: 'me-door-btn', r: 'me-room-btn', l: 'me-light-btn',
     f: 'me-fog-btn', t: 'me-terrain-btn', m: 'me-measure-btn', v: 'me-select-btn',
-    p: 'me-spot-btn', g: 'me-pin-btn', e: 'me-erase-btn',
+    p: 'me-spot-btn', g: 'me-pin-btn', e: 'me-erase-btn', a: 'me-label-btn',
   };
   // Surface each shortcut in its button's tooltip so it's discoverable.
   Object.keys(TOOL_KEYS).forEach(function (k) {
