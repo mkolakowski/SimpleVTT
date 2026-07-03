@@ -3097,12 +3097,14 @@
             (t.team === 'hero' || t.controller_user_id != null));
     }
     let _visCanvas = null, _visSrcCanvas = null;
-    // Return a Set of "col,row" grid cells the party can currently see. Draws
-    // each token's vision disc (minus wall shadows) onto an offscreen canvas,
-    // then samples each grid cell's center for coverage.
-    function computeVisibleCells() {
+    // Return a Set of "col,row" grid cells ``sourceTokens`` can currently see
+    // (defaults to the party). Draws each token's vision disc (minus wall
+    // shadows) onto an offscreen canvas, then samples each grid cell's center.
+    // v2.846.0 — takes an explicit token list so the GM can preview what a
+    // single targeted entity sees.
+    function computeVisibleCells(sourceTokens) {
         const out = new Set();
-        const party = _fogPartyTokens();
+        const party = sourceTokens || _fogPartyTokens();
         if (!party.length) return out;
         const pxPerFt = gridSize / 5;
         const walls = _fogSolidWalls();
@@ -3193,16 +3195,56 @@
     // (dim memory), never-seen cells stay veiled. Static mode keeps the original
     // GM-rect-only behavior.
     let _fogCanvas = null;
+    // v2.846.0 — a test-only override for the viewer role + targeted tokens, so
+    // __testDrawFog can exercise the GM perspective without stubbing ME /
+    // _targetingState. null in production.
+    let _fogViewOverride = null;
+    function _fogViewerIsGm() {
+        if (_fogViewOverride) return !!_fogViewOverride.gm;
+        return !!(typeof ME !== 'undefined' && ME && ME.isGm);
+    }
+    function _fogTargetTokenIds() {
+        if (_fogViewOverride) return new Set(_fogViewOverride.targetIds || []);
+        return new Set((window._targetingState && window._targetingState.tokenIds) || []);
+    }
+    // v2.846.0 — when the GM has targeted entities, the fog is drawn from THAT
+    // entity's viewpoint ("see what they see"). Cached on a signature of the
+    // targets' ids/positions/light so pan/zoom don't recompute vision.
+    let _gmViewCache = { sig: null, cells: new Set() };
+    function _gmTargetVisibleCells(targetIds) {
+        const src = (tokens || []).filter(t => t && targetIds.has(t.id));
+        if (!src.length) return new Set();
+        const sig = src.map(t => `${t.id}:${Math.round(t.x)},${Math.round(t.y)}:${t.light_dim_ft || 0}`).join('|')
+            + '#' + mapWalls.length;
+        if (_gmViewCache.sig === sig) return _gmViewCache.cells;
+        const cells = computeVisibleCells(src);
+        _gmViewCache = { sig, cells };
+        return cells;
+    }
+    // v2.766.0 fog overlay. v2.846.0 — GM perspective: the GM sees NO fog by
+    // default (full map); only when targeting an entity does the GM see what
+    // that entity sees (its wall-occluded vision + explored memory, opaque
+    // everywhere else). Players are unaffected (their party's view).
     function drawFog() {
         if (!mapFogEnabled) return;
-        const isGm = !!(typeof ME !== 'undefined' && ME && ME.isGm);
+        const isGm = _fogViewerIsGm();
+        const targetIds = _fogTargetTokenIds();
+        // GM with no target → no fog at all; GM with a target → that entity's
+        // view (which visible-cell set to clear, computed from the target).
+        let visibleSet = mapFogVisible;
+        if (isGm) {
+            if (!targetIds.size) return;                 // default: GM sees all
+            visibleSet = mapFogDynamic ? _gmTargetVisibleCells(targetIds) : mapFogVisible;
+        }
         if (!_fogCanvas) _fogCanvas = document.createElement('canvas');
         if (_fogCanvas.width !== MAP_W) _fogCanvas.width = MAP_W;
         if (_fogCanvas.height !== MAP_H) _fogCanvas.height = MAP_H;
         const fc = _fogCanvas.getContext('2d');
         fc.clearRect(0, 0, MAP_W, MAP_H);
         fc.globalCompositeOperation = 'source-over';
-        fc.fillStyle = isGm ? 'rgba(8,10,22,0.40)' : 'rgba(5,7,16,0.97)';
+        // Opaque veil — a player (or the GM previewing an entity) can't see
+        // beyond what that viewpoint reveals.
+        fc.fillStyle = 'rgba(5,7,16,0.97)';
         fc.fillRect(0, 0, MAP_W, MAP_H);
         fc.globalCompositeOperation = 'destination-out';
         if (mapFogDynamic) {
@@ -3212,9 +3254,10 @@
                 const p = k.split(',');
                 fc.fillRect(p[0] * gridSize, p[1] * gridSize, gridSize, gridSize);
             });
-            // Currently visible: full erase → fully clear (drawn on top).
+            // Currently visible (party, or the GM's targeted entity): full
+            // erase → fully clear (drawn on top of the memory layer).
             fc.fillStyle = 'rgba(0,0,0,1)';
-            mapFogVisible.forEach(k => {
+            visibleSet.forEach(k => {
                 const p = k.split(',');
                 fc.fillRect(p[0] * gridSize, p[1] * gridSize, gridSize, gridSize);
             });
@@ -3234,6 +3277,7 @@
     // v2.844.0 — deterministic harness hook: drive the exploration-fog state
     // directly (tokens/walls/explored) and redraw, bypassing WS/bootstrap
     // timing, then leave the veil on window.__fogCanvasForTest to sample.
+    // v2.846.0 — opts.gm / opts.targetIds exercise the GM perspective.
     window.__testDrawFog = function (opts) {
         opts = opts || {};
         mapFogEnabled = true;
@@ -3243,6 +3287,9 @@
         if (Array.isArray(opts.explored)) {
             mapFogExplored = new Set(opts.explored.map(c => `${c[0]},${c[1]}`));
         }
+        _fogViewOverride = (opts.gm || opts.targetIds)
+            ? { gm: !!opts.gm, targetIds: opts.targetIds || [] } : null;
+        _gmViewCache = { sig: null, cells: new Set() };  // force recompute
         try { mapFogVisible = computeVisibleCells(); } catch (e) { return String(e); }
         try { render(); } catch (e) { return String(e); }
         return { visible: [...mapFogVisible], explored: [...mapFogExplored] };

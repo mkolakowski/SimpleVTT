@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.846.0] - 2026-07-03 — "The Watcher's Eye"
+
+**Schema version:** 97
+
+**Commit summary:** GM fog perspective — the GM sees no fog by default, but targeting an entity renders the fog from that entity's viewpoint.
+
+**Description:** Refines how fog reads for the GM on the tabletop. Previously the GM saw a faint fog tint over hidden areas; now the **GM sees no fog at all by default** — the whole map is visible, as a GM expects. When the GM **targets a token** (the existing double-click targeting used for attacks/spells), the fog re-renders from **that entity's viewpoint**: the target's wall-occluded vision (base 60 ft + its light, on a dynamic map) clears, explored ground shows as dimmed memory, and everything the target can't see goes opaque — so the GM can check exactly what any player or monster perceives. Clearing the target returns the GM to the full-map view. Players are unaffected (they still see their own party's fog). The GM's per-target visibility is cached on the targets' positions so panning/zooming doesn't recompute it.
+
+### Changed
+- `app/static/tabletop.js` — `drawFog()` now branches on viewer role + targeting: GM with no target draws nothing; GM with a target draws that entity's view (`_gmTargetVisibleCells`, cached by target signature); players unchanged. `computeVisibleCells(sourceTokens)` takes an explicit token list. The `__testDrawFog` hook gains `gm`/`targetIds` overrides.
+- `docs/wiki/map-editor-tour.md` — Fog row notes the GM sees no fog by default and targets to preview an entity's view.
+
+### Added
+- `tests/harness_ui/test_map_fog_gm_perspective.py` (new, +2) — GM with no target sees no fog overlay; GM targeting a token sees that entity's wall-occluded view (front clear / explored dim / unseen opaque).
+
+### Schema
+- No schema change (still v97 — client rendering only).
+
 ## [2.845.1] - 2026-07-03 — "The Settled Fog"
 
 **Schema version:** 97

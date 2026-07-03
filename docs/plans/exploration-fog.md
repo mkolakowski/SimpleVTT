@@ -56,6 +56,9 @@ render as a dimmed "memory."
   deduped).
 - Three-state `drawFog()`: base veil → partial `destination-out` over explored cells (dim
   memory) + GM rects → full `destination-out` over currently-visible cells.
+- **GM perspective (v2.846.0):** the GM sees **no fog by default**; targeting a token (the
+  existing double-click `_targetingState`) renders the fog from that entity's viewpoint
+  (`_gmTargetVisibleCells`, cached by target signature). Players still see their party's view.
 
 ## Editor + demo — Phase 3 (shipped v2.845.0)
 
