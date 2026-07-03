@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.859.0] - 2026-07-03 — "The True Scale"
+
+**Schema version:** 98
+
+**Commit summary:** Fix the editor↔tabletop coordinate mismatch — demo maps now store their image's natural resolution, so elements drawn in the editor land in the same spot on the VTT.
+
+**Description:** **Bug fix.** The map editor works in the image's **natural pixel space** (the image is displayed at `naturalWidth × zoom` and every coordinate calc uses `naturalWidth`), and map **upload** sets `width_px/height_px` from the image's real size — so the designed invariant is "**stored `width_px` == the image's natural resolution**." The **demo seed violated it** by hardcoding arbitrary dimensions (e.g. the Caldera stored `1800×1300` while its PNG is `2400×1792`), so terrain/lights drawn in the editor rendered **shifted** on the tabletop. (The tavern's stored dims happened to match its PNG, which is why campaign 1 — the harness anchor — never surfaced it.) Now the demo seed reads each image's **natural dimensions** (`natural_image_dims`, mirroring the upload flow) and stores those as `width_px/height_px`; each spec's element + token coordinates are authored in a "design space" and **rescaled to natural at seed time** (`_rescale_records`), so every element keeps its art-relative position while the editor and tabletop finally share one coordinate space. The Caldera's live-drawn lava polygons (authored in natural space) now align exactly. `/active-map` also surfaces `width_px/height_px`.
+
+Also fixes a test regression: the v2.856.0 Caldera capture removed its labels/hotspot and switched to dark ambient, which had silently broken `test_caldera_throne_ships_terrain_lights_labels` (renamed → `test_caldera_throne_ships_lava_polygons`, updated to the redesign).
+
+### Added
+- `app/image_utils.py` — `natural_image_dims(url)` + a shared `_resolve_static` helper.
+- `app/routes/tabletop_routes.py` — `/active-map` now returns `width_px`/`height_px`.
+
+### Changed
+- `app/demo_campaigns.py` — `_seed_one` sets `width_px/height_px` from the image's natural size and computes `(sx, sy)`; `_apply_map_elements` + a new `_rescale_records` scale every element coordinate (incl. terrain `points`) and token positions to natural space; the Caldera spec is authored in natural (2400×1792). Other specs keep their authored design-space coords (rescaled at runtime) → identical art-relative positions.
+- `tests/harness/test_demo_map_elements.py` — the Caldera test rewritten for the redesign (lava polygons, dark ambient, in-bounds vertices). `tests/harness/test_demo_campaigns.py` — the in-bounds token check reads dims from `/active-map` instead of hardcoding.
+
+### Schema
+- No schema change (still v98 — `width_px/height_px` already exist; only the seeded values change).
+
 ## [2.858.0] - 2026-07-03 — "The Hidden Ground"
 
 **Schema version:** 98

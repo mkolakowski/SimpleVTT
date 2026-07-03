@@ -193,17 +193,6 @@ _CAMPAIGN_GMS = [
     (5, "demo-gm@example.com"),    # L13 Shadowfell Spire
     (6, "demo-gm@example.com"),    # L18 Dragon's Apotheosis
 ]
-# v2.847.0 — leveled demo map dimensions (width, height) for the in-bounds
-# assertion, mirroring the CAMPAIGN_SPECS map dicts in app/demo_campaigns.py.
-_GRIDLESS_MAP_DIMS = {
-    2: (1400, 1000),   # Goblin Warrens
-    3: (1400, 1000),   # Tide-Wracked Catacombs
-    4: (1600, 1100),   # Drowned Reef
-    5: (1600, 1200),   # Shadowfell Spire
-    6: (1800, 1300),   # Caldera Throne
-}
-
-
 @_LIVE
 @pytest.mark.parametrize("cid,gm", _CAMPAIGN_GMS)
 async def test_demo_campaign_has_encounter(cid, gm):
@@ -238,14 +227,18 @@ async def test_demo_tokens_are_grid_aligned(cid, gm):
             ]
             assert not off, f"campaign {cid} off-grid tokens: {off}"
         else:
+            # v2.859.0 — leveled maps are gridless; their dims are the image's
+            # natural resolution (read from the API, not hardcoded). Tokens sit
+            # within the map bounds.
             am = (await client.get(f"/api/campaign/{cid}/active-map")).json()
             assert am["grid_type"] == "none", f"campaign {cid}: {am['grid_type']}"
             assert am["grid_size_px"] == 70   # the 5-ft scale reference stays
-            w, h = _GRIDLESS_MAP_DIMS[cid]
+            w, h = am["width_px"], am["height_px"]
+            assert w > 0 and h > 0
             out = [
                 (t.get("label"), t["x"], t["y"])
                 for t in tokens
-                if not (0 <= float(t["x"]) <= w - 70 and 0 <= float(t["y"]) <= h - 70)
+                if not (0 <= float(t["x"]) <= w and 0 <= float(t["y"]) <= h)
             ]
             assert not out, f"campaign {cid} out-of-bounds tokens: {out}"
     finally:

@@ -124194,6 +124194,8 @@ def get_active_map(
     return {
         "ok": True, "map_id": m.id, "name": m.name,
         "grid_size_px": m.grid_size_px,
+        "width_px": int(getattr(m, "width_px", 0) or 0),
+        "height_px": int(getattr(m, "height_px", 0) or 0),
         "grid_type": getattr(m.grid_type, "value", m.grid_type) or "square",
         "ambient_light": m.ambient_light,
         "walls": list(m.walls or []),

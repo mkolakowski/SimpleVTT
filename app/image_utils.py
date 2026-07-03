@@ -14,6 +14,37 @@ from typing import Optional
 _STATIC_DIR = (Path(__file__).resolve().parent / "static").resolve()
 
 
+def _resolve_static(image_url: Optional[str]) -> Optional[Path]:
+    """Resolve a ``/static/...`` URL to a filesystem path inside the static
+    root, or None (external URL / traversal / missing file)."""
+    if not image_url or not image_url.startswith("/static/"):
+        return None
+    rel = image_url[len("/static/"):].split("?", 1)[0].split("#", 1)[0]
+    path = (_STATIC_DIR / rel).resolve()
+    try:
+        path.relative_to(_STATIC_DIR)
+    except ValueError:
+        return None
+    return path if path.is_file() else None
+
+
+def natural_image_dims(image_url: Optional[str]) -> Optional[tuple]:
+    """v2.859.0 — the natural ``(width, height)`` of a ``/static``-hosted image,
+    or None. Demo seeding sets a map's ``width_px``/``height_px`` from this so
+    the stored dimensions equal the image's real resolution — the invariant the
+    map editor + upload flow assume, keeping editor and tabletop coordinates in
+    the same pixel space."""
+    path = _resolve_static(image_url)
+    if not path:
+        return None
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            return int(im.width), int(im.height)
+    except Exception:
+        return None
+
+
 def average_image_color(image_url: Optional[str]) -> Optional[str]:
     """Average colour of a ``/static``-hosted image as ``#rrggbb``.
 

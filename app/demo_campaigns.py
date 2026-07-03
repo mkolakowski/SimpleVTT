@@ -26,7 +26,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from .demo_seed import _npc_sheet, build_dnd5e_sheet
-from .image_utils import average_image_color
+from .image_utils import average_image_color, natural_image_dims
 from .models import (
     Campaign,
     CampaignMembership,
@@ -623,7 +623,10 @@ _DRAGONS_APOTHEOSIS = {
     # ambient (labels/hotspot cleared in the editor). Coords are as drawn — a
     # couple of vertices spill past the map edge into the letterbox, which the
     # tabletop clips.
-    "map": {"name": "The Caldera Throne", "width": 1800, "height": 1300,
+    # v2.859.0 — authored in the image's NATURAL space (2400×1792): the terrain
+    # + light were drawn live in the editor (which works in natural pixels), so
+    # this spec's design space IS natural → the seed's rescale is a no-op here.
+    "map": {"name": "The Caldera Throne", "width": 2400, "height": 1792,
             "image": "/static/demo/maps/caldera-throne.png",
             "gridless": True,
             "ambient_light": "dark",
@@ -638,9 +641,9 @@ _DRAGONS_APOTHEOSIS = {
                 {"id": "ct-t3", "type": "lava",
                  "points": [[805, 1084], [1189, 1205], [1586, 1091], [1730, 764], [2366, 708],
                             [2339, 1157], [2127, 1420], [1820, 1609], [1472, 1726], [1011, 1760], [428, 1567]]}]},
-    # Organic token placement (parallel to "party" / "npc_tokens" below).
-    "party_pos": [(312, 771), (416, 826), (247, 738), (367, 692), (491, 793)],
-    "npc_pos": [(866, 612), (671, 703), (1094, 688), (1153, 496)],
+    # Token positions in natural space (2400×1792), matching the terrain above.
+    "party_pos": [(416, 1063), (555, 1139), (329, 1017), (489, 954), (655, 1093)],
+    "npc_pos": [(1155, 844), (895, 969), (1459, 948), (1537, 684)],
     "party": [
         {"owner": "gm", "name": "Archmagus Selene",
          "image": "/static/demo/tokens/l18-selene.png", "sheet": dict(
@@ -981,7 +984,40 @@ def campaign_names() -> list[str]:
     return [s["name"] for s in CAMPAIGN_SPECS]
 
 
-def _apply_map_elements(m: Map, mp: dict) -> None:
+# v2.859.0 — which coordinate fields each element column carries, so the seed
+# can rescale them from the spec's authored design space to the map image's
+# natural pixel space (see ``_seed_one``). Each entry: (x-fields, y-fields).
+_SCALE_FIELDS = {
+    "walls": (("x1", "x2"), ("y1", "y2")),
+    "lights": (("x",), ("y",)),
+    "terrain": (("x", "w"), ("y", "h")),
+    "hotspots": (("x",), ("y",)),
+    "gm_pins": (("x",), ("y",)),
+    "labels": (("x",), ("y",)),
+    "fog_revealed": (("x", "w"), ("y", "h")),
+}
+
+
+def _rescale_records(col: str, records: list, sx: float, sy: float) -> list:
+    """Scale every coordinate field of a sanitized element list by (sx, sy),
+    including terrain ``points`` polygons. Returns the same list (mutated)."""
+    if sx == 1.0 and sy == 1.0:
+        return records
+    xf, yf = _SCALE_FIELDS.get(col, ((), ()))
+    for r in records:
+        for k in xf:
+            if k in r:
+                r[k] = round(float(r[k]) * sx, 1)
+        for k in yf:
+            if k in r:
+                r[k] = round(float(r[k]) * sy, 1)
+        pts = r.get("points")
+        if isinstance(pts, list):
+            r["points"] = [[round(p[0] * sx, 1), round(p[1] * sy, 1)] for p in pts]
+    return records
+
+
+def _apply_map_elements(m: Map, mp: dict, sx: float = 1.0, sy: float = 1.0) -> None:
     """v2.840.0 — copy any editor-element lists present on a spec's ``map`` dict
     onto the Map so every demo board ships pre-furnished with the map editor's
     element families (walls/doors, lights, terrain, fog, hotspots, GM pins,
@@ -990,7 +1026,11 @@ def _apply_map_elements(m: Map, mp: dict) -> None:
     Each list is run through the **same sanitizer the PUT endpoint uses** so the
     stored shape is guaranteed to match what a real editor save produces (default
     keys filled, coords coerced to floats) — a hand-written literal that omitted
-    e.g. ``door``/``secret`` would otherwise reach clients missing those keys."""
+    e.g. ``door``/``secret`` would otherwise reach clients missing those keys.
+
+    v2.859.0 — coordinates are then scaled by (sx, sy) from the spec's authored
+    design space to the image's natural pixel space, so editor and tabletop
+    share one coordinate space regardless of the authored dimensions."""
     # Lazy import to avoid a circular import at module load (tabletop_routes
     # pulls in a large slice of the app).
     from .routes import tabletop_routes as _tr
@@ -1005,7 +1045,7 @@ def _apply_map_elements(m: Map, mp: dict) -> None:
     }
     for col, sanitize in _SANITIZERS.items():
         if mp.get(col):
-            setattr(m, col, sanitize(mp[col]))
+            setattr(m, col, _rescale_records(col, sanitize(mp[col]), sx, sy))
     if mp.get("fog_enabled"):
         m.fog_enabled = True
     if mp.get("fog_dynamic"):
@@ -1038,17 +1078,27 @@ def _seed_one(db: Session, spec: dict, users: dict[str, User]) -> Campaign:
     # scale reference that keeps distance/speed/range math (Euclidean when
     # gridless) and the exploration-fog cell size working.
     gridless = bool(mp.get("gridless"))
+    # v2.859.0 — store the map at the image's NATURAL resolution (the invariant
+    # the editor + upload flow assume: width_px == the image's real pixel size).
+    # The spec authors element/token coords in a "design space" (mp width/height);
+    # we scale them to natural by (sx, sy) so the editor and tabletop render in
+    # the same coordinate space. Falls back to the authored dims when the image
+    # can't be read (e.g. no image).
+    design_w = mp.get("width", 1400); design_h = mp.get("height", 1000)
+    nat = natural_image_dims(mp.get("image"))
+    map_w, map_h = nat if nat else (design_w, design_h)
+    sx = map_w / design_w if design_w else 1.0
+    sy = map_h / design_h if design_h else 1.0
     m = Map(
         campaign_id=camp.id, name=mp["name"], image_url=mp.get("image"),
-        grid_size_px=70, width_px=mp.get("width", 1400),
-        height_px=mp.get("height", 1000),
+        grid_size_px=70, width_px=map_w, height_px=map_h,
         grid_type=GridType.NONE if gridless else GridType.SQUARE,
         show_grid=not gridless,
         # v2.733.0 — ship every demo with the "match surround to map" toggle
         # ON: paint the canvas background the map image's average colour.
         letterbox_color=average_image_color(mp.get("image")),
     )
-    _apply_map_elements(m, mp)
+    _apply_map_elements(m, mp, sx, sy)
     db.add(m)
     db.flush()
     camp.active_map_id = m.id
@@ -1083,11 +1133,14 @@ def _seed_one(db: Session, spec: dict, users: dict[str, User]) -> Campaign:
     # parallel to ``party`` / ``npc_tokens`` (index-keyed since NPC labels can
     # repeat). Specs without them fall back to the original row layout (PCs
     # across the top at y=280, NPCs across the bottom at y=630, step 140).
+    # v2.859.0 — token positions are authored in the same design space and
+    # scaled to natural by (sx, sy), matching the map elements above.
     party_pos = spec.get("party_pos") or []
     npc_pos = spec.get("npc_pos") or []
     enc_tokens: list[Token] = []
     for i, ch in enumerate(chars):
-        px, py = party_pos[i] if i < len(party_pos) else (140 + i * 140, 280)
+        rx, ry = party_pos[i] if i < len(party_pos) else (140 + i * 140, 280)
+        px, py = rx * sx, ry * sy
         tk = Token(
             map_id=m.id, character_id=ch.id, controller_user_id=ch.owner_user_id,
             label=ch.name, color="#6cb4ff", image_url=spec["party"][i].get("image"),
@@ -1101,7 +1154,8 @@ def _seed_one(db: Session, spec: dict, users: dict[str, User]) -> Campaign:
         tt = tmpls.get(slug)
         if tt is None:
             continue
-        nx, ny = npc_pos[i] if i < len(npc_pos) else (140 + i * 140, 630)
+        _rx, _ry = npc_pos[i] if i < len(npc_pos) else (140 + i * 140, 630)
+        nx, ny = _rx * sx, _ry * sy
         tk = Token(
             map_id=m.id, character_id=None, token_template_id=tt.id,
             label=label, color=color, image_url=image,

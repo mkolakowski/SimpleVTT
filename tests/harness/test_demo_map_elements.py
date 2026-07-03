@@ -54,7 +54,11 @@ async def test_goblin_warrens_ships_walls_and_hotspots(gm_client):
     assert am["fog_revealed"], "expected a revealed fog region over the play area"
 
 
-async def test_caldera_throne_ships_terrain_lights_labels(gm_client):
+async def test_caldera_throne_ships_lava_polygons(gm_client):
+    # v2.856.0 — the Caldera was redesigned live in the editor: branching
+    # free-form lava polygons + a single custom ember glow in dark ambient
+    # (labels/hotspot cleared). v2.859.0 — captured at the image's natural
+    # resolution so editor and tabletop align.
     cids = await _demo_campaign_ids(gm_client)
     cid = cids.get("Demo L18: The Dragon's Apotheosis")
     assert cid, f"leveled demo campaign missing; saw {list(cids)}"
@@ -62,24 +66,23 @@ async def test_caldera_throne_ships_terrain_lights_labels(gm_client):
 
     terrain = am["terrain"]
     assert terrain, "Caldera Throne should ship with lava terrain"
-    assert any(t["type"] == "lava" for t in terrain)
+    assert all(t["type"] == "lava" for t in terrain)
+    # The lava regions are free-form polygons (≥3 vertices), all in bounds.
+    assert any(len(t.get("points") or []) >= 3 for t in terrain)
     for t in terrain:
         for k in ("x", "y", "w", "h"):
             assert isinstance(t[k], (int, float)), (k, t)
+        for px, py in (t.get("points") or []):
+            assert 0 <= px <= am["width_px"] and 0 <= py <= am["height_px"], (t["id"], px, py)
 
     lights = am["lights"]
-    assert lights, "expected seeded fire-glow lights"
+    assert lights, "expected a seeded fire-glow light"
     for lt in lights:
         for k in ("x", "y", "bright_ft", "dim_ft"):
             assert isinstance(lt[k], (int, float)), (k, lt)
         assert isinstance(lt["color"], str)
 
-    labels = am["labels"]
-    assert labels and labels[0]["text"], "expected a public text label"
-    assert labels[0]["color"].startswith("#")
-
-    # v2.842.0 — the throne is lit by its own lava (dim ambient).
-    assert am["ambient_light"] == "dim", am["ambient_light"]
+    assert am["ambient_light"] == "dark", am["ambient_light"]
 
 
 async def test_demo_elements_visible_to_players(gm_client, alice_client):
