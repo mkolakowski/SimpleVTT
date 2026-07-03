@@ -616,34 +616,28 @@ _DRAGONS_APOTHEOSIS = {
              "stop it. Each PC shows off a high-tier feature — full casters' "
              "9th-level spells and martial capstones. Demo campaign — resets "
              "on a fixed interval."),
-    # v2.840.0 — volcano showcase: lava terrain regions, fiery glow lights, a
-    # public warning label, and a hotspot for the erupting vent.
-    # v2.842.0 — the throne is lit by its own lava (dim ambient), so the
-    # fire-glow lights read against the gloom.
-    # v2.847.0 — gridless: Pyraxis holds the central obsidian dais, the fire
-    # giants flank it, the cult archmage hangs back by the vent; the party
-    # crests the south-west rim above the lava flow.
+    # v2.840.0 — volcano showcase: lava terrain regions, fiery glow lights.
+    # v2.856.0 — captured from a live editor session: the lava is now three
+    # free-form polygons (⬡ Free polygon tool) forming branching molten flows
+    # across the caldera floor, lit by a single custom ember glow in dark
+    # ambient (labels/hotspot cleared in the editor). Coords are as drawn — a
+    # couple of vertices spill past the map edge into the letterbox, which the
+    # tabletop clips.
     "map": {"name": "The Caldera Throne", "width": 1800, "height": 1300,
             "image": "/static/demo/maps/caldera-throne.png",
             "gridless": True,
-            "ambient_light": "dim",
-            "terrain": [
-                {"id": "ct-t1", "x": 128, "y": 923, "w": 1544, "h": 236, "type": "lava"},
-                {"id": "ct-t2", "x": 781, "y": 198, "w": 263, "h": 291, "type": "lava"}],
+            "ambient_light": "dark",
             "lights": [
-                {"id": "ct-l1", "x": 287, "y": 1041, "bright_ft": 15, "dim_ft": 30,
-                 "color": "#f97316", "color2": "#dc2626", "type": "torch"},
-                {"id": "ct-l2", "x": 1526, "y": 1019, "bright_ft": 15, "dim_ft": 30,
-                 "color": "#f97316", "color2": "#dc2626", "type": "torch"},
-                {"id": "ct-l3", "x": 897, "y": 336, "bright_ft": 20, "dim_ft": 40,
-                 "color": "#fb923c", "color2": "#fde047", "type": "lamp"}],
-            "labels": [
-                {"id": "ct-lb1", "x": 712, "y": 968, "text": "Lava flow",
-                 "size": 34, "color": "#fdba74"}],
-            "hotspots": [
-                {"id": "ct-h1", "x": 908, "y": 344, "label": "Erupting vent",
-                 "description": "Bursts every other round. DC 15 DEX save or 4d6 fire.",
-                 "roll": "1d20"}]},
+                {"id": "ct-l1", "x": 1200, "y": 767, "bright_ft": 20, "dim_ft": 40,
+                 "color": "#fb923c", "color2": "#fde047", "type": "custom"}],
+            "terrain": [
+                {"id": "ct-t1", "type": "lava",
+                 "points": [[953, 492], [1429, 483], [1717, 766], [2368, 712], [1587, 62], [526, 101]]},
+                {"id": "ct-t2", "type": "lava",
+                 "points": [[963, 496], [672, 784], [815, 1087], [442, 1571], [28, 1017], [110, 503], [533, 93]]},
+                {"id": "ct-t3", "type": "lava",
+                 "points": [[805, 1084], [1189, 1205], [1586, 1091], [1730, 764], [2366, 708],
+                            [2339, 1157], [2127, 1420], [1820, 1609], [1472, 1726], [1011, 1760], [428, 1567]]}]},
     # Organic token placement (parallel to "party" / "npc_tokens" below).
     "party_pos": [(312, 771), (416, 826), (247, 738), (367, 692), (491, 793)],
     "npc_pos": [(866, 612), (671, 703), (1094, 688), (1153, 496)],

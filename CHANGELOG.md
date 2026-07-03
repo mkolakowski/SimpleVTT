@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.856.0] - 2026-07-03 — "The Molten Flows"
+
+**Schema version:** 97
+
+**Commit summary:** Capture a live editor redesign of the Caldera Throne demo map into the seed — three free-form lava polygons under a single ember glow.
+
+**Description:** Snapshots a hand-drawn redesign of the L18 Caldera Throne map (made live in the editor with the new ⬡ Free polygon + Select & move tools) back into `app/demo_campaigns.py` so it survives the demo reset — captured via `scripts/capture_demo_maps.sh`. The two rectangular lava patches become **three branching free-form lava polygons** (6/7/11 vertices) flowing across the caldera floor; lighting drops to a single **custom ember glow** in **dark** ambient (the label + hotspot were cleared in the editor). Vertex coords are preserved exactly as drawn (a few spill into the letterbox past the map edge, which the tabletop clips). Depends on v2.855.0's 3..40-vertex `points` support.
+
+### Changed
+- `app/demo_campaigns.py` — `_DRAGONS_APOTHEOSIS` map dict: three `points` lava polygons, one custom light, `ambient_light: dark`, labels/hotspot removed.
+
+### Schema
+- No schema change (still v97 — demo seed content only).
+
 ## [2.855.0] - 2026-07-03 — "The Free Hand"
 
 **Schema version:** 97
