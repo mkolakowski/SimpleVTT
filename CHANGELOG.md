@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.855.0] - 2026-07-03 — "The Free Hand"
+
+**Schema version:** 97
+
+**Commit summary:** Add an "⬡ Free polygon" terrain toggle — place a region with any number of vertices, closed by clicking the first point.
+
+**Description:** Second half of the editor upgrade. Terrain regions were rectangles or (gridless) 4-dot quads; now a **⬡ Free polygon** toggle in the Environment group turns terrain placement into a **click-to-add-vertex** flow on **any** map — click as many vertices as you like (min 3), then **click the first dot to close** the shape. A closed dashed outline previews the polygon and the first vertex grows into a highlighted ring once the shape is closable, so the close target is obvious. The record stores the vertices in `points` (now **3..40**, was exactly 4) with `x/y/w/h` recomputed as the bounding box, so every legacy rect reader keeps working; polygons render via `<polygon>` in the editor and on the live tabletop, and the corner-resize handles already extend to N vertices (drag each independently). Turning the toggle off restores drag-rectangle placement (and the 4-dot quad on gridless).
+
+### Added
+- `app/routes/tabletop_routes.py` — `_sanitize_terrain` accepts `points` of 3..`_TERRAIN_POLY_MAX` (40) instead of exactly 4; bbox from all vertices; malformed → rect fallback.
+- `app/templates/map_editor.html` — `#me-terrain-poly-btn` toggle + `terrainPolyOn`; N-vertex placement with close-on-first-dot; closed-outline + first-dot-highlight preview; polygon render condition relaxed to `>= 3`.
+- `app/templates/tabletop.html` — terrain polygon render condition relaxed to `>= 3`.
+- `tests/harness/test_map_terrain.py` — `test_terrain_polygon_points_round_trip` (+1): 3-point + 6-point round-trip (bbox recomputed), 2-point rejected → rect fallback. `tests/harness_ui/test_map_editor_terrain_polygon.py` (new, +2): a 5-vertex region places + closes on the first dot, and renders as a `<polygon>` on the tabletop.
+
+### Changed
+- `docs/wiki/map-editor-tour.md` — Terrain row documents the free-polygon toggle.
+
+### Schema
+- No schema change (still v97 — `points` is an existing additive JSON field, just with a wider length range).
+
 ## [2.854.0] - 2026-07-03 — "The Ready Hand"
 
 **Schema version:** 97

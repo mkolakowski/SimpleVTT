@@ -124571,31 +124571,39 @@ async def reset_map_fog(
     return {"ok": True, **payload}
 
 
+# v2.855.0 — cap on a terrain polygon's vertex count (the editor's free-polygon
+# tool). Generous — a hand-drawn coastline rarely exceeds a dozen points.
+_TERRAIN_POLY_MAX = 40
+
+
 def _sanitize_terrain(raw) -> list:
     """v2.789.0 — coerce a client terrain list into the stored shape: a list of
     ``{id, x, y, w, h, type}`` rectangles in map-pixel coords. Drops anything
     without four numeric fields or a non-positive size; ``type`` is a short
     free-form key (difficult / water / lava / …), capped.
 
-    v2.848.0 — a region may also carry ``points``: exactly 4 numeric ``[x, y]``
-    corner pairs making it a free-form quadrilateral (authored on gridless
-    maps). When valid, ``x/y/w/h`` are recomputed as the quad's bounding box so
-    every legacy rect reader (labels, hit anchors) keeps working; malformed
-    ``points`` are dropped and the record falls back to its rect fields."""
+    v2.848.0 — a region may also carry ``points``: 4 numeric ``[x, y]`` corner
+    pairs making it a free-form quadrilateral. v2.855.0 — ``points`` may be
+    3..``_TERRAIN_POLY_MAX`` vertices (unlimited-segment polygons). When valid,
+    ``x/y/w/h`` are recomputed as the polygon's bounding box so every legacy
+    rect reader (labels, hit anchors) keeps working; malformed ``points`` are
+    dropped and the record falls back to its rect fields."""
     out = []
     if not isinstance(raw, list):
         return out
     for i, r in enumerate(raw):
         if not isinstance(r, dict):
             continue
-        # Optional free-form quad corners.
+        # Optional free-form polygon vertices. v2.848.0 accepted exactly 4
+        # (quads); v2.855.0 accepts 3..``_TERRAIN_POLY_MAX`` (unlimited-segment
+        # polygons authored by the editor's "free polygon" tool).
         points = None
         rawpts = r.get("points")
-        if isinstance(rawpts, list) and len(rawpts) == 4:
+        if isinstance(rawpts, list) and 3 <= len(rawpts) <= _TERRAIN_POLY_MAX:
             try:
                 pts = [[float(p[0]), float(p[1])] for p in rawpts
                        if isinstance(p, (list, tuple)) and len(p) == 2]
-                if len(pts) == 4:
+                if len(pts) == len(rawpts):   # every vertex well-formed
                     points = pts
             except (TypeError, ValueError, IndexError):
                 points = None
@@ -124603,7 +124611,7 @@ def _sanitize_terrain(raw) -> list:
             xs = [p[0] for p in points]; ys = [p[1] for p in points]
             x, y = min(xs), min(ys)
             w, h = max(xs) - x, max(ys) - y
-            if w <= 0 or h <= 0:   # degenerate quad (all corners collinear)
+            if w <= 0 or h <= 0:   # degenerate polygon (all vertices collinear)
                 continue
         else:
             try:

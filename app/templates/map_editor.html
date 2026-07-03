@@ -291,6 +291,10 @@
       <button type="button" id="me-terrain-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
               title="Terrain: drag a rectangle to mark difficult terrain / water / lava…; on a gridless map, click four dots to place a free-form quad instead; right-click a region to change its type, resize by its corners, or delete">⛰ Terrain</button>
     </div>
+    {# v2.855.0 — free-polygon terrain: when on, terrain is placed by clicking
+       vertices (min 3) and closing on the first point — any map. #}
+    <button type="button" id="me-terrain-poly-btn" class="me-tool-btn" aria-pressed="false"
+            title="Free polygon terrain: when on, click to drop terrain vertices (any number) and click the first dot to close the shape — instead of dragging a rectangle.">⬡ Free polygon</button>
     <label id="me-fog-on-lbl" style="display:none;"><input type="checkbox" id="me-fog-on-cb"> fog on</label>
     {# v2.845.0 — exploration-tracking fog: auto-reveal what the party's tokens
        see as they move (base sight + light, wall-occluded); explored ground
@@ -536,6 +540,7 @@
   var fogDrag = null;
   var terrainDrag = null;   // v2.789.1 — rect being painted
   var terrainDots = [];     // v2.848.0 — gridless four-dot quad placement (pending corners)
+  var terrainPolyOn = false; // v2.855.0 — free-polygon terrain (click vertices, close on first)
   var measureMode = false;  // v2.805.0 — ruler tool
   var measureDrag = null;   // the line being dragged
   var measureLine = null;   // the last committed measurement (stays shown)
@@ -1137,7 +1142,7 @@
       var tt = terrainType(tr.type);
       // v2.848.0 — a region with ``points`` (4 corner pairs, authored on
       // gridless maps) renders as a free-form quad; plain regions stay rects.
-      var isQuad = Array.isArray(tr.points) && tr.points.length === 4;
+      var isQuad = Array.isArray(tr.points) && tr.points.length >= 3;  // v2.855.0 — N-gon
       var rc;
       if (isQuad) {
         rc = document.createElementNS(NS, 'polygon');
@@ -1229,7 +1234,7 @@
         }
       }
     });
-    if (terrainDrag) {  // live paint preview
+    if (terrainDrag && !terrainPolyOn) {  // live paint preview (rect drag only)
       var tpv = document.createElementNS(NS, 'rect');
       var tx = Math.min(terrainDrag.sx, terrainDrag.cx), ty = Math.min(terrainDrag.sy, terrainDrag.cy);
       tpv.setAttribute('x', tx); tpv.setAttribute('y', ty);
@@ -1244,8 +1249,11 @@
     // numbered dots + a dashed polyline connecting them, in the terrain colour.
     if (terrainDots.length) {
       var qc = terrainType((document.getElementById('me-terrain-type') || {}).value);
+      // v2.855.0 — free-polygon mode closes back to the first dot, so draw the
+      // connector as a closed <polygon> outline once there are ≥3 vertices.
+      var closable = terrainPolyOn && terrainDots.length >= 3;
       if (terrainDots.length > 1) {
-        var pl = document.createElementNS(NS, 'polyline');
+        var pl = document.createElementNS(NS, closable ? 'polygon' : 'polyline');
         pl.setAttribute('points', terrainDots.map(function (p) {
           return p[0] + ',' + p[1];
         }).join(' '));
@@ -1254,11 +1262,15 @@
         pl.style.pointerEvents = 'none';
         svg.appendChild(pl);
       }
-      terrainDots.forEach(function (p) {
+      terrainDots.forEach(function (p, di) {
         var d = document.createElementNS(NS, 'circle');
         d.setAttribute('cx', p[0]); d.setAttribute('cy', p[1]);
-        d.setAttribute('r', 6); d.setAttribute('fill', qc.color);
-        d.setAttribute('stroke', '#000'); d.setAttribute('stroke-width', '1.5');
+        // Highlight the FIRST dot (larger ring) once the shape can be closed.
+        var first = closable && di === 0;
+        d.setAttribute('r', first ? 10 : 6);
+        d.setAttribute('fill', first ? 'none' : qc.color);
+        d.setAttribute('stroke', first ? qc.color : '#000');
+        d.setAttribute('stroke-width', first ? '3' : '1.5');
         d.classList.add('me-terrain-dot');
         d.style.pointerEvents = 'none';
         svg.appendChild(d);
@@ -2445,6 +2457,18 @@
   if (selectBtn) selectBtn.addEventListener('click', function () { setMode(selectMode ? null : 'select'); });
   // v2.854.0 — Select & Move toggle (on by default). When off, an existing
   // selection loses its resize handles + drag; the toolbar-mirror stays.
+  // v2.855.0 — free-polygon terrain toggle.
+  var terrainPolyBtn = document.getElementById('me-terrain-poly-btn');
+  if (terrainPolyBtn) terrainPolyBtn.addEventListener('click', function () {
+    terrainPolyOn = !terrainPolyOn;
+    terrainPolyBtn.setAttribute('aria-pressed', terrainPolyOn ? 'true' : 'false');
+    terrainDots = [];  // abandon any pending dots when switching placement style
+    if (terrainPolyOn && !terrainMode) setMode('terrain');  // convenience
+    setStatus(terrainPolyOn
+      ? 'Free polygon ON — click terrain vertices, then click the first dot to close.'
+      : '');
+    render();
+  });
   var selMoveBtn = document.getElementById('me-selmove-btn');
   if (selMoveBtn) selMoveBtn.addEventListener('click', function () {
     selectMoveOn = !selectMoveOn;
@@ -2847,7 +2871,31 @@
       try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
       var tx = Math.min(td.sx, td.cx), ty = Math.min(td.sy, td.cy);
       var tw = Math.abs(td.cx - td.sx), th = Math.abs(td.cy - td.sy);
-      if (tw > 6 && th > 6) {
+      if (terrainPolyOn) {
+        // v2.855.0 — free polygon: each press drops a vertex (drag distance is
+        // ignored). Clicking within the close-threshold of the FIRST vertex,
+        // once there are ≥3, closes the shape into an N-gon terrain region.
+        var close = Math.max(14, (gridPx || 70) * 0.35);
+        if (terrainDots.length >= 3
+            && Math.hypot(td.sx - terrainDots[0][0], td.sy - terrainDots[0][1]) <= close) {
+          var pxs = terrainDots.map(function (p) { return p[0]; });
+          var pys = terrainDots.map(function (p) { return p[1]; });
+          var px0 = Math.min.apply(null, pxs), py0 = Math.min.apply(null, pys);
+          var pw = Math.max.apply(null, pxs) - px0, ph = Math.max.apply(null, pys) - py0;
+          if (pw > 6 && ph > 6) {
+            terrain.push({ id: 't' + Date.now() + '_' + (seq++),
+              x: px0, y: py0, w: pw, h: ph, points: terrainDots,
+              type: (document.getElementById('me-terrain-type') || {}).value || 'difficult' });
+            terrainDots = [];
+            setStatus(''); saveTerrain();
+          } else { terrainDots = []; render(); }  // degenerate — discard
+        } else {
+          terrainDots.push([td.sx, td.sy]);
+          setStatus(terrainDots.length + ' point' + (terrainDots.length === 1 ? '' : 's')
+            + ' — click more, then click the first dot to close (Esc cancels).');
+          render();
+        }
+      } else if (tw > 6 && th > 6) {
         terrain.push({ id: 't' + Date.now() + '_' + (seq++), x: tx, y: ty, w: tw, h: th,
           type: (document.getElementById('me-terrain-type') || {}).value || 'difficult' });
         terrainDots = [];   // a drag supersedes any pending quad dots

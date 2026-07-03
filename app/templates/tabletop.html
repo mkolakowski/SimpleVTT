@@ -2570,7 +2570,7 @@
             terrain.forEach(function (tr) {
                 var col = terrainColor(tr.type);
                 var rc;
-                if (Array.isArray(tr.points) && tr.points.length === 4) {
+                if (Array.isArray(tr.points) && tr.points.length >= 3) {  // v2.855.0 — N-gon
                     rc = document.createElementNS(NS, 'polygon');
                     rc.setAttribute('points', tr.points.map(function (p) {
                         return p[0] + ',' + p[1];
