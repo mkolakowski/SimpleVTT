@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.843.0] - 2026-07-02 — "The Explored Dark"
+
+**Schema version:** 97
+
+**Commit summary:** Exploration-tracking fog of war — Phase 1: the persistence + endpoint engine (accumulating explored-cell memory, dynamic-mode flag, incremental reveal + reset APIs).
+
+**Description:** First phase of turning fog of war from a static GM-painted rectangle layer into classic dungeon-crawl fog that tracks **what the party has explored**. This commit lands the server engine and persistence; the client vision computation + three-state rendering (Phase 2) and the editor toggle + demo wiring (Phase 3) follow. Two new `Map` columns: **`fog_dynamic`** (bool — opts a map into exploration mode; off = today's static behavior, unchanged) and **`fog_explored`** (a JSON list of `[col,row]` grid cells — the accumulating "seen" memory, since vision shapes can't be axis-aligned rects). Two new endpoints: **`POST …/fog/explore`** (any campaign member — players drive exploration by moving, so the client posts the cells its party tokens now see; add-only/monotonic union) and **`POST …/fog/reset`** (GM-only — wipes the explored memory). The fog GET/PUT, `/active-map`, the editor page context, and every `fog_update` broadcast now carry `fog_dynamic` + `fog_explored`; the PUT accepts a `dynamic` flag. Design doc `docs/plans/exploration-fog.md`, surfaced through the wiki.
+
+### Added
+- `app/models.py` — `Map.fog_dynamic` + `Map.fog_explored`.
+- `app/database.py` — schema **v97** migration (additive `ALTER TABLE maps ADD COLUMN` for both).
+- `app/routes/tabletop_routes.py` — `_sanitize_fog_cells`, `_fog_payload`, `POST …/fog/explore`, `POST …/fog/reset`; extended fog GET/PUT + `get_active_map` + editor context + `fog_update` broadcasts.
+- `docs/plans/exploration-fog.md` (new) + wiki surfacing (`wiki_routes.py` allowlist `plan-exploration-fog`, `wiki_plans.html`, `docs/wiki/README.md`) + `test_wiki_doc_serves_exploration_fog_plan`.
+- `tests/harness/test_fog_explore.py` (new, +5) — monotonic union, repeat no-op, player-can-explore, GM-only reset clears, unknown-map 404. `tests/harness/test_map_fog.py` — `dynamic` flag round-trips (+1).
+
+### Schema
+- **v97:** `maps.fog_dynamic` (BOOLEAN, default FALSE) + `maps.fog_explored` (JSON, default `[]`). Additive; existing maps default to static fog off.
+
 ## [2.842.0] - 2026-07-02 — "The Low Lantern"
 
 **Schema version:** 96

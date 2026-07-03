@@ -124172,7 +124172,9 @@ def get_active_map(
         "hotspots": list(getattr(m, "hotspots", None) or []),
         "lights": list(getattr(m, "lights", None) or []),
         "fog_enabled": bool(getattr(m, "fog_enabled", False)),
+        "fog_dynamic": bool(getattr(m, "fog_dynamic", False)),
         "fog_revealed": list(getattr(m, "fog_revealed", None) or []),
+        "fog_explored": list(getattr(m, "fog_explored", None) or []),
         "terrain": list(getattr(m, "terrain", None) or []),
         "props": list(getattr(m, "props", None) or []),
         "labels": list(getattr(m, "labels", None) or []),
@@ -124405,6 +124407,52 @@ def _sanitize_fog_rects(raw) -> list:
     return out
 
 
+# v2.843.0 — exploration-tracking fog: the cap on stored explored cells. Even a
+# huge 3000×3000 px map at a 35 px (min) grid is ~85×85 ≈ 7 225 cells, so 20 000
+# is a generous ceiling that bounds the JSON blob against a malicious client.
+_FOG_EXPLORED_CELL_CAP = 20000
+
+
+def _sanitize_fog_cells(raw) -> list:
+    """v2.843.0 — coerce a client explored-cell list into the stored shape: a
+    list of ``[col, row]`` non-negative integer grid coords. Drops anything that
+    isn't a 2-element numeric pair or is negative; dedupes preserving order;
+    caps the total to ``_FOG_EXPLORED_CELL_CAP``."""
+    out: list = []
+    seen: set = set()
+    if not isinstance(raw, list):
+        return out
+    for cell in raw:
+        if not isinstance(cell, (list, tuple)) or len(cell) != 2:
+            continue
+        try:
+            c = int(cell[0]); r = int(cell[1])
+        except (TypeError, ValueError):
+            continue
+        if c < 0 or r < 0:
+            continue
+        key = (c, r)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append([c, r])
+        if len(out) >= _FOG_EXPLORED_CELL_CAP:
+            break
+    return out
+
+
+def _fog_payload(m) -> dict:
+    """v2.843.0 — the full fog state a client needs, shared by every fog read +
+    the ``fog_update`` broadcast so the shape stays in one place."""
+    return {
+        "map_id": m.id,
+        "fog_enabled": bool(m.fog_enabled),
+        "fog_dynamic": bool(getattr(m, "fog_dynamic", False)),
+        "fog_revealed": list(m.fog_revealed or []),
+        "fog_explored": list(getattr(m, "fog_explored", None) or []),
+    }
+
+
 @router.get("/api/campaign/{campaign_id}/map/{map_id}/fog")
 def get_map_fog(
     campaign_id: int,
@@ -124412,7 +124460,8 @@ def get_map_fog(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """v2.766.0 — read a map's fog-of-war state (any member)."""
+    """v2.766.0 — read a map's fog-of-war state (any member). v2.843.0 — now
+    also carries ``fog_dynamic`` + the accumulated ``fog_explored`` cells."""
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
         raise HTTPException(403, "Not a member")
@@ -124420,9 +124469,7 @@ def get_map_fog(
         Map.id == map_id, Map.campaign_id == campaign_id).first()
     if not m:
         raise HTTPException(404, "Map not found")
-    return {"ok": True, "map_id": m.id,
-            "fog_enabled": bool(getattr(m, "fog_enabled", False)),
-            "fog_revealed": list(getattr(m, "fog_revealed", None) or [])}
+    return {"ok": True, **_fog_payload(m)}
 
 
 @router.put("/api/campaign/{campaign_id}/map/{map_id}/fog")
@@ -124434,8 +124481,9 @@ async def set_map_fog(
     user: User = Depends(require_user),
 ):
     """v2.766.0 — set a map's fog of war (GM-only). Body:
-    ``{enabled?: bool, revealed?: [{x,y,w,h}]}`` — either may be sent.
-    Broadcasts ``fog_update``."""
+    ``{enabled?: bool, dynamic?: bool, revealed?: [{x,y,w,h}]}`` — any may be
+    sent. v2.843.0 — ``dynamic`` toggles exploration-tracking mode. Broadcasts
+    ``fog_update`` with the full fog payload."""
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_is_gm(user, campaign, db):
         raise HTTPException(403, "GM only")
@@ -124446,17 +124494,76 @@ async def set_map_fog(
     body = await request.json()
     if "enabled" in body:
         m.fog_enabled = bool(body.get("enabled"))
+    if "dynamic" in body:
+        m.fog_dynamic = bool(body.get("dynamic"))
     if "revealed" in body:
         m.fog_revealed = _sanitize_fog_rects(body.get("revealed"))
     db.commit()
-    await hub.broadcast(campaign_id, {
-        "type": "fog_update",
-        "data": {"map_id": m.id, "fog_enabled": bool(m.fog_enabled),
-                 "fog_revealed": list(m.fog_revealed or [])},
-    })
-    return {"ok": True, "map_id": m.id,
-            "fog_enabled": bool(m.fog_enabled),
-            "fog_revealed": list(m.fog_revealed or [])}
+    payload = _fog_payload(m)
+    await hub.broadcast(campaign_id, {"type": "fog_update", "data": payload})
+    return {"ok": True, **payload}
+
+
+@router.post("/api/campaign/{campaign_id}/map/{map_id}/fog/explore")
+async def explore_map_fog(
+    campaign_id: int,
+    map_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.843.0 — exploration-tracking fog: union newly-seen grid cells into the
+    map's accumulated ``fog_explored`` memory. **Any campaign member** — players
+    drive exploration by moving their tokens, so the client (not just the GM)
+    posts the cells its party tokens can now see. Add-only (monotonic): the
+    stored set only grows here; the GM clears it via ``/fog/reset``. Body:
+    ``{cells: [[col,row], …]}``. Broadcasts ``fog_update`` when the set changed."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    m = db.query(Map).filter(
+        Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404, "Map not found")
+    body = await request.json()
+    incoming = _sanitize_fog_cells(body.get("cells"))
+    existing = list(getattr(m, "fog_explored", None) or [])
+    have = {(int(c[0]), int(c[1])) for c in existing
+            if isinstance(c, (list, tuple)) and len(c) == 2}
+    added = [cell for cell in incoming if (cell[0], cell[1]) not in have]
+    if added:
+        merged = _sanitize_fog_cells(existing + added)
+        m.fog_explored = merged
+        db.commit()
+        payload = _fog_payload(m)
+        await hub.broadcast(campaign_id, {"type": "fog_update", "data": payload})
+        return {"ok": True, "added": len(added), **payload}
+    # Nothing new — skip the write + broadcast, but still report current state.
+    return {"ok": True, "added": 0, **_fog_payload(m)}
+
+
+@router.post("/api/campaign/{campaign_id}/map/{map_id}/fog/reset")
+async def reset_map_fog(
+    campaign_id: int,
+    map_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.843.0 — clear a map's accumulated exploration memory (GM-only). Wipes
+    ``fog_explored`` back to empty so the party's seen-map resets. Broadcasts
+    ``fog_update``. ``fog_revealed`` (GM-painted rects) is untouched."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(
+        Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404, "Map not found")
+    m.fog_explored = []
+    db.commit()
+    payload = _fog_payload(m)
+    await hub.broadcast(campaign_id, {"type": "fog_update", "data": payload})
+    return {"ok": True, **payload}
 
 
 def _sanitize_terrain(raw) -> list:
@@ -124845,7 +124952,9 @@ def map_editor_page(
         "hotspots": list(getattr(m, "hotspots", None) or []),
         "lights": list(getattr(m, "lights", None) or []),
         "fog_enabled": bool(getattr(m, "fog_enabled", False)),
+        "fog_dynamic": bool(getattr(m, "fog_dynamic", False)),
         "fog_revealed": list(getattr(m, "fog_revealed", None) or []),
+        "fog_explored": list(getattr(m, "fog_explored", None) or []),
         "terrain": list(getattr(m, "terrain", None) or []),
         "gm_pins": list(getattr(m, "gm_pins", None) or []),
         "props": list(getattr(m, "props", None) or []),

@@ -414,6 +414,18 @@ async def test_wiki_doc_serves_plan():
     assert 'class="wiki-nav"' in resp.text
 
 
+async def test_wiki_doc_serves_exploration_fog_plan():
+    """v2.843.0: GET /wiki/doc/plan-exploration-fog — 200 + body contains the
+    plan's H1 + the nav menu. Resolves through _DOC_ALLOWLIST to
+    ``docs/plans/exploration-fog.md``."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-exploration-fog")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "exploration-tracking fog" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
 async def test_wiki_doc_serves_spell_upcasting_plan():
     """v2.107.2: GET /wiki/doc/plan-spell-upcasting — 200 + body
     contains the plan's H1 + the nav menu. Resolves through the

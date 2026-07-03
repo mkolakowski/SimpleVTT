@@ -1131,6 +1131,22 @@ def _apply_inline_migrations() -> None:
                 "ALTER TABLE maps ADD COLUMN weather VARCHAR(16) NOT NULL DEFAULT ''"
             ))
 
+    # ---- Schema v97 (2.843.0): maps.fog_dynamic + maps.fog_explored ----
+    # Exploration-tracking fog of war. ``fog_dynamic`` turns on auto-reveal from
+    # the party's token vision; ``fog_explored`` accumulates the seen grid cells
+    # ([col,row] pairs). Both additive; defaults off / empty list.
+    maps_cols_v97 = _column_names("maps")
+    with engine.begin() as conn:
+        if maps_cols_v97 and "fog_dynamic" not in maps_cols_v97:
+            conn.execute(text(
+                "ALTER TABLE maps ADD COLUMN fog_dynamic "
+                "BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+        if maps_cols_v97 and "fog_explored" not in maps_cols_v97:
+            conn.execute(text(
+                "ALTER TABLE maps ADD COLUMN fog_explored JSON NOT NULL DEFAULT '[]'"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

@@ -406,6 +406,17 @@ class Map(Base):
         Boolean, default=False, server_default="false")
     fog_revealed: Mapped[list] = mapped_column(
         JSON, default=list, server_default="[]")
+    # v2.843.0 — exploration-tracking fog of war. When ``fog_dynamic`` is true,
+    # the client auto-reveals what the party's tokens can see as they move
+    # (base sight range extended by token light, occluded by walls) and
+    # accumulates the seen grid cells in ``fog_explored`` — a JSON list of
+    # ``[col, row]`` cell coords (map-grid units). Explored cells stay revealed
+    # as a dimmed "memory" once out of view; never-seen cells stay hidden.
+    # ``fog_revealed`` (GM-painted rects) coexists as always-clear regions.
+    fog_dynamic: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false")
+    fog_explored: Mapped[list] = mapped_column(
+        JSON, default=list, server_default="[]")
     # v2.789.0 — Maps 2.0 terrain regions: a JSON list of coloured/labelled
     # rectangles ({id, x, y, w, h, type}) marking difficult terrain / water /
     # lava / etc. Presentation + reference only (movement isn't enforced).

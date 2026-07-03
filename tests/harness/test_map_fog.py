@@ -62,6 +62,33 @@ async def test_fog_enabled_only_patch(gm_client):
             json={"enabled": False, "revealed": []})
 
 
+async def test_fog_dynamic_flag_round_trips(gm_client, gm_ws):
+    """v2.843.0 — the `dynamic` flag (exploration mode) persists through
+    PUT/GET and rides the `fog_update` broadcast."""
+    mid = await _active_map_id(gm_client)
+    try:
+        r = await gm_client.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/fog",
+                                json={"enabled": True, "dynamic": True})
+        assert r.status_code == 200, r.text
+        assert r.json()["fog_dynamic"] is True
+        # fog_explored is always surfaced (empty by default).
+        assert r.json()["fog_explored"] == []
+
+        msg = await gm_ws.wait_for("fog_update")
+        assert msg["data"]["fog_dynamic"] is True
+        assert "fog_explored" in msg["data"]
+
+        got = (await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/fog")).json()
+        assert got["fog_dynamic"] is True
+        am = (await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/active-map")).json()
+        assert am["fog_dynamic"] is True
+    finally:
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/fog",
+            json={"enabled": False, "dynamic": False, "revealed": []})
+
+
 async def test_set_fog_requires_gm(gm_client, alice_client):
     mid = await _active_map_id(gm_client)
     assert (await alice_client.get(
