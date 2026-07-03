@@ -999,7 +999,10 @@
     function punch(cx, cy, brightFt, dimFt) {
       var outer = Math.max(brightFt, dimFt) * pxPerFt; if (outer <= 0) return;
       var inner = Math.min(brightFt * pxPerFt, outer * 0.95);
-      function mk(c) { var g = c.createRadialGradient(cx, cy, Math.max(1, inner), cx, cy, outer); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0.35)'); return g; }
+      // v2.867.0 — dim ring fades all the way to the ambient level at the outer
+      // edge (0 clear), so the light blends into the rest of the map instead of
+      // stopping at a hard 0.35-lit ring — mirrors tabletop.js drawLighting().
+      function mk(c) { var g = c.createRadialGradient(cx, cy, Math.max(1, inner), cx, cy, outer); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)'); return g; }
       if (!solid.length) { lc.fillStyle = mk(lc); lc.beginPath(); lc.arc(cx, cy, outer, 0, Math.PI * 2); lc.fill(); return; }
       if (!_meSrcCanvas) _meSrcCanvas = document.createElement('canvas');
       if (_meSrcCanvas.width !== W) _meSrcCanvas.width = W;

@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.867.0] - 2026-07-03 — "The Soft Falloff"
+
+**Schema version:** 98
+
+**Commit summary:** A light's dim radius now fades as a smooth gradient into the ambient darkness instead of stopping at a hard-edged ring.
+
+**Description:** Per request. A light punched a hole in the darkness veil with a radial gradient that ran from fully-lit at the **bright** radius to only **0.35-cleared** at the **dim** radius — then hard-cut to full darkness beyond it. That left a visible ring where the dim edge (still noticeably brighter than the map) met the surrounding ambient. The dim ring now fades all the way to **zero clear** at the outer radius, so it blends seamlessly from the bright inner circle out to the same darkness as the rest of the map — a soft, natural falloff with no hard edge. Applied identically to the tabletop (`drawLighting`) and the map editor's live lighting preview (`punch`), which share the same gradient shape. Token lights, placed map lights, and Daylight emitters all inherit it.
+
+### Changed
+- `app/static/tabletop.js` — `drawLighting` light-punch gradient outer stop `rgba(0,0,0,0.35)` → `rgba(0,0,0,0)` (dim edge fades to ambient).
+- `app/templates/map_editor.html` — the editor's lighting-preview `punch` gradient gets the same outer stop, keeping the preview faithful to the tabletop.
+
+### Schema
+- No schema change (still v98 — client light rendering only).
+
 ## [2.866.2] - 2026-07-03 — "The Illustrated Tour"
 
 **Schema version:** 98

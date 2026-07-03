@@ -3047,8 +3047,14 @@
             const innerPx = Math.min(brightFt * pxPerFt, outerPx * 0.95);
             const mkGrad = (c) => {
                 const g = c.createRadialGradient(cx, cy, Math.max(1, innerPx), cx, cy, outerPx);
-                g.addColorStop(0, 'rgba(0,0,0,1)');     // bright → fully clear
-                g.addColorStop(1, 'rgba(0,0,0,0.35)');  // dim edge → partial
+                // v2.867.0 — the dim ring is a smooth gradient from the bright
+                // core all the way down to the map's ambient level at the outer
+                // edge: full clear at the bright radius fading to zero clear
+                // (i.e. the surrounding ambient veil) at the dim radius, so the
+                // light blends seamlessly into the rest of the map instead of
+                // stopping at a hard 0.35-lit ring.
+                g.addColorStop(0, 'rgba(0,0,0,1)');   // bright → fully clear
+                g.addColorStop(1, 'rgba(0,0,0,0)');   // dim edge → ambient (no clear)
                 return g;
             };
             if (!solidWalls.length) {
