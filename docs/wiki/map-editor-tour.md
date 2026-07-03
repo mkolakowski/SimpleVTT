@@ -1,7 +1,7 @@
 # Map editor tour
 
 **Audience:** GMs building out a battle map's interactive layers.
-**Version stamp:** v2.842.0.
+**Version stamp:** v2.866.0.
 
 The [Maps, grids & tokens](maps-grids-tokens.md) guide covers uploading a map, its grid, and placing tokens on the tabletop. This guide is about the layer *underneath* that — the **map editor**, where you draw the walls, lights, terrain, fog, and annotations that make a map interactive. As of **v2.840.0 ("The Furnished Board")** every demo campaign ships a map pre-furnished with these elements, so the fastest way to learn the editor is to open a demo map and poke at what's already there.
 
@@ -18,7 +18,7 @@ The toolbar groups the editor's tools by what they place. Each family is one per
 | Group | Tool | What it places | Demo map to see it on |
 |---|---|---|---|
 | **Walls** | Wall / Door / Room | Sight-blocking line segments. A **door** is a wall you can toggle open; a **secret** door is hidden from players until opened; a **window** passes sight but reads solid. A **material** (stone / wood / brick / metal / cave) sets the look. | Sundered Tavern (walled common room + a hidden cellar door); Goblin Warrens (cave walls + secret door) |
-| **Markers → Lights** | Light | A light source with a **bright** and **dim** radius (in feet) and a **two-colour flicker pair** — the live tabletop's glow wavers torch-like between them. Pick a preset (candle / torch / lantern / lamp / bullseye / daylight; each defines its pair) or set your own colours with the two pickers — non-preset values make the light **custom**. **Double-click a placed light to select it**: the toolbar then mirrors and live-edits its radii + colours (a right-click **🎨 Flicker colours** pop-out edits them in place too). | Every demo map ships flickering lights — e.g. Shadowfell Spire (violet braziers in the dark); Caldera Throne (ember-red fire-glow); Goblin Warrens & Catacombs (torches + lanterns carving pools out of the black) |
+| **Markers → Lights** | Light | A light source with a **bright** and **dim** radius (in feet) and a **two-colour flicker pair** — the live tabletop's glow wavers torch-like between them. Pick a preset (candle / torch / lantern / lamp / bullseye / daylight; each defines its pair) or set your own colours with the two pickers — non-preset values make the light **custom**. **Double-click a placed light to select it**: the toolbar then mirrors and live-edits its radii + colours, and **drag-handles appear on the map** at the bright and dim edges — drag a handle to grow or shrink that radius, with the current distance shown on the handle (a right-click **🎨 Flicker colours** pop-out edits the colours in place too). | Every demo map ships flickering lights — e.g. Shadowfell Spire (violet braziers in the dark); Caldera Throne (ember-red fire-glow); Goblin Warrens & Catacombs (torches + lanterns carving pools out of the black) |
 | **Markers → Hotspots** | Hotspot | A clickable point with a title, description, and an optional dice expression — players get a 🎲 **Roll** button in the popup. Great for traps and points of interest. | Goblin Warrens (a pit-trap that rolls `1d20`); Caldera Throne (erupting vent) |
 | **Markers → Label** | Label | Public on-map text (room names, callouts) with a size and colour. | Sundered Tavern ("The Bar", "Hearth", "Cellar"); Drowned Reef ("Deep channel", "Kelp forest") |
 | **Markers → GM Pin** | GM Pin | A **GM-only** note pinned to the map — never sent to players. Use it for ambush triggers and secret staging. | Goblin Warrens ("Ambush"); Shadowfell Spire ("Shadow gate") |
@@ -47,6 +47,28 @@ highlight): the matching toolbar control then mirrors its values and edits it li
 type/radii/colour pickers for lights, the **material** select for walls, the **terrain type**
 select for terrain. Double-click again, press **Esc**, or switch tools to deselect; with nothing
 selected the same controls set the defaults for *new* placements, exactly as before.
+
+## The Tools group
+
+Beyond the placement families, the **Tools** group holds the helpers you reach for while building:
+
+- **Snap** locks new wall endpoints to the grid, so rooms come out square.
+- **📏 Measure** (hotkey `m`) draws a ruler across the map, reading the distance in feet — handy for sizing a light's radius or checking a corridor's width before you commit.
+- **Select & move** double-click any placed element to grab and reposition it (and light up its resize handles) — see *Select to edit* above.
+- **Undo / Redo** (`Ctrl`/`⌘ + Z` / `Y`) and **Delete** (`Del` / `Backspace` removes the current selection).
+
+Every placement tool also has a **single-key shortcut** — hover any toolbar button to see it in the tooltip:
+
+| Key | Tool | Key | Tool |
+|---|---|---|---|
+| `w` | Wall | `t` | Terrain |
+| `d` | Door | `f` | Fog |
+| `r` | Room | `a` | Label |
+| `l` | Light | `p` | Hotspot |
+| `g` | GM Pin | `m` | Measure |
+| `v` | Select | `e` | Erase |
+
+Shortcuts are ignored while you're typing in a field, so they never fight your text entry.
 
 ## Tips
 

@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.866.1] - 2026-07-03 — "The Redlined Tour"
+
+**Schema version:** 98
+
+**Commit summary:** Sync the map-editor tour with the current editor — version stamp, Tools group + hotkey table, light drag-handles.
+
+**Description:** Doc-accuracy pass on [`docs/wiki/map-editor-tour.md`](docs/wiki/map-editor-tour.md), which had drifted from the editor. Fixes: (1) the version stamp was frozen at v2.842.0 despite documenting later behavior → bumped to v2.866.1; (2) the tour never mentioned the **Tools group** helpers — added a section covering **📏 Measure** (the ruler, hotkey `m`), **Select & move**, and **Undo/Redo/Delete**, plus a table of every placement tool's **single-key shortcut** (including the `a` Label shortcut just added in v2.866.0); (3) the Lights row described editing radii only via the toolbar — added the **on-map drag-handles** (v2.857.0) you drag at the bright/dim edges to resize each radius, with the live distance on the handle. No code change.
+
+### Changed
+- `docs/wiki/map-editor-tour.md` — version stamp, new "The Tools group" section (Measure / Select & move / undo-redo / hotkey table), and the light radius drag-handle description on the Lights row.
+
+### Schema
+- No schema change (still v98 — documentation only).
+
 ## [2.866.0] - 2026-07-03 — "The Last Shortcut"
 
 **Schema version:** 98
