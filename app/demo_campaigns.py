@@ -77,7 +77,7 @@ _GOBLIN_WARRENS = {
                  "color": "#f59e0b", "type": "torch"},
                 {"id": "gw-l3", "x": 980, "y": 350, "bright_ft": 20, "dim_ft": 40,
                  "color": "#fbbf24", "type": "lantern"}],
-            "fog_enabled": True,
+            "fog_enabled": True, "fog_dynamic": True,
             "fog_revealed": [{"x": 70, "y": 200, "w": 1260, "h": 560}],
             "walls": [
                 {"id": "gw-w1", "x1": 140, "y1": 140, "x2": 700, "y2": 140, "style": "cave"},
@@ -245,7 +245,7 @@ _STORM_SALTMARSH = {
                  "color": "#fde68a", "type": "lantern"},
                 {"id": "dr-l2", "x": 1190, "y": 350, "bright_ft": 15, "dim_ft": 30,
                  "color": "#fde68a", "type": "lantern"}],
-            "fog_enabled": True,
+            "fog_enabled": True, "fog_dynamic": True,
             "fog_revealed": [{"x": 70, "y": 200, "w": 1460, "h": 620}],
             "terrain": [
                 {"id": "dr-t1", "x": 140, "y": 770, "w": 1330, "h": 210, "type": "water"},
@@ -425,7 +425,7 @@ _SHADOWFELL_SPIRE = {
                  "color": "#38bdf8", "type": "candle"},
                 {"id": "ss-l4", "x": 800, "y": 350, "bright_ft": 25, "dim_ft": 50,
                  "color": "#22d3ee", "type": "daylight"}],
-            "fog_enabled": True,
+            "fog_enabled": True, "fog_dynamic": True,
             "fog_revealed": [{"x": 70, "y": 200, "w": 1460, "h": 560}],
             "gm_pins": [
                 {"id": "ss-p1", "x": 800, "y": 910, "label": "Shadow gate",
@@ -794,7 +794,7 @@ _TIDEWRACKED_CATACOMBS = {
                  "color": "#f59e0b", "type": "torch"},
                 {"id": "tc-l3", "x": 1050, "y": 490, "bright_ft": 15, "dim_ft": 30,
                  "color": "#fde68a", "type": "lantern"}],
-            "fog_enabled": True,
+            "fog_enabled": True, "fog_dynamic": True,
             "fog_revealed": [{"x": 70, "y": 200, "w": 1260, "h": 560}]},
     "party": [
         {"owner": "gm", "name": "Sir Gareth Tidebreaker",
@@ -968,6 +968,8 @@ def _apply_map_elements(m: Map, mp: dict) -> None:
             setattr(m, col, sanitize(mp[col]))
     if mp.get("fog_enabled"):
         m.fog_enabled = True
+    if mp.get("fog_dynamic"):
+        m.fog_dynamic = True
     if mp.get("ambient_light"):
         m.ambient_light = mp["ambient_light"]
 

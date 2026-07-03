@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.845.0] - 2026-07-03 — "The Lifting Veil"
+
+**Schema version:** 97
+
+**Commit summary:** Exploration-tracking fog of war — Phase 3: the editor toggle + reset, and the demo maps ship in dynamic mode.
+
+**Description:** Final phase — the GM-facing controls and the live demo. The map editor's Fog group gains an **"explore (dynamic)"** checkbox (turning it on flips the map into exploration mode — and turns fog on if it wasn't) plus a **"Reset explored"** button that clears the party's accumulated seen-map. Both ride alongside the existing "fog on" toggle and persist through the fog PUT / `fog/reset`. All four demo maps that already ship fog — **Goblin Warrens, Tide-Wracked Catacombs, Drowned Reef, Shadowfell Spire** — now ship in **dynamic** mode, so opening one as a player and walking a token peels the veil back in a wall-occluded disc, leaving a dimmed memory trail. The `map-editor-tour` wiki guide's Fog row documents both modes.
+
+### Added
+- `app/templates/map_editor.html` — `#me-fog-dyn-cb` (dynamic toggle) + `#me-fog-reset-btn` (reset explored) in the Fog group; wired to the fog PUT (`dynamic`) and `POST …/fog/reset`; folded into save-all + undo/redo snapshots.
+- `app/demo_campaigns.py` — `_apply_map_elements` copies `fog_dynamic`; the four fogged demo specs set `fog_dynamic: True`.
+- `tests/harness_ui/test_map_editor_fog_dynamic.py` (new, +1) — entering Fog mode reveals the dynamic controls; ticking the toggle persists `fog_dynamic` (+ turns fog on); the reset button clears `fog_explored`.
+
+### Changed
+- `docs/wiki/map-editor-tour.md` — Fog row now describes static vs. dynamic (explore) modes + reset.
+
+### Schema
+- No schema change (still v97 — UI + demo wiring on the Phase 1/2 engine).
+
 ## [2.844.0] - 2026-07-02 — "The Remembered Room"
 
 **Schema version:** 97
