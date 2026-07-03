@@ -14,7 +14,8 @@ Both are folded onto the projected monster sheet by `_monster_dict_to_sheet`
 (keyed by monster `slug`) and surfaced in play through the
 `#_lair_action_panel` (GM — as of v2.862.0 it lives in the **Battle drawer**,
 under the Reactions panel, instead of floating over the map) and the player's
-`#_regional_effects_panel` atmosphere card. The
+`#_regional_effects_panel` atmosphere card (as of v2.863.0 it too lives in the
+player's **Battle drawer**, not a floating card). The
 GM-driven fade tracker (`POST /set_regional_fade`, v2.181.0) models the RAW
 "regional effects fade over 1d10 days" countdown once the lair-dweller dies.
 

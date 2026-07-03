@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.863.0] - 2026-07-03 — "The Felt Presence"
+
+**Schema version:** 98
+
+**Commit summary:** The player-side regional-effects atmosphere card moves into the Battle drawer, matching the GM lair-panel relocation.
+
+**Description:** Parity follow-up to v2.862.0. The player's read-only 🌐 regional-effects card (`#_regional_effects_panel`) — the RAW MM p.11 atmospheric effects the whole table feels while a lair-dweller is on the field, plus the "the land is letting go" fade cue — used to float over the map in a `position:fixed` card bolted to `<body>`. It now renders into a **static host inside the Battle drawer** (`#players-drawer`), the player's counterpart to the GM lair panel. Both sides' lair surfaces now live in one place — the initiative drawer — instead of floating disconnected over the map. The card stays hidden until a lair-bearing combatant with regional effects is on the field; a legacy floating fallback remains only if the drawer host is absent. Because a player's default-open right drawer is the roll log, they open the Battle tab to see it (same tab the GM runs initiative from).
+
+### Changed
+- `app/templates/tabletop.html` — new `{% if not is_gm %}` static `#_regional_effects_panel` host in the Battle drawer; `_renderPlayerRegionalPanel` reveals/hides that host (`display`) instead of body-appending / removing a floating card, and `_renderLairActionPanel`'s empty-state hides (not removes) the player host.
+
+### Schema
+- No schema change (still v98 — client panel relocation only).
+
 ## [2.862.0] - 2026-07-03 — "The Lair's Turn"
 
 **Schema version:** 98

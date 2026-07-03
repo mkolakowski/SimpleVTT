@@ -3615,6 +3615,19 @@
              style="display:none;margin:0 0 8px;background:rgba(28,18,12,0.93);color:#fbe9dc;border:2px solid #c2541f;border-radius:10px;padding:10px 14px;font-size:14px;box-shadow:0 3px 14px rgba(0,0,0,.35);"></div>
         {% endif %}
 
+        {# v2.863.0 — the player's read-only regional-effects atmosphere
+           card, relocated INTO the Battle drawer alongside the GM's lair
+           panel (v2.862.0). Previously `_renderPlayerRegionalPanel` floated
+           this over the map; it now renders into this static host so the
+           whole table's lair surfaces live in one place. Players never see
+           the GM `#_lair_action_panel`, so this is their `not is_gm`
+           counterpart. Hidden until a lair owner with regional effects is
+           on the field. #}
+        {% if not is_gm %}
+        <div id="_regional_effects_panel"
+             style="display:none;margin:0 0 8px;background:rgba(18,22,28,0.93);color:#dce7f2;border:2px solid #3f6f8c;border-radius:10px;padding:10px 14px;font-size:14px;box-shadow:0 3px 14px rgba(0,0,0,.35);"></div>
+        {% endif %}
+
         {# v2.49.102 — Initiative summary + details wrapper removed
            per user request. The battle banner + init list now sit
            directly in the drawer-body as siblings of the GM Controls
@@ -10820,10 +10833,15 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         const regional = (owner && Array.isArray(owner.regional_effects))
             ? owner.regional_effects : [];
         if (!regional.length) {
-            if (host) host.remove();
+            // v2.863.0 — the host is now static in the Battle drawer; hide
+            // it rather than removing (removal would delete the slot).
+            if (host) host.style.display = 'none';
             return;
         }
         if (!host) {
+            // v2.863.0 — fallback only: the Battle-drawer host (rendered
+            // server-side for players) is the normal path. Fall back to the
+            // old floating card if it's somehow absent.
             host = document.createElement('div');
             host.id = HOST_ID;
             host.style.cssText = (
@@ -10836,6 +10854,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             );
             document.body.appendChild(host);
         }
+        host.style.display = '';
         const header = (
             '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">'
             + '<span style="font-size:18px;">🌐</span>'
@@ -10895,7 +10914,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             // removing it — removal would delete the drawer slot for good.
             if (host) host.style.display = 'none';
             const _pp = document.getElementById('_regional_effects_panel');
-            if (_pp) _pp.remove();
+            if (_pp) _pp.style.display = 'none';  // v2.863.0 — static host: hide, don't remove
             return;
         }
 

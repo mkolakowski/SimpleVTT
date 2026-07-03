@@ -105,6 +105,17 @@ def _battle_json(in_lair: bool = False, turn_index: int = 0,
     })
 
 
+def _open_battle_drawer(page: Page) -> None:
+    """Open the Battle drawer (#players-drawer). The demo GM keeps the roll
+    log on the left, so Battle is their default-open right drawer; players
+    (Alice) default to the roll log, so player tests open Battle explicitly
+    to reach the relocated lair / regional cards (v2.862.0 / v2.863.0)."""
+    page.evaluate(
+        "() => window._openDrawerPanel && window._openDrawerPanel('players-drawer')"
+    )
+    page.wait_for_timeout(150)
+
+
 def _seed_battle(page: Page, in_lair: bool = False, turn_index: int = 0,
                  regional_fade=None) -> None:
     page.add_init_script(
@@ -508,7 +519,12 @@ def test_regional_effects_render_for_player(alice_page: Page):
         _battle_json(in_lair=True, turn_index=1),
     )
 
-    player_panel = alice_page.locator("#_regional_effects_panel")
+    # v2.863.0 — the card now lives in the Battle drawer; a player opens the
+    # Battle tab to see it (roll log is their default-open right drawer).
+    _open_battle_drawer(alice_page)
+
+    # Scoped selector only matches if the card is inside the Battle drawer.
+    player_panel = alice_page.locator("#players-drawer #_regional_effects_panel")
     expect(player_panel).to_be_visible(timeout=5000)
     expect(player_panel).to_contain_text("Regional Effects")
     expect(player_panel).to_contain_text("Minor Earthquakes")
@@ -628,7 +644,8 @@ def test_fade_player_gets_atmospheric_cue(alice_page: Page):
         }),
     )
 
-    player_panel = alice_page.locator("#_regional_effects_panel")
+    _open_battle_drawer(alice_page)  # v2.863.0 — card lives in the Battle drawer
+    player_panel = alice_page.locator("#players-drawer #_regional_effects_panel")
     expect(player_panel).to_be_visible(timeout=5000)
     expect(player_panel).to_contain_text("waning", timeout=3000)
     # No GM day-count numbers or controls leak to the player.
