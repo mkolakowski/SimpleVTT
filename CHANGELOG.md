@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.851.0] - 2026-07-03 — "The Chosen Stone"
+
+**Schema version:** 97
+
+**Commit summary:** Select-to-edit for walls and terrain — double-click a segment or region and the toolbar's material / terrain-type select mirrors and edits it.
+
+**Description:** Completes the select-to-edit arc (lights shipped in v2.850.0). **Double-click a wall segment** and it selects (dashed white highlight along the segment): the Walls group's **material select** shows its material, and changing the select re-materials that wall. **Double-click a terrain region** (rect or free-form quad) and the Environment group's **terrain type select** mirrors + edits it the same way. With nothing selected both selects keep their original job — defaults for *new* placements. Esc, tool change, deleting the object, or double-clicking empty map deselects (one shared `clearObjectSelection` path across lights/walls/terrain). The map-editor tour documents the pattern in a new "Select to edit" section.
+
+### Added
+- `app/templates/map_editor.html` — `selectedWall`/`selectedTerrain` + `selectWall`/`selectTerrain`/`clearObjectSelection`; dblclick handlers + dashed highlights on wall hit-lines and terrain regions; `#me-wall-style` / `#me-terrain-type` change handlers edit the selection; delete-path + Esc/setMode/empty-dblclick cleanup.
+- `tests/harness_ui/test_map_editor_select_edit.py` (new, +2) — dblclick wall → material select mirrors + a change persists, Esc deselects (further changes leave it alone); dblclick terrain → type select mirrors + edits.
+
+### Changed
+- `docs/wiki/map-editor-tour.md` — Lights row documents the two-colour flicker + double-click editing; new "Select to edit" section covers the shared pattern.
+
+### Schema
+- No schema change (still v97 — editor UX only).
+
 ## [2.850.0] - 2026-07-03 — "The Chosen Flame"
 
 **Schema version:** 97

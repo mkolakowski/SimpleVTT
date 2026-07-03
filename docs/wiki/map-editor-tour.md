@@ -18,7 +18,7 @@ The toolbar groups the editor's tools by what they place. Each family is one per
 | Group | Tool | What it places | Demo map to see it on |
 |---|---|---|---|
 | **Walls** | Wall / Door / Room | Sight-blocking line segments. A **door** is a wall you can toggle open; a **secret** door is hidden from players until opened; a **window** passes sight but reads solid. A **material** (stone / wood / brick / metal / cave) sets the look. | Sundered Tavern (walled common room + a hidden cellar door); Goblin Warrens (cave walls + secret door) |
-| **Markers → Lights** | Light | A light source with a **bright** and **dim** radius (in feet) and a colour. Pick a preset (candle / torch / lantern / lamp / bullseye / daylight). Lights matter most on a **dim** or **dark**-ambient map. | Every demo map ships lights — e.g. Shadowfell Spire (coloured braziers in the dark); Caldera Throne (fire-glow); Goblin Warrens & Catacombs (torches + lanterns carving pools out of the black) |
+| **Markers → Lights** | Light | A light source with a **bright** and **dim** radius (in feet) and a **two-colour flicker pair** — the live tabletop's glow wavers torch-like between them. Pick a preset (candle / torch / lantern / lamp / bullseye / daylight; each defines its pair) or set your own colours with the two pickers — non-preset values make the light **custom**. **Double-click a placed light to select it**: the toolbar then mirrors and live-edits its radii + colours (a right-click **🎨 Flicker colours** pop-out edits them in place too). | Every demo map ships flickering lights — e.g. Shadowfell Spire (violet braziers in the dark); Caldera Throne (ember-red fire-glow); Goblin Warrens & Catacombs (torches + lanterns carving pools out of the black) |
 | **Markers → Hotspots** | Hotspot | A clickable point with a title, description, and an optional dice expression — players get a 🎲 **Roll** button in the popup. Great for traps and points of interest. | Goblin Warrens (a pit-trap that rolls `1d20`); Caldera Throne (erupting vent) |
 | **Markers → Label** | Label | Public on-map text (room names, callouts) with a size and colour. | Sundered Tavern ("The Bar", "Hearth", "Cellar"); Drowned Reef ("Deep channel", "Kelp forest") |
 | **Markers → GM Pin** | GM Pin | A **GM-only** note pinned to the map — never sent to players. Use it for ambush triggers and secret staging. | Goblin Warrens ("Ambush"); Shadowfell Spire ("Shadow gate") |
@@ -39,6 +39,14 @@ Open the flagship demo map's editor and you'll find the pattern most interior ma
 5. Three **labels** name the spaces: *The Bar*, *Hearth*, *Cellar*.
 
 Toggle the **Layers** checkboxes to isolate each family, then **Erase** + redraw to feel out the tools. Because it's a demo map, the hourly reseed restores the original set — experiment freely.
+
+## Select to edit
+
+**Double-click** any placed light, wall, or terrain region to **select** it (dashed white
+highlight): the matching toolbar control then mirrors its values and edits it live — the light
+type/radii/colour pickers for lights, the **material** select for walls, the **terrain type**
+select for terrain. Double-click again, press **Esc**, or switch tools to deselect; with nothing
+selected the same controls set the defaults for *new* placements, exactly as before.
 
 ## Tips
 

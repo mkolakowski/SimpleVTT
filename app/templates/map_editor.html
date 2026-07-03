@@ -1158,8 +1158,27 @@
       rc.style.pointerEvents = active ? 'all' : 'none';
       rc.style.cursor = 'pointer';
       rc.addEventListener('click', function (e) {
-        if (eraseMode) { e.stopPropagation(); terrain.splice(i, 1); saveTerrain(); }
+        if (eraseMode) {
+          e.stopPropagation();
+          if (selectedTerrain === tr) selectedTerrain = null;  // v2.851.0
+          terrain.splice(i, 1); saveTerrain();
+        }
       });
+      // v2.851.0 — double-click selects (the terrain type select edits it).
+      rc.addEventListener('dblclick', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        selectTerrain(selectedTerrain === tr ? null : tr);
+      });
+      // Dashed white outline on the dbl-click-selected region.
+      if (selectedTerrain === tr) {
+        var selOut = rc.cloneNode(false);
+        selOut.setAttribute('fill', 'none');
+        selOut.setAttribute('stroke', '#fff'); selOut.setAttribute('stroke-width', '2');
+        selOut.setAttribute('stroke-dasharray', '5 4');
+        selOut.style.pointerEvents = 'none';
+        selOut.classList.remove('me-terrain');
+        svg.appendChild(selOut);
+      }
       rc.addEventListener('contextmenu', function (e) {
         e.preventDefault(); e.stopPropagation();
         var typeItems = TERRAIN_TYPES.map(function (t) {
@@ -1177,7 +1196,10 @@
             } },
           { label: '⛰ Terrain — ↔ Move', fn: function () { startMove('terrain', tr); } },
           { label: '⛰ Terrain type', sub: typeItems },
-          { label: '🗑 Delete', fn: function () { terrain.splice(i, 1); saveTerrain(); } },
+          { label: '🗑 Delete', fn: function () {
+              if (selectedTerrain === tr) selectedTerrain = null;  // v2.851.0
+              terrain.splice(i, 1); saveTerrain();
+            } },
         ]);
       });
       svg.appendChild(rc);
@@ -1307,7 +1329,22 @@
     });
     if (layers.walls) walls.forEach(function (w) {
       drawWallVisual(w);
+      // v2.851.0 — dashed white highlight along the dbl-click-selected wall.
+      if (selectedWall === w) {
+        var selLn = document.createElementNS(NS, 'line');
+        selLn.setAttribute('x1', w.x1); selLn.setAttribute('y1', w.y1);
+        selLn.setAttribute('x2', w.x2); selLn.setAttribute('y2', w.y2);
+        selLn.setAttribute('stroke', '#fff'); selLn.setAttribute('stroke-width', '2');
+        selLn.setAttribute('stroke-dasharray', '5 4');
+        selLn.style.pointerEvents = 'none';
+        svg.appendChild(selLn);
+      }
       var hit = mkHitLine(w);
+      // v2.851.0 — double-click selects (the Walls material select edits it).
+      hit.addEventListener('dblclick', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        selectWall(selectedWall === w ? null : w);
+      });
       hit.addEventListener('pointerdown', function (e) {
         if (e.button !== 0) return;  // v2.781.1 — leave right-click for the menu
         if (eraseMode || !(wallMode || doorMode)) return;  // drag-move only in a draw mode
@@ -2096,7 +2133,11 @@
     if (r) r.disabled = _histIdx >= _hist.length - 1;
   }
   // v2.770.0 — object delete + move (via erase mode / right-click menu).
-  function deleteWall(w) { walls = walls.filter(function (x) { return x.id !== w.id; }); saveWalls(); }
+  function deleteWall(w) {
+    if (selectedWall === w) selectedWall = null;  // v2.851.0
+    walls = walls.filter(function (x) { return x.id !== w.id; });
+    saveWalls();
+  }
   function deleteHotspot(h) { hotspots = hotspots.filter(function (x) { return x.id !== h.id; }); saveHotspots(); }
   function deleteLight(L) {
     if (selectedLight === L) selectLight(null);  // v2.850.0
@@ -2242,6 +2283,33 @@
     setStatus(L ? 'Light selected — the Markers controls edit it (Esc deselects).' : '');
     render();
   }
+  // v2.851.0 — same select-to-edit for walls (material) + terrain (type):
+  // double-click selects; the matching toolbar select mirrors + edits it.
+  var selectedWall = null, selectedTerrain = null;
+  function selectWall(w) {
+    selectedWall = w;
+    if (w) {
+      var s = document.getElementById('me-wall-style');
+      if (s) s.value = w.style || 'stone';
+    }
+    setStatus(w ? 'Wall selected — the material select edits it (Esc deselects).' : '');
+    render();
+  }
+  function selectTerrain(tr) {
+    selectedTerrain = tr;
+    if (tr) {
+      var s = document.getElementById('me-terrain-type');
+      if (s) s.value = tr.type || 'difficult';
+    }
+    setStatus(tr ? 'Terrain selected — the terrain type select edits it (Esc deselects).' : '');
+    render();
+  }
+  function clearObjectSelection() {
+    var had = selectedLight || selectedWall || selectedTerrain;
+    selectedLight = null; selectedWall = null; selectedTerrain = null;
+    if (had) { syncLightToolbar(); setStatus(''); render(); }
+    return !!had;
+  }
   // Live edits from the toolbar onto the selection: any divergence from every
   // preset flips the light to custom.
   function editSelectedLight(mut) {
@@ -2259,6 +2327,16 @@
   var doorBtn = document.getElementById('me-door-btn');
   var roomBtn = document.getElementById('me-room-btn');
   var styleSel = document.getElementById('me-wall-style');
+  // v2.851.0 — when a wall is dbl-click-selected, the material select edits it
+  // (with nothing selected it stays the default for NEW walls, as before).
+  if (styleSel) styleSel.addEventListener('change', function () {
+    if (selectedWall) { selectedWall.style = styleSel.value; saveWalls(); }
+  });
+  // v2.851.0 — same for terrain: the type select edits the selected region.
+  var terrainTypeSelEl = document.getElementById('me-terrain-type');
+  if (terrainTypeSelEl) terrainTypeSelEl.addEventListener('change', function () {
+    if (selectedTerrain) { selectedTerrain.type = terrainTypeSelEl.value; saveTerrain(); }
+  });
   var spotBtn = document.getElementById('me-spot-btn');
   var snapBtn = document.getElementById('me-snap-btn');
   if (snapBtn) snapBtn.addEventListener('click', function () {
@@ -2415,11 +2493,11 @@
     }
     // v2.788.1 — Esc finishes a wall/room chain or clears the selection.
     // v2.848.0 — also cancels pending quad-corner dots.
-    // v2.850.0 — also deselects the dbl-click-selected light.
+    // v2.850.0/v2.851.0 — also deselects the dbl-click-selected object.
     if (e.key === 'Escape') {
       if (terrainDots.length) { terrainDots = []; setStatus(''); render(); }
       else if (pending) { pending = null; render(); }
-      else if (selectedLight) { selectLight(null); }
+      else if (clearObjectSelection()) { /* light/wall/terrain deselected */ }
       else if (selection.length) { selection = []; render(); }
     }
   });
@@ -2451,7 +2529,9 @@
     if (fogResetBtn) fogResetBtn.style.display = (fogMode && fogDynamic) ? 'inline-flex' : 'none';
     pending = null; fogDrag = null;
     terrainDots = [];  // v2.848.0 — abandon a half-placed quad on tool change
-    if (selectedLight) { selectedLight = null; syncLightToolbar(); }  // v2.850.0
+    // v2.850.0/v2.851.0 — tool changes drop any dbl-click object selection.
+    selectedLight = null; selectedWall = null; selectedTerrain = null;
+    syncLightToolbar();
     syncStageCursor(); render();
   }
   var fogOnLbl = document.getElementById('me-fog-on-lbl');
@@ -2993,11 +3073,11 @@
   }
   document.getElementById('me-zoom-fit').addEventListener('click', fitContain);
   var stage = document.getElementById('me-stage');
-  // v2.850.0 — double-clicking empty map deselects the selected light (the
-  // light hit-circles stopPropagation their own dblclick, so this only fires
-  // for non-light double-clicks).
+  // v2.850.0/v2.851.0 — double-clicking empty map deselects any dbl-click
+  // selection (object hit-elements stopPropagation their own dblclick, so
+  // this only fires for empty-map double-clicks).
   stage.addEventListener('dblclick', function () {
-    if (selectedLight) selectLight(null);
+    clearObjectSelection();
   });
   stage.addEventListener('wheel', function (e) {
     // v2.830.0 — the scroll wheel zooms the map (toward the cursor). Drag / the
