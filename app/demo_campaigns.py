@@ -64,8 +64,25 @@ _GOBLIN_WARRENS = {
              "been raiding the trade road from a warren of tunnels. Each PC "
              "shows off a feature their class gains around level 3. Demo "
              "campaign — resets on a fixed interval."),
+    # v2.840.0 — dungeon showcase: cave walls with a swinging door + a hidden
+    # secret door, a trapped-floor hotspot, and a GM-only ambush pin.
     "map": {"name": "The Goblin Warrens (entrance)", "width": 1400, "height": 1000,
-            "image": "/static/demo/maps/goblin-warrens.png"},
+            "image": "/static/demo/maps/goblin-warrens.png",
+            "walls": [
+                {"id": "gw-w1", "x1": 140, "y1": 140, "x2": 700, "y2": 140, "style": "cave"},
+                {"id": "gw-w2", "x1": 140, "y1": 140, "x2": 140, "y2": 700, "style": "cave"},
+                {"id": "gw-w3", "x1": 140, "y1": 700, "x2": 1260, "y2": 700, "style": "cave"},
+                {"id": "gw-d1", "x1": 700, "y1": 140, "x2": 700, "y2": 280,
+                 "door": True, "open": False, "style": "wood"},
+                {"id": "gw-s1", "x1": 1120, "y1": 420, "x2": 1120, "y2": 560,
+                 "door": True, "secret": True, "style": "cave"}],
+            "hotspots": [
+                {"id": "gw-h1", "x": 490, "y": 490, "label": "Pit trap",
+                 "description": "A covered pit. DC 13 DEX save or fall 10 ft (2d6 bludgeoning).",
+                 "roll": "1d20"}],
+            "gm_pins": [
+                {"id": "gw-p1", "x": 910, "y": 350, "label": "Ambush",
+                 "note": "Three goblins fire from the ledge the moment the party crosses the hall."}]},
     "party": [
         {"owner": "gm", "name": "Thorin Battlehammer",
          "image": "/static/demo/tokens/l3-thorin.png", "sheet": dict(
@@ -205,8 +222,21 @@ _STORM_SALTMARSH = {
              "Each PC shows off a feature gained around level 9 — most "
              "notably full casters' first 5th-level spells. Demo campaign — "
              "resets on a fixed interval."),
+    # v2.840.0 — open-water showcase: water + difficult (kelp) terrain regions,
+    # public text labels, and a hotspot marking the sunken wreck.
     "map": {"name": "The Drowned Reef", "width": 1600, "height": 1100,
-            "image": "/static/demo/maps/drowned-reef.png"},
+            "image": "/static/demo/maps/drowned-reef.png",
+            "terrain": [
+                {"id": "dr-t1", "x": 140, "y": 770, "w": 1330, "h": 210, "type": "water"},
+                {"id": "dr-t2", "x": 980, "y": 210, "w": 350, "h": 350, "type": "difficult"}],
+            "labels": [
+                {"id": "dr-lb1", "x": 210, "y": 840, "text": "Deep channel",
+                 "size": 32, "color": "#bae6fd"},
+                {"id": "dr-lb2", "x": 1050, "y": 280, "text": "Kelp forest",
+                 "size": 28, "color": "#86efac"}],
+            "hotspots": [
+                {"id": "dr-h1", "x": 700, "y": 490, "label": "Sunken wreck",
+                 "description": "A shattered hull. A DC 15 Investigation turns up a waterlogged chest."}]},
     "party": [
         {"owner": "dave", "name": "Vaelith Stormscale",
          "image": "/static/demo/tokens/l9-vaelith.png", "sheet": dict(
@@ -359,8 +389,24 @@ _SHADOWFELL_SPIRE = {
              "spill out. Each PC shows off a feature gained around level 13 — "
              "full casters' first 7th-level spells, and tier-3 martial power. "
              "Demo campaign — resets on a fixed interval."),
+    # v2.840.0 — dark-tower showcase: ambient dark with coloured brazier lights,
+    # fog of war (revealed generously over the play area so the live view stays
+    # visible), and a GM-only pin.
     "map": {"name": "The Shadowfell Spire (threshold)", "width": 1600, "height": 1200,
-            "image": "/static/demo/maps/shadowfell-spire.png"},
+            "image": "/static/demo/maps/shadowfell-spire.png",
+            "ambient_light": "dark",
+            "lights": [
+                {"id": "ss-l1", "x": 350, "y": 350, "bright_ft": 20, "dim_ft": 40,
+                 "color": "#a855f7", "type": "torch"},
+                {"id": "ss-l2", "x": 1250, "y": 350, "bright_ft": 20, "dim_ft": 40,
+                 "color": "#a855f7", "type": "torch"},
+                {"id": "ss-l3", "x": 800, "y": 700, "bright_ft": 15, "dim_ft": 30,
+                 "color": "#38bdf8", "type": "candle"}],
+            "fog_enabled": True,
+            "fog_revealed": [{"x": 70, "y": 200, "w": 1460, "h": 560}],
+            "gm_pins": [
+                {"id": "ss-p1", "x": 800, "y": 910, "label": "Shadow gate",
+                 "note": "The rift opens on round 3; a shadow demon steps through."}]},
     "party": [
         {"owner": "bob", "name": "Maelen Farsight",
          "image": "/static/demo/tokens/l13-maelen.png", "sheet": dict(
@@ -519,8 +565,27 @@ _DRAGONS_APOTHEOSIS = {
              "stop it. Each PC shows off a high-tier feature — full casters' "
              "9th-level spells and martial capstones. Demo campaign — resets "
              "on a fixed interval."),
+    # v2.840.0 — volcano showcase: lava terrain regions, fiery glow lights, a
+    # public warning label, and a hotspot for the erupting vent.
     "map": {"name": "The Caldera Throne", "width": 1800, "height": 1300,
-            "image": "/static/demo/maps/caldera-throne.png"},
+            "image": "/static/demo/maps/caldera-throne.png",
+            "terrain": [
+                {"id": "ct-t1", "x": 140, "y": 910, "w": 1520, "h": 250, "type": "lava"},
+                {"id": "ct-t2", "x": 770, "y": 210, "w": 280, "h": 280, "type": "lava"}],
+            "lights": [
+                {"id": "ct-l1", "x": 280, "y": 1030, "bright_ft": 15, "dim_ft": 30,
+                 "color": "#f97316", "type": "torch"},
+                {"id": "ct-l2", "x": 1540, "y": 1030, "bright_ft": 15, "dim_ft": 30,
+                 "color": "#f97316", "type": "torch"},
+                {"id": "ct-l3", "x": 910, "y": 350, "bright_ft": 20, "dim_ft": 40,
+                 "color": "#fb923c", "type": "lamp"}],
+            "labels": [
+                {"id": "ct-lb1", "x": 700, "y": 990, "text": "Lava flow",
+                 "size": 34, "color": "#fdba74"}],
+            "hotspots": [
+                {"id": "ct-h1", "x": 910, "y": 350, "label": "Erupting vent",
+                 "description": "Bursts every other round. DC 15 DEX save or 4d6 fire.",
+                 "roll": "1d20"}]},
     "party": [
         {"owner": "gm", "name": "Archmagus Selene",
          "image": "/static/demo/tokens/l18-selene.png", "sheet": dict(
@@ -687,8 +752,17 @@ _TIDEWRACKED_CATACOMBS = {
              "class gains at level 5 (Extra Attack, 3rd-level spells, Uncanny "
              "Dodge). The remade Level-5 demo — the original 'Sundered Vault' "
              "is kept as an archived example. Resets on a fixed interval."),
+    # v2.840.0 — flooded-crypt showcase: standing-water terrain, fog of war
+    # (revealed generously over the play area), and a lantern light source.
     "map": {"name": "The Tide-Wracked Catacombs", "width": 1400, "height": 1000,
-            "image": "/static/demo/maps/tide-wracked-catacombs.png"},
+            "image": "/static/demo/maps/tide-wracked-catacombs.png",
+            "terrain": [
+                {"id": "tc-t1", "x": 140, "y": 630, "w": 1120, "h": 210, "type": "water"}],
+            "lights": [
+                {"id": "tc-l1", "x": 700, "y": 420, "bright_ft": 20, "dim_ft": 40,
+                 "color": "#fde68a", "type": "lantern"}],
+            "fog_enabled": True,
+            "fog_revealed": [{"x": 70, "y": 200, "w": 1260, "h": 560}]},
     "party": [
         {"owner": "gm", "name": "Sir Gareth Tidebreaker",
          "image": "/static/demo/tokens/l5tide-gareth.png", "sheet": dict(
@@ -834,6 +908,37 @@ def campaign_names() -> list[str]:
     return [s["name"] for s in CAMPAIGN_SPECS]
 
 
+def _apply_map_elements(m: Map, mp: dict) -> None:
+    """v2.840.0 — copy any editor-element lists present on a spec's ``map`` dict
+    onto the Map so every demo board ships pre-furnished with the map editor's
+    element families (walls/doors, lights, terrain, fog, hotspots, GM pins,
+    labels) instead of a blank grid.
+
+    Each list is run through the **same sanitizer the PUT endpoint uses** so the
+    stored shape is guaranteed to match what a real editor save produces (default
+    keys filled, coords coerced to floats) — a hand-written literal that omitted
+    e.g. ``door``/``secret`` would otherwise reach clients missing those keys."""
+    # Lazy import to avoid a circular import at module load (tabletop_routes
+    # pulls in a large slice of the app).
+    from .routes import tabletop_routes as _tr
+    _SANITIZERS = {
+        "walls": _tr._sanitize_wall_segments,
+        "lights": _tr._sanitize_lights,
+        "terrain": _tr._sanitize_terrain,
+        "hotspots": _tr._sanitize_hotspots,
+        "gm_pins": _tr._sanitize_gm_pins,
+        "labels": _tr._sanitize_labels,
+        "fog_revealed": _tr._sanitize_fog_rects,
+    }
+    for col, sanitize in _SANITIZERS.items():
+        if mp.get(col):
+            setattr(m, col, sanitize(mp[col]))
+    if mp.get("fog_enabled"):
+        m.fog_enabled = True
+    if mp.get("ambient_light"):
+        m.ambient_light = mp["ambient_light"]
+
+
 def _seed_one(db: Session, spec: dict, users: dict[str, User]) -> Campaign:
     gm = users[spec["gm"]]
     camp = Campaign(
@@ -860,6 +965,7 @@ def _seed_one(db: Session, spec: dict, users: dict[str, User]) -> Campaign:
         # ON: paint the canvas background the map image's average colour.
         letterbox_color=average_image_color(mp.get("image")),
     )
+    _apply_map_elements(m, mp)
     db.add(m)
     db.flush()
     camp.active_map_id = m.id

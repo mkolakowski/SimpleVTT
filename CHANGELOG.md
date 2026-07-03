@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.840.0] - 2026-07-02 — "The Furnished Board"
+
+**Schema version:** 96
+
+**Commit summary:** Seed every demo map with a themed mix of map-editor elements so the editor's features are visible on first open.
+
+**Description:** Every one of the six demo maps used to ship blank — just an image, a grid, and tokens — so a visitor opening a demo campaign saw none of the map editor's headline capabilities. This furnishes each demo board with a **themed, believable subset** of editor elements, chosen so the six maps *collectively* demonstrate all seven active element families (walls/doors, lights, terrain, fog of war, hotspots, GM pins, labels). The **Sundered Tavern** gets a walled common room with a wooden door + a hidden cellar door, hearth/candle lights, and public labels. **Goblin Warrens** shows cave walls with a secret door, a pit-trap hotspot, and a GM ambush pin. **Tide-Wracked Catacombs** shows standing-water terrain under fog of war with a lantern. **Drowned Reef** shows water + kelp terrain with labels and a wreck hotspot. **Shadowfell Spire** shows coloured brazier lights in ambient dark under fog. **Caldera Throne** shows lava terrain with fire-glow lights and a warning label. Props are intentionally skipped (the tool is parked). Each seed list is run through the **same sanitizer the PUT endpoints use** (`_sanitize_wall_segments` / `_sanitize_lights` / …) so the stored shape is guaranteed to match a real editor save — no hand-written literal can reach clients missing a defaulted key. Fog is revealed generously over the play area so the live view is never blacked out.
+
+### Added
+- `app/demo_campaigns.py` — `_apply_map_elements(m, mp)` helper copies optional `walls`/`lights`/`terrain`/`hotspots`/`gm_pins`/`labels`/`fog_revealed` (+ `fog_enabled`/`ambient_light`) off each spec's `map` dict onto the Map; called from `_seed_one`. The five leveled specs gain themed element data.
+- `app/demo_seed.py` — the flagship `seed_map` sets inline `walls`/`lights`/`labels` for the Sundered Tavern.
+- `tests/harness/test_demo_map_elements.py` (new, +3) — discovers the leveled demo campaigns by name (via `/api/user/gm-campaigns`, since campaign 1 is the shared harness playground) and asserts the Goblin Warrens ships well-formed walls (incl. a door + a secret door) + a hotspot, the Caldera Throne ships lava terrain + lights + labels, and that a non-GM member sees the player-visible layers while GM pins never leak into the bootstrap.
+
+### Schema
+- No schema change (still v96 — demo seed content only; reuses existing element columns).
+
 ## [2.839.0] - 2026-07-02 — "The Whole Map"
 
 **Schema version:** 96

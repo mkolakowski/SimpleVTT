@@ -416,6 +416,35 @@ def seed_map(db: Session, camp: Campaign) -> Map:
         # v2.733.0 — ship with the "match surround to map" toggle ON.
         letterbox_color=average_image_color("/static/demo/maps/tavern.png"),
     )
+    # v2.840.0 — furnish the flagship map so the editor's element families are
+    # visible on first open: a walled common room with a wooden door + a hidden
+    # cellar door, hearth/candle lights, and public labels. Routed through the
+    # shared applicator (which runs each list through the tabletop_routes
+    # sanitizers) so the stored shape matches a real editor save.
+    from .demo_campaigns import _apply_map_elements
+    _apply_map_elements(m, {
+        "walls": [
+            {"id": "tv-w1", "x1": 210, "y1": 210, "x2": 1050, "y2": 210, "style": "wood"},
+            {"id": "tv-w2", "x1": 210, "y1": 210, "x2": 210, "y2": 1050, "style": "wood"},
+            {"id": "tv-w3", "x1": 1050, "y1": 210, "x2": 1050, "y2": 1050, "style": "wood"},
+            {"id": "tv-w4", "x1": 210, "y1": 1050, "x2": 1050, "y2": 1050, "style": "wood"},
+            {"id": "tv-d1", "x1": 560, "y1": 1050, "x2": 700, "y2": 1050,
+             "door": True, "open": False, "style": "wood"},
+            {"id": "tv-s1", "x1": 1050, "y1": 700, "x2": 1050, "y2": 840,
+             "door": True, "secret": True, "style": "stone"},
+        ],
+        "lights": [
+            {"id": "tv-l1", "x": 350, "y": 350, "bright_ft": 20, "dim_ft": 40,
+             "color": "#f59e0b", "type": "torch"},
+            {"id": "tv-l2", "x": 910, "y": 350, "bright_ft": 10, "dim_ft": 20,
+             "color": "#fbbf24", "type": "candle"},
+        ],
+        "labels": [
+            {"id": "tv-lb1", "x": 350, "y": 490, "text": "Hearth", "size": 30, "color": "#fca5a5"},
+            {"id": "tv-lb2", "x": 630, "y": 280, "text": "The Bar", "size": 34, "color": "#fef3c7"},
+            {"id": "tv-lb3", "x": 630, "y": 980, "text": "Cellar", "size": 26, "color": "#d1d5db"},
+        ],
+    })
     db.add(m)
     db.flush()
     camp.active_map_id = m.id
