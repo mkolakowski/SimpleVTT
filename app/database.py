@@ -1147,6 +1147,17 @@ def _apply_inline_migrations() -> None:
                 "ALTER TABLE maps ADD COLUMN fog_explored JSON NOT NULL DEFAULT '[]'"
             ))
 
+    # ---- Schema v98 (2.858.0): maps.terrain_hidden ----
+    # Terrain overlays are hidden from players by default (the GM always sees
+    # them); a GM toggle reveals them. Additive; default TRUE.
+    maps_cols_v98 = _column_names("maps")
+    with engine.begin() as conn:
+        if maps_cols_v98 and "terrain_hidden" not in maps_cols_v98:
+            conn.execute(text(
+                "ALTER TABLE maps ADD COLUMN terrain_hidden "
+                "BOOLEAN NOT NULL DEFAULT TRUE"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

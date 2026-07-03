@@ -421,6 +421,11 @@ class Map(Base):
     # rectangles ({id, x, y, w, h, type}) marking difficult terrain / water /
     # lava / etc. Presentation + reference only (movement isn't enforced).
     terrain: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
+    # v2.858.0 — terrain is hidden from players by default (the GM always sees
+    # it). A GM toggle in the tabletop's GM Tools drawer flips this to reveal
+    # the terrain overlays to players live.
+    terrain_hidden: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true")
     # v2.790.0 — GM-only pins: a JSON list of {id, x, y, label, note} markers
     # the GM sees on the map (trap DCs, plot reminders). NEVER sent to players
     # (the GET is GM-gated; edits broadcast only a data-less "changed" signal).

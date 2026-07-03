@@ -124072,6 +124072,34 @@ async def settings_map_weather(
     return {"ok": True, "map_id": m.id, "weather": m.weather}
 
 
+@router.post("/campaign/{campaign_id}/settings/maps/{map_id}/terrain_visibility")
+async def settings_map_terrain_visibility(
+    campaign_id: int,
+    map_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.858.0 — reveal/hide the map's terrain overlays for players (GM-only).
+    Terrain is hidden from players by default; the GM always sees it. Body:
+    ``{hidden: bool}``. Broadcasts ``terrain_visibility_update`` so clients
+    re-render live."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404)
+    body = await request.json()
+    m.terrain_hidden = bool(body.get("hidden"))
+    db.commit()
+    await hub.broadcast(campaign_id, {
+        "type": "terrain_visibility_update",
+        "data": {"map_id": m.id, "terrain_hidden": bool(m.terrain_hidden)},
+    })
+    return {"ok": True, "map_id": m.id, "terrain_hidden": bool(m.terrain_hidden)}
+
+
 @router.post("/campaign/{campaign_id}/settings/maps/{map_id}/ambient_light")
 async def settings_map_ambient_light(
     campaign_id: int,
@@ -124176,6 +124204,7 @@ def get_active_map(
         "fog_revealed": list(getattr(m, "fog_revealed", None) or []),
         "fog_explored": list(getattr(m, "fog_explored", None) or []),
         "terrain": list(getattr(m, "terrain", None) or []),
+        "terrain_hidden": bool(getattr(m, "terrain_hidden", True)),
         "props": list(getattr(m, "props", None) or []),
         "labels": list(getattr(m, "labels", None) or []),
         "weather": getattr(m, "weather", "") or "",

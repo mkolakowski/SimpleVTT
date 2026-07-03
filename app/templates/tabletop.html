@@ -2404,6 +2404,7 @@
         var hotspots = [], spotMode = false;  // v2.756.0 — clickable hotspots
         var grab = null, suppressClick = false;  // v2.759.0 — drag-to-move
         var terrain = [];  // v2.789.2 — terrain regions
+        var terrainHidden = true;  // v2.858.0 — hidden from players by default; GM reveals
         var TERRAIN_TYPES = {
             difficult: '#8a6d3b', water: '#3b6ea5', lava: '#d1481f',
             ice: '#7fc7d9', swamp: '#4b6b3a', rubble: '#77726a',
@@ -2566,8 +2567,12 @@
             while (svg.firstChild) svg.removeChild(svg.firstChild);
             // v2.789.2 — terrain regions (under walls/tokens): translucent
             // coloured rects + a label; non-interactive. v2.848.0 — a region
-            // with ``points`` (4 corner pairs) renders as a free-form quad.
-            terrain.forEach(function (tr) {
+            // with ``points`` renders as a free-form polygon.
+            // v2.858.0 — terrain is hidden from players by default; the GM
+            // always sees it (dimmer + a 🔒 label when players can't).
+            var terrainVisible = IS_GM || !terrainHidden;
+            var terrainLocked = terrainHidden;  // hidden from players right now
+            if (terrainVisible) terrain.forEach(function (tr) {
                 var col = terrainColor(tr.type);
                 var rc;
                 if (Array.isArray(tr.points) && tr.points.length >= 3) {  // v2.855.0 — N-gon
@@ -2580,16 +2585,18 @@
                     rc.setAttribute('x', tr.x); rc.setAttribute('y', tr.y);
                     rc.setAttribute('width', tr.w); rc.setAttribute('height', tr.h);
                 }
-                rc.setAttribute('fill', col); rc.setAttribute('fill-opacity', '0.28');
+                rc.setAttribute('fill', col);
+                rc.setAttribute('fill-opacity', terrainLocked ? '0.16' : '0.28');
                 rc.setAttribute('stroke', col); rc.setAttribute('stroke-width', '2');
-                rc.setAttribute('stroke-dasharray', '7 5');
+                rc.setAttribute('stroke-dasharray', terrainLocked ? '3 6' : '7 5');
                 rc.style.pointerEvents = 'none';
                 svg.appendChild(rc);
                 var lbl = document.createElementNS(NS, 'text');
                 lbl.setAttribute('x', tr.x + 5); lbl.setAttribute('y', tr.y + 16);
                 lbl.setAttribute('fill', col); lbl.setAttribute('font-size', '13');
                 lbl.setAttribute('font-weight', '700'); lbl.style.pointerEvents = 'none';
-                lbl.textContent = (tr.type || 'difficult').charAt(0).toUpperCase() + (tr.type || 'difficult').slice(1);
+                lbl.textContent = (terrainLocked ? '🔒 ' : '')
+                    + (tr.type || 'difficult').charAt(0).toUpperCase() + (tr.type || 'difficult').slice(1);
                 svg.appendChild(lbl);
             });
             // v2.793.0 — decorative prop stamps (emoji glyphs), above terrain
@@ -2753,6 +2760,8 @@
                 var d = await r.json();
                 mapId = d.map_id; walls = d.walls || [];
                 hotspots = d.hotspots || []; terrain = d.terrain || [];
+                terrainHidden = (d.terrain_hidden !== false);  // v2.858.0 — default hidden
+                if (typeof _syncTerrainRevealBtn === 'function') _syncTerrainRevealBtn();
                 props = d.props || []; labels = d.labels || []; render();
                 applyWeather(d.weather || '');  // v2.808.0 — start/stop the weather overlay
                 fetchGmPins();  // v2.790.2 — GM-only (no-op for players)
@@ -2854,6 +2863,30 @@
             if (!data) return;
             terrain = data.terrain || []; render();
         };
+        // v2.858.0 — GM reveal-terrain toggle: the flag + live update + a GM
+        // Tools button. Terrain is hidden from players until the GM reveals it.
+        window._onTerrainVisibilityUpdate = function (data) {
+            if (!data) return;
+            terrainHidden = !!data.terrain_hidden;
+            _syncTerrainRevealBtn();
+            render();
+        };
+        function _syncTerrainRevealBtn() {
+            var btn = document.getElementById('terrain-reveal-btn');
+            if (!btn) return;
+            btn.textContent = terrainHidden ? '🙈 Hidden from players' : '👁 Revealed to players';
+            btn.setAttribute('aria-pressed', terrainHidden ? 'false' : 'true');
+            btn.classList.toggle('active', !terrainHidden);
+        }
+        function setTerrainVisibility(hidden) {
+            if (!mapId) return;
+            terrainHidden = hidden; _syncTerrainRevealBtn(); render();  // optimistic
+            fetch('/campaign/' + CID + '/settings/maps/' + mapId + '/terrain_visibility', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ hidden: hidden }),
+            }).catch(function () {});
+        }
+        window.setTerrainVisibility = setTerrainVisibility;
         window._onPropsUpdate = function (data) {  // v2.793.0
             if (!data) return;
             props = data.props || []; render();
@@ -4982,6 +5015,22 @@
                 <button type="button" data-wx="fog" onclick="setLiveWeather('fog')" style="font-size:12px;padding:6px 10px;min-height:32px;">🌫 Fog</button>
             </div>
             </div><!-- /gm-panel-body (weather) -->
+        </details>
+
+        {# v2.858.0 — GM reveal-terrain toggle. Terrain overlays are hidden from
+           players by default; this reveals/hides them live. #}
+        <details id="terrain-vis-panel" class="gm-panel" open>
+            <summary>
+                <span style="font-size:9px;color:var(--fg-mute);transition:transform .15s;">▼</span>
+                <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">⛰ Terrain</h4>
+            </summary>
+            <div class="gm-panel-body">
+            <style>#terrain-reveal-btn.active{background:var(--accent);color:#0b0f14;border-color:var(--accent);}</style>
+            <button type="button" id="terrain-reveal-btn" aria-pressed="false"
+                    onclick="setTerrainVisibility(document.getElementById('terrain-reveal-btn').getAttribute('aria-pressed')==='true')"
+                    title="Toggle whether players see the terrain overlays (difficult / water / lava…). Hidden from players by default; you always see them."
+                    style="font-size:12px;padding:6px 10px;min-height:32px;width:100%;">🙈 Hidden from players</button>
+            </div><!-- /gm-panel-body (terrain) -->
         </details>
         {% endif %}
 

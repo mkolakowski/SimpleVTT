@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.858.0] - 2026-07-03 — "The Hidden Ground"
+
+**Schema version:** 98
+
+**Commit summary:** Terrain overlays are now hidden from players by default with a GM "reveal to players" toggle in the tabletop's GM Tools drawer.
+
+**Description:** Terrain regions (difficult / water / lava / ice / swamp / rubble) used to render for everyone. Now they're **hidden from players by default** — the **GM always sees them** (rendered dimmer with a 🔒 on the label so you know players can't) — and a new **⛰ Terrain** panel in the tabletop's GM Tools drawer toggles **"reveal to players" / "hidden from players"** live. The state is a per-map flag (`Map.terrain_hidden`, default true) persisted across reloads/resets and broadcast to every client, so revealing a hazard drops it onto the players' boards instantly. Modeled end-to-end on the Weather live control.
+
+### Added
+- `app/models.py` — `Map.terrain_hidden` (bool, default true). `app/database.py` — schema **v98** migration (`ALTER TABLE maps ADD COLUMN terrain_hidden BOOLEAN NOT NULL DEFAULT TRUE`).
+- `app/routes/tabletop_routes.py` — `POST …/settings/maps/{mid}/terrain_visibility` (GM-only) → sets the flag + broadcasts `terrain_visibility_update`; `terrain_hidden` surfaced on `/active-map`.
+- `app/templates/tabletop.html` — terrain render gated on `IS_GM || !terrainHidden` (GM sees a dimmed 🔒 style when hidden); GM Tools ⛰ Terrain toggle + `setTerrainVisibility` + `_onTerrainVisibilityUpdate`. `app/static/tabletop.js` — routes the `terrain_visibility_update` WS event.
+- `tests/harness/test_terrain_visibility.py` (new, +3) — toggle round-trips + `/active-map` carries it + broadcast shape, GM-only (player → 403), unknown-map 404. `tests/harness_ui/test_terrain_visibility.py` (new, +1) — a player sees no terrain while hidden, the GM does, and a GM reveal shows it to the player live.
+
+### Changed
+- `docs/wiki/map-editor-tour.md` — Terrain row notes players-hidden-by-default + the GM reveal.
+
+### Schema
+- **v98:** `maps.terrain_hidden` (BOOLEAN, default TRUE). Additive; existing maps default to hidden-from-players.
+
 ## [2.857.0] - 2026-07-03 — "The Drawn Radius"
 
 **Schema version:** 97

@@ -5698,6 +5698,11 @@
                 if (msg.data && typeof window._onTerrainUpdate === 'function') {
                     try { window._onTerrainUpdate(msg.data); } catch (_) {}
                 }
+            } else if (msg.type === 'terrain_visibility_update') {
+                // v2.858.0 — GM revealed/hid terrain for players.
+                if (msg.data && typeof window._onTerrainVisibilityUpdate === 'function') {
+                    try { window._onTerrainVisibilityUpdate(msg.data); } catch (_) {}
+                }
             } else if (msg.type === 'gm_pins_changed') {
                 // v2.790.2 — GM pins changed: GM clients re-fetch (data-less
                 // signal; players' handler is a no-op / the GET is GM-gated).
