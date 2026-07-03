@@ -426,6 +426,13 @@ class Map(Base):
     # the terrain overlays to players live.
     terrain_hidden: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true")
+    # v2.869.0 — lair-action zones: a JSON list of areas (like terrain, but with
+    # a label + associated lair-action ids) that mark where a creature's lair
+    # actions strike. Placed in the map editor; render as a toggleable overlay
+    # on the tabletop (each client shows/hides locally) and drive AoE targeting
+    # when a lair action fires. Shape: {id, x, y, w, h, points?, label, actions[]}.
+    lair_zones: Mapped[list] = mapped_column(
+        JSON, default=list, server_default="[]")
     # v2.790.0 — GM-only pins: a JSON list of {id, x, y, label, note} markers
     # the GM sees on the map (trap DCs, plot reminders). NEVER sent to players
     # (the GET is GM-gated; edits broadcast only a data-less "changed" signal).

@@ -1158,6 +1158,17 @@ def _apply_inline_migrations() -> None:
                 "BOOLEAN NOT NULL DEFAULT TRUE"
             ))
 
+    # ---- Schema v99 (2.869.0): maps.lair_zones ----
+    # Lair-action zones: labelled areas (like terrain) carrying a list of
+    # associated lair-action ids, used as a toggleable tabletop overlay and to
+    # drive AoE targeting when a lair action fires. Additive; default '[]'.
+    maps_cols_v99 = _column_names("maps")
+    with engine.begin() as conn:
+        if maps_cols_v99 and "lair_zones" not in maps_cols_v99:
+            conn.execute(text(
+                "ALTER TABLE maps ADD COLUMN lair_zones JSON NOT NULL DEFAULT '[]'"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

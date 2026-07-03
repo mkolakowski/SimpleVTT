@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.869.0] - 2026-07-03 — "The Marked Ground"
+
+**Schema version:** 99
+
+**Commit summary:** Foundation for the lair-action zone layer — a new per-map `lair_zones` element type with storage + read/write endpoints.
+
+**Description:** Phase 1 of the requested lair-action layer (place zones like terrain, bind lair actions to them, toggle the overlay, drive targeting). This commit lays the backend: a new **`lair_zones`** JSON column on the maps table (schema v99, additive) storing labelled areas that mirror terrain geometry — a rect or a 3–40-vertex polygon (bbox recomputed from the points) — plus a `label` and an `actions` list of the lair-action ids the zone is bound to. New GM-only **`PUT /api/campaign/{cid}/map/{mid}/lair_zones`** (sanitizes + persists + broadcasts `lair_zones_update`), a member-readable **`GET`** of the same path, and the field is surfaced on `/active-map` and the editor page render. The editor tool, tabletop overlay + toggle, and trigger-time targeting land in the following phases.
+
+### Added
+- `app/models.py` — `Map.lair_zones` JSON column.
+- `app/database.py` — schema v99 migration (`ALTER TABLE maps ADD COLUMN lair_zones`).
+- `app/routes/tabletop_routes.py` — `_sanitize_lair_zones`, `GET`/`PUT /map/{id}/lair_zones` (+ `lair_zones_update` broadcast), and `lair_zones` on `/active-map` + the editor render.
+- `tests/harness/test_map_lair_zones.py` — set/get + WS broadcast, polygon bbox round-trip + invalid-points fallback, GM-only write (player 403), unknown-map 404.
+
+### Schema
+- **Schema version → 99.** `maps.lair_zones` added (JSON, default `[]`). Additive; no data migration.
+
 ## [2.868.0] - 2026-07-03 — "The Folded Lair"
 
 **Schema version:** 98

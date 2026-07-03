@@ -124292,6 +124292,7 @@ def get_active_map(
         "fog_explored": list(getattr(m, "fog_explored", None) or []),
         "terrain": list(getattr(m, "terrain", None) or []),
         "terrain_hidden": bool(getattr(m, "terrain_hidden", True)),
+        "lair_zones": list(getattr(m, "lair_zones", None) or []),
         "props": list(getattr(m, "props", None) or []),
         "labels": list(getattr(m, "labels", None) or []),
         "weather": getattr(m, "weather", "") or "",
@@ -124794,6 +124795,110 @@ async def set_map_terrain(
     return {"ok": True, "map_id": m.id, "terrain": list(m.terrain or [])}
 
 
+def _sanitize_lair_zones(raw) -> list:
+    """v2.869.0 — coerce a client lair-zone list into the stored shape: a list
+    of ``{id, x, y, w, h, points?, label, actions[]}`` areas in map-pixel
+    coords. Geometry mirrors ``_sanitize_terrain`` (a rect, or a
+    3..``_TERRAIN_POLY_MAX``-vertex polygon whose bbox is recomputed from the
+    points). ``label`` is a short free-form name; ``actions`` is the list of
+    lair-action ids the zone is bound to — used to drive AoE targeting when the
+    matching lair action fires."""
+    out = []
+    if not isinstance(raw, list):
+        return out
+    for i, r in enumerate(raw):
+        if not isinstance(r, dict):
+            continue
+        points = None
+        rawpts = r.get("points")
+        if isinstance(rawpts, list) and 3 <= len(rawpts) <= _TERRAIN_POLY_MAX:
+            try:
+                pts = [[float(p[0]), float(p[1])] for p in rawpts
+                       if isinstance(p, (list, tuple)) and len(p) == 2]
+                if len(pts) == len(rawpts):
+                    points = pts
+            except (TypeError, ValueError, IndexError):
+                points = None
+        if points is not None:
+            xs = [p[0] for p in points]; ys = [p[1] for p in points]
+            x, y = min(xs), min(ys)
+            w, h = max(xs) - x, max(ys) - y
+            if w <= 0 or h <= 0:
+                continue
+        else:
+            try:
+                x = float(r.get("x")); y = float(r.get("y"))
+                w = float(r.get("w")); h = float(r.get("h"))
+            except (TypeError, ValueError):
+                continue
+            if w <= 0 or h <= 0:
+                continue
+        label = str(r.get("label") or "").strip()[:60]
+        actions = []
+        raw_actions = r.get("actions")
+        if isinstance(raw_actions, list):
+            for a in raw_actions[:24]:
+                s = str(a or "").strip()[:60]
+                if s:
+                    actions.append(s)
+        rec = {
+            "id": (str(r.get("id") or "").strip()[:40] or f"lz{i}"),
+            "x": x, "y": y, "w": w, "h": h,
+            "label": label, "actions": actions,
+        }
+        if points is not None:
+            rec["points"] = points
+        out.append(rec)
+    return out
+
+
+@router.get("/api/campaign/{campaign_id}/map/{map_id}/lair_zones")
+def get_map_lair_zones(
+    campaign_id: int,
+    map_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.869.0 — read a map's lair-action zones (any member)."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    m = db.query(Map).filter(
+        Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404, "Map not found")
+    return {"ok": True, "map_id": m.id,
+            "lair_zones": list(getattr(m, "lair_zones", None) or [])}
+
+
+@router.put("/api/campaign/{campaign_id}/map/{map_id}/lair_zones")
+async def set_map_lair_zones(
+    campaign_id: int,
+    map_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.869.0 — replace a map's lair-action zones (GM-only). Body:
+    ``{lair_zones: [{x,y,w,h,points?,label,actions[]}]}``. Broadcasts
+    ``lair_zones_update``."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(
+        Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404, "Map not found")
+    body = await request.json()
+    m.lair_zones = _sanitize_lair_zones(body.get("lair_zones"))
+    db.commit()
+    await hub.broadcast(campaign_id, {
+        "type": "lair_zones_update",
+        "data": {"map_id": m.id, "lair_zones": list(m.lair_zones or [])},
+    })
+    return {"ok": True, "map_id": m.id, "lair_zones": list(m.lair_zones or [])}
+
+
 def _sanitize_gm_pins(raw) -> list:
     """v2.790.0 — coerce a client GM-pin list into ``{id, x, y, label, note}``
     in map-pixel coords. Drops anything without numeric x/y."""
@@ -125112,6 +125217,7 @@ def map_editor_page(
         "fog_revealed": list(getattr(m, "fog_revealed", None) or []),
         "fog_explored": list(getattr(m, "fog_explored", None) or []),
         "terrain": list(getattr(m, "terrain", None) or []),
+        "lair_zones": list(getattr(m, "lair_zones", None) or []),
         "gm_pins": list(getattr(m, "gm_pins", None) or []),
         "props": list(getattr(m, "props", None) or []),
         "labels": list(getattr(m, "labels", None) or []),
