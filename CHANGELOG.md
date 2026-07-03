@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.853.0] - 2026-07-03 — "The Kept Layout"
+
+**Schema version:** 97
+
+**Commit summary:** Add a capture tool that snapshots the live demo maps' editor state back into paste-ready seed snippets.
+
+**Description:** Dev tooling for the "edit the demo maps live, then keep the layout" workflow. Editor changes to the leveled demo maps (moved lights, redrawn walls, reshaped/quad terrain, repositioned tokens, ambient/fog toggles) live only in the database and are wiped on the next demo reset (every rebuild + the 60-min timer reseed from code). **`scripts/capture_demo_maps.py`** (run via the **`scripts/capture_demo_maps.sh`** wrapper, which pipes it into the app container's Python for app-model + DB access) reads each of the five leveled campaigns' active map and prints a **paste-ready block** of Python literals — the `map` dict's element keys (`gridless`/`ambient_light`/`fog_*`/`walls`/`lights`/`terrain`/`hotspots`/`gm_pins`/`labels`) plus the `party_pos`/`npc_pos` token lists (rebuilt from the tokens table, split by team + ordered to match `_seed_one`) — to drop into `app/demo_campaigns.py` so the layout survives resets. Read-only (no DB mutations); the flagship tavern is skipped (it's the harness playground, seeded separately in `app/demo_seed.py`). Verified round-trip: the current DB emits snippets that match the shipped seed exactly, including the Drowned Reef's free-form `points` quad.
+
+### Added
+- `scripts/capture_demo_maps.py` + `scripts/capture_demo_maps.sh` — the DB→seed capture tool.
+- `app/demo_campaigns.py` — a pointer comment above `CAMPAIGN_SPECS` documenting the workflow.
+
+### Schema
+- No schema change (still v97 — read-only dev tooling; no app behaviour change).
+
 ## [2.852.0] - 2026-07-03 — "The Carried Flame"
 
 **Schema version:** 97

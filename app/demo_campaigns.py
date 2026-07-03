@@ -968,6 +968,11 @@ _TIDEWRACKED_CATACOMBS = {
 }
 
 
+# v2.853.0 — tweaked one of these maps live in the in-app editor (moved lights,
+# redrew walls, reshaped terrain, repositioned tokens)? Snapshot the running DB
+# back into these specs with ``scripts/capture_demo_maps.sh`` — it prints the
+# paste-ready ``map`` element keys + ``party_pos``/``npc_pos`` for each leveled
+# campaign so the change survives the demo reset.
 CAMPAIGN_SPECS = [
     _GOBLIN_WARRENS,
     _TIDEWRACKED_CATACOMBS,
