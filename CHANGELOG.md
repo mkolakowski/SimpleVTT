@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.861.0] - 2026-07-03 — "The Raised Piece"
+
+**Schema version:** 98
+
+**Commit summary:** Tokens draw as the top-most layer (above all decoration, below fog/darkness) and never render below a legible on-screen size.
+
+**Description:** Two visibility fixes that pair with the natural-resolution demo maps (v2.859.0) and auto-fit (v2.860.0). **(1) Top layer.** Map decoration — terrain regions, walls, light hotspots (`#wall-overlay` / `#light-glow-canvas`), and weather (`#weather-canvas`) — used to render **above** the token canvas, so a token could be tinted or partly hidden by the scenery over it. Tokens (plus their skull/status/target markers) now draw on a new **`#token-veil-canvas`** that sits above every decoration layer, with the **lighting + fog veil composited last on that same canvas** — so the net order is *decoration < tokens < darkness/fog*. An unexplored or unlit token is still hidden/dimmed by vision, exactly as before; the new canvas is `pointer-events:none`, so token drag and door/hotspot clicks still fall through to the interactive layers untouched. **(2) Min on-screen size.** A size-1 token is `~62px` on a `grid_size_px=70` map — tiny on a 2400px natural-res map or when zoomed out. The token radius is now the full cell radius (was inset by `-4px`) **floored to `TOKEN_MIN_SCREEN_PX` on screen**, using the live camera scale, so tokens stay legible at any zoom on any map. The editor's sample tokens get the analogous full-cell bump.
+
+### Changed
+- `app/templates/tabletop.html` — new `#token-veil-canvas` (z-6, `pointer-events:none`, same gutter geometry as `#vtt-canvas`); `#gif-token-overlay` raised to z-5 so GIF tokens stay above decoration too.
+- `app/static/tabletop.js` — dual render contexts (`mainCtx` for grid/breadcrumb/AoE/ruler, `veilCtx` for tokens + skull/status + lighting + fog); `_tokenRadius()` helper applies the scale-aware on-screen floor to the token, ring, HP bar, label, and image together; `_camScale` mirror kept in sync in `applyTransform()`. Test hooks `__tokenRadiusForTest` / `__camScaleForTest` / `__tokenMinScreenPx`.
+- `app/templates/map_editor.html` — `mkToken` sample tokens use the full cell radius (no aggressive floor, which would inflate the interactive SVG hit area when zoomed out).
+
+### Schema
+- No schema change (still v98 — client render/layer only).
+
 ## [2.860.0] - 2026-07-03 — "The Whole Board"
 
 **Schema version:** 98

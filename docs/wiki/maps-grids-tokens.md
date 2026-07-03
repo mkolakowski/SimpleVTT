@@ -39,6 +39,8 @@ The active map renders on the tabletop at **`/campaign/<id>`**. You pan and zoom
 
 ![The tabletop: the tavern map with its grid and placed tokens, GM Tools drawer at right](/static/docs/maps-tokens/02-tabletop-grid.png)
 
+**Tokens are the top layer.** Tokens draw **above** all map decoration — terrain regions, walls, light hotspots, and weather — so they're never tinted or hidden by the scenery under them. The only thing that still renders **over** a token is the **fog-of-war and darkness veil**: an unexplored or unlit token stays hidden/dimmed, exactly as vision intends. Tokens also have a **minimum on-screen size**, so a lone figure stays legible even when you've zoomed the board out or you're on a large, high-resolution map.
+
 ## Placing tokens
 
 Open the **GM Tools** drawer (right side) → **Token Management** → **+ Add Token**. The modal has four ways to get a token onto the map:

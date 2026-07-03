@@ -18,7 +18,23 @@
     if (!canvas) return;
 
     const mapPane = document.getElementById('map-pane');
-    const ctx = canvas.getContext('2d');
+    // v2.861.0 — two stacked canvases: the base #vtt-canvas holds the grid;
+    // #token-veil-canvas (a higher DOM layer, above walls/terrain/weather)
+    // holds tokens + gameplay markers + the lighting/fog veil, so tokens sit
+    // ABOVE the map decoration. ``ctx`` is a mutable pointer swapped between
+    // the two inside render() — every draw function keeps using ``ctx`` and
+    // lands on whichever layer is active, no per-function edits needed.
+    const mainCtx = canvas.getContext('2d');
+    const veilCanvas = document.getElementById('token-veil-canvas');
+    const veilCtx = veilCanvas ? veilCanvas.getContext('2d') : mainCtx;
+    let ctx = mainCtx;
+    // v2.861.0 — mirror of the camera zoom (`scale`, declared later in the
+    // pan/zoom block) so token sizing can enforce a minimum ON-SCREEN size
+    // without a temporal-dead-zone reference. Updated in applyTransform().
+    let _camScale = 1;
+    // A token never renders smaller than this on-screen radius (px), so tokens
+    // stay legible when zoomed out or on large natural-resolution maps.
+    const TOKEN_MIN_SCREEN_PX = 26;
 
     // v2.3.45: HiDPI / Retina sharpness. The HTML template sets
     // ``width="{{ map.width_px }}"`` / ``height="…"`` on the canvas;
@@ -70,24 +86,35 @@
         const rs = Math.min(targetRS, RS_MAX, capByDim, capByArea);
         return Math.max(DPR, rs);
     }
-    function applyRenderScale(rs) {
-        renderScale = rs;
-        canvas.width = Math.round((MAP_W + 2 * stripH) * rs);
-        canvas.height = Math.round((MAP_H + 2 * stripH) * rs);
-        canvas.style.width = (MAP_W + 2 * stripH) + 'px';
-        canvas.style.height = (MAP_H + 2 * stripH) + 'px';
+    function _setupCtx(c, rs) {
         // Resizing the backing store resets the 2D context — re-establish
         // the rs scale + the stripH origin shift + high-quality resampling.
         // Shift the drawing origin so logical (0, 0) is at canvas-physical
         // (stripH, stripH); the gutter strips paint at logical (-stripH..0)
         // which lands in the outer halo.
-        ctx.setTransform(rs, 0, 0, rs, 0, 0);
-        ctx.translate(stripH, stripH);
+        c.setTransform(rs, 0, 0, rs, 0, 0);
+        c.translate(stripH, stripH);
         // ``high`` resampling matters for the demo-token portraits which
         // are sourced ~1000 px wide and rendered at ~70 px on canvas; the
         // browser default (``low``) makes that downscale look mushy.
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
+        c.imageSmoothingEnabled = true;
+        c.imageSmoothingQuality = 'high';
+    }
+    function applyRenderScale(rs) {
+        renderScale = rs;
+        const bw = Math.round((MAP_W + 2 * stripH) * rs);
+        const bh = Math.round((MAP_H + 2 * stripH) * rs);
+        const cw = (MAP_W + 2 * stripH) + 'px';
+        const ch = (MAP_H + 2 * stripH) + 'px';
+        canvas.width = bw; canvas.height = bh;
+        canvas.style.width = cw; canvas.style.height = ch;
+        _setupCtx(mainCtx, rs);
+        // v2.861.0 — keep the top-token canvas in lock-step with the base.
+        if (veilCanvas) {
+            veilCanvas.width = bw; veilCanvas.height = bh;
+            veilCanvas.style.width = cw; veilCanvas.style.height = ch;
+            _setupCtx(veilCtx, rs);
+        }
     }
     applyRenderScale(DPR);
 
@@ -1841,11 +1868,23 @@
         ctx.fillText((t.label || '').slice(0, 12), cx, cy);
     }
 
+    // v2.861.0 — the on-screen token radius: the full cell radius (bigger than
+    // the old ``-4`` inset), floored so it never renders below
+    // TOKEN_MIN_SCREEN_PX on screen (legible when zoomed out / on large maps).
+    // Used by the token, its skull/targeting overlays, so they stay aligned.
+    function _tokenRadius(t) {
+        return Math.max((gridSize * (t.size || 1)) / 2, TOKEN_MIN_SCREEN_PX / (_camScale || 1));
+    }
+    // Test hooks (v2.861.0): the on-screen radius floor is scale-dependent, so
+    // the harness reads the live radius + camera scale rather than the pixels.
+    window.__tokenRadiusForTest = (t) => _tokenRadius(t || { size: 1 });
+    window.__camScaleForTest = () => _camScale;
+    window.__tokenMinScreenPx = TOKEN_MIN_SCREEN_PX;
     function drawToken(t) {
         if (_isTokenHiddenFromMe(t)) return;
         const cx = t.x + gridSize / 2;
         const cy = t.y + gridSize / 2;
-        const r = (gridSize * t.size) / 2 - 4;
+        const r = _tokenRadius(t);
         ctx.save();
         // v2.64.0: GM dim-render for tokens hidden from anyone —
         // legacy `is_hidden` OR the new per-user `hidden_from_user_ids`
@@ -1982,11 +2021,17 @@
     };
 
     function render() {
-        ctx.clearRect(0, 0, MAP_W, MAP_H);
+        // v2.861.0 — base layer (#vtt-canvas): grid only. Everything else
+        // (tokens, markers, veil) draws on the top layer above the decoration.
+        ctx = mainCtx;
+        mainCtx.clearRect(-stripH, -stripH, MAP_W + 2 * stripH, MAP_H + 2 * stripH);
         if (showGrid) {
             if (gridType === 'square') drawSquareGrid();
             else if (gridType === 'hex') drawHexGrid();
         }
+        // --- switch to the top-token layer ---
+        ctx = veilCtx;
+        veilCtx.clearRect(-stripH, -stripH, MAP_W + 2 * stripH, MAP_H + 2 * stripH);
         tokens.forEach(drawToken);
         // v2.49.4 — skull overlay for any token whose linked
         // combatant is at 0 HP. Iterates window.battle.combatants for
@@ -2016,7 +2061,7 @@
             if (!(hpMax > 0 && hpCur <= 0)) return;
             const cx = t.x + gridSize / 2;
             const cy = t.y + gridSize / 2;
-            const r = (gridSize * t.size) / 2;
+            const r = _tokenRadius(t);
             ctx.save();
             // Dim the token portrait so the skull reads as the
             // primary visual signal.
@@ -2049,7 +2094,7 @@
             if (t && !(_isTokenHiddenFromMe(t))) {
                 const cx = t.x + gridSize / 2;
                 const cy = t.y + gridSize / 2;
-                const r = (gridSize * t.size) / 2;
+                const r = _tokenRadius(t);
                 ctx.save();
                 ctx.lineWidth = 3;
                 ctx.strokeStyle = '#a78bfa';      // accent purple (matches theme accent default)
@@ -2202,7 +2247,7 @@
             if (t) {
                 const cx = t.x + gridSize / 2;
                 const cy = t.y + gridSize / 2;
-                const r = (gridSize * t.size) / 2;
+                const r = _tokenRadius(t);
                 ctx.save();
                 ctx.lineWidth = 2;
                 if (_hoveredOutOfRange) {
@@ -2233,7 +2278,7 @@
                 if (_isTokenHiddenFromMe(t)) continue;
                 const cx = t.x + gridSize / 2;
                 const cy = t.y + gridSize / 2;
-                const r = (gridSize * t.size) / 2;
+                const r = _tokenRadius(t);
                 ctx.save();
                 // v2.49.158: tighter + bolder ring matching the new
                 // active-turn init card border style. Outer halo +
@@ -2923,6 +2968,7 @@
         // their "establish a fixed naming system" role.
         if (showGrid) drawGridCoords();
 
+        ctx = mainCtx;  // v2.861.0 — restore for any draw outside render()
         _updateGifOverlay();
     }
 
@@ -3536,6 +3582,7 @@
     const mapTransform = document.getElementById('map-transform');
     function applyTransform() {
         clampPan();
+        _camScale = scale;  // v2.861.0 — keep the token-size floor in sync
         const t = `translate(${panX}px, ${panY}px) scale(${scale})`;
         if (mapTransform) {
             mapTransform.style.transform = t;

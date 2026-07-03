@@ -2364,7 +2364,10 @@
                wrapper's transform applies to all three uniformly. Token
                positions inside this overlay are in map coords (matching
                bg-layer's (0,0)), so this stays at top:0;left:0. #}
-            <div id="gif-token-overlay" style="position:absolute;top:0;left:0;z-index:2;pointer-events:none;"></div>
+            {# v2.861.0 — GIF token overlay raised to z-5 so animated tokens sit
+               ABOVE the map decoration (walls/terrain/weather), like PNG tokens
+               on the top-token canvas below. #}
+            <div id="gif-token-overlay" style="position:absolute;top:0;left:0;z-index:5;pointer-events:none;"></div>
             {# v2.754.0 — Maps 2.0 wall overlay. Lives inside #map-transform so
                it pans/zooms with the map; SVG coords == map-pixel coords. Walls
                render as solid lines, doors as dashed (green when open). Pointer
@@ -2381,6 +2384,17 @@
             {# v2.808.0 — ambient weather overlay (rain / snow / fog), animated. #}
             <canvas id="weather-canvas" width="{{ active_map.width_px }}" height="{{ active_map.height_px }}"
                     style="position:absolute;top:0;left:0;z-index:4;pointer-events:none;"></canvas>
+            {# v2.861.0 — top-token layer: tokens + skull/status + gameplay
+               markers + the lighting/fog veil render here, ABOVE the map
+               decoration (walls/terrain/weather) but with the fog+darkness veil
+               drawn last so vision still hides/dims tokens. Same geometry as
+               #vtt-canvas (gutter halo included); pointer-events:none so token
+               drag + door clicks fall through to the interactive layers. #}
+            <canvas id="token-veil-canvas"
+                    width="{{ active_map.width_px + 2 * _strip_h }}"
+                    height="{{ active_map.height_px + 2 * _strip_h }}"
+                    data-strip-h="{{ _strip_h }}"
+                    style="position:absolute;top:-{{ _strip_h }}px;left:-{{ _strip_h }}px;z-index:6;pointer-events:none;"></canvas>
             </div>
         {% else %}
             <p class="muted" style="padding: 20px;">No active map. {% if is_gm %}Upload one in <a href="/admin/campaign/{{ campaign.id }}">campaign settings</a>.{% endif %}</p>

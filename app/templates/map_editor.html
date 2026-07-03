@@ -1882,7 +1882,10 @@
   // (never persisted); rendered above the lighting veil so it's always
   // visible. Drag to move; right-click (or erase mode) to remove.
   function mkToken(t) {
-    var r = Math.max(11, (gridPx || 70) / 2 * 0.85);
+    // v2.861.0 — more visible: the full cell radius (was 0.85×). No on-screen
+    // floor here — these ephemeral sample tokens are interactive, and inflating
+    // their map-coord radius when zoomed out would create an oversized hit area.
+    var r = Math.max(11, (gridPx || 70) / 2);
     var active = (selectedTokenId === t.id);  // v2.785.2 — perspective active?
     var g = document.createElementNS(NS, 'g');
     g.classList.add('me-token');
