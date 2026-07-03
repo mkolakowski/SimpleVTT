@@ -1592,6 +1592,12 @@
       }
       ring(Math.max(bpx, dpx), true);   // dim edge (dashed)
       ring(bpx, false);                 // bright edge (solid)
+      // v2.857.0 — when this light is selected, its bright + dim rings carry
+      // draggable ft-labelled handles to resize each radius directly.
+      if (selectedLight === L) {
+        if (dpx > 0) svg.appendChild(mkLightRadiusHandle(L, 'dim'));
+        if (bpx > 0) svg.appendChild(mkLightRadiusHandle(L, 'bright'));
+      }
       var lbl = document.createElementNS(NS, 'text');
       lbl.setAttribute('x', L.x + 6); lbl.setAttribute('y', L.y - 6);
       lbl.setAttribute('fill', col); lbl.setAttribute('font-size', '13');
@@ -2377,6 +2383,40 @@
   // v2.854.0 — drag the selected object by its body (separate from the one-shot
   // `relocating` so the selection + handles persist across drags).
   var objDrag = null;
+  // v2.857.0 — drag a selected light's bright/dim radius ring to resize it.
+  var lightRadiusDrag = null;
+  // A draggable handle on a selected light's bright or dim ring (which =
+  // 'bright'|'dim'). Sits at the ring's east point with a live ft label;
+  // dragging sets the radius from the cursor distance. Same svg-captured drag
+  // pattern as mkTerrainHandle so a mid-drag render doesn't drop it.
+  function mkLightRadiusHandle(L, which) {
+    var rpx = (which === 'bright' ? (L.bright_ft || 0) : (L.dim_ft || 0)) * pxPerFt;
+    var hx = L.x + rpx, hy = L.y;
+    var g = document.createElementNS(NS, 'g');
+    var h = document.createElementNS(NS, 'circle');
+    h.setAttribute('cx', hx); h.setAttribute('cy', hy);
+    h.setAttribute('r', Math.max(7, (gridPx || 70) * 0.12));
+    h.setAttribute('fill', '#ffd24a'); h.setAttribute('stroke', '#000');
+    h.setAttribute('stroke-width', '1.5');
+    h.style.pointerEvents = 'all'; h.style.cursor = 'ew-resize';
+    h.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      e.stopPropagation(); e.preventDefault();
+      lightRadiusDrag = { L: L, which: which };
+      try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+    g.appendChild(h);
+    var lbl = document.createElementNS(NS, 'text');
+    lbl.setAttribute('x', hx + 8); lbl.setAttribute('y', hy - 8);
+    lbl.setAttribute('fill', '#ffd24a'); lbl.setAttribute('font-size', '13');
+    lbl.setAttribute('font-weight', '700'); lbl.setAttribute('stroke', '#000');
+    lbl.setAttribute('stroke-width', '0.6'); lbl.style.paintOrder = 'stroke';
+    lbl.style.pointerEvents = 'none';
+    lbl.textContent = (which === 'bright' ? 'B ' : 'D ')
+      + Math.round(rpx / pxPerFt) + ' ft';
+    g.appendChild(lbl);
+    return g;
+  }
   // Wire an object's hit element for double-click-select + (when Select & Move
   // is on and it's the selected object) drag-to-move. Call from each object's
   // render branch. dblclick toggles the selection; pointerdown on the already-
@@ -2775,6 +2815,18 @@
     try { svg.setPointerCapture(e.pointerId); } catch (_) {}
   });
   svg.addEventListener('pointermove', function (e) {
+    if (lightRadiusDrag) {  // v2.857.0 — resize a light's bright/dim radius
+      var lp = toMap(e); if (lp) {
+        var L = lightRadiusDrag.L;
+        var ft = Math.max(0, Math.min(500,
+          Math.round(Math.hypot(lp.x - L.x, lp.y - L.y) / pxPerFt)));
+        if (lightRadiusDrag.which === 'bright') L.bright_ft = ft; else L.dim_ft = ft;
+        L.type = matchLightPreset(L) || 'custom';
+        if (selectedLight === L) syncLightToolbar();
+        render();
+      }
+      return;
+    }
     if (objDrag) {  // v2.854.0 — drag the selected object by its body
       var op = toMap(e); if (op) {
         var osp = snapPoint(op);
@@ -2825,6 +2877,13 @@
     render();
   });
   svg.addEventListener('pointerup', function (e) {
+    if (lightRadiusDrag) {  // v2.857.0 — commit a radius drag
+      lightRadiusDrag = null;
+      try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
+      saveLights();
+      suppressClick = true; setTimeout(function () { suppressClick = false; }, 0);
+      return;
+    }
     if (objDrag) {  // v2.854.0 — commit a body drag (keep the selection + handles)
       var od = objDrag; objDrag = null;
       try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
@@ -3009,6 +3068,7 @@
       nl.type = matchLightPreset(nl) || 'custom';
       lights.push(nl);
       saveLights();
+      selectLight(nl);  // v2.857.0 — auto-select so radius handles show at once
     } else if (pinMode) {
       // v2.790.1 — drop a GM-only pin (label + private note).
       var plabel = window.prompt('Pin label:', 'Pin');

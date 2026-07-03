@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.857.0] - 2026-07-03 — "The Drawn Radius"
+
+**Schema version:** 97
+
+**Commit summary:** Drag a selected light's bright/dim rings to resize the radius directly, with a live foot label; newly placed lights auto-select.
+
+**Description:** Light radii were only editable via the toolbar's B/D number fields. Now, when a light is **selected**, its **bright and dim rings carry draggable yellow handles** (at each ring's east edge) that you grab to expand or contract the radius — each handle shows the **current distance in feet** ("B 20 ft" / "D 40 ft"), updating live as you drag. A **newly placed light auto-selects**, so the handles appear the moment you drop it. Dragging sets the radius from the cursor's distance to the light (clamped 0–500 ft) and flips the light to **custom** when it no longer matches a preset; the toolbar B/D fields mirror the change. The drag captures the pointer on the persistent svg (like the terrain/wall resize handles) so a mid-drag redraw doesn't drop it.
+
+### Added
+- `app/templates/map_editor.html` — `mkLightRadiusHandle(L, which)` + `lightRadiusDrag` state with svg pointermove/up branches; radius handles rendered when `selectedLight === L`; `selectLight(nl)` on placement (auto-select).
+- `tests/harness_ui/test_map_editor_light_radius.py` (new, +2) — placing a light auto-selects it (a handle shows); dragging the dim handle outward grows `dim_ft` and flips the type to custom.
+
+### Schema
+- No schema change (still v97 — editor interaction only).
+
 ## [2.856.0] - 2026-07-03 — "The Molten Flows"
 
 **Schema version:** 97
