@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.865.0] - 2026-07-03 — "The Unsealed Grimoire"
+
+**Schema version:** 98
+
+**Commit summary:** Caster monsters surface a Spells tab with cast buttons — the mini-sheet projection now parses their SRD Spellcasting block into a structured spell list.
+
+**Description:** Completes the checklist's "un-gate the Spells fieldset on the monster mini-sheet." The mini-sheet's Spells tab only renders when the projected sheet looks like a caster (`class_spellcasting` / `spell_slots` / a non-empty `spells` list), but `_monster_dict_to_sheet` never emitted any of those — a monster's spellcasting lived only as **prose** inside its "Spellcasting" special ability (folded into `actions` with `category: "special_ability"`). New helper **`_parse_monster_spellcasting`** parses that RAW MM prose — the standard prepared-caster format (`"Nth-level spellcaster … Cantrips (at will): … / N level (M slots): …"`) — into structured `spells` (name + level + prepared), `spell_slots` (level → count), and the `spellcasting_ability`, and folds them onto the projected sheet. That un-gates the Spells tab for every prepared-caster SRD monster (Mage, Archmage, Lich, Priest, Druid, Acolyte, Cult Fanatic, the Nagas, Gynosphinx, Guardian Naga, etc. — 12 shipped stat blocks), whose spells now render as `.mini-cast-btn` cast buttons routing through the existing `/npc_cast_spell`. Innate-only casters (the `"3/day each:"` format) are a deliberate follow-up — the parser returns `None` for them, so nothing is injected and no non-caster sprouts spell buttons.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_parse_monster_spellcasting()` (SRD Spellcasting-prose → structured spells/slots/ability), folded onto the sheet in `_monster_dict_to_sheet`.
+- `tests/harness/test_monster_spellcasting.py` — asserts a caster monster's mini-sheet (Archmage in the demo card pool) renders `.mini-cast-btn` cast buttons tagged to a monster template, including its parsed Globe of Invulnerability; plus a `/templates` contract-shape guard.
+
+### Schema
+- No schema change (still v98 — projection derives spells at read time; no content files or DB touched).
+
 ## [2.864.0] - 2026-07-03 — "The Stat-Block Roar"
 
 **Schema version:** 98

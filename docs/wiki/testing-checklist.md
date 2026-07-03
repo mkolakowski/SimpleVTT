@@ -49,7 +49,7 @@ The most recent version is at the top. **Append new entries above older ones.** 
 **Filed for follow-up:**
 
 - Playwright UI test in `tests/harness_ui/` that exercises the actual click (button → fetch → broadcast). Out of scope for the harness layer; needs the visual-regression-harness scaffold.
-- Phase 2 monster sheet (Spells fieldset un-gate, legendary/lair actions as first-class buttons) still pending — when it ships, append tests for the new mechanic to this file.
+- Phase 2 monster sheet: legendary-action strip (v2.160.0), lair-action strip (v2.864.0), and the Spells-fieldset un-gate for prepared casters (v2.865.0) have all shipped as first-class mini-sheet buttons. Remaining: innate-only (`"3/day each:"`) caster parsing + per-combatant `roll_state` adv/disadv.
 
 ---
 
@@ -106,8 +106,8 @@ The most recent version is at the top. **Append new entries above older ones.** 
 **Filed for follow-up:**
 
 - `tests/harness/test_monster_sheet_init.py` — exercise the strike + ability button broadcasts.
-- Phase 2: un-gate the Spells fieldset on monster sheets + wire to `/npc_cast_spell`.
-- Phase 2: legendary / lair actions as first-class buttons (new projection field in `_monster_template_to_sheet`).
+- ✅ Phase 2: un-gate the Spells fieldset on monster sheets + wire to `/npc_cast_spell` — shipped v2.865.0 (`_parse_monster_spellcasting`, prepared casters; innate-only `"3/day each:"` casters still to do).
+- ✅ Phase 2: legendary / lair actions as first-class buttons — legendary strip v2.160.0, lair strip v2.864.0.
 - Phase 2: per-combatant `roll_state` so monster sheet rolls honor adv/disadv.
 
 ### Template for future entries

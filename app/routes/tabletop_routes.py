@@ -123134,6 +123134,84 @@ class _SyntheticMonsterChar:
         self.template_id = template_id
 
 
+def _parse_monster_spellcasting(m: dict) -> "dict | None":
+    """v2.865.0 — parse a monster's SRD "Spellcasting" special-ability prose
+    into the structured spellcasting fields the mini-sheet's Spells tab reads
+    (``spellcasting_ability`` / ``class_spellcasting`` / ``spell_slots`` /
+    ``spells``), so caster monsters (Mage, Archmage, Priest, Druid, Lich, the
+    Nagas, etc.) surface a Spells tab with cast buttons instead of only a
+    prose blurb.
+
+    Handles the standard *prepared-caster* format the SRD uses:
+
+        "The mage is a 9th-level spellcaster. Its spellcasting ability is
+         Intelligence (spell save DC 14, ...). ... following wizard spells
+         prepared: Cantrips (at will): fire bolt, light, ...
+         1st level (4 slots): detect magic, mage armor, ...
+         2nd level (3 slots): misty step, suggestion ..."
+
+    Returns ``None`` when there's no parseable Spellcasting block (innate-only
+    "3/day each" casters aren't parsed yet — a deliberate first-slice scope).
+    """
+    import re as _re
+    _ABIL = {
+        "strength": "str", "dexterity": "dex", "constitution": "con",
+        "intelligence": "int", "wisdom": "wis", "charisma": "cha",
+    }
+    # The SRD build folds the "Spellcasting" special ability into ``actions``
+    # with ``category: "special_ability"`` (not a separate top-level block),
+    # so read it from there.
+    desc = ""
+    for a in (m.get("actions") or []):
+        if isinstance(a, dict) and str(a.get("name", "")).strip().lower() == "spellcasting":
+            desc = str(a.get("desc") or "")
+            break
+    if not desc:
+        return None
+
+    def _names(raw: str) -> list:
+        out = []
+        for part in str(raw).split(","):
+            # Trim, and cut any run-on prose after a 2+-space gap (some SRD
+            # descs jam the next line onto the last spell of the previous).
+            nm = _re.split(r"\s{2,}", part.strip(" .\t\r\n"))[0].strip()
+            if nm and len(nm) <= 40:
+                out.append(nm.lower())
+        return out
+
+    ability = ""
+    am = _re.search(r"spellcasting ability is (\w+)", desc, _re.I)
+    if am:
+        ability = _ABIL.get(am.group(1).strip().lower(), "")
+
+    spells: list = []
+    slots: dict = {}
+    cm = _re.search(
+        r"Cantrips\s*\(at will\)\s*:\s*(.+?)(?=\d+(?:st|nd|rd|th)\s+level|$)",
+        desc, _re.I | _re.S)
+    if cm:
+        for nm in _names(cm.group(1)):
+            spells.append({"name": nm, "level": 0, "prepared": True})
+    for lm in _re.finditer(
+            r"(\d+)(?:st|nd|rd|th)\s+level\s*\((\d+)\s*slots?\)\s*:\s*"
+            r"(.+?)(?=\d+(?:st|nd|rd|th)\s+level|$)",
+            desc, _re.I | _re.S):
+        lvl = int(lm.group(1))
+        cnt = int(lm.group(2))
+        slots[str(lvl)] = cnt
+        for nm in _names(lm.group(3)):
+            spells.append({"name": nm, "level": lvl, "prepared": True})
+
+    if not spells:
+        return None
+    return {
+        "spellcasting_ability": ability,
+        "class_spellcasting": ability,
+        "spell_slots": slots,
+        "spells": spells,
+    }
+
+
 def _monster_dict_to_sheet(m: dict, *, base: Optional[dict] = None) -> dict:
     """Project a Monster Pydantic dict (loaded by ``local_content.resolve``
     from ``app/data/local/dnd5e/monsters/*.json`` or a homebrew JSON file)
@@ -123212,6 +123290,13 @@ def _monster_dict_to_sheet(m: dict, *, base: Optional[dict] = None) -> dict:
     reg = _regional_effects_for_slug(m.get("slug"))
     if reg:
         out["regional_effects"] = reg
+    # v2.865.0 — un-gate the Spells tab for caster monsters: parse the
+    # "Spellcasting" special-ability prose into structured spells + slots +
+    # ability so the mini-sheet renders cast buttons (via /npc_cast_spell)
+    # instead of only the stat-block blurb.
+    sc = _parse_monster_spellcasting(m)
+    if sc:
+        out.update(sc)
     return out
 
 
