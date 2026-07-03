@@ -119,6 +119,25 @@
         try { window._onLightsGlow && window._onLightsGlow(mapLights); } catch (_) {}
         try { render(); } catch (_) {}
     };
+    // v2.852.0 — token light sources also glow on the flicker layer. A carried
+    // light has no stored colour, so default to a warm torch flicker pair; the
+    // glow loop pulls this each frame, so the glow follows a moving/dragged
+    // token for free. Hidden-from-viewer tokens don't glow (mirrors the veil).
+    const _TOKEN_GLOW_C1 = '#ffcf8a', _TOKEN_GLOW_C2 = '#ff9d45';
+    window._glowTokenLights = function () {
+        const out = [];
+        (tokens || []).forEach(t => {
+            if (!t || _isTokenHiddenFromMe(t)) return;
+            const b = Number(t.light_bright_ft || 0), d = Number(t.light_dim_ft || 0);
+            if (b <= 0 && d <= 0) return;
+            out.push({ id: 'tok' + t.id, x: t.x + gridSize / 2, y: t.y + gridSize / 2,
+                bright_ft: b, dim_ft: d, color: _TOKEN_GLOW_C1, color2: _TOKEN_GLOW_C2 });
+        });
+        return out;
+    };
+    // (Re)start the glow loop when a token's light may have appeared — a no-op
+    // if it's already running (see tabletop.html).
+    function _kickGlow() { try { window._glowKick && window._glowKick(); } catch (_) {} }
     // v2.766.0 — fog of war. Players see the map obscured except inside the
     // revealed rects; the GM sees a faint fog tint over still-hidden areas.
     // v2.844.0 — exploration-tracking fog. When ``mapFogDynamic`` is on, the
@@ -155,6 +174,7 @@
             if (d.ambient_light) mapAmbientLight = d.ambient_light;
             if (Array.isArray(d.light_emitters)) lightEmitters = d.light_emitters;
             try { render(); } catch (_) {}
+            _kickGlow();  // v2.852.0 — start the glow loop if any token is lit
         } catch (_) { /* lighting is best-effort presentation */ }
     })();
     const characters = initialData.characters || [];
@@ -5477,12 +5497,14 @@
                     // Static-fog maps just fall through to a plain render.
                     if (mapFogEnabled && mapFogDynamic) { revealFromVision(); }
                     else { render(); }
+                    _kickGlow();  // v2.852.0 — a lit token's glow follows it
                 }
             } else if (msg.type === 'token_add') {
                 tokens.push(msg.data);
                 renderTokenTracker();
                 refreshPlaceButtons();
                 render();
+                _kickGlow();  // v2.852.0
                 // Encounter load cascades token_add per token — center
                 // on the player's first controlled token as soon as
                 // it appears. Idempotent for non-controlled tokens;
@@ -5496,7 +5518,7 @@
                 render();
             } else if (msg.type === 'token_update') {
                 const t = tokens.find(t => t.id === msg.data.id);
-                if (t) { Object.assign(t, msg.data); renderTokenTracker(); refreshPlaceButtons(); render(); }
+                if (t) { Object.assign(t, msg.data); renderTokenTracker(); refreshPlaceButtons(); render(); _kickGlow(); }
             } else if (msg.type === 'roll') {
                 appendRoll(msg.data);
                 _focusRollLogIfLocal(msg.data && msg.data.user_id);

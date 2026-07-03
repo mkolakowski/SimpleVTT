@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.852.0] - 2026-07-03 — "The Carried Flame"
+
+**Schema version:** 97
+
+**Commit summary:** Token light sources flicker too — a token carrying light now casts a warm, torch-flickering glow that follows it.
+
+**Description:** Extends the flicker-glow layer (v2.849.0) to **token light sources**. A token with `light_bright_ft`/`light_dim_ft` (a PC holding a torch, a glowing familiar) already punched a colourless hole in the darkness veil; now it also casts a **warm, torch-flickering glow** on `#light-glow-canvas`, colour-matched to a carried flame (a candle-amber `#ffcf8a → #ff9d45` pair). Tokens have no stored light colour, so this default pair applies to every lit token — no schema change. The glow **follows the token as it moves** (including mid-drag) because the rAF loop pulls the live token list each frame from tabletop.js; hidden-from-viewer tokens don't glow (mirrors the veil + fog rules). The loop now self-terminates when there are no sources and restarts on a `_glowKick()` from the token add/move/update handlers + the initial token bootstrap, so a map with only token lights (no placed map lights) animates correctly.
+
+### Added
+- `app/static/tabletop.js` — `window._glowTokenLights()` (lit, non-hidden tokens → glow sources, centred on the cell, default warm flicker pair) + `_kickGlow()` wired into the token bootstrap and the token_move/add/update WS handlers.
+- `app/templates/tabletop.html` — the glow loop merges pushed map lights with pulled token lights each frame (`_lgSources`), self-terminates when empty, and exposes `window._glowKick()` / `_lgEnsureLoop()`.
+- `tests/harness_ui/test_token_light_glow.py` (new, +1) — a lit token appears in the glow set and draws a flickering glow at its centre; turning the light off live (token PATCH → `token_update`) drops it from the set.
+
+### Schema
+- No schema change (still v97 — presentation layer; tokens keep their existing light-radius fields).
+
 ## [2.851.0] - 2026-07-03 — "The Chosen Stone"
 
 **Schema version:** 97

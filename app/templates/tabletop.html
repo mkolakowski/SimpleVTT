@@ -2925,8 +2925,16 @@
         // the pair differs (two incommensurate sines, seeded per light).
         // Modeled on the weather rAF loop above; map coords, so the
         // #map-transform wrapper pans/zooms it for free.
-        var _lgCanvas = null, _lgCtx = null, _lgRAF = null, _lgLights = [];
+        var _lgCanvas = null, _lgCtx = null, _lgRAF = null, _lgMapLights = [];
         var _LG_PX_PER_FT = {{ active_map.grid_size_px if active_map else 70 }} / 5;
+        // v2.852.0 — the loop draws map lights (pushed) PLUS token lights (pulled
+        // live each frame from tabletop.js, so a carried light's glow follows a
+        // moving token). Merge them per frame.
+        function _lgSources() {
+            var toks = [];
+            try { if (window._glowTokenLights) toks = window._glowTokenLights() || []; } catch (e) {}
+            return _lgMapLights.concat(toks);
+        }
         function _lgHexToRgb(hex) {
             var m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
             if (!m) return null;
@@ -2956,10 +2964,12 @@
             var c = _lgCtx; if (!c) return;
             var W = _lgCanvas.width, H = _lgCanvas.height;
             c.clearRect(0, 0, W, H);
+            var srcs = _lgSources();
+            if (!srcs.length) { _lgRAF = null; return; }  // self-terminate when no lights
             c.globalCompositeOperation = 'lighter';
             var t = performance.now() / 1000;
-            for (var i = 0; i < _lgLights.length; i++) {
-                var L = _lgLights[i];
+            for (var i = 0; i < srcs.length; i++) {
+                var L = srcs[i];
                 var rpx = Math.max(Number(L.bright_ft || 0), Number(L.dim_ft || 0)) * _LG_PX_PER_FT;
                 if (rpx <= 0) continue;
                 var rgb = _lgColorAt(L, t);
@@ -2971,16 +2981,23 @@
                 c.beginPath(); c.arc(L.x, L.y, rpx, 0, 6.283); c.fill();
             }
             c.globalCompositeOperation = 'source-over';
+            _lgRAF = requestAnimationFrame(_lgStep);
         }
-        window._onLightsGlow = function (lightList) {
-            _lgLights = Array.isArray(lightList) ? lightList : [];
+        function _lgEnsureLoop() {
             if (!_lgCanvas) { _lgCanvas = document.getElementById('light-glow-canvas');
                 _lgCtx = _lgCanvas ? _lgCanvas.getContext('2d') : null; }
             if (!_lgCanvas || !_lgCtx) return;
-            if (_lgRAF) { cancelAnimationFrame(_lgRAF); _lgRAF = null; }
-            if (!_lgLights.length) { _lgCtx.clearRect(0, 0, _lgCanvas.width, _lgCanvas.height); return; }
-            (function loop() { _lgStep(); _lgRAF = requestAnimationFrame(loop); })();
+            if (_lgRAF) return;                       // already running
+            if (!_lgSources().length) {              // nothing to draw
+                _lgCtx.clearRect(0, 0, _lgCanvas.width, _lgCanvas.height); return; }
+            _lgRAF = requestAnimationFrame(_lgStep);
+        }
+        window._onLightsGlow = function (lightList) {   // map lights (pushed)
+            _lgMapLights = Array.isArray(lightList) ? lightList : [];
+            _lgEnsureLoop();
         };
+        // v2.852.0 — (re)start the loop when token lights may have changed.
+        window._glowKick = function () { _lgEnsureLoop(); };
         // v2.809.0 — live GM weather control (POSTs the active map's weather;
         // the broadcast updates every client including this one).
         function _syncLiveWeatherBtns(val) {
