@@ -3559,6 +3559,7 @@
     // Restore previously-saved view (GM only). Clamps scale into the
     // existing zoom bounds in case MIN_SCALE / MAX_SCALE moved since
     // the save. Pan is clamped by clampPan() inside applyTransform().
+    let _viewRestored = false;
     if (VIEW_KEY) {
         try {
             const raw = localStorage.getItem(VIEW_KEY);
@@ -3572,9 +3573,30 @@
                     panY = saved.panY;
                     scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, saved.scale));
                     applyTransform();
+                    _viewRestored = true;
                 }
             }
         } catch (e) { /* corrupt JSON — ignore + overwrite on next move */ }
+    }
+
+    // v2.860.0 — fit the whole map into the viewport on first load. The
+    // tabletop used to render at 1:1 from the top-left, which was fine when
+    // demo maps were ~viewport-sized but leaves a large map (e.g. a
+    // natural-resolution battle map) overflowing so lower tokens sit
+    // off-screen. Fit-to-contain (centred), scaling down oversized maps and
+    // never up-scaling past 1:1. Skipped when a saved GM view was restored.
+    function fitToViewport() {
+        const paneRect = mapPane.getBoundingClientRect();
+        if (paneRect.width <= 0 || paneRect.height <= 0) return false;
+        const margin = 12;
+        const fs = Math.min(1,
+            (paneRect.width - margin * 2) / MAP_W,
+            (paneRect.height - margin * 2) / MAP_H);
+        scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, fs));
+        panX = (paneRect.width - MAP_W * scale) / 2;
+        panY = (paneRect.height - MAP_H * scale) / 2;
+        applyTransform();
+        return true;
     }
 
     // ---------- Auto-center on the player's first controlled token ----------
@@ -3620,11 +3642,15 @@
         if (t) centerOnToken(t);
     }
 
-    // Initial autocenter — runs after the synchronous render() at
-    // module init, so the map is drawn before we move the viewport.
-    // setTimeout(0) lets the browser finish initial layout so
-    // mapPane has a real width/height to center against.
-    setTimeout(centerOnFirstControlledToken, 0);
+    // Initial view — runs after the synchronous render() at module init, so
+    // the map is drawn before we move the viewport. setTimeout(0) lets the
+    // browser finish initial layout so mapPane has a real width/height.
+    // v2.860.0 — fit the whole map first (unless a saved GM view was
+    // restored), then a player re-centres on their controlled token.
+    setTimeout(() => {
+        if (!_viewRestored) fitToViewport();
+        centerOnFirstControlledToken();
+    }, 0);
 
     // Per-user zoom-speed multiplier. 1.0 = default. Applied to both
     // wheel (1.12 per notch base) and pinch (with extra baseline

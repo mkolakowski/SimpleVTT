@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.860.0] - 2026-07-03 — "The Whole Board"
+
+**Schema version:** 98
+
+**Commit summary:** The tabletop now fits the whole map into the viewport on load, so tokens on large maps aren't left off-screen.
+
+**Description:** Follow-up to v2.859.0. The tabletop rendered every map at **1:1 from the top-left** and never auto-fit (the GM's auto-center is deliberately disabled). That was fine when demo maps were ~viewport-sized, but v2.859.0 switched them to their **natural resolution** (e.g. the Caldera is 2400×1792) — so at 1:1 the map overflowed the viewport and the lower tokens (the whole party) sat **below the visible area**, appearing to vanish. The tabletop now **fits the whole map into the viewport on first load** — fit-to-contain, centred, scaling oversized maps down (never up-scaling past 1:1) — for both GM and players. A restored GM saved-view takes precedence (your saved pan/zoom isn't overridden), and a player still re-centers on their controlled token afterward. This also fixes any large **uploaded** map, which had the same latent overflow.
+
+### Added
+- `app/static/tabletop.js` — `fitToViewport()` (fit-to-contain, centred, clamped) run on initial load when no saved GM view was restored, before the player auto-center.
+
+### Schema
+- No schema change (still v98 — client camera only).
+
 ## [2.859.0] - 2026-07-03 — "The True Scale"
 
 **Schema version:** 98
