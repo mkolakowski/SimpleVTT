@@ -6,8 +6,10 @@ save dispatch, the carry-forward guard). This file covers the
 browser-side surface v2.170.0 adds to `tabletop.html`:
 
   - When the active battle holds a combatant carrying a non-empty
-    `lair_actions` list, the GM sees the floating 🌋 lair-action panel
-    (`#_lair_action_panel`) with an Enter/Exit toggle.
+    `lair_actions` list, the GM sees the 🌋 lair-action panel
+    (`#_lair_action_panel`) with an Enter/Exit toggle. As of v2.862.0 the
+    panel lives INSIDE the Battle drawer (`#players-drawer`), under the
+    Reactions panel, rather than floating over the map.
   - Toggling POSTs `/set_in_lair` carrying `{in_lair, lair_slug}`.
   - An `in_lair_changed` WS message flips the panel into the in-lair
     state, listing each action with a Trigger button.
@@ -144,7 +146,7 @@ def _dispatch_lair_action_resolved(page: Page, action_id: str,
 
 def test_lair_panel_toggle_renders(gm_page: Page):
     """When the battle holds a lair-bearing creature, the GM sees the
-    floating lair-action panel with an "Enter lair" toggle and no action
+    lair-action panel with an "Enter lair" toggle and no action
     list (battle starts out of lair)."""
     _seed_battle(gm_page, in_lair=False)
     gm_page.goto(tabletop_url())
@@ -160,6 +162,36 @@ def test_lair_panel_toggle_renders(gm_page: Page):
     expect(toggle).to_contain_text("Enter lair")
     # Out of lair → no action Trigger buttons yet.
     expect(panel.locator("._lair_trigger_btn")).to_have_count(0)
+
+
+def test_lair_panel_lives_in_battle_drawer(gm_page: Page):
+    """v2.862.0 — the lair-action panel is a descendant of the Battle
+    drawer (`#players-drawer`), directly under the Reactions panel — NOT a
+    floating card appended to <body>. Regression guard for the relocation."""
+    _seed_battle(gm_page, in_lair=False)
+    gm_page.goto(tabletop_url())
+
+    # The scoped selector only matches if the panel is inside the drawer.
+    scoped = gm_page.locator("#players-drawer #_lair_action_panel")
+    expect(scoped).to_be_visible(timeout=5000)
+    expect(scoped).to_contain_text("Lair Actions")
+
+    # It is NOT a direct child of <body> (the old floating position).
+    parent_tag = gm_page.evaluate(
+        "() => (document.getElementById('_lair_action_panel')?.parentElement?.tagName || '').toLowerCase()"
+    )
+    assert parent_tag not in ("", "body"), (
+        f"lair panel should sit inside the drawer, not <body> (parent=<{parent_tag}>)"
+    )
+    # And it sits after the Reactions panel in the drawer's DOM order.
+    order = gm_page.evaluate(
+        """() => {
+            const drawer = document.getElementById('players-drawer');
+            const nodes = [...drawer.querySelectorAll('#gm-reactions-panel, #_lair_action_panel')];
+            return nodes.map(n => n.id);
+        }"""
+    )
+    assert order == ["gm-reactions-panel", "_lair_action_panel"], order
 
 
 def test_in_lair_changed_shows_action_list(gm_page: Page):

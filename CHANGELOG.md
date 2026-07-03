@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.862.0] - 2026-07-03 — "The Lair's Turn"
+
+**Schema version:** 98
+
+**Commit summary:** Lair actions now live inside the Battle drawer, under Reactions, instead of a floating card bolted to the map.
+
+**Description:** Per request — the GM lair-action controls (Enter/Exit lair, the init-count-20 prompt, per-action Trigger buttons, regional effects, and the regional-fade tracker) used to render in a **floating `position:fixed` card** appended to `<body>` at `bottom:200px;left:18px`, hovering over the map disconnected from the initiative order it belongs to. That panel now renders into a **static host inside the Battle drawer**, directly beneath the ⚡ Reactions panel — the same relocation the Reactions panel itself got in v2.89.0. Because the demo GM keeps the roll log on the left, the Battle drawer is the default-open right drawer, so the lair card is right where the GM is already running initiative. All the plumbing is unchanged: the `#_lair_action_panel` id, the `/set_in_lair` + `/trigger_lair_action` POSTs, and the `in_lair_changed` / `lair_action_resolved` / `lair_init_20_reached` WS handlers keep binding exactly as before. The card stays hidden until the active battle holds a lair-bearing combatant, and a legacy floating fallback remains only for the (post-rebuild impossible) case where the drawer host is absent.
+
+### Changed
+- `app/templates/tabletop.html` — new GM-only static `#_lair_action_panel` host inside the Battle drawer (`#players-drawer`), between the Reactions panel and the initiative list; `_renderLairActionPanel` now reveals/hides that host (`display`) instead of body-appending / removing a floating card, keeping the volcanic border so the init-20 glow still reads.
+
+### Schema
+- No schema change (still v98 — client panel relocation only).
+
 ## [2.861.0] - 2026-07-03 — "The Raised Piece"
 
 **Schema version:** 98

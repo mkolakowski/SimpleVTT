@@ -3599,6 +3599,20 @@
             if (panel.open) refresh();
         })();
         </script>
+        {# v2.862.0 — Lair Actions relocated INTO the Battle drawer.
+           Previously `_renderLairActionPanel` created a floating
+           `position:fixed` card bolted to <body> (bottom:200px;left:18px),
+           which floated over the map disconnected from the initiative it
+           belongs to. It now renders into this static host inside the
+           Battle drawer, directly under the Reactions panel — the same
+           relocation Reactions got in v2.89.0. GM-only; hidden until the
+           renderer finds a lair-bearing combatant. The volcanic border +
+           dark backdrop are kept so `_renderLairActionPanel`'s init-20
+           glow (which sets host.style.borderColor / boxShadow directly)
+           still reads, and so the lair card stands apart from the frosted
+           init rows below it. #}
+        <div id="_lair_action_panel"
+             style="display:none;margin:0 0 8px;background:rgba(28,18,12,0.93);color:#fbe9dc;border:2px solid #c2541f;border-radius:10px;padding:10px 14px;font-size:14px;box-shadow:0 3px 14px rgba(0,0,0,.35);"></div>
         {% endif %}
 
         {# v2.49.102 — Initiative summary + details wrapper removed
@@ -10876,7 +10890,10 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         }
 
         if (!owner) {
-            if (host) host.remove();
+            // v2.862.0 — the host is now a static element in the Battle
+            // drawer (not a body-appended float), so hide it rather than
+            // removing it — removal would delete the drawer slot for good.
+            if (host) host.style.display = 'none';
             const _pp = document.getElementById('_regional_effects_panel');
             if (_pp) _pp.remove();
             return;
@@ -10898,11 +10915,12 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         const lairSlug = (battle && battle.lair_slug) || owner.lair_slug || '';
 
         if (!host) {
+            // v2.862.0 — fallback only: the Battle-drawer host (rendered
+            // server-side for GMs) is the normal path. If it's somehow
+            // absent (e.g. a stale cached template) fall back to the old
+            // floating card so the lair controls are never lost.
             host = document.createElement('div');
             host.id = HOST_ID;
-            // bottom:200px keeps clear of the LR prompt banner (bottom:18px)
-            // and repeated-save panel. Volcanic-orange border to match the
-            // lair-action flavor (red-dragon volcanic actions in the seed).
             host.style.cssText = (
                 'position:fixed;bottom:200px;left:18px;z-index:9080;'
                 + 'background:rgba(28,18,12,0.93);color:#fbe9dc;'
@@ -10913,6 +10931,9 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             );
             document.body.appendChild(host);
         }
+        // The drawer host starts hidden; reveal it now that a lair owner
+        // is on the field.
+        host.style.display = '';
 
         const ownerName = _escH(owner.name || 'Creature');
         const header = (
