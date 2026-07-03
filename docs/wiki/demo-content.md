@@ -19,6 +19,15 @@ the showcase feature).
 > Sundered Vault** ships its `tavern.png` battle map as final art too — the
 > whole demo art catalog is complete.
 
+> **Gridless boards (v2.847.0):** the five leveled demo maps are **gridless**
+> (`grid_type: none`) — free token placement, no grid overlay — with tokens
+> and map-editor elements placed **organically to match the art** (party at
+> the approach, monsters in their lairs) rather than in grid-aligned rows.
+> Distances, speed caps, and the exploration fog still work: `grid_size_px`
+> stays 70 as the 5-ft scale, with gridless distance measured Euclidean. The
+> **archived Sundered Vault keeps its 70 px square grid** (it's the test
+> harness's anchor map).
+
 ## Accounts
 
 All accounts share the password **`demopass`**.

@@ -32,6 +32,7 @@ from .models import (
     CampaignMembership,
     Character,
     Encounter,
+    GridType,
     Map,
     Token,
     TokenTemplate,
@@ -67,33 +68,40 @@ _GOBLIN_WARRENS = {
     # v2.840.0 — dungeon showcase: cave walls with a swinging door + a hidden
     # secret door, a trapped-floor hotspot, and a GM-only ambush pin.
     # v2.842.0 — dark warren lit only by wall torches, explored under fog.
+    # v2.847.0 — gridless: organic, art-matched coords (irregular cave walls,
+    # torches at the tunnel mouths); party at the palisade approach (SW),
+    # goblins at the tunnel mouths (NE), Grukk deep in the warren.
     "map": {"name": "The Goblin Warrens (entrance)", "width": 1400, "height": 1000,
             "image": "/static/demo/maps/goblin-warrens.png",
+            "gridless": True,
             "ambient_light": "dark",
             "lights": [
-                {"id": "gw-l1", "x": 280, "y": 280, "bright_ft": 15, "dim_ft": 30,
+                {"id": "gw-l1", "x": 293, "y": 287, "bright_ft": 15, "dim_ft": 30,
                  "color": "#f59e0b", "type": "torch"},
-                {"id": "gw-l2", "x": 630, "y": 490, "bright_ft": 15, "dim_ft": 30,
+                {"id": "gw-l2", "x": 622, "y": 501, "bright_ft": 15, "dim_ft": 30,
                  "color": "#f59e0b", "type": "torch"},
-                {"id": "gw-l3", "x": 980, "y": 350, "bright_ft": 20, "dim_ft": 40,
+                {"id": "gw-l3", "x": 988, "y": 343, "bright_ft": 20, "dim_ft": 40,
                  "color": "#fbbf24", "type": "lantern"}],
             "fog_enabled": True, "fog_dynamic": True,
-            "fog_revealed": [{"x": 70, "y": 200, "w": 1260, "h": 560}],
+            "fog_revealed": [{"x": 56, "y": 188, "w": 1288, "h": 672}],
             "walls": [
-                {"id": "gw-w1", "x1": 140, "y1": 140, "x2": 700, "y2": 140, "style": "cave"},
-                {"id": "gw-w2", "x1": 140, "y1": 140, "x2": 140, "y2": 700, "style": "cave"},
-                {"id": "gw-w3", "x1": 140, "y1": 700, "x2": 1260, "y2": 700, "style": "cave"},
-                {"id": "gw-d1", "x1": 700, "y1": 140, "x2": 700, "y2": 280,
+                {"id": "gw-w1", "x1": 152, "y1": 163, "x2": 684, "y2": 131, "style": "cave"},
+                {"id": "gw-w2", "x1": 152, "y1": 163, "x2": 129, "y2": 706, "style": "cave"},
+                {"id": "gw-w3", "x1": 129, "y1": 706, "x2": 1271, "y2": 731, "style": "cave"},
+                {"id": "gw-d1", "x1": 684, "y1": 131, "x2": 693, "y2": 274,
                  "door": True, "open": False, "style": "wood"},
-                {"id": "gw-s1", "x1": 1120, "y1": 420, "x2": 1120, "y2": 560,
+                {"id": "gw-s1", "x1": 1123, "y1": 411, "x2": 1131, "y2": 553,
                  "door": True, "secret": True, "style": "cave"}],
             "hotspots": [
-                {"id": "gw-h1", "x": 490, "y": 490, "label": "Pit trap",
+                {"id": "gw-h1", "x": 531, "y": 566, "label": "Pit trap",
                  "description": "A covered pit. DC 13 DEX save or fall 10 ft (2d6 bludgeoning).",
                  "roll": "1d20"}],
             "gm_pins": [
-                {"id": "gw-p1", "x": 910, "y": 350, "label": "Ambush",
+                {"id": "gw-p1", "x": 921, "y": 366, "label": "Ambush",
                  "note": "Three goblins fire from the ledge the moment the party crosses the hall."}]},
+    # Organic token placement (parallel to "party" / "npc_tokens" below).
+    "party_pos": [(196, 742), (287, 803), (358, 715), (233, 641), (415, 795)],
+    "npc_pos": [(842, 337), (1013, 268), (925, 472), (1146, 351)],
     "party": [
         {"owner": "gm", "name": "Thorin Battlehammer",
          "image": "/static/demo/tokens/l3-thorin.png", "sheet": dict(
@@ -237,27 +245,34 @@ _STORM_SALTMARSH = {
     # public text labels, and a hotspot marking the sunken wreck.
     # v2.842.0 — storm-darkened daylight (dim ambient) with swaying lanterns and
     # rolling sea-fog over the reef.
+    # v2.847.0 — gridless: party on the western reef plates, sahuagin circling
+    # the central wreck, the shark prowling the deep channel, the elemental in
+    # the surf; lanterns hang off the listing hull.
     "map": {"name": "The Drowned Reef", "width": 1600, "height": 1100,
             "image": "/static/demo/maps/drowned-reef.png",
+            "gridless": True,
             "ambient_light": "dim",
             "lights": [
-                {"id": "dr-l1", "x": 700, "y": 490, "bright_ft": 20, "dim_ft": 40,
+                {"id": "dr-l1", "x": 716, "y": 478, "bright_ft": 20, "dim_ft": 40,
                  "color": "#fde68a", "type": "lantern"},
-                {"id": "dr-l2", "x": 1190, "y": 350, "bright_ft": 15, "dim_ft": 30,
+                {"id": "dr-l2", "x": 1178, "y": 337, "bright_ft": 15, "dim_ft": 30,
                  "color": "#fde68a", "type": "lantern"}],
             "fog_enabled": True, "fog_dynamic": True,
-            "fog_revealed": [{"x": 70, "y": 200, "w": 1460, "h": 620}],
+            "fog_revealed": [{"x": 59, "y": 214, "w": 1483, "h": 660}],
             "terrain": [
-                {"id": "dr-t1", "x": 140, "y": 770, "w": 1330, "h": 210, "type": "water"},
-                {"id": "dr-t2", "x": 980, "y": 210, "w": 350, "h": 350, "type": "difficult"}],
+                {"id": "dr-t1", "x": 127, "y": 781, "w": 1352, "h": 204, "type": "water"},
+                {"id": "dr-t2", "x": 991, "y": 198, "w": 337, "h": 368, "type": "difficult"}],
             "labels": [
-                {"id": "dr-lb1", "x": 210, "y": 840, "text": "Deep channel",
+                {"id": "dr-lb1", "x": 218, "y": 851, "text": "Deep channel",
                  "size": 32, "color": "#bae6fd"},
-                {"id": "dr-lb2", "x": 1050, "y": 280, "text": "Kelp forest",
+                {"id": "dr-lb2", "x": 1063, "y": 273, "text": "Kelp forest",
                  "size": 28, "color": "#86efac"}],
             "hotspots": [
-                {"id": "dr-h1", "x": 700, "y": 490, "label": "Sunken wreck",
+                {"id": "dr-h1", "x": 712, "y": 496, "label": "Sunken wreck",
                  "description": "A shattered hull. A DC 15 Investigation turns up a waterlogged chest."}]},
+    # Organic token placement (parallel to "party" / "npc_tokens" below).
+    "party_pos": [(312, 447), (416, 521), (247, 563), (383, 356), (491, 462)],
+    "npc_pos": [(807, 533), (923, 411), (1101, 823), (688, 662)],
     "party": [
         {"owner": "dave", "name": "Vaelith Stormscale",
          "image": "/static/demo/tokens/l9-vaelith.png", "sheet": dict(
@@ -413,23 +428,32 @@ _SHADOWFELL_SPIRE = {
     # v2.840.0 — dark-tower showcase: ambient dark with coloured brazier lights,
     # fog of war (revealed generously over the play area so the live view stays
     # visible), and a GM-only pin.
+    # v2.847.0 — gridless: party entering across the southern plaza, wraith +
+    # spawn drifting among the shadow-rifts mid-plaza, the illithid at the
+    # spire's base off the top edge; braziers moved onto the rift line. The
+    # fog reveal now covers the party's southern approach (the rift field
+    # stays unexplored until scouted).
     "map": {"name": "The Shadowfell Spire (threshold)", "width": 1600, "height": 1200,
             "image": "/static/demo/maps/shadowfell-spire.png",
+            "gridless": True,
             "ambient_light": "dark",
             "lights": [
-                {"id": "ss-l1", "x": 350, "y": 350, "bright_ft": 20, "dim_ft": 40,
+                {"id": "ss-l1", "x": 338, "y": 362, "bright_ft": 20, "dim_ft": 40,
                  "color": "#a855f7", "type": "torch"},
-                {"id": "ss-l2", "x": 1250, "y": 350, "bright_ft": 20, "dim_ft": 40,
+                {"id": "ss-l2", "x": 1263, "y": 341, "bright_ft": 20, "dim_ft": 40,
                  "color": "#a855f7", "type": "torch"},
-                {"id": "ss-l3", "x": 800, "y": 700, "bright_ft": 15, "dim_ft": 30,
+                {"id": "ss-l3", "x": 786, "y": 713, "bright_ft": 15, "dim_ft": 30,
                  "color": "#38bdf8", "type": "candle"},
-                {"id": "ss-l4", "x": 800, "y": 350, "bright_ft": 25, "dim_ft": 50,
+                {"id": "ss-l4", "x": 808, "y": 337, "bright_ft": 25, "dim_ft": 50,
                  "color": "#22d3ee", "type": "daylight"}],
             "fog_enabled": True, "fog_dynamic": True,
-            "fog_revealed": [{"x": 70, "y": 200, "w": 1460, "h": 560}],
+            "fog_revealed": [{"x": 56, "y": 580, "w": 1488, "h": 560}],
             "gm_pins": [
-                {"id": "ss-p1", "x": 800, "y": 910, "label": "Shadow gate",
+                {"id": "ss-p1", "x": 773, "y": 881, "label": "Shadow gate",
                  "note": "The rift opens on round 3; a shadow demon steps through."}]},
+    # Organic token placement (parallel to "party" / "npc_tokens" below).
+    "party_pos": [(591, 917), (703, 986), (817, 924), (688, 843), (943, 968)],
+    "npc_pos": [(517, 428), (688, 337), (912, 391), (793, 216)],
     "party": [
         {"owner": "bob", "name": "Maelen Farsight",
          "image": "/static/demo/tokens/l13-maelen.png", "sheet": dict(
@@ -592,26 +616,33 @@ _DRAGONS_APOTHEOSIS = {
     # public warning label, and a hotspot for the erupting vent.
     # v2.842.0 — the throne is lit by its own lava (dim ambient), so the
     # fire-glow lights read against the gloom.
+    # v2.847.0 — gridless: Pyraxis holds the central obsidian dais, the fire
+    # giants flank it, the cult archmage hangs back by the vent; the party
+    # crests the south-west rim above the lava flow.
     "map": {"name": "The Caldera Throne", "width": 1800, "height": 1300,
             "image": "/static/demo/maps/caldera-throne.png",
+            "gridless": True,
             "ambient_light": "dim",
             "terrain": [
-                {"id": "ct-t1", "x": 140, "y": 910, "w": 1520, "h": 250, "type": "lava"},
-                {"id": "ct-t2", "x": 770, "y": 210, "w": 280, "h": 280, "type": "lava"}],
+                {"id": "ct-t1", "x": 128, "y": 923, "w": 1544, "h": 236, "type": "lava"},
+                {"id": "ct-t2", "x": 781, "y": 198, "w": 263, "h": 291, "type": "lava"}],
             "lights": [
-                {"id": "ct-l1", "x": 280, "y": 1030, "bright_ft": 15, "dim_ft": 30,
+                {"id": "ct-l1", "x": 287, "y": 1041, "bright_ft": 15, "dim_ft": 30,
                  "color": "#f97316", "type": "torch"},
-                {"id": "ct-l2", "x": 1540, "y": 1030, "bright_ft": 15, "dim_ft": 30,
+                {"id": "ct-l2", "x": 1526, "y": 1019, "bright_ft": 15, "dim_ft": 30,
                  "color": "#f97316", "type": "torch"},
-                {"id": "ct-l3", "x": 910, "y": 350, "bright_ft": 20, "dim_ft": 40,
+                {"id": "ct-l3", "x": 897, "y": 336, "bright_ft": 20, "dim_ft": 40,
                  "color": "#fb923c", "type": "lamp"}],
             "labels": [
-                {"id": "ct-lb1", "x": 700, "y": 990, "text": "Lava flow",
+                {"id": "ct-lb1", "x": 712, "y": 968, "text": "Lava flow",
                  "size": 34, "color": "#fdba74"}],
             "hotspots": [
-                {"id": "ct-h1", "x": 910, "y": 350, "label": "Erupting vent",
+                {"id": "ct-h1", "x": 908, "y": 344, "label": "Erupting vent",
                  "description": "Bursts every other round. DC 15 DEX save or 4d6 fire.",
                  "roll": "1d20"}]},
+    # Organic token placement (parallel to "party" / "npc_tokens" below).
+    "party_pos": [(312, 771), (416, 826), (247, 738), (367, 692), (491, 793)],
+    "npc_pos": [(866, 612), (671, 703), (1094, 688), (1153, 496)],
     "party": [
         {"owner": "gm", "name": "Archmagus Selene",
          "image": "/static/demo/tokens/l18-selene.png", "sheet": dict(
@@ -782,20 +813,26 @@ _TIDEWRACKED_CATACOMBS = {
     # (revealed generously over the play area), and a lantern light source.
     # v2.842.0 — pitch-dark crypt (dark ambient): only the party's lanterns and
     # a guttering wall torch carve pools of light out of the black.
+    # v2.847.0 — gridless: party clustered on the dry central stair, undead
+    # wading through the flooded halls below; lanterns hung along the stair.
     "map": {"name": "The Tide-Wracked Catacombs", "width": 1400, "height": 1000,
             "image": "/static/demo/maps/tide-wracked-catacombs.png",
+            "gridless": True,
             "ambient_light": "dark",
             "terrain": [
-                {"id": "tc-t1", "x": 140, "y": 630, "w": 1120, "h": 210, "type": "water"}],
+                {"id": "tc-t1", "x": 131, "y": 624, "w": 1138, "h": 221, "type": "water"}],
             "lights": [
-                {"id": "tc-l1", "x": 700, "y": 420, "bright_ft": 20, "dim_ft": 40,
+                {"id": "tc-l1", "x": 681, "y": 407, "bright_ft": 20, "dim_ft": 40,
                  "color": "#fde68a", "type": "lantern"},
-                {"id": "tc-l2", "x": 280, "y": 280, "bright_ft": 15, "dim_ft": 30,
+                {"id": "tc-l2", "x": 272, "y": 291, "bright_ft": 15, "dim_ft": 30,
                  "color": "#f59e0b", "type": "torch"},
-                {"id": "tc-l3", "x": 1050, "y": 490, "bright_ft": 15, "dim_ft": 30,
+                {"id": "tc-l3", "x": 1063, "y": 483, "bright_ft": 15, "dim_ft": 30,
                  "color": "#fde68a", "type": "lantern"}],
             "fog_enabled": True, "fog_dynamic": True,
-            "fog_revealed": [{"x": 70, "y": 200, "w": 1260, "h": 560}]},
+            "fog_revealed": [{"x": 63, "y": 217, "w": 1274, "h": 610}]},
+    # Organic token placement (parallel to "party" / "npc_tokens" below).
+    "party_pos": [(612, 373), (703, 428), (548, 447), (662, 519), (779, 361)],
+    "npc_pos": [(338, 682), (517, 736), (871, 704), (1042, 651)],
     "party": [
         {"owner": "gm", "name": "Sir Gareth Tidebreaker",
          "image": "/static/demo/tokens/l5tide-gareth.png", "sheet": dict(
@@ -992,10 +1029,18 @@ def _seed_one(db: Session, spec: dict, users: dict[str, User]) -> Campaign:
     # Optional ``image`` web-path (e.g. "/static/demo/maps/goblin-warrens.png")
     # on the map dict / party PCs / npc_tokens wires demo art generated from the
     # prompts at /wiki/doc/image-prompts. Absent → None (plain coloured ring).
+    # v2.847.0 — the leveled demos are gridless boards: `gridless: True` on a
+    # spec's map dict sets grid_type NONE (free token placement, no overlay, no
+    # coordinate gutter). ``grid_size_px`` stays 70 regardless — it's the 5-ft
+    # scale reference that keeps distance/speed/range math (Euclidean when
+    # gridless) and the exploration-fog cell size working.
+    gridless = bool(mp.get("gridless"))
     m = Map(
         campaign_id=camp.id, name=mp["name"], image_url=mp.get("image"),
         grid_size_px=70, width_px=mp.get("width", 1400),
-        height_px=mp.get("height", 1000), show_grid=True,
+        height_px=mp.get("height", 1000),
+        grid_type=GridType.NONE if gridless else GridType.SQUARE,
+        show_grid=not gridless,
         # v2.733.0 — ship every demo with the "match surround to map" toggle
         # ON: paint the canvas background the map image's average colour.
         letterbox_color=average_image_color(mp.get("image")),
@@ -1030,15 +1075,20 @@ def _seed_one(db: Session, spec: dict, users: dict[str, User]) -> Campaign:
         tmpls[slug] = tt
     db.flush()
 
-    # PC tokens across the top, NPC tokens across the bottom. Positions are
-    # multiples of the 70 px grid (step 140 = two cells; rows at 4·70 and
-    # 9·70) so every token lands squarely on a grid cell.
+    # Token placement. v2.847.0 — gridless maps carry organic, art-matched
+    # positions in the spec: ``party_pos`` / ``npc_pos`` are lists of (x, y)
+    # parallel to ``party`` / ``npc_tokens`` (index-keyed since NPC labels can
+    # repeat). Specs without them fall back to the original row layout (PCs
+    # across the top at y=280, NPCs across the bottom at y=630, step 140).
+    party_pos = spec.get("party_pos") or []
+    npc_pos = spec.get("npc_pos") or []
     enc_tokens: list[Token] = []
     for i, ch in enumerate(chars):
+        px, py = party_pos[i] if i < len(party_pos) else (140 + i * 140, 280)
         tk = Token(
             map_id=m.id, character_id=ch.id, controller_user_id=ch.owner_user_id,
             label=ch.name, color="#6cb4ff", image_url=spec["party"][i].get("image"),
-            x=140 + i * 140, y=280, size=1, team="hero")
+            x=px, y=py, size=1, team="hero")
         db.add(tk)
         enc_tokens.append(tk)
     for i, entry in enumerate(spec.get("npc_tokens", [])):
@@ -1048,10 +1098,11 @@ def _seed_one(db: Session, spec: dict, users: dict[str, User]) -> Campaign:
         tt = tmpls.get(slug)
         if tt is None:
             continue
+        nx, ny = npc_pos[i] if i < len(npc_pos) else (140 + i * 140, 630)
         tk = Token(
             map_id=m.id, character_id=None, token_template_id=tt.id,
             label=label, color=color, image_url=image,
-            x=140 + i * 140, y=630, size=1, team="villain")
+            x=nx, y=ny, size=1, team="villain")
         db.add(tk)
         enc_tokens.append(tk)
     db.flush()

@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.847.0] - 2026-07-03 — "The Unruled Table"
+
+**Schema version:** 97
+
+**Commit summary:** The five leveled demo maps go gridless, with tokens and map elements repositioned organically to match the art.
+
+**Description:** The leveled demos (L3/L5/L9/L13/L18) now ship as **gridless boards** — `grid_type: none`, no grid overlay, no coordinate gutter, free token placement — since the map art is deliberately grid-free anyway. Tokens leave their neat 140 px rows for **organic, art-matched positions**: the Goblin Warrens party approaches the palisade while goblins hold the tunnel mouths; the Catacombs party clusters on the dry stair with undead wading the flooded halls; the Reef party crosses the western plates while sahuagin circle the wreck and the shark prowls the deep channel; the Shadowfell party crosses the southern plaza toward rift-drifting undead; and Pyraxis holds the Caldera's central dais with his court arrayed around it. Seeded elements (walls/lights/terrain/labels/hotspots/pins) shift off grid multiples onto the same art features — the warren walls now run at cave-irregular angles. **Everything mechanical keeps working**: `grid_size_px` stays 70 as the 5-ft scale, so speed caps/ranges/OA measure Euclidean feet and the exploration fog keeps its 70 px cells. Encounters inherit the new positions automatically (they snapshot the placed tokens at seed time). **The flagship Sundered Tavern keeps its square grid** — it's the harness anchor, and gridless flips distance from Chebyshev to Euclidean, which its movement tests assert.
+
+### Changed
+- `app/demo_campaigns.py` — `gridless: True` map-dict flag → `grid_type=NONE` + `show_grid=False` (grid_size_px stays 70); `party_pos`/`npc_pos` parallel position lists (index-keyed — NPC labels can repeat) with row-layout fallback; all five specs gain organic token positions + repositioned elements; fog reveals re-covered over the new party spots (the Shadowfell reveal moves to the southern approach).
+- `tests/harness/test_demo_campaigns.py` — `test_demo_tokens_are_grid_aligned` split: flagship keeps the 70 px alignment guard; leveled campaigns assert `grid_type: "none"`, `grid_size_px: 70`, and every token in-bounds.
+- `docs/wiki/demo-content.md` — "Gridless boards" note (leveled demos gridless; flagship keeps its grid).
+
+### Schema
+- No schema change (still v97 — demo seed content only; `grid_type` NONE is existing substrate).
+
 ## [2.846.0] - 2026-07-03 — "The Watcher's Eye"
 
 **Schema version:** 97

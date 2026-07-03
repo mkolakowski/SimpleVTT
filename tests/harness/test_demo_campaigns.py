@@ -179,12 +179,12 @@ async def test_second_gm_owns_only_its_campaign():
 
 
 # ── Demo-seed review (v2.640.0) ─────────────────────────────────────────
-# Every demo campaign ships with at least one encounter, and every seeded
-# token sits squarely on a grid cell. Guards the demo_campaigns.py fix that
-# replaced the off-grid 105 px token spacing (every other token landed half
-# a cell off) + added a per-campaign encounter to the five leveled games
-# (previously only the flagship Sundered Vault had one).
-_DEMO_GRID_PX = 70  # every demo map is a 70 px square grid, offset (0, 0)
+# Every demo campaign ships with at least one encounter. v2.847.0 — the five
+# leveled demos are now GRIDLESS boards with organic, art-matched token
+# placement, so the old "every token on a 70 px multiple" guard now applies
+# only to the flagship (which keeps its square grid as the harness anchor);
+# the leveled campaigns instead assert grid_type "none" + tokens in-bounds.
+_DEMO_GRID_PX = 70  # the flagship map's 70 px square grid, offset (0, 0)
 _CAMPAIGN_GMS = [
     (1, "demo-gm@example.com"),    # Sundered Vault (archived flagship)
     (2, "demo-gm@example.com"),    # L3  Goblin Warrens
@@ -193,6 +193,15 @@ _CAMPAIGN_GMS = [
     (5, "demo-gm@example.com"),    # L13 Shadowfell Spire
     (6, "demo-gm@example.com"),    # L18 Dragon's Apotheosis
 ]
+# v2.847.0 — leveled demo map dimensions (width, height) for the in-bounds
+# assertion, mirroring the CAMPAIGN_SPECS map dicts in app/demo_campaigns.py.
+_GRIDLESS_MAP_DIMS = {
+    2: (1400, 1000),   # Goblin Warrens
+    3: (1400, 1000),   # Tide-Wracked Catacombs
+    4: (1600, 1100),   # Drowned Reef
+    5: (1600, 1200),   # Shadowfell Spire
+    6: (1800, 1300),   # Caldera Throne
+}
 
 
 @_LIVE
@@ -211,19 +220,33 @@ async def test_demo_campaign_has_encounter(cid, gm):
 @_LIVE
 @pytest.mark.parametrize("cid,gm", _CAMPAIGN_GMS)
 async def test_demo_tokens_are_grid_aligned(cid, gm):
-    """Every seeded token's (x, y) is a multiple of the 70 px grid, so each
-    token sits on a grid cell rather than drifting half a cell off."""
+    """Flagship (campaign 1): every seeded token's (x, y) is a multiple of the
+    70 px grid — it keeps its square grid as the harness anchor. v2.847.0 —
+    the leveled campaigns are gridless with organic placement, so they instead
+    assert grid_type "none" + every token inside the map bounds."""
     client = await login_client(gm, "demopass")
     try:
         resp = await client.get(f"/api/campaign/{cid}/tokens")
         assert resp.status_code == 200, f"campaign {cid}: {resp.status_code}"
         tokens = resp.json()["tokens"]
         assert tokens, f"campaign {cid} has no tokens"
-        off = [
-            (t.get("label"), t["x"], t["y"])
-            for t in tokens
-            if float(t["x"]) % _DEMO_GRID_PX or float(t["y"]) % _DEMO_GRID_PX
-        ]
-        assert not off, f"campaign {cid} off-grid tokens: {off}"
+        if cid == 1:
+            off = [
+                (t.get("label"), t["x"], t["y"])
+                for t in tokens
+                if float(t["x"]) % _DEMO_GRID_PX or float(t["y"]) % _DEMO_GRID_PX
+            ]
+            assert not off, f"campaign {cid} off-grid tokens: {off}"
+        else:
+            am = (await client.get(f"/api/campaign/{cid}/active-map")).json()
+            assert am["grid_type"] == "none", f"campaign {cid}: {am['grid_type']}"
+            assert am["grid_size_px"] == 70   # the 5-ft scale reference stays
+            w, h = _GRIDLESS_MAP_DIMS[cid]
+            out = [
+                (t.get("label"), t["x"], t["y"])
+                for t in tokens
+                if not (0 <= float(t["x"]) <= w - 70 and 0 <= float(t["y"]) <= h - 70)
+            ]
+            assert not out, f"campaign {cid} out-of-bounds tokens: {out}"
     finally:
         await client.aclose()
