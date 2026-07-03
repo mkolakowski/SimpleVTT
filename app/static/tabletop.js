@@ -118,11 +118,28 @@
     };
     // v2.766.0 — fog of war. Players see the map obscured except inside the
     // revealed rects; the GM sees a faint fog tint over still-hidden areas.
-    let mapFogEnabled = false, mapFogRevealed = [];
-    window._setMapFog = function (enabled, revealed) {
+    // v2.844.0 — exploration-tracking fog. When ``mapFogDynamic`` is on, the
+    // client reveals what the party's tokens can see as they move (base sight +
+    // light, wall-occluded) and accumulates the seen grid cells in
+    // ``mapFogExplored`` (a Set of "col,row" keys). ``mapFogVisible`` is the
+    // currently-in-view subset, refreshed on move — explored-but-not-visible
+    // renders as dimmed memory. ``mapFogMapId`` is the map the reveal POSTs
+    // target (the active map).
+    let mapFogEnabled = false, mapFogRevealed = [], mapFogDynamic = false;
+    let mapFogExplored = new Set();   // "c,r" keys — accumulated seen cells
+    let mapFogVisible = new Set();    // "c,r" keys — currently in view
+    let mapFogMapId = (typeof MAP_ID !== 'undefined' ? MAP_ID : null);
+    window._setMapFog = function (enabled, revealed, dynamic, explored, mapId) {
         mapFogEnabled = !!enabled;
         mapFogRevealed = Array.isArray(revealed) ? revealed : [];
-        try { render(); } catch (_) {}
+        // Optional args (undefined from legacy 2-arg callers) leave state as-is.
+        if (dynamic !== undefined) mapFogDynamic = !!dynamic;
+        if (Array.isArray(explored)) {
+            mapFogExplored = new Set(explored.map(c => `${c[0]},${c[1]}`));
+        }
+        if (mapId != null) mapFogMapId = mapId;
+        // Recompute the currently-visible set from the new state, then redraw.
+        try { revealFromVision(); } catch (_) { try { render(); } catch (_) {} }
     };
     // The server-rendered initial-data predates the vision fields, so pull
     // the active map's ambient + placed emitters once on load. Deferred
@@ -3041,9 +3058,140 @@
         return true;
     };
 
+    // v2.844.0 — exploration-tracking fog: vision computation. A "party" token
+    // (a hero or a player-controlled piece the viewer can perceive) reveals what
+    // it can see; the union of all party tokens' sight is the currently-visible
+    // area, occluded by walls. Base sight range extended by the token's own
+    // light. BASE_SIGHT_FT is deliberately generous so an unlit token still
+    // "sees" the room it's standing in.
+    const FOG_BASE_SIGHT_FT = 60;
+    function _fogSolidWalls() {
+        return (mapWalls || []).filter(
+            w => w && !((w.door || w.gate) && w.open) && !w.window &&
+                 [w.x1, w.y1, w.x2, w.y2].every(n => typeof n === 'number'));
+    }
+    // Project each solid wall's shadow away from the source point and erase it
+    // from ``sctx`` (which must be in destination-out mode by the caller). Same
+    // shadow-quad math drawLighting() uses for its per-source light shadows.
+    function _fogEraseWallShadows(sctx, sx, sy, walls) {
+        if (!walls.length) return;
+        const ext = (MAP_W + MAP_H) * 2;
+        walls.forEach(w => {
+            const proj = (px, py) => {
+                const dx = px - sx, dy = py - sy;
+                const len = Math.hypot(dx, dy) || 1;
+                return [px + dx / len * ext, py + dy / len * ext];
+            };
+            const f1 = proj(w.x1, w.y1), f2 = proj(w.x2, w.y2);
+            sctx.beginPath();
+            sctx.moveTo(w.x1, w.y1);
+            sctx.lineTo(f1[0], f1[1]);
+            sctx.lineTo(f2[0], f2[1]);
+            sctx.lineTo(w.x2, w.y2);
+            sctx.closePath();
+            sctx.fill();
+        });
+    }
+    function _fogPartyTokens() {
+        return (tokens || []).filter(t => t && !_isTokenHiddenFromMe(t) &&
+            (t.team === 'hero' || t.controller_user_id != null));
+    }
+    let _visCanvas = null, _visSrcCanvas = null;
+    // Return a Set of "col,row" grid cells the party can currently see. Draws
+    // each token's vision disc (minus wall shadows) onto an offscreen canvas,
+    // then samples each grid cell's center for coverage.
+    function computeVisibleCells() {
+        const out = new Set();
+        const party = _fogPartyTokens();
+        if (!party.length) return out;
+        const pxPerFt = gridSize / 5;
+        const walls = _fogSolidWalls();
+        if (!_visCanvas) _visCanvas = document.createElement('canvas');
+        if (_visCanvas.width !== MAP_W) _visCanvas.width = MAP_W;
+        if (_visCanvas.height !== MAP_H) _visCanvas.height = MAP_H;
+        const vc = _visCanvas.getContext('2d');
+        vc.clearRect(0, 0, MAP_W, MAP_H);
+        party.forEach(t => {
+            const dim = Number(t.light_dim_ft || 0);
+            const rpx = Math.max(FOG_BASE_SIGHT_FT, dim) * pxPerFt;
+            if (rpx <= 0) return;
+            const cx = t.x + gridSize / 2, cy = t.y + gridSize / 2;
+            if (!walls.length) {
+                vc.beginPath(); vc.arc(cx, cy, rpx, 0, Math.PI * 2); vc.fill();
+                return;
+            }
+            // Build this token's disc on a temp canvas, carve wall shadows, then
+            // union it into the visibility canvas.
+            if (!_visSrcCanvas) _visSrcCanvas = document.createElement('canvas');
+            if (_visSrcCanvas.width !== MAP_W) _visSrcCanvas.width = MAP_W;
+            if (_visSrcCanvas.height !== MAP_H) _visSrcCanvas.height = MAP_H;
+            const sc = _visSrcCanvas.getContext('2d');
+            sc.clearRect(0, 0, MAP_W, MAP_H);
+            sc.globalCompositeOperation = 'source-over';
+            sc.fillStyle = 'rgba(0,0,0,1)';
+            sc.beginPath(); sc.arc(cx, cy, rpx, 0, Math.PI * 2); sc.fill();
+            sc.save();
+            sc.globalCompositeOperation = 'destination-out';
+            sc.fillStyle = 'rgba(0,0,0,1)';
+            _fogEraseWallShadows(sc, cx, cy, walls);
+            sc.restore();
+            vc.drawImage(_visSrcCanvas, 0, 0);
+        });
+        // Sample each grid cell center (tiny 1×1 reads — cheap vs a full copy).
+        const cols = Math.ceil(MAP_W / gridSize), rows = Math.ceil(MAP_H / gridSize);
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const sx = Math.min(MAP_W - 1, Math.floor(c * gridSize + gridSize / 2));
+                const sy = Math.min(MAP_H - 1, Math.floor(r * gridSize + gridSize / 2));
+                if (vc.getImageData(sx, sy, 1, 1).data[3] > 40) out.add(`${c},${r}`);
+            }
+        }
+        return out;
+    }
+
+    // Recompute the currently-visible set, fold any newly-seen cells into the
+    // persistent explored memory, queue them for the server, and redraw. A
+    // no-op (bar a redraw) when the map isn't in dynamic-fog mode.
+    let _fogPending = new Set();
+    let _fogFlushTimer = null;
+    function revealFromVision() {
+        if (!mapFogEnabled || !mapFogDynamic) { try { render(); } catch (_) {} return; }
+        mapFogVisible = computeVisibleCells();
+        mapFogVisible.forEach(k => {
+            if (!mapFogExplored.has(k)) {
+                mapFogExplored.add(k);
+                _fogPending.add(k);
+            }
+        });
+        try { render(); } catch (_) {}
+        if (_fogPending.size) _scheduleFogFlush();
+    }
+    function _scheduleFogFlush() {
+        if (_fogFlushTimer) return;   // coalesce a drag's rapid moves
+        _fogFlushTimer = setTimeout(_flushFogReveal, 400);
+    }
+    async function _flushFogReveal() {
+        _fogFlushTimer = null;
+        if (!_fogPending.size || mapFogMapId == null ||
+            typeof CAMPAIGN_ID === 'undefined') { _fogPending.clear(); return; }
+        const cells = [..._fogPending].map(k => k.split(',').map(Number));
+        _fogPending.clear();
+        try {
+            await fetch(`/api/campaign/${CAMPAIGN_ID}/map/${mapFogMapId}/fog/explore`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cells }),
+            });
+            // The server broadcasts fog_update with the merged set → every
+            // client (incl. this one) reconciles mapFogExplored from it.
+        } catch (_) { /* best-effort; the local set already shows the reveal */ }
+    }
+    window._fogRevealFromVision = revealFromVision;
+
     // v2.766.0 — fog of war overlay. Covers the map with a fog veil and cuts
-    // out the GM-revealed rectangles. Players get an opaque veil (can't see
-    // unexplored areas); the GM gets a faint tint so they know what's hidden.
+    // out the revealed areas. v2.844.0 — three states when dynamic: currently-
+    // visible cells clear fully, explored-but-out-of-view cells clear partially
+    // (dim memory), never-seen cells stay veiled. Static mode keeps the original
+    // GM-rect-only behavior.
     let _fogCanvas = null;
     function drawFog() {
         if (!mapFogEnabled) return;
@@ -3056,8 +3204,22 @@
         fc.globalCompositeOperation = 'source-over';
         fc.fillStyle = isGm ? 'rgba(8,10,22,0.40)' : 'rgba(5,7,16,0.97)';
         fc.fillRect(0, 0, MAP_W, MAP_H);
-        // Cut out the revealed rectangles.
         fc.globalCompositeOperation = 'destination-out';
+        if (mapFogDynamic) {
+            // Explored memory: partial erase (0.6) → the area shows dimmed.
+            fc.fillStyle = 'rgba(0,0,0,0.6)';
+            mapFogExplored.forEach(k => {
+                const p = k.split(',');
+                fc.fillRect(p[0] * gridSize, p[1] * gridSize, gridSize, gridSize);
+            });
+            // Currently visible: full erase → fully clear (drawn on top).
+            fc.fillStyle = 'rgba(0,0,0,1)';
+            mapFogVisible.forEach(k => {
+                const p = k.split(',');
+                fc.fillRect(p[0] * gridSize, p[1] * gridSize, gridSize, gridSize);
+            });
+        }
+        // GM-painted revealed rectangles are always fully clear.
         fc.fillStyle = 'rgba(0,0,0,1)';
         (mapFogRevealed || []).forEach(r => {
             if (!r) return;
@@ -3069,6 +3231,22 @@
         ctx.drawImage(_fogCanvas, 0, 0);
         window.__fogCanvasForTest = _fogCanvas;
     }
+    // v2.844.0 — deterministic harness hook: drive the exploration-fog state
+    // directly (tokens/walls/explored) and redraw, bypassing WS/bootstrap
+    // timing, then leave the veil on window.__fogCanvasForTest to sample.
+    window.__testDrawFog = function (opts) {
+        opts = opts || {};
+        mapFogEnabled = true;
+        mapFogDynamic = opts.dynamic !== false;
+        if (Array.isArray(opts.walls)) mapWalls = opts.walls;
+        if (Array.isArray(opts.tokens)) tokens = opts.tokens;
+        if (Array.isArray(opts.explored)) {
+            mapFogExplored = new Set(opts.explored.map(c => `${c[0]},${c[1]}`));
+        }
+        try { mapFogVisible = computeVisibleCells(); } catch (e) { return String(e); }
+        try { render(); } catch (e) { return String(e); }
+        return { visible: [...mapFogVisible], explored: [...mapFogExplored] };
+    };
 
     /* v2.8.1: movement breadcrumb. Drawn on top of tokens so the line
      * stays visible when a token sits on a waypoint. Reads
@@ -5242,7 +5420,14 @@
             }
             if (msg.type === 'token_move') {
                 const t = tokens.find(t => t.id === msg.data.id);
-                if (t) { t.x = msg.data.x; t.y = msg.data.y; render(); }
+                if (t) {
+                    t.x = msg.data.x; t.y = msg.data.y;
+                    // v2.844.0 — a moved token may have scouted new ground;
+                    // recompute party vision + reveal (redraws internally).
+                    // Static-fog maps just fall through to a plain render.
+                    if (mapFogEnabled && mapFogDynamic) { revealFromVision(); }
+                    else { render(); }
+                }
             } else if (msg.type === 'token_add') {
                 tokens.push(msg.data);
                 renderTokenTracker();
@@ -5427,9 +5612,13 @@
                 }
             } else if (msg.type === 'fog_update') {
                 // v2.766.0 — Maps 2.0: re-render fog of war.
+                // v2.844.0 — carry the dynamic flag + accumulated explored cells.
                 if (msg.data && typeof window._setMapFog === 'function') {
                     try {
-                        window._setMapFog(msg.data.fog_enabled, msg.data.fog_revealed || []);
+                        window._setMapFog(
+                            msg.data.fog_enabled, msg.data.fog_revealed || [],
+                            msg.data.fog_dynamic, msg.data.fog_explored,
+                            msg.data.map_id);
                     } catch (_) {}
                 }
             } else if (msg.type === 'terrain_update') {

@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.844.0] - 2026-07-02 — "The Remembered Room"
+
+**Schema version:** 97
+
+**Commit summary:** Exploration-tracking fog of war — Phase 2: client vision computation + three-state rendering (reveal on move, dim memory, wall occlusion).
+
+**Description:** Second phase — the client half that makes exploration fog visible. On a `fog_dynamic` map, as the party's tokens move the client computes **what they can see** (a `max(60 ft, token dim-light)` vision disc per hero/player-controlled token, with **wall shadows carved out** using the same projection math the lighting overlay uses) and folds newly-seen grid cells into the map's explored memory, POSTing them (throttled, deduped) to `/fog/explore` so every client + the server stay in sync. `drawFog()` is now **three-state**: currently-visible cells clear fully, explored-but-out-of-view cells clear partially (a dimmed "memory" of where you've been), never-seen cells stay veiled. Static-fog maps (the default) keep the original GM-painted-rect behavior untouched. The reveal recomputes on every `token_move` and on load; `_setMapFog` + the `/active-map` bootstrap + the `fog_update` WS now carry `fog_dynamic` + the explored set.
+
+### Added
+- `app/static/tabletop.js` — `computeVisibleCells()` (party-token vision discs − wall shadows → grid cells), `revealFromVision()` (recompute + accumulate + throttled `/fog/explore` POST), three-state `drawFog()`, extended `_setMapFog` state (`mapFogDynamic` / `mapFogExplored` / `mapFogVisible` / `mapFogMapId`), and the `window.__testDrawFog` harness hook. The `token_move` + `fog_update` handlers drive the reveal.
+- `app/templates/tabletop.html` — the `/active-map` bootstrap passes `fog_dynamic` / `fog_explored` / `map_id` into `_setMapFog`.
+- `tests/harness_ui/test_map_fog_dynamic.py` (new, +1) — drives `__testDrawFog` and samples the fog canvas: a front cell reads clear, a wall-occluded explored cell reads dim, a wall-occluded never-seen cell reads opaque.
+
+### Schema
+- No schema change (still v97 — client rendering + reveal on the Phase 1 engine).
+
 ## [2.843.0] - 2026-07-02 — "The Explored Dark"
 
 **Schema version:** 97

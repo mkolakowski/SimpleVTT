@@ -2743,7 +2743,11 @@
                 fetchGmPins();  // v2.790.2 — GM-only (no-op for players)
                 if (window._setMapWalls) window._setMapWalls(walls);
                 if (window._setMapLights) window._setMapLights(d.lights || []);
-                if (window._setMapFog) window._setMapFog(d.fog_enabled, d.fog_revealed || []);
+                // v2.844.0 — pass the exploration-fog fields so dynamic maps
+                // bootstrap their explored memory + compute initial visibility.
+                if (window._setMapFog) window._setMapFog(
+                    d.fog_enabled, d.fog_revealed || [],
+                    d.fog_dynamic, d.fog_explored, d.map_id);
             } catch (e) {}
         }
         async function saveHotspots() {
