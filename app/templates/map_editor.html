@@ -196,6 +196,11 @@
             title="Measure: drag a line to read its length in feet (5 ft per grid cell)">📏 Measure</button>
     <button type="button" id="me-select-btn" class="me-tool-btn" aria-pressed="false"
             title="Select: drag a box to select multiple objects, then drag to move them together or press Delete to remove them all">⬚ Select</button>
+    {# v2.854.0 — Select & Move: double-click an object to select it, then drag
+       it to move; walls/doors/terrain also light up their resize handles. On
+       by default. #}
+    <button type="button" id="me-selmove-btn" class="me-tool-btn" aria-pressed="true"
+            title="Select &amp; move (on by default): double-click any object to select it, then drag it to move. Walls, doors and terrain also show resize handles. Toggle off to double-click for toolbar editing only.">🖱 Select &amp; move</button>
   </div>
   {# v2.817.0 — Actions │ Draw zone boundary. v2.820.0 — label folds the zone. #}
   <div class="me-zone-sep"><span class="me-zone-lbl">Draw</span></div>
@@ -1164,11 +1169,9 @@
           terrain.splice(i, 1); saveTerrain();
         }
       });
-      // v2.851.0 — double-click selects (the terrain type select edits it).
-      rc.addEventListener('dblclick', function (e) {
-        e.preventDefault(); e.stopPropagation();
-        selectTerrain(selectedTerrain === tr ? null : tr);
-      });
+      // v2.851.0 — double-click selects (type select edits it).
+      // v2.854.0 — + drag-to-move + resize handles via wireSelectDrag.
+      wireSelectDrag(rc, 'terrain', tr);
       // Dashed white outline on the dbl-click-selected region.
       if (selectedTerrain === tr) {
         var selOut = rc.cloneNode(false);
@@ -1303,6 +1306,7 @@
       hb.setAttribute('fill', 'transparent');
       hb.style.pointerEvents = relocating ? 'none' : 'all';
       hb.style.cursor = 'pointer';
+      wireSelectDrag(hb, 'prop', pr);  // v2.854.0 — select + drag-to-move
       hb.addEventListener('click', function (e) {
         e.stopPropagation();
         if (eraseMode) { props.splice(i, 1); saveProps(); }
@@ -1341,10 +1345,9 @@
       }
       var hit = mkHitLine(w);
       // v2.851.0 — double-click selects (the Walls material select edits it).
-      hit.addEventListener('dblclick', function (e) {
-        e.preventDefault(); e.stopPropagation();
-        selectWall(selectedWall === w ? null : w);
-      });
+      // v2.854.0 — + drag-to-move + resize handles via wireSelectDrag. Doors
+      // are walls with a flag, so the kind is always 'wall' (saveReloc/resize).
+      wireSelectDrag(hit, 'wall', w);
       hit.addEventListener('pointerdown', function (e) {
         if (e.button !== 0) return;  // v2.781.1 — leave right-click for the menu
         if (eraseMode || !(wallMode || doorMode)) return;  // drag-move only in a draw mode
@@ -1448,13 +1451,16 @@
       mk.setAttribute('stroke', '#6cb4ff'); mk.setAttribute('stroke-width', '2');
       mk.style.pointerEvents = relocating ? 'none' : 'all'; mk.style.cursor = 'pointer';
       mk.classList.add('me-hotspot');
+      wireSelectDrag(mk, 'hotspot', h);  // v2.854.0 — select + drag-to-move
       if (h.label) { var t = document.createElementNS(NS, 'title'); t.textContent = h.label; mk.appendChild(t); }
       mk.addEventListener('click', function (e) {
         e.stopPropagation();
         if (selectMode || measureMode) return;
         if (eraseMode) { deleteHotspot(h); return; }
-        alert('📍 ' + (h.label || 'Hotspot') + (h.description ? '\n\n' + h.description : '')
-          + (h.roll ? '\n\n🎲 ' + h.roll : ''));
+        schedulePreview(function () {
+          alert('📍 ' + (h.label || 'Hotspot') + (h.description ? '\n\n' + h.description : '')
+            + (h.roll ? '\n\n🎲 ' + h.roll : ''));
+        });
       });
       mk.addEventListener('contextmenu', function (e) {
         e.preventDefault(); e.stopPropagation();
@@ -1476,6 +1482,7 @@
       pc.setAttribute('stroke-width', '2');
       pc.style.pointerEvents = relocating ? 'none' : 'all'; pc.style.cursor = 'pointer';
       pc.classList.add('me-gmpin');
+      wireSelectDrag(pc, 'gmpin', pin);  // v2.854.0 — select + drag-to-move
       var tip = document.createElementNS(NS, 'title');
       tip.textContent = '📌 ' + (pin.label || 'Pin') + (pin.note ? ' — ' + pin.note : '');
       pc.appendChild(tip);
@@ -1483,7 +1490,9 @@
         e.stopPropagation();
         if (selectMode || measureMode) return;
         if (eraseMode) { gmPins.splice(i, 1); saveGmPins(); return; }
-        alert('📌 ' + (pin.label || 'Pin') + (pin.note ? '\n\n' + pin.note : '') + '\n\n(GM-only — players never see this)');
+        schedulePreview(function () {
+          alert('📌 ' + (pin.label || 'Pin') + (pin.note ? '\n\n' + pin.note : '') + '\n\n(GM-only — players never see this)');
+        });
       });
       pc.addEventListener('contextmenu', function (e) {
         e.preventDefault(); e.stopPropagation();
@@ -1520,6 +1529,7 @@
       t.style.cursor = 'pointer';
       t.style.userSelect = 'none';
       t.classList.add('me-label');
+      wireSelectDrag(t, 'label', lb);  // v2.854.0 — select + drag-to-move
       t.textContent = lb.text || '';
       t.addEventListener('click', function (e) {
         e.stopPropagation();
@@ -1630,10 +1640,8 @@
         if (eraseMode) deleteLight(L);
       });
       // v2.850.0 — double-click selects (the Markers controls then edit it).
-      hit.addEventListener('dblclick', function (e) {
-        e.preventDefault(); e.stopPropagation();
-        selectLight(selectedLight === L ? null : L);
-      });
+      // v2.854.0 — + drag-to-move via wireSelectDrag.
+      wireSelectDrag(hit, 'light', L);
       hit.addEventListener('contextmenu', function (e) {
         e.preventDefault(); e.stopPropagation();
         // v2.786.10 — light type lives in a hover flyout submenu (like walls).
@@ -2279,8 +2287,9 @@
   }
   function selectLight(L) {
     selectedLight = L;
+    _setSelectedObj(L ? { kind: 'light', obj: L } : null);
     syncLightToolbar();
-    setStatus(L ? 'Light selected — the Markers controls edit it (Esc deselects).' : '');
+    setStatus(L ? 'Light selected — the Markers controls edit it; drag to move (Esc deselects).' : '');
     render();
   }
   // v2.851.0 — same select-to-edit for walls (material) + terrain (type):
@@ -2292,7 +2301,8 @@
       var s = document.getElementById('me-wall-style');
       if (s) s.value = w.style || 'stone';
     }
-    setStatus(w ? 'Wall selected — the material select edits it (Esc deselects).' : '');
+    _setSelectedObj(w ? { kind: 'wall', obj: w } : null);
+    setStatus(w ? 'Wall selected — the material select edits it; drag to move, corner-handles resize (Esc deselects).' : '');
     render();
   }
   function selectTerrain(tr) {
@@ -2301,14 +2311,90 @@
       var s = document.getElementById('me-terrain-type');
       if (s) s.value = tr.type || 'difficult';
     }
-    setStatus(tr ? 'Terrain selected — the terrain type select edits it (Esc deselects).' : '');
+    _setSelectedObj(tr ? { kind: 'terrain', obj: tr } : null);
+    setStatus(tr ? 'Terrain selected — the type select edits it; drag to move, corner-handles resize (Esc deselects).' : '');
+    render();
+  }
+  // v2.854.0 — Select & Move: `selectMoveOn` (toolbar toggle, on by default)
+  // gates drag-to-move + auto-shown resize handles on a double-click-selected
+  // object. `selectedObj` = {kind, obj} is the single source for the drag +
+  // highlight; the per-kind selected* vars above still drive toolbar mirroring.
+  var selectMoveOn = true;
+  var selectedObj = null;
+  function _setSelectedObj(sel) {
+    selectedObj = sel;
+    // Arm the resize handles for walls/doors + terrain when Select & Move is on.
+    resizing = null; resizingTerrain = null;
+    if (sel && selectMoveOn) {
+      if (sel.kind === 'wall' || sel.kind === 'door') resizing = sel.obj;
+      else if (sel.kind === 'terrain') resizingTerrain = sel.obj;
+    }
+  }
+  // Select any object kind (used by the non-toolbar kinds: hotspot/prop/label/
+  // gmpin). Point objects get drag-move only (no resize handles).
+  function selectObj(kind, obj) {
+    // Route the three toolbar-editable kinds through their own selectors so
+    // the material/type/colour mirroring keeps working.
+    if (kind === 'wall' || kind === 'door') { selectWall(obj); return; }
+    if (kind === 'terrain') { selectTerrain(obj); return; }
+    if (kind === 'light') { selectLight(obj); return; }
+    selectedLight = null; selectedWall = null; selectedTerrain = null;
+    syncLightToolbar();
+    _setSelectedObj(obj ? { kind: kind, obj: obj } : null);
+    setStatus(obj ? 'Selected — drag to move (Esc deselects).' : '');
     render();
   }
   function clearObjectSelection() {
-    var had = selectedLight || selectedWall || selectedTerrain;
+    var had = selectedObj;
     selectedLight = null; selectedWall = null; selectedTerrain = null;
+    resizing = null; resizingTerrain = null;
+    selectedObj = null;
     if (had) { syncLightToolbar(); setStatus(''); render(); }
     return !!had;
+  }
+  // Translate an object of a given kind by (dx, dy) in map pixels. Mirrors
+  // moveObjTo's per-kind geometry but is delta-based (for objDrag).
+  function translateObj(kind, o, dx, dy) {
+    if (kind === 'wall' || kind === 'door') {
+      o.x1 += dx; o.y1 += dy; o.x2 += dx; o.y2 += dy;
+    } else if (kind === 'terrain') {
+      o.x += dx; o.y += dy;
+      if (Array.isArray(o.points)) o.points = o.points.map(function (q) { return [q[0] + dx, q[1] + dy]; });
+    } else { o.x += dx; o.y += dy; }
+  }
+  // v2.854.0 — drag the selected object by its body (separate from the one-shot
+  // `relocating` so the selection + handles persist across drags).
+  var objDrag = null;
+  // Wire an object's hit element for double-click-select + (when Select & Move
+  // is on and it's the selected object) drag-to-move. Call from each object's
+  // render branch. dblclick toggles the selection; pointerdown on the already-
+  // selected body starts a drag.
+  // v2.854.0 — a single-click "preview" (hotspot / GM-pin note popup) is
+  // deferred briefly so the first click of a double-click-to-select can cancel
+  // it (otherwise a dblclick pops the alert twice).
+  var _previewTimer = null;
+  function schedulePreview(fn) { clearTimeout(_previewTimer); _previewTimer = setTimeout(fn, 240); }
+  function wireSelectDrag(hitEl, kind, obj) {
+    hitEl.addEventListener('dblclick', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      clearTimeout(_previewTimer);  // cancel a pending single-click preview
+      selectObj(kind, (selectedObj && selectedObj.obj === obj) ? null : obj);
+    });
+    // Pointerdown STARTS the body drag; the move/up are handled at the svg
+    // level (which survives the render() rebuild) with pointer captured on the
+    // svg — mirroring the wall draw-mode `grab`. Capturing on the hit element
+    // would break after the first render() removes it from the DOM.
+    hitEl.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      if (!selectMoveOn || !selectedObj || selectedObj.obj !== obj) return;
+      var p = toMap(e); if (!p) return;
+      // stopImmediatePropagation so a later pointerdown on the same element
+      // (e.g. the wall draw-mode grab) doesn't also fire. Resize handles are
+      // separate elements and win via their own pointerdown.
+      e.stopImmediatePropagation(); e.preventDefault();
+      objDrag = { kind: kind, obj: obj, lx: p.x, ly: p.y, moved: false };
+      try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+    });
   }
   // Live edits from the toolbar onto the selection: any divergence from every
   // preset flips the light to custom.
@@ -2357,6 +2443,18 @@
   if (measureBtn) measureBtn.addEventListener('click', function () { setMode(measureMode ? null : 'measure'); });
   var selectBtn = document.getElementById('me-select-btn');
   if (selectBtn) selectBtn.addEventListener('click', function () { setMode(selectMode ? null : 'select'); });
+  // v2.854.0 — Select & Move toggle (on by default). When off, an existing
+  // selection loses its resize handles + drag; the toolbar-mirror stays.
+  var selMoveBtn = document.getElementById('me-selmove-btn');
+  if (selMoveBtn) selMoveBtn.addEventListener('click', function () {
+    selectMoveOn = !selectMoveOn;
+    selMoveBtn.setAttribute('aria-pressed', selectMoveOn ? 'true' : 'false');
+    // Re-arm (or drop) the resize handles on the current selection to match.
+    if (selectedObj) _setSelectedObj(selectedObj);
+    setStatus(selectMoveOn ? 'Select & move ON — double-click an object, then drag.'
+                           : 'Select & move OFF — double-click edits via the toolbar only.');
+    render();
+  });
   function syncStageCursor() {
     // The overlay captures empty-area clicks when placing/painting/relocating.
     // (Objects stay individually clickable for erase/right-click regardless.)
@@ -2529,8 +2627,10 @@
     if (fogResetBtn) fogResetBtn.style.display = (fogMode && fogDynamic) ? 'inline-flex' : 'none';
     pending = null; fogDrag = null;
     terrainDots = [];  // v2.848.0 — abandon a half-placed quad on tool change
-    // v2.850.0/v2.851.0 — tool changes drop any dbl-click object selection.
+    // v2.850.0/v2.851.0/v2.854.0 — tool changes drop any dbl-click selection
+    // (incl. the unified selectedObj + its armed resize handles).
     selectedLight = null; selectedWall = null; selectedTerrain = null;
+    selectedObj = null; resizing = null; resizingTerrain = null;
     syncLightToolbar();
     syncStageCursor(); render();
   }
@@ -2651,6 +2751,15 @@
     try { svg.setPointerCapture(e.pointerId); } catch (_) {}
   });
   svg.addEventListener('pointermove', function (e) {
+    if (objDrag) {  // v2.854.0 — drag the selected object by its body
+      var op = toMap(e); if (op) {
+        var osp = snapPoint(op);
+        translateObj(objDrag.kind, objDrag.obj, osp.x - objDrag.lx, osp.y - objDrag.ly);
+        objDrag.lx = osp.x; objDrag.ly = osp.y; objDrag.moved = true;
+        render();
+      }
+      return;
+    }
     if (relocDragging && relocating) {
       var rp = toMap(e); if (rp) { moveObjTo(relocating, snapPoint(rp)); render(); }
       return;
@@ -2692,6 +2801,13 @@
     render();
   });
   svg.addEventListener('pointerup', function (e) {
+    if (objDrag) {  // v2.854.0 — commit a body drag (keep the selection + handles)
+      var od = objDrag; objDrag = null;
+      try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
+      if (od.moved) saveReloc({ kind: od.kind, obj: od.obj });
+      suppressClick = true; setTimeout(function () { suppressClick = false; }, 0);
+      return;
+    }
     if (relocDragging && relocating) {
       var r = relocating; relocating = null; relocDragging = false;
       try { svg.releasePointerCapture(e.pointerId); } catch (_) {}

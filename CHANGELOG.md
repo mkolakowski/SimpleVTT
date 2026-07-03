@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.854.0] - 2026-07-03 — "The Ready Hand"
+
+**Schema version:** 97
+
+**Commit summary:** Add a "Select & move" editor toggle (on by default) — double-click any object to select it, then drag to move; walls/doors/terrain also show resize handles.
+
+**Description:** First half of a two-part editor upgrade. A new **🖱 Select & move** toggle in the Tools group (lit, **on by default**) makes double-click-select actually *movable*: double-click any object — wall, door, terrain region, light, hotspot, prop, label, GM pin — to select it (the existing toolbar select-to-edit still mirrors material/type/colour), then **drag its body to move it**. Walls/doors and terrain additionally **light up their resize handles** on select (the same corner/end handles as the right-click Resize), so you can reshape in place. Resize-handle presses and body-drags coexist (handles are separate elements). Turning the toggle off keeps the double-click toolbar mirroring but drops the drag + handles. The body-drag captures the pointer on the persistent `svg` (mirroring the wall draw-mode grab) so a redraw mid-drag doesn't drop it; hotspot/GM-pin note pop-ups are deferred so a double-click-to-select doesn't fire them twice.
+
+### Added
+- `app/templates/map_editor.html` — `#me-selmove-btn` toggle + `selectMoveOn` state; unified `selectedObj` with `selectObj` / `_setSelectedObj` (arms `resizing`/`resizingTerrain` on select); `wireSelectDrag` (dblclick-select + body-drag) on every object kind's hit element; `translateObj` + `objDrag` branches in the svg pointermove/up; deferred `schedulePreview` for hotspot/GM-pin popups; deselect folded into Esc / tool change / delete / empty-map dblclick.
+- `tests/harness_ui/test_map_editor_select_move.py` (new, +2) — toggle lit by default, double-click a light + drag moves it, double-click a wall shows resize handles; toggle off → double-click doesn't drag.
+
+### Schema
+- No schema change (still v97 — editor interaction only).
+
 ## [2.853.0] - 2026-07-03 — "The Kept Layout"
 
 **Schema version:** 97
