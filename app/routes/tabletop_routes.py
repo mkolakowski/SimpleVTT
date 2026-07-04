@@ -124795,6 +124795,11 @@ def _sanitize_terrain(raw) -> list:
             "id": (str(r.get("id") or "").strip()[:40] or f"t{i}"),
             "x": x, "y": y, "w": w, "h": h, "type": typ,
         }
+        # v2.890.0 — per-region "hide from players": a hidden region is drawn
+        # only for the GM (dimmed + 🔒), independent of the map-level
+        # terrain_hidden bool. Stored only when set, to keep records lean.
+        if r.get("hidden"):
+            rec["hidden"] = True
         if points is not None:
             rec["points"] = points
         out.append(rec)

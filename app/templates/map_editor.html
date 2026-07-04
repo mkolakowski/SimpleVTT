@@ -1323,9 +1323,12 @@
         rc.setAttribute('x', tr.x); rc.setAttribute('y', tr.y);
         rc.setAttribute('width', tr.w); rc.setAttribute('height', tr.h);
       }
-      rc.setAttribute('fill', tt.color); rc.setAttribute('fill-opacity', '0.28');
+      // v2.890.0 — a per-region "hidden from players" flag: draw it dimmer +
+      // tighter-dashed in the editor (and prefix its label with 🔒) so the GM
+      // can see at a glance which regions players won't see.
+      rc.setAttribute('fill', tt.color); rc.setAttribute('fill-opacity', tr.hidden ? '0.16' : '0.28');
       rc.setAttribute('stroke', tt.color); rc.setAttribute('stroke-width', '2');
-      rc.setAttribute('stroke-dasharray', '7 5');
+      rc.setAttribute('stroke-dasharray', tr.hidden ? '3 6' : '7 5');
       rc.classList.add('me-terrain');
       // v2.832.0 — interactive in terrain/erase mode AND the default no-tool
       // state (so you can right-click a region to Resize/Move/retype it), but
@@ -1374,6 +1377,9 @@
             } },
           { label: '⛰ Terrain — ↔ Move', fn: function () { startMove('terrain', tr); } },
           { label: '⛰ Terrain type', sub: typeItems },
+          // v2.890.0 — per-region hide-from-players toggle.
+          { label: (tr.hidden ? '👁 Show to players' : '🚫 Hide from players'),
+            fn: function () { tr.hidden = !tr.hidden; saveTerrain(); } },
           { label: '🗑 Delete', fn: function () {
               if (selectedTerrain === tr) selectedTerrain = null;  // v2.851.0
               terrain.splice(i, 1); saveTerrain();
@@ -1385,7 +1391,7 @@
       lbl.setAttribute('x', tr.x + 5); lbl.setAttribute('y', tr.y + 16);
       lbl.setAttribute('fill', tt.color); lbl.setAttribute('font-size', '13');
       lbl.setAttribute('font-weight', '700'); lbl.style.pointerEvents = 'none';
-      lbl.textContent = tt.label;
+      lbl.textContent = (tr.hidden ? '🔒 ' : '') + tt.label;  // v2.890.0
       svg.appendChild(lbl);
       // v2.832.0 — draggable corner handles while this region is being resized.
       // v2.848.0 — quads get one handle per corner point (each drags freely);

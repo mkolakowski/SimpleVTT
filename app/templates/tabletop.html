@@ -2649,9 +2649,14 @@
             // with ``points`` renders as a free-form polygon.
             // v2.858.0 — terrain is hidden from players by default; the GM
             // always sees it (dimmer + a 🔒 label when players can't).
-            var terrainVisible = IS_GM || !terrainHidden;
-            var terrainLocked = terrainHidden;  // hidden from players right now
-            if (terrainVisible) terrain.forEach(function (tr) {
+            // v2.890.0 — per-region hide: a region is hidden from players when
+            // the map-level terrainHidden is set OR the region carries its own
+            // ``hidden`` flag. The GM always sees every region (dimmed + 🔒 for
+            // any that a player can't).
+            terrain.forEach(function (tr) {
+                var regionLocked = terrainHidden || !!tr.hidden;  // hidden from players
+                if (!IS_GM && regionLocked) return;  // players don't see it
+                var terrainLocked = regionLocked;
                 var col = terrainColor(tr.type);
                 var rc;
                 if (Array.isArray(tr.points) && tr.points.length >= 3) {  // v2.855.0 — N-gon

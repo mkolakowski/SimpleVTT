@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.890.0] - 2026-07-04 — "The Hidden Ground"
+
+**Schema version:** 100
+
+**Commit summary:** Terrain regions can be hidden from players one at a time (per-region), not just the whole map at once.
+
+**Description:** Until now terrain visibility was all-or-nothing — the map-level `terrain_hidden` toggle hid *every* region from players. This adds a **per-region** hide: right-click a terrain region in the map editor → **🚫 Hide from players** (toggles back with 👁 Show to players). A hidden region renders **only for the GM** (dimmed + a 🔒 label), independent of the map-level toggle, so a GM can reveal the lava field while keeping a secret pit hidden. On the tabletop the render now decides visibility per region (`terrainHidden || tr.hidden`) instead of skipping the whole terrain layer. The flag round-trips through the existing terrain PUT/GET; regions without it stay lean (no stored `hidden` key).
+
+### Added
+- `app/routes/tabletop_routes.py` — `_sanitize_terrain` accepts + stores a per-region `hidden` bool (only when set).
+- `app/templates/map_editor.html` — a "Hide from players / Show to players" item in the terrain right-click menu; hidden regions render dimmed + 🔒 in the editor.
+- `app/templates/tabletop.html` — per-region visibility (`!IS_GM && (terrainHidden || tr.hidden)` skips a region for players; the GM sees it dimmed + 🔒).
+- `tests/harness/test_terrain_hidden_per_region.py` — the `hidden` flag round-trips (set on one region, absent on another).
+- `tests/harness_ui/test_terrain_hidden_player.py` — with the map-level toggle off, a player sees the visible region's label but not the hidden one; the GM sees both (hidden one flagged 🔒).
+
+### Schema
+- No schema change (still v100 — an additive field inside the existing `maps.terrain` JSON).
+
 ## [2.889.0] - 2026-07-04 — "The Slim Ribbon"
 
 **Schema version:** 100
