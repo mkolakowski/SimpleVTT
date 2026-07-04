@@ -21,11 +21,75 @@ from ..auth import (
 )
 from ..config import get_settings
 from ..database import get_db
-from ..models import User
+from ..models import Campaign, CampaignMembership, User
 from ..templates import templates
 
 router = APIRouter()
 log = logging.getLogger(__name__)
+
+
+def _demo_login_roster(db: Session) -> list[dict]:
+    """v2.884.0 — the full demo cast for the login screen. For each seeded
+    demo account (all share ``demopass``) return its display name, email, GM
+    flag, and the campaigns it belongs to (as primary GM via
+    ``Campaign.gm_user_id`` or as a player/co-GM via ``CampaignMembership``),
+    so the login page can list everyone and reveal who plays where. Ordered
+    to match the seed's ``DEMO_EMAILS`` (GMs interleaved with their players).
+    """
+    from ..demo_seed import DEMO_EMAILS  # local import: demo_seed is heavy
+
+    users = db.query(User).filter(User.email.in_(DEMO_EMAILS)).all()
+    by_email = {u.email: u for u in users}
+    uids = [u.id for u in users]
+    if not uids:
+        return []
+    camps = db.query(Campaign).all()
+    camp_by_id = {c.id: c for c in camps}
+    owned_by_uid: dict[int, list] = {}
+    for c in camps:
+        owned_by_uid.setdefault(c.gm_user_id, []).append(c)
+    mem_by_uid: dict[int, list] = {}
+    for m in (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.user_id.in_(uids))
+        .all()
+    ):
+        mem_by_uid.setdefault(m.user_id, []).append(m)
+
+    roster: list[dict] = []
+    for email in DEMO_EMAILS:
+        u = by_email.get(email)
+        if not u:
+            continue
+        campaigns: list[dict] = []
+        seen: set[int] = set()
+        for c in owned_by_uid.get(u.id, []):
+            campaigns.append(
+                {"name": c.name, "role": "GM", "archived": bool(c.is_archived)}
+            )
+            seen.add(c.id)
+        for m in mem_by_uid.get(u.id, []):
+            c = camp_by_id.get(m.campaign_id)
+            if not c or c.id in seen:
+                continue
+            campaigns.append(
+                {
+                    "name": c.name,
+                    "role": "Co-GM" if m.is_gm else "Player",
+                    "archived": bool(c.is_archived),
+                }
+            )
+            seen.add(c.id)
+        campaigns.sort(key=lambda x: x["name"])
+        roster.append(
+            {
+                "email": u.email,
+                "display_name": u.display_name,
+                "is_gm": bool(u.is_gm),
+                "campaigns": campaigns,
+            }
+        )
+    return roster
 
 
 def _safe_next_path(raw: Optional[str]) -> str:
@@ -51,6 +115,7 @@ def login_page(
     request: Request,
     error: Optional[str] = None,
     next: Optional[str] = None,
+    db: Session = Depends(get_db),
 ):
     settings = get_settings()
     safe_next = _safe_next_path(next)
@@ -71,6 +136,9 @@ def login_page(
             # v2.3.28: round-trip the safe-validated ``next`` so the form
             # carries it through to the POST handler.
             "next_path": safe_next,
+            # v2.884.0 — the full demo cast + their campaigns for the login
+            # box (only queried under demo mode; empty list otherwise).
+            "demo_users": _demo_login_roster(db) if settings.demo_mode else [],
         },
     )
 

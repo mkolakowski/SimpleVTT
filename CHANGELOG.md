@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.884.0] - 2026-07-04 — "The Cast List"
+
+**Schema version:** 99
+
+**Commit summary:** The demo login box lists the FULL demo cast (all seeded accounts) with a toggle to reveal which campaigns each one plays in.
+
+**Description:** The demo-mode login box was stale — it hardcoded just three accounts (`demo-gm`, `demo-alice`, `demo-bob`) even though the seed creates **seven** (two GMs + five players across six campaigns). Now the `/login` handler builds a server-side roster of every seeded demo account — display name, email, GM flag, and the campaigns it belongs to (as primary GM via `Campaign.gm_user_id`, or Co-GM / Player via `CampaignMembership`) — and the login box renders all of them, each with its existing "Fill" button. A new **"Show each account's campaigns"** toggle reveals a per-account list of which campaigns that user is in and their role (hidden by default to keep the box compact). Every account still shares the `demopass` password.
+
+### Added
+- `app/routes/auth_routes.py` — `_demo_login_roster(db)` builds the full demo cast + per-account campaign membership; `login_page` passes `demo_users` to the template under demo mode.
+- `app/templates/login.html` — the demo box loops over `demo_users` (all seeded accounts) instead of three hardcoded rows; a GM tag; a "Show campaigns" toggle that reveals per-account campaign lists (role + archived marker).
+- `tests/harness/test_login_demo_roster.py` — asserts the login page lists all seven demo accounts, each with a Fill button, plus the campaigns toggle and hidden-by-default campaign lists.
+
+### Schema
+- No schema change (still v99 — a login-page presentation change reading existing users/campaigns).
+
 ## [2.883.0] - 2026-07-04 — "The Full Bleed"
 
 **Schema version:** 99

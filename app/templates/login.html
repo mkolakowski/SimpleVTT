@@ -29,37 +29,59 @@
     {% endif %}
 
     {% if DEMO_MODE and DEMO_CREDENTIALS_VISIBLE %}
-    {# v2.3.0: demo-mode credentials box. The seed creates these three
-       accounts with a shared password every reset — players can grab
-       one without registering.
-       v2.4.4: each row now carries a "Fill" button that auto-populates
-       the email + password fields in the sign-in form above. Saves the
-       copy-paste dance for the most common demo-evaluation flow. #}
+    {# v2.3.0: demo-mode credentials box. The seed creates these accounts with
+       a shared password every reset — players can grab one without registering.
+       v2.4.4: each row carries a "Fill" button that auto-populates the sign-in
+       form above.
+       v2.884.0: the box now lists the FULL demo cast (all seeded accounts, not
+       just three) from the ``demo_users`` roster built in the /login handler,
+       plus a "Show campaigns" toggle that reveals which campaigns each account
+       plays in (GM / Co-GM / Player). #}
     <div class="demo-creds-box">
         <h3>🎲 Try the demo without signing up</h3>
-        <p class="muted">All three accounts share the password <code>demopass</code>.</p>
+        <p class="muted">Every account shares the password <code>demopass</code>.</p>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin:6px 0 10px;cursor:pointer;">
+            <input type="checkbox" id="demo-show-campaigns" style="min-height:0;width:auto;margin:0;">
+            Show each account's campaigns
+        </label>
         <ul>
             {# 32-px dense-panel exception per CLAUDE.md — the demo-creds box is
                an information panel where each list item is one row; full-height
-               44-px buttons would visually overpower the row text.
-               v2.4.7: ``white-space:nowrap`` on each <li> keeps the Fill button
-               on the same line as its label + email. Pre-v2.4.7 the Player
-               (Rogue) row would wrap because demo-alice@example.com is just
-               a few characters longer than demo-gm / demo-bob, pushing the
-               trailing button onto a second line. #}
-            <li style="white-space:nowrap;"><strong>GM:</strong> <code>demo-gm@example.com</code> <button type="button" class="demo-fill-btn" data-demo-email="demo-gm@example.com" style="min-height:32px;padding:4px 12px;font-size:13px;margin-left:6px;">Fill</button></li>
-            <li style="white-space:nowrap;"><strong>Player (Rogue):</strong> <code>demo-alice@example.com</code> <button type="button" class="demo-fill-btn" data-demo-email="demo-alice@example.com" style="min-height:32px;padding:4px 12px;font-size:13px;margin-left:6px;">Fill</button></li>
-            <li style="white-space:nowrap;"><strong>Player (Wizard):</strong> <code>demo-bob@example.com</code> <button type="button" class="demo-fill-btn" data-demo-email="demo-bob@example.com" style="min-height:32px;padding:4px 12px;font-size:13px;margin-left:6px;">Fill</button></li>
+               44-px buttons would visually overpower the row text. #}
+            {% for u in demo_users %}
+            <li>
+                <span style="white-space:nowrap;">
+                    <strong>{{ u.display_name }}</strong>{% if u.is_gm %} <span class="demo-role-tag">GM</span>{% endif %}
+                    <code>{{ u.email }}</code>
+                    <button type="button" class="demo-fill-btn" data-demo-email="{{ u.email }}"
+                            style="min-height:32px;padding:4px 12px;font-size:13px;margin-left:6px;">Fill</button>
+                </span>
+                {% if u.campaigns %}
+                <ul class="demo-campaigns" hidden style="margin:4px 0 2px 6px;padding-left:14px;font-size:12px;">
+                    {% for c in u.campaigns %}
+                    <li class="muted">{{ c.name }} — <em>{{ c.role }}</em>{% if c.archived %} <span class="muted">(archived)</span>{% endif %}</li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <ul class="demo-campaigns" hidden style="margin:4px 0 2px 6px;padding-left:14px;font-size:12px;">
+                    <li class="muted"><em>No campaigns yet</em></li>
+                </ul>
+                {% endif %}
+            </li>
+            {% endfor %}
         </ul>
         <p class="muted">⚠ The dataset resets every {{ DEMO_RESET_INTERVAL_MINUTES }} minutes — anything you change will be wiped.</p>
     </div>
+    <style>
+        .demo-role-tag { font-size:10px; font-weight:700; text-transform:uppercase;
+            letter-spacing:.5px; background:#3a3f5a; color:#cdd3ff; border-radius:4px;
+            padding:1px 5px; vertical-align:middle; }
+    </style>
     <script>
-        // v2.4.4: each Fill button writes the row's email into the
-        // form's email field, fills the shared demo password, and
-        // moves focus to the Sign in button — one click from
-        // landing on the page to submitting. The password is
-        // hardcoded ("demopass") to match the seed constant in
-        // app/demo_seed.py:DEMO_PASSWORD.
+        // v2.4.4: each Fill button writes the row's email into the form's email
+        // field, fills the shared demo password, and focuses Sign in — one click
+        // from landing to submitting. Password is hardcoded ("demopass") to match
+        // the seed constant in app/demo_seed.py:DEMO_PASSWORD.
         document.querySelectorAll('.demo-fill-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const email = btn.dataset.demoEmail;
@@ -73,6 +95,16 @@
                 if (submit) submit.focus();
             });
         });
+        // v2.884.0: the "Show campaigns" toggle reveals/hides the per-account
+        // campaign lists (hidden by default to keep the box compact).
+        const _demoCampToggle = document.getElementById('demo-show-campaigns');
+        if (_demoCampToggle) {
+            _demoCampToggle.addEventListener('change', () => {
+                document.querySelectorAll('.demo-campaigns').forEach(el => {
+                    el.hidden = !_demoCampToggle.checked;
+                });
+            });
+        }
     </script>
     {% endif %}
 </div>
