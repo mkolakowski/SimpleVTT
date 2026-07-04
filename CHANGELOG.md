@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.902.0] - 2026-07-04 — "The Snug Doorway"
+
+**Schema version:** 100
+
+**Commit summary:** Embedded doors P4 (final) — the editor's Door tool drops a door INTO a wall without splitting it, renders it, lets you toggle/edit it, and snaps multiple doors on one wall flush together.
+
+**Description:** Final phase — the map editor. Placing a door (Door tool → click a wall) now **appends an opening to the wall's `doors` list** instead of splitting the wall into three segments: the wall stays **one object**. You can drop **multiple doors on the same wall**, and a new door placed close to an existing one **snaps flush** against it (edges touch). The editor renders embedded doors as door glyphs on the intact wall, and each door has its own interaction: click to open/close, 🗑 Erase to remove, right-click for Open/Close · Gate · Flip swing · Secret · Delete. Copy/paste carries a wall's embedded doors (with fresh ids); undo already snapshots them.
+
+### Changed
+- `app/templates/map_editor.html` — `_hasEmbeddedDoors` / `_wallRenderSpans` + `drawWallVisual` recursion (render); `_placeDoorInWall` appends a grid-cell-wide door span to `w.doors` (no split) with magnetic snap to nearby doors; per-embedded-door hit-lines (toggle/erase/context-menu); `pasteAt` carries `doors`.
+- `tests/harness_ui/test_map_editor_door_style.py` — rewritten: placing a door leaves ONE wall carrying an embedded `doors` entry (no split); two doors placed close together snap flush (`test_place_door_embeds_in_wall_without_splitting`, `test_two_doors_on_one_wall_snap_flush`).
+
+### Schema
+- No schema change (still v100 — the embedded-door model from v2.899.0).
+
 ## [2.901.0] - 2026-07-04 — "The Hinged Wall"
 
 **Schema version:** 100

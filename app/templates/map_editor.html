@@ -1055,6 +1055,12 @@
   // v2.772.0 — the visible look. Walls: a dark casing under a material face +
   // a faint top sheen. Doors/gates: jamb frame + swing arc + leaf(s).
   function drawWallVisual(w) {
+    // v2.902.0 — a wall with embedded doors renders as face spans (plain wall)
+    // + a door glyph per door span, by recursing on the synthetic sub-segments.
+    if (_hasEmbeddedDoors(w)) {
+      _wallRenderSpans(w).forEach(function (sub) { drawWallVisual(sub); });
+      return;
+    }
     var st = wallStyle(w);
     // v2.787.3 — render into an opacity group when the wall is transparent.
     var _wc = svg, _o = (w.opacity == null ? 1 : w.opacity);
@@ -1159,6 +1165,39 @@
     var G = doorGeom(w), open = !!w.open;
     if (G.gate) return [[G.a.hinge, open ? G.a.open : G.a.closed], [G.b.hinge, open ? G.b.open : G.b.closed]];
     return [[G.hinge, open ? G.open : G.closed]];
+  }
+  // v2.902.0 — embedded doors: split a wall with a ``doors`` list into synthetic
+  // plain-wall FACE spans + one door span per door (mirrors the tabletop) for
+  // rendering + hit-testing. Each door span carries ``_embWallId``/``_embDoorId``.
+  function _hasEmbeddedDoors(w) {
+    return w && !w.door && !w.gate && !w.window && Array.isArray(w.doors) && w.doors.length;
+  }
+  function _wallRenderSpans(w) {
+    var dx = w.x2 - w.x1, dy = w.y2 - w.y1;
+    function pt(t) { return [w.x1 + dx * t, w.y1 + dy * t]; }
+    function face(t0, t1) {
+      var a = pt(t0), b = pt(t1);
+      return { x1: a[0], y1: a[1], x2: b[0], y2: b[1], style: w.style, opacity: w.opacity };
+    }
+    function door(d, t0, t1) {
+      var a = pt(t0), b = pt(t1);
+      return { x1: a[0], y1: a[1], x2: b[0], y2: b[1], style: w.style, opacity: w.opacity,
+        gate: !!d.gate, door: !d.gate, open: !!d.open, flip: !!d.flip, secret: !!d.secret,
+        _embWallId: w.id, _embDoorId: d.id };
+    }
+    var doors = (w.doors || [])
+      .filter(function (d) { return d && typeof d.t0 === 'number' && typeof d.t1 === 'number'; })
+      .map(function (d) { return { d: d, t0: Math.max(0, Math.min(1, d.t0)), t1: Math.max(0, Math.min(1, d.t1)) }; })
+      .filter(function (x) { return x.t1 > x.t0; })
+      .sort(function (a, b) { return a.t0 - b.t0; });
+    var out = [], cur = 0;
+    doors.forEach(function (x) {
+      if (x.t0 > cur + 1e-4) out.push(face(cur, x.t0));
+      out.push(door(x.d, x.t0, x.t1));
+      cur = Math.max(cur, x.t1);
+    });
+    if (cur < 1 - 1e-4) out.push(face(cur, 1));
+    return out;
   }
   // v2.774.0 — lighting preview: veil for dim/dark ambient, punched by each
   // light's bright/dim radius with wall shadows (mirrors the tabletop).
@@ -1777,6 +1816,56 @@
         showMenu(e.clientX, e.clientY, items);
       });
       svg.appendChild(hit);
+      // v2.902.0 — per-embedded-door hit-lines: in the no-tool state a click
+      // toggles that door open/closed, erase deletes it, right-click opens door
+      // options. Inert while a draw tool is active (Door mode places new doors
+      // on the wall face; Wall mode drags the wall) so the wall still catches
+      // those. This is how you add MULTIPLE doors to one wall.
+      if (_hasEmbeddedDoors(w) && !relocating) {
+        _wallRenderSpans(w).forEach(function (sub) {
+          if (!sub._embDoorId) return;
+          var emb = (w.doors || []).find(function (d) { return d && d.id === sub._embDoorId; });
+          if (!emb) return;
+          var doorInert = wallMode || doorMode;  // let those modes reach the wall
+          var dh = document.createElementNS(NS, 'line');
+          dh.setAttribute('x1', sub.x1); dh.setAttribute('y1', sub.y1);
+          dh.setAttribute('x2', sub.x2); dh.setAttribute('y2', sub.y2);
+          dh.setAttribute('stroke', 'transparent'); dh.setAttribute('stroke-width', '18');
+          dh.style.pointerEvents = doorInert ? 'none' : 'stroke';
+          dh.style.cursor = 'pointer';
+          var dttl = document.createElementNS(NS, 'title');
+          dttl.textContent = (emb.gate ? '🚪 Gate — ' : '🚪 Door — ') + (emb.open ? 'open' : 'closed');
+          dh.appendChild(dttl);
+          function _rmDoor() { w.doors = (w.doors || []).filter(function (d) { return d.id !== emb.id; }); saveWalls(); }
+          dh.addEventListener('click', function (e) {
+            e.stopPropagation();
+            if (eraseMode) { _rmDoor(); return; }
+            emb.open = !emb.open; saveWalls();
+          });
+          dh.addEventListener('contextmenu', function (e) {
+            e.preventDefault(); e.stopPropagation();
+            showMenu(e.clientX, e.clientY, [
+              { label: (emb.open ? '🚪 Close door' : '🚪 Open door'), fn: function () { emb.open = !emb.open; saveWalls(); } },
+              { label: (emb.gate ? '✓ ' : '   ') + '🚪 Gate (opens in middle)', fn: function () { emb.gate = !emb.gate; saveWalls(); } },
+              { label: '↻ Flip swing', fn: function () { emb.flip = !emb.flip; saveWalls(); } },
+              { label: (emb.secret ? '✓ ' : '   ') + '🔒 Secret (hidden from players)', fn: function () { emb.secret = !emb.secret; saveWalls(); } },
+              { label: '🗑 Delete door', fn: _rmDoor },
+            ]);
+          });
+          svg.appendChild(dh);
+          if (emb.open) {
+            doorLeafSegments(sub).forEach(function (sp) {
+              var lh = document.createElementNS(NS, 'line');
+              lh.setAttribute('x1', sp[0][0]); lh.setAttribute('y1', sp[0][1]);
+              lh.setAttribute('x2', sp[1][0]); lh.setAttribute('y2', sp[1][1]);
+              lh.setAttribute('stroke', 'transparent'); lh.setAttribute('stroke-width', '18');
+              lh.style.pointerEvents = doorInert ? 'none' : 'stroke'; lh.style.cursor = 'pointer';
+              lh.addEventListener('click', function (e) { e.stopPropagation(); if (eraseMode) { _rmDoor(); return; } emb.open = !emb.open; saveWalls(); });
+              svg.appendChild(lh);
+            });
+          }
+        });
+      }
       // v2.787.1 — click-anywhere on an OPEN door/gate: the swung leaf is away
       // from the opening, so add a hit-line over it too (closed leaves overlap
       // the main hit-line already).
@@ -2565,35 +2654,32 @@
     walls = walls.filter(function (x) { return x.id !== w.id; });
     saveWalls();
   }
-  // v2.897.0 — place a door INTO an existing wall: split the wall at the click
-  // point and insert a door-width (one grid cell) opening, keeping the flanking
-  // wall on each side. If the wall is shorter than a door, the whole segment
-  // becomes the door. The door inherits the wall's material.
+  // v2.902.0 — place a door INTO an existing wall by appending an opening to the
+  // wall's ``doors`` list — the wall stays ONE object (no split). The door is a
+  // grid-cell-wide span centred at the click; if another door on the same wall
+  // is adjacent, the new door snaps flush against it (edges touch).
   function _placeDoorInWall(w, p) {
     if (!w) return;
     var dx = w.x2 - w.x1, dy = w.y2 - w.y1;
     var len = Math.hypot(dx, dy);
     if (len < 1) return;
-    var ux = dx / len, uy = dy / len;
     var t = p ? ((p.x - w.x1) * dx + (p.y - w.y1) * dy) / (len * len) : 0.5;
     t = Math.max(0, Math.min(1, t));
-    var center = t * len;
-    var doorW = Math.min(len, (gridPx || 70));
-    var dStart = Math.max(0, center - doorW / 2);
-    var dEnd = Math.min(len, center + doorW / 2);
-    var style = w.style || 'stone';
-    var pt = function (dist) { return { x: Math.round(w.x1 + ux * dist), y: Math.round(w.y1 + uy * dist) }; };
-    var mk = function (a, b, isDoor) {
-      return { id: 'w' + Date.now() + '_' + (seq++), x1: a.x, y1: a.y, x2: b.x, y2: b.y,
-        door: !!isDoor, open: false, style: style };
-    };
-    var idx = walls.indexOf(w);
-    if (idx >= 0) walls.splice(idx, 1);
-    var minSeg = 4;
-    var A = pt(0), S = pt(dStart), E = pt(dEnd), B = pt(len);
-    if (dStart > minSeg) walls.push(mk(A, S, false));
-    walls.push(mk(S, E, true));  // the door
-    if (len - dEnd > minSeg) walls.push(mk(E, B, false));
+    var wFrac = Math.min(1, (gridPx || 70) / len);  // door width as a fraction
+    var t0 = t - wFrac / 2, t1 = t + wFrac / 2;
+    if (t0 < 0) { t1 -= t0; t0 = 0; }
+    if (t1 > 1) { t0 -= (t1 - 1); t1 = 1; }
+    t0 = Math.max(0, t0); t1 = Math.min(1, t1);
+    if (!Array.isArray(w.doors)) w.doors = [];
+    // Snap flush to a nearby door on the same wall — magnetic within ~one door
+    // width so two doors placed close together end up edge-to-edge.
+    var snap = Math.max(0.03, wFrac);
+    w.doors.forEach(function (d) {
+      if (Math.abs(t0 - d.t1) <= snap) { var wd = t1 - t0; t0 = d.t1; t1 = Math.min(1, t0 + wd); }
+      else if (Math.abs(t1 - d.t0) <= snap) { var wd2 = t1 - t0; t1 = d.t0; t0 = Math.max(0, t1 - wd2); }
+    });
+    if (t1 - t0 < 1e-3) return;
+    w.doors.push({ id: 'd' + Date.now() + '_' + (seq++), t0: t0, t1: t1, open: false });
     saveWalls();
     if (window.showToast) showToast('Door placed in the wall.');
   }
@@ -2649,10 +2735,18 @@
     if (clipboard.kind === 'wall') {
       var mx = (d.x1 + d.x2) / 2, my = (d.y1 + d.y2) / 2;
       var dx = p.x - mx, dy = p.y - my;
-      walls.push({ id: newId('w'), x1: d.x1 + dx, y1: d.y1 + dy,
+      var nw = { id: newId('w'), x1: d.x1 + dx, y1: d.y1 + dy,
         x2: d.x2 + dx, y2: d.y2 + dy, door: !!d.door, open: !!d.open,
-        gate: !!d.gate, flip: !!d.flip, opacity: (d.opacity == null ? 1 : d.opacity),
-        style: d.style || 'stone' });
+        gate: !!d.gate, flip: !!d.flip, window: !!d.window, secret: !!d.secret,
+        opacity: (d.opacity == null ? 1 : d.opacity), style: d.style || 'stone' };
+      // v2.902.0 — carry embedded doors (fresh ids).
+      if (Array.isArray(d.doors) && d.doors.length) {
+        nw.doors = d.doors.map(function (x) {
+          return { id: newId('d'), t0: x.t0, t1: x.t1, open: !!x.open,
+            gate: !!x.gate, secret: !!x.secret, flip: !!x.flip };
+        });
+      }
+      walls.push(nw);
       saveWalls();
     } else if (clipboard.kind === 'hotspot') {
       hotspots.push({ id: newId('h'), x: p.x, y: p.y,
