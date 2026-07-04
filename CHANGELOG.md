@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.901.0] - 2026-07-04 — "The Hinged Wall"
+
+**Schema version:** 100
+
+**Commit summary:** Embedded doors P3 — the tabletop renders a wall's embedded doors (as door glyphs on the intact wall) and each toggles open/closed.
+
+**Description:** Phase 3 of embedded doors — the tabletop rendering + interaction. A wall carrying a `doors` list now draws as its plain-wall **face spans** (the parts between doors) plus a **door glyph** (jamb, swing arc, leaf, knob) for each embedded door — the wall stays one object, no split. Each door gets its own clickable hit-line (and an over-the-leaf hit-line when open) that toggles just that door via the composite `{wallId}:{doorId}` endpoint; players can toggle non-secret embedded doors, the GM can toggle all. Legacy whole-segment doors/gates render + toggle exactly as before.
+
+### Added
+- `app/templates/tabletop.html` — `_hasEmbeddedDoors` / `_wallRenderSpans` (split a wall into synthetic face + door sub-segments); `drawWallVisual` recurses on them; the wall render loop adds per-embedded-door hit-lines; `toggleDoor(w, embDoorId)` sends the composite id.
+- `tests/harness_ui/test_embedded_door_render.py` — a wall with an embedded door draws the door knob glyph and its hit-line toggles the door open.
+
+### Schema
+- No schema change (still v100 — client rendering over the v2.899.0 model).
+
 ## [2.900.0] - 2026-07-04 — "The Open Span"
 
 **Schema version:** 100

@@ -2581,7 +2581,50 @@
             if (G.gate) return [[G.a.hinge, open ? G.a.open : G.a.closed], [G.b.hinge, open ? G.b.open : G.b.closed]];
             return [[G.hinge, open ? G.open : G.closed]];
         }
+        // v2.900.0 — embedded doors: split a wall with a ``doors`` list into
+        // synthetic sub-segments — plain-wall FACE spans (the parts between
+        // doors) + one door-glyph span per door. Each door span carries the
+        // door's flags + ``_embWallId``/``_embDoorId`` so hit-lines can toggle
+        // the right embedded door. Reused for rendering + interaction.
+        function _hasEmbeddedDoors(w) {
+            return w && !w.door && !w.gate && !w.window
+                && Array.isArray(w.doors) && w.doors.length;
+        }
+        function _wallRenderSpans(w) {
+            var dx = w.x2 - w.x1, dy = w.y2 - w.y1;
+            function pt(t) { return [w.x1 + dx * t, w.y1 + dy * t]; }
+            function face(t0, t1) {
+                var a = pt(t0), b = pt(t1);
+                return { x1: a[0], y1: a[1], x2: b[0], y2: b[1], style: w.style, opacity: w.opacity };
+            }
+            function door(d, t0, t1) {
+                var a = pt(t0), b = pt(t1);
+                return { x1: a[0], y1: a[1], x2: b[0], y2: b[1], style: w.style, opacity: w.opacity,
+                    gate: !!d.gate, door: !d.gate, open: !!d.open, flip: !!d.flip, secret: !!d.secret,
+                    _embWallId: w.id, _embDoorId: d.id };
+            }
+            var doors = (w.doors || [])
+                .filter(function (d) { return d && typeof d.t0 === 'number' && typeof d.t1 === 'number'; })
+                .map(function (d) { return { d: d, t0: Math.max(0, Math.min(1, d.t0)), t1: Math.max(0, Math.min(1, d.t1)) }; })
+                .filter(function (x) { return x.t1 > x.t0; })
+                .sort(function (a, b) { return a.t0 - b.t0; });
+            var out = [], cur = 0;
+            doors.forEach(function (x) {
+                if (x.t0 > cur + 1e-4) out.push(face(cur, x.t0));
+                out.push(door(x.d, x.t0, x.t1));
+                cur = Math.max(cur, x.t1);
+            });
+            if (cur < 1 - 1e-4) out.push(face(cur, 1));
+            return out;
+        }
         function drawWallVisual(w) {
+            // v2.900.0 — a wall with embedded doors renders as its face spans
+            // (plain wall) + a door glyph per door span, by recursing on the
+            // synthetic sub-segments.
+            if (_hasEmbeddedDoors(w)) {
+                _wallRenderSpans(w).forEach(function (sub) { drawWallVisual(sub); });
+                return;
+            }
             var st = wallStyle(w);
             // v2.787.3 — render into an opacity group when the wall is transparent.
             var _wc = svg, _o = (w.opacity == null ? 1 : w.opacity);
@@ -2862,6 +2905,29 @@
                         svg.appendChild(lh);
                     });
                 }
+                // v2.900.0 — embedded doors: a clickable hit-line per door span
+                // (+ over an open leaf) that toggles that door by composite id.
+                if (!editMode && _hasEmbeddedDoors(w)) {
+                    _wallRenderSpans(w).forEach(function (sub) {
+                        if (!sub._embDoorId) return;              // face span — inert
+                        if (!(IS_GM || !sub.secret)) return;      // players can't touch secret doors
+                        var eid = sub._embDoorId;
+                        var dh = mkHitLine(sub);                  // door-span hit-line (clickable: sub.door)
+                        dh.addEventListener('click', function (e) { e.stopPropagation(); toggleDoor(w, eid); });
+                        svg.appendChild(dh);
+                        if (sub.open) {
+                            doorLeafSegments(sub).forEach(function (sp) {
+                                var lh = document.createElementNS(NS, 'line');
+                                lh.setAttribute('x1', sp[0][0]); lh.setAttribute('y1', sp[0][1]);
+                                lh.setAttribute('x2', sp[1][0]); lh.setAttribute('y2', sp[1][1]);
+                                lh.setAttribute('stroke', 'transparent'); lh.setAttribute('stroke-width', '16');
+                                lh.style.pointerEvents = 'stroke'; lh.style.cursor = 'pointer';
+                                lh.addEventListener('click', function (e) { e.stopPropagation(); toggleDoor(w, eid); });
+                                svg.appendChild(lh);
+                            });
+                        }
+                    });
+                }
             });
             if (pending) {
                 var c = document.createElementNS(NS, 'circle');
@@ -2991,11 +3057,13 @@
             } catch (e) {}
             render();  // optimistic; the walls_update WS will reconcile
         }
-        async function toggleDoor(w) {
+        async function toggleDoor(w, embDoorId) {
             if (!mapId || !w || !w.id) return;
+            // v2.900.0 — an embedded door is addressed by a composite id.
+            var did = embDoorId ? (w.id + ':' + embDoorId) : w.id;
             try {
                 await fetch('/api/campaign/' + CID + '/map/' + mapId
-                    + '/door/' + encodeURIComponent(w.id) + '/toggle',
+                    + '/door/' + encodeURIComponent(did) + '/toggle',
                     { method: 'POST' });
                 // walls_update WS re-renders for everyone.
             } catch (e) {}
