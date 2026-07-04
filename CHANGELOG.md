@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.881.1] - 2026-07-03 — "The Way Back"
+
+**Schema version:** 99
+
+**Commit summary:** The map editor gets a "Back to tabletop" nav link alongside "Back to settings".
+
+**Description:** Small navigation add. The map editor's top nav had "← Back to settings" (to campaign settings) but no direct way back to the live tabletop. Added **"← Back to tabletop"** (to `/campaign/{id}`) to its left, matching the existing link's style.
+
+### Added
+- `app/templates/map_editor.html` — a "← Back to tabletop" nav link (to the campaign tabletop) beside "Back to settings".
+
+### Schema
+- No schema change (still v99 — a nav link only).
+
 ## [2.881.0] - 2026-07-03 — "The Stacked Layers"
 
 **Schema version:** 99

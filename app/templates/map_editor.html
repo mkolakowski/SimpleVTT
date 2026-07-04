@@ -17,6 +17,7 @@
     {% if is_active %}<span style="color:#6cb;font-size:12px;">· Active</span>{% endif %}
   </span>
   <nav>
+    <a href="/campaign/{{ campaign.id }}" title="Back to the tabletop">← Back to tabletop</a>
     <a href="/campaign/{{ campaign.id }}/settings#maps" title="Back to campaign settings">← Back to settings</a>
     <a href="/wiki" target="_blank" rel="noopener noreferrer" title="Open the wiki in a new tab">Wiki</a>
     {% if user %}
