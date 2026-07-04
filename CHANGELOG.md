@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.896.0] - 2026-07-04 — "The Delete Key"
+
+**Schema version:** 100
+
+**Commit summary:** Pressing Delete now removes the single selected object in the map editor (not just a marquee multi-selection).
+
+**Description:** The editor already deleted a **marquee** multi-selection and a selected **lair zone** on Delete/Backspace. Now the same key also removes the **single double-click-selected object** — a wall/door, terrain region, light, hotspot, GM pin, prop, or label — so you can select something and just hit Delete instead of opening its right-click menu. Skipped while typing in a field, and it persists the affected layer.
+
+### Added
+- `app/templates/map_editor.html` — `deleteSelectedObj()` (removes `selectedObj` by kind + saves) + a Delete/Backspace branch in the keydown handler.
+- `tests/harness_ui/test_map_editor_delete_key.py` — double-clicking a wall to select it, then pressing Delete, removes it server-side.
+
+### Schema
+- No schema change (still v100).
+
 ## [2.895.0] - 2026-07-04 — "The Clean Slate"
 
 **Schema version:** 100

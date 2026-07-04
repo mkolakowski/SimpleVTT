@@ -2148,6 +2148,27 @@
     pushHistory(); saveAll(); render();
     setStatus('Deleted ' + n + ' object' + (n === 1 ? '' : 's') + '.');
   }
+  // v2.896.0 — delete the single dbl-click-selected object (selectedObj), by
+  // kind, and persist its layer. Used by the Delete/Backspace key handler so a
+  // selected wall / terrain / light / prop / label / hotspot / pin can be
+  // removed without opening its right-click menu.
+  function deleteSelectedObj() {
+    if (!selectedObj || !selectedObj.obj) return false;
+    var kind = selectedObj.kind, obj = selectedObj.obj;
+    function _rm(arr) { var i = arr.indexOf(obj); if (i >= 0) arr.splice(i, 1); }
+    if (kind === 'wall') { _rm(walls); saveWalls(); }
+    else if (kind === 'terrain') { _rm(terrain); saveTerrain(); }
+    else if (kind === 'light') { _rm(lights); saveLights(); }
+    else if (kind === 'lairzone') { _rm(lairZones); saveLairZones(); }
+    else if (kind === 'hotspot') { _rm(hotspots); saveHotspots(); }
+    else if (kind === 'gmpin') { _rm(gmPins); saveGmPins(); }
+    else if (kind === 'prop') { _rm(props); saveProps(); }
+    else if (kind === 'label') { _rm(labels); saveLabels(); }
+    else { return false; }
+    clearObjectSelection();
+    setStatus('Deleted.');
+    return true;
+  }
   function drawSelection() {
     // Highlight each selected object + a bounding box.
     selection.forEach(function (s) {
@@ -3123,6 +3144,10 @@
     }
     if ((e.key === 'Delete' || e.key === 'Backspace') && selection.length && !typing) {
       e.preventDefault(); deleteSelection(); return;
+    }
+    // v2.896.0 — Delete/Backspace removes the single dbl-click-selected object.
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedObj && selectedObj.obj && !typing) {
+      if (deleteSelectedObj()) { e.preventDefault(); return; }
     }
     // v2.821.0 — single-key tool hotkeys (no modifier, not while typing).
     if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
