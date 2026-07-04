@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.900.0] - 2026-07-04 — "The Open Span"
+
+**Schema version:** 100
+
+**Commit summary:** Embedded doors P2 — the client vision + lighting engine expands a wall into its solid spans, so an open embedded door casts light/sight through the gap.
+
+**Description:** Phase 2 of embedded doors. The tabletop's two wall-blocker filters (lighting shadow-casting + fog/vision raycasting) and the map editor's lighting/vision previews now **expand each wall into its solid sub-segments** via a shared `_wallSolidSpans` helper (mirroring the server's). A wall with an **open** embedded door leaves a real gap; a **closed** one still blocks; windows + legacy open doors block nothing, as before. The GM "see from a token" cache signature now includes a door-open fingerprint so toggling a door invalidates it.
+
+### Added
+- `app/static/tabletop.js` — `_wallSolidSpans(w)` (+ `window._wallSolidSpans` hook) and `_wallsOpenFingerprint()`; both blocker filters (`solidWalls`, `_fogSolidWalls`) flatMap through it; the `_gmTargetVisibleCells` cache signature includes the door-open fingerprint.
+- `app/templates/map_editor.html` — the same `_wallSolidSpans` helper feeds the editor's lighting + vision preview blocker lists.
+- `tests/harness_ui/test_embedded_door_vision.py` — a plain wall → one span, a closed embedded door → one span (still solid), a window / legacy-open door → none, and an OPEN embedded door → two spans with the gap at the door.
+
+### Schema
+- No schema change (still v100 — client-side vision only).
+
 ## [2.899.0] - 2026-07-04 — "The Door Within"
 
 **Schema version:** 100

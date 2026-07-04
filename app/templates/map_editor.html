@@ -1011,6 +1011,33 @@
   // v2.787.1 — door/gate geometry: hinge(s), closed + open (swung 90°) leaf
   // ends. ``gate`` = double door hinged at both ends, meeting in the middle;
   // ``flip`` swings to the other side.
+  // v2.900.0 — a wall's solid (sight-blocking) sub-segments {x1,y1,x2,y2}: a
+  // window blocks nothing; a legacy open door/gate nothing; a wall with embedded
+  // ``doors`` blocks everywhere except its OPEN door spans (mirrors the tabletop
+  // + server). Feeds the editor's lighting + vision previews.
+  function _wallSolidSpans(w) {
+    if (!w) return [];
+    if (![w.x1, w.y1, w.x2, w.y2].every(function (n) { return typeof n === 'number'; })) return [];
+    if (w.window) return [];
+    var hasEmb = Array.isArray(w.doors) && w.doors.length;
+    if ((w.door || w.gate) && !hasEmb) {
+      return w.open ? [] : [{ x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2 }];
+    }
+    if (!hasEmb) return [{ x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2 }];
+    var openSpans = [];
+    w.doors.forEach(function (d) {
+      if (!d || !d.open) return;
+      var a = Math.max(0, Math.min(1, +d.t0)), b = Math.max(0, Math.min(1, +d.t1));
+      if (!isNaN(a) && !isNaN(b) && b > a) openSpans.push([a, b]);
+    });
+    openSpans.sort(function (p, q) { return p[0] - q[0]; });
+    var dx = w.x2 - w.x1, dy = w.y2 - w.y1, spans = [], cur = 0;
+    openSpans.forEach(function (s) { if (s[0] > cur) spans.push([cur, s[0]]); cur = Math.max(cur, s[1]); });
+    if (cur < 1) spans.push([cur, 1]);
+    return spans.map(function (s) {
+      return { x1: w.x1 + dx * s[0], y1: w.y1 + dy * s[0], x2: w.x1 + dx * s[1], y2: w.y1 + dy * s[1] };
+    });
+  }
   function doorGeom(w) {
     var x1 = w.x1, y1 = w.y1, x2 = w.x2, y2 = w.y2;
     var dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy) || 1;
@@ -1152,10 +1179,7 @@
     var pxPerFt = (gridPx || 70) / 5;
     lc.fillStyle = 'rgba(3,6,18,' + (dark ? 0.8 : 0.42) + ')';
     lc.fillRect(0, 0, W, H);
-    var solid = (walls || []).filter(function (w) {
-      return w && !((w.door || w.gate) && w.open) && !w.window &&
-        [w.x1, w.y1, w.x2, w.y2].every(function (n) { return typeof n === 'number'; });
-    });
+    var solid = (walls || []).flatMap(_wallSolidSpans);  // v2.900.0 — open embedded doors → gaps
     function eraseShadows(sctx, sx, sy) {
       if (!solid.length) return;
       var ext = (W + H) * 2;
@@ -1215,10 +1239,7 @@
     // Veil everything the token can't see…
     vc.fillStyle = 'rgba(2,4,12,0.72)';
     vc.fillRect(0, 0, W, H);
-    var solid = (walls || []).filter(function (w) {
-      return w && !((w.door || w.gate) && w.open) && !w.window &&
-        [w.x1, w.y1, w.x2, w.y2].every(function (n) { return typeof n === 'number'; });
-    });
+    var solid = (walls || []).flatMap(_wallSolidSpans);  // v2.900.0 — open embedded doors → gaps
     if (!_meVisSrc) _meVisSrc = document.createElement('canvas');
     if (_meVisSrc.width !== W) _meVisSrc.width = W;
     if (_meVisSrc.height !== H) _meVisSrc.height = H;

@@ -135,6 +135,51 @@
         mapWalls = Array.isArray(w) ? w : [];
         try { render(); } catch (_) {}  // full redraw (map+tokens+lighting)
     };
+    // v2.900.0 — the solid (sight-blocking) sub-segments of a wall, as a list of
+    // {x1,y1,x2,y2}. A window blocks nothing; a legacy whole-segment open
+    // door/gate blocks nothing; a wall with embedded ``doors`` blocks everywhere
+    // except its OPEN door spans (a closed door still blocks). A plain wall
+    // returns its single whole segment. Both blocker filters below expand walls
+    // through this so an open embedded door leaves a real gap.
+    function _wallSolidSpans(w) {
+        if (!w) return [];
+        if (![w.x1, w.y1, w.x2, w.y2].every(n => typeof n === 'number')) return [];
+        if (w.window) return [];
+        const hasEmbedded = Array.isArray(w.doors) && w.doors.length;
+        if ((w.door || w.gate) && !hasEmbedded) {
+            return w.open ? [] : [{ x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2 }];
+        }
+        if (!hasEmbedded) return [{ x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2 }];
+        const openSpans = [];
+        w.doors.forEach(d => {
+            if (!d || !d.open) return;
+            const a = Math.max(0, Math.min(1, +d.t0));
+            const b = Math.max(0, Math.min(1, +d.t1));
+            if (!isNaN(a) && !isNaN(b) && b > a) openSpans.push([a, b]);
+        });
+        openSpans.sort((p, q) => p[0] - q[0]);
+        const dx = w.x2 - w.x1, dy = w.y2 - w.y1;
+        const spans = [];
+        let cur = 0;
+        openSpans.forEach(([a, b]) => { if (a > cur) spans.push([cur, a]); cur = Math.max(cur, b); });
+        if (cur < 1) spans.push([cur, 1]);
+        return spans.map(([s0, s1]) => ({
+            x1: w.x1 + dx * s0, y1: w.y1 + dy * s0,
+            x2: w.x1 + dx * s1, y2: w.y1 + dy * s1,
+        }));
+    }
+    window._wallSolidSpans = _wallSolidSpans;  // harness hook
+    // A fingerprint of every wall's open state (segment + embedded doors) so
+    // vision caches invalidate when a door toggles (the walls array length
+    // alone doesn't change on a toggle).
+    function _wallsOpenFingerprint() {
+        return (mapWalls || []).map(w => {
+            const seg = (w && w.open) ? '1' : '0';
+            const emb = (w && Array.isArray(w.doors))
+                ? w.doors.map(d => (d && d.open) ? '1' : '0').join('') : '';
+            return seg + emb;
+        }).join(',');
+    }
     // v2.765.0 — placeable map light sources (torches/lanterns). Fed by the
     // wall editor's /active-map bootstrap + the lights_update WS; punched into
     // the lighting overlay (with wall shadows) like token lights.
@@ -3103,9 +3148,9 @@
         // built on a temp canvas, the wall shadows are erased from it, then
         // it's punched into the veil — so shadows are per-source (one light's
         // shadow doesn't darken an area another light reaches).
-        const solidWalls = (mapWalls || []).filter(
-            w => w && !((w.door || w.gate) && w.open) && !w.window &&
-                 [w.x1, w.y1, w.x2, w.y2].every(n => typeof n === 'number'));
+        // v2.900.0 — expand each wall into its solid sub-spans (open embedded
+        // doors become gaps).
+        const solidWalls = (mapWalls || []).flatMap(_wallSolidSpans);
         let _srcCanvas = null;
         function _eraseWallShadows(sctx, sx, sy) {
             if (!solidWalls.length) return;
@@ -3236,9 +3281,8 @@
     // "sees" the room it's standing in.
     const FOG_BASE_SIGHT_FT = 60;
     function _fogSolidWalls() {
-        return (mapWalls || []).filter(
-            w => w && !((w.door || w.gate) && w.open) && !w.window &&
-                 [w.x1, w.y1, w.x2, w.y2].every(n => typeof n === 'number'));
+        // v2.900.0 — expand walls into solid sub-spans (open embedded doors → gaps).
+        return (mapWalls || []).flatMap(_wallSolidSpans);
     }
     // Project each solid wall's shadow away from the source point and erase it
     // from ``sctx`` (which must be in destination-out mode by the caller). Same
@@ -3385,7 +3429,7 @@
         const src = (tokens || []).filter(t => t && targetIds.has(t.id));
         if (!src.length) return new Set();
         const sig = src.map(t => `${t.id}:${Math.round(t.x)},${Math.round(t.y)}:${t.light_dim_ft || 0}`).join('|')
-            + '#' + mapWalls.length;
+            + '#' + mapWalls.length + '#' + _wallsOpenFingerprint();  // v2.900.0 — door toggles invalidate
         if (_gmViewCache.sig === sig) return _gmViewCache.cells;
         const cells = computeVisibleCells(src);
         _gmViewCache = { sig, cells };
