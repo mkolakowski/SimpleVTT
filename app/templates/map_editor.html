@@ -244,8 +244,11 @@
             title="Draw connected walls: click a chain of points; click the last point again or press Esc to finish">🧱 Wall</button>
     <button type="button" id="me-door-btn" class="me-tool-btn" aria-pressed="false"
             title="Place a door: click an existing wall to drop a door into it (players can open/close it at the table)">🚪 Door</button>
+    {# v2.898.0 — replaced the two-corner Room tool with a free-polygon wall
+       mode: click a chain of points, then click the first dot to close it into
+       a room of walls (Esc cancels). #}
     <button type="button" id="me-room-btn" class="me-tool-btn" aria-pressed="false"
-            title="Draw a room: click two opposite corners to enclose it with four walls">🔲 Room</button>
+            title="Free polygon walls: click a chain of points to drop wall vertices, then click the first dot to close the shape into a room (Esc cancels).">⬡ Free polygon</button>
     <label class="me-capsel" title="Material/look for new walls + doors">
       <span class="me-cap">material</span>
       <select id="me-wall-style" style="min-height:32px;font-size:12px;width:100%;">
@@ -652,6 +655,7 @@
   var terrainDrag = null;   // v2.789.1 — rect being painted
   var terrainDots = [];     // v2.848.0 — gridless four-dot quad placement (pending corners)
   var terrainPolyOn = false; // v2.855.0 — free-polygon terrain (click vertices, close on first)
+  var roomDots = [];        // v2.898.0 — free-polygon WALL vertices (pending; close on first dot)
   var measureMode = false;  // v2.805.0 — ruler tool
   var measureDrag = null;   // the line being dragged
   var measureLine = null;   // the last committed measurement (stays shown)
@@ -1456,6 +1460,30 @@
         d.classList.add('me-terrain-dot');
         d.style.pointerEvents = 'none';
         svg.appendChild(d);
+      });
+    }
+    // v2.898.0 — free-polygon WALL vertices in progress (roomMode): a dashed
+    // connector + dots, with the first dot ringed once the loop can close.
+    if (roomDots.length) {
+      var rClosable = roomDots.length >= 3;
+      if (roomDots.length > 1) {
+        var rpl = document.createElementNS(NS, rClosable ? 'polygon' : 'polyline');
+        rpl.setAttribute('points', roomDots.map(function (p) { return p[0] + ',' + p[1]; }).join(' '));
+        rpl.setAttribute('fill', 'none'); rpl.setAttribute('stroke', '#cbd5e1');
+        rpl.setAttribute('stroke-width', '3'); rpl.setAttribute('stroke-dasharray', '6 4');
+        rpl.style.pointerEvents = 'none';
+        svg.appendChild(rpl);
+      }
+      roomDots.forEach(function (p, di) {
+        var rd = document.createElementNS(NS, 'circle');
+        rd.setAttribute('cx', p[0]); rd.setAttribute('cy', p[1]);
+        var rfirst = rClosable && di === 0;
+        rd.setAttribute('r', rfirst ? 10 : 6);
+        rd.setAttribute('fill', rfirst ? 'none' : '#cbd5e1');
+        rd.setAttribute('stroke', rfirst ? '#cbd5e1' : '#000');
+        rd.setAttribute('stroke-width', rfirst ? '3' : '1.5');
+        rd.style.pointerEvents = 'none';
+        svg.appendChild(rd);
       });
     }
     // v2.870.0 — lair-action zones (above terrain): translucent crimson areas
@@ -3198,6 +3226,7 @@
     if (e.key === 'Escape') {
       if (lairZoneDots.length) { lairZoneDots = []; setStatus(''); render(); }  // v2.870.0
       else if (terrainDots.length) { terrainDots = []; setStatus(''); render(); }
+      else if (roomDots.length) { roomDots = []; setStatus(''); render(); }  // v2.898.0
       else if (pending) { pending = null; render(); }
       else if (clearObjectSelection()) { /* light/wall/terrain deselected */ }
       else if (selectedLairZone) { selectedLairZone = null; render(); }  // v2.870.0
@@ -3234,6 +3263,7 @@
     if (fogResetBtn) fogResetBtn.style.display = (fogMode && fogDynamic) ? 'inline-flex' : 'none';
     pending = null; fogDrag = null;
     terrainDots = [];  // v2.848.0 — abandon a half-placed quad on tool change
+    roomDots = [];  // v2.898.0 — abandon a half-placed free-polygon wall loop
     // v2.850.0/v2.851.0/v2.854.0 — tool changes drop any dbl-click selection
     // (incl. the unified selectedObj + its armed resize handles).
     selectedLight = null; selectedWall = null; selectedTerrain = null;
@@ -3624,20 +3654,28 @@
       // on empty map just hints.
       if (window.showToast) showToast('Doors must be placed on a wall — click an existing wall.');
     } else if (roomMode) {
-      // v2.788.1 — two opposite corners → four walls forming the room.
+      // v2.898.0 — free-polygon walls: each click drops a vertex; clicking
+      // within the close-threshold of the FIRST vertex (once there are ≥3)
+      // closes the loop into a room of connected wall segments.
       p = snapPoint(p);
-      if (!pending) { pending = p; render(); return; }
-      var rx1 = pending.x, ry1 = pending.y, rx2 = p.x, ry2 = p.y;
-      var rstyle = (styleSel && styleSel.value) || 'stone';
-      if (rx1 !== rx2 && ry1 !== ry2) {
-        var rseg = function (ax, ay, bx, by) {
-          return { id: 'w' + Date.now() + '_' + (seq++), x1: ax, y1: ay, x2: bx, y2: by,
-            door: false, open: false, style: rstyle };
-        };
-        walls.push(rseg(rx1, ry1, rx2, ry1), rseg(rx2, ry1, rx2, ry2),
-                   rseg(rx2, ry2, rx1, ry2), rseg(rx1, ry2, rx1, ry1));
+      var rclose = Math.max(14, (gridPx || 70) * 0.35);
+      if (roomDots.length >= 3
+          && Math.hypot(p.x - roomDots[0][0], p.y - roomDots[0][1]) <= rclose) {
+        var rstyle = (styleSel && styleSel.value) || 'stone';
+        for (var ri = 0; ri < roomDots.length; ri++) {
+          var a = roomDots[ri], b = roomDots[(ri + 1) % roomDots.length];
+          if (a[0] === b[0] && a[1] === b[1]) continue;
+          walls.push({ id: 'w' + Date.now() + '_' + (seq++),
+            x1: a[0], y1: a[1], x2: b[0], y2: b[1],
+            door: false, open: false, style: rstyle });
+        }
+        roomDots = []; setStatus(''); saveWalls();
+      } else {
+        roomDots.push([p.x, p.y]);
+        setStatus(roomDots.length + ' point' + (roomDots.length === 1 ? '' : 's')
+          + ' — click more, then click the first dot to close (Esc cancels).');
+        render();
       }
-      pending = null; saveWalls();
     } else if (spotMode) {
       var label = window.prompt('Hotspot label:', '');
       if (label === null) return;

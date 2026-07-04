@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.898.0] - 2026-07-04 — "The Free Polygon"
+
+**Schema version:** 100
+
+**Commit summary:** The two-corner Room tool is replaced by a free-polygon wall mode — click a chain of points, close on the first dot to make a room of any shape.
+
+**Description:** Swaps the 🔲 Room tool (which drew a rectangle of four walls from two opposite corners) for a **⬡ Free polygon** wall mode. Click a chain of points to drop wall vertices; a dashed connector + dots preview the shape, and once you have ≥3 points the **first dot is ringed** — click it to **close the loop into connected wall segments** (a room of any shape, not just rectangles). Esc cancels the pending vertices; switching tools abandons them. Mirrors the existing free-polygon terrain / lair-zone flow.
+
+### Changed
+- `app/templates/map_editor.html` — the Room button is now "⬡ Free polygon"; `roomMode` accumulates `roomDots` vertices and closes into walls on the first dot (was a two-corner rectangle); added the in-progress dot/connector preview + Esc/tool-switch cleanup.
+- `tests/harness_ui/test_map_editor_room.py` — `test_free_polygon_walls_close_into_a_loop` (four vertices + a close-click → 4 wall segments), replacing the two-corner room test.
+
+### Schema
+- No schema change (still v100 — produces ordinary wall segments).
+
 ## [2.897.0] - 2026-07-04 — "The Doorway"
 
 **Schema version:** 100

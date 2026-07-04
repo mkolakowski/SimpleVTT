@@ -1,4 +1,8 @@
-"""v2.788.1 — room tool (4 walls in one shot) + polyline wall chaining."""
+"""v2.788.1 — free-polygon walls + polyline wall chaining.
+
+v2.898.0 — the two-corner Room tool became a free-polygon wall mode: click a
+chain of vertices, then click the first dot to close it into a loop of walls.
+"""
 from __future__ import annotations
 
 import httpx
@@ -18,19 +22,23 @@ def _open(gm_page, mid):
     me_clear_toolbar(gm_page)  # map is full-bleed behind the toolbar
 
 
-def test_room_tool_makes_four_walls(gm_page: Page) -> None:
+def test_free_polygon_walls_close_into_a_loop(gm_page: Page) -> None:
     with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
         c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
         try:
             _open(gm_page, mid)
-            gm_page.locator("#me-room-btn").click()
+            gm_page.locator("#me-room-btn").click()  # ⬡ Free polygon (walls)
             ov = gm_page.locator("#me-overlay").bounding_box()
-            gm_page.mouse.click(ov["x"] + 90, ov["y"] + 70)     # corner 1
-            gm_page.mouse.click(ov["x"] + 260, ov["y"] + 190)   # opposite corner
+            corners = [(90, 70), (260, 70), (260, 190), (90, 190)]
+            for (dx, dy) in corners:
+                gm_page.mouse.click(ov["x"] + dx, ov["y"] + dy)
+                gm_page.wait_for_timeout(120)
+            # Click the FIRST dot again to close the loop → 4 wall segments.
+            gm_page.mouse.click(ov["x"] + corners[0][0], ov["y"] + corners[0][1])
             gm_page.wait_for_timeout(300)
-            assert len(_walls(c, mid)) == 4, _walls(c, mid)  # four sides
+            assert len(_walls(c, mid)) == 4, _walls(c, mid)  # closed 4-gon
         finally:
             c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
 
