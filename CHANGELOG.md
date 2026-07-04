@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.871.0] - 2026-07-03 — "The Revealed Zone"
+
+**Schema version:** 99
+
+**Commit summary:** Lair zones render on the tabletop as a per-client toggleable overlay for both GM and players.
+
+**Description:** Phase 3 of the lair-action layer. The lair zones authored in the editor now render on the tabletop as translucent crimson areas (`.tt-lairzone`) with a 🎯 label, drawn on the wall/terrain overlay. A **🎯 Zones** button in the canvas-tools cluster (next to 📏 Ruler) toggles the overlay **per-client** — it's available to **both the GM and players** (a shared targeting aid, not a GM-only reveal), and only surfaces when the active map actually carries zones. The layer is off by default; each viewer flips it on when they want to see where the lair's actions strike. Zone edits in the editor push live via the `lair_zones_update` WS so every client's overlay stays current.
+
+### Added
+- `app/templates/tabletop.html` — `lairZones` state + per-client `lairZonesVisible` toggle, the crimson `.tt-lairzone` render on the overlay, the `/active-map` bootstrap, `_onLairZonesUpdate` WS handler, and the 🎯 Zones canvas-tools button (`_syncLairZonesBtn` / `toggleLairZones`, shown only when zones exist).
+- `app/static/tabletop.js` — dispatch `lair_zones_update` → `window._onLairZonesUpdate`.
+- `tests/harness_ui/test_lair_zones_tabletop.py` — GM toggles the overlay on/off; a player can toggle it too; the button hides when the map has no zones.
+
+### Schema
+- No schema change (still v99 — reuses the Phase-1 data + WS).
+
 ## [2.870.0] - 2026-07-03 — "The Painted Zone"
 
 **Schema version:** 99

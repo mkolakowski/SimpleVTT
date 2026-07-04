@@ -5782,6 +5782,11 @@
                 if (msg.data && typeof window._onTerrainVisibilityUpdate === 'function') {
                     try { window._onTerrainVisibilityUpdate(msg.data); } catch (_) {}
                 }
+            } else if (msg.type === 'lair_zones_update') {
+                // v2.871.0 — Maps 2.0: lair-action zones changed in the editor.
+                if (msg.data && typeof window._onLairZonesUpdate === 'function') {
+                    try { window._onLairZonesUpdate(msg.data); } catch (_) {}
+                }
             } else if (msg.type === 'gm_pins_changed') {
                 // v2.790.2 — GM pins changed: GM clients re-fetch (data-less
                 // signal; players' handler is a no-op / the GET is GM-gated).

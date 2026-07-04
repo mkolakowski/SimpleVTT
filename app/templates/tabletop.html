@@ -2291,6 +2291,19 @@
                 {% if not active_map %}aria-disabled="true" disabled{% endif %}>
             📏 Ruler
         </button>
+        {# v2.871.0 — lair-action zone overlay toggle. Visible to GM + players;
+           a per-client show/hide of the crimson zone areas (a targeting aid).
+           Hidden until the active map actually carries lair zones (wired by
+           the script below). #}
+        <button type="button"
+                id="lair-zones-btn"
+                class="canvas-tool-btn"
+                aria-pressed="false"
+                style="display:none;"
+                onclick="window.toggleLairZones && window.toggleLairZones()"
+                title="Show lair-action zones">
+            🎯 Zones
+        </button>
         {# v2.773.0 — the movement-lock toggle + map-editor link moved to
            Tools → Encounters (see #encounters-panel) to declutter the canvas
            toolbar. #}
@@ -2468,6 +2481,8 @@
         var grab = null, suppressClick = false;  // v2.759.0 — drag-to-move
         var terrain = [];  // v2.789.2 — terrain regions
         var terrainHidden = true;  // v2.858.0 — hidden from players by default; GM reveals
+        var lairZones = [];  // v2.871.0 — lair-action zones (targeting overlay)
+        var lairZonesVisible = false;  // per-client toggle (GM + players); off by default
         var TERRAIN_TYPES = {
             difficult: '#8a6d3b', water: '#3b6ea5', lava: '#d1481f',
             ice: '#7fc7d9', swamp: '#4b6b3a', rubble: '#77726a',
@@ -2662,6 +2677,35 @@
                     + (tr.type || 'difficult').charAt(0).toUpperCase() + (tr.type || 'difficult').slice(1);
                 svg.appendChild(lbl);
             });
+            // v2.871.0 — lair-action zone overlay, toggled per-client (GM +
+            // players) via the 🎯 canvas-tools button. A targeting aid: shows
+            // where a creature's lair actions strike.
+            if (lairZonesVisible) lairZones.forEach(function (lz) {
+                var zColor = '#d24b3a';
+                var zc;
+                if (Array.isArray(lz.points) && lz.points.length >= 3) {
+                    zc = document.createElementNS(NS, 'polygon');
+                    zc.setAttribute('points', lz.points.map(function (p) {
+                        return p[0] + ',' + p[1];
+                    }).join(' '));
+                } else {
+                    zc = document.createElementNS(NS, 'rect');
+                    zc.setAttribute('x', lz.x); zc.setAttribute('y', lz.y);
+                    zc.setAttribute('width', lz.w); zc.setAttribute('height', lz.h);
+                }
+                zc.setAttribute('fill', zColor); zc.setAttribute('fill-opacity', '0.18');
+                zc.setAttribute('stroke', zColor); zc.setAttribute('stroke-width', '2');
+                zc.setAttribute('stroke-dasharray', '2 5');
+                zc.style.pointerEvents = 'none';
+                zc.classList.add('tt-lairzone');
+                svg.appendChild(zc);
+                var zlbl = document.createElementNS(NS, 'text');
+                zlbl.setAttribute('x', lz.x + 5); zlbl.setAttribute('y', lz.y + 16);
+                zlbl.setAttribute('fill', zColor); zlbl.setAttribute('font-size', '13');
+                zlbl.setAttribute('font-weight', '700'); zlbl.style.pointerEvents = 'none';
+                zlbl.textContent = '🎯 ' + (lz.label || 'Lair zone');
+                svg.appendChild(zlbl);
+            });
             // v2.793.0 — decorative prop stamps (emoji glyphs), above terrain
             // and below tokens; visible to everyone, non-interactive.
             props.forEach(function (pr) {
@@ -2824,6 +2868,8 @@
                 mapId = d.map_id; walls = d.walls || [];
                 hotspots = d.hotspots || []; terrain = d.terrain || [];
                 terrainHidden = (d.terrain_hidden !== false);  // v2.858.0 — default hidden
+                lairZones = d.lair_zones || [];  // v2.871.0
+                if (typeof _syncLairZonesBtn === 'function') _syncLairZonesBtn();
                 if (typeof _syncTerrainRevealBtn === 'function') _syncTerrainRevealBtn();
                 props = d.props || []; labels = d.labels || []; render();
                 applyWeather(d.weather || '');  // v2.808.0 — start/stop the weather overlay
@@ -2926,6 +2972,29 @@
             if (!data) return;
             terrain = data.terrain || []; render();
         };
+        // v2.871.0 — lair-zone layer live-update (GM edits in the editor push
+        // lair_zones_update). Overlay visibility is a per-client toggle.
+        window._onLairZonesUpdate = function (data) {
+            if (!data) return;
+            lairZones = data.lair_zones || [];
+            _syncLairZonesBtn(); render();
+        };
+        function _syncLairZonesBtn() {
+            var btn = document.getElementById('lair-zones-btn');
+            if (!btn) return;
+            // Only surface the toggle when the map actually has zones.
+            var has = lairZones && lairZones.length > 0;
+            btn.style.display = has ? '' : 'none';
+            if (!has) lairZonesVisible = false;
+            btn.setAttribute('aria-pressed', lairZonesVisible ? 'true' : 'false');
+            btn.title = lairZonesVisible ? 'Hide lair-action zones' : 'Show lair-action zones';
+        }
+        function toggleLairZones() {
+            lairZonesVisible = !lairZonesVisible;
+            _syncLairZonesBtn();
+            render();
+        }
+        window.toggleLairZones = toggleLairZones;
         // v2.858.0 — GM reveal-terrain toggle: the flag + live update + a GM
         // Tools button. Terrain is hidden from players until the GM reveals it.
         window._onTerrainVisibilityUpdate = function (data) {
