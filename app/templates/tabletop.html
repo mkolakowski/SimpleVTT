@@ -3021,6 +3021,7 @@
             lairZones = data.lair_zones || [];
             _syncLairZonesBtn(); render();
             if (window._lairActionsListOpen) window._renderLairActionsList();  // v2.892.0
+            if (window._renderLairActionPanel) window._renderLairActionPanel();  // v2.894.0 — init panel
         };
         function _syncLairZonesBtn() {
             var btn = document.getElementById('lair-zones-btn');
@@ -3199,6 +3200,7 @@
         window._onLairCatalogLoaded = function () {
             _syncLairZonesBtn();
             if (window._lairActionsListOpen) window._renderLairActionsList();
+            if (window._renderLairActionPanel) window._renderLairActionPanel();  // v2.894.0
         };
         // v2.893.0 — fire a map-placed lair action: resolve targets from its
         // bound zone (auto-target + flash) or the manual picker, then POST the
@@ -11440,29 +11442,50 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             }
         }
 
-        if (!owner) {
-            // v2.862.0 — the host is now a static element in the Battle
-            // drawer (not a body-appended float), so hide it rather than
-            // removing it — removal would delete the drawer slot for good.
-            // v2.868.0 — hide the collapsible <details> wrapper.
-            const _wrap = document.getElementById('_lair_action_details');
-            if (_wrap) _wrap.style.display = 'none';
-            const _pp = document.getElementById('_regional_effects_panel');
-            if (_pp) _pp.style.display = 'none';  // v2.863.0 — static host: hide, don't remove
-            return;
+        // v2.894.0 — the lair actions PLACED on the map (zone-bound), resolved
+        // to their full mechanics. The init panel now pulls from these too, so a
+        // zone-driven lair (no single creature) still gets a lair-action panel.
+        const _placedDefs = ((window._getPlacedLairActions && window._getPlacedLairActions()) || [])
+            .map(pa => pa.def).filter(Boolean);
+
+        function _hideLairPanels() {
+            // v2.862.0 — the host is a static element in the Battle drawer, so
+            // hide the wrapper rather than removing it (removal deletes the slot).
+            const _w = document.getElementById('_lair_action_details');
+            if (_w) _w.style.display = 'none';
+            const _p = document.getElementById('_regional_effects_panel');
+            if (_p) _p.style.display = 'none';
         }
 
-        // v2.180.0 — players (non-GM) get a read-only regional-effects card.
-        // RAW MM p.11 regional effects are observable environmental changes
-        // (earthquakes, fog, fouled water), so the whole table can feel the
-        // lair's presence — but we deliberately omit the GM-only lair-action
-        // controls AND the creature's name (so the panel is atmosphere, not a
-        // monster reveal). Players never see the 🌋 lair-action host.
+        // v2.180.0 — players (non-GM) get a read-only regional-effects card,
+        // but only when a real creature owner dwells here (a zone-only lair has
+        // no creature atmosphere to reveal). Players never see the lair-action
+        // controls or the creature's name.
         if (!isGm) {
+            if (!owner) { _hideLairPanels(); return; }
             if (host) host.remove();
             _renderPlayerRegionalPanel(owner);
             return;
         }
+
+        // GM: surface the panel when there's a creature owner OR any placed
+        // action. A zone-only lair (no creature) only shows during an active
+        // battle, and gets a synthetic owner so the rest of the renderer
+        // (which reads owner.name / .id / .regional_effects) works.
+        const _battleActive = (typeof battle !== 'undefined') && battle && battle.active;
+        if (!owner && (!_placedDefs.length || !_battleActive)) { _hideLairPanels(); return; }
+        if (!owner) owner = { id: null, name: 'The lair (map zones)', lair_actions: [], regional_effects: [] };
+
+        // Merge the creature's curated actions with the map-placed ones
+        // (deduped by id) — this is the list the panel renders + triggers.
+        const _effectiveActions = [];
+        const _seenAids = {};
+        (owner.lair_actions || []).forEach(a => {
+            if (a && a.id && !_seenAids[a.id]) { _seenAids[a.id] = 1; _effectiveActions.push(a); }
+        });
+        _placedDefs.forEach(a => {
+            if (a && a.id && !_seenAids[a.id]) { _seenAids[a.id] = 1; _effectiveActions.push(a); }
+        });
 
         const inLair = !!(battle && battle.in_lair);
         const lairSlug = (battle && battle.lair_slug) || owner.lair_slug || '';
@@ -11550,7 +11573,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     + 'color:#d8c2b2;">Initiative count 20 not yet reached.</div>'
                 );
             }
-            actionsHtml += (owner.lair_actions || []).map(a => {
+            actionsHtml += (_effectiveActions || []).map(a => {
                 const aid = _escH(a.id || '');
                 const anm = _escH(a.name || 'Lair action');
                 const dmg = a.damage ? (_escH(a.damage) + ' ' + _escH(a.damage_type || '')) : '';

@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.894.0] - 2026-07-04 — "The Zone Lair"
+
+**Schema version:** 100
+
+**Commit summary:** The GM's init-tracker lair panel now pulls its actions from the zones placed on the map — a lair defined purely by map zones gets a full lair-action panel.
+
+**Description:** Completes the lair-action arc. The init-20 lair panel used to key entirely off a creature combatant's curated `lair_actions`; if no creature on the field had a lair, the panel hid. Now the panel renders the **merged** list — the creature's actions **plus** every action placed on the map's lair zones (deduped by id) — so a map-placed action shows up alongside (or instead of) a creature's. For a **zone-driven lair** with no creature owner at all, the panel still surfaces during an active battle (with a synthetic "The lair (map zones)" owner and an Enter-lair toggle), so the GM can drive lair actions straight from what they painted in the editor. Each row keeps the existing trigger flow (zone targeting → roll → once-per-round tracking). Players' regional-effects card is unchanged (still creature-owner only — a zone-only lair has no creature to narrate).
+
+### Changed
+- `app/templates/tabletop.html` — `_renderLairActionPanel` gathers `_getPlacedLairActions()`, renders the merged creature-∪-placed action list, and surfaces for a zone-only lair during an active battle (synthetic owner); `_onLairZonesUpdate` / `_onLairCatalogLoaded` refresh the panel.
+
+### Added
+- `tests/harness_ui/test_lair_panel_placed.py` — with an active battle whose only combatant has no lair actions, the GM init panel still lists the map-placed "Magma Erupts" pulled from a bound zone.
+
+### Schema
+- No schema change (still v100).
+
 ## [2.893.0] - 2026-07-04 — "The Trigger Finger"
 
 **Schema version:** 100
