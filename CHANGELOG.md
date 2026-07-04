@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.891.0] - 2026-07-04 — "The Placed Strike"
+
+**Schema version:** 100
+
+**Commit summary:** Map-placed lair actions can now be resolved + rolled without their source creature — the groundwork for driving lair actions from the zones on the map.
+
+**Description:** Substrate for the lair-action work (the panel/slide-out UI follow). A lair zone in the editor binds an action **id** (from the id-deduped `all_lair_actions()` catalog) but not the creature it came from. This adds the plumbing to treat those map-placed ids as first-class:
+- `lair_action_by_id_any(action_id)` resolves an action by id alone, searching every slug's catalog and returning full mechanics (damage/save/effect/area).
+- `all_lair_actions_full()` — the id-deduped catalog **with** mechanics (not just id/name/desc).
+- `POST /trigger_lair_action` now falls back to the id-only lookup when the battle has no matching `lair_slug`, so a zone-placed action fires with its real damage/save/condition even when the lair has no slug set.
+- New `GET /api/lair_action_catalog` returns the full-mechanics catalog to the client.
+- The tabletop fetches it into `window._lairCatalog` and exposes `window._getPlacedLairActions()` (the union of every zone's bound actions, resolved to catalog dicts + the zone ids that carry each) and `window._highlightLairZones()` / `_clearLairZoneHighlight()` (persistent hover highlight, distinct from the timed strike flash).
+
+### Added
+- `app/content/lair_actions.py` — `lair_action_by_id_any()` + `all_lair_actions_full()`.
+- `app/routes/tabletop_routes.py` — `GET /api/lair_action_catalog`; `trigger_lair_action` id-only fallback.
+- `app/templates/tabletop.html` — `window._lairCatalog` (fetched), `_getPlacedLairActions()`, `_highlightLairZones()` / `_clearLairZoneHighlight()`.
+- `tests/harness/test_lair_action_catalog.py` — the catalog GET returns actions with mechanics (magma-erupts = DEX/6d6/fire), ids unique, readable by a player.
+- `tests/harness/test_trigger_lair_action.py` — a zone-placed action fires + resolves with full mechanics when the battle has no `lair_slug`.
+
+### Schema
+- No schema change (still v100).
+
 ## [2.890.0] - 2026-07-04 — "The Hidden Ground"
 
 **Schema version:** 100

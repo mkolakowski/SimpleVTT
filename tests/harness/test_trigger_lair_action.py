@@ -435,6 +435,35 @@ async def test_trigger_lair_action_unknown_action_409(gm_client):
     assert resp.json()["error"] == "unknown_lair_action"
 
 
+async def test_trigger_zone_placed_action_resolves_without_slug(
+    gm_client, gm_ws, bandit_template_id,
+):
+    """v2.891.0 — a MAP-PLACED lair action (bound to a zone in the editor)
+    carries only its id, not a creature slug. With the battle in a lair but
+    NO lair_slug set, firing an action id still resolves via the id-only
+    catalog fallback, with full mechanics."""
+    b1 = "npc_lair_zoneplaced_b1"
+    await _seed_battle(gm_client, [
+        _mkc(b1, hp_cur=40, hp_max=40, name="Bandit Zoned", initiative=15,
+             token_template_id=bandit_template_id),
+    ], in_lair=True, lair_slug="")  # no slug — as a zone-only lair would be
+
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/trigger_lair_action",
+        json={"action_id": "magma-erupts", "aoe_target_combatant_ids": [b1]},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["action_name"] == "Magma Erupts"
+
+    msg = await gm_ws.wait_for("lair_action_resolved")
+    # Full mechanics resolved from the id-only lookup.
+    assert msg["data"]["save_ability"] == "DEX"
+    assert msg["data"]["damage"] == "6d6"
+    assert msg["data"]["damage_type"] == "fire"
+
+
 async def test_trigger_lair_action_missing_action_id_400(gm_client):
     await _seed_battle(gm_client, [
         _mkc("npc_lair_missing", name="Filler", initiative=10),

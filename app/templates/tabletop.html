@@ -3026,6 +3026,42 @@
         // tabletop.js, where the ``tokens`` array + gridSize live) can read
         // them across the script boundary.
         window._getLairZones = function () { return lairZones || []; };
+        // v2.891.0 — the SRD lair-action catalog (id -> full mechanics), fetched
+        // once so the tabletop can render + roll a map-placed zone's bound
+        // actions without needing the creature it came from.
+        window._lairCatalog = {};
+        (function _loadLairCatalog() {
+            fetch('/api/lair_action_catalog').then(function (r) { return r.json(); })
+                .then(function (d) {
+                    (d.actions || []).forEach(function (a) {
+                        if (a && a.id) window._lairCatalog[a.id] = a;
+                    });
+                    if (typeof window._onLairCatalogLoaded === 'function') window._onLairCatalogLoaded();
+                }).catch(function () {});
+        })();
+        // The lair actions actually PLACED on the map = the union of every
+        // zone's bound action ids, each resolved to its catalog dict + the list
+        // of zone ids that carry it (for targeting + hover-highlight).
+        window._getPlacedLairActions = function () {
+            var zones = (window._getLairZones && window._getLairZones()) || [];
+            var byId = {};
+            zones.forEach(function (z) {
+                (z.actions || []).forEach(function (aid) {
+                    if (!aid) return;
+                    if (!byId[aid]) byId[aid] = { id: aid, zoneIds: [], def: window._lairCatalog[aid] || null };
+                    if (z.id != null) byId[aid].zoneIds.push(z.id);
+                });
+            });
+            return Object.keys(byId).map(function (k) { return byId[k]; });
+        };
+        // v2.891.0 — persistent zone highlight for hover (distinct from the
+        // timed _flashLairZones "strike" pulse): mark + render, clear on demand.
+        window._highlightLairZones = function (zoneIds) {
+            lairZonesVisible = true; _flashZoneIds = {};
+            (zoneIds || []).forEach(function (id) { if (id != null) _flashZoneIds[id] = true; });
+            _syncLairZonesBtn(); render();
+        };
+        window._clearLairZoneHighlight = function () { _flashZoneIds = {}; render(); };
         // v2.858.0 — GM reveal-terrain toggle: the flag + live update + a GM
         // Tools button. Terrain is hidden from players until the GM reveals it.
         window._onTerrainVisibilityUpdate = function (data) {

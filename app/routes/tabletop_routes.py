@@ -7003,7 +7003,9 @@ from app.content.effective_speed import (
 )
 from app.content.lair_actions import (
     all_lair_actions as _all_lair_actions,
+    all_lair_actions_full as _all_lair_actions_full,
     lair_action_by_id as _lair_action_by_id,
+    lair_action_by_id_any as _lair_action_by_id_any,
     lair_actions_for_slug as _lair_actions_for_slug,
 )
 from app.content.regional_effects import (
@@ -31836,6 +31838,15 @@ async def set_in_lair(
     return {"ok": True, "in_lair": in_lair, "lair_slug": state["lair_slug"]}
 
 
+@router.get("/api/lair_action_catalog")
+def lair_action_catalog(user: User = Depends(require_user)):
+    """v2.891.0 — the full SRD lair-action catalog (id-deduped, with mechanics:
+    damage/save/effect/area) for the tabletop's placed-lair-action UI. Static
+    content; any signed-in user may read it. The tabletop resolves a map-placed
+    zone's bound action ids against this to render + roll them."""
+    return {"actions": _all_lair_actions_full()}
+
+
 @router.post("/api/campaign/{campaign_id}/trigger_lair_action")
 async def trigger_lair_action(
     campaign_id: int,
@@ -31917,6 +31928,13 @@ async def trigger_lair_action(
         or str(state.get("lair_slug") or "").strip().lower()
     )
     action_def = _lair_action_by_id(lair_slug, action_id)
+    if not action_def:
+        # v2.891.0 — a MAP-PLACED lair action (bound to a zone in the editor)
+        # carries only its id, not the creature slug. Fall back to an
+        # id-only lookup across every catalog so zone-placed actions fire
+        # with their full mechanics even when the battle has no lair_slug (or
+        # a different one) set.
+        action_def = _lair_action_by_id_any(action_id)
     if not action_def:
         return JSONResponse(status_code=409, content={
             "error": "unknown_lair_action",

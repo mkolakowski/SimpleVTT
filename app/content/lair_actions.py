@@ -733,3 +733,43 @@ def all_lair_actions() -> list[dict]:
                 "desc": str(a.get("desc") or ""),
             }
     return sorted(seen.values(), key=lambda x: x["name"].lower())
+
+
+def lair_action_by_id_any(action_id) -> dict | None:
+    """v2.891.0 — resolve a lair action by id ALONE, searching every slug's
+    catalog. Used when a map-placed lair zone binds an action id without
+    knowing which creature it came from (the editor's Lair-Actions dropdown
+    is sourced from ``all_lair_actions()``, which is id-unique across slugs).
+    Returns a deep copy with full mechanics (damage/save/effect/area), or
+    None for an unknown id."""
+    if not action_id or not isinstance(action_id, str):
+        return None
+    want = action_id.strip()
+    if not want:
+        return None
+    for actions in LAIR_ACTIONS_BY_SLUG.values():
+        for a in actions:
+            if isinstance(a, dict) and str(a.get("id") or "") == want:
+                return copy.deepcopy(a)
+    return None
+
+
+def all_lair_actions_full() -> list[dict]:
+    """v2.891.0 — like ``all_lair_actions()`` but keeps the full mechanics
+    (``save_ability``, ``save_dc``, ``damage``, ``damage_type``,
+    ``half_on_save``, ``effect``, ``area``) on each id-deduped record. Feeds
+    the tabletop's placed-lair-action UI (slide-out list + trigger buttons)
+    so a zone-placed action can be rendered + rolled without a creature."""
+    seen: dict[str, dict] = {}
+    for actions in LAIR_ACTIONS_BY_SLUG.values():
+        for a in actions:
+            if not isinstance(a, dict):
+                continue
+            aid = str(a.get("id") or "").strip()
+            if not aid or aid in seen:
+                continue
+            rec = copy.deepcopy(a)
+            rec["id"] = aid
+            rec["name"] = str(a.get("name") or aid)
+            seen[aid] = rec
+    return sorted(seen.values(), key=lambda x: str(x.get("name") or "").lower())
