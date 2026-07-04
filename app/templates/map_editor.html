@@ -120,8 +120,8 @@
   .me-group.me-collapsed > *:not(.me-grp-lbl) { display:none !important; }
   .me-group > label { justify-content:center; }
   /* v2.814.0 — Layers checkboxes as a uniform 2-column grid (aligned rows). */
-  .me-layers-grid { display:grid; grid-template-columns:1fr 1fr; column-gap:12px;
-    row-gap:2px; }
+  /* v2.874.0 — single top-to-bottom column (was a 2-col grid). */
+  .me-layers-grid { display:flex; flex-direction:column; row-gap:3px; }
   .me-layers-grid > label { justify-content:flex-start; white-space:nowrap;
     font-size:12px; }
   /* a sub-row that keeps several controls together on one line */
@@ -389,15 +389,15 @@
             title="Show or hide every overlay at once — handy for eyeballing the bare map image (tip: shift-click a layer below to show only that one)">👁 All / None</button>
     {# v2.814.0 — uniform 2-column checkbox grid. #}
     <div class="me-layers-grid">
-      <label style="gap:4px;"><input type="checkbox" id="me-layer-walls" checked> Walls</label>
-      <label style="gap:4px;"><input type="checkbox" id="me-layer-terrain" checked> Terrain</label>
-      <label style="gap:4px;"><input type="checkbox" id="me-layer-lights" checked> Lights</label>
-      <label style="gap:4px;"><input type="checkbox" id="me-layer-hotspots" checked> Hotspots</label>
-      <label style="gap:4px;"><input type="checkbox" id="me-layer-fog" checked> Fog</label>
-      <label style="gap:4px;"><input type="checkbox" id="me-layer-gmpins" checked> Pins</label>
-      <label style="gap:4px;"><input type="checkbox" id="me-layer-labels" checked> Labels</label>
-      <label style="gap:4px;"><input type="checkbox" id="me-layer-lairzones" checked> Lair zones</label>
-      <label style="gap:4px;"><input type="checkbox" id="me-layer-tokens" checked> Tokens</label>
+      <label style="gap:4px;"><input type="checkbox" id="me-layer-walls" checked> 🧱 Walls</label>
+      <label style="gap:4px;"><input type="checkbox" id="me-layer-terrain" checked> ⛰️ Terrain</label>
+      <label style="gap:4px;"><input type="checkbox" id="me-layer-lights" checked> 💡 Lights</label>
+      <label style="gap:4px;"><input type="checkbox" id="me-layer-hotspots" checked> 📍 Hotspots</label>
+      <label style="gap:4px;"><input type="checkbox" id="me-layer-fog" checked> 🌫️ Fog</label>
+      <label style="gap:4px;"><input type="checkbox" id="me-layer-gmpins" checked> 📌 Pins</label>
+      <label style="gap:4px;"><input type="checkbox" id="me-layer-labels" checked> 🔤 Labels</label>
+      <label style="gap:4px;"><input type="checkbox" id="me-layer-lairzones" checked> 🎯 Lair zones</label>
+      <label style="gap:4px;"><input type="checkbox" id="me-layer-tokens" checked> 🔵 Tokens</label>
     </div>
   </div>
   <div class="me-group me-group--stack" role="group" aria-label="View">

@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.874.0] - 2026-07-03 — "The Labeled Stack"
+
+**Schema version:** 99
+
+**Commit summary:** Map-editor Layers panel — each layer gets an emoji + a single top-to-bottom column.
+
+**Description:** Small map-editor legibility pass on the **Layers** visibility panel (per request). Each layer checkbox now leads with an emoji matching its tool — 🧱 Walls, ⛰️ Terrain, 💡 Lights, 📍 Hotspots, 🌫️ Fog, 📌 Pins, 🔤 Labels, 🎯 Lair zones, 🔵 Tokens — so a layer is recognisable at a glance. The panel is also laid out as one **top-to-bottom column** instead of the previous two-column grid, so the layers read as a single ordered stack.
+
+### Changed
+- `app/templates/map_editor.html` — emoji prefixes on each `#me-layer-*` label; `.me-layers-grid` switched from a 2-column grid to a single-column flex stack.
+
+### Schema
+- No schema change (still v99 — editor presentation only).
+
 ## [2.873.0] - 2026-07-03 — "The Lit Strike"
 
 **Schema version:** 99
