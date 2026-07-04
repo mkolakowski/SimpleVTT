@@ -8,16 +8,14 @@ from .conftest import BASE_URL, CAMPAIGN_ID
 
 
 def _open_layers(page: Page) -> None:
-    """v2.880.0 — the layer checkboxes live in a <details> dropdown; open it so
-    the checkboxes + All/None toggle are actionable."""
-    if page.eval_on_selector(".me-layers-dd", "el => !el.open"):
-        page.locator(".me-layers-dd > summary").click()
-        page.wait_for_timeout(120)
+    """v2.881.0 — the layer checkboxes are always expanded now (no dropdown);
+    kept as a no-op so the existing tests read the same."""
+    return None
 
 
-def test_layers_dropdown_collapses(gm_page: Page) -> None:
-    """v2.880.0 — the layer checkboxes live in a collapsed-by-default <details>
-    dropdown; the summary reveals the checkbox list."""
+def test_layers_always_expanded(gm_page: Page) -> None:
+    """v2.881.0 — the layer checkboxes are shown as an always-expanded list
+    (each row carries a ⠿ drag handle to reorder the layers)."""
     with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
@@ -25,13 +23,46 @@ def test_layers_dropdown_collapses(gm_page: Page) -> None:
     expect(gm_page.locator("#me-overlay")).to_be_visible()
     gm_page.wait_for_timeout(300)
 
-    # Collapsed by default → the checkboxes are not rendered.
-    assert gm_page.eval_on_selector("#me-layer-walls", "el => el.offsetParent === null")
-    # Opening the summary reveals the checkbox column.
-    gm_page.locator(".me-layers-dd > summary").click()
-    gm_page.wait_for_timeout(150)
-    expect(gm_page.locator("#me-layer-walls")).to_be_visible()
-    expect(gm_page.locator("#me-layer-tokens")).to_be_visible()
+    # Every checkbox is visible without opening anything, and each row has a handle.
+    assert gm_page.eval_on_selector("#me-layer-walls", "el => el.offsetParent !== null")
+    assert gm_page.locator(".me-layer-row .me-layer-drag").count() == 9
+
+
+def test_layer_reorder_changes_zorder(gm_page: Page) -> None:
+    """v2.881.0 — dragging a layer's ⠿ handle reorders the layers, which changes
+    the SVG draw order (top row = drawn on top) and persists across reload."""
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
+        c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
+    # A wide viewport so the Layers group (near the toolbar's right end) + its
+    # handles are on-screen.
+    gm_page.set_viewport_size({"width": 1800, "height": 1000})
+    gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
+    expect(gm_page.locator("#me-overlay")).to_be_visible()
+    gm_page.wait_for_timeout(400)
+
+    def _svg_order():
+        return gm_page.eval_on_selector_all(
+            "#me-overlay > g[data-layer]", "els => els.map(e => e.getAttribute('data-layer'))")
+
+    # By default tokens draw last (on top).
+    assert _svg_order()[-1] == "tokens"
+
+    # Drag the Tokens row's handle down past several rows → tokens leaves the top.
+    h = gm_page.locator('.me-layer-row[data-layer="tokens"] .me-layer-drag')
+    hb = h.bounding_box()
+    gm_page.mouse.move(hb["x"] + hb["width"] / 2, hb["y"] + hb["height"] / 2)
+    gm_page.mouse.down()
+    gm_page.mouse.move(hb["x"] + hb["width"] / 2, hb["y"] + 130, steps=12)
+    gm_page.mouse.up()
+    gm_page.wait_for_timeout(300)
+    assert _svg_order()[-1] != "tokens", _svg_order()
+
+    # The new order persists across a reload (localStorage).
+    order_after = _svg_order()
+    gm_page.reload()
+    gm_page.wait_for_timeout(600)
+    assert _svg_order() == order_after, (order_after, _svg_order())
 
 
 def test_layer_toggle_hides_walls(gm_page: Page) -> None:

@@ -120,28 +120,20 @@
   .me-group.me-collapsed > .me-grp-lbl::before { content:'▸ '; }
   .me-group.me-collapsed > *:not(.me-grp-lbl) { display:none !important; }
   .me-group > label { justify-content:center; }
-  /* v2.814.0 — Layers checkboxes as a uniform 2-column grid (aligned rows). */
-  /* v2.874.0 — single top-to-bottom column (was a 2-col grid). v2.880.0 — the
-     column lives inside a <details> dropdown (below), so the toolbar stays
-     compact until the GM opens it. */
-  .me-layers-grid { display:flex; flex-direction:column; row-gap:2px; }
-  /* v2.880.0 — Layers dropdown: a compact summary button that reveals the
-     checkbox column top-to-bottom when opened. */
-  .me-layers-dd > summary { list-style:none; cursor:pointer; display:flex;
-    align-items:center; justify-content:space-between; gap:6px;
-    -webkit-user-select:none; user-select:none; touch-action:manipulation; }
-  .me-layers-dd > summary::-webkit-details-marker { display:none; }
-  .me-layers-dd > summary::marker { content:''; }
-  .me-layers-chev { font-size:9px; opacity:.75; transition:transform .15s; }
-  .me-layers-dd[open] .me-layers-chev { transform:rotate(180deg); }
-  /* Hidden until opened — an explicit display:flex would otherwise override
-     the browser's default collapsing of closed <details> content. */
-  .me-layers-panel { display:none; flex-direction:column; gap:3px; margin-top:4px;
-    max-height:60vh; overflow-y:auto; }
-  .me-layers-dd[open] > .me-layers-panel { display:flex; }
-  .me-layers-grid > label { display:flex; flex-direction:row; align-items:center;
-    gap:5px; justify-content:flex-start; white-space:nowrap;
-    font-size:12px; }
+  /* v2.881.0 — always-expanded reorderable layer list (was a dropdown). Each
+     row: checkbox + name + a ⠿ drag handle; drag to change z-order. Capped +
+     scrollable so it doesn't blow up the floating toolbar. */
+  .me-layers-grid { display:flex; flex-direction:column; row-gap:1px; margin-top:2px;
+    max-height:210px; overflow-y:auto; padding-right:2px; }
+  .me-layer-row { display:flex; flex-direction:row; align-items:center; gap:5px;
+    white-space:nowrap; font-size:12px; padding:1px 0; }
+  .me-layer-row .me-layer-name { flex:1 1 auto; }
+  .me-layer-drag { margin-left:auto; cursor:grab; opacity:.45; font-size:13px;
+    padding:0 3px; line-height:1; }
+  .me-layer-drag:hover { opacity:.9; }
+  .me-layer-drag:active { cursor:grabbing; }
+  .me-row-dragging { opacity:.4; }
+  .me-row-drop-target { box-shadow:0 -2px 0 var(--accent) inset; }
   /* a sub-row that keeps several controls together on one line */
   .me-sub { display:flex; align-items:center; gap:4px; }
   .me-sub > label { flex:0 0 auto; }
@@ -417,30 +409,21 @@
   {# v2.790.3 — per-layer visibility (authoring only; saved locally). #}
   <div class="me-group" role="group" aria-label="Layers">
     <span class="me-grp-lbl">Layers</span>
-    {# v2.880.0 — the layer toggles live in a dropdown: a compact summary button
-       that reveals the checkbox column (top-to-bottom) when opened, so the
-       toolbar stays short by default. #}
-    <details class="me-layers-dd">
-      <summary class="me-tool-btn" title="Show / hide individual map layers">
-        <span>👁 Layers</span><span class="me-layers-chev">▾</span>
-      </summary>
-      <div class="me-layers-panel">
-        {# v2.818.0 — one click hides/shows every overlay (isolate the bare map). #}
-        <button type="button" id="me-layers-toggle" class="me-tool-btn" style="font-size:11px;"
-                title="Show or hide every overlay at once — handy for eyeballing the bare map image (tip: shift-click a layer below to show only that one)">👁 All / None</button>
-        <div class="me-layers-grid">
-          <label style="gap:4px;"><input type="checkbox" id="me-layer-walls" checked> 🧱 Walls</label>
-          <label style="gap:4px;"><input type="checkbox" id="me-layer-terrain" checked> ⛰️ Terrain</label>
-          <label style="gap:4px;"><input type="checkbox" id="me-layer-lights" checked> 💡 Lights</label>
-          <label style="gap:4px;"><input type="checkbox" id="me-layer-hotspots" checked> 📍 Hotspots</label>
-          <label style="gap:4px;"><input type="checkbox" id="me-layer-fog" checked> 🌫️ Fog</label>
-          <label style="gap:4px;"><input type="checkbox" id="me-layer-gmpins" checked> 📌 Pins</label>
-          <label style="gap:4px;"><input type="checkbox" id="me-layer-labels" checked> 🔤 Labels</label>
-          <label style="gap:4px;"><input type="checkbox" id="me-layer-lairzones" checked> 🎯 Lair zones</label>
-          <label style="gap:4px;"><input type="checkbox" id="me-layer-tokens" checked> 🔵 Tokens</label>
-        </div>
-      </div>
-    </details>
+    {# v2.881.0 — always-expanded checkbox column; each row has a ⠿ drag handle
+       to reorder the layers, which changes their draw order (top = front). #}
+    <button type="button" id="me-layers-toggle" class="me-tool-btn" style="font-size:11px;"
+            title="Show or hide every overlay at once — handy for eyeballing the bare map image (tip: shift-click a layer below to show only that one)">👁 All / None</button>
+    <div class="me-layers-grid" id="me-layers-grid">
+      <label class="me-layer-row" data-layer="walls"><input type="checkbox" id="me-layer-walls" checked> <span class="me-layer-name">🧱 Walls</span><span class="me-layer-drag" title="Drag to reorder (top = drawn on top)">⠿</span></label>
+      <label class="me-layer-row" data-layer="terrain"><input type="checkbox" id="me-layer-terrain" checked> <span class="me-layer-name">⛰️ Terrain</span><span class="me-layer-drag" title="Drag to reorder (top = drawn on top)">⠿</span></label>
+      <label class="me-layer-row" data-layer="lights"><input type="checkbox" id="me-layer-lights" checked> <span class="me-layer-name">💡 Lights</span><span class="me-layer-drag" title="Drag to reorder (top = drawn on top)">⠿</span></label>
+      <label class="me-layer-row" data-layer="hotspots"><input type="checkbox" id="me-layer-hotspots" checked> <span class="me-layer-name">📍 Hotspots</span><span class="me-layer-drag" title="Drag to reorder (top = drawn on top)">⠿</span></label>
+      <label class="me-layer-row" data-layer="fog"><input type="checkbox" id="me-layer-fog" checked> <span class="me-layer-name">🌫️ Fog</span><span class="me-layer-drag" title="Drag to reorder (top = drawn on top)">⠿</span></label>
+      <label class="me-layer-row" data-layer="gmpins"><input type="checkbox" id="me-layer-gmpins" checked> <span class="me-layer-name">📌 Pins</span><span class="me-layer-drag" title="Drag to reorder (top = drawn on top)">⠿</span></label>
+      <label class="me-layer-row" data-layer="labels"><input type="checkbox" id="me-layer-labels" checked> <span class="me-layer-name">🔤 Labels</span><span class="me-layer-drag" title="Drag to reorder (top = drawn on top)">⠿</span></label>
+      <label class="me-layer-row" data-layer="lairzones"><input type="checkbox" id="me-layer-lairzones" checked> <span class="me-layer-name">🎯 Lair zones</span><span class="me-layer-drag" title="Drag to reorder (top = drawn on top)">⠿</span></label>
+      <label class="me-layer-row" data-layer="tokens"><input type="checkbox" id="me-layer-tokens" checked> <span class="me-layer-name">🔵 Tokens</span><span class="me-layer-drag" title="Drag to reorder (top = drawn on top)">⠿</span></label>
+    </div>
   </div>
   <div class="me-group me-group--stack" role="group" aria-label="View">
     <span class="me-grp-lbl">View</span>
@@ -512,6 +495,35 @@
     return def;
   })();
   function saveLayers() { try { localStorage.setItem('me-layers-' + MID, JSON.stringify(layers)); } catch (e) {} }
+  // v2.881.0 — layer DRAW ORDER (z-order), reorderable from the Layers panel.
+  // render() collects each layer's SVG output into a group, then appends the
+  // groups in this order — so a layer dragged up in the panel draws on top.
+  var LAYER_DEFAULT_ORDER = ['terrain', 'lairzones', 'props', 'walls', 'hotspots', 'gmpins', 'labels', 'lights', 'fog', 'tokens'];
+  var layerOrder = (function () {
+    try {
+      var s = JSON.parse(localStorage.getItem('me-layer-order-' + MID) || 'null');
+      if (Array.isArray(s)) {
+        // Keep saved order for known keys, append any missing (forward-safe).
+        var ordered = s.filter(function (k) { return LAYER_DEFAULT_ORDER.indexOf(k) >= 0; });
+        LAYER_DEFAULT_ORDER.forEach(function (k) { if (ordered.indexOf(k) < 0) ordered.push(k); });
+        return ordered;
+      }
+    } catch (e) {}
+    return LAYER_DEFAULT_ORDER.slice();
+  })();
+  function saveLayerOrder() { try { localStorage.setItem('me-layer-order-' + MID, JSON.stringify(layerOrder)); } catch (e) {} }
+  // render() calls: mark the child count before the layers, then _closeLayer()
+  // after each block moves that block's new nodes into a per-layer <g>;
+  // _appendLayerGroups() then re-inserts the groups in layerOrder.
+  var _pgroups = {}, _layerMark = 0;
+  function _closeLayer(name) {
+    var g = document.createElementNS(NS, 'g'); g.setAttribute('data-layer', name);
+    while (svg.childNodes.length > _layerMark) { g.appendChild(svg.childNodes[_layerMark]); }
+    _pgroups[name] = g;
+  }
+  function _appendLayerGroups() {
+    layerOrder.forEach(function (name) { if (_pgroups[name]) svg.appendChild(_pgroups[name]); });
+  }
   // v2.789.1 — terrain region types (colour + label).
   var TERRAIN_TYPES = [
     { key: 'difficult', label: 'Difficult', color: '#8a6d3b' },
@@ -1275,6 +1287,8 @@
     // v2.789.1 — terrain regions (under walls/tokens): translucent coloured
     // rects + a label. Interactive only in terrain/erase mode (so they don't
     // block other tools).
+    // v2.881.0 — start collecting per-layer groups (z-order below).
+    _pgroups = {}; _layerMark = svg.childNodes.length;
     if (layers.terrain) terrain.forEach(function (tr, i) {
       var tt = terrainType(tr.type);
       // v2.848.0 — a region with ``points`` (4 corner pairs, authored on
@@ -1417,6 +1431,7 @@
     // v2.870.0 — lair-action zones (above terrain): translucent crimson areas
     // with a 🎯 label + a bound-action count. Interactive in lairzone/erase
     // mode: click selects (mirrors the toolbar label/actions) or deletes.
+    _closeLayer('terrain');
     if (layers.lairzones) lairZones.forEach(function (lz, i) {
       var lzColor = lz.color || '#d24b3a';  // v2.877.0 — per-zone colour
       var lzPoly = Array.isArray(lz.points) && lz.points.length >= 3;
@@ -1534,6 +1549,7 @@
     // v2.791.0 — decorative prop stamps (emoji glyphs) above terrain, below
     // walls/tokens. Each renders as a rotated <text> centred on its point with
     // a transparent hit box; interactive in prop / erase mode + right-click.
+    _closeLayer('lairzones');
     if (layers.props) props.forEach(function (pr, i) {
       var pg = document.createElementNS(NS, 'g');
       var rot = pr.rot || 0, sz = pr.size || 40;
@@ -1598,6 +1614,7 @@
       pg.appendChild(hb);
       svg.appendChild(pg);
     });
+    _closeLayer('props');
     if (layers.walls) walls.forEach(function (w) {
       drawWallVisual(w);
       // v2.851.0 — dashed white highlight along the dbl-click-selected wall.
@@ -1710,6 +1727,7 @@
       c.setAttribute('r', '6'); c.setAttribute('fill', '#e05a4a');
       c.style.pointerEvents = 'none'; svg.appendChild(c);
     }
+    _closeLayer('walls');
     if (layers.hotspots) hotspots.forEach(function (h) {
       var mk = document.createElementNS(NS, 'circle');
       mk.setAttribute('cx', h.x); mk.setAttribute('cy', h.y);
@@ -1741,6 +1759,7 @@
       svg.appendChild(mk);
     });
     // v2.790.1 — GM-only pins: amber markers (📌) with a hover note tooltip.
+    _closeLayer('hotspots');
     if (layers.gmpins) gmPins.forEach(function (pin, i) {
       var pg = document.createElementNS(NS, 'g');
       var pc = document.createElementNS(NS, 'circle');
@@ -1780,6 +1799,7 @@
     });
     // v2.802.0 — public text labels (room names): centred outlined text so it
     // reads over any background; interactive in label / erase mode + right-click.
+    _closeLayer('gmpins');
     if (layers.labels) labels.forEach(function (lb, i) {
       var t = document.createElementNS(NS, 'text');
       t.setAttribute('x', lb.x); t.setAttribute('y', lb.y);
@@ -1832,6 +1852,7 @@
     }
     // v2.765.0 — light sources: bright + dim radius rings (in ft → px) + a
     // range label; click the center to delete (in light-edit mode).
+    _closeLayer('labels');
     if (layers.lights) lights.forEach(function (L, i) {
       var bpx = (L.bright_ft || 0) * pxPerFt, dpx = (L.dim_ft || 0) * pxPerFt;
       var col = L.color || '#ffd27f';
@@ -1961,6 +1982,7 @@
     // v2.766.0 — fog-of-war editor preview: a faint dark veil over the whole
     // map with the revealed rectangles cut out (lighter); click a reveal (in
     // fog mode) to re-hide it.
+    _closeLayer('lights');
     if (layers.fog && fogEnabled) {
       var W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
       var veil = document.createElementNS(NS, 'rect');
@@ -1998,7 +2020,12 @@
     }
     drawEditorLighting();  // v2.774.0 — refresh the lighting preview
     // v2.777.0 — sample tokens render last so they sit above everything.
+    _closeLayer('fog');
     if (layers.tokens) sampleTokens.forEach(function (t) { svg.appendChild(mkToken(t)); });
+    // v2.881.0 — close the last layer + re-insert every layer group in the
+    // GM-chosen z-order; the overlays below (vision, ruler, selection) then
+    // append straight to svg, so they always sit on top.
+    _closeLayer('tokens'); _appendLayerGroups();
     // v2.779.0 — harness hooks for the grid-snap test (token coords are
     // live map-pixels; grid params can change via the toolbar).
     window.__meTokens = sampleTokens;
@@ -3838,6 +3865,64 @@
       render();
     });
   }
+  // v2.881.0 — drag the ⠿ handle on a layer row to reorder the layers, which
+  // changes the draw order (top row = drawn on top / front). The panel shows
+  // front→back top→bottom; layerOrder is stored back→front (render append order).
+  (function () {
+    var lgrid = document.getElementById('me-layers-grid');
+    if (!lgrid) return;
+    var dragRow = null;
+    function rowAfter(y) {
+      var rows = [].slice.call(lgrid.querySelectorAll('.me-layer-row:not(.me-row-dragging)'));
+      var best = null, bestOff = -Infinity;
+      rows.forEach(function (row) {
+        var box = row.getBoundingClientRect();
+        var off = y - box.top - box.height / 2;
+        if (off < 0 && off > bestOff) { bestOff = off; best = row; }
+      });
+      return best;
+    }
+    function rebuildOrder() {
+      var rows = [].slice.call(lgrid.querySelectorAll('.me-layer-row'));
+      var backToFront = rows.map(function (r) { return r.getAttribute('data-layer'); }).reverse();
+      if (backToFront.indexOf('props') < 0) backToFront.splice(2, 0, 'props');  // props has no row
+      layerOrder = backToFront;
+      saveLayerOrder(); render();
+    }
+    // Pointer-based reorder (more testable than native HTML5 drag-and-drop).
+    function onMove(e) {
+      if (!dragRow) return;
+      var after = rowAfter(e.clientY);
+      if (after == null) lgrid.appendChild(dragRow);
+      else if (after !== dragRow) lgrid.insertBefore(dragRow, after);
+    }
+    function onUp() {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      if (dragRow) dragRow.classList.remove('me-row-dragging');
+      dragRow = null;
+      rebuildOrder();
+    }
+    lgrid.querySelectorAll('.me-layer-drag').forEach(function (h) {
+      // The handle sits inside the <label>; a bare click would toggle the
+      // checkbox, so swallow clicks (only a drag should reorder).
+      h.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); });
+      h.addEventListener('pointerdown', function (e) {
+        if (e.button !== 0) return;
+        e.preventDefault(); e.stopPropagation();
+        dragRow = h.closest('.me-layer-row');
+        if (!dragRow) return;
+        dragRow.classList.add('me-row-dragging');
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+      });
+    });
+    // On load, arrange the rows to match the saved z-order (front on top).
+    layerOrder.filter(function (k) { return k !== 'props'; }).reverse().forEach(function (k) {
+      var row = lgrid.querySelector('.me-layer-row[data-layer="' + k + '"]');
+      if (row) lgrid.appendChild(row);
+    });
+  })();
   // v2.811.0 — collapsible toolbar groups: click a group's label to fold it to
   // just the label (reclaims horizontal space); persisted per map.
   var collapsedGroups = (function () {

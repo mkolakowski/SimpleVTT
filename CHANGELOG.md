@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.881.0] - 2026-07-03 — "The Stacked Layers"
+
+**Schema version:** 99
+
+**Commit summary:** The editor's Layers panel is always-expanded with drag handles, and dragging reorders the layers' draw order (z-order).
+
+**Description:** Reworks the Layers panel into a proper layers stack. It's **always expanded** now (no dropdown), listing every layer top-to-bottom with a **⠿ drag handle** on the right of each row. **Dragging a layer reorders it, which changes the actual draw order** — the top row draws on top (front), the bottom row at the back — so a GM can, say, pull Terrain above Walls or drop Tokens behind Fog. The panel shows front→back (top→bottom); the order persists per-map in localStorage. Under the hood, `render()` now collects each layer's SVG output into a `<g data-layer>` group and re-inserts the groups in the stored order (the always-on-top overlays — vision, ruler, selection — still append after). Checkbox visibility, All/None, and shift-click-to-solo are unchanged.
+
+### Added
+- `app/templates/map_editor.html` — `layerOrder` state (persisted) + `_closeLayer`/`_appendLayerGroups` grouping in `render()`; always-expanded `.me-layer-row` list with a pointer-drag `⠿` handle that reorders the layers and re-renders.
+- `tests/harness_ui/test_map_editor_layers.py` — `test_layers_always_expanded` (9 rows + handles visible) and `test_layer_reorder_changes_zorder` (dragging a handle changes the SVG group order + persists across reload).
+
+### Changed
+- `tests/harness_ui/test_map_editor_layers.py` / `test_map_editor_label.py` — dropped the v2.880.0 dropdown-open steps (the list is always expanded now).
+
+### Schema
+- No schema change (still v99 — editor rendering/layout only).
+
 ## [2.880.0] - 2026-07-03 — "The Layer Menu"
 
 **Schema version:** 99
