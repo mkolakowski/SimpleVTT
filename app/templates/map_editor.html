@@ -243,7 +243,7 @@
     <button type="button" id="me-wall-btn" class="me-tool-btn" aria-pressed="false"
             title="Draw connected walls: click a chain of points; click the last point again or press Esc to finish">🧱 Wall</button>
     <button type="button" id="me-door-btn" class="me-tool-btn" aria-pressed="false"
-            title="Draw a door: click two points (players can open/close it at the table)">🚪 Door</button>
+            title="Place a door: click an existing wall to drop a door into it (players can open/close it at the table)">🚪 Door</button>
     <button type="button" id="me-room-btn" class="me-tool-btn" aria-pressed="false"
             title="Draw a room: click two opposite corners to enclose it with four walls">🔲 Room</button>
     <label class="me-capsel" title="Material/look for new walls + doors">
@@ -1664,7 +1664,7 @@
       wireSelectDrag(hit, 'wall', w);
       hit.addEventListener('pointerdown', function (e) {
         if (e.button !== 0) return;  // v2.781.1 — leave right-click for the menu
-        if (eraseMode || !(wallMode || doorMode)) return;  // drag-move only in a draw mode
+        if (eraseMode || !wallMode) return;  // v2.897.0 — drag-move only in Wall mode (Door mode places a door in the clicked wall)
         e.stopPropagation(); e.preventDefault();
         var p = toMap(e); if (!p) return;
         grab = { w: w, ox1: w.x1, oy1: w.y1, ox2: w.x2, oy2: w.y2,
@@ -1673,6 +1673,9 @@
       });
       hit.addEventListener('click', function (e) {
         if (eraseMode) { e.stopPropagation(); deleteWall(w); return; }
+        // v2.897.0 — Door mode: click an existing wall to place a door in it
+        // (splits the wall + inserts a door-width opening at the click point).
+        if (doorMode && !w.door && !w.gate) { e.stopPropagation(); _placeDoorInWall(w, toMap(e)); return; }
         // v2.775.0/v2.787.1 — outside erase/draw modes, clicking a door/gate
         // toggles it open/closed.
         if ((w.door || w.gate) && !wallMode && !doorMode && !relocating && !selectMode && !measureMode) {
@@ -2512,6 +2515,38 @@
     if (selectedWall === w) selectedWall = null;  // v2.851.0
     walls = walls.filter(function (x) { return x.id !== w.id; });
     saveWalls();
+  }
+  // v2.897.0 — place a door INTO an existing wall: split the wall at the click
+  // point and insert a door-width (one grid cell) opening, keeping the flanking
+  // wall on each side. If the wall is shorter than a door, the whole segment
+  // becomes the door. The door inherits the wall's material.
+  function _placeDoorInWall(w, p) {
+    if (!w) return;
+    var dx = w.x2 - w.x1, dy = w.y2 - w.y1;
+    var len = Math.hypot(dx, dy);
+    if (len < 1) return;
+    var ux = dx / len, uy = dy / len;
+    var t = p ? ((p.x - w.x1) * dx + (p.y - w.y1) * dy) / (len * len) : 0.5;
+    t = Math.max(0, Math.min(1, t));
+    var center = t * len;
+    var doorW = Math.min(len, (gridPx || 70));
+    var dStart = Math.max(0, center - doorW / 2);
+    var dEnd = Math.min(len, center + doorW / 2);
+    var style = w.style || 'stone';
+    var pt = function (dist) { return { x: Math.round(w.x1 + ux * dist), y: Math.round(w.y1 + uy * dist) }; };
+    var mk = function (a, b, isDoor) {
+      return { id: 'w' + Date.now() + '_' + (seq++), x1: a.x, y1: a.y, x2: b.x, y2: b.y,
+        door: !!isDoor, open: false, style: style };
+    };
+    var idx = walls.indexOf(w);
+    if (idx >= 0) walls.splice(idx, 1);
+    var minSeg = 4;
+    var A = pt(0), S = pt(dStart), E = pt(dEnd), B = pt(len);
+    if (dStart > minSeg) walls.push(mk(A, S, false));
+    walls.push(mk(S, E, true));  // the door
+    if (len - dEnd > minSeg) walls.push(mk(E, B, false));
+    saveWalls();
+    if (window.showToast) showToast('Door placed in the wall.');
   }
   function deleteHotspot(h) { hotspots = hotspots.filter(function (x) { return x.id !== h.id; }); saveHotspots(); }
   function deleteLight(L) {
@@ -3572,18 +3607,22 @@
       setStatus(''); syncStageCursor(); render(); return;
     }
     var p = toMap(e); if (!p) return;
-    if (wallMode || doorMode) {
+    if (wallMode) {
       p = snapPoint(p);
       if (!pending) { pending = p; render(); return; }
       // v2.788.1 — click the last point again to finish (no zero-length wall).
       if (p.x === pending.x && p.y === pending.y) { pending = null; render(); return; }
       walls.push({ id: 'w' + Date.now() + '_' + (seq++),
         x1: pending.x, y1: pending.y, x2: p.x, y2: p.y,
-        door: doorMode, open: false,
+        door: false, open: false,
         style: (styleSel && styleSel.value) || 'stone' });
-      // Doors are single openings; walls chain from the new endpoint.
-      pending = doorMode ? null : p;
+      pending = p;  // walls chain from the new endpoint
       saveWalls();
+    } else if (doorMode) {
+      // v2.897.0 — a door must be placed IN a wall. Clicking an existing wall
+      // is handled by the wall hit-line (splits it + inserts a door); a click
+      // on empty map just hints.
+      if (window.showToast) showToast('Doors must be placed on a wall — click an existing wall.');
     } else if (roomMode) {
       // v2.788.1 — two opposite corners → four walls forming the room.
       p = snapPoint(p);

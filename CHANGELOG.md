@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.897.0] - 2026-07-04 — "The Doorway"
+
+**Schema version:** 100
+
+**Commit summary:** Doors must now be placed into a wall — in Door mode you click an existing wall and it splits, inserting a door.
+
+**Description:** The Door tool used to draw a free-floating door segment anywhere (two clicks). Now a door **has to be placed in a wall**: in Door mode you **click an existing wall**, and it splits at the click point to insert a **door-width (one grid cell) opening**, keeping the flanking wall on each side. The door inherits the wall's material. If the wall is shorter than a door, the whole segment becomes the door. Clicking **empty map** in Door mode does nothing but hint ("Doors must be placed on a wall"). Wall mode is unchanged (chained segments); Door mode no longer drag-moves walls (a click places the door).
+
+### Changed
+- `app/templates/map_editor.html` — Door mode clicks a wall to place a door (`_placeDoorInWall` splits the wall + inserts the opening); the svg click no longer draws a free door segment; the wall drag-move is Wall-mode-only; Door button tooltip updated.
+- `tests/harness_ui/test_map_editor_door_style.py` — rewritten: clicking a seeded wall in Door mode yields a `door=true` segment with the wall's style (`test_place_door_in_wall`); a click on empty map places nothing (`test_door_on_empty_map_is_rejected`).
+
+### Schema
+- No schema change (still v100 — doors remain walls with a `door` flag).
+
 ## [2.896.0] - 2026-07-04 — "The Delete Key"
 
 **Schema version:** 100
