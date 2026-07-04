@@ -45,6 +45,11 @@ def test_gm_toggles_lair_zone_overlay(gm_page: Page) -> None:
         assert _count(gm_page) >= 1          # toggled on → zone rendered
         assert btn.get_attribute("aria-pressed") == "true"
 
+        # v2.873.0 — the zone label names its bound action (title-cased).
+        labels = gm_page.eval_on_selector_all(
+            "#wall-overlay text", "els => els.map(e => e.textContent)")
+        assert any("Magma Erupts" in (t or "") for t in labels), labels
+
         btn.click()
         gm_page.wait_for_timeout(300)
         assert _count(gm_page) == 0          # toggled back off

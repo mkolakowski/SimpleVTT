@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.873.0] - 2026-07-03 — "The Lit Strike"
+
+**Schema version:** 99
+
+**Commit summary:** Lair-zone overlay polish — zone labels name their bound actions, and a triggered zone flashes.
+
+**Description:** Polish on the lair-action zone layer. Two enhancements to the tabletop overlay's job as a targeting aid: **(1)** each zone's label now lists the **bound action names** (title-cased from their ids), so the overlay is self-documenting — "🎯 Magma vent · Magma Erupts, Tremor" instead of a bare label. **(2)** When a lair action is triggered against a bound zone, that specific zone **flashes** for ~1.4s — brighter fill, a solid heavier border — so the whole table sees exactly where the action struck (replacing the plain reveal). The flash is driven by `window._flashLairZones(zoneIds)`, which the panel + mini-sheet trigger handlers now call with the matched zones' ids.
+
+### Added
+- `app/templates/tabletop.html` — `_flashZoneIds` state + `window._flashLairZones(zoneIds)` (reveal + timed highlight); the zone render brightens flashed zones and appends the bound-action names to each zone label; both trigger handlers flash the matched zones instead of a plain reveal.
+
+### Schema
+- No schema change (still v99 — client overlay polish).
+
 ## [2.872.0] - 2026-07-03 — "The Struck Zone"
 
 **Schema version:** 99

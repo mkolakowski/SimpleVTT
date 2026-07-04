@@ -2483,6 +2483,7 @@
         var terrainHidden = true;  // v2.858.0 — hidden from players by default; GM reveals
         var lairZones = [];  // v2.871.0 — lair-action zones (targeting overlay)
         var lairZonesVisible = false;  // per-client toggle (GM + players); off by default
+        var _flashZoneIds = {};  // v2.873.0 — zones briefly highlighted on trigger
         var TERRAIN_TYPES = {
             difficult: '#8a6d3b', water: '#3b6ea5', lava: '#d1481f',
             ice: '#7fc7d9', swamp: '#4b6b3a', rubble: '#77726a',
@@ -2693,9 +2694,14 @@
                     zc.setAttribute('x', lz.x); zc.setAttribute('y', lz.y);
                     zc.setAttribute('width', lz.w); zc.setAttribute('height', lz.h);
                 }
-                zc.setAttribute('fill', zColor); zc.setAttribute('fill-opacity', '0.18');
-                zc.setAttribute('stroke', zColor); zc.setAttribute('stroke-width', '2');
-                zc.setAttribute('stroke-dasharray', '2 5');
+                // v2.873.0 — a zone flashes brighter for ~1.4s when its lair
+                // action is triggered, so the table sees exactly where it struck.
+                var zFlash = _flashZoneIds[lz.id];
+                zc.setAttribute('fill', zColor);
+                zc.setAttribute('fill-opacity', zFlash ? '0.42' : '0.18');
+                zc.setAttribute('stroke', zColor);
+                zc.setAttribute('stroke-width', zFlash ? '4' : '2');
+                zc.setAttribute('stroke-dasharray', zFlash ? '' : '2 5');
                 zc.style.pointerEvents = 'none';
                 zc.classList.add('tt-lairzone');
                 svg.appendChild(zc);
@@ -2703,7 +2709,12 @@
                 zlbl.setAttribute('x', lz.x + 5); zlbl.setAttribute('y', lz.y + 16);
                 zlbl.setAttribute('fill', zColor); zlbl.setAttribute('font-size', '13');
                 zlbl.setAttribute('font-weight', '700'); zlbl.style.pointerEvents = 'none';
-                zlbl.textContent = '🎯 ' + (lz.label || 'Lair zone');
+                // v2.873.0 — the label carries the bound action names so the
+                // overlay is self-documenting ("🎯 Magma vent · Magma Erupts").
+                var zActs = (lz.actions || []).map(function (a) {
+                    return String(a).replace(/[-_]/g, ' ').replace(/\b\w/g, function (m) { return m.toUpperCase(); });
+                }).join(', ');
+                zlbl.textContent = '🎯 ' + (lz.label || 'Lair zone') + (zActs ? ' · ' + zActs : '');
                 svg.appendChild(zlbl);
             });
             // v2.793.0 — decorative prop stamps (emoji glyphs), above terrain
@@ -2997,6 +3008,17 @@
         window.toggleLairZones = toggleLairZones;
         window._revealLairZones = function () {
             lairZonesVisible = true; _syncLairZonesBtn(); render();
+        };
+        // v2.873.0 — reveal the overlay + flash the given zones (by id) for a
+        // beat, so a triggered lair action visibly "strikes" its zone.
+        var _flashTimer = null;
+        window._flashLairZones = function (zoneIds) {
+            lairZonesVisible = true;
+            _flashZoneIds = {};
+            (zoneIds || []).forEach(function (id) { if (id != null) _flashZoneIds[id] = true; });
+            _syncLairZonesBtn(); render();
+            if (_flashTimer) clearTimeout(_flashTimer);
+            _flashTimer = setTimeout(function () { _flashZoneIds = {}; render(); }, 1400);
         };
         // v2.872.0 — expose the zones so the zone-targeting helper (defined in
         // tabletop.js, where the ``tokens`` array + gridSize live) can read
@@ -9389,7 +9411,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             const _zt = window._lairZoneTargetsForAction && window._lairZoneTargetsForAction(actionId);
             if (_zt) {
                 targetIds = _zt.ids;
-                if (window._revealLairZones) window._revealLairZones();
+                if (window._flashLairZones) window._flashLairZones(_zt.zones.map(z => z.id));
                 const _zl = _zt.zones.map(z => z.label).filter(Boolean).join(', ') || 'the lair zone';
                 (window.showToast || function (m) { console.log(m); })(
                     `🎯 Targeting ${targetIds.length} in ${_zl}.`, 'info');
@@ -11434,7 +11456,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 const _zt = window._lairZoneTargetsForAction && window._lairZoneTargetsForAction(actionId);
                 if (_zt) {
                     targetIds = _zt.ids;
-                    if (window._revealLairZones) window._revealLairZones();
+                    if (window._flashLairZones) window._flashLairZones(_zt.zones.map(z => z.id));
                     const _zl = _zt.zones.map(z => z.label).filter(Boolean).join(', ') || 'the lair zone';
                     (window.showToast || function (m) { console.log(m); })(
                         '🎯 Targeting ' + targetIds.length + ' in ' + _zl + '.', 'info');
