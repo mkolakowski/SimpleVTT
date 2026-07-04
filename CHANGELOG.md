@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.879.0] - 2026-07-03 — "The Tidy Lair"
+
+**Schema version:** 99
+
+**Commit summary:** Tidy the Lair group layout — buttons on one row, colour wheel left of the action dropdown, swatches removed.
+
+**Description:** Layout pass on the map editor's Lair group (per request). The **🎯 Lair Zone** and **⬡ Free polygon** buttons now share one row (was stacked). The zone **colour picker is reduced to just the native colour wheel** (the preset swatches are gone) and moved to the **left of the "Lair Actions" dropdown**, so colour + action sit on one line. The action description still sits below, six lines with hover-for-full. Behaviour is unchanged — the wheel still colours new zones and live-edits the selected one.
+
+### Changed
+- `app/templates/map_editor.html` — Lair group: the two tool buttons share a row; the `#me-lairzone-color` wheel moved left of `#me-lairzone-actions`; removed the preset-swatch row (`#me-lairzone-swatches`) + its JS.
+
+### Schema
+- No schema change (still v99 — editor layout only).
+
 ## [2.878.1] - 2026-07-03 — "The Counted Test"
 
 **Schema version:** 99

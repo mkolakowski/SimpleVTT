@@ -337,36 +337,34 @@
      inside the zone. #}
   <div class="me-group" role="group" aria-label="Lair zones">
     <span class="me-grp-lbl">Lair</span>
+    {# v2.879.0 — the tool + free-polygon toggle share one row. #}
     <div class="me-sub">
       <button type="button" id="me-lairzone-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
               title="Lair zone: drag a rectangle (or use ⬡ Free polygon) to mark where a lair action strikes; pick its lair action below. Double-click a zone to edit it; Delete removes the selected zone.">🎯 Lair Zone</button>
+      <button type="button" id="me-lairzone-poly-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
+              title="Free polygon lair zone: when on, click to drop zone vertices and click the first dot to close the shape — instead of dragging a rectangle.">⬡ Free polygon</button>
     </div>
-    <button type="button" id="me-lairzone-poly-btn" class="me-tool-btn" aria-pressed="false"
-            title="Free polygon lair zone: when on, click to drop zone vertices and click the first dot to close the shape — instead of dragging a rectangle.">⬡ Free polygon</button>
+    {# v2.879.0 — the zone-colour wheel sits to the LEFT of the action dropdown
+       (the preset swatches were dropped — the native colour wheel is enough). #}
     <label class="me-capsel" title="The lair action this zone is bound to. Triggering it targets the tokens inside the zone.">
       <span class="me-cap">Lair Actions</span>
-      <select id="me-lairzone-actions" style="min-height:32px;font-size:12px;width:100%;">
-        <option value="">— none —</option>
-        {% for a in lair_action_catalog %}
-        <option value="{{ a.id }}">{{ a.name }}</option>
-        {% endfor %}
-      </select>
+      <div class="me-sub" style="gap:4px;">
+        <input type="color" id="me-lairzone-color" value="#d24b3a"
+               title="Zone colour — for new zones, or the selected zone"
+               style="width:34px;height:32px;min-height:32px;padding:1px;border-radius:6px;cursor:pointer;flex-shrink:0;">
+        <select id="me-lairzone-actions" style="min-height:32px;font-size:12px;flex:1 1 auto;min-width:0;">
+          <option value="">— none —</option>
+          {% for a in lair_action_catalog %}
+          <option value="{{ a.id }}">{{ a.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
     </label>
     {# The selected action's text — wraps to the group's width (the width:0 +
        min-width:100% keeps the long text from widening the group). v2.877.1 —
        shows up to 6 lines (was 2); hover still shows the full text. #}
     <div id="me-lairzone-desc"
          style="width:0;min-width:100%;box-sizing:border-box;font-size:11px;line-height:1.35;color:var(--fg-mute);white-space:normal;overflow-wrap:break-word;word-break:break-word;max-height:8.1em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;cursor:help;"></div>
-    {# v2.877.0 — per-zone colour: a custom picker + quick preset swatches
-       (rendered by JS). Applies to new zones, or live-edits the selected one. #}
-    <label class="me-capsel" title="Zone colour — for new zones, or the selected zone">
-      <span class="me-cap">colour</span>
-      <div class="me-sub" style="gap:4px;">
-        <input type="color" id="me-lairzone-color" value="#d24b3a"
-               style="width:34px;height:32px;min-height:32px;padding:1px;border-radius:6px;cursor:pointer;">
-        <div id="me-lairzone-swatches" style="display:flex;gap:3px;flex-wrap:wrap;flex:1 1 auto;align-items:center;"></div>
-      </div>
-    </label>
   </div>
   {# v2.810.0 — Labels + GM pin tools moved into the Markers group. #}
   <div class="me-group" role="group" aria-label="Tokens">
@@ -2774,30 +2772,15 @@
       saveLairZones();
     }
   });
-  // v2.877.0 — per-zone colour: a custom picker + quick preset swatches.
+  // v2.877.0 — per-zone colour wheel. v2.879.0 — swatches dropped; the native
+  // colour picker (left of the action dropdown) is enough.
   var LAIR_ZONE_DEFAULT_COLOR = '#d24b3a';
-  var LAIR_ZONE_PRESETS = ['#d24b3a', '#e0872a', '#e6c619', '#4b9b3a', '#3b8ea5', '#7a5bd0'];
   var lairZoneColorEl = document.getElementById('me-lairzone-color');
-  var lairZoneSwatchesEl = document.getElementById('me-lairzone-swatches');
   function _currentZoneColor() {
     return (lairZoneColorEl && lairZoneColorEl.value) || LAIR_ZONE_DEFAULT_COLOR;
   }
-  function _applyZoneColor(hex) {
-    if (lairZoneColorEl && hex) lairZoneColorEl.value = hex;
-    if (selectedLairZone) { selectedLairZone.color = hex; saveLairZones(); }
-  }
   if (lairZoneColorEl) lairZoneColorEl.addEventListener('input', function () {
     if (selectedLairZone) { selectedLairZone.color = lairZoneColorEl.value; saveLairZones(); }
-  });
-  if (lairZoneSwatchesEl) LAIR_ZONE_PRESETS.forEach(function (hex) {
-    var s = document.createElement('button');
-    s.type = 'button'; s.title = hex; s.className = 'me-lz-swatch';
-    // 32px-tall clickable chip — the compact-panel touch-target floor per
-    // CLAUDE.md (a colour palette is a deliberately dense control).
-    s.style.cssText = 'width:26px;height:32px;min-height:32px;padding:0;border-radius:4px;'
-      + 'border:1px solid rgba(255,255,255,0.35);cursor:pointer;background:' + hex + ';';
-    s.addEventListener('click', function () { _applyZoneColor(hex); });
-    lairZoneSwatchesEl.appendChild(s);
   });
   var spotBtn = document.getElementById('me-spot-btn');
   var snapBtn = document.getElementById('me-snap-btn');
