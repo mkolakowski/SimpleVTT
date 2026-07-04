@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.892.0] - 2026-07-04 — "The Lair Ledger"
+
+**Schema version:** 100
+
+**Commit summary:** A 📋 slide-out lists every lair action placed on the map; hovering a row highlights its zone(s).
+
+**Description:** Adds a **📋 Lair actions** button to the canvas tools (next to 🎯 Zones; shown only when the map has actions bound to its lair zones). It opens a **right slide-out** listing every lair action placed on the map — the union of all zones' bound actions, deduplicated. Each row shows the action name, a "N zones · hover to locate" hint, and (for the GM) the mechanics (💥 damage, 🎲 save DC, ✨ condition) plus the flavour text; **hovering a row highlights that action's zone(s)** on the map (reusing the persistent zone highlight from v2.891.0). Available to the same audience that can toggle the zone overlay (GM + players); players see the names + flavour, the GM also sees mechanics. The list live-updates when the GM edits zones and re-renders once the mechanics catalog loads.
+
+### Added
+- `app/templates/tabletop.html` — the 📋 button + `#lair-actions-slideout` panel; `toggleLairActionsList()` / `_renderLairActionsList()` (built from `_getPlacedLairActions()`), hover → `_highlightLairZones()` / `_clearLairZoneHighlight()`; `_syncLairZonesBtn` now also shows/hides the list button; `_onLairZonesUpdate` / `_onLairCatalogLoaded` refresh the open list.
+- `tests/harness_ui/test_lair_actions_slideout.py` — with a zone bound to magma-erupts, the 📋 button shows, the slide-out lists "Magma Erupts" + its 6d6 mechanics, and hovering the row flashes the bound zone (fill-opacity 0.42).
+
+### Schema
+- No schema change (still v100 — a client UI over the v2.891.0 endpoints).
+
 ## [2.891.0] - 2026-07-04 — "The Placed Strike"
 
 **Schema version:** 100
