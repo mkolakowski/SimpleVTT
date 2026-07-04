@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.878.0] - 2026-07-03 — "The Reshaped Zone"
+
+**Schema version:** 99
+
+**Commit summary:** A selected lair zone shows resize handles so it can be reshaped in place, like terrain.
+
+**Description:** Completes the "same style editor after selection" parity for lair zones. Selecting a zone (double-click, or single-click with the Lair Zone tool) now shows draggable **resize handles** — the four corner handles for a rectangle (anchored resize), or one handle per vertex for a free polygon (each drags independently, with the bounding box recomputed). Mirrors the terrain reshape handles (`mkTerrainHandle` → `mkLairZoneHandle` / `lairZoneBBox`); drags save through `PUT /lair_zones`. Combined with the earlier select/move/right-click (v2.876.0), colour (v2.877.0), and dropdown (v2.875.0) work, a placed zone now has the full editor treatment.
+
+### Added
+- `app/templates/map_editor.html` — `lairZoneBBox` + `mkLairZoneHandle`; the selected zone renders corner (rect) / per-vertex (polygon) resize handles that reshape it and save.
+
+### Schema
+- No schema change (still v99 — editor interaction only).
+
 ## [2.877.1] - 2026-07-03 — "The Fuller Text"
 
 **Schema version:** 99

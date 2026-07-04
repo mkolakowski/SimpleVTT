@@ -887,6 +887,65 @@
     });
     return h;
   }
+  // v2.878.0 — lair-zone resize handles: mirror the terrain handle. A selected
+  // zone shows draggable corner handles (rect) / per-vertex handles (polygon)
+  // so it can be reshaped in place — the "style editor" other objects get.
+  function lairZoneBBox(lz) {
+    var xs = lz.points.map(function (p) { return p[0]; });
+    var ys = lz.points.map(function (p) { return p[1]; });
+    lz.x = Math.min.apply(null, xs); lz.y = Math.min.apply(null, ys);
+    lz.w = Math.max.apply(null, xs) - lz.x; lz.h = Math.max.apply(null, ys) - lz.y;
+  }
+  function mkLairZoneHandle(lz, hx, hy, corner) {
+    var h = document.createElementNS(NS, 'circle');
+    h.setAttribute('cx', hx); h.setAttribute('cy', hy);
+    h.setAttribute('r', Math.max(7, (gridPx || 70) * 0.13));
+    h.setAttribute('fill', '#ffd24a'); h.setAttribute('stroke', '#000');
+    h.setAttribute('stroke-width', '1.5');
+    h.style.pointerEvents = 'all';
+    var freeCorner = (typeof corner === 'number');
+    h.style.cursor = freeCorner ? 'move'
+      : (corner === 'nw' || corner === 'se') ? 'nwse-resize' : 'nesw-resize';
+    h.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      e.stopPropagation(); e.preventDefault();
+      if (freeCorner) {   // polygon vertex: move just this point; bbox follows.
+        function mvq(ev) {
+          var p = toMap(ev); if (!p) return;
+          var s = snapPoint(p);
+          lz.points[corner] = [s.x, s.y];
+          lairZoneBBox(lz); render();
+        }
+        function upq() {
+          window.removeEventListener('pointermove', mvq);
+          window.removeEventListener('pointerup', upq);
+          saveLairZones();
+        }
+        window.addEventListener('pointermove', mvq);
+        window.addEventListener('pointerup', upq);
+        return;
+      }
+      // Rect corner: anchor = the diagonally-opposite corner.
+      var ax = (corner === 'nw' || corner === 'sw') ? lz.x + lz.w : lz.x;
+      var ay = (corner === 'nw' || corner === 'ne') ? lz.y + lz.h : lz.y;
+      function mv(ev) {
+        var p = toMap(ev); if (!p) return;
+        var s = snapPoint(p);
+        var nw = Math.abs(s.x - ax), nh = Math.abs(s.y - ay);
+        if (nw < 4 || nh < 4) return;
+        lz.x = Math.min(ax, s.x); lz.y = Math.min(ay, s.y); lz.w = nw; lz.h = nh;
+        render();
+      }
+      function up() {
+        window.removeEventListener('pointermove', mv);
+        window.removeEventListener('pointerup', up);
+        saveLairZones();
+      }
+      window.addEventListener('pointermove', mv);
+      window.addEventListener('pointerup', up);
+    });
+    return h;
+  }
   // v2.787.1 — door/gate geometry: hinge(s), closed + open (swung 90°) leaf
   // ends. ``gate`` = double door hinged at both ends, meeting in the middle;
   // ``flip`` swings to the other side.
@@ -1398,6 +1457,17 @@
         zSel.style.pointerEvents = 'none';
         zSel.classList.remove('me-lairzone');
         svg.appendChild(zSel);
+        // v2.878.0 — resize handles on the selected zone (reshape in place).
+        if (lzPoly) {
+          lz.points.forEach(function (p, k) {
+            svg.appendChild(mkLairZoneHandle(lz, p[0], p[1], k));
+          });
+        } else {
+          svg.appendChild(mkLairZoneHandle(lz, lz.x, lz.y, 'nw'));
+          svg.appendChild(mkLairZoneHandle(lz, lz.x + lz.w, lz.y, 'ne'));
+          svg.appendChild(mkLairZoneHandle(lz, lz.x, lz.y + lz.h, 'sw'));
+          svg.appendChild(mkLairZoneHandle(lz, lz.x + lz.w, lz.y + lz.h, 'se'));
+        }
       }
       var zt = document.createElementNS(NS, 'text');
       zt.setAttribute('x', lz.x + 5); zt.setAttribute('y', lz.y + 16);

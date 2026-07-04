@@ -155,3 +155,61 @@ def test_lair_zone_selectable_and_right_clickable(gm_page: Page) -> None:
         finally:
             c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lair_zones",
                   json={"lair_zones": []})
+
+
+def test_lair_zone_selected_shows_resize_handles(gm_page: Page) -> None:
+    """v2.878.0 — a selected zone shows corner resize handles; dragging one
+    reshapes the zone (like terrain)."""
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
+        c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
+        c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lair_zones", json={"lair_zones": []})
+        try:
+            gm_page.set_viewport_size({"width": 1400, "height": 1000})
+            gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
+            expect(gm_page.locator("#me-overlay")).to_be_visible()
+            gm_page.wait_for_timeout(400)
+
+            box = gm_page.locator("#me-overlay").bounding_box()
+            cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] * 0.6
+            _prime_pointer(gm_page, cx, cy)
+            gm_page.click("#me-lairzone-btn")
+            gm_page.select_option("#me-lairzone-actions", "magma-erupts")
+            gm_page.mouse.move(cx - 100, cy - 55)
+            gm_page.mouse.down()
+            gm_page.mouse.move(cx + 100, cy + 55, steps=6)
+            gm_page.mouse.up()
+            gm_page.wait_for_timeout(400)
+            w0 = _zones(c, mid)[0]["w"]
+
+            # Leave lair-zone mode (no-tool) so a double-click cleanly selects.
+            gm_page.click("#me-lairzone-btn")
+            # Select the zone → corner handles appear.
+            gm_page.mouse.dblclick(cx, cy)
+            gm_page.wait_for_timeout(300)
+            handles = gm_page.eval_on_selector_all(
+                "#me-overlay circle",
+                "els => els.filter(c => c.getAttribute('fill') === '#ffd24a').length")
+            assert handles >= 4, handles
+
+            # Drag the south-east handle outward → the zone grows.
+            se = gm_page.evaluate("""() => {
+                const cs = [...document.querySelectorAll('#me-overlay circle')]
+                    .filter(c => c.getAttribute('fill') === '#ffd24a');
+                let best = null, bs = -1e9;
+                cs.forEach(c => { const r = c.getBoundingClientRect();
+                    const s = r.x + r.y; if (s > bs) { bs = s;
+                        best = { x: r.x + r.width / 2, y: r.y + r.height / 2 }; } });
+                return best;
+            }""")
+            assert se, "expected a resize handle"
+            gm_page.mouse.move(se["x"], se["y"])
+            gm_page.mouse.down()
+            gm_page.mouse.move(se["x"] + 80, se["y"] + 60, steps=6)
+            gm_page.mouse.up()
+            gm_page.wait_for_timeout(400)
+
+            assert _zones(c, mid)[0]["w"] > w0, (w0, _zones(c, mid)[0]["w"])
+        finally:
+            c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lair_zones",
+                  json={"lair_zones": []})
