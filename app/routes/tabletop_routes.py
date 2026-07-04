@@ -31784,8 +31784,12 @@ async def set_in_lair(
     Body:
       ``in_lair``    — bool. When False, clears ``lair_slug`` too.
       ``lair_slug``  — the monster slug whose lair actions apply
-                       (e.g. ``adult-red-dragon``). Required when
-                       ``in_lair`` is True.
+                       (e.g. ``adult-red-dragon``). OPTIONAL as of v2.893.0:
+                       omit it for a **zone-driven lair**, where the lair
+                       actions come from the map's lair zones (each zone
+                       binds action ids) rather than a single creature. The
+                       trigger endpoint resolves a zone-placed action by id
+                       even with no slug set.
 
     Persists ``in_lair`` + ``lair_slug`` onto the battle-state dict
     (carried across `/battle` PUTs by the v2.169.0 carry-forward guard)
@@ -31795,15 +31799,12 @@ async def set_in_lair(
     Auth: GM only.
 
     Errors:
-      400 ``in_lair`` True but ``lair_slug`` missing.
       403 non-member / non-GM.
       404 no active battle.
     """
     body = await request.json()
     in_lair = bool(body.get("in_lair"))
     lair_slug = str(body.get("lair_slug") or "").strip().lower()
-    if in_lair and not lair_slug:
-        raise HTTPException(400, "lair_slug is required when in_lair is true")
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):

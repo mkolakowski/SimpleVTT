@@ -3158,6 +3158,34 @@
                 zc.style.cssText = 'font-size:10px;opacity:.55;margin-top:5px;';
                 zc.textContent = '🎯 ' + pa.zoneIds.length + ' zone' + (pa.zoneIds.length === 1 ? '' : 's') + ' · hover to locate';
                 row.appendChild(zc);
+                // v2.893.0 — GM: a ⚡ Trigger button rolls/applies the action
+                // (targets the tokens in its zone) + tracks once-per-round. The
+                // just-used action is marked until the lair acts again / a fresh
+                // round frees it.
+                if (isGm) {
+                    var usedNow = window._lairLastActionId && window._lairLastActionId === pa.id;
+                    var trigRow = document.createElement('div');
+                    trigRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:7px;';
+                    var trig = document.createElement('button');
+                    trig.type = 'button';
+                    trig.textContent = '⚡ Trigger';
+                    trig.setAttribute('style', 'min-height:32px;padding:3px 12px;font-size:12px;'
+                        + 'background:var(--accent);color:#10131c;font-weight:600;border-radius:6px;');
+                    trig.addEventListener('click', function (ev) {
+                        ev.stopPropagation();
+                        trig.disabled = true;
+                        Promise.resolve(window._triggerPlacedLairAction(pa.id, def.name || pa.id))
+                            .finally(function () { trig.disabled = false; });
+                    });
+                    trigRow.appendChild(trig);
+                    if (usedNow) {
+                        var used = document.createElement('span');
+                        used.style.cssText = 'font-size:11px;opacity:.7;color:var(--accent);';
+                        used.textContent = '✓ used this round';
+                        trigRow.appendChild(used);
+                    }
+                    row.appendChild(trigRow);
+                }
                 row.addEventListener('mouseenter', function () {
                     if (window._highlightLairZones) window._highlightLairZones(pa.zoneIds);
                 });
@@ -3172,6 +3200,69 @@
             _syncLairZonesBtn();
             if (window._lairActionsListOpen) window._renderLairActionsList();
         };
+        // v2.893.0 — fire a map-placed lair action: resolve targets from its
+        // bound zone (auto-target + flash) or the manual picker, then POST the
+        // trigger. If the battle isn't flagged in-lair yet, flag it as a
+        // zone-driven lair (no slug) and retry once. The server is the
+        // authoritative once-per-round / no-repeat gate.
+        window._lairLastActionId = '';
+        window._triggerPlacedLairAction = async function (actionId, actionName) {
+            actionName = actionName || 'Lair action';
+            var targetIds = [];
+            var _zt = window._lairZoneTargetsForAction && window._lairZoneTargetsForAction(actionId);
+            if (_zt) {
+                targetIds = _zt.ids;
+                if (window._flashLairZones) window._flashLairZones(_zt.zones.map(function (z) { return z.id; }));
+            } else if (typeof window.vttOpenMultiTargetPicker === 'function') {
+                var picked = await window.vttOpenMultiTargetPicker({ required: 12, spellName: actionName });
+                if (picked === null) return false;  // cancelled
+                targetIds = Array.isArray(picked) ? picked : [];
+            }
+            function _post() {
+                return fetch('/api/campaign/' + CAMPAIGN_ID + '/trigger_lair_action', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action_id: actionId, aoe_target_combatant_ids: targetIds }),
+                });
+            }
+            var _toast = window.showToast || function (m) { console.log(m); };
+            try {
+                var r = await _post();
+                if (r.status === 409) {
+                    var txt = await r.text();
+                    if (txt.indexOf('not_in_lair') !== -1) {
+                        // Auto-enable a zone-driven lair (no slug), then retry once.
+                        var se = await fetch('/api/campaign/' + CAMPAIGN_ID + '/set_in_lair', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ in_lair: true }),
+                        });
+                        if (se.ok) r = await _post();
+                    }
+                }
+                if (!r.ok) {
+                    var t2 = await r.text();
+                    var msg = '🌋 Lair action was rejected.';
+                    if (r.status === 404) msg = '🌋 Start a battle before triggering lair actions.';
+                    else if (t2.indexOf('lair_action_repeated') !== -1) msg = '🌋 ' + actionName + ' was used last round — pick a different one.';
+                    else if (t2.indexOf('lair_already_acted_this_round') !== -1) msg = '🌋 The lair already acted this round (one per round).';
+                    _toast(msg, 'warn');
+                    return false;
+                }
+                _toast('🌋 ' + actionName + ' triggered.', 'info');
+                return true;
+            } catch (e) { console.warn('trigger_lair_action failed:', e); return false; }
+        };
+        // Track the last-used lair action (for the "used this round" marker),
+        // driven by the same broadcasts the init-tracker lair panel listens to.
+        document.addEventListener('vtt:ws-message', function (e) {
+            var msg = e && e.detail; if (!msg) return;
+            if (msg.type === 'lair_action_resolved') {
+                window._lairLastActionId = (msg.data && msg.data.last_lair_action_id) || '';
+                if (window._lairActionsListOpen) window._renderLairActionsList();
+            } else if (msg.type === 'in_lair_changed') {
+                window._lairLastActionId = '';
+                if (window._lairActionsListOpen) window._renderLairActionsList();
+            }
+        });
         // v2.858.0 — GM reveal-terrain toggle: the flag + live update + a GM
         // Tools button. Terrain is hidden from players until the GM reveals it.
         window._onTerrainVisibilityUpdate = function (data) {

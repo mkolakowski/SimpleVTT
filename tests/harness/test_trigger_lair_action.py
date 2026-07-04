@@ -122,7 +122,9 @@ async def test_set_in_lair_false_clears_slug(gm_client):
     assert resp.json()["lair_slug"] == ""
 
 
-async def test_set_in_lair_requires_slug_400(gm_client):
+async def test_set_in_lair_without_slug_is_a_zone_lair(gm_client):
+    """v2.893.0 — the slug is now OPTIONAL: in_lair=True with no slug flags a
+    zone-driven lair (actions come from the map's lair zones, resolved by id)."""
     await _seed_battle(gm_client, [
         _mkc("npc_lair_set_c", name="Filler", initiative=10),
     ])
@@ -130,7 +132,10 @@ async def test_set_in_lair_requires_slug_400(gm_client):
         f"/api/campaign/{CAMPAIGN_ID}/set_in_lair",
         json={"in_lair": True},
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["in_lair"] is True
+    assert data["lair_slug"] == ""  # zone-driven — no creature slug
 
 
 async def test_set_in_lair_player_403(alice_client):

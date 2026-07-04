@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.893.0] - 2026-07-04 — "The Trigger Finger"
+
+**Schema version:** 100
+
+**Commit summary:** GM can roll/apply a placed lair action straight from the slide-out — one click targets the zone, resolves saves + damage, and tracks once-per-round.
+
+**Description:** Wires the placed-lair-action slide-out (v2.892.0) into the existing lair-action engine so the GM can **fire** a map-placed action, not just read it. Each GM slide-out row gains a **⚡ Trigger** button: clicking it targets the tokens inside the action's bound zone (auto-target + flash), or falls back to the manual target picker, then POSTs to `trigger_lair_action` — which rolls the area damage once, resolves each target's save, applies damage/conditions, and enforces the RAW once-per-round / no-repeat gates. The just-used action shows **✓ used this round** (cleared when the lair acts again or a fresh round frees it, driven by the same `lair_action_resolved` / `in_lair_changed` broadcasts). To support **zone-driven lairs** (a lair defined by map zones, with no single creature), `set_in_lair` now treats `lair_slug` as **optional** — and the trigger button auto-flags the battle in-lair (slug-less) on the first use if needed. Players' slide-out stays list-only (no Trigger, no mechanics).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `set_in_lair` no longer requires `lair_slug` (a slug-less `in_lair=True` is a zone-driven lair); dropped the 400.
+- `app/templates/tabletop.html` — GM slide-out rows get a ⚡ Trigger button + `window._triggerPlacedLairAction()` (zone-target → POST, auto-enable in-lair on `not_in_lair`, 409 toasts); a `vtt:ws-message` listener tracks the last-used action for the ✓ used-this-round marker.
+
+### Added
+- `tests/harness/test_trigger_lair_action.py` — `test_set_in_lair_without_slug_is_a_zone_lair` (slug-less in-lair now 200, replacing the old 400 test).
+- `tests/harness_ui/test_lair_actions_slideout.py` — the GM's slide-out rows carry a ⚡ Trigger button; a player's rows do not (and show no mechanics).
+
+### Schema
+- No schema change (still v100).
+
 ## [2.892.0] - 2026-07-04 — "The Lair Ledger"
 
 **Schema version:** 100
