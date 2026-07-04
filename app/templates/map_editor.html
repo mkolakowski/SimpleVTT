@@ -353,10 +353,10 @@
       </select>
     </label>
     {# The selected action's text — wraps to the group's width (the width:0 +
-       min-width:100% keeps the long text from widening the group), truncated to
-       two lines; hover shows it all. #}
+       min-width:100% keeps the long text from widening the group). v2.877.1 —
+       shows up to 6 lines (was 2); hover still shows the full text. #}
     <div id="me-lairzone-desc"
-         style="width:0;min-width:100%;box-sizing:border-box;font-size:11px;line-height:1.35;color:var(--fg-mute);white-space:normal;overflow-wrap:break-word;word-break:break-word;max-height:2.7em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;cursor:help;"></div>
+         style="width:0;min-width:100%;box-sizing:border-box;font-size:11px;line-height:1.35;color:var(--fg-mute);white-space:normal;overflow-wrap:break-word;word-break:break-word;max-height:8.1em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;cursor:help;"></div>
     {# v2.877.0 — per-zone colour: a custom picker + quick preset swatches
        (rendered by JS). Applies to new zones, or live-edits the selected one. #}
     <label class="me-capsel" title="Zone colour — for new zones, or the selected zone">

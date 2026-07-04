@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.877.1] - 2026-07-03 — "The Fuller Text"
+
+**Schema version:** 99
+
+**Commit summary:** The selected lair action's description shows up to six lines instead of two.
+
+**Description:** Per request, the Lair Zone tool's action description (`#me-lairzone-desc`) now shows up to **six** lines before clamping (was two), so much more of the selected action's text is readable at a glance. It still wraps to the group's width and a hover still reveals the full text.
+
+### Changed
+- `app/templates/map_editor.html` — `#me-lairzone-desc` `-webkit-line-clamp` 2 → 6 (`max-height` bumped to match).
+
+### Schema
+- No schema change (still v99 — editor CSS only).
+
 ## [2.877.0] - 2026-07-03 — "The Coloured Zone"
 
 **Schema version:** 99
