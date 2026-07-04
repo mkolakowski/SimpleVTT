@@ -5085,6 +5085,12 @@
                 </form>
                 <span style="font-size:10px;color:var(--fg-mute);white-space:nowrap;">Offline</span>
                 {% endif %}
+                {# v2.888.0 — browse past session recaps (nickname + GM notes +
+                   every player's note). Available whether or not a session is
+                   live. #}
+                <button type="button" id="recap-history-btn" class="btn-link" title="Browse past session recaps"
+                        onclick="if(window._showRecapHistory)window._showRecapHistory();"
+                        style="flex-shrink:0;font-size:12px;">📜 Recaps</button>
                 <a href="/campaign/{{ campaign.id }}/settings" class="btn-link" style="flex-shrink:0;font-size:12px;">⚙ Settings</a>
             </div>
         </div>

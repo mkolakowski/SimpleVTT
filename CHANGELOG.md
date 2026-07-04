@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.888.0] - 2026-07-04 — "The Adventure Log"
+
+**Schema version:** 100
+
+**Commit summary:** A GM "📜 Recaps" browser to review past session recaps — nicknames, GM notes (editable), and every player's note.
+
+**Description:** Adds the read/review side of the session-recap feature. A new **"📜 Recaps"** button in the GM drawer's "⚡ Session" group (available whether or not a session is live) opens a browser backed by the existing `GET /api/campaign/{id}/session-recaps` list endpoint. It lists past recaps (nickname + date); clicking one opens a detail view with the session's **editable** nickname + GM notes (saved back via `PUT .../session-recap/{key}`) and a read-only list of **every player's note** for that session (author + body). Escape or the ✕ closes it; ← Back returns to the list.
+
+### Added
+- `app/static/tabletop.js` — `_showRecapHistory()` (glass list/detail browser over the recap endpoints); `window._showRecapHistory`.
+- `app/templates/tabletop.html` — a "📜 Recaps" button in the GM Session group.
+- `tests/harness_ui/test_recap_history.py` — seeds a recap over HTTP, opens the browser, asserts the list row + the detail view's editable GM notes + the player-notes section.
+
+### Schema
+- No schema change (still v100 — a GM read/edit UI over the v2.885.0 endpoints).
+
 ## [2.887.0] - 2026-07-04 — "The Table Talk"
 
 **Schema version:** 100

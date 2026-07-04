@@ -4746,6 +4746,174 @@
     }
     window._showPlayerSessionNote = _showPlayerSessionNote;
 
+    // v2.888.0 — GM: browse past session recaps. A list (nickname + date);
+    // click one to see/edit the GM notes and read every player's note.
+    function _showRecapHistory() {
+        if (typeof CAMPAIGN_ID === 'undefined') return;
+        const backdrop = document.createElement('div');
+        backdrop.setAttribute('style', [
+            'position:fixed', 'inset:0', 'background:rgba(0,0,0,0.5)',
+            'z-index:2147483600', 'display:flex', 'align-items:center',
+            'justify-content:center', 'padding:16px',
+            'animation:reactionPopIn 180ms ease-out',
+        ].join(';'));
+        backdrop.setAttribute('role', 'dialog');
+        backdrop.setAttribute('aria-label', 'Session recaps');
+        const card = document.createElement('div');
+        card.setAttribute('style', [
+            'background:color-mix(in srgb, var(--bg, #1f2433) 92%, transparent)',
+            'backdrop-filter:blur(10px)', '-webkit-backdrop-filter:blur(10px)',
+            'border:1px solid var(--border, rgba(255,255,255,0.18))',
+            'border-left:4px solid var(--accent, #6cb4ff)', 'border-radius:10px',
+            'padding:16px 18px', 'color:var(--fg, #fff)', 'font-size:13px',
+            'max-width:560px', 'width:100%', 'max-height:82vh', 'overflow:auto',
+            'box-shadow:0 10px 36px rgba(0,0,0,0.55)',
+        ].join(';'));
+        backdrop.appendChild(card);
+        function close() { document.removeEventListener('keydown', onKey); backdrop.remove(); }
+        function onKey(e) { if (e.key === 'Escape') close(); }
+        document.addEventListener('keydown', onKey);
+        backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+
+        function _headerRow(titleText, leftBtn) {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:12px;';
+            if (leftBtn) row.appendChild(leftBtn);
+            const h = document.createElement('div');
+            h.style.cssText = 'font-size:15px; font-weight:600; flex:1;';
+            h.textContent = titleText;
+            row.appendChild(h);
+            const x = document.createElement('button');
+            x.type = 'button'; x.textContent = '✕';
+            x.setAttribute('style', 'min-height:32px; padding:2px 10px; border-radius:6px; cursor:pointer; background:rgba(255,255,255,0.05); color:var(--fg); border:1px solid var(--border, rgba(255,255,255,0.22));');
+            x.addEventListener('click', close);
+            row.appendChild(x);
+            return row;
+        }
+        function _mkBtn(label, style) {
+            const b = document.createElement('button');
+            b.type = 'button'; b.textContent = label;
+            b.setAttribute('style', ['min-height:36px', 'padding:6px 14px', 'border-radius:6px', 'cursor:pointer', 'font-size:13px', 'border:1px solid var(--border, rgba(255,255,255,0.22))'].join(';') + ';' + (style || ''));
+            return b;
+        }
+        function _fmtDate(iso) {
+            if (!iso) return '';
+            try { return new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); }
+            catch (_) { return iso; }
+        }
+
+        function renderList() {
+            card.innerHTML = '';
+            card.appendChild(_headerRow('📜 Session recaps', null));
+            const status = document.createElement('div');
+            status.className = 'muted';
+            status.style.cssText = 'font-size:12px; opacity:0.8;';
+            status.textContent = 'Loading…';
+            card.appendChild(status);
+            fetch(`/api/campaign/${CAMPAIGN_ID}/session-recaps`)
+                .then(r => r.json())
+                .then(d => {
+                    const recaps = (d && d.recaps) || [];
+                    status.remove();
+                    if (!recaps.length) {
+                        const empty = document.createElement('p');
+                        empty.style.cssText = 'font-size:12px; opacity:0.8;';
+                        empty.textContent = 'No sessions have been recapped yet. End a session to start the log.';
+                        card.appendChild(empty);
+                        return;
+                    }
+                    recaps.forEach(rc => {
+                        const row = _mkBtn('', 'display:block; width:100%; text-align:left; margin-bottom:6px; background:rgba(255,255,255,0.04); min-height:44px;');
+                        row.textContent = '';
+                        const name = document.createElement('div');
+                        name.style.cssText = 'font-weight:600;';
+                        name.textContent = rc.nickname || 'Unnamed session';
+                        const date = document.createElement('div');
+                        date.style.cssText = 'font-size:11px; opacity:0.7;';
+                        date.textContent = _fmtDate(rc.created_at);
+                        row.appendChild(name); row.appendChild(date);
+                        row.addEventListener('click', () => renderDetail(rc));
+                        card.appendChild(row);
+                    });
+                })
+                .catch(() => { status.textContent = 'Could not load recaps.'; });
+        }
+
+        function renderDetail(rc) {
+            card.innerHTML = '';
+            const back = _mkBtn('← Back', 'min-height:32px; padding:2px 10px; background:rgba(255,255,255,0.05); color:var(--fg);');
+            back.addEventListener('click', renderList);
+            card.appendChild(_headerRow('Recap', back));
+            const status = document.createElement('div');
+            status.className = 'muted';
+            status.style.cssText = 'font-size:12px; opacity:0.8;';
+            status.textContent = 'Loading…';
+            card.appendChild(status);
+            fetch(`/api/campaign/${CAMPAIGN_ID}/session-recap/${encodeURIComponent(rc.session_key)}`)
+                .then(r => r.json())
+                .then(d => {
+                    status.remove();
+                    const nick = document.createElement('input');
+                    nick.type = 'text'; nick.maxLength = 200; nick.value = d.nickname || '';
+                    nick.placeholder = 'Session name';
+                    nick.setAttribute('style', 'width:100%; box-sizing:border-box; margin-bottom:8px;');
+                    card.appendChild(nick);
+                    const notes = document.createElement('textarea');
+                    notes.rows = 5; notes.maxLength = 50000; notes.value = d.gm_notes || '';
+                    notes.placeholder = 'GM-only notes';
+                    notes.setAttribute('style', 'width:100%; box-sizing:border-box; resize:vertical; min-height:80px; margin-bottom:8px;');
+                    card.appendChild(notes);
+                    const saveRow = document.createElement('div');
+                    saveRow.style.cssText = 'display:flex; justify-content:flex-end; gap:8px; margin-bottom:14px;';
+                    const saved = document.createElement('span');
+                    saved.style.cssText = 'font-size:11px; opacity:0.7; align-self:center;';
+                    const save = _mkBtn('💾 Save', 'background:var(--accent, #6cb4ff); color:#10131c; font-weight:600;');
+                    save.addEventListener('click', () => {
+                        save.disabled = true; saved.textContent = 'Saving…';
+                        fetch(`/api/campaign/${CAMPAIGN_ID}/session-recap/${encodeURIComponent(rc.session_key)}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ nickname: nick.value || '', gm_notes: notes.value || '' }),
+                        }).then(() => { saved.textContent = 'Saved ✓'; })
+                          .catch(() => { saved.textContent = 'Save failed'; })
+                          .finally(() => { save.disabled = false; });
+                    });
+                    saveRow.appendChild(saved); saveRow.appendChild(save);
+                    card.appendChild(saveRow);
+
+                    const pnHead = document.createElement('div');
+                    pnHead.style.cssText = 'font-size:12px; font-weight:600; opacity:0.85; margin-bottom:6px;';
+                    const pnotes = d.player_notes || [];
+                    pnHead.textContent = `Player notes (${pnotes.length})`;
+                    card.appendChild(pnHead);
+                    if (!pnotes.length) {
+                        const none = document.createElement('p');
+                        none.style.cssText = 'font-size:12px; opacity:0.7;';
+                        none.textContent = 'No player notes for this session.';
+                        card.appendChild(none);
+                    } else {
+                        pnotes.forEach(pn => {
+                            const box = document.createElement('div');
+                            box.style.cssText = 'border:1px solid var(--border, rgba(255,255,255,0.14)); border-radius:6px; padding:6px 8px; margin-bottom:6px; background:rgba(255,255,255,0.03);';
+                            const who = document.createElement('div');
+                            who.style.cssText = 'font-size:11px; font-weight:600; opacity:0.8; margin-bottom:2px;';
+                            who.textContent = pn.author_name || 'Player';
+                            const body = document.createElement('div');
+                            body.style.cssText = 'font-size:12px; white-space:pre-wrap; opacity:0.92;';
+                            body.textContent = pn.body || '';
+                            box.appendChild(who); box.appendChild(body);
+                            card.appendChild(box);
+                        });
+                    }
+                })
+                .catch(() => { status.textContent = 'Could not load this recap.'; });
+        }
+
+        document.body.appendChild(backdrop);
+        renderList();
+    }
+    window._showRecapHistory = _showRecapHistory;
+
     function _showMovementLockedModal({
         isGm, tokenId, tokenLabel, onMove, onCancel,
     }) {
