@@ -5744,24 +5744,60 @@ def _segments_intersect(ax, ay, bx, by, cx, cy, dx, dy) -> bool:
     return ((d1 > 0) != (d2 > 0)) and ((d3 > 0) != (d4 > 0))
 
 
+def _wall_solid_spans(w):
+    """v2.899.0 — the solid (sight-blocking) sub-segments of a wall as a list of
+    ``(x1,y1,x2,y2)`` tuples. A window blocks nothing; a legacy whole-segment
+    open door/gate blocks nothing; a wall with embedded ``doors`` blocks
+    everywhere EXCEPT its OPEN door spans (a closed door still blocks). A plain
+    wall returns its single whole segment."""
+    if not isinstance(w, dict):
+        return []
+    if w.get("window"):
+        return []
+    try:
+        x1 = float(w["x1"]); y1 = float(w["y1"])
+        x2 = float(w["x2"]); y2 = float(w["y2"])
+    except (KeyError, TypeError, ValueError):
+        return []
+    # Legacy whole-segment door/gate (no embedded ``doors``).
+    if (w.get("door") or w.get("gate")) and not w.get("doors"):
+        return [] if w.get("open") else [(x1, y1, x2, y2)]
+    doors = w.get("doors")
+    if not isinstance(doors, list) or not doors:
+        return [(x1, y1, x2, y2)]
+    open_spans = []
+    for d in doors:
+        if not (isinstance(d, dict) and d.get("open")):
+            continue
+        try:
+            a = max(0.0, min(1.0, float(d.get("t0"))))
+            b = max(0.0, min(1.0, float(d.get("t1"))))
+        except (TypeError, ValueError):
+            continue
+        if b > a:
+            open_spans.append((a, b))
+    open_spans.sort()
+    dx = x2 - x1; dy = y2 - y1
+    spans = []
+    cur = 0.0
+    for (a, b) in open_spans:
+        if a > cur:
+            spans.append((cur, a))
+        cur = max(cur, b)
+    if cur < 1.0:
+        spans.append((cur, 1.0))
+    return [(x1 + dx * s0, y1 + dy * s0, x1 + dx * s1, y1 + dy * s1) for (s0, s1) in spans]
+
+
 def _walls_block_sight(map_row, ax, ay, bx, by) -> bool:
     """v2.753.0 — Maps 2.0 wall occlusion: does any solid wall / closed door
     segment on ``map_row`` cross the sight line from (ax,ay) to (bx,by)? An
-    open door (``door`` and ``open``) doesn't block."""
+    open door doesn't block. v2.899.0 — each wall is expanded into its solid
+    sub-spans so an OPEN embedded door leaves a real gap in the wall."""
     for w in (getattr(map_row, "walls", None) or []):
-        if not isinstance(w, dict):
-            continue
-        if w.get("window"):
-            continue  # window — sight passes through the glass
-        if (w.get("door") or w.get("gate")) and w.get("open"):
-            continue  # open door / gate — sight passes
-        try:
-            wx1 = float(w["x1"]); wy1 = float(w["y1"])
-            wx2 = float(w["x2"]); wy2 = float(w["y2"])
-        except (KeyError, TypeError, ValueError):
-            continue
-        if _segments_intersect(ax, ay, bx, by, wx1, wy1, wx2, wy2):
-            return True
+        for (wx1, wy1, wx2, wy2) in _wall_solid_spans(w):
+            if _segments_intersect(ax, ay, bx, by, wx1, wy1, wx2, wy2):
+                return True
     return False
 
 
@@ -124289,10 +124325,46 @@ async def settings_map_ambient_light(
     return {"ok": True, "ambient_light": m.ambient_light}
 
 
+def _sanitize_wall_doors(raw, wall_idx: int) -> list:
+    """v2.899.0 — embedded doors: a wall keeps its single segment and may hold
+    a list of door *openings* along it. Each door is
+    ``{id, t0, t1, open, gate, secret, flip}`` where ``t0 < t1`` are fractions
+    in [0,1] of the way along the wall (x1,y1)→(x2,y2). Degenerate or
+    out-of-range spans are dropped; overlapping spans are allowed (the client
+    snaps them). Presentation + occlusion are driven by these spans — an OPEN
+    door span is a gap in the wall, a closed one still blocks."""
+    out = []
+    if not isinstance(raw, list):
+        return out
+    for j, d in enumerate(raw):
+        if not isinstance(d, dict):
+            continue
+        try:
+            t0 = float(d.get("t0")); t1 = float(d.get("t1"))
+        except (TypeError, ValueError):
+            continue
+        t0 = max(0.0, min(1.0, t0)); t1 = max(0.0, min(1.0, t1))
+        if t1 - t0 < 1e-4:  # degenerate / inverted span
+            continue
+        out.append({
+            "id": (str(d.get("id") or "").strip()[:40] or f"w{wall_idx}d{j}"),
+            "t0": t0, "t1": t1,
+            "open": bool(d.get("open")),
+            "gate": bool(d.get("gate")),
+            "secret": bool(d.get("secret")),
+            "flip": bool(d.get("flip")),
+        })
+    return out
+
+
 def _sanitize_wall_segments(raw) -> list:
     """v2.752.0 — coerce a client-supplied wall list into the stored shape:
     a list of ``{id, x1, y1, x2, y2, door, open}`` segments in map-pixel
-    coords. Drops anything that isn't a dict with four numeric endpoints."""
+    coords. Drops anything that isn't a dict with four numeric endpoints.
+
+    v2.899.0 — a wall may also carry ``doors``: a list of embedded door
+    openings along the segment (see ``_sanitize_wall_doors``). Legacy
+    whole-segment doors (``door``/``gate`` on the segment itself) still work."""
     out = []
     if not isinstance(raw, list):
         return out
@@ -124308,7 +124380,7 @@ def _sanitize_wall_segments(raw) -> list:
             op = max(0.0, min(1.0, float(seg.get("opacity"))))
         except (TypeError, ValueError):
             op = 1.0
-        out.append({
+        rec = {
             "id": (str(seg.get("id") or "").strip()[:40] or f"w{i}"),
             "x1": x1, "y1": y1, "x2": x2, "y2": y2,
             "door": bool(seg.get("door")),
@@ -124327,7 +124399,12 @@ def _sanitize_wall_segments(raw) -> list:
             # short style key the client maps to a wall/door look. Presentation
             # only — occlusion ignores it.
             "style": str(seg.get("style") or "").strip()[:20],
-        })
+        }
+        # v2.899.0 — embedded door openings (stored only when present).
+        doors = _sanitize_wall_doors(seg.get("doors"), i)
+        if doors:
+            rec["doors"] = doors
+        out.append(rec)
     return out
 
 
@@ -125243,14 +125320,34 @@ async def toggle_map_door(
         raise HTTPException(404, "Map not found")
     walls = list(m.walls or [])
     did = str(door_id).strip()
-    target = next(
-        (w for w in walls
-         if isinstance(w, dict) and str(w.get("id")) == did
-         and (w.get("door") or w.get("gate"))),  # v2.787.0 — gates toggle too
-        None)
-    if target is None:
-        raise HTTPException(404, "Door not found")
-    target["open"] = not bool(target.get("open"))
+    if ":" in did:
+        # v2.899.0 — an embedded door: id is "{wallId}:{doorId}". Flip the door
+        # opening's ``open`` inside the wall's ``doors`` list (the wall segment
+        # itself is unchanged).
+        wall_id, _, emb_id = did.partition(":")
+        wall = next(
+            (w for w in walls if isinstance(w, dict) and str(w.get("id")) == wall_id),
+            None)
+        door = None
+        if wall is not None:
+            for d in (wall.get("doors") or []):
+                if isinstance(d, dict) and str(d.get("id")) == emb_id:
+                    door = d
+                    break
+        if door is None:
+            raise HTTPException(404, "Door not found")
+        door["open"] = not bool(door.get("open"))
+        new_open = door["open"]
+    else:
+        target = next(
+            (w for w in walls
+             if isinstance(w, dict) and str(w.get("id")) == did
+             and (w.get("door") or w.get("gate"))),  # v2.787.0 — gates toggle too
+            None)
+        if target is None:
+            raise HTTPException(404, "Door not found")
+        target["open"] = not bool(target.get("open"))
+        new_open = target["open"]
     m.walls = walls
     # Flag the JSON column dirty (in-place mutation of a JSON list isn't
     # always tracked by SQLAlchemy).
@@ -125261,7 +125358,7 @@ async def toggle_map_door(
         "type": "walls_update",
         "data": {"map_id": m.id, "walls": walls},
     })
-    return {"ok": True, "door_id": did, "open": target["open"]}
+    return {"ok": True, "door_id": did, "open": new_open}
 
 
 @router.get("/campaign/{campaign_id}/map/{map_id}/edit", response_class=HTMLResponse)

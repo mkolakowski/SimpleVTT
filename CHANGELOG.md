@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.899.0] - 2026-07-04 — "The Door Within"
+
+**Schema version:** 100
+
+**Commit summary:** Embedded doors, Phase 1 — a wall can now carry door *openings* along it (server model, occlusion, and toggle); the wall stays one object.
+
+**Description:** First phase of reworking doors so they're **embedded in a wall** instead of splitting it into pieces (the editor UI follows in later phases). A wall may now carry a `doors` list — each `{id, t0, t1, open, gate, secret, flip}`, where `t0 < t1` are fractions along the segment marking the door's span. The server occlusion now expands each wall into its **solid sub-spans**, so an **open** embedded door leaves a real gap in the wall while a **closed** one still blocks line of sight. The door-toggle endpoint accepts a composite **`{wallId}:{doorId}`** id to flip a single embedded door's `open`. Legacy whole-segment doors/gates keep working unchanged (no migration).
+
+### Added
+- `app/routes/tabletop_routes.py` — `_sanitize_wall_doors` (validates the per-wall `doors` list; drops degenerate/inverted spans); `_sanitize_wall_segments` stores `doors` when present; `_wall_solid_spans` (a wall's sight-blocking sub-segments around open doors); `_walls_block_sight` expands walls via it; the door-toggle endpoint flips an embedded door by `{wallId}:{doorId}`.
+- `tests/harness/test_embedded_doors.py` — an embedded door round-trips; toggling it open/closed (composite id) opens/closes line of sight through the wall; unknown embedded id → 404; an inverted span is dropped.
+
+### Schema
+- No schema change (still v100 — `doors` is additive inside the existing `maps.walls` JSON).
+
 ## [2.898.0] - 2026-07-04 — "The Free Polygon"
 
 **Schema version:** 100
