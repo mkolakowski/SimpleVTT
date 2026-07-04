@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.882.0] - 2026-07-03 — "The Watchful Eye"
+
+**Schema version:** 99
+
+**Commit summary:** Tokens stay on top of every effect until you select one — then the view narrows to what that token sees.
+
+**Description:** Reworks token visibility on the tabletop around selection. **With no token selected**, tokens are redrawn **on top of the lighting + fog veil** for maximum legibility — the **GM** sees *every* visible token above all effects; a **player** sees only the tokens **they control** on top (other tokens stay under the veil, subject to fog). **When a token is selected** (the targeting set, driven by double-click), that "everything on top" pass is suppressed and the view **narrows to that token's vision**: for the GM this is the existing "see what they see" fog, and now a **player who selects a token they control** also gets that token's wall-occluded viewpoint instead of the whole-party view. Net effect: by default you can always read the board (your pieces above darkness/fog), and selecting a piece switches to its perspective.
+
+### Added
+- `app/static/tabletop.js` — `_controlsToken` / `_anyTokenSelected` / `_tokenDrawsOnTop` helpers; a post-`drawFog()` redraw of the always-visible tokens on top of the veil when nothing is selected; a player-perspective branch in `drawFog()` (a selected controlled token narrows the fog to its vision); `window.__tokenVisForTest` harness hook.
+- `tests/harness_ui/test_token_visibility_perspective.py` — GM draws all tokens on top until one is selected; a player forces only controlled tokens on top.
+
+### Changed
+- `app/static/tabletop.js` — token layering is now selection-aware (previously tokens always drew under the veil).
+
+### Schema
+- No schema change (still v99 — a client-side rendering change only).
+
 ## [2.881.1] - 2026-07-03 — "The Way Back"
 
 **Schema version:** 99

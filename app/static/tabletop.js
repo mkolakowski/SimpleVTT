@@ -491,6 +491,37 @@
         return false;
     }
 
+    // v2.882.0 — does the current viewer control this token? GMs control all;
+    // a player controls a token they're the direct controller of, or one linked
+    // to a character they own. (Mirrors canMove()/findMyFirstControlledToken().)
+    function _controlsToken(t) {
+        if (!t) return false;
+        if (ME && ME.isGm) return true;
+        if (t.controller_user_id != null && ME && t.controller_user_id === ME.id) return true;
+        if (t.character_id && typeof characters !== 'undefined') {
+            const c = characters.find(c => c.id === t.character_id);
+            if (c && ME && c.owner_user_id === ME.id) return true;
+        }
+        return false;
+    }
+    // v2.882.0 — a token is "selected" when it's in the targeting set (the only
+    // per-token selection the tabletop has; driven by double-click). With no
+    // selection we maximize token visibility; with a selection we narrow to that
+    // token's vision.
+    function _anyTokenSelected() {
+        return !!(window._targetingState && (window._targetingState.tokenIds || []).length);
+    }
+    // v2.882.0 — should this token be redrawn ON TOP of every effect (above the
+    // lighting + fog veil) for maximum visibility? Only when nothing is selected:
+    // GM → every visible token; player → only the tokens they control. Once a
+    // token is selected we drop back under the veil and narrow to its vision.
+    function _tokenDrawsOnTop(t) {
+        if (_anyTokenSelected()) return false;
+        if (_isTokenHiddenFromMe(t)) return false;
+        if (ME && ME.isGm) return true;
+        return _controlsToken(t);
+    }
+
     function _updateGifOverlay() {
         if (!_gifOverlay) return;
         const keep = new Set();
@@ -1880,6 +1911,14 @@
     window.__tokenRadiusForTest = (t) => _tokenRadius(t || { size: 1 });
     window.__camScaleForTest = () => _camScale;
     window.__tokenMinScreenPx = TOKEN_MIN_SCREEN_PX;
+    // v2.882.0 — the selection-aware visibility logic (which token draws on top
+    // of every effect vs under the veil) is the meat of the feature; expose it
+    // so the harness can assert the decision without pixel-sampling the veil.
+    window.__tokenVisForTest = {
+        anySelected: () => _anyTokenSelected(),
+        drawsOnTop: (t) => _tokenDrawsOnTop(t),
+        controls: (t) => _controlsToken(t),
+    };
 
     // v2.872.0 — zone-driven lair-action targeting. Lives here (not in
     // tabletop.html) so it can read the ``tokens`` array + ``gridSize``; the
@@ -3008,6 +3047,15 @@
         // room that hasn't been explored).
         drawFog();
 
+        // v2.882.0 — maximum token visibility: with NO token selected, redraw
+        // the "always-visible" tokens ON TOP of the lighting + fog veil so they
+        // read clearly above every effect. GM → every visible token; player →
+        // only the tokens they control. (When a token IS selected we skip this
+        // and let the veil narrow the view to that token's vision instead.)
+        if (!_anyTokenSelected()) {
+            (tokens || []).forEach(t => { if (_tokenDrawsOnTop(t)) drawToken(t); });
+        }
+
         // v2.50.0 — grid coordinate labels drawn LAST so the gutter
         // sits on top of every other rendered element. Tokens sliding
         // along the map edge will pass under the strip, which is
@@ -3357,6 +3405,15 @@
         if (isGm) {
             if (!targetIds.size) return;                 // default: GM sees all
             visibleSet = mapFogDynamic ? _gmTargetVisibleCells(targetIds) : mapFogVisible;
+        } else if (targetIds.size) {
+            // v2.882.0 — a player who selected a token they control narrows the
+            // fog to THAT token's vision ("see what it sees"); selecting a token
+            // they don't control leaves the party view untouched.
+            const mine = new Set([...targetIds].filter(id => {
+                const t = (tokens || []).find(x => x && x.id === id);
+                return t && _controlsToken(t);
+            }));
+            if (mine.size) visibleSet = mapFogDynamic ? _gmTargetVisibleCells(mine) : mapFogVisible;
         }
         if (!_fogCanvas) _fogCanvas = document.createElement('canvas');
         if (_fogCanvas.width !== MAP_W) _fogCanvas.width = MAP_W;
