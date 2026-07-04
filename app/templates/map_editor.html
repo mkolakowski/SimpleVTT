@@ -1342,19 +1342,42 @@
       zc.setAttribute('stroke', lzColor); zc.setAttribute('stroke-width', '2');
       zc.setAttribute('stroke-dasharray', '2 5');
       zc.classList.add('me-lairzone');
-      var zActive = (lairZoneMode || eraseMode) && !relocating;
+      // v2.876.0 — interactive in lair-zone / erase mode AND the default
+      // no-tool state (like terrain), so a zone can always be double-clicked
+      // to select or right-clicked for its menu; inert while another drawing
+      // tool or a relocate is active.
+      var _zNoTool = !(wallMode || doorMode || roomMode || spotMode || lightMode
+        || fogMode || pinMode || propMode || labelMode || measureMode || selectMode
+        || terrainMode);
+      var zActive = (lairZoneMode || eraseMode || _zNoTool) && !relocating;
       zc.style.pointerEvents = zActive ? 'all' : 'none';
       zc.style.cursor = 'pointer';
+      function _selectZone() { selectedLairZone = lz; syncLairZoneToolbar(); render(); }
       zc.addEventListener('click', function (e) {
         if (eraseMode) {
           e.stopPropagation();
           if (selectedLairZone === lz) selectedLairZone = null;
           lairZones.splice(i, 1); saveLairZones(); return;
         }
-        if (lairZoneMode) {
-          e.stopPropagation();
-          selectedLairZone = lz; syncLairZoneToolbar(); render();
-        }
+        if (lairZoneMode) { e.stopPropagation(); _selectZone(); }
+      });
+      // v2.876.0 — double-click selects (edits its action via the dropdown).
+      zc.addEventListener('dblclick', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        selectedLairZone = (selectedLairZone === lz) ? null : lz;
+        syncLairZoneToolbar(); render();
+      });
+      // v2.876.0 — right-click menu: select (edit action) / move / delete.
+      zc.addEventListener('contextmenu', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        showMenu(e.clientX, e.clientY, [
+          { label: '🎯 Select (edit action)', fn: _selectZone },
+          { label: '↔ Move', fn: function () { startMove('lairzone', lz); } },
+          { label: '🗑 Delete', fn: function () {
+              if (selectedLairZone === lz) selectedLairZone = null;
+              lairZones.splice(i, 1); saveLairZones();
+            } },
+        ]);
       });
       svg.appendChild(zc);
       if (selectedLairZone === lz) {
@@ -2329,10 +2352,10 @@
       var mx = (r.obj.x1 + r.obj.x2) / 2, my = (r.obj.y1 + r.obj.y2) / 2;
       var dx = p.x - mx, dy = p.y - my;
       r.obj.x1 += dx; r.obj.y1 += dy; r.obj.x2 += dx; r.obj.y2 += dy;
-    } else if (r.kind === 'terrain') {  // v2.832.0 — centre the rect on the cursor
+    } else if (r.kind === 'terrain' || r.kind === 'lairzone') {  // centre the rect on the cursor
       var ndx = (p.x - r.obj.w / 2) - r.obj.x, ndy = (p.y - r.obj.h / 2) - r.obj.y;
       r.obj.x += ndx; r.obj.y += ndy;
-      // v2.848.0 — a free-form quad translates all four corners together.
+      // a free-form polygon translates all its vertices together.
       if (Array.isArray(r.obj.points)) {
         r.obj.points = r.obj.points.map(function (q) { return [q[0] + ndx, q[1] + ndy]; });
       }
@@ -2346,6 +2369,7 @@
     else if (r.kind === 'prop') saveProps();
     else if (r.kind === 'label') saveLabels();
     else if (r.kind === 'terrain') saveTerrain();  // v2.832.0
+    else if (r.kind === 'lairzone') saveLairZones();  // v2.876.0
   }
   // v2.775.0 — copy/paste objects via the right-click menu.
   var clipboard = null;

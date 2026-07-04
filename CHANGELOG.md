@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.876.0] - 2026-07-03 — "The Handled Zone"
+
+**Schema version:** 99
+
+**Commit summary:** Placed lair zones are now selectable + right-clickable in the editor, like terrain.
+
+**Description:** Fixes reported gaps in the Lair Zone tool. A placed zone was only interactive while the Lair Zone or Erase tool was active, and had no right-click menu — so in the default (no-tool) state you couldn't select or act on a zone. Zones now behave like terrain regions: interactive in the **no-tool** state too, **double-click to select** (which loads its bound action into the dropdown for editing), and a **right-click context menu** with **🎯 Select (edit action)**, **↔ Move** (drag to reposition — rect or polygon), and **🗑 Delete**. The move plumbing (`moveObjTo` / `saveReloc`) gained a `lairzone` kind alongside `terrain`.
+
+### Fixed
+- `app/templates/map_editor.html` — lair zones are interactive in no-tool mode; added double-click select + a right-click menu (select / move / delete); `moveObjTo` + `saveReloc` handle the `lairzone` kind.
+
+### Schema
+- No schema change (still v99 — editor interaction only).
+
 ## [2.875.1] - 2026-07-03 — "The Wrapped Text"
 
 **Schema version:** 99

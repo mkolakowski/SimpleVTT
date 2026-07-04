@@ -107,3 +107,51 @@ def test_lair_zone_free_polygon_placement(gm_page: Page) -> None:
         finally:
             c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lair_zones",
                   json={"lair_zones": []})
+
+
+def test_lair_zone_selectable_and_right_clickable(gm_page: Page) -> None:
+    """v2.876.0 — a placed zone can be double-clicked to select (loading its
+    action into the dropdown) and right-clicked for a context menu, even in the
+    default no-tool state."""
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
+        c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
+        c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lair_zones", json={"lair_zones": []})
+        try:
+            gm_page.set_viewport_size({"width": 1400, "height": 1000})
+            gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
+            expect(gm_page.locator("#me-overlay")).to_be_visible()
+            gm_page.wait_for_timeout(400)
+
+            box = gm_page.locator("#me-overlay").bounding_box()
+            cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] * 0.6
+            _prime_pointer(gm_page, cx, cy)
+
+            gm_page.click("#me-lairzone-btn")
+            gm_page.select_option("#me-lairzone-actions", "magma-erupts")
+            gm_page.mouse.move(cx - 100, cy - 55)
+            gm_page.mouse.down()
+            gm_page.mouse.move(cx + 100, cy + 55, steps=6)
+            gm_page.mouse.up()
+            gm_page.wait_for_timeout(400)
+            assert len(_zones(c, mid)) == 1
+
+            # Leave lair-zone mode (default no-tool state) + clear the dropdown.
+            gm_page.click("#me-lairzone-btn")
+            gm_page.select_option("#me-lairzone-actions", "")
+
+            # Double-click the placed zone → it selects, reloading its action.
+            gm_page.mouse.dblclick(cx, cy)
+            gm_page.wait_for_timeout(300)
+            assert gm_page.eval_on_selector("#me-lairzone-actions", "el => el.value") == "magma-erupts"
+
+            # Right-click the zone → a context menu appears with Delete.
+            gm_page.mouse.click(cx, cy, button="right")
+            gm_page.wait_for_timeout(200)
+            menu = gm_page.locator("#me-ctx-menu")
+            expect(menu).to_be_visible()
+            expect(menu).to_contain_text("Delete")
+            expect(menu).to_contain_text("Move")
+        finally:
+            c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lair_zones",
+                  json={"lair_zones": []})
