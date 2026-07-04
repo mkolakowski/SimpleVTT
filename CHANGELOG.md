@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.875.1] - 2026-07-03 — "The Wrapped Text"
+
+**Schema version:** 99
+
+**Commit summary:** The Lair Zone action description wraps to the group's width instead of overflowing it.
+
+**Description:** Fix on v2.875.0. The selected lair action's description (`#me-lairzone-desc`) was widening the Lair toolbar group / running off its edge instead of wrapping. The div now fills the group's width without contributing to its intrinsic width (`width:0; min-width:100%`) and wraps (`overflow-wrap/word-break`), so the text wraps to the width the group has before an action is selected — still clamped to two lines, hover for the full text.
+
+### Fixed
+- `app/templates/map_editor.html` — `#me-lairzone-desc` wraps to the Lair group's width instead of overflowing it.
+
+### Schema
+- No schema change (still v99 — editor CSS only).
+
 ## [2.875.0] - 2026-07-03 — "The Chosen Action"
 
 **Schema version:** 99
