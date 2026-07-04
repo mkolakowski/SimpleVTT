@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.887.0] - 2026-07-04 — "The Table Talk"
+
+**Schema version:** 100
+
+**Commit summary:** When the GM ends a session, players now get their own note popout before returning to the lobby.
+
+**Description:** Phase 3 of the session recap (the player side) — completes the feature. When the GM ends a session, the `session_ended` broadcast carries the `session_key`, and each **player** gets a popout (matching the GM's recap dialog) with a textarea to jot their own notes for the session. **Save & Leave** stores the note via `PUT /api/campaign/{id}/session-recap/{session_key}/my-note` (author-scoped) and returns them to the lobby; **Skip** (or Escape) just leaves. A player's note is private to them and the GM (who sees every player's note in the recap); other players never see it. With no `session_key` on the event, players fall back to the old immediate bounce.
+
+### Added
+- `app/static/tabletop.js` — `_showPlayerSessionNote(sessionKey)` (reuses the `_recapModal` builder); the `session_ended` handler opens it for non-GM clients when a `session_key` is present, else bounces as before.
+- `tests/harness_ui/test_session_recap_popout.py` — `test_player_session_note_popout_renders`: the player note popout shows a textarea + Save & Leave + Skip.
+
+### Schema
+- No schema change (still v100 — a player-side UI layer over the v2.885.0 endpoints).
+
 ## [2.886.0] - 2026-07-04 — "The Curtain Call"
 
 **Schema version:** 100

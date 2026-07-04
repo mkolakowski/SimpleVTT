@@ -4708,6 +4708,44 @@
     }
     window._showGmEndSessionRecap = _showGmEndSessionRecap;
 
+    // Player: when the GM ends the session, jot a personal note for it before
+    // heading back to the lobby (saved to their account, per session_key).
+    function _showPlayerSessionNote(sessionKey) {
+        if (typeof CAMPAIGN_ID === 'undefined' || !sessionKey) { location.href = '/'; return; }
+        const intro = document.createElement('p');
+        intro.style.cssText = 'margin:0 0 12px 0; font-size:12px; opacity:0.85; line-height:1.4;';
+        intro.textContent = 'The GM ended the session. Jot down your own notes before you head back to the lobby — they’re saved to your account for this session.';
+        const notes = document.createElement('textarea');
+        notes.rows = 5;
+        notes.maxLength = 50000;
+        notes.placeholder = 'Your notes for this session…';
+        notes.setAttribute('style', 'width:100%; box-sizing:border-box; resize:vertical; min-height:88px;');
+
+        let _saving = false;
+        _recapModal({
+            title: '📝 Session notes',
+            accent: '#8bd17c',
+            bodyEls: [intro, notes],
+            onClose: () => { location.href = '/'; },  // Escape → leave (unsaved)
+            buttons: [
+                { label: 'Skip', style: 'background:rgba(255,255,255,0.05); color:var(--fg);',
+                  onClick: () => { location.href = '/'; } },
+                { label: '💾 Save & Leave', style: 'background:#8bd17c; color:#10131c; font-weight:600;',
+                  onClick: () => {
+                      if (_saving) return; _saving = true;
+                      fetch(`/api/campaign/${CAMPAIGN_ID}/session-recap/${encodeURIComponent(sessionKey)}/my-note`, {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ body: notes.value || '' }),
+                      }).then(() => { location.href = '/'; })
+                        .catch(() => { location.href = '/'; });  // leave anyway on error
+                  } },
+            ],
+        });
+        setTimeout(() => notes.focus(), 30);
+    }
+    window._showPlayerSessionNote = _showPlayerSessionNote;
+
     function _showMovementLockedModal({
         isGm, tokenId, tokenLabel, onMove, onCancel,
     }) {
@@ -5702,8 +5740,16 @@
             // to the lobby (which will show the "Waiting" state). The GM's
             // tab stays put — they can immediately re-Start without losing
             // their setup view.
+            // v2.887.0 — first offer the player a per-session note popout
+            // (they save it, then head to the lobby); Skip/Escape leaves
+            // immediately. Falls back to the plain bounce with no session_key.
             if (msg.type === 'session_ended' && !ME.isGm) {
-                location.href = '/';
+                const _sk = msg.data && msg.data.session_key;
+                if (_sk && window._showPlayerSessionNote) {
+                    window._showPlayerSessionNote(_sk);
+                } else {
+                    location.href = '/';
+                }
                 return;
             }
             // Encounter load swapped the active map under us. The canvas
