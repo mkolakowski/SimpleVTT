@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.878.1] - 2026-07-03 — "The Counted Test"
+
+**Schema version:** 99
+
+**Commit summary:** Sync the test-harness coverage count/note that v2.878.0 missed.
+
+**Description:** Doc-only fix. The v2.878.0 commit added `test_lair_zone_selected_shows_resize_handles` but its coverage-doc update didn't land (a stale version stamp in the edit pattern), leaving the `tests/harness_ui/` count at 225. Corrected to 226 with the note for the resize-handle test.
+
+### Fixed
+- `docs/test-harness-coverage.md` — `tests/harness_ui/` count 225 → 226 + the v2.878.0 resize-handle test note.
+
+### Schema
+- No schema change (still v99 — documentation only).
+
 ## [2.878.0] - 2026-07-03 — "The Reshaped Zone"
 
 **Schema version:** 99
