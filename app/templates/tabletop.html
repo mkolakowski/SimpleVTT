@@ -2682,7 +2682,7 @@
             // players) via the 🎯 canvas-tools button. A targeting aid: shows
             // where a creature's lair actions strike.
             if (lairZonesVisible) lairZones.forEach(function (lz) {
-                var zColor = '#d24b3a';
+                var zColor = lz.color || '#d24b3a';  // v2.877.0 — per-zone colour
                 var zc;
                 if (Array.isArray(lz.points) && lz.points.length >= 3) {
                     zc = document.createElementNS(NS, 'polygon');

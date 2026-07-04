@@ -357,6 +357,16 @@
        two lines; hover shows it all. #}
     <div id="me-lairzone-desc"
          style="width:0;min-width:100%;box-sizing:border-box;font-size:11px;line-height:1.35;color:var(--fg-mute);white-space:normal;overflow-wrap:break-word;word-break:break-word;max-height:2.7em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;cursor:help;"></div>
+    {# v2.877.0 — per-zone colour: a custom picker + quick preset swatches
+       (rendered by JS). Applies to new zones, or live-edits the selected one. #}
+    <label class="me-capsel" title="Zone colour — for new zones, or the selected zone">
+      <span class="me-cap">colour</span>
+      <div class="me-sub" style="gap:4px;">
+        <input type="color" id="me-lairzone-color" value="#d24b3a"
+               style="width:34px;height:32px;min-height:32px;padding:1px;border-radius:6px;cursor:pointer;">
+        <div id="me-lairzone-swatches" style="display:flex;gap:3px;flex-wrap:wrap;flex:1 1 auto;align-items:center;"></div>
+      </div>
+    </label>
   </div>
   {# v2.810.0 — Labels + GM pin tools moved into the Markers group. #}
   <div class="me-group" role="group" aria-label="Tokens">
@@ -1327,7 +1337,7 @@
     // with a 🎯 label + a bound-action count. Interactive in lairzone/erase
     // mode: click selects (mirrors the toolbar label/actions) or deletes.
     if (layers.lairzones) lairZones.forEach(function (lz, i) {
-      var lzColor = '#d24b3a';
+      var lzColor = lz.color || '#d24b3a';  // v2.877.0 — per-zone colour
       var lzPoly = Array.isArray(lz.points) && lz.points.length >= 3;
       var zc;
       if (lzPoly) {
@@ -2670,6 +2680,9 @@
       var aid = (selectedLairZone.actions || [])[0] || '';
       lairZoneActionsEl.value = LAIR_ACTION_BY_ID[aid] ? aid : '';
       _showLairActionDesc(lairZoneActionsEl.value);
+      // v2.877.0 — mirror the selected zone's colour into the picker.
+      var cEl = document.getElementById('me-lairzone-color');
+      if (cEl) cEl.value = selectedLairZone.color || '#d24b3a';
     }
   }
   if (lairZoneBtn) lairZoneBtn.addEventListener('click', function () { setMode(lairZoneMode ? null : 'lairzone'); });
@@ -2690,6 +2703,31 @@
       selectedLairZone.label = a ? a.name : '';
       saveLairZones();
     }
+  });
+  // v2.877.0 — per-zone colour: a custom picker + quick preset swatches.
+  var LAIR_ZONE_DEFAULT_COLOR = '#d24b3a';
+  var LAIR_ZONE_PRESETS = ['#d24b3a', '#e0872a', '#e6c619', '#4b9b3a', '#3b8ea5', '#7a5bd0'];
+  var lairZoneColorEl = document.getElementById('me-lairzone-color');
+  var lairZoneSwatchesEl = document.getElementById('me-lairzone-swatches');
+  function _currentZoneColor() {
+    return (lairZoneColorEl && lairZoneColorEl.value) || LAIR_ZONE_DEFAULT_COLOR;
+  }
+  function _applyZoneColor(hex) {
+    if (lairZoneColorEl && hex) lairZoneColorEl.value = hex;
+    if (selectedLairZone) { selectedLairZone.color = hex; saveLairZones(); }
+  }
+  if (lairZoneColorEl) lairZoneColorEl.addEventListener('input', function () {
+    if (selectedLairZone) { selectedLairZone.color = lairZoneColorEl.value; saveLairZones(); }
+  });
+  if (lairZoneSwatchesEl) LAIR_ZONE_PRESETS.forEach(function (hex) {
+    var s = document.createElement('button');
+    s.type = 'button'; s.title = hex; s.className = 'me-lz-swatch';
+    // 32px-tall clickable chip — the compact-panel touch-target floor per
+    // CLAUDE.md (a colour palette is a deliberately dense control).
+    s.style.cssText = 'width:26px;height:32px;min-height:32px;padding:0;border-radius:4px;'
+      + 'border:1px solid rgba(255,255,255,0.35);cursor:pointer;background:' + hex + ';';
+    s.addEventListener('click', function () { _applyZoneColor(hex); });
+    lairZoneSwatchesEl.appendChild(s);
   });
   var spotBtn = document.getElementById('me-spot-btn');
   var snapBtn = document.getElementById('me-snap-btn');
@@ -3173,10 +3211,11 @@
       var lzx = Math.min(lz.sx, lz.cx), lzy = Math.min(lz.sy, lz.cy);
       var lzw = Math.abs(lz.cx - lz.sx), lzh = Math.abs(lz.cy - lz.sy);
       // v2.875.0 — new zones bind to the dropdown's selected lair action; its
-      // name is the zone label.
+      // name is the zone label. v2.877.0 — + the current colour.
       var _sa = _selectedLairAction();
       var _lbl = _sa ? _sa.name : '';
       var _acts = _sa ? [_sa.id] : [];
+      var _col = _currentZoneColor();
       if (lairZonePolyOn) {
         var lzclose = Math.max(14, (gridPx || 70) * 0.35);
         if (lairZoneDots.length >= 3
@@ -3187,7 +3226,7 @@
           var zw = Math.max.apply(null, zxs) - zx0, zh = Math.max.apply(null, zys) - zy0;
           if (zw > 6 && zh > 6) {
             lairZones.push({ id: 'lz' + Date.now() + '_' + (seq++),
-              x: zx0, y: zy0, w: zw, h: zh, points: lairZoneDots, label: _lbl, actions: _acts });
+              x: zx0, y: zy0, w: zw, h: zh, points: lairZoneDots, label: _lbl, actions: _acts, color: _col });
             lairZoneDots = []; setStatus(''); saveLairZones();
           } else { lairZoneDots = []; render(); }
         } else {
@@ -3198,7 +3237,7 @@
         }
       } else if (lzw > 6 && lzh > 6) {
         lairZones.push({ id: 'lz' + Date.now() + '_' + (seq++),
-          x: lzx, y: lzy, w: lzw, h: lzh, label: _lbl, actions: _acts });
+          x: lzx, y: lzy, w: lzw, h: lzh, label: _lbl, actions: _acts, color: _col });
         lairZoneDots = []; saveLairZones();
       } else { render(); }
       return;

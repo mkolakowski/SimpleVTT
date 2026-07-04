@@ -25,7 +25,8 @@ async def test_set_and_get_lair_zones(gm_client, gm_ws):
     mid = await _active_map_id(gm_client)
     zones = [
         {"x": 200, "y": 220, "w": 160, "h": 90, "label": "Magma vent",
-         "actions": ["magma-erupts", "tremor"]},
+         "actions": ["magma-erupts", "tremor"], "color": "#3B8EA5",
+         "bad_color": "not-a-hex"},
         {"x": 5, "y": 5, "w": 0, "h": 40, "label": "bad"},  # dropped — zero width
     ]
     try:
@@ -38,6 +39,10 @@ async def test_set_and_get_lair_zones(gm_client, gm_ws):
         assert lz[0]["label"] == "Magma vent"
         assert lz[0]["actions"] == ["magma-erupts", "tremor"]
         assert lz[0]["w"] == 160.0 and lz[0]["id"]
+        # v2.877.0 — a valid #rrggbb colour round-trips (lowercased); the bad
+        # one is dropped, and a stray field never leaks through.
+        assert lz[0]["color"] == "#3b8ea5"
+        assert "bad_color" not in lz[0]
 
         msg = await gm_ws.wait_for("lair_zones_update")
         assert msg["data"]["map_id"] == mid

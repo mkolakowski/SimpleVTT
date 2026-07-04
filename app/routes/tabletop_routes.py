@@ -124847,6 +124847,11 @@ def _sanitize_lair_zones(raw) -> list:
             "x": x, "y": y, "w": w, "h": h,
             "label": label, "actions": actions,
         }
+        # v2.877.0 — optional per-zone colour (a #rrggbb hex; default applied
+        # client-side). Kept short + validated so it's safe to inline as SVG.
+        col = str(r.get("color") or "").strip()
+        if _re.fullmatch(r"#[0-9a-fA-F]{6}", col):
+            rec["color"] = col.lower()
         if points is not None:
             rec["points"] = points
         out.append(rec)

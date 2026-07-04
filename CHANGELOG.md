@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.877.0] - 2026-07-03 — "The Coloured Zone"
+
+**Schema version:** 99
+
+**Commit summary:** Lair zones get a per-zone colour — a custom picker plus quick preset swatches.
+
+**Description:** Lair zones are no longer locked to crimson. Each zone carries an optional **`color`** (a validated `#rrggbb`); the Lair editor group gains a **colour picker** plus a row of **preset swatches** (crimson / amber / gold / green / teal / violet). The colour applies to new zones and live-edits the selected one, and both the editor preview and the tabletop overlay render each zone in its own colour. Selecting a zone loads its colour into the picker (alongside its action). Zones without a colour fall back to the crimson default.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_sanitize_lair_zones` accepts a validated `color`.
+- `app/templates/map_editor.html` — Lair group colour picker (`#me-lairzone-color`) + preset swatches; new/selected zones carry the colour; editor render uses it.
+- `app/templates/tabletop.html` — the zone overlay renders in each zone's colour.
+
+### Schema
+- No schema change (still v99 — `color` is an optional field on the existing `lair_zones` shape).
+
 ## [2.876.0] - 2026-07-03 — "The Handled Zone"
 
 **Schema version:** 99
