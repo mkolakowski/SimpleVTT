@@ -4606,6 +4606,108 @@
      *     move" action here.
      * Mirrors the _showGmOverRangeModal glass-card recipe so the two
      * movement prompts read as a family. */
+    // v2.886.0 — session-recap popouts. A shared glass-card modal builder
+    // (same house style as _showMovementLockedModal) used by both the GM's
+    // end-session recap and the players' per-session note.
+    function _recapModal({ title, accent, bodyEls, buttons, onClose }) {
+        const backdrop = document.createElement('div');
+        backdrop.setAttribute('style', [
+            'position:fixed', 'inset:0', 'background:rgba(0,0,0,0.5)',
+            'z-index:2147483600', 'display:flex', 'align-items:center',
+            'justify-content:center', 'padding:16px',
+            'animation:reactionPopIn 180ms ease-out',
+        ].join(';'));
+        backdrop.setAttribute('role', 'dialog');
+        backdrop.setAttribute('aria-label', title);
+
+        const card = document.createElement('div');
+        card.setAttribute('style', [
+            'background:color-mix(in srgb, var(--bg, #1f2433) 90%, transparent)',
+            'backdrop-filter:blur(10px)', '-webkit-backdrop-filter:blur(10px)',
+            'border:1px solid var(--border, rgba(255,255,255,0.18))',
+            'border-left:4px solid ' + (accent || 'var(--accent, #6cb4ff)'),
+            'border-radius:10px', 'padding:18px 20px', 'color:var(--fg, #fff)',
+            'font-size:13px', 'max-width:460px', 'width:100%',
+            'box-shadow:0 10px 36px rgba(0,0,0,0.55)',
+        ].join(';'));
+
+        const header = document.createElement('div');
+        header.style.cssText = 'font-size:15px; font-weight:600; margin-bottom:10px;';
+        header.textContent = title;
+        card.appendChild(header);
+        (bodyEls || []).forEach(el => card.appendChild(el));
+
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex; gap:8px; justify-content:flex-end; margin-top:14px;';
+        function _close() { backdrop.remove(); if (onClose) onClose(); }
+        (buttons || []).forEach(spec => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = spec.label;
+            b.setAttribute('style', [
+                'min-height:44px', 'padding:6px 16px', 'border-radius:6px',
+                'cursor:pointer', 'font-size:13px',
+                'border:1px solid var(--border, rgba(255,255,255,0.22))',
+            ].join(';') + ';' + (spec.style || ''));
+            b.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                if (spec.onClick) spec.onClick();  // handler decides whether to close/navigate
+                else backdrop.remove();
+            });
+            btnRow.appendChild(b);
+        });
+        card.appendChild(btnRow);
+        backdrop.appendChild(card);
+        // Escape closes (as the non-destructive default). Backdrop click is
+        // intentionally NOT wired — the recap is a deliberate step, not a
+        // throwaway toast, so a stray click shouldn't lose typed notes.
+        function _onKey(e) { if (e.key === 'Escape') { document.removeEventListener('keydown', _onKey); _close(); } }
+        document.addEventListener('keydown', _onKey);
+        document.body.appendChild(backdrop);
+        return { backdrop, close: () => { document.removeEventListener('keydown', _onKey); _close(); } };
+    }
+
+    // GM: on End Session, name the session + jot GM-only notes, then end it.
+    function _showGmEndSessionRecap() {
+        if (typeof CAMPAIGN_ID === 'undefined') { location.href = '/'; return; }
+        const intro = document.createElement('p');
+        intro.style.cssText = 'margin:0 0 12px 0; font-size:12px; opacity:0.85; line-height:1.4;';
+        intro.textContent = 'Wrap up this session. Give it a name and jot any GM-only notes — players will get their own note box before they return to the lobby.';
+        const nick = document.createElement('input');
+        nick.type = 'text';
+        nick.maxLength = 200;
+        nick.placeholder = 'Session name (e.g. "The Goblin Ambush")';
+        nick.setAttribute('style', 'width:100%; box-sizing:border-box; margin-bottom:10px;');
+        const notes = document.createElement('textarea');
+        notes.rows = 5;
+        notes.maxLength = 50000;
+        notes.placeholder = 'GM-only notes (what happened, threads to follow up)…';
+        notes.setAttribute('style', 'width:100%; box-sizing:border-box; resize:vertical; min-height:88px;');
+
+        let _ending = false;
+        const modal = _recapModal({
+            title: '⏹ End session',
+            accent: 'var(--accent, #6cb4ff)',
+            bodyEls: [intro, nick, notes],
+            buttons: [
+                { label: 'Cancel', style: 'background:rgba(255,255,255,0.05); color:var(--fg);',
+                  onClick: () => modal.close() },
+                { label: '⏹ End Session', style: 'background:var(--accent, #6cb4ff); color:#10131c; font-weight:600;',
+                  onClick: () => {
+                      if (_ending) return; _ending = true;
+                      fetch(`/campaign/${CAMPAIGN_ID}/session/end`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                          body: JSON.stringify({ nickname: nick.value || '', gm_notes: notes.value || '' }),
+                      }).then(() => { location.href = '/'; })
+                        .catch(() => { location.href = '/'; });  // leave anyway on error
+                  } },
+            ],
+        });
+        setTimeout(() => nick.focus(), 30);
+    }
+    window._showGmEndSessionRecap = _showGmEndSessionRecap;
+
     function _showMovementLockedModal({
         isGm, tokenId, tokenLabel, onMove, onCancel,
     }) {

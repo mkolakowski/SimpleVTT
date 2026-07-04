@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.886.0] - 2026-07-04 — "The Curtain Call"
+
+**Schema version:** 100
+
+**Commit summary:** The GM's End Session button now opens a recap popout to name the session + jot GM-only notes before ending it.
+
+**Description:** Phase 2 of the session recap (the GM side). Clicking **⏹ End Session** in the GM drawer's "⚡ Session" group no longer ends the session immediately — it opens a glass-card popout (matching the house modal style) with a **session-name** field and a **GM-only notes** textarea. Confirming posts them to `POST /campaign/{id}/session/end` (the JSON contract from v2.885.0), which stamps the recap and ends the session, then returns the GM to the lobby. Cancel/Escape dismisses without ending. The plain form POST remains as a no-JS fallback (ends without a recap). Players' own note popout follows in Phase 3.
+
+### Added
+- `app/static/tabletop.js` — `_recapModal(...)` shared glass-card modal builder + `_showGmEndSessionRecap()` (nickname + GM-notes fields, `fetch`es `/session/end` with the JSON contract, redirects to the lobby); exposed as `window._showGmEndSessionRecap`.
+- `app/templates/tabletop.html` — the End Session form intercepts submit to open the recap popout (no-JS form POST fallback retained).
+- `tests/harness_ui/test_session_recap_popout.py` — the GM recap popout renders a nickname input + GM-notes textarea + End Session button, and Cancel dismisses it.
+
+### Schema
+- No schema change (still v100 — a GM-side UI layer over the v2.885.0 endpoints).
+
 ## [2.885.0] - 2026-07-04 — "The Session Ledger"
 
 **Schema version:** 100

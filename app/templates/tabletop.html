@@ -5060,10 +5060,25 @@
             <div style="background:linear-gradient(135deg,color-mix(in srgb, var(--accent) 13%, transparent),color-mix(in srgb, var(--accent) 8%, transparent));border-bottom:2px solid var(--accent);padding:5px 10px;font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">⚡ Session</div>
             <div style="padding:8px 10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
                 {% if campaign.session_active %}
-                <form method="post" action="/campaign/{{ campaign.id }}/session/end" style="display:contents;">
-                    <button type="submit" title="End session and return players to the lobby" style="flex:1;font-size:12px;">⏹ End Session</button>
+                {# v2.886.0 — End Session opens the GM recap popout (name the
+                   session + GM-only notes) via JS, then ends it. The plain
+                   form POST stays as a no-JS fallback (ends without a recap). #}
+                <form method="post" action="/campaign/{{ campaign.id }}/session/end" id="end-session-form" style="display:contents;">
+                    <button type="submit" id="end-session-btn" title="End session and return players to the lobby" style="flex:1;font-size:12px;">⏹ End Session</button>
                 </form>
                 <span style="font-size:10px;color:var(--accent);white-space:nowrap;">● Live</span>
+                <script>
+                    (function () {
+                        var f = document.getElementById('end-session-form');
+                        if (!f) return;
+                        f.addEventListener('submit', function (e) {
+                            if (window._showGmEndSessionRecap) {
+                                e.preventDefault();
+                                window._showGmEndSessionRecap();
+                            }
+                        });
+                    })();
+                </script>
                 {% else %}
                 <form method="post" action="/campaign/{{ campaign.id }}/session/start" style="display:contents;">
                     <button type="submit" title="Open the tabletop to players" style="flex:1;font-size:12px;">▶ Start Session</button>
