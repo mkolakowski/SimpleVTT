@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.872.0] - 2026-07-03 — "The Struck Zone"
+
+**Schema version:** 99
+
+**Commit summary:** Triggering a lair action bound to a zone auto-targets the tokens inside it — no manual picking.
+
+**Description:** Phase 4 (final) of the lair-action layer, closing the loop the whole feature was for: **targeting**. When the GM triggers a lair action — from the Battle-drawer panel or the mini-sheet strip — the client checks whether any placed zone is **bound to that action** (its `actions` list contains the id). If so, it **reveals the zone overlay and targets every token whose centre falls inside the zone automatically** (resolving each to its combatant id, with a `tok:<id>` fallback), then fires `/trigger_lair_action` with those targets and a "🎯 Targeting N in &lt;zone&gt;" toast — skipping the manual multi-target picker entirely. Actions with **no** bound zone fall back to the picker exactly as before. The geometry (point-in-rect / ray-cast point-in-polygon) + token→combatant resolution live in `_lairZoneTargetsForAction` (tabletop.js, where the token array lives), reading the zones from tabletop.html via `window._getLairZones()`.
+
+### Added
+- `app/static/tabletop.js` — `_lairZoneTargetsForAction(actionId)` (+ `_pointInLairZone`): returns the in-zone target ids for a bound action, or null to fall back to the picker.
+- `app/templates/tabletop.html` — both lair-action trigger handlers (panel `._lair_trigger_btn` + mini-sheet `.lair-act-btn`) prefer zone targeting; `window._getLairZones` / `window._revealLairZones` bridges.
+- `tests/harness_ui/test_lair_zone_targeting.py` — a token inside a bound zone resolves to its combatant id; an unbound action returns null (picker fallback).
+
+### Schema
+- No schema change (still v99 — client targeting on the Phase-1 data).
+
 ## [2.871.0] - 2026-07-03 — "The Revealed Zone"
 
 **Schema version:** 99

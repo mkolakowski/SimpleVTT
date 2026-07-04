@@ -1880,6 +1880,53 @@
     window.__tokenRadiusForTest = (t) => _tokenRadius(t || { size: 1 });
     window.__camScaleForTest = () => _camScale;
     window.__tokenMinScreenPx = TOKEN_MIN_SCREEN_PX;
+
+    // v2.872.0 — zone-driven lair-action targeting. Lives here (not in
+    // tabletop.html) so it can read the ``tokens`` array + ``gridSize``; the
+    // zones come from tabletop.html via window._getLairZones(). Given a
+    // lair-action id, if any placed zone is bound to it, return the target ids
+    // of every visible token whose centre falls inside those zones (a combatant
+    // id, else a ``tok:<id>`` fallback — mirroring the multi-target picker's
+    // resolver). Returns null when NO zone is bound → the caller falls back to
+    // the manual target picker.
+    function _pointInLairZone(px, py, lz) {
+        if (Array.isArray(lz.points) && lz.points.length >= 3) {
+            let inside = false;
+            const pts = lz.points;
+            for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+                const xi = pts[i][0], yi = pts[i][1], xj = pts[j][0], yj = pts[j][1];
+                if (((yi > py) !== (yj > py))
+                        && (px < (xj - xi) * (py - yi) / ((yj - yi) || 1e-9) + xi)) inside = !inside;
+            }
+            return inside;
+        }
+        return px >= lz.x && px <= lz.x + lz.w && py >= lz.y && py <= lz.y + lz.h;
+    }
+    window._lairZoneTargetsForAction = function (actionId) {
+        const aid = String(actionId || '');
+        const zones = (typeof window._getLairZones === 'function') ? (window._getLairZones() || []) : [];
+        const matched = zones.filter(lz => (lz.actions || []).some(a => String(a) === aid));
+        if (!matched.length) return null;
+        const combs = (window.battle && window.battle.combatants) || [];
+        const resolveC = (t) => {
+            for (const c of combs) {
+                if (c.source_token_id != null && c.source_token_id === t.id) return c;
+                if (t.character_id && c.char_id === t.character_id) return c;
+                if (t.token_template_id && c.token_template_id === t.token_template_id
+                        && c.name === t.label) return c;
+            }
+            return null;
+        };
+        const ids = [];
+        (tokens || []).forEach(t => {
+            if (_isTokenHiddenFromMe(t)) return;
+            const cx = t.x + gridSize / 2, cy = t.y + gridSize / 2;
+            if (!matched.some(lz => _pointInLairZone(cx, cy, lz))) return;
+            const c = resolveC(t);
+            ids.push(c && c.id ? c.id : ('tok:' + t.id));
+        });
+        return { ids, zones: matched };
+    };
     function drawToken(t) {
         if (_isTokenHiddenFromMe(t)) return;
         const cx = t.x + gridSize / 2;

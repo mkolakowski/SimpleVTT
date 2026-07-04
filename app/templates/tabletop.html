@@ -2995,6 +2995,13 @@
             render();
         }
         window.toggleLairZones = toggleLairZones;
+        window._revealLairZones = function () {
+            lairZonesVisible = true; _syncLairZonesBtn(); render();
+        };
+        // v2.872.0 — expose the zones so the zone-targeting helper (defined in
+        // tabletop.js, where the ``tokens`` array + gridSize live) can read
+        // them across the script boundary.
+        window._getLairZones = function () { return lairZones || []; };
         // v2.858.0 — GM reveal-terrain toggle: the flag + live update + a GM
         // Tools button. Terrain is hidden from players until the GM reveals it.
         window._onTerrainVisibilityUpdate = function (data) {
@@ -9374,8 +9381,19 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             const c = battle.combatants[idx];
             if (!c || !c.id) return;
             const actionName = btn.dataset.actionName || 'Lair action';
+            const actionId = btn.dataset.actionId || '';
             let targetIds = [];
-            if (typeof window.vttOpenMultiTargetPicker === 'function') {
+            // v2.872.0 — if a lair zone is bound to this action, target the
+            // tokens inside it automatically (revealing the zone); otherwise
+            // fall back to the manual target picker.
+            const _zt = window._lairZoneTargetsForAction && window._lairZoneTargetsForAction(actionId);
+            if (_zt) {
+                targetIds = _zt.ids;
+                if (window._revealLairZones) window._revealLairZones();
+                const _zl = _zt.zones.map(z => z.label).filter(Boolean).join(', ') || 'the lair zone';
+                (window.showToast || function (m) { console.log(m); })(
+                    `🎯 Targeting ${targetIds.length} in ${_zl}.`, 'info');
+            } else if (typeof window.vttOpenMultiTargetPicker === 'function') {
                 const picked = await window.vttOpenMultiTargetPicker({
                     required: 12, spellName: actionName, casterCombatantId: c.id,
                 });
@@ -11411,7 +11429,16 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 const actionId = btn.getAttribute('data-action-id') || '';
                 const actionName = btn.getAttribute('data-action-name') || 'Lair action';
                 let targetIds = [];
-                if (typeof window.vttOpenMultiTargetPicker === 'function') {
+                // v2.872.0 — a bound lair zone drives targeting (reveal it +
+                // target the tokens inside); else fall back to the picker.
+                const _zt = window._lairZoneTargetsForAction && window._lairZoneTargetsForAction(actionId);
+                if (_zt) {
+                    targetIds = _zt.ids;
+                    if (window._revealLairZones) window._revealLairZones();
+                    const _zl = _zt.zones.map(z => z.label).filter(Boolean).join(', ') || 'the lair zone';
+                    (window.showToast || function (m) { console.log(m); })(
+                        '🎯 Targeting ' + targetIds.length + ' in ' + _zl + '.', 'info');
+                } else if (typeof window.vttOpenMultiTargetPicker === 'function') {
                     const picked = await window.vttOpenMultiTargetPicker({
                         required: 12,
                         spellName: actionName,
