@@ -26,7 +26,11 @@ def test_place_label(gm_page: Page) -> None:
             lbl = gm_page.locator("#me-overlay text.me-label")
             assert lbl.count() == 1
             assert lbl.first.text_content() == "The Vault"
-            # Hiding the Labels layer removes it.
+            # Hiding the Labels layer removes it. v2.880.0 — the layer toggles
+            # live in a dropdown; open it to reach the checkbox.
+            if gm_page.eval_on_selector(".me-layers-dd", "el => !el.open"):
+                gm_page.locator(".me-layers-dd > summary").click()
+                gm_page.wait_for_timeout(120)
             gm_page.uncheck("#me-layer-labels")
             gm_page.wait_for_timeout(200)
             assert gm_page.locator("#me-overlay text.me-label").count() == 0

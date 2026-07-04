@@ -82,7 +82,8 @@
   /* Only the actual controls capture pointer input; the bar + group-card gaps
      pass presses through to the map behind. */
   .me-toolbar button, .me-toolbar select, .me-toolbar input,
-  .me-toolbar label, .me-grp-lbl, .me-zone-lbl { pointer-events:auto; }
+  .me-toolbar label, .me-grp-lbl, .me-zone-lbl,
+  .me-toolbar summary { pointer-events:auto; }  /* v2.880.0 — Layers dropdown */
   .me-toolbar label { font-size:12px; color:var(--fg-mute); display:inline-flex;
     align-items:center; gap:4px; }
   /* small buttons: tight padding; min-height at the 32px dense-panel floor */
@@ -120,12 +121,26 @@
   .me-group.me-collapsed > *:not(.me-grp-lbl) { display:none !important; }
   .me-group > label { justify-content:center; }
   /* v2.814.0 — Layers checkboxes as a uniform 2-column grid (aligned rows). */
-  /* v2.874.0 — single top-to-bottom column (was a 2-col grid). v2.875.0 —
-     capped + internally scrollable so the tall list doesn't grow the floating
-     toolbar (which the map fits below), which would shrink the editor map. */
-  .me-layers-grid { display:flex; flex-direction:column; row-gap:2px;
-    max-height:150px; overflow-y:auto; padding-right:2px; }
-  .me-layers-grid > label { justify-content:flex-start; white-space:nowrap;
+  /* v2.874.0 — single top-to-bottom column (was a 2-col grid). v2.880.0 — the
+     column lives inside a <details> dropdown (below), so the toolbar stays
+     compact until the GM opens it. */
+  .me-layers-grid { display:flex; flex-direction:column; row-gap:2px; }
+  /* v2.880.0 — Layers dropdown: a compact summary button that reveals the
+     checkbox column top-to-bottom when opened. */
+  .me-layers-dd > summary { list-style:none; cursor:pointer; display:flex;
+    align-items:center; justify-content:space-between; gap:6px;
+    -webkit-user-select:none; user-select:none; touch-action:manipulation; }
+  .me-layers-dd > summary::-webkit-details-marker { display:none; }
+  .me-layers-dd > summary::marker { content:''; }
+  .me-layers-chev { font-size:9px; opacity:.75; transition:transform .15s; }
+  .me-layers-dd[open] .me-layers-chev { transform:rotate(180deg); }
+  /* Hidden until opened — an explicit display:flex would otherwise override
+     the browser's default collapsing of closed <details> content. */
+  .me-layers-panel { display:none; flex-direction:column; gap:3px; margin-top:4px;
+    max-height:60vh; overflow-y:auto; }
+  .me-layers-dd[open] > .me-layers-panel { display:flex; }
+  .me-layers-grid > label { display:flex; flex-direction:row; align-items:center;
+    gap:5px; justify-content:flex-start; white-space:nowrap;
     font-size:12px; }
   /* a sub-row that keeps several controls together on one line */
   .me-sub { display:flex; align-items:center; gap:4px; }
@@ -402,21 +417,30 @@
   {# v2.790.3 — per-layer visibility (authoring only; saved locally). #}
   <div class="me-group" role="group" aria-label="Layers">
     <span class="me-grp-lbl">Layers</span>
-    {# v2.818.0 — one click hides/shows every overlay (isolate the bare map). #}
-    <button type="button" id="me-layers-toggle" class="me-tool-btn" style="font-size:11px;"
-            title="Show or hide every overlay at once — handy for eyeballing the bare map image (tip: shift-click a layer below to show only that one)">👁 All / None</button>
-    {# v2.814.0 — uniform 2-column checkbox grid. #}
-    <div class="me-layers-grid">
-      <label style="gap:4px;"><input type="checkbox" id="me-layer-walls" checked> 🧱 Walls</label>
-      <label style="gap:4px;"><input type="checkbox" id="me-layer-terrain" checked> ⛰️ Terrain</label>
-      <label style="gap:4px;"><input type="checkbox" id="me-layer-lights" checked> 💡 Lights</label>
-      <label style="gap:4px;"><input type="checkbox" id="me-layer-hotspots" checked> 📍 Hotspots</label>
-      <label style="gap:4px;"><input type="checkbox" id="me-layer-fog" checked> 🌫️ Fog</label>
-      <label style="gap:4px;"><input type="checkbox" id="me-layer-gmpins" checked> 📌 Pins</label>
-      <label style="gap:4px;"><input type="checkbox" id="me-layer-labels" checked> 🔤 Labels</label>
-      <label style="gap:4px;"><input type="checkbox" id="me-layer-lairzones" checked> 🎯 Lair zones</label>
-      <label style="gap:4px;"><input type="checkbox" id="me-layer-tokens" checked> 🔵 Tokens</label>
-    </div>
+    {# v2.880.0 — the layer toggles live in a dropdown: a compact summary button
+       that reveals the checkbox column (top-to-bottom) when opened, so the
+       toolbar stays short by default. #}
+    <details class="me-layers-dd">
+      <summary class="me-tool-btn" title="Show / hide individual map layers">
+        <span>👁 Layers</span><span class="me-layers-chev">▾</span>
+      </summary>
+      <div class="me-layers-panel">
+        {# v2.818.0 — one click hides/shows every overlay (isolate the bare map). #}
+        <button type="button" id="me-layers-toggle" class="me-tool-btn" style="font-size:11px;"
+                title="Show or hide every overlay at once — handy for eyeballing the bare map image (tip: shift-click a layer below to show only that one)">👁 All / None</button>
+        <div class="me-layers-grid">
+          <label style="gap:4px;"><input type="checkbox" id="me-layer-walls" checked> 🧱 Walls</label>
+          <label style="gap:4px;"><input type="checkbox" id="me-layer-terrain" checked> ⛰️ Terrain</label>
+          <label style="gap:4px;"><input type="checkbox" id="me-layer-lights" checked> 💡 Lights</label>
+          <label style="gap:4px;"><input type="checkbox" id="me-layer-hotspots" checked> 📍 Hotspots</label>
+          <label style="gap:4px;"><input type="checkbox" id="me-layer-fog" checked> 🌫️ Fog</label>
+          <label style="gap:4px;"><input type="checkbox" id="me-layer-gmpins" checked> 📌 Pins</label>
+          <label style="gap:4px;"><input type="checkbox" id="me-layer-labels" checked> 🔤 Labels</label>
+          <label style="gap:4px;"><input type="checkbox" id="me-layer-lairzones" checked> 🎯 Lair zones</label>
+          <label style="gap:4px;"><input type="checkbox" id="me-layer-tokens" checked> 🔵 Tokens</label>
+        </div>
+      </div>
+    </details>
   </div>
   <div class="me-group me-group--stack" role="group" aria-label="View">
     <span class="me-grp-lbl">View</span>

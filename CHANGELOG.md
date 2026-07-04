@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.880.0] - 2026-07-03 — "The Layer Menu"
+
+**Schema version:** 99
+
+**Commit summary:** The map editor's Layers panel becomes a dropdown of checkboxes.
+
+**Description:** Per request, the always-visible column of layer-visibility checkboxes is now a **dropdown**: a compact **👁 Layers ▾** summary button that, when clicked, reveals the checkbox list top-to-bottom (each layer's 🧱/⛰️/💡/… select box, plus the **All / None** toggle). Collapsed by default, so the floating toolbar stays short — which also gives the editor map more room on load. All the checkbox ids + the All/None + shift-click-to-solo wiring are unchanged.
+
+### Changed
+- `app/templates/map_editor.html` — the Layers group wraps its All/None button + checkbox column in a `<details class="me-layers-dd">` dropdown (summary + rotating chevron); the `.me-layers-grid` height cap is dropped (the dropdown holds the full list).
+
+### Schema
+- No schema change (still v99 — editor layout only).
+
 ## [2.879.0] - 2026-07-03 — "The Tidy Lair"
 
 **Schema version:** 99
