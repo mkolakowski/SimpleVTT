@@ -1141,6 +1141,70 @@ class CampaignNote(Base):
     )
 
 
+class SessionRecap(Base):
+    """A GM's end-of-session recap (v2.885.0, schema v100).
+
+    Created when the GM ends a session: a short ``nickname`` for the
+    session ("The Goblin Ambush") plus GM-only ``gm_notes``. Keyed by
+    ``(campaign_id, session_key)`` where ``session_key`` is the session
+    bucket from ``_session_key_for_campaign`` (the session's
+    ``session_started_at``), the same key the stat-event log uses — so a
+    recap lines up with the events of that session. Players attach their
+    own notes via ``SessionRecapPlayerNote``.
+    """
+    __tablename__ = "session_recaps"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="CASCADE"), index=True,
+    )
+    session_key: Mapped[str] = mapped_column(String(64), index=True)
+    nickname: Mapped[str] = mapped_column(
+        String(200), default="", server_default="",
+    )
+    gm_notes: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )
+    __table_args__ = (
+        UniqueConstraint(
+            "campaign_id", "session_key", name="uq_session_recap_campaign_key",
+        ),
+    )
+
+
+class SessionRecapPlayerNote(Base):
+    """One player's personal note for a session recap (v2.885.0, schema
+    v100). Author-scoped: a player only ever reads/writes their own row.
+    Unique per ``(campaign_id, session_key, author_user_id)``."""
+    __tablename__ = "session_recap_player_notes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="CASCADE"), index=True,
+    )
+    session_key: Mapped[str] = mapped_column(String(64), index=True)
+    author_user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True,
+    )
+    body: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )
+    __table_args__ = (
+        UniqueConstraint(
+            "campaign_id", "session_key", "author_user_id",
+            name="uq_session_recap_note_author",
+        ),
+    )
+
+
 class Handout(Base):
     """A GM-authored handout that can be revealed to the table (v2.555.0,
     schema v73). See ``docs/plans/notes-and-handouts.md`` Phase 2.

@@ -1169,6 +1169,16 @@ def _apply_inline_migrations() -> None:
                 "ALTER TABLE maps ADD COLUMN lair_zones JSON NOT NULL DEFAULT '[]'"
             ))
 
+    # ---- Schema v100 (2.885.0): session_recaps + session_recap_player_notes ----
+    # End-of-session recap: a GM nickname + GM-only notes per session, plus
+    # each player's own note, keyed by (campaign_id, session_key). New tables;
+    # ``Base.metadata.create_all`` creates them on fresh DBs, this explicit
+    # create(checkfirst) covers existing DBs. See models.SessionRecap /
+    # SessionRecapPlayerNote.
+    from .models import SessionRecap, SessionRecapPlayerNote
+    SessionRecap.__table__.create(bind=engine, checkfirst=True)
+    SessionRecapPlayerNote.__table__.create(bind=engine, checkfirst=True)
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

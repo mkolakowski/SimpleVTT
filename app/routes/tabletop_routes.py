@@ -17340,12 +17340,21 @@ async def start_session(
 @router.post("/campaign/{campaign_id}/session/end")
 async def end_session(
     campaign_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
     """GM (or admin) closes the tabletop. Players in the tabletop will be
     bounced back to the lobby; new players hitting the URL get the
     waiting page until the GM Starts again.
+
+    v2.885.0 — ending a session also stamps a **session recap** row keyed
+    by the session bucket (``_session_key_for_campaign``), optionally with
+    the GM's nickname + notes (JSON body ``{nickname, gm_notes}``), and
+    broadcasts the ``session_key`` on ``session_ended`` so players can open
+    their own recap-note popout before they're bounced. A form POST still
+    gets a redirect; a ``fetch`` with ``Accept: application/json`` gets the
+    session_key back as JSON.
 
     Audio auto-stop: any audio still playing is stopped for everyone via
     the same path as the manual ``/audio/stop`` button.
@@ -17355,9 +17364,49 @@ async def end_session(
         raise HTTPException(404, "Campaign not found")
     if not _user_is_gm(user, campaign, db):
         raise HTTPException(403, "GM only")
+
+    # Capture the session bucket BEFORE flipping the flag (session_started_at
+    # is preserved across end, so the key is stable either way).
+    session_key = _session_key_for_campaign(db, campaign_id)
+
+    # Optional recap payload from a JSON fetch (a plain form POST has none).
+    nickname = ""
+    gm_notes = ""
+    wants_json = "application/json" in (request.headers.get("accept", "") or "")
+    try:
+        if "application/json" in (request.headers.get("content-type", "") or ""):
+            _body = await request.json()
+            nickname = str(_body.get("nickname", "") or "")[:200]
+            gm_notes = str(_body.get("gm_notes", "") or "")[:50_000]
+    except Exception:
+        pass
+
     campaign.session_active = False
+
+    # Upsert the recap row for this session so the GM's popout + players'
+    # note popouts all have a stable key to attach to.
+    from ..models import SessionRecap
+    recap = (
+        db.query(SessionRecap)
+        .filter(
+            SessionRecap.campaign_id == campaign_id,
+            SessionRecap.session_key == session_key,
+        )
+        .first()
+    )
+    if recap is None:
+        recap = SessionRecap(campaign_id=campaign_id, session_key=session_key)
+        db.add(recap)
+    if nickname:
+        recap.nickname = nickname
+    if gm_notes:
+        recap.gm_notes = gm_notes
     db.commit()
-    await hub.broadcast(campaign_id, {"type": "session_ended", "data": {}})
+
+    await hub.broadcast(
+        campaign_id,
+        {"type": "session_ended", "data": {"recap": True, "session_key": session_key}},
+    )
 
     # Stop any audio that's still playing. Idempotent — safe when nothing
     # is currently playing. ``reason='session_end'`` labels the in-flight
@@ -17369,6 +17418,8 @@ async def end_session(
         except Exception as exc:
             log.warning("Auto-stop audio failed for campaign %s: %s", campaign_id, exc)
 
+    if wants_json:
+        return JSONResponse({"ok": True, "session_key": session_key})
     return RedirectResponse("/", status_code=303)
 
 

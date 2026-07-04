@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.885.0] - 2026-07-04 — "The Session Ledger"
+
+**Schema version:** 100
+
+**Commit summary:** Session-recap substrate — end-session now stamps a per-session recap (GM nickname + GM notes + per-player notes) with GET/PUT endpoints.
+
+**Description:** Phase 1 of the session-recap feature (the data + API; the GM/player popouts follow). Adds two tables — `session_recaps` (GM nickname + GM-only notes) and `session_recap_player_notes` (each player's own note) — keyed by `(campaign_id, session_key)`, where `session_key` is the existing session bucket from `_session_key_for_campaign` (the session's `session_started_at`), so a recap lines up with that session's stat events. **Ending a session** (`POST /campaign/{id}/session/end`) now captures the session key, upserts a recap row (optionally with a `{nickname, gm_notes}` JSON body), and broadcasts the `session_key` on the `session_ended` event; a `fetch` with `Accept: application/json` gets the key back (a plain form POST still redirects). New endpoints let the GM set the recap and any member set their own note, with strict read-scoping: **a player never receives the GM notes or other players' notes** — only the nickname + their own note.
+
+### Added
+- `app/models.py` — `SessionRecap` + `SessionRecapPlayerNote` (schema v100).
+- `app/database.py` — v100 migration creating both tables (`create(checkfirst=True)`).
+- `app/routes/session_recap_routes.py` — `GET /api/campaign/{id}/session-recaps`, `GET/PUT /api/campaign/{id}/session-recap/{session_key}` (GM sets nickname + notes; player-scoped reads), `PUT .../my-note` (author-scoped player note); registered in `app/main.py`.
+- `tests/harness/test_session_recap.py` — GM sets + reads a recap; a player note is author-scoped and the GM sees every note while the player sees neither GM notes nor others'; 403 when a player writes the GM recap; 400 on an over-long key; `session/end` stamps the recap and returns the key.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `end_session` stamps/updates the recap row and broadcasts `session_ended` with `{recap, session_key}`; supports a JSON response for `fetch` callers.
+
+### Schema
+- **Schema v100** — new `session_recaps` and `session_recap_player_notes` tables. Additive; no existing table touched.
+
 ## [2.884.0] - 2026-07-04 — "The Cast List"
 
 **Schema version:** 99
