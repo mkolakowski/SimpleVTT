@@ -12,8 +12,9 @@ from playwright.sync_api import Page, expect
 
 from .conftest import BASE_URL, CAMPAIGN_ID
 
+# v2.875.0 — a zone's label is its bound lair action's name (editor dropdown).
 _ZONE = {"id": "z1", "x": 300, "y": 300, "w": 420, "h": 300,
-         "label": "Magma vent", "actions": ["magma-erupts"]}
+         "label": "Magma Erupts", "actions": ["magma-erupts"]}
 
 
 def _set_zones(zones) -> int:

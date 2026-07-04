@@ -120,8 +120,11 @@
   .me-group.me-collapsed > *:not(.me-grp-lbl) { display:none !important; }
   .me-group > label { justify-content:center; }
   /* v2.814.0 — Layers checkboxes as a uniform 2-column grid (aligned rows). */
-  /* v2.874.0 — single top-to-bottom column (was a 2-col grid). */
-  .me-layers-grid { display:flex; flex-direction:column; row-gap:3px; }
+  /* v2.874.0 — single top-to-bottom column (was a 2-col grid). v2.875.0 —
+     capped + internally scrollable so the tall list doesn't grow the floating
+     toolbar (which the map fits below), which would shrink the editor map. */
+  .me-layers-grid { display:flex; flex-direction:column; row-gap:2px;
+    max-height:150px; overflow-y:auto; padding-right:2px; }
   .me-layers-grid > label { justify-content:flex-start; white-space:nowrap;
     font-size:12px; }
   /* a sub-row that keeps several controls together on one line */
@@ -326,27 +329,32 @@
       </select>
     </label>
   </div>
-  {# v2.870.0 — Lair zones: labelled areas bound to a creature's lair actions.
-     Drawn like terrain (rect drag, or ⬡ free polygon); each zone carries a
-     label + a comma-separated list of lair-action ids it targets. On the
-     tabletop the GM/players toggle the overlay and triggering a bound lair
-     action pre-selects the tokens inside the zone. #}
+  {# v2.870.0 — Lair zones: areas bound to a creature's lair action. Drawn like
+     terrain (rect drag, or ⬡ free polygon). v2.875.0 — a zone binds to one lair
+     action chosen from the "Lair Actions" dropdown (its name becomes the zone's
+     label); the action's text shows below. On the tabletop the GM/players
+     toggle the overlay and triggering the bound action targets the tokens
+     inside the zone. #}
   <div class="me-group" role="group" aria-label="Lair zones">
     <span class="me-grp-lbl">Lair</span>
     <div class="me-sub">
       <button type="button" id="me-lairzone-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
-              title="Lair zone: drag a rectangle (or use ⬡ Free polygon) to mark where a lair action strikes; set its label + the lair-action ids it targets below. Double-click a zone to edit it; Delete removes the selected zone.">🎯 Lair Zone</button>
+              title="Lair zone: drag a rectangle (or use ⬡ Free polygon) to mark where a lair action strikes; pick its lair action below. Double-click a zone to edit it; Delete removes the selected zone.">🎯 Lair Zone</button>
     </div>
     <button type="button" id="me-lairzone-poly-btn" class="me-tool-btn" aria-pressed="false"
             title="Free polygon lair zone: when on, click to drop zone vertices and click the first dot to close the shape — instead of dragging a rectangle.">⬡ Free polygon</button>
-    <label class="me-capsel" title="Label for the selected zone (or new zones)">
-      <span class="me-cap">label</span>
-      <input type="text" id="me-lairzone-label" placeholder="e.g. Magma vent" style="min-height:32px;font-size:12px;width:100%;">
+    <label class="me-capsel" title="The lair action this zone is bound to. Triggering it targets the tokens inside the zone.">
+      <span class="me-cap">Lair Actions</span>
+      <select id="me-lairzone-actions" style="min-height:32px;font-size:12px;width:100%;">
+        <option value="">— none —</option>
+        {% for a in lair_action_catalog %}
+        <option value="{{ a.id }}">{{ a.name }}</option>
+        {% endfor %}
+      </select>
     </label>
-    <label class="me-capsel" title="Lair-action ids this zone targets, comma-separated (e.g. magma-erupts, tremor). Triggering one of these pre-selects the tokens inside the zone.">
-      <span class="me-cap">actions</span>
-      <input type="text" id="me-lairzone-actions" placeholder="magma-erupts, tremor" style="min-height:32px;font-size:12px;width:100%;">
-    </label>
+    {# The selected action's text — truncated to two lines; hover shows it all. #}
+    <div id="me-lairzone-desc"
+         style="font-size:11px;line-height:1.35;color:var(--fg-mute);max-height:2.7em;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;cursor:help;"></div>
   </div>
   {# v2.810.0 — Labels + GM pin tools moved into the Markers group. #}
   <div class="me-group" role="group" aria-label="Tokens">
@@ -448,6 +456,11 @@
   var fogRevealed = {{ fog_revealed | tojson }};
   var terrain = {{ terrain | tojson }};   // v2.789.1 — terrain regions
   var lairZones = {{ lair_zones | tojson }};  // v2.870.0 — lair-action zones
+  // v2.875.0 — the full lair-action catalog for the dropdown; a lookup by id.
+  var LAIR_ACTION_CATALOG = {{ lair_action_catalog | tojson }};
+  var LAIR_ACTION_BY_ID = (function () {
+    var m = {}; (LAIR_ACTION_CATALOG || []).forEach(function (a) { m[a.id] = a; }); return m;
+  })();
   var lairZoneDrag = null;    // rect being painted
   var lairZoneDots = [];      // pending free-polygon vertices
   var lairZonePolyOn = false; // free-polygon placement mode
@@ -2609,14 +2622,29 @@
   // v2.870.0 — lair-zone tool wiring.
   var lairZoneBtn = document.getElementById('me-lairzone-btn');
   var lairZonePolyBtn = document.getElementById('me-lairzone-poly-btn');
-  var lairZoneLabelEl = document.getElementById('me-lairzone-label');
+  // v2.875.0 — a single "Lair Actions" <select> replaces the label + free-text
+  // actions inputs. The chosen action's id is the zone's bound action; its name
+  // becomes the zone label; its text shows in #me-lairzone-desc (hover = full).
   var lairZoneActionsEl = document.getElementById('me-lairzone-actions');
-  function _parseZoneActions(s) {
-    return String(s || '').split(',').map(function (a) { return a.trim(); }).filter(Boolean).slice(0, 24);
+  var lairZoneDescEl = document.getElementById('me-lairzone-desc');
+  function _selectedLairAction() {
+    var id = lairZoneActionsEl ? lairZoneActionsEl.value : '';
+    return id ? (LAIR_ACTION_BY_ID[id] || { id: id, name: id, desc: '' }) : null;
+  }
+  function _showLairActionDesc(id) {
+    if (!lairZoneDescEl) return;
+    var a = id ? LAIR_ACTION_BY_ID[id] : null;
+    var txt = a ? (a.desc || '') : '';
+    lairZoneDescEl.textContent = txt;
+    lairZoneDescEl.title = txt;   // hover shows the full (possibly clipped) text
   }
   function syncLairZoneToolbar() {
-    if (lairZoneLabelEl && selectedLairZone) lairZoneLabelEl.value = selectedLairZone.label || '';
-    if (lairZoneActionsEl && selectedLairZone) lairZoneActionsEl.value = (selectedLairZone.actions || []).join(', ');
+    if (!lairZoneActionsEl) return;
+    if (selectedLairZone) {
+      var aid = (selectedLairZone.actions || [])[0] || '';
+      lairZoneActionsEl.value = LAIR_ACTION_BY_ID[aid] ? aid : '';
+      _showLairActionDesc(lairZoneActionsEl.value);
+    }
   }
   if (lairZoneBtn) lairZoneBtn.addEventListener('click', function () { setMode(lairZoneMode ? null : 'lairzone'); });
   if (lairZonePolyBtn) lairZonePolyBtn.addEventListener('click', function () {
@@ -2628,11 +2656,14 @@
       ? 'Free polygon ON — click zone vertices, then click the first dot to close.' : '');
     render();
   });
-  if (lairZoneLabelEl) lairZoneLabelEl.addEventListener('change', function () {
-    if (selectedLairZone) { selectedLairZone.label = lairZoneLabelEl.value.trim().slice(0, 60); saveLairZones(); }
-  });
   if (lairZoneActionsEl) lairZoneActionsEl.addEventListener('change', function () {
-    if (selectedLairZone) { selectedLairZone.actions = _parseZoneActions(lairZoneActionsEl.value); saveLairZones(); }
+    var a = _selectedLairAction();
+    _showLairActionDesc(a ? a.id : '');
+    if (selectedLairZone) {
+      selectedLairZone.actions = a ? [a.id] : [];
+      selectedLairZone.label = a ? a.name : '';
+      saveLairZones();
+    }
   });
   var spotBtn = document.getElementById('me-spot-btn');
   var snapBtn = document.getElementById('me-snap-btn');
@@ -3115,8 +3146,11 @@
       try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
       var lzx = Math.min(lz.sx, lz.cx), lzy = Math.min(lz.sy, lz.cy);
       var lzw = Math.abs(lz.cx - lz.sx), lzh = Math.abs(lz.cy - lz.sy);
-      var _lbl = (lairZoneLabelEl && lairZoneLabelEl.value.trim().slice(0, 60)) || '';
-      var _acts = lairZoneActionsEl ? _parseZoneActions(lairZoneActionsEl.value) : [];
+      // v2.875.0 — new zones bind to the dropdown's selected lair action; its
+      // name is the zone label.
+      var _sa = _selectedLairAction();
+      var _lbl = _sa ? _sa.name : '';
+      var _acts = _sa ? [_sa.id] : [];
       if (lairZonePolyOn) {
         var lzclose = Math.max(14, (gridPx || 70) * 0.35);
         if (lairZoneDots.length >= 3

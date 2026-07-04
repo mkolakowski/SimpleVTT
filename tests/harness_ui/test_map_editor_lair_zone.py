@@ -33,6 +33,8 @@ def test_lair_zone_rect_placement_with_actions(gm_page: Page) -> None:
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
         c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lair_zones", json={"lair_zones": []})
         try:
+            # Taller viewport so the editor map (below the toolbar) is usable.
+            gm_page.set_viewport_size({"width": 1400, "height": 1000})
             gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
             expect(gm_page.locator("#me-overlay")).to_be_visible()
             gm_page.wait_for_timeout(400)
@@ -43,8 +45,12 @@ def test_lair_zone_rect_placement_with_actions(gm_page: Page) -> None:
 
             gm_page.click("#me-lairzone-btn")
             assert gm_page.get_attribute("#me-lairzone-btn", "aria-pressed") == "true"
-            gm_page.fill("#me-lairzone-label", "Magma vent")
-            gm_page.fill("#me-lairzone-actions", "magma-erupts, tremor")
+            # v2.875.0 — bind the zone to a lair action from the dropdown; its
+            # description shows below (hover reveals the full text).
+            gm_page.select_option("#me-lairzone-actions", "magma-erupts")
+            gm_page.wait_for_timeout(100)
+            desc = gm_page.inner_text("#me-lairzone-desc")
+            assert desc.strip(), "the selected action's text should show below the dropdown"
 
             # Drag a rectangle over the stage's lower half.
             gm_page.mouse.move(cx - 110, cy - 60)
@@ -55,8 +61,9 @@ def test_lair_zone_rect_placement_with_actions(gm_page: Page) -> None:
 
             lz = _zones(c, mid)
             assert len(lz) == 1, lz
-            assert lz[0]["label"] == "Magma vent", lz[0]
-            assert lz[0]["actions"] == ["magma-erupts", "tremor"], lz[0]
+            # The zone binds to the selected action; its name is the label.
+            assert lz[0]["actions"] == ["magma-erupts"], lz[0]
+            assert lz[0]["label"] == "Magma Erupts", lz[0]
             assert lz[0]["w"] > 6 and lz[0]["h"] > 6, lz[0]
             # Renders as a .me-lairzone element in the editor.
             expect(gm_page.locator(".me-lairzone")).to_have_count(1)
@@ -71,6 +78,10 @@ def test_lair_zone_free_polygon_placement(gm_page: Page) -> None:
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
         c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lair_zones", json={"lair_zones": []})
         try:
+            # A taller viewport so the editor map (which sits below the toolbar)
+            # is large enough to place a polygon whose vertices are all
+            # on-screen — the multi-click placement needs every vertex visible.
+            gm_page.set_viewport_size({"width": 1400, "height": 1000})
             gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
             expect(gm_page.locator("#me-overlay")).to_be_visible()
             gm_page.wait_for_timeout(400)
@@ -83,7 +94,7 @@ def test_lair_zone_free_polygon_placement(gm_page: Page) -> None:
             gm_page.click("#me-lairzone-poly-btn")
             assert gm_page.get_attribute("#me-lairzone-poly-btn", "aria-pressed") == "true"
 
-            pts = [(-120, -70), (120, -70), (150, 60), (0, 120), (-150, 60)]
+            pts = [(-110, -60), (110, -60), (130, 50), (0, 100), (-130, 50)]
             for dx, dy in pts:
                 gm_page.mouse.click(cx + dx, cy + dy)
                 gm_page.wait_for_timeout(110)

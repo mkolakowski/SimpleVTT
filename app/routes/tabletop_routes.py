@@ -7002,6 +7002,7 @@ from app.content.effective_speed import (
     effective_speed_walk as _effective_speed_walk,
 )
 from app.content.lair_actions import (
+    all_lair_actions as _all_lair_actions,
     lair_action_by_id as _lair_action_by_id,
     lair_actions_for_slug as _lair_actions_for_slug,
 )
@@ -125218,6 +125219,7 @@ def map_editor_page(
         "fog_explored": list(getattr(m, "fog_explored", None) or []),
         "terrain": list(getattr(m, "terrain", None) or []),
         "lair_zones": list(getattr(m, "lair_zones", None) or []),
+        "lair_action_catalog": _all_lair_actions(),
         "gm_pins": list(getattr(m, "gm_pins", None) or []),
         "props": list(getattr(m, "props", None) or []),
         "labels": list(getattr(m, "labels", None) or []),

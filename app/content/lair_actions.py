@@ -713,3 +713,23 @@ def lair_action_by_id(slug, action_id) -> dict | None:
         if str(a.get("id") or "") == action_id.strip():
             return a
     return None
+
+
+def all_lair_actions() -> list[dict]:
+    """A flat, id-deduped catalog of every curated lair action — ``{id, name,
+    desc}`` sorted by display name. Feeds the map editor's Lair-Actions
+    dropdown (v2.875.0), which binds a placed zone to one of these ids."""
+    seen: dict[str, dict] = {}
+    for actions in LAIR_ACTIONS_BY_SLUG.values():
+        for a in actions:
+            if not isinstance(a, dict):
+                continue
+            aid = str(a.get("id") or "").strip()
+            if not aid or aid in seen:
+                continue
+            seen[aid] = {
+                "id": aid,
+                "name": str(a.get("name") or aid),
+                "desc": str(a.get("desc") or ""),
+            }
+    return sorted(seen.values(), key=lambda x: x["name"].lower())

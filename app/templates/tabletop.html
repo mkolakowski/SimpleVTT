@@ -2709,12 +2709,9 @@
                 zlbl.setAttribute('x', lz.x + 5); zlbl.setAttribute('y', lz.y + 16);
                 zlbl.setAttribute('fill', zColor); zlbl.setAttribute('font-size', '13');
                 zlbl.setAttribute('font-weight', '700'); zlbl.style.pointerEvents = 'none';
-                // v2.873.0 — the label carries the bound action names so the
-                // overlay is self-documenting ("🎯 Magma vent · Magma Erupts").
-                var zActs = (lz.actions || []).map(function (a) {
-                    return String(a).replace(/[-_]/g, ' ').replace(/\b\w/g, function (m) { return m.toUpperCase(); });
-                }).join(', ');
-                zlbl.textContent = '🎯 ' + (lz.label || 'Lair zone') + (zActs ? ' · ' + zActs : '');
+                // v2.875.0 — the zone's label IS its bound lair action's name
+                // (set by the editor's dropdown), so the label alone names it.
+                zlbl.textContent = '🎯 ' + (lz.label || 'Lair zone');
                 svg.appendChild(zlbl);
             });
             // v2.793.0 — decorative prop stamps (emoji glyphs), above terrain

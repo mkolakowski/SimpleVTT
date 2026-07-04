@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.875.0] - 2026-07-03 — "The Chosen Action"
+
+**Schema version:** 99
+
+**Commit summary:** The Lair Zone tool binds a zone to a lair action via a "Lair Actions" dropdown that shows the action's text.
+
+**Description:** Reworks the Lair Zone tool's inputs per request. The free-text **label** field is gone; the comma-separated **actions** field is replaced by a single **"Lair Actions" dropdown** listing every curated lair action (36, id-deduped, sorted by name). Selecting one **binds the zone to that action** — the action's name becomes the zone's label — and the action's **descriptive text renders just below the dropdown**, clipped to two lines with an ellipsis; **hovering shows the full text** (a `title` tooltip). Double-clicking a placed zone reselects its action + shows its text. The catalog is served to the editor via a new `all_lair_actions()` content helper on `lair_action_catalog`. Because a zone's label is now always its action's name, the tabletop overlay label drops the redundant action-name suffix.
+
+### Added
+- `app/content/lair_actions.py` — `all_lair_actions()`: a flat, id-deduped `{id, name, desc}` catalog.
+- `app/routes/tabletop_routes.py` — `lair_action_catalog` in the map-editor render context.
+
+### Changed
+- `app/templates/map_editor.html` — Lair group: removed the label input; the actions input is now a `#me-lairzone-actions` `<select>` of all lair actions + a `#me-lairzone-desc` text area (2-line clamp, hover-for-full); placement/select/edit bind the zone to the chosen action (label = its name).
+- `app/templates/tabletop.html` — the zone overlay label shows the zone label (= action name) without the now-redundant action-name suffix.
+- `tests/harness_ui/test_map_editor_lair_zone.py` / `test_lair_zones_tabletop.py` — select the action from the dropdown + assert the description shows; the zone label equals the action name.
+
+### Fixed
+- `app/templates/map_editor.html` — the v2.874.0 top-to-bottom Layers column is now height-capped with internal scroll (`max-height:150px; overflow-y:auto`). The uncapped column grew the floating toolbar tall enough to shrink the editor map (which fits *below* the toolbar), which had broken several editor placement flows at small viewports.
+
+### Schema
+- No schema change (still v99 — the `lair_zones` shape is unchanged; `actions` now holds one id).
+
 ## [2.874.0] - 2026-07-03 — "The Labeled Stack"
 
 **Schema version:** 99
