@@ -202,6 +202,12 @@
     {# v2.813.0 — Save moved here from the (removed) header row. #}
     <button type="button" id="me-save-btn" class="me-tool-btn" style="background:var(--accent);color:#fff;font-weight:600;"
             title="Commit all map changes now (⌘/Ctrl+S) — edits also save automatically">💾 Save</button>
+    {# v2.895.0 — wipe every placed element (walls, terrain, lights, fog,
+       hotspots, pins, props, labels, lair zones). Gated behind a type-DELETE
+       confirmation; undoable (snapshots history first). #}
+    <button type="button" id="me-delete-all-btn" class="me-tool-btn"
+            style="background:#7a1f14;color:#ffd9d2;font-weight:600;border:1px solid #b5321f;"
+            title="Delete every placed element on this map (asks you to type DELETE)">🗑 Delete all</button>
     {# v2.826.0 — map tags folded in from the (removed) standalone Tags group.
        v2.889.0 — tags input + its Save button share a row (was stacked). #}
     <span class="me-cap" style="text-align:center;margin-top:2px;">Tags</span>
@@ -2946,6 +2952,88 @@
   // v2.781.0 — explicit Save button + ⌘/Ctrl+S.
   var saveBtn = document.getElementById('me-save-btn');
   if (saveBtn) saveBtn.addEventListener('click', function () { saveAll({ toast: true }); });
+  // v2.895.0 — "Delete all": wipe every placed element, behind a type-DELETE
+  // confirmation. Undoable (snapshots history before clearing).
+  function _confirmDeleteAll() {
+    var backdrop = document.createElement('div');
+    backdrop.setAttribute('style', [
+      'position:fixed', 'inset:0', 'background:rgba(0,0,0,0.55)', 'z-index:2147483600',
+      'display:flex', 'align-items:center', 'justify-content:center', 'padding:16px',
+    ].join(';'));
+    backdrop.setAttribute('role', 'dialog');
+    backdrop.setAttribute('aria-label', 'Delete all map elements');
+    var card = document.createElement('div');
+    card.setAttribute('style', [
+      'background:color-mix(in srgb, var(--bg, #1f2433) 92%, transparent)',
+      '-webkit-backdrop-filter:blur(10px)', 'backdrop-filter:blur(10px)',
+      'border:1px solid var(--border, rgba(255,255,255,0.18))', 'border-left:4px solid #b5321f',
+      'border-radius:10px', 'padding:18px 20px', 'color:var(--fg, #fff)', 'font-size:13px',
+      'max-width:440px', 'width:100%', 'box-shadow:0 10px 36px rgba(0,0,0,0.55)',
+    ].join(';'));
+    var h = document.createElement('div');
+    h.style.cssText = 'font-size:15px;font-weight:700;margin-bottom:8px;';
+    h.textContent = '🗑 Delete all map elements?';
+    var p = document.createElement('p');
+    p.style.cssText = 'margin:0 0 12px 0;font-size:12px;opacity:0.85;line-height:1.45;';
+    p.innerHTML = 'This permanently removes <strong>every</strong> placed element on this map — '
+      + 'walls, terrain, lights, fog reveals, hotspots, GM pins, props, labels, and lair zones. '
+      + 'The map image + grid are kept. This is undoable (↶ Undo) until you leave the editor.<br><br>'
+      + 'Type <strong>DELETE</strong> to confirm:';
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.setAttribute('autocomplete', 'off');
+    input.setAttribute('placeholder', 'DELETE');
+    input.setAttribute('style', 'width:100%;box-sizing:border-box;margin-bottom:14px;text-transform:none;');
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+    function _mk(label, style, onClick) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.textContent = label;
+      b.setAttribute('style', 'min-height:44px;padding:6px 16px;border-radius:6px;cursor:pointer;'
+        + 'font-size:13px;border:1px solid var(--border, rgba(255,255,255,0.22));' + (style || ''));
+      b.addEventListener('click', onClick);
+      return b;
+    }
+    function _close() { document.removeEventListener('keydown', _onKey); backdrop.remove(); }
+    function _onKey(e) { if (e.key === 'Escape') _close(); }
+    var cancel = _mk('Cancel', 'background:rgba(255,255,255,0.05);color:var(--fg);', _close);
+    var del = _mk('Delete everything', 'background:#b5321f;color:#fff;font-weight:600;border-color:#7a1f14;', function () {
+      if (input.value.trim() !== 'DELETE') { input.focus(); return; }
+      _close();
+      _deleteAllElements();
+    });
+    del.disabled = true; del.style.opacity = '0.5'; del.style.cursor = 'not-allowed';
+    input.addEventListener('input', function () {
+      var ok = input.value.trim() === 'DELETE';
+      del.disabled = !ok;
+      del.style.opacity = ok ? '1' : '0.5';
+      del.style.cursor = ok ? 'pointer' : 'not-allowed';
+    });
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && input.value.trim() === 'DELETE') { _close(); _deleteAllElements(); }
+    });
+    row.appendChild(cancel); row.appendChild(del);
+    card.appendChild(h); card.appendChild(p); card.appendChild(input); card.appendChild(row);
+    backdrop.appendChild(card);
+    document.addEventListener('keydown', _onKey);
+    document.body.appendChild(backdrop);
+    setTimeout(function () { input.focus(); }, 30);
+  }
+  function _deleteAllElements() {
+    pushHistory();  // snapshot first so ↶ Undo restores everything
+    walls = []; hotspots = []; lights = []; terrain = [];
+    lairZones = []; gmPins = []; props = []; labels = [];
+    fogRevealed = [];  // clear painted reveals (fog on/off + dynamic are settings, left as-is)
+    if (typeof selectedTerrain !== 'undefined') selectedTerrain = null;
+    if (typeof selectedWall !== 'undefined') selectedWall = null;
+    if (typeof selectedLight !== 'undefined') selectedLight = null;
+    if (typeof selectedLairZone !== 'undefined') selectedLairZone = null;
+    saveAll({ toast: true });
+    render();
+    setStatus('All map elements deleted.');
+  }
+  var deleteAllBtn = document.getElementById('me-delete-all-btn');
+  if (deleteAllBtn) deleteAllBtn.addEventListener('click', _confirmDeleteAll);
   // v2.788.0 — undo / redo buttons.
   var undoBtn = document.getElementById('me-undo-btn');
   if (undoBtn) undoBtn.addEventListener('click', undo);

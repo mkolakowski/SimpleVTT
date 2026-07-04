@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.895.0] - 2026-07-04 — "The Clean Slate"
+
+**Schema version:** 100
+
+**Commit summary:** A "🗑 Delete all" button in the editor's File group wipes every placed element — behind a type-DELETE confirmation.
+
+**Description:** Adds a **🗑 Delete all** button to the map editor's File group (next to 💾 Save). Clicking it opens a confirmation dialog that lists exactly what will be removed — **walls, terrain, lights, fog reveals, hotspots, GM pins, props, labels, and lair zones** (the map image + grid are kept) — and requires you to **type `DELETE`** (exact case) before the "Delete everything" button enables. Confirming snapshots the current state to history first (so **↶ Undo** restores everything), clears every layer, and commits via the existing `saveAll`. Cancel or Escape aborts with no change.
+
+### Added
+- `app/templates/map_editor.html` — the `#me-delete-all-btn` button; `_confirmDeleteAll()` (type-DELETE modal) + `_deleteAllElements()` (history snapshot → clear every layer → `saveAll`).
+- `tests/harness_ui/test_map_editor_delete_all.py` — the confirm button stays disabled until `DELETE` is typed (lowercase doesn't count), then clears all seeded layers server-side; Cancel leaves them untouched.
+
+### Schema
+- No schema change (still v100 — clears existing per-layer JSON via the existing PUT endpoints).
+
 ## [2.894.0] - 2026-07-04 — "The Zone Lair"
 
 **Schema version:** 100
