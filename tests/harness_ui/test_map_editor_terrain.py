@@ -4,7 +4,7 @@ from __future__ import annotations
 import httpx
 from playwright.sync_api import Page, expect
 
-from .conftest import BASE_URL, CAMPAIGN_ID
+from .conftest import BASE_URL, CAMPAIGN_ID, me_clear_toolbar
 
 
 def _terrain(c, mid):
@@ -20,6 +20,7 @@ def test_paint_terrain_region(gm_page: Page) -> None:
             gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
             expect(gm_page.locator("#me-overlay")).to_be_visible()
             gm_page.wait_for_timeout(400)
+            me_clear_toolbar(gm_page)  # map is full-bleed behind the toolbar
             gm_page.locator("#me-terrain-btn").click()          # terrain mode
             gm_page.select_option("#me-terrain-type", "water")
             ov = gm_page.locator("#me-overlay").bounding_box()

@@ -109,6 +109,28 @@ def roster() -> dict:
         return {c["name"]: c for c in chars}
 
 
+def me_clear_toolbar(page, gap: int = 24) -> None:
+    """v2.883.0 — the map editor is now full-bleed: the map fills the whole
+    stage and the floating toolbar overlays its top ~280px (the always-expanded
+    vertical Layers panel is tall). So map content near the top renders BEHIND
+    the toolbar, where clicks hit toolbar buttons instead of the map. Tests call
+    this after opening the editor to pan the map down until the overlay's top
+    clears the toolbar's bottom edge, exactly as a GM would drag the map out from
+    under the ribbon before drawing there."""
+    page.wait_for_function("() => typeof window.__editorPanBy === 'function'", timeout=8000)
+    geo = page.evaluate(
+        """() => {
+            const tb = document.querySelector('.me-toolbar').getBoundingClientRect();
+            const ov = document.getElementById('me-overlay').getBoundingClientRect();
+            return { tbBottom: tb.bottom, ovTop: ov.y };
+        }"""
+    )
+    dy = (geo["tbBottom"] + gap) - geo["ovTop"]
+    if dy > 0:
+        page.evaluate("(dy) => window.__editorPanBy(0, dy)", dy)
+        page.wait_for_timeout(60)
+
+
 def sheet_url(char_id: int) -> str:
     """URL helper for the standalone character-sheet page."""
     return f"{BASE_URL}/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet"

@@ -3662,19 +3662,16 @@
     if (wc) wc.style.transform = t;  // v2.831.0 — weather pans/zooms with the map
   }
   function panBy(dx, dy) { panX += dx; panY += dy; applyPan(); }
-  // v2.839.0 — the floating toolbar overlays the top of the map, so the default
-  // view reserves its height: the map is fit + centred in the area BELOW the bar
-  // so the whole map is visible on load (not tucked behind the ribbon).
-  function _topInset() {
-    var tb = document.querySelector('.me-toolbar');
-    if (!tb) return 8;
-    return tb.offsetTop + tb.offsetHeight + 8;  // bar bottom (stage coords) + gap
-  }
-  function centerMap() {  // centre the map in the visible area below the toolbar
-    var top = _topInset();
-    var availH = Math.max(40, stage.clientHeight - top - 8);
+  // v2.883.0 — harness hook: the map is full-bleed behind the floating toolbar,
+  // so tests pan content out from under the ribbon before interacting with it.
+  window.__editorPanBy = panBy;
+  // v2.883.0 — match the tabletop's "map behind glass": the map fills the WHOLE
+  // stage edge-to-edge and the floating toolbar overlays its top (like the VTT's
+  // fitToViewport). No top-inset reservation — the map is centred in the full
+  // viewport, so the top of the map runs behind the transparent ribbon.
+  function centerMap() {  // centre the map in the full stage (VTT-style)
     panX = Math.round((stage.clientWidth - img.clientWidth) / 2);
-    panY = Math.round(top + (availH - img.clientHeight) / 2);
+    panY = Math.round((stage.clientHeight - img.clientHeight) / 2);
     applyPan();
   }
   // v2.830.0 — zoom toward a stage-local point (sx, sy): keep the map pixel under
@@ -3710,10 +3707,10 @@
   function fitContain() {
     var nw = img.naturalWidth || img.width, nh = img.naturalHeight || img.height;
     if (!nw || !nh) { setZoom(1); centerMap(); return; }
-    // v2.839.0 — fit the WHOLE map into the area BELOW the floating toolbar so
-    // it's fully visible on load, not partly hidden behind the bar.
-    var availW = (stage.clientWidth || 800) - 12;
-    var availH = Math.max(120, stage.clientHeight - _topInset() - 12);
+    // v2.883.0 — fit the WHOLE map into the FULL stage (symmetric 12px margin),
+    // edge-to-edge behind the floating toolbar, matching the VTT's fitToViewport.
+    var availW = (stage.clientWidth || 800) - 24;
+    var availH = Math.max(120, stage.clientHeight - 24);
     setZoom(Math.min(availW / nw, availH / nh));
     centerMap();  // v2.828.0 — recentre the camera after a fit
   }

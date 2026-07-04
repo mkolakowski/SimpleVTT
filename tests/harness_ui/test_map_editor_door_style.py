@@ -9,7 +9,7 @@ from __future__ import annotations
 import httpx
 from playwright.sync_api import Page, expect
 
-from .conftest import BASE_URL, CAMPAIGN_ID
+from .conftest import BASE_URL, CAMPAIGN_ID, me_clear_toolbar
 
 
 def test_draw_door_with_style(gm_page: Page) -> None:
@@ -22,6 +22,7 @@ def test_draw_door_with_style(gm_page: Page) -> None:
         try:
             gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
             expect(gm_page.locator("#me-overlay")).to_be_visible()
+            me_clear_toolbar(gm_page)  # map is full-bleed behind the toolbar
 
             # Pick a material + the dedicated Door tool.
             gm_page.select_option("#me-wall-style", "wood")

@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.883.0] - 2026-07-04 — "The Full Bleed"
+
+**Schema version:** 99
+
+**Commit summary:** The map editor fits + centres the map in the FULL stage, edge-to-edge behind the floating toolbar, matching the tabletop.
+
+**Description:** Aligns the editor's default view with the tabletop's "map behind glass." Previously (v2.839.0) the editor reserved the toolbar's height and fit the whole map in the area *below* the bar. Now `fitContain()` + `centerMap()` fit and centre the map into the **full stage** with a symmetric 12px margin — the same as the VTT's `fitToViewport()` — so the map runs **edge-to-edge behind the transparent floating toolbar**, its top tucked under the ribbon just like on the tabletop. Removes the now-dead `_topInset()` helper. Pan/zoom (drag, wheel-toward-cursor, Fit) are unchanged; the only difference is the map no longer letterboxes a strip under the toolbar.
+
+### Changed
+- `app/templates/map_editor.html` — `centerMap()` centres in the full stage; `fitContain()` fits into the full stage (symmetric 12px margin) instead of reserving the toolbar height; dropped `_topInset()`.
+
+### Schema
+- No schema change (still v99 — an editor view-layout change only).
+
 ## [2.882.0] - 2026-07-03 — "The Watchful Eye"
 
 **Schema version:** 99

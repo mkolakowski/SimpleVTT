@@ -9,7 +9,7 @@ from __future__ import annotations
 import httpx
 from playwright.sync_api import Page, expect
 
-from .conftest import BASE_URL, CAMPAIGN_ID
+from .conftest import BASE_URL, CAMPAIGN_ID, me_clear_toolbar
 
 
 def test_zoom_keeps_drawing_correct(gm_page: Page) -> None:
@@ -36,7 +36,9 @@ def test_zoom_keeps_drawing_correct(gm_page: Page) -> None:
                 gm_page.locator("#me-zoom-in").click()
             assert _zoom_pct() > before, (before, _zoom_pct())
 
-            # Draw a wall at the zoomed scale.
+            # Draw a wall at the zoomed scale. (Pan the zoomed map out from
+            # under the full-bleed toolbar first — zoom-in doesn't recenter.)
+            me_clear_toolbar(gm_page)
             gm_page.locator("#me-wall-btn").click()
             box = gm_page.locator("#me-overlay").bounding_box()
             gm_page.mouse.click(box["x"] + 90, box["y"] + 90)

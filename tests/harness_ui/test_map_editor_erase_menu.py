@@ -8,7 +8,7 @@ from __future__ import annotations
 import httpx
 from playwright.sync_api import Page, expect
 
-from .conftest import BASE_URL, CAMPAIGN_ID
+from .conftest import BASE_URL, CAMPAIGN_ID, me_clear_toolbar
 
 
 def _seed_walls(c, mid, n):
@@ -32,6 +32,7 @@ def test_erase_toggle_and_context_menu(gm_page: Page) -> None:
             gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
             expect(gm_page.locator("#me-overlay")).to_be_visible()
             gm_page.wait_for_timeout(500)
+            me_clear_toolbar(gm_page)  # map is full-bleed behind the toolbar
             hits = gm_page.locator('#me-overlay line[stroke="transparent"]')
             assert hits.count() == 2
 
