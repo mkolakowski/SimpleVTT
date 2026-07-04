@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.889.0] - 2026-07-04 — "The Slim Ribbon"
+
+**Schema version:** 100
+
+**Commit summary:** The map editor's floating toolbar is ~26% shorter, so the full-bleed map behind it is much more visible.
+
+**Description:** Follow-up to v2.883.0 (the editor's full-bleed map behind the floating toolbar) — the always-expanded vertical Layers panel plus tall control stacks made the toolbar ~284px tall, hiding a big strip of the map. This compacts it to ~210px at 1280×720 **without dropping any controls or the touch-target floor**: the caption-selects (`.me-capsel`, ambient/terrain/weather/etc.) now lay the caption **beside** the dropdown instead of above it (the biggest single cut — each was ~47px, now one control-row); the File group pairs Undo/Redo and the tags input + its Save button onto shared rows; the always-expanded Layers rows are tighter (all 9 still visible, no scroll); and group gaps/padding are trimmed. Every interactive control keeps the 32px dense-panel minimum. Because the map is full-bleed, several editor UI tests now pan the map out from under the (relaid-out) toolbar before interacting.
+
+### Changed
+- `app/templates/map_editor.html` — `.me-capsel` horizontal layout; File group's Undo/Redo + tags controls paired into `.me-sub` rows; compacter `.me-layers-grid` / `.me-layer-row` / `.me-group` spacing (32px control floor retained).
+
+### Added
+- `tests/harness_ui/test_map_editor_toolbar_compact.py` — the toolbar height stays < 240px and all 9 layer rows remain visible.
+- `tests/harness_ui/test_map_editor_{door,label,measure,select}.py`, `test_map_light_types.py`, `test_map_lights_editor.py` — call `me_clear_toolbar` after opening the editor (the toolbar relayout moved controls, so these now pan the full-bleed map clear first; assertions unchanged).
+
+### Schema
+- No schema change (still v100 — an editor layout change only).
+
 ## [2.888.0] - 2026-07-04 — "The Adventure Log"
 
 **Schema version:** 100

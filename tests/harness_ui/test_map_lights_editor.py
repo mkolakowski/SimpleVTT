@@ -9,7 +9,7 @@ from __future__ import annotations
 import httpx
 from playwright.sync_api import Page, expect
 
-from .conftest import BASE_URL, CAMPAIGN_ID
+from .conftest import BASE_URL, CAMPAIGN_ID, me_clear_toolbar
 
 
 def test_editor_places_light(gm_page: Page) -> None:
@@ -23,6 +23,7 @@ def test_editor_places_light(gm_page: Page) -> None:
             gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
             overlay = gm_page.locator("#me-overlay")
             expect(overlay).to_be_visible()
+            me_clear_toolbar(gm_page)  # map is full-bleed behind the toolbar
             gm_page.locator("#me-light-btn").click()
             # v2.784.0 — radii are their own fields now.
             gm_page.fill("#me-light-bright", "25")

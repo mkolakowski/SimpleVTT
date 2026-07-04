@@ -4,7 +4,7 @@ from __future__ import annotations
 import httpx
 from playwright.sync_api import Page, expect
 
-from .conftest import BASE_URL, CAMPAIGN_ID
+from .conftest import BASE_URL, CAMPAIGN_ID, me_clear_toolbar
 
 # Map → screen via the overlay's live CTM, so the test is independent of the
 # editor's zoom / grid-snap.
@@ -31,6 +31,7 @@ def test_marquee_select_move_delete(gm_page: Page) -> None:
             gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
             expect(gm_page.locator("#me-overlay")).to_be_visible()
             gm_page.wait_for_timeout(400)
+            me_clear_toolbar(gm_page)  # map is full-bleed behind the toolbar
 
             def scr(mx, my):
                 return gm_page.evaluate(_MAP_TO_SCREEN, [mx, my])

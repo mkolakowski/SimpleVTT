@@ -91,7 +91,7 @@
   .me-tool-btn { min-height:32px; padding:2px 8px; font-size:13px; white-space:nowrap; }
   .me-tool-btn[aria-pressed="true"] { background:var(--accent); color:#fff; }
   /* v2.785.7 — every toolbar control (button / select / number input) is the
-     same 32px height. */
+     same 32px height (the dense-panel touch-target floor). */
   .me-toolbar .me-tool-btn,
   .me-toolbar select,
   .me-toolbar input[type=number] { height:32px; min-height:32px; box-sizing:border-box; }
@@ -108,8 +108,8 @@
   /* v2.820.0 — the zone label folds/expands its whole zone; hover hints it. */
   .me-zone-sep > .me-zone-lbl:hover { opacity:1; color:var(--accent); }
   /* v2.783.0 — labelled sub-groups, stacked + width-equalised to the widest. */
-  .me-group { display:flex; flex-direction:column; align-items:stretch; gap:4px;
-    padding:3px 6px 5px; border:1px solid var(--border); border-radius:7px;
+  .me-group { display:flex; flex-direction:column; align-items:stretch; gap:3px;
+    padding:2px 6px 4px; border:1px solid var(--border); border-radius:7px;
     flex:0 0 auto;
     background:color-mix(in srgb, var(--bg) 55%, transparent); }
   .me-grp-lbl { font-size:9px; font-weight:700; text-transform:uppercase;
@@ -122,14 +122,20 @@
   .me-group.me-collapsed > *:not(.me-grp-lbl) { display:none !important; }
   .me-group > label { justify-content:center; }
   /* v2.881.0 — always-expanded reorderable layer list (was a dropdown). Each
-     row: checkbox + name + a ⠿ drag handle; drag to change z-order. Capped +
-     scrollable so it doesn't blow up the floating toolbar. */
-  .me-layers-grid { display:flex; flex-direction:column; row-gap:1px; margin-top:2px;
-    max-height:210px; overflow-y:auto; padding-right:2px; }
+     row: checkbox + name + a ⠿ drag handle; drag to change z-order.
+     v2.889.0 — compact rows so all 9 layers stay visible in one column while
+     the floating toolbar is much shorter (was ~284px tall, dominated by this
+     group) and hides less of the full-bleed map behind it. */
+  .me-layers-grid { display:flex; flex-direction:column; row-gap:0; margin-top:1px;
+    max-height:170px; overflow-y:auto; padding-right:2px; }
   .me-layer-row { display:flex; flex-direction:row; align-items:center; gap:5px;
-    white-space:nowrap; font-size:12px; padding:1px 0; }
+    white-space:nowrap; font-size:11px; line-height:1.2; padding:0; }
+  /* v2.889.0 — drop the checkbox's default vertical margin so each row is one
+     line tall (keeps the browser-default 13px box — not a smaller touch target,
+     just no extra margin) → all 9 layers stay visible in a shorter column. */
+  .me-layer-row input[type=checkbox] { margin:0; }
   .me-layer-row .me-layer-name { flex:1 1 auto; }
-  .me-layer-drag { margin-left:auto; cursor:grab; opacity:.45; font-size:13px;
+  .me-layer-drag { margin-left:auto; cursor:grab; opacity:.45; font-size:12px;
     padding:0 3px; line-height:1; }
   .me-layer-drag:hover { opacity:.9; }
   .me-layer-drag:active { cursor:grabbing; }
@@ -141,9 +147,14 @@
   /* v2.785.9 — a tiny caption above a control */
   .me-cap { font-size:9px; font-weight:700; text-transform:uppercase;
     letter-spacing:.4px; color:var(--fg-mute); opacity:.75; line-height:1.2; }
-  /* v2.815.0 — caption-above-a-dropdown wrapper (title over every select). */
-  .me-capsel { display:flex; flex-direction:column; align-items:stretch; gap:1px; }
-  .me-capsel > .me-cap { text-align:center; }
+  /* v2.815.0 — caption-above-a-dropdown wrapper (title over every select).
+     v2.889.0 — laid out horizontally (caption beside the select, not above) so
+     each capsel is one control-row tall instead of ~47px; this is the biggest
+     single cut to the floating toolbar's height. The bar scrolls horizontally,
+     so the extra width is free. */
+  .me-capsel { display:flex; flex-direction:row; align-items:center; gap:5px; }
+  .me-capsel > .me-cap { text-align:left; flex:0 0 auto; white-space:nowrap; }
+  .me-capsel > select { flex:1 1 auto; min-width:0; }
   /* v2.785.5 — drop the spinner arrows on all toolbar number inputs. */
   .me-toolbar input[type=number] { -moz-appearance:textfield; appearance:textfield; }
   .me-toolbar input[type=number]::-webkit-outer-spin-button,
@@ -183,18 +194,24 @@
      v2.826.0 — renamed "File": Save + Undo/Redo + the map's Tags all together. #}
   <div class="me-group me-group--stack" role="group" aria-label="File">
     <span class="me-grp-lbl">File</span>
-    <button type="button" id="me-undo-btn" class="me-tool-btn" title="Undo (⌘/Ctrl+Z)" disabled>↶ Undo</button>
-    <button type="button" id="me-redo-btn" class="me-tool-btn" title="Redo (⌘/Ctrl+Shift+Z)" disabled>↷ Redo</button>
+    {# v2.889.0 — Undo/Redo paired on one row (was two) to shorten the group. #}
+    <div class="me-sub">
+      <button type="button" id="me-undo-btn" class="me-tool-btn" style="flex:1;" title="Undo (⌘/Ctrl+Z)" disabled>↶ Undo</button>
+      <button type="button" id="me-redo-btn" class="me-tool-btn" style="flex:1;" title="Redo (⌘/Ctrl+Shift+Z)" disabled>↷ Redo</button>
+    </div>
     {# v2.813.0 — Save moved here from the (removed) header row. #}
     <button type="button" id="me-save-btn" class="me-tool-btn" style="background:var(--accent);color:#fff;font-weight:600;"
             title="Commit all map changes now (⌘/Ctrl+S) — edits also save automatically">💾 Save</button>
-    {# v2.826.0 — map tags folded in from the (removed) standalone Tags group. #}
+    {# v2.826.0 — map tags folded in from the (removed) standalone Tags group.
+       v2.889.0 — tags input + its Save button share a row (was stacked). #}
     <span class="me-cap" style="text-align:center;margin-top:2px;">Tags</span>
-    <input type="text" id="me-tags-input" placeholder="tag1, tag2…"
-           value="{{ (map.tags or []) | join(', ') }}" maxlength="400"
-           style="min-height:32px;width:140px;box-sizing:border-box;font-size:12px;"
-           title="Comma-separated tags for this map">
-    <button type="button" id="me-tags-save" class="me-tool-btn" title="Save the map's tags">Save tags</button>
+    <div class="me-sub">
+      <input type="text" id="me-tags-input" placeholder="tag1, tag2…"
+             value="{{ (map.tags or []) | join(', ') }}" maxlength="400"
+             style="min-height:32px;width:110px;box-sizing:border-box;font-size:12px;"
+             title="Comma-separated tags for this map">
+      <button type="button" id="me-tags-save" class="me-tool-btn" title="Save the map's tags">Save tags</button>
+    </div>
   </div>
   {# v2.816.0 — Actions zone: Tools sits beside History (Undo/Redo/Save). #}
   <div class="me-group me-group--stack" role="group" aria-label="Tools">
