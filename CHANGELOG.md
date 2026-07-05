@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.912.0] - 2026-07-05 — "The Folded Lair"
+
+**Schema version:** 100
+
+**Commit summary:** The Lair group collapses with the rest of the Draw zone, and a collapsed group's title now reads vertically to save space.
+
+**Description:** Two map-editor toolbar tidies:
+1. **The Lair group joins the Draw zone collapse.** Clicking the **Draw** zone divider label collapses/expands every group in that zone — but the **Lair zones** group was missing from that set, so it stayed open. It's now included (Walls · Markers · Environment · Lair · Tokens all fold together).
+2. **Collapsed group titles are vertical.** When a group is collapsed, its title (Walls, Markers, …) now reads **vertically** — the same orientation as the zone dividers (Draw / Map) — so a collapsed group is a **slim vertical strip** instead of a horizontal label, reclaiming toolbar width.
+
+### Changed
+- `app/templates/map_editor.html` — `ZONE_MEMBERS.Draw` includes `'Lair zones'`; `.me-group.me-collapsed > .me-grp-lbl` uses `writing-mode: vertical-rl` (rotated, like the zone labels) with tighter collapsed padding.
+
+### Added
+- `tests/harness_ui/test_editor_group_collapse.py` — clicking the Draw zone collapses the Lair group (with the others), and a collapsed group's label computes to a vertical writing-mode.
+
+### Schema
+- No schema change (still v100 — editor toolbar layout only).
+
 ## [2.911.0] - 2026-07-05 — "The FreeForm"
 
 **Schema version:** 100

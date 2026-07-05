@@ -120,9 +120,13 @@
     text-align:center; margin-bottom:1px; cursor:pointer; }
   /* v2.811.0 — click a group label to collapse it (reclaims toolbar width). */
   .me-grp-lbl::before { content:'▾ '; font-size:8px; opacity:.7; }
-  .me-group.me-collapsed { justify-content:center; padding-left:4px; padding-right:4px; }
+  .me-group.me-collapsed { justify-content:center; padding-left:2px; padding-right:2px; }
   .me-group.me-collapsed > .me-grp-lbl::before { content:'▸ '; }
   .me-group.me-collapsed > *:not(.me-grp-lbl) { display:none !important; }
+  /* v2.912.0 — a collapsed group's title reads VERTICALLY (like the zone
+     labels) so it's a slim strip that reclaims horizontal space. */
+  .me-group.me-collapsed > .me-grp-lbl { writing-mode:vertical-rl; transform:rotate(180deg);
+    margin:0; letter-spacing:1px; text-align:center; }
   .me-group > label { justify-content:center; }
   /* v2.881.0 — always-expanded reorderable layer list (was a dropdown). Each
      row: checkbox + name + a ⠿ drag handle; drag to change z-order.
@@ -4451,7 +4455,8 @@
   // that zone at once (the bulk version of the per-group collapse above). Reuses
   // the same collapsedGroups store so per-group + per-zone state stay in sync.
   var ZONE_MEMBERS = {
-    Draw: ['Walls', 'Markers', 'Environment', 'Tokens'],  // v2.835.0 — Props removed
+    // v2.912.0 — the Lair group collapses with the rest of the Draw zone.
+    Draw: ['Walls', 'Markers', 'Environment', 'Lair zones', 'Tokens'],  // v2.835.0 — Props removed
     Map: ['Grid', 'Layers', 'View'],  // v2.826.0 — Tags moved to the File group
   };
   Array.prototype.forEach.call(document.querySelectorAll('.me-zone-sep > .me-zone-lbl'), function (lbl) {
