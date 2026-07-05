@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.907.0] - 2026-07-05 — "The Sliding Door"
+
+**Schema version:** 100
+
+**Commit summary:** A selected embedded door can be moved (slide along the wall) and resized (drag its edge handles).
+
+**Description:** Embedded doors are now movable + resizable in the map editor. Right-click a door → **↔ Move / resize door** to select it: the door gets a dashed highlight and a **yellow handle at each edge**. Since a door is a span along its wall, it moves + resizes **along the wall line** — drag the door body to **slide** it (keeping its width, clamped to the wall ends), or drag an edge handle to **widen/narrow** it (keeping a minimum width, edges can't cross). Esc, a tool change, or a double-click on empty map deselects. A move-drag suppresses the click-toggle so sliding a door doesn't also open/close it.
+
+### Added
+- `app/templates/map_editor.html` — `selectedDoor` state; `selectDoor` + `mkDoorHandle` + `_projFrac`/`_doorEdgePt` helpers; a "Move / resize door" menu item; body-drag to move + edge handles to resize a selected door; deselect on Esc / tool change / empty double-click.
+- `tests/harness_ui/test_embedded_door_move_resize.py` — selecting a door shows two edge handles; dragging a handle widens it (`t1` grows) and dragging the body slides it (`t0` shrinks).
+
+### Schema
+- No schema change (still v100).
+
 ## [2.906.0] - 2026-07-05 — "The Right-Click Door"
 
 **Schema version:** 100

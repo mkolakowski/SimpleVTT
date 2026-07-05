@@ -669,6 +669,7 @@
   var sampleTokens = [];       // v2.777.0 — ephemeral preview tokens (not saved)
   var resizing = null;         // v2.786.6 — a wall/door whose ends are draggable
   var resizingTerrain = null;  // v2.832.0 — a terrain region whose corners are draggable
+  var selectedDoor = null;     // v2.907.0 — {wall, door} of a selected embedded door (movable/resizable)
 
   // v2.770.0 — right-click context menu for map objects.
   function hideMenu() {
@@ -870,6 +871,58 @@
       window.addEventListener('pointerup', up);
     });
     return h;
+  }
+  // v2.907.0 — embedded-door move/resize helpers. A door is a [t0,t1] span along
+  // its wall, so it can only slide/resize ALONG the wall line.
+  function _projFrac(w, p) {
+    var dx = w.x2 - w.x1, dy = w.y2 - w.y1, len2 = dx * dx + dy * dy || 1;
+    return Math.max(0, Math.min(1, ((p.x - w.x1) * dx + (p.y - w.y1) * dy) / len2));
+  }
+  function _doorEdgePt(w, frac) {
+    return { x: w.x1 + (w.x2 - w.x1) * frac, y: w.y1 + (w.y2 - w.y1) * frac };
+  }
+  function _doorMinFrac(w) {
+    var len = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) || 1;
+    return Math.max(0.02, 18 / len);  // ≥ ~18px wide so a door can't vanish
+  }
+  // A draggable yellow handle at one edge of a selected door; dragging it moves
+  // that edge (t0 or t1) along the wall, keeping t0<t1 and a minimum width.
+  function mkDoorHandle(w, emb, isEnd) {
+    var pt = _doorEdgePt(w, isEnd ? emb.t1 : emb.t0);
+    var h = document.createElementNS(NS, 'circle');
+    h.setAttribute('cx', pt.x); h.setAttribute('cy', pt.y);
+    h.setAttribute('r', Math.max(6, (gridPx || 70) * 0.11));
+    h.setAttribute('fill', '#ffd24a'); h.setAttribute('stroke', '#000'); h.setAttribute('stroke-width', '1.5');
+    h.style.pointerEvents = 'all'; h.style.cursor = 'grab';
+    h.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      e.stopPropagation(); e.preventDefault();
+      var minF = _doorMinFrac(w);
+      function mv(ev) {
+        var p = toMap(ev); if (!p) return;
+        var f = _projFrac(w, p);
+        if (isEnd) emb.t1 = Math.min(1, Math.max(emb.t0 + minF, f));
+        else emb.t0 = Math.max(0, Math.min(emb.t1 - minF, f));
+        render();
+      }
+      function up() {
+        window.removeEventListener('pointermove', mv);
+        window.removeEventListener('pointerup', up);
+        saveWalls();
+      }
+      window.addEventListener('pointermove', mv);
+      window.addEventListener('pointerup', up);
+    });
+    return h;
+  }
+  function selectDoor(w, emb) {
+    clearObjectSelection();
+    selectedWall = null; selectedTerrain = null; selectedLight = null;
+    if (typeof selectedLairZone !== 'undefined') selectedLairZone = null;
+    resizing = null; resizingTerrain = null;
+    selectedDoor = (w && emb) ? { wall: w, door: emb } : null;
+    setStatus(selectedDoor ? 'Door selected — drag it to move, drag the yellow handles to resize (Esc deselects).' : '');
+    render();
   }
   // v2.832.0 — a draggable corner-handle for resizing a terrain rectangle. The
   // opposite corner stays anchored while the dragged corner follows the cursor;
@@ -1837,7 +1890,12 @@
           var emb = (w.doors || []).find(function (d) { return d && d.id === sub._embDoorId; });
           if (!emb) return;
           var doorInert = wallMode || doorMode;  // let those modes reach the wall
-          function _rmDoor() { w.doors = (w.doors || []).filter(function (d) { return d.id !== emb.id; }); saveWalls(); }
+          var _selD = selectedDoor && selectedDoor.door === emb;  // v2.907.0
+          function _rmDoor() {
+            w.doors = (w.doors || []).filter(function (d) { return d.id !== emb.id; });
+            if (_selD) selectedDoor = null;
+            saveWalls();
+          }
           // v2.904.0 — the hit target follows the door LEAF (closed → along the
           // opening; open → the swung leaf), so an open door is clicked +
           // right-clicked on the leaf, not the empty doorway it left behind.
@@ -1847,19 +1905,46 @@
             dh.setAttribute('x2', sp[1][0]); dh.setAttribute('y2', sp[1][1]);
             dh.setAttribute('stroke', 'transparent'); dh.setAttribute('stroke-width', '18');
             dh.style.pointerEvents = doorInert ? 'none' : 'stroke';
-            dh.style.cursor = 'pointer';
+            dh.style.cursor = _selD ? 'move' : 'pointer';
             var dttl = document.createElementNS(NS, 'title');
             dttl.textContent = (emb.gate ? '🚪 Gate — ' : '🚪 Door — ')
               + (emb.open ? 'open (click to close)' : 'closed (click to open)');
             dh.appendChild(dttl);
             dh.addEventListener('click', function (e) {
               e.stopPropagation();
+              if (suppressClick) return;  // v2.907.0 — a move-drag just ended; don't toggle
               if (eraseMode) { _rmDoor(); return; }
               emb.open = !emb.open; saveWalls();
             });
+            // v2.907.0 — when selected, dragging the door body slides it along
+            // the wall (keeping its width).
+            if (_selD && !doorInert) {
+              dh.addEventListener('pointerdown', function (e) {
+                if (e.button !== 0) return;
+                e.stopPropagation(); e.preventDefault();
+                var start = toMap(e); if (!start) return;
+                var f0 = _projFrac(w, start), width = emb.t1 - emb.t0, origT0 = emb.t0, moved = false;
+                function mv(ev) {
+                  var p = toMap(ev); if (!p) return;
+                  var nt0 = origT0 + (_projFrac(w, p) - f0);
+                  nt0 = Math.max(0, Math.min(1 - width, nt0));
+                  if (nt0 !== emb.t0) moved = true;
+                  emb.t0 = nt0; emb.t1 = nt0 + width; render();
+                }
+                function up() {
+                  window.removeEventListener('pointermove', mv);
+                  window.removeEventListener('pointerup', up);
+                  if (moved) { suppressClick = true; setTimeout(function () { suppressClick = false; }, 0); saveWalls(); }
+                }
+                window.addEventListener('pointermove', mv);
+                window.addEventListener('pointerup', up);
+              });
+            }
             dh.addEventListener('contextmenu', function (e) {
               e.preventDefault(); e.stopPropagation();
               showMenu(e.clientX, e.clientY, [
+                { label: (_selD ? '✓ ↔ Move / resize door' : '↔ Move / resize door'),
+                  fn: function () { selectDoor(w, _selD ? null : emb); } },
                 { label: (emb.open ? '🚪 Close door' : '🚪 Open door'), fn: function () { emb.open = !emb.open; saveWalls(); } },
                 { label: (emb.gate ? '✓ ' : '   ') + '🚪 Gate (opens in middle)', fn: function () { emb.gate = !emb.gate; saveWalls(); } },
                 { label: '↻ Flip swing', fn: function () { emb.flip = !emb.flip; saveWalls(); } },
@@ -1869,6 +1954,20 @@
             });
             svg.appendChild(dh);
           });
+          // v2.907.0 — a selected door gets a dashed highlight + a resize handle
+          // at each edge (drag to widen/narrow along the wall).
+          if (_selD && !doorInert) {
+            doorLeafSegments(sub).forEach(function (sp) {
+              var hl = document.createElementNS(NS, 'line');
+              hl.setAttribute('x1', sp[0][0]); hl.setAttribute('y1', sp[0][1]);
+              hl.setAttribute('x2', sp[1][0]); hl.setAttribute('y2', sp[1][1]);
+              hl.setAttribute('stroke', '#6cf'); hl.setAttribute('stroke-width', '3');
+              hl.setAttribute('stroke-dasharray', '5 4'); hl.style.pointerEvents = 'none';
+              svg.appendChild(hl);
+            });
+            svg.appendChild(mkDoorHandle(w, emb, false));
+            svg.appendChild(mkDoorHandle(w, emb, true));
+          }
         });
       }
       // v2.787.1 — click-anywhere on an OPEN door/gate: the swung leaf is away
@@ -3351,6 +3450,7 @@
       else if (terrainDots.length) { terrainDots = []; setStatus(''); render(); }
       else if (roomDots.length) { roomDots = []; setStatus(''); render(); }  // v2.898.0
       else if (pending) { pending = null; render(); }
+      else if (selectedDoor) { selectedDoor = null; setStatus(''); render(); }  // v2.907.0
       else if (clearObjectSelection()) { /* light/wall/terrain deselected */ }
       else if (selectedLairZone) { selectedLairZone = null; render(); }  // v2.870.0
       else if (selection.length) { selection = []; render(); }
@@ -3391,6 +3491,7 @@
     // (incl. the unified selectedObj + its armed resize handles).
     selectedLight = null; selectedWall = null; selectedTerrain = null;
     selectedObj = null; resizing = null; resizingTerrain = null;
+    selectedDoor = null;  // v2.907.0 — drop a selected door on tool change
     selectedLairZone = null; lairZoneDots = [];   // v2.870.0
     syncLairZoneToolbar();
     syncLightToolbar();
@@ -4057,6 +4158,7 @@
   // this only fires for empty-map double-clicks).
   stage.addEventListener('dblclick', function () {
     clearObjectSelection();
+    if (selectedDoor) { selectedDoor = null; setStatus(''); render(); }  // v2.907.0
   });
   stage.addEventListener('wheel', function (e) {
     // v2.830.0 — the scroll wheel zooms the map (toward the cursor). Drag / the
