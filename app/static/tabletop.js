@@ -3997,114 +3997,128 @@
     function _onCtxKey(e) { if (e.key === 'Escape') _closeTokenCtxMenu(); }
     function _showTokenContextMenu(clientX, clientY, token) {
         _closeTokenCtxMenu();
+        const isGm = !!(ME && ME.isGm);
         const menu = document.createElement('div');
         menu.className = 'tt-token-ctx';
-        menu.style.cssText = 'position:fixed;z-index:9600;min-width:180px;'
-            + 'background:var(--bg);border:1px solid var(--border);border-radius:10px;'
-            + 'box-shadow:0 8px 28px rgba(0,0,0,.4);padding:6px;display:flex;'
-            + 'flex-direction:column;gap:2px;font-size:14px;';
+        // v2.919.0 — compact menu: tighter padding/gap + a narrower min-width so
+        // it reads as a small pop-over, not a panel.
+        menu.style.cssText = 'position:fixed;z-index:9600;min-width:150px;'
+            + 'background:var(--bg);border:1px solid var(--border);border-radius:9px;'
+            + 'box-shadow:0 6px 22px rgba(0,0,0,.4);padding:4px;display:flex;'
+            + 'flex-direction:column;gap:1px;font-size:13px;';
         const title = document.createElement('div');
         title.textContent = token.label || 'Token';
-        title.style.cssText = 'font-weight:700;padding:4px 8px 6px;opacity:.8;'
-            + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;';
+        title.style.cssText = 'font-weight:700;padding:3px 8px 4px;opacity:.8;font-size:12px;'
+            + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:230px;';
         menu.appendChild(title);
-        // Full-width action buttons inherit the global 44px min-height.
+        // v2.919.0 — compact action rows (32px per the dense-menu exception,
+        // like the initiative tracker), not the global 44px button height.
         function actionBtn(label, fn) {
             const b = document.createElement('button');
             b.type = 'button';
             b.textContent = label;
-            b.style.cssText = 'justify-content:flex-start;width:100%;font-size:14px;';
+            b.style.cssText = 'justify-content:flex-start;width:100%;min-height:32px;'
+                + 'padding:4px 8px;font-size:13px;';
             b.addEventListener('click', () => { _closeTokenCtxMenu(); fn(); });
             menu.appendChild(b);
             return b;
         }
-        if (token.character_id || token.token_template_id) {
-            actionBtn('📋 Open sheet', () => _openSheetForToken(token));
-        }
-        // Size row — dense, one-click M/L/H/G. 32px min per the compact-UI
-        // exception (a context-menu segmented control, like the init tracker).
-        const sizeWrap = document.createElement('div');
-        sizeWrap.style.cssText = 'display:flex;align-items:center;gap:4px;padding:4px 8px;';
-        const sizeLbl = document.createElement('span');
-        sizeLbl.textContent = 'Size';
-        sizeLbl.style.cssText = 'opacity:.7;font-size:12px;margin-right:2px;';
-        sizeWrap.appendChild(sizeLbl);
-        const curSize = Math.max(1, Math.min(4, parseInt(token.size, 10) || 1));
-        [[1, 'M'], [2, 'L'], [3, 'H'], [4, 'G']].forEach(([val, ch]) => {
-            const b = document.createElement('button');
-            b.type = 'button';
-            b.textContent = ch;
-            b.title = { 1: 'Medium (1×1)', 2: 'Large (2×2)', 3: 'Huge (3×3)', 4: 'Gargantuan (4×4)' }[val];
-            b.setAttribute('aria-pressed', val === curSize ? 'true' : 'false');
-            b.style.cssText = 'flex:1 1 0;min-height:32px;min-width:32px;padding:2px 6px;font-size:13px;'
-                + (val === curSize ? 'background:var(--accent);color:#fff;' : '');
-            b.addEventListener('click', () => { _closeTokenCtxMenu(); patchToken(token.id, { size: val }); });
-            sizeWrap.appendChild(b);
-        });
-        menu.appendChild(sizeWrap);
-        // v2.918.0 — labelled control rows (owner · team · colour) so the GM can
-        // manage a token entirely from the map without opening the drawer.
         function ctrlRow(labelText, control) {
             const row = document.createElement('div');
-            row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:2px 8px;';
+            row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:1px 8px;';
             const lbl = document.createElement('span');
             lbl.textContent = labelText;
-            lbl.style.cssText = 'opacity:.7;font-size:12px;min-width:44px;';
+            lbl.style.cssText = 'opacity:.7;font-size:11px;min-width:42px;';
             row.appendChild(lbl);
             control.style.flex = '1 1 0';
             row.appendChild(control);
             menu.appendChild(row);
             return control;
         }
-        // Owner (GM or a campaign member).
-        const ownerSel = document.createElement('select');
-        ownerSel.style.cssText = 'min-height:32px;font-size:13px;';
-        const gmOpt = document.createElement('option');
-        gmOpt.value = ''; gmOpt.textContent = 'GM';
-        gmOpt.selected = token.controller_user_id == null;
-        ownerSel.appendChild(gmOpt);
-        (typeof MEMBERS !== 'undefined' ? MEMBERS : []).forEach(m => {
-            const o = document.createElement('option');
-            o.value = String(m.id); o.textContent = m.name;
-            o.selected = token.controller_user_id === m.id;
-            ownerSel.appendChild(o);
+        if (token.character_id || token.token_template_id) {
+            if (!(token.is_hidden && !isGm)) {
+                actionBtn('📋 Open sheet', () => _openSheetForToken(token));
+            }
+        }
+        // Target / clear target — available to GM + players (the same primitive
+        // the Players drawer 🎯 button uses).
+        const targeted = _targeting && _targeting.isTargeted(token.id);
+        actionBtn(targeted ? '🎯 Clear target' : '🎯 Target', () => {
+            if (targeted) _targeting.clear(); else _targeting.setTarget(token.id);
         });
-        ownerSel.addEventListener('change', (e) => {
-            const v = e.target.value;
-            _closeTokenCtxMenu();
-            patchToken(token.id, { controller_user_id: v ? parseInt(v, 10) : null });
-        });
-        ctrlRow('Owner', ownerSel);
-        // Team (used by the OA same-team filter).
-        const teamSel = document.createElement('select');
-        teamSel.style.cssText = 'min-height:32px;font-size:13px;';
-        [['neutral', '— Neutral'], ['hero', '🦸 Hero'], ['villain', '👹 Villain']].forEach(([v, t]) => {
-            const o = document.createElement('option');
-            o.value = v; o.textContent = t;
-            o.selected = String(token.team || 'neutral').toLowerCase() === v;
-            teamSel.appendChild(o);
-        });
-        teamSel.addEventListener('change', (e) => {
-            _closeTokenCtxMenu();
-            patchToken(token.id, { team: e.target.value || 'neutral' });
-        });
-        ctrlRow('Team', teamSel);
-        // Colour (the token ring / circle-token fill).
-        const colorInp = document.createElement('input');
-        colorInp.type = 'color';
-        colorInp.value = /^#[0-9a-fA-F]{6}$/.test(token.color || '') ? token.color : '#cc3333';
-        colorInp.style.cssText = 'min-height:32px;padding:2px;';
-        colorInp.addEventListener('change', (e) => {
-            _closeTokenCtxMenu();
-            patchToken(token.id, { color: e.target.value });
-        });
-        ctrlRow('Colour', colorInp);
-        actionBtn(token.is_hidden ? '👁 Show token' : '🚫 Hide token',
-            () => patchToken(token.id, { is_hidden: !token.is_hidden }));
-        actionBtn('🗑 Delete token', () => {
-            if (!confirm(`Delete "${token.label || 'token'}"?`)) return;
-            fetch(`/api/campaign/${CAMPAIGN_ID}/tokens/${token.id}`, { method: 'DELETE' });
-        });
+
+        // ---- GM-only management controls ----
+        if (isGm) {
+            // Size row — dense, one-click M/L/H/G.
+            const sizeWrap = document.createElement('div');
+            sizeWrap.style.cssText = 'display:flex;align-items:center;gap:4px;padding:2px 8px;';
+            const sizeLbl = document.createElement('span');
+            sizeLbl.textContent = 'Size';
+            sizeLbl.style.cssText = 'opacity:.7;font-size:11px;min-width:42px;';
+            sizeWrap.appendChild(sizeLbl);
+            const curSize = Math.max(1, Math.min(4, parseInt(token.size, 10) || 1));
+            [[1, 'M'], [2, 'L'], [3, 'H'], [4, 'G']].forEach(([val, ch]) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.textContent = ch;
+                b.title = { 1: 'Medium (1×1)', 2: 'Large (2×2)', 3: 'Huge (3×3)', 4: 'Gargantuan (4×4)' }[val];
+                b.setAttribute('aria-pressed', val === curSize ? 'true' : 'false');
+                b.style.cssText = 'flex:1 1 0;min-height:32px;min-width:30px;padding:2px 4px;font-size:12px;'
+                    + (val === curSize ? 'background:var(--accent);color:#fff;' : '');
+                b.addEventListener('click', () => { _closeTokenCtxMenu(); patchToken(token.id, { size: val }); });
+                sizeWrap.appendChild(b);
+            });
+            menu.appendChild(sizeWrap);
+            // Owner (GM or a campaign member).
+            const ownerSel = document.createElement('select');
+            ownerSel.style.cssText = 'min-height:32px;font-size:13px;';
+            const gmOpt = document.createElement('option');
+            gmOpt.value = ''; gmOpt.textContent = 'GM';
+            gmOpt.selected = token.controller_user_id == null;
+            ownerSel.appendChild(gmOpt);
+            (typeof MEMBERS !== 'undefined' ? MEMBERS : []).forEach(m => {
+                const o = document.createElement('option');
+                o.value = String(m.id); o.textContent = m.name;
+                o.selected = token.controller_user_id === m.id;
+                ownerSel.appendChild(o);
+            });
+            ownerSel.addEventListener('change', (e) => {
+                const v = e.target.value;
+                _closeTokenCtxMenu();
+                patchToken(token.id, { controller_user_id: v ? parseInt(v, 10) : null });
+            });
+            ctrlRow('Owner', ownerSel);
+            // Team (used by the OA same-team filter).
+            const teamSel = document.createElement('select');
+            teamSel.style.cssText = 'min-height:32px;font-size:13px;';
+            [['neutral', '— Neutral'], ['hero', '🦸 Hero'], ['villain', '👹 Villain']].forEach(([v, t]) => {
+                const o = document.createElement('option');
+                o.value = v; o.textContent = t;
+                o.selected = String(token.team || 'neutral').toLowerCase() === v;
+                teamSel.appendChild(o);
+            });
+            teamSel.addEventListener('change', (e) => {
+                _closeTokenCtxMenu();
+                patchToken(token.id, { team: e.target.value || 'neutral' });
+            });
+            ctrlRow('Team', teamSel);
+            // Colour (the token ring / circle-token fill).
+            const colorInp = document.createElement('input');
+            colorInp.type = 'color';
+            colorInp.value = /^#[0-9a-fA-F]{6}$/.test(token.color || '') ? token.color : '#cc3333';
+            colorInp.style.cssText = 'min-height:32px;padding:2px;';
+            colorInp.addEventListener('change', (e) => {
+                _closeTokenCtxMenu();
+                patchToken(token.id, { color: e.target.value });
+            });
+            ctrlRow('Colour', colorInp);
+            actionBtn(token.is_hidden ? '👁 Show token' : '🚫 Hide token',
+                () => patchToken(token.id, { is_hidden: !token.is_hidden }));
+            actionBtn('🗑 Delete token', () => {
+                if (!confirm(`Delete "${token.label || 'token'}"?`)) return;
+                fetch(`/api/campaign/${CAMPAIGN_ID}/tokens/${token.id}`, { method: 'DELETE' });
+            });
+        }
         _tokenCtxMenuEl = menu;
         document.body.appendChild(menu);
         // Clamp within the viewport.
@@ -4155,17 +4169,13 @@
         for (let i = tokens.length - 1; i >= 0; i--) {
             const t = tokens[i];
             if (!pointInToken(x, y, t)) continue;
-            // v2.916.0 — GMs get the token action menu; players keep the
-            // direct sheet-open gesture (nothing to manage, just view).
-            if (ME && ME.isGm) {
-                _showTokenContextMenu(ev.clientX, ev.clientY, t);
-                _lastSheetOpenAt = Date.now();
-                return;
-            }
-            if (_openSheetForToken(t)) {
-                _lastSheetOpenAt = Date.now();
-                return;
-            }
+            // v2.916.0 / v2.919.0 — GMs get the full management menu; players
+            // get a compact menu (open sheet · target). Players can't see a
+            // hidden token, so skip it and fall through to the next one.
+            if (t.is_hidden && !(ME && ME.isGm)) continue;
+            _showTokenContextMenu(ev.clientX, ev.clientY, t);
+            _lastSheetOpenAt = Date.now();
+            return;
         }
     }
     canvas.addEventListener('contextmenu', _handleRightClick);

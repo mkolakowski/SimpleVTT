@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.919.0] - 2026-07-05 — "The Player's Menu"
+
+**Schema version:** 101
+
+**Commit summary:** Slimmer GM token menu + a compact player right-click menu.
+
+**Description:** Two tweaks to the tabletop token right-click menu:
+1. **Compact GM menu.** The GM menu had grown tall (sheet · size · owner · team · colour · hide · delete). It's now a tighter pop-over — smaller title, 32px dense rows (the compact-menu exception, like the initiative tracker) instead of full 44px buttons, and a narrower min-width — so it covers less of the map.
+2. **Players get a right-click menu too.** Previously a player's right-click jumped straight to the token's sheet. Now players get their own compact menu with **📋 Open sheet** (when the token has a sheet) and **🎯 Target / Clear target** (the same targeting primitive as the Players-drawer 🎯 button). GM-only management controls (size, owner, team, colour, hide, delete) are **not** shown to players. A player still can't right-click a hidden token (it falls through to the next token / empty space).
+
+### Added
+- Player token context menu (`_showTokenContextMenu` now branches on `ME.isGm`): open-sheet + target actions for players; full management set for GMs.
+- **🎯 Target / Clear target** action available to GM + players in the menu.
+- `tests/harness_ui/test_token_context_menu.py::test_player_right_click_gets_compact_menu` — a player right-click shows the target action but none of the GM controls (no delete, no selects).
+
+### Changed
+- The token context menu is visually compact (tighter padding/gap, 32px rows, smaller title/min-width).
+- `_handleRightClick` routes both GMs and players to the context menu (players no longer jump straight to the sheet).
+
+### Schema
+- No schema change (still v101 — client menu only).
+
 ## [2.918.0] - 2026-07-05 — "The Full Menu"
 
 **Schema version:** 101

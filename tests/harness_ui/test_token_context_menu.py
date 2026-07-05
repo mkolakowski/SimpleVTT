@@ -93,3 +93,41 @@ def test_gm_token_menu_sets_team(gm_page: Page) -> None:
             assert row["team"] == "hero", row
         finally:
             c.request("DELETE", f"/api/campaign/{CAMPAIGN_ID}/tokens/{tid}")
+
+
+def test_player_right_click_gets_compact_menu(alice_page: Page) -> None:
+    """v2.919.0 — a player's right-click opens a compact menu (target only, no
+    GM management controls)."""
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
+        c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        am = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()
+        cx_map, cy_map = (int(am.get("width_px") or 2000) / 2,
+                          int(am.get("height_px") or 1500) / 2)
+        # A visible token (players can't right-click hidden ones).
+        tok = c.post(f"/api/campaign/{CAMPAIGN_ID}/tokens",
+                     json={"label": "PlayerCtx", "x": cx_map, "y": cy_map}).json()
+        tid = tok["id"]
+        try:
+            alice_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}")
+            alice_page.wait_for_selector("#token-veil-canvas", timeout=8000)
+            alice_page.wait_for_function("() => window.__camScaleForTest", timeout=8000)
+            alice_page.wait_for_timeout(500)
+            pt = alice_page.evaluate(
+                """([mx, my]) => {
+                    const scale = window.__camScaleForTest();
+                    const g = parseInt(document.getElementById('vtt-canvas').dataset.gridSize || '70', 10);
+                    const rect = document.getElementById('map-transform').getBoundingClientRect();
+                    return { x: rect.left + (mx + g / 2) * scale, y: rect.top + (my + g / 2) * scale };
+                }""",
+                [cx_map, cy_map],
+            )
+            alice_page.mouse.click(pt["x"], pt["y"], button="right")
+            menu = alice_page.locator(".tt-token-ctx")
+            expect(menu).to_be_visible(timeout=3000)
+            # Player gets the target action…
+            expect(menu.get_by_role("button", name="🎯 Target")).to_be_visible()
+            # …but NOT the GM management controls (no delete, no size/owner selects).
+            expect(menu.get_by_role("button", name="🗑 Delete token")).to_have_count(0)
+            assert menu.locator("select").count() == 0
+        finally:
+            c.request("DELETE", f"/api/campaign/{CAMPAIGN_ID}/tokens/{tid}")
