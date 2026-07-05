@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.905.0] - 2026-07-05 — "The Single Placement"
+
+**Schema version:** 100
+
+**Commit summary:** The Door tool turns off after placing a door, so a stray next click doesn't drop an unwanted second door.
+
+**Description:** Placing a door with the 🚪 Door tool now **deselects the tool** (the button un-presses) once the door lands. Previously the tool stayed armed, so the next click on a wall dropped another door you didn't mean to place. To add several doors, re-click 🚪 Door before each — or use the new right-click **Insert door** (shipping alongside). The right-click "Insert door" path doesn't touch the tool state.
+
+### Changed
+- `app/templates/map_editor.html` — `_placeDoorInWall` calls `setMode(null)` when placing from Door mode; the toast now notes the tool is off.
+- `tests/harness_ui/test_map_editor_door_style.py` — asserts the Door button un-presses after a placement, and the two-door snap test re-arms the tool before each door.
+
+### Schema
+- No schema change (still v100).
+
 ## [2.904.0] - 2026-07-05 — "The Swinging Leaf"
 
 **Schema version:** 100

@@ -33,9 +33,13 @@ def test_place_door_embeds_in_wall_without_splitting(gm_page: Page) -> None:
             gm_page.wait_for_timeout(300)
             me_clear_toolbar(gm_page)
 
-            gm_page.locator("#me-door-btn").click()
+            door_btn = gm_page.locator("#me-door-btn")
+            door_btn.click()
+            assert door_btn.get_attribute("aria-pressed") == "true"
             box = gm_page.locator('#me-overlay line[stroke="transparent"]').first.bounding_box()
             _place_door_at(gm_page, 0.5, box)
+            # v2.905.0 — placing a door turns the tool back off.
+            assert door_btn.get_attribute("aria-pressed") == "false"
 
             walls = c.get(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls").json()["walls"]
             # Still ONE wall — not split — carrying one embedded door.
@@ -66,9 +70,12 @@ def test_two_doors_on_one_wall_snap_flush(gm_page: Page) -> None:
             expect(gm_page.locator("#me-overlay")).to_be_visible()
             gm_page.wait_for_timeout(300)
             me_clear_toolbar(gm_page)
+            # v2.905.0 — the Door tool turns OFF after each placement, so
+            # re-enable it before each door.
             gm_page.locator("#me-door-btn").click()
             box = gm_page.locator('#me-overlay line[stroke="transparent"]').first.bounding_box()
             _place_door_at(gm_page, 0.48, box)
+            gm_page.locator("#me-door-btn").click()  # re-arm the Door tool
             _place_door_at(gm_page, 0.55, box)  # close to the first → snaps flush
 
             walls = c.get(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls").json()["walls"]
