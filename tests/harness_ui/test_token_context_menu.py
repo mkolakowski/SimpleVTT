@@ -56,3 +56,40 @@ def test_gm_right_click_token_menu_resizes(gm_page: Page) -> None:
             expect(menu).to_have_count(0)
         finally:
             c.request("DELETE", f"/api/campaign/{CAMPAIGN_ID}/tokens/{tid}")
+
+
+def test_gm_token_menu_sets_team(gm_page: Page) -> None:
+    """v2.918.0 — the context menu's Team control changes the token's team."""
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
+        c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        am = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()
+        cx_map, cy_map = (int(am.get("width_px") or 2000) / 2,
+                          int(am.get("height_px") or 1500) / 2)
+        tok = c.post(f"/api/campaign/{CAMPAIGN_ID}/tokens",
+                     json={"label": "TeamTest", "x": cx_map, "y": cy_map}).json()
+        tid = tok["id"]
+        try:
+            gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}")
+            gm_page.wait_for_selector("#token-veil-canvas", timeout=8000)
+            gm_page.wait_for_function("() => window.__camScaleForTest", timeout=8000)
+            gm_page.wait_for_timeout(500)
+            pt = gm_page.evaluate(
+                """([mx, my]) => {
+                    const scale = window.__camScaleForTest();
+                    const g = parseInt(document.getElementById('vtt-canvas').dataset.gridSize || '70', 10);
+                    const rect = document.getElementById('map-transform').getBoundingClientRect();
+                    return { x: rect.left + (mx + g / 2) * scale, y: rect.top + (my + g / 2) * scale };
+                }""",
+                [cx_map, cy_map],
+            )
+            gm_page.mouse.click(pt["x"], pt["y"], button="right")
+            menu = gm_page.locator(".tt-token-ctx")
+            expect(menu).to_be_visible(timeout=3000)
+            # Pick "🦸 Hero" in the Team dropdown.
+            menu.locator("select").nth(1).select_option("hero")
+            gm_page.wait_for_timeout(500)
+            row = next(t for t in c.get(
+                f"/api/campaign/{CAMPAIGN_ID}/tokens").json()["tokens"] if t["id"] == tid)
+            assert row["team"] == "hero", row
+        finally:
+            c.request("DELETE", f"/api/campaign/{CAMPAIGN_ID}/tokens/{tid}")

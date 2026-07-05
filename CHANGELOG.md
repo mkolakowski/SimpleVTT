@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.918.0] - 2026-07-05 — "The Full Menu"
+
+**Schema version:** 101
+
+**Commit summary:** The GM token right-click menu gains owner, team, and colour controls.
+
+**Description:** Rounds out the token context menu (v2.916.0) so the GM can manage a token **entirely from the map** without opening the Players/Tokens drawer. Below the size control, the menu now carries three labelled rows:
+- **Owner** — reassign the token to the GM or any campaign member.
+- **Team** — Neutral / 🦸 Hero / 👹 Villain (drives the opportunity-attack same-team filter).
+- **Colour** — a native colour picker for the token ring / circle fill.
+
+Each writes through the existing token `PATCH` endpoint (live `token_update` broadcast) and closes the menu on change. The menu now reads: open sheet · size · owner · team · colour · hide/show · delete.
+
+### Added
+- Token context menu: **Owner**, **Team**, and **Colour** control rows wired to `patchToken`.
+- `tests/harness_ui/test_token_context_menu.py::test_gm_token_menu_sets_team` — picking 🦸 Hero in the menu's Team dropdown sets the token's team.
+
+### Schema
+- No schema change (still v101 — client menu over the existing `PATCH /token/{id}`).
+
 ## [2.917.0] - 2026-07-05 — "The Squared Footprint"
 
 **Schema version:** 101

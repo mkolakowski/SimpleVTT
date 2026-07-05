@@ -4042,6 +4042,63 @@
             sizeWrap.appendChild(b);
         });
         menu.appendChild(sizeWrap);
+        // v2.918.0 — labelled control rows (owner · team · colour) so the GM can
+        // manage a token entirely from the map without opening the drawer.
+        function ctrlRow(labelText, control) {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:2px 8px;';
+            const lbl = document.createElement('span');
+            lbl.textContent = labelText;
+            lbl.style.cssText = 'opacity:.7;font-size:12px;min-width:44px;';
+            row.appendChild(lbl);
+            control.style.flex = '1 1 0';
+            row.appendChild(control);
+            menu.appendChild(row);
+            return control;
+        }
+        // Owner (GM or a campaign member).
+        const ownerSel = document.createElement('select');
+        ownerSel.style.cssText = 'min-height:32px;font-size:13px;';
+        const gmOpt = document.createElement('option');
+        gmOpt.value = ''; gmOpt.textContent = 'GM';
+        gmOpt.selected = token.controller_user_id == null;
+        ownerSel.appendChild(gmOpt);
+        (typeof MEMBERS !== 'undefined' ? MEMBERS : []).forEach(m => {
+            const o = document.createElement('option');
+            o.value = String(m.id); o.textContent = m.name;
+            o.selected = token.controller_user_id === m.id;
+            ownerSel.appendChild(o);
+        });
+        ownerSel.addEventListener('change', (e) => {
+            const v = e.target.value;
+            _closeTokenCtxMenu();
+            patchToken(token.id, { controller_user_id: v ? parseInt(v, 10) : null });
+        });
+        ctrlRow('Owner', ownerSel);
+        // Team (used by the OA same-team filter).
+        const teamSel = document.createElement('select');
+        teamSel.style.cssText = 'min-height:32px;font-size:13px;';
+        [['neutral', '— Neutral'], ['hero', '🦸 Hero'], ['villain', '👹 Villain']].forEach(([v, t]) => {
+            const o = document.createElement('option');
+            o.value = v; o.textContent = t;
+            o.selected = String(token.team || 'neutral').toLowerCase() === v;
+            teamSel.appendChild(o);
+        });
+        teamSel.addEventListener('change', (e) => {
+            _closeTokenCtxMenu();
+            patchToken(token.id, { team: e.target.value || 'neutral' });
+        });
+        ctrlRow('Team', teamSel);
+        // Colour (the token ring / circle-token fill).
+        const colorInp = document.createElement('input');
+        colorInp.type = 'color';
+        colorInp.value = /^#[0-9a-fA-F]{6}$/.test(token.color || '') ? token.color : '#cc3333';
+        colorInp.style.cssText = 'min-height:32px;padding:2px;';
+        colorInp.addEventListener('change', (e) => {
+            _closeTokenCtxMenu();
+            patchToken(token.id, { color: e.target.value });
+        });
+        ctrlRow('Colour', colorInp);
         actionBtn(token.is_hidden ? '👁 Show token' : '🚫 Hide token',
             () => patchToken(token.id, { is_hidden: !token.is_hidden }));
         actionBtn('🗑 Delete token', () => {
