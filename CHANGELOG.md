@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.912.1] - 2026-07-05 — "The Remembered Fold"
+
+**Schema version:** 100
+
+**Commit summary:** Regression guard — a toolbar zone collapse survives a page reload.
+
+**Description:** No behavior change: verified that collapsing a whole toolbar zone (via the Draw/Map divider label) already persists across a reload, because the zone handler writes into the same per-map `me-collapsed-<MID>` localStorage store that per-group collapse uses. This commit locks that in with a regression test so a future refactor of the zone handler can't silently drop persistence.
+
+### Added
+- `tests/harness_ui/test_editor_group_collapse.py::test_zone_collapse_persists_across_reload` — collapse the Draw zone, reload the editor, and assert every Draw-zone group (Walls · Markers · Environment · Lair · Tokens) comes back collapsed.
+
+### Schema
+- No schema change (still v100 — test-only).
+
 ## [2.912.0] - 2026-07-05 — "The Folded Lair"
 
 **Schema version:** 100
