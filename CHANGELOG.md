@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.914.0] - 2026-07-05 — "The Preset Row"
+
+**Schema version:** 101
+
+**Commit summary:** One-click S/M/L/XL presets for the map editor's per-map token-size dial.
+
+**Description:** Builds on v2.913.0's **tokens ×** dial with a row of one-click size presets — **S** (0.75×), **M** (1×, the default), **L** (1.5×), **XL** (2×) — right below the number input in the map editor's **Grid** group. Clicking a preset sets the per-map token scale, re-renders the preview, persists it (same `token_scale` endpoint → live `token_scale_update` broadcast), and highlights the active preset. The number input and the presets share one setter, so they always agree.
+
+### Added
+- Map editor: an **S / M / L / XL** preset button row under the tokens × input; the active scale's preset shows `aria-pressed="true"`.
+- `tests/harness_ui/test_editor_token_scale.py::test_editor_token_scale_presets` — clicking **L** sets 1.5×, persists, and highlights only that preset.
+
+### Changed
+- Editor JS: refactored the token-scale change handler into a shared `applyTokenScale()` used by both the number input and the presets, with `_syncTokenPresetHighlight()` reflecting the current scale on load + on change.
+
+### Schema
+- No schema change (still v101 — UI only, reuses the v2.913.0 `token_scale` endpoint).
+
 ## [2.913.0] - 2026-07-05 — "The Sizing Dial"
 
 **Schema version:** 101
