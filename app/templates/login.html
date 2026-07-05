@@ -50,11 +50,14 @@
                44-px buttons would visually overpower the row text. #}
             {% for u in demo_users %}
             <li>
-                <span style="white-space:nowrap;">
-                    <strong>{{ u.display_name }}</strong>{% if u.is_gm %} <span class="demo-role-tag">GM</span>{% endif %}
-                    <code>{{ u.email }}</code>
+                {# v2.919.1 — Fill button to the LEFT of a name-over-email stack. #}
+                <span style="display:flex;align-items:center;gap:10px;">
                     <button type="button" class="demo-fill-btn" data-demo-email="{{ u.email }}"
-                            style="min-height:32px;padding:4px 12px;font-size:13px;margin-left:6px;">Fill</button>
+                            style="min-height:32px;padding:4px 12px;font-size:13px;flex-shrink:0;">Fill</button>
+                    <span style="display:flex;flex-direction:column;line-height:1.25;min-width:0;">
+                        <span style="white-space:nowrap;"><strong>{{ u.display_name }}</strong>{% if u.is_gm %} <span class="demo-role-tag">GM</span>{% endif %}</span>
+                        <code style="font-size:12px;">{{ u.email }}</code>
+                    </span>
                 </span>
                 {% if u.campaigns %}
                 <ul class="demo-campaigns" hidden style="margin:4px 0 2px 6px;padding-left:14px;font-size:12px;">

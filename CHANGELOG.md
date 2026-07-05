@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.919.1] - 2026-07-05 — "The Stacked Sign-In"
+
+**Schema version:** 101
+
+**Commit summary:** Login demo-user rows now stack the email under the name with the Fill button on the left.
+
+**Description:** Tidies each row of the login page's demo-credentials box. The account's **email now sits beneath its display name** (a two-line stack) instead of trailing it on the same line, and the **Fill** button moves to the **left** of the name/email so the clickable action leads the row. Cosmetic only — the roster contents, the per-account campaign toggle, and the Fill behaviour are unchanged.
+
+### Changed
+- `app/templates/login.html` — demo-user `<li>` layout: `[Fill] [name / email]` flex row (Fill left; name over email).
+
+### Schema
+- No schema change (still v101 — login layout only).
+
 ## [2.919.0] - 2026-07-05 — "The Player's Menu"
 
 **Schema version:** 101
