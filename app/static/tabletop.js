@@ -9387,6 +9387,11 @@
                     .join('');
                 const teamOpt = (v, label) =>
                     `<option value="${v}"${teamRaw === v ? ' selected' : ''}>${escapeHTML(label)}</option>`;
+                // v2.915.0 — per-token size override (grid cells across). Combines
+                // with the per-map token_scale. 1=Medium … 4=Gargantuan.
+                const tSize = Math.max(1, Math.min(4, parseInt(t.size, 10) || 1));
+                const sizeOpt = (v, label) =>
+                    `<option value="${v}"${tSize === v ? ' selected' : ''}>${escapeHTML(label)}</option>`;
                 infoHtml = `
                     <select class="tt-ctrl" title="Ownership">
                         <option value="">GM</option>
@@ -9396,6 +9401,12 @@
                         ${teamOpt('neutral', '— Neutral')}
                         ${teamOpt('hero', '🦸 Hero')}
                         ${teamOpt('villain', '👹 Villain')}
+                    </select>
+                    <select class="tt-size" title="Token size (grid cells across)">
+                        ${sizeOpt(1, 'M · 1×1')}
+                        ${sizeOpt(2, 'L · 2×2')}
+                        ${sizeOpt(3, 'H · 3×3')}
+                        ${sizeOpt(4, 'G · 4×4')}
                     </select>`;
             } else {
                 const ownerLabel = _ownerLabel(t);
@@ -9452,6 +9463,13 @@
             if (teamSel) {
                 teamSel.addEventListener('change', (e) => {
                     patchToken(t.id, { team: e.target.value || 'neutral' });
+                });
+            }
+            // v2.915.0 — per-token size override.
+            const sizeSel = row.querySelector('.tt-size');
+            if (sizeSel) {
+                sizeSel.addEventListener('change', (e) => {
+                    patchToken(t.id, { size: parseInt(e.target.value, 10) || 1 });
                 });
             }
 

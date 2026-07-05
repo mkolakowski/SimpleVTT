@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.915.0] - 2026-07-05 — "The Bigger Beast"
+
+**Schema version:** 101
+
+**Commit summary:** Per-token size override — the GM sets an individual token's size (Medium–Gargantuan) from the tabletop's Players/Tokens drawer.
+
+**Description:** Complements the per-map token-size dial (v2.913.0–v2.914.0) with a **per-token** override so a single ogre or dragon can be sized up without touching the rest of the map. In the tabletop's **Players / Tokens** drawer, flipping on **✎ Edit** now shows a size dropdown on each token row — **M · 1×1**, **L · 2×2**, **H · 3×3**, **G · 4×4** — alongside the existing owner/team pickers. Changing it saves via the token `PATCH` endpoint and broadcasts `token_update`, so every client re-renders the token at its new footprint live. The per-token size multiplies with the per-map `token_scale` (a Large token on a 1.5× map draws at 3× a Medium token's baseline).
+
+> Note on placement: the tabletop's right-click gesture already opens a token's character/monster sheet, so the size control lives in the token-management drawer (the established home for owner/team/visibility edits) rather than a new right-click menu that would collide with sheet-opening.
+
+### Added
+- `PATCH /api/campaign/{cid}/token/{id}` now accepts **`size`** (integer, clamped `[1, 4]`; 400 on non-integer). The `token_update` broadcast already carries `size`.
+- Tabletop Players/Tokens drawer (edit mode): a per-row **size** dropdown (Medium / Large / Huge / Gargantuan) wired to `patchToken`.
+- `tests/harness/test_token_size.py` — round-trip + `token_update` broadcast, clamp to `[1, 4]`, 400 on non-integer, 403 for non-GM.
+
+### Schema
+- No schema change (still v101 — `tokens.size` already existed; this exposes it to the update endpoint + UI).
+
 ## [2.914.0] - 2026-07-05 — "The Preset Row"
 
 **Schema version:** 101

@@ -22110,6 +22110,13 @@ async def update_token(
         token.controller_user_id = int(val) if val else None
     if "color" in body:
         token.color = str(body["color"])[:20]
+    # v2.915.0 — per-token size override (Tiny/Small–Medium/Large/Huge/Garg =
+    # 1..4 grid cells). Clamped to [1, 4]; combines with the per-map token_scale.
+    if "size" in body:
+        try:
+            token.size = max(1, min(4, int(body["size"])))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "size must be an integer 1–4")
     # v2.99.52 — plan-movement-oa-flow Phase 1: accept faction tag.
     # Validated against the closed set so a malicious client can't
     # land an arbitrary string that would skip the same-team filter
