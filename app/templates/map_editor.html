@@ -215,6 +215,16 @@
     <button type="button" id="me-delete-all-btn" class="me-tool-btn"
             style="background:#7a1f14;color:#ffd9d2;font-weight:600;border:1px solid #b5321f;"
             title="Delete every placed element on this map (asks you to type DELETE)">🗑 Delete all</button>
+    {# v2.922.0 — export/import the whole map layout (walls/doors/windows/terrain/
+       lights/fog/hotspots/pins/props/labels/lair zones + grid/ambient/token scale)
+       as a JSON file, so a layout can be shared or baked into the demo seed. #}
+    <div class="me-sub">
+      <button type="button" id="me-export-btn" class="me-tool-btn" style="flex:1;"
+              title="Download every placed element (walls, doors, windows, terrain, lights, fog, hotspots, pins, props, labels, lair zones) as a JSON file">⬇ Export</button>
+      <button type="button" id="me-import-btn" class="me-tool-btn" style="flex:1;"
+              title="Import a map JSON export — REPLACES all placed elements on this map (undoable)">⬆ Import</button>
+    </div>
+    <input type="file" id="me-import-file" accept="application/json,.json" style="display:none;">
     {# v2.826.0 — map tags folded in from the (removed) standalone Tags group.
        v2.889.0 — tags input + its Save button share a row (was stacked). #}
     <span class="me-cap" style="text-align:center;margin-top:2px;">Tags</span>
@@ -2772,6 +2782,110 @@
       if (announce) showToast('Save failed ✗');
     }
   }
+  // v2.922.0 — export / import the whole map layout as a JSON file. Handy for
+  // sharing a layout or baking a hand-authored map into the demo seed.
+  function _mapExportObject() {
+    var nm = (document.getElementById('me-map-name') || {}).textContent || '';
+    return {
+      _simplevtt_map_export: 1,
+      map_id: MID,
+      map_name: nm,
+      grid: { type: gridType, px: gridPx, show: gridShow, offset_x: gridOffX, offset_y: gridOffY },
+      ambient_light: ambient,
+      token_scale: tokenScale,
+      fog: { enabled: fogEnabled, dynamic: fogDynamic, revealed: fogRevealed },
+      walls: walls, terrain: terrain, lights: lights, hotspots: hotspots,
+      gm_pins: gmPins, props: props, labels: labels, lair_zones: lairZones,
+    };
+  }
+  function exportMapJSON() {
+    var obj = _mapExportObject();
+    var json = JSON.stringify(obj, null, 2);
+    var blob = new Blob([json], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var safe = (obj.map_name || 'map').replace(/[^a-z0-9]+/gi, '-').toLowerCase().replace(/^-+|-+$/g, '') || 'map';
+    var a = document.createElement('a');
+    a.href = url; a.download = 'simplevtt-map-' + safe + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    if (navigator.clipboard) { try { navigator.clipboard.writeText(json); } catch (_) {} }
+    if (window.showToast) showToast('Map layout exported ⬇');
+  }
+  function _syncToolbarFromState() {
+    var g = function (id) { return document.getElementById(id); };
+    if (g('me-grid')) g('me-grid').value = gridPx;
+    if (g('me-grid-type')) g('me-grid-type').value = gridType;
+    if (g('me-grid-show')) g('me-grid-show').checked = gridShow;
+    if (g('me-grid-offx')) g('me-grid-offx').value = gridOffX;
+    if (g('me-grid-offy')) g('me-grid-offy').value = gridOffY;
+    if (g('me-ambient')) g('me-ambient').value = ambient;
+    if (g('me-token-scale')) g('me-token-scale').value = (+tokenScale).toString();
+    if (typeof _syncTokenPresetHighlight === 'function') _syncTokenPresetHighlight();
+    if (typeof fogOnCb !== 'undefined' && fogOnCb) fogOnCb.checked = fogEnabled;
+    if (typeof fogDynCb !== 'undefined' && fogDynCb) fogDynCb.checked = fogDynamic;
+  }
+  function applyMapImport(data) {
+    if (!data || data._simplevtt_map_export !== 1) {
+      if (window.showToast) showToast('Not a SimpleVTT map export ✗');
+      return false;
+    }
+    pushHistory();  // snapshot current state so the import is undoable
+    if (Array.isArray(data.walls)) walls = data.walls;
+    if (Array.isArray(data.terrain)) terrain = data.terrain;
+    if (Array.isArray(data.lights)) lights = data.lights;
+    if (Array.isArray(data.hotspots)) hotspots = data.hotspots;
+    if (Array.isArray(data.gm_pins)) gmPins = data.gm_pins;
+    if (Array.isArray(data.props)) props = data.props;
+    if (Array.isArray(data.labels)) labels = data.labels;
+    if (Array.isArray(data.lair_zones)) lairZones = data.lair_zones;
+    if (data.fog) {
+      if (typeof data.fog.enabled === 'boolean') fogEnabled = data.fog.enabled;
+      if (typeof data.fog.dynamic === 'boolean') fogDynamic = data.fog.dynamic;
+      if (Array.isArray(data.fog.revealed)) fogRevealed = data.fog.revealed;
+    }
+    if (data.grid) {
+      if (data.grid.type) gridType = data.grid.type;
+      if (data.grid.px) { gridPx = data.grid.px; pxPerFt = gridPx / 5; }
+      if (typeof data.grid.show === 'boolean') gridShow = data.grid.show;
+      if (data.grid.offset_x != null) gridOffX = data.grid.offset_x;
+      if (data.grid.offset_y != null) gridOffY = data.grid.offset_y;
+    }
+    if (data.ambient_light) ambient = data.ambient_light;
+    if (typeof data.token_scale === 'number') tokenScale = data.token_scale;
+    _syncToolbarFromState();
+    // Persist all layers + grid, then the settings-endpoint-only fields.
+    saveAll({ toast: false });
+    saveGrid();
+    var J = { 'Content-Type': 'application/json' };
+    fetch('/campaign/' + CID + '/settings/maps/' + MID + '/ambient_light',
+      { method: 'POST', headers: J, body: JSON.stringify({ ambient_light: ambient }) }).catch(function () {});
+    fetch('/campaign/' + CID + '/settings/maps/' + MID + '/token_scale',
+      { method: 'POST', headers: J, body: JSON.stringify({ token_scale: tokenScale }) }).catch(function () {});
+    render();
+    if (window.showToast) showToast('Map layout imported ⬆');
+    return true;
+  }
+  (function () {
+    var exportBtn = document.getElementById('me-export-btn');
+    if (exportBtn) exportBtn.addEventListener('click', exportMapJSON);
+    var importBtn = document.getElementById('me-import-btn');
+    var importFile = document.getElementById('me-import-file');
+    if (importBtn && importFile) {
+      importBtn.addEventListener('click', function () { importFile.value = ''; importFile.click(); });
+      importFile.addEventListener('change', function () {
+        var f = importFile.files && importFile.files[0]; if (!f) return;
+        var reader = new FileReader();
+        reader.onload = function () {
+          try { applyMapImport(JSON.parse(reader.result)); }
+          catch (e) { if (window.showToast) showToast('Invalid JSON ✗'); }
+        };
+        reader.readAsText(f);
+      });
+    }
+    // Harness hook: import without the file picker.
+    window.__meImportMap = applyMapImport;
+    window.__meExportObject = _mapExportObject;
+  })();
   // v2.788.0 — undo/redo for the persisted map layers (walls / hotspots /
   // lights / fog). Sample tokens + grid/ambient settings are out of scope.
   var _hist = [], _histIdx = -1, _applyingHist = false;

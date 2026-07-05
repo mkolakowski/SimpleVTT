@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.922.0] - 2026-07-05 — "The Portable Map"
+
+**Schema version:** 101
+
+**Commit summary:** Export/import the whole map layout as a JSON file in the editor.
+
+**Description:** Adds **⬇ Export** and **⬆ Import** buttons to the map editor's **File** group. **Export** downloads a single JSON file capturing *everything placed on the map* — walls (incl. doors, windows, invisible walls, opacity), terrain, lights, hotspots, GM pins, props, labels, lair zones — plus the map's grid, ambient light, token scale, and fog settings (and copies it to the clipboard). **Import** reads such a file back and **replaces** the current map's layout with it (undoable via the history stack), persisting every layer. This makes a layout portable between maps/instances — and is the intended path for handing a hand-built map to be baked into the demo seed.
+
+### Added
+- Editor File group: **⬇ Export** (download + clipboard) and **⬆ Import** (file picker) buttons; `_mapExportObject()` / `applyMapImport()`.
+- Harness hooks `window.__meExportObject()` / `window.__meImportMap(data)`.
+- `tests/harness_ui/test_editor_map_import_export.py` — the export object carries every layer; import replaces the wall layout (incl. a 0-opacity window) and persists ambient light.
+
+### Schema
+- No schema change (still v101 — client serialises existing per-layer state through existing endpoints).
+
 ## [2.921.0] - 2026-07-05 — "The Open Window"
 
 **Schema version:** 101
