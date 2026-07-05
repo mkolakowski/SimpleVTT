@@ -1831,43 +1831,38 @@
           var emb = (w.doors || []).find(function (d) { return d && d.id === sub._embDoorId; });
           if (!emb) return;
           var doorInert = wallMode || doorMode;  // let those modes reach the wall
-          var dh = document.createElementNS(NS, 'line');
-          dh.setAttribute('x1', sub.x1); dh.setAttribute('y1', sub.y1);
-          dh.setAttribute('x2', sub.x2); dh.setAttribute('y2', sub.y2);
-          dh.setAttribute('stroke', 'transparent'); dh.setAttribute('stroke-width', '18');
-          dh.style.pointerEvents = doorInert ? 'none' : 'stroke';
-          dh.style.cursor = 'pointer';
-          var dttl = document.createElementNS(NS, 'title');
-          dttl.textContent = (emb.gate ? '🚪 Gate — ' : '🚪 Door — ') + (emb.open ? 'open' : 'closed');
-          dh.appendChild(dttl);
           function _rmDoor() { w.doors = (w.doors || []).filter(function (d) { return d.id !== emb.id; }); saveWalls(); }
-          dh.addEventListener('click', function (e) {
-            e.stopPropagation();
-            if (eraseMode) { _rmDoor(); return; }
-            emb.open = !emb.open; saveWalls();
-          });
-          dh.addEventListener('contextmenu', function (e) {
-            e.preventDefault(); e.stopPropagation();
-            showMenu(e.clientX, e.clientY, [
-              { label: (emb.open ? '🚪 Close door' : '🚪 Open door'), fn: function () { emb.open = !emb.open; saveWalls(); } },
-              { label: (emb.gate ? '✓ ' : '   ') + '🚪 Gate (opens in middle)', fn: function () { emb.gate = !emb.gate; saveWalls(); } },
-              { label: '↻ Flip swing', fn: function () { emb.flip = !emb.flip; saveWalls(); } },
-              { label: (emb.secret ? '✓ ' : '   ') + '🔒 Secret (hidden from players)', fn: function () { emb.secret = !emb.secret; saveWalls(); } },
-              { label: '🗑 Delete door', fn: _rmDoor },
-            ]);
-          });
-          svg.appendChild(dh);
-          if (emb.open) {
-            doorLeafSegments(sub).forEach(function (sp) {
-              var lh = document.createElementNS(NS, 'line');
-              lh.setAttribute('x1', sp[0][0]); lh.setAttribute('y1', sp[0][1]);
-              lh.setAttribute('x2', sp[1][0]); lh.setAttribute('y2', sp[1][1]);
-              lh.setAttribute('stroke', 'transparent'); lh.setAttribute('stroke-width', '18');
-              lh.style.pointerEvents = doorInert ? 'none' : 'stroke'; lh.style.cursor = 'pointer';
-              lh.addEventListener('click', function (e) { e.stopPropagation(); if (eraseMode) { _rmDoor(); return; } emb.open = !emb.open; saveWalls(); });
-              svg.appendChild(lh);
+          // v2.904.0 — the hit target follows the door LEAF (closed → along the
+          // opening; open → the swung leaf), so an open door is clicked +
+          // right-clicked on the leaf, not the empty doorway it left behind.
+          doorLeafSegments(sub).forEach(function (sp) {
+            var dh = document.createElementNS(NS, 'line');
+            dh.setAttribute('x1', sp[0][0]); dh.setAttribute('y1', sp[0][1]);
+            dh.setAttribute('x2', sp[1][0]); dh.setAttribute('y2', sp[1][1]);
+            dh.setAttribute('stroke', 'transparent'); dh.setAttribute('stroke-width', '18');
+            dh.style.pointerEvents = doorInert ? 'none' : 'stroke';
+            dh.style.cursor = 'pointer';
+            var dttl = document.createElementNS(NS, 'title');
+            dttl.textContent = (emb.gate ? '🚪 Gate — ' : '🚪 Door — ')
+              + (emb.open ? 'open (click to close)' : 'closed (click to open)');
+            dh.appendChild(dttl);
+            dh.addEventListener('click', function (e) {
+              e.stopPropagation();
+              if (eraseMode) { _rmDoor(); return; }
+              emb.open = !emb.open; saveWalls();
             });
-          }
+            dh.addEventListener('contextmenu', function (e) {
+              e.preventDefault(); e.stopPropagation();
+              showMenu(e.clientX, e.clientY, [
+                { label: (emb.open ? '🚪 Close door' : '🚪 Open door'), fn: function () { emb.open = !emb.open; saveWalls(); } },
+                { label: (emb.gate ? '✓ ' : '   ') + '🚪 Gate (opens in middle)', fn: function () { emb.gate = !emb.gate; saveWalls(); } },
+                { label: '↻ Flip swing', fn: function () { emb.flip = !emb.flip; saveWalls(); } },
+                { label: (emb.secret ? '✓ ' : '   ') + '🔒 Secret (hidden from players)', fn: function () { emb.secret = !emb.secret; saveWalls(); } },
+                { label: '🗑 Delete door', fn: _rmDoor },
+              ]);
+            });
+            svg.appendChild(dh);
+          });
         });
       }
       // v2.787.1 — click-anywhere on an OPEN door/gate: the swung leaf is away

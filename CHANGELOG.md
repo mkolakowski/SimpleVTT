@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.904.0] - 2026-07-05 — "The Swinging Leaf"
+
+**Schema version:** 100
+
+**Commit summary:** An open embedded door is clicked/right-clicked on its swung leaf, not the empty doorway it left behind.
+
+**Description:** In the map editor, an embedded door's clickable + right-clickable hit-line now follows the **door leaf** (`doorLeafSegments`) instead of sitting on the door's opening span. A **closed** door's leaf lies along the opening (unchanged); an **open** door's leaf swings out perpendicular to the wall, so you now interact with the door where the leaf actually is — the empty doorway no longer catches clicks. Both left-click (open/close, or erase-to-delete) and right-click (Open/Close · Gate · Flip · Secret · Delete) live on the leaf.
+
+### Changed
+- `app/templates/map_editor.html` — per-embedded-door hit-lines are built from `doorLeafSegments(sub)` (leaf-following) with the click + contextmenu handlers, replacing the fixed opening-span hit-line + click-only leaf hit-line.
+
+### Added
+- `tests/harness_ui/test_embedded_door_open_hit.py` — an open embedded door on a horizontal wall yields an interactive door hit-line with vertical extent (the leaf swings off the wall line).
+
+### Schema
+- No schema change (still v100).
+
 ## [2.903.0] - 2026-07-05 — "The Door On Top"
 
 **Schema version:** 100
