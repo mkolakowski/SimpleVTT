@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.910.0] - 2026-07-05 — "The Drawn Ghost"
+
+**Schema version:** 100
+
+**Commit summary:** "👻 Invisible" is now in the wall material dropdown, so you can DRAW invisible walls (not just convert existing ones).
+
+**Description:** Follow-up to v2.909.0 — the invisible wall type was only reachable via an existing wall's right-click **Type** submenu, so there was no way to *draw* a new one. Adds **👻 Invisible** to the wall material dropdown (`#me-wall-style`): pick it, then draw with 🧱 Wall or ⬡ Free polygon to lay invisible walls directly. It's a wall *type*, not a material, so choosing it sets the wall's `invisible` flag (with a `stone` fallback material for any embedded doors) rather than a bogus `style: "invisible"`. Changing a selected wall's dropdown to/from Invisible also toggles its `invisible` flag, and a selected invisible wall shows "Invisible" in the dropdown.
+
+### Changed
+- `app/templates/map_editor.html` — an "👻 Invisible" option in `#me-wall-style`; wall + free-polygon placement set `invisible` when it's chosen; the material-change handler and the selected-wall dropdown sync treat Invisible as a type.
+
+### Added
+- `tests/harness_ui/test_invisible_wall_render.py` — `test_draw_invisible_wall_from_material_dropdown`: drawing with 👻 Invisible selected yields a wall with `invisible: true` (not `style: "invisible"`).
+
+### Schema
+- No schema change (still v100).
+
 ## [2.909.0] - 2026-07-05 — "The Invisible Wall"
 
 **Schema version:** 100

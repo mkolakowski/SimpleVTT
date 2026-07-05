@@ -260,6 +260,9 @@
         <option value="brick">Brick</option>
         <option value="metal">Metal</option>
         <option value="cave">Cave</option>
+        <!-- v2.910.0 — not a material: draws an invisible wall (blocks sight, not
+             shown to players). Embedded doors still get a real material. -->
+        <option value="invisible">👻 Invisible</option>
       </select>
     </label>
   </div>
@@ -2973,7 +2976,7 @@
     selectedWall = w;
     if (w) {
       var s = document.getElementById('me-wall-style');
-      if (s) s.value = w.style || 'stone';
+      if (s) s.value = w.invisible ? 'invisible' : (w.style || 'stone');  // v2.910.0
     }
     _setSelectedObj(w ? { kind: 'wall', obj: w } : null);
     setStatus(w ? 'Wall selected — the material select edits it; drag to move, corner-handles resize (Esc deselects).' : '');
@@ -3124,7 +3127,12 @@
   // v2.851.0 — when a wall is dbl-click-selected, the material select edits it
   // (with nothing selected it stays the default for NEW walls, as before).
   if (styleSel) styleSel.addEventListener('change', function () {
-    if (selectedWall) { selectedWall.style = styleSel.value; saveWalls(); }
+    if (selectedWall) {
+      // v2.910.0 — "invisible" is a wall TYPE, not a material.
+      if (styleSel.value === 'invisible') { selectedWall.invisible = true; }
+      else { selectedWall.invisible = false; selectedWall.style = styleSel.value; }
+      saveWalls();
+    }
   });
   // v2.851.0 — same for terrain: the type select edits the selected region.
   var terrainTypeSelEl = document.getElementById('me-terrain-type');
@@ -3923,10 +3931,12 @@
       // v2.788.1 — click the last point again to finish (no zero-length wall).
       // v2.908.0 — finishing the chain is "placed" → single-shot tool turns off.
       if (p.x === pending.x && p.y === pending.y) { pending = null; _afterPlace(); render(); return; }
+      var _sv = (styleSel && styleSel.value) || 'stone';  // v2.910.0
       walls.push({ id: 'w' + Date.now() + '_' + (seq++),
         x1: pending.x, y1: pending.y, x2: p.x, y2: p.y,
         door: false, open: false,
-        style: (styleSel && styleSel.value) || 'stone' });
+        invisible: (_sv === 'invisible'),
+        style: (_sv === 'invisible' ? 'stone' : _sv) });
       pending = p;  // walls chain from the new endpoint
       saveWalls();
     } else if (doorMode) {
@@ -3942,13 +3952,14 @@
       var rclose = Math.max(14, (gridPx || 70) * 0.35);
       if (roomDots.length >= 3
           && Math.hypot(p.x - roomDots[0][0], p.y - roomDots[0][1]) <= rclose) {
-        var rstyle = (styleSel && styleSel.value) || 'stone';
+        var _rsv = (styleSel && styleSel.value) || 'stone';  // v2.910.0
+        var rInvis = (_rsv === 'invisible'), rstyle = rInvis ? 'stone' : _rsv;
         for (var ri = 0; ri < roomDots.length; ri++) {
           var a = roomDots[ri], b = roomDots[(ri + 1) % roomDots.length];
           if (a[0] === b[0] && a[1] === b[1]) continue;
           walls.push({ id: 'w' + Date.now() + '_' + (seq++),
             x1: a[0], y1: a[1], x2: b[0], y2: b[1],
-            door: false, open: false, style: rstyle });
+            door: false, open: false, invisible: rInvis, style: rstyle });
         }
         roomDots = []; setStatus(''); saveWalls();
         _afterPlace();  // v2.908.0 — polygon closed → single-shot tool off

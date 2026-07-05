@@ -6,7 +6,9 @@ from __future__ import annotations
 import httpx
 from playwright.sync_api import Page
 
-from .conftest import BASE_URL, CAMPAIGN_ID, tabletop_url
+from playwright.sync_api import expect
+
+from .conftest import BASE_URL, CAMPAIGN_ID, me_clear_toolbar, tabletop_url
 
 # The invisible-wall GM guide is drawn with this distinctive dash pattern.
 GUIDE = 'line[stroke-dasharray="4 7"]'
@@ -37,4 +39,30 @@ def test_invisible_wall_is_gm_only(gm_page: Page, alice_page: Page) -> None:
     finally:
         with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
             c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+            c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
+
+
+def test_draw_invisible_wall_from_material_dropdown(gm_page: Page) -> None:
+    """v2.910.0 — picking 👻 Invisible in the wall material dropdown draws an
+    invisible wall (not a bogus 'invisible' material)."""
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
+        c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
+        c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
+        try:
+            gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
+            expect(gm_page.locator("#me-overlay")).to_be_visible()
+            gm_page.wait_for_timeout(300)
+            me_clear_toolbar(gm_page)
+            gm_page.select_option("#me-wall-style", "invisible")
+            gm_page.locator("#me-wall-btn").click()
+            ov = gm_page.locator("#me-overlay").bounding_box()
+            gm_page.mouse.click(ov["x"] + 120, ov["y"] + 90)
+            gm_page.mouse.click(ov["x"] + 320, ov["y"] + 90)
+            gm_page.wait_for_timeout(400)
+            walls = c.get(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls").json()["walls"]
+            assert len(walls) == 1, walls
+            assert walls[0]["invisible"] is True, walls[0]  # invisible, not style='invisible'
+            assert walls[0]["style"] != "invisible", walls[0]
+        finally:
             c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
