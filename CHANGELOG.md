@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.921.0] - 2026-07-05 — "The Open Window"
+
+**Schema version:** 101
+
+**Commit summary:** A 🪟 Window option in the Walls material dropdown + a transparency slider that opens the window all the way.
+
+**Description:** Makes windows a first-class draw option. **🪟 Window** now appears in the Walls **material** dropdown (alongside Stone/Wood/…/👻 Invisible), so you can draw a see-through window directly instead of converting a wall via the right-click menu. A new **opacity** slider in the Walls group sets the transparency of the selected wall (and the default for newly-drawn walls): slide it **down to 0%** for a **fully open window** — no glass drawn — while sight still passes through a window at any value. Both persist on the wall (`window` + `opacity`) and the tabletop already renders windows with their opacity, so an open window reads the same at the table.
+
+### Added
+- Walls group: **🪟 Window** dropdown option + an **opacity** range slider (0–100%). New walls pick up the dropdown type + current opacity; a selected wall is edited live.
+- `_newWallFromStyle()` centralises new-wall construction (material / window / invisible / opacity) for both the Wall and FreeForm tools.
+- `tests/harness_ui/test_editor_window_wall.py` — drawing with 🪟 Window selected yields `window: true`; the opacity slider takes a selected window down to `opacity: 0` (open window).
+
+### Changed
+- The wall material `<select>` change handler now also toggles the `window` type; `selectWall` syncs both the material dropdown and the opacity slider to the selection.
+
+### Schema
+- No schema change (still v101 — `window` + `opacity` wall fields already persisted server-side).
+
 ## [2.920.0] - 2026-07-05 — "The Double-Click Select"
 
 **Schema version:** 101

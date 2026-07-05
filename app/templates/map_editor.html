@@ -265,10 +265,20 @@
         <option value="brick">Brick</option>
         <option value="metal">Metal</option>
         <option value="cave">Cave</option>
+        <!-- v2.921.0 — a window: see-through glass (passes sight). Its
+             transparency is adjustable below, down to a fully open window. -->
+        <option value="window">🪟 Window</option>
         <!-- v2.910.0 — not a material: draws an invisible wall (blocks sight, not
              shown to players). Embedded doors still get a real material. -->
         <option value="invisible">👻 Invisible</option>
       </select>
+    </label>
+    {# v2.921.0 — transparency for new walls / the selected wall. Most useful on
+       a 🪟 Window: 100% = frosted glass, 0% = a fully open window (no pane). #}
+    <label class="me-capsel" title="Wall/window opacity — slide down to 0% for a fully open window (no glass drawn); sight passes through a window at any value">
+      <span class="me-cap">opacity</span>
+      <input type="range" id="me-wall-opacity" min="0" max="100" step="5" value="100"
+             style="width:100%;min-height:24px;">
     </label>
   </div>
   <div class="me-group" role="group" aria-label="Markers">
@@ -3005,11 +3015,27 @@
   // v2.851.0 — same select-to-edit for walls (material) + terrain (type):
   // double-click selects; the matching toolbar select mirrors + edits it.
   var selectedWall = null, selectedTerrain = null;
+  var defaultWallOpacity = 1;  // v2.921.0 — the transparency slider's value for NEW walls
+  // v2.921.0 — build a new wall segment honouring the material dropdown
+  // (stone/…/window/invisible) + the current default opacity.
+  function _newWallFromStyle(a, b) {
+    var sv = ((document.getElementById('me-wall-style') || {}).value) || 'stone';
+    var isWin = (sv === 'window'), isInvis = (sv === 'invisible');
+    var w = { id: 'w' + Date.now() + '_' + (seq++),
+      x1: a.x, y1: a.y, x2: b.x, y2: b.y,
+      door: false, open: false,
+      window: isWin, invisible: isInvis,
+      style: (isWin || isInvis) ? 'stone' : sv };
+    if (defaultWallOpacity < 1) w.opacity = defaultWallOpacity;
+    return w;
+  }
   function selectWall(w) {
     selectedWall = w;
     if (w) {
       var s = document.getElementById('me-wall-style');
-      if (s) s.value = w.invisible ? 'invisible' : (w.style || 'stone');  // v2.910.0
+      if (s) s.value = w.window ? 'window' : (w.invisible ? 'invisible' : (w.style || 'stone'));  // v2.910.0/v2.921.0
+      var op = document.getElementById('me-wall-opacity');  // v2.921.0
+      if (op) op.value = Math.round((w.opacity == null ? 1 : w.opacity) * 100);
     }
     _setSelectedObj(w ? { kind: 'wall', obj: w } : null);
     setStatus(w ? 'Wall selected — the material select edits it; drag to move, corner-handles resize (Esc deselects).' : '');
@@ -3162,11 +3188,21 @@
   // (with nothing selected it stays the default for NEW walls, as before).
   if (styleSel) styleSel.addEventListener('change', function () {
     if (selectedWall) {
-      // v2.910.0 — "invisible" is a wall TYPE, not a material.
-      if (styleSel.value === 'invisible') { selectedWall.invisible = true; }
-      else { selectedWall.invisible = false; selectedWall.style = styleSel.value; }
-      saveWalls();
+      // v2.910.0/v2.921.0 — "invisible" + "window" are wall TYPES, not materials.
+      var v = styleSel.value;
+      selectedWall.invisible = (v === 'invisible');
+      selectedWall.window = (v === 'window');
+      if (v !== 'invisible' && v !== 'window') selectedWall.style = v;
+      saveWalls(); render();
     }
+  });
+  // v2.921.0 — transparency slider: edits the selected wall's opacity live (0% =
+  // a fully open window), else sets the default opacity for newly-drawn walls.
+  var wallOpacityInp = document.getElementById('me-wall-opacity');
+  if (wallOpacityInp) wallOpacityInp.addEventListener('input', function () {
+    var o = Math.max(0, Math.min(1, (parseInt(wallOpacityInp.value, 10) || 0) / 100));
+    if (selectedWall) { selectedWall.opacity = o; saveWalls(); render(); }
+    else { defaultWallOpacity = o; }
   });
   // v2.851.0 — same for terrain: the type select edits the selected region.
   var terrainTypeSelEl = document.getElementById('me-terrain-type');
@@ -3966,12 +4002,7 @@
       p = snapPoint(p);
       if (!pending) { pending = p; render(); return; }
       if (p.x === pending.x && p.y === pending.y) { pending = null; render(); return; }
-      var _sv = (styleSel && styleSel.value) || 'stone';  // v2.910.0
-      walls.push({ id: 'w' + Date.now() + '_' + (seq++),
-        x1: pending.x, y1: pending.y, x2: p.x, y2: p.y,
-        door: false, open: false,
-        invisible: (_sv === 'invisible'),
-        style: (_sv === 'invisible' ? 'stone' : _sv) });
+      walls.push(_newWallFromStyle(pending, p));
       pending = null;  // two-point wall — no chaining
       saveWalls(); _afterPlace(); render();
     } else if (doorMode) {
@@ -3990,11 +4021,7 @@
         render(); return;
       }
       if (p.x === pending.x && p.y === pending.y) { pending = null; setStatus(''); _afterPlace(); render(); return; }
-      var _rsv = (styleSel && styleSel.value) || 'stone';  // v2.910.0
-      var rInvis = (_rsv === 'invisible'), rstyle = rInvis ? 'stone' : _rsv;
-      walls.push({ id: 'w' + Date.now() + '_' + (seq++),
-        x1: pending.x, y1: pending.y, x2: p.x, y2: p.y,
-        door: false, open: false, invisible: rInvis, style: rstyle });
+      walls.push(_newWallFromStyle(pending, p));
       pending = p;  // the chain continues from the new endpoint
       saveWalls();
     } else if (spotMode) {
