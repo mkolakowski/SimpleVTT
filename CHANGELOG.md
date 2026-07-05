@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.920.0] - 2026-07-05 — "The Double-Click Select"
+
+**Schema version:** 101
+
+**Commit summary:** Double-clicking a door in the editor now selects it for move/resize instead of opening it (walls already did this).
+
+**Description:** Unifies double-click selection across the wall layer. Double-clicking a **wall** already selected it into move + resize mode; double-clicking a **door** used to just toggle it open. Now a door double-click **selects the door** (dashed highlight + two edge handles, drag the body to slide, drag a handle to resize) and does **not** open it. A single click still toggles the door open/closed — the toggle is now deferred a beat so a double-click can cancel it. Applies to both embedded doors and legacy whole-segment door/gate walls.
+
+### Changed
+- Editor: embedded-door + legacy-door single-click open-toggle is deferred (~220ms) and cancelled by a double-click; a new door `dblclick` selects it via `selectDoor` (move + resize).
+- `wireSelectDrag`'s double-click also clears the pending door open-toggle.
+
+### Added
+- `tests/harness_ui/test_editor_dblclick_select.py` — double-clicking a wall arms its two resize handles; double-clicking a door selects it (two handles) without opening it.
+
+### Schema
+- No schema change (still v101 — editor interaction only).
+
 ## [2.919.1] - 2026-07-05 — "The Stacked Sign-In"
 
 **Schema version:** 101

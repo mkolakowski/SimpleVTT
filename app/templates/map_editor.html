@@ -693,6 +693,7 @@
   var resizing = null;         // v2.786.6 — a wall/door whose ends are draggable
   var resizingTerrain = null;  // v2.832.0 — a terrain region whose corners are draggable
   var selectedDoor = null;     // v2.907.0 — {wall, door} of a selected embedded door (movable/resizable)
+  var _doorClickTimer = null;  // v2.920.0 — defer a door's open-toggle so a double-click (select) can cancel it
 
   // v2.770.0 — right-click context menu for map objects.
   function hideMenu() {
@@ -1854,8 +1855,10 @@
         // toggles it open/closed.
         if ((w.door || w.gate) && !wallMode && !doorMode && !relocating && !selectMode && !measureMode) {
           e.stopPropagation();
-          w.open = !w.open;
-          saveWalls();
+          // v2.920.0 — defer so a double-click (select for move/resize) cancels
+          // the open-toggle instead of flipping it twice.
+          clearTimeout(_doorClickTimer);
+          _doorClickTimer = setTimeout(function () { w.open = !w.open; saveWalls(); }, 220);
         }
       });
       hit.addEventListener('contextmenu', function (e) {
@@ -1946,7 +1949,17 @@
               e.stopPropagation();
               if (suppressClick) return;  // v2.907.0 — a move-drag just ended; don't toggle
               if (eraseMode) { _rmDoor(); return; }
-              emb.open = !emb.open; saveWalls();
+              // v2.920.0 — defer the open-toggle a beat so a double-click
+              // (which selects the door for move/resize) can cancel it.
+              clearTimeout(_doorClickTimer);
+              _doorClickTimer = setTimeout(function () { emb.open = !emb.open; saveWalls(); }, 220);
+            });
+            // v2.920.0 — double-click selects the door (move + resize), it does
+            // NOT open it.
+            dh.addEventListener('dblclick', function (e) {
+              e.preventDefault(); e.stopPropagation();
+              clearTimeout(_doorClickTimer);  // cancel the pending open-toggle
+              selectDoor(w, _selD ? null : emb);
             });
             // v2.907.0 — when selected, dragging the door body slides it along
             // the wall (keeping its width).
@@ -3109,6 +3122,7 @@
     hitEl.addEventListener('dblclick', function (e) {
       e.preventDefault(); e.stopPropagation();
       clearTimeout(_previewTimer);  // cancel a pending single-click preview
+      clearTimeout(_doorClickTimer);  // v2.920.0 — cancel a pending door open-toggle
       selectObj(kind, (selectedObj && selectedObj.obj === obj) ? null : obj);
     });
     // Pointerdown STARTS the body drag; the move/up are handled at the svg
