@@ -136,8 +136,9 @@ def test_lair_zone_selectable_and_right_clickable(gm_page: Page) -> None:
             gm_page.wait_for_timeout(400)
             assert len(_zones(c, mid)) == 1
 
-            # Leave lair-zone mode (default no-tool state) + clear the dropdown.
-            gm_page.click("#me-lairzone-btn")
+            # v2.908.0 — placing the zone auto-exits the tool (single-shot), so
+            # we're already in the no-tool state. Just clear the dropdown.
+            assert gm_page.get_attribute("#me-lairzone-btn", "aria-pressed") == "false"
             gm_page.select_option("#me-lairzone-actions", "")
 
             # Double-click the placed zone → it selects, reloading its action.
@@ -182,8 +183,9 @@ def test_lair_zone_selected_shows_resize_handles(gm_page: Page) -> None:
             gm_page.wait_for_timeout(400)
             w0 = _zones(c, mid)[0]["w"]
 
-            # Leave lair-zone mode (no-tool) so a double-click cleanly selects.
-            gm_page.click("#me-lairzone-btn")
+            # v2.908.0 — placing auto-exits the tool (single-shot); already in
+            # the no-tool state so a double-click cleanly selects.
+            assert gm_page.get_attribute("#me-lairzone-btn", "aria-pressed") == "false"
             # Select the zone → corner handles appear.
             gm_page.mouse.dblclick(cx, cy)
             gm_page.wait_for_timeout(300)

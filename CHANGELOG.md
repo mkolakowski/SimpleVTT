@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.908.0] - 2026-07-05 — "The Sticky Tool"
+
+**Schema version:** 100
+
+**Commit summary:** Placeable editor tools are single-shot by default (auto-off after one item) with right-click for a sticky "keep placing" mode shown by a yellow ring.
+
+**Description:** Every placeable map-editor tool — 🧱 Wall, 🚪 Door, ⬡ Free polygon, 📍 Hotspot, 💡 Light, ⛰ Terrain, 📌 Pin, 🎴 Prop, 🔤 Label, 🎯 Lair Zone — now **turns itself off after the item is placed**, so a stray next click can't drop something you didn't mean to. For multi-vertex tools (wall chains, free-polygon walls/terrain/lair zones), "placed" means the shape is **fully connected/closed**, not each vertex — so a polygon keeps taking points until you close it, then the tool switches off. **Right-click** a tool button to arm it in **sticky mode** — it stays on for placing many, marked with a **yellow ring**; right-click again (or Esc/left-click another tool) to leave sticky mode.
+
+### Added
+- `app/templates/map_editor.html` — `setMode(mode, sticky)` + `stickyTool` state; `_afterPlace()` (single-shot auto-off) wired into every placement site (wall-chain finish, polygon close, hotspot/light/pin/prop/label/terrain/lair-zone/door); right-click handlers on the placeable-tool buttons; `.me-tool-sticky` ring + `_updateStickyHighlight`.
+- `tests/harness_ui/test_editor_sticky_tools.py` — a left-click tool auto-deselects after placing; a right-click tool stays armed (with the ring).
+
+### Schema
+- No schema change (still v100 — editor UX only).
+
 ## [2.907.0] - 2026-07-05 — "The Sliding Door"
 
 **Schema version:** 100

@@ -90,6 +90,9 @@
   /* small buttons: tight padding; min-height at the 32px dense-panel floor */
   .me-tool-btn { min-height:32px; padding:2px 8px; font-size:13px; white-space:nowrap; }
   .me-tool-btn[aria-pressed="true"] { background:var(--accent); color:#fff; }
+  /* v2.908.0 — a right-click "sticky" (keep-placing) tool gets a yellow ring so
+     it's clear the tool stays armed after each placement. */
+  .me-tool-btn.me-tool-sticky { box-shadow:0 0 0 2px #ffd24a, 0 0 9px 1px rgba(255,210,74,.75); }
   /* v2.785.7 — every toolbar control (button / select / number input) is the
      same 32px height (the dense-panel touch-target floor). */
   .me-toolbar .me-tool-btn,
@@ -2786,9 +2789,10 @@
     w.doors.push({ id: 'd' + Date.now() + '_' + (seq++), t0: t0, t1: t1, open: false });
     saveWalls();
     // v2.905.0 — placing a door turns the Door tool OFF so a stray next click
-    // doesn't drop an unwanted second door. Re-click 🚪 Door to place another.
-    if (doorMode) setMode(null);
-    if (window.showToast) showToast('Door placed — Door tool off.');
+    // doesn't drop an unwanted second door. v2.908.0 — unless it's sticky
+    // (right-clicked on). Re-click / right-click 🚪 Door to place more.
+    if (doorMode) _afterPlace();
+    if (window.showToast) showToast(stickyTool ? 'Door placed.' : 'Door placed — Door tool off.');
   }
   function deleteHotspot(h) { hotspots = hotspots.filter(function (x) { return x.id !== h.id; }); saveHotspots(); }
   function deleteLight(L) {
@@ -3457,7 +3461,10 @@
     }
   });
   // One edit mode at a time (wall / door / spot / light / fog), or null.
-  function setMode(mode) {
+  function setMode(mode, sticky) {
+    // v2.908.0 — "sticky" (right-click) keeps the tool armed for placing many;
+    // a plain left-click is single-shot (auto-off after one placement).
+    stickyTool = !!(mode && sticky);
     wallMode = (mode === 'wall'); doorMode = (mode === 'door'); roomMode = (mode === 'room');
     spotMode = (mode === 'spot'); lightMode = (mode === 'light'); fogMode = (mode === 'fog');
     terrainMode = (mode === 'terrain'); pinMode = (mode === 'pin');
@@ -3495,7 +3502,24 @@
     selectedLairZone = null; lairZoneDots = [];   // v2.870.0
     syncLairZoneToolbar();
     syncLightToolbar();
+    _updateStickyHighlight();  // v2.908.0
     syncStageCursor(); render();
+  }
+  // v2.908.0 — sticky-tool state: a right-click on a placeable-tool button arms
+  // it in "sticky" mode (stays on for placing many); a left-click is single-shot
+  // (auto-off after the item is placed — for a polygon/chain, after it closes).
+  var stickyTool = false;
+  function _updateStickyHighlight() {
+    var btns = document.querySelectorAll('.me-toolbar .me-tool-btn');
+    Array.prototype.forEach.call(btns, function (b) {
+      var on = b.getAttribute('aria-pressed') === 'true';
+      b.classList.toggle('me-tool-sticky', on && stickyTool);
+    });
+  }
+  // Called after a placeable item is fully placed. A single-shot tool turns
+  // itself off; a sticky (right-clicked) tool stays armed for the next one.
+  function _afterPlace() {
+    if (!stickyTool) setMode(null);
   }
   var fogOnLbl = document.getElementById('me-fog-on-lbl');
   var fogOnCb = document.getElementById('me-fog-on-cb');
@@ -3523,6 +3547,21 @@
   if (roomBtn) roomBtn.addEventListener('click', function () { setMode(roomMode ? null : 'room'); });
   spotBtn.addEventListener('click', function () { setMode(spotMode ? null : 'spot'); });
   if (lightBtn) lightBtn.addEventListener('click', function () { setMode(lightMode ? null : 'light'); });
+  // v2.908.0 — right-click a placeable-tool button to arm it in "sticky" mode
+  // (stays on for placing many, shown by a yellow ring); a left-click is
+  // single-shot (auto-off after the item is placed / a polygon closes).
+  [[wallBtn, 'wall'], [doorBtn, 'door'], [roomBtn, 'room'], [spotBtn, 'spot'],
+   [lightBtn, 'light'], [terrainBtn, 'terrain'], [pinBtn, 'pin'], [propBtn, 'prop'],
+   [labelBtn, 'label'], [lairZoneBtn, 'lairzone']].forEach(function (pair) {
+    var b = pair[0], m = pair[1];
+    if (!b) return;
+    b.addEventListener('contextmenu', function (e) {
+      e.preventDefault();
+      // Right-clicking the already-sticky active tool turns it off.
+      if (stickyTool && b.getAttribute('aria-pressed') === 'true') setMode(null);
+      else setMode(m, true);
+    });
+  });
   // v2.784.0 — picking a light type fills the radius fields with its preset
   // (the user can then tweak the numbers independently of the type).
   // v2.850.0 — also fills the flicker-colour pickers, and applies the preset
@@ -3757,7 +3796,7 @@
           if (zw > 6 && zh > 6) {
             lairZones.push({ id: 'lz' + Date.now() + '_' + (seq++),
               x: zx0, y: zy0, w: zw, h: zh, points: lairZoneDots, label: _lbl, actions: _acts, color: _col });
-            lairZoneDots = []; setStatus(''); saveLairZones();
+            lairZoneDots = []; setStatus(''); saveLairZones(); _afterPlace();  // v2.908.0
           } else { lairZoneDots = []; render(); }
         } else {
           lairZoneDots.push([lz.sx, lz.sy]);
@@ -3768,7 +3807,7 @@
       } else if (lzw > 6 && lzh > 6) {
         lairZones.push({ id: 'lz' + Date.now() + '_' + (seq++),
           x: lzx, y: lzy, w: lzw, h: lzh, label: _lbl, actions: _acts, color: _col });
-        lairZoneDots = []; saveLairZones();
+        lairZoneDots = []; saveLairZones(); _afterPlace();  // v2.908.0
       } else { render(); }
       return;
     }
@@ -3793,7 +3832,7 @@
               x: px0, y: py0, w: pw, h: ph, points: terrainDots,
               type: (document.getElementById('me-terrain-type') || {}).value || 'difficult' });
             terrainDots = [];
-            setStatus(''); saveTerrain();
+            setStatus(''); saveTerrain(); _afterPlace();  // v2.908.0
           } else { terrainDots = []; render(); }  // degenerate — discard
         } else {
           terrainDots.push([td.sx, td.sy]);
@@ -3805,7 +3844,7 @@
         terrain.push({ id: 't' + Date.now() + '_' + (seq++), x: tx, y: ty, w: tw, h: th,
           type: (document.getElementById('me-terrain-type') || {}).value || 'difficult' });
         terrainDots = [];   // a drag supersedes any pending quad dots
-        saveTerrain();
+        saveTerrain(); _afterPlace();  // v2.908.0
       } else if (gridType === 'none') {
         // v2.848.0 — gridless four-dot placement: a click (not a drag) drops a
         // quad corner; the 4th corner completes a free-form region. The bbox
@@ -3821,7 +3860,7 @@
               x: qx, y: qy, w: qw, h: qh, points: terrainDots,
               type: (document.getElementById('me-terrain-type') || {}).value || 'difficult' });
             terrainDots = [];
-            saveTerrain();
+            saveTerrain(); _afterPlace();  // v2.908.0
           } else { terrainDots = []; render(); }  // degenerate — discard
         } else {
           setStatus('Quad corner ' + terrainDots.length + '/4 placed — ' +
@@ -3865,7 +3904,8 @@
       p = snapPoint(p);
       if (!pending) { pending = p; render(); return; }
       // v2.788.1 — click the last point again to finish (no zero-length wall).
-      if (p.x === pending.x && p.y === pending.y) { pending = null; render(); return; }
+      // v2.908.0 — finishing the chain is "placed" → single-shot tool turns off.
+      if (p.x === pending.x && p.y === pending.y) { pending = null; _afterPlace(); render(); return; }
       walls.push({ id: 'w' + Date.now() + '_' + (seq++),
         x1: pending.x, y1: pending.y, x2: p.x, y2: p.y,
         door: false, open: false,
@@ -3894,6 +3934,7 @@
             door: false, open: false, style: rstyle });
         }
         roomDots = []; setStatus(''); saveWalls();
+        _afterPlace();  // v2.908.0 — polygon closed → single-shot tool off
       } else {
         roomDots.push([p.x, p.y]);
         setStatus(roomDots.length + ' point' + (roomDots.length === 1 ? '' : 's')
@@ -3908,7 +3949,7 @@
       hotspots.push({ id: 'h' + Date.now() + '_' + (seq++), x: p.x, y: p.y,
         label: (label || 'Hotspot').slice(0, 120), description: desc.slice(0, 2000),
         roll: roll.trim().slice(0, 60) });
-      saveHotspots();
+      saveHotspots(); _afterPlace();  // v2.908.0
     } else if (lightMode) {
       var sel = (document.getElementById('me-light-type') || {}).value || 'torch';
       var t = lightType(sel) || lightType('torch');
@@ -3927,6 +3968,7 @@
       nl.type = matchLightPreset(nl) || 'custom';
       lights.push(nl);
       saveLights();
+      _afterPlace();    // v2.908.0 — single-shot tool off (before re-selecting)
       selectLight(nl);  // v2.857.0 — auto-select so radius handles show at once
     } else if (pinMode) {
       // v2.790.1 — drop a GM-only pin (label + private note).
@@ -3935,7 +3977,7 @@
       var pnote = window.prompt('GM note (players never see this):', '') || '';
       gmPins.push({ id: 'p' + Date.now() + '_' + (seq++), x: p.x, y: p.y,
         label: (plabel || 'Pin').slice(0, 120), note: pnote.slice(0, 2000) });
-      saveGmPins();
+      saveGmPins(); _afterPlace();  // v2.908.0
     } else if (propMode) {
       // v2.791.0 — stamp the selected prop glyph at the click point.
       // v2.801.0 — with 🧲 Snap on, drop it in the grid-cell centre (like a token).
@@ -3943,7 +3985,7 @@
       var pp = snapTokenToGrid(p);
       props.push({ id: 'pr' + Date.now() + '_' + (seq++), x: pp.x, y: pp.y,
         kind: pk, size: 40, rot: 0 });
-      saveProps();
+      saveProps(); _afterPlace();  // v2.908.0
     } else if (labelMode) {
       // v2.802.0 — write a public text label at the click point.
       var lt = window.prompt('Label text (visible to everyone):', '');
@@ -3952,7 +3994,7 @@
       if (!lt) return;
       labels.push({ id: 'lb' + Date.now() + '_' + (seq++), x: p.x, y: p.y,
         text: lt, size: 24, color: '#ffffff' });
-      saveLabels();
+      saveLabels(); _afterPlace();  // v2.908.0
     }
   });
 
