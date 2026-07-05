@@ -2622,7 +2622,11 @@
             // (plain wall) + a door glyph per door span, by recursing on the
             // synthetic sub-segments.
             if (_hasEmbeddedDoors(w)) {
-                _wallRenderSpans(w).forEach(function (sub) { drawWallVisual(sub); });
+                // v2.903.0 — faces first, then door glyphs on top (the wall
+                // casing must not overlap/hide the door).
+                var _spans = _wallRenderSpans(w);
+                _spans.forEach(function (sub) { if (!sub._embDoorId) drawWallVisual(sub); });
+                _spans.forEach(function (sub) { if (sub._embDoorId) drawWallVisual(sub); });
                 return;
             }
             var st = wallStyle(w);

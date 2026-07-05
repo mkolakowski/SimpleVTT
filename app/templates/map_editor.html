@@ -1058,7 +1058,11 @@
     // v2.902.0 — a wall with embedded doors renders as face spans (plain wall)
     // + a door glyph per door span, by recursing on the synthetic sub-segments.
     if (_hasEmbeddedDoors(w)) {
-      _wallRenderSpans(w).forEach(function (sub) { drawWallVisual(sub); });
+      // v2.903.0 — draw the plain-wall FACE spans first, then the door glyphs
+      // ON TOP, so the wall's casing never overlaps/hides a door.
+      var _spans = _wallRenderSpans(w);
+      _spans.forEach(function (sub) { if (!sub._embDoorId) drawWallVisual(sub); });
+      _spans.forEach(function (sub) { if (sub._embDoorId) drawWallVisual(sub); });
       return;
     }
     var st = wallStyle(w);

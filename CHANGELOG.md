@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.903.0] - 2026-07-05 — "The Door On Top"
+
+**Schema version:** 100
+
+**Commit summary:** Embedded doors now render on top of the wall — the wall's casing no longer overlaps/hides the door.
+
+**Description:** A wall with embedded doors now draws its plain-wall **face spans first, then every door glyph on top**, in both the map editor and the tabletop. Previously the door and its flanking wall faces were drawn in position order, so a thick wall casing (with round line-caps) could paint over the door's jamb/leaf — making the door look half-buried in the wall. Now the door leaf, jamb, swing arc, hinge, and knob always sit above the wall face.
+
+### Changed
+- `app/templates/map_editor.html` + `app/templates/tabletop.html` — `drawWallVisual` renders embedded-door walls as face spans first, then door spans on top.
+
+### Schema
+- No schema change (still v100 — render order only).
+
 ## [2.902.0] - 2026-07-04 — "The Snug Doorway"
 
 **Schema version:** 100
