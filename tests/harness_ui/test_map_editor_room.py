@@ -1,7 +1,9 @@
-"""v2.788.1 — free-polygon walls + polyline wall chaining.
+"""v2.788.1 — FreeForm walls + wall chaining.
 
-v2.898.0 — the two-corner Room tool became a free-polygon wall mode: click a
-chain of vertices, then click the first dot to close it into a loop of walls.
+v2.898.0 — the two-corner Room tool became a free-polygon wall mode.
+v2.911.0 — renamed ⬡ FreeForm and now an OPEN chain: 🧱 Wall places a single
+two-point segment, ⬡ FreeForm chains connected segments (click the last point
+again, or Esc, to finish — no need to close back to the start).
 """
 from __future__ import annotations
 
@@ -43,14 +45,39 @@ def test_free_polygon_walls_close_into_a_loop(gm_page: Page) -> None:
             c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
 
 
-def test_wall_chaining(gm_page: Page) -> None:
+def test_basic_wall_is_two_point_no_chain(gm_page: Page) -> None:
+    # v2.911.0 — 🧱 Wall no longer auto-extends: 3 clicks make ONE two-point wall
+    # (the 3rd click starts a fresh wall's first point, not a chained segment).
     with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
         c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
         try:
             _open(gm_page, mid)
-            gm_page.locator("#me-wall-btn").click()
+            # Right-click to keep the tool armed across placements (sticky).
+            gm_page.locator("#me-wall-btn").click(button="right")
+            ov = gm_page.locator("#me-overlay").bounding_box()
+            gm_page.mouse.click(ov["x"] + 80, ov["y"] + 70)   # wall A start
+            gm_page.mouse.click(ov["x"] + 200, ov["y"] + 70)  # wall A end → 1 wall
+            gm_page.wait_for_timeout(250)
+            gm_page.mouse.click(ov["x"] + 200, ov["y"] + 180)  # a NEW wall's first point
+            gm_page.wait_for_timeout(250)
+            ws = _walls(c, mid)
+            assert len(ws) == 1, ws  # only the finished two-point wall (no chain)
+        finally:
+            c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
+
+
+def test_freeform_wall_chaining(gm_page: Page) -> None:
+    # v2.911.0 — chaining moved from 🧱 Wall (now a single two-point wall) to
+    # ⬡ FreeForm (the open-chain tool). 3 points → 2 connected segments.
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
+        c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
+        c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
+        try:
+            _open(gm_page, mid)
+            gm_page.locator("#me-room-btn").click()  # ⬡ FreeForm
             ov = gm_page.locator("#me-overlay").bounding_box()
             # Chain of 3 points → 2 connected segments (no tool re-click
             # between). Small waits let each per-segment save land in order.

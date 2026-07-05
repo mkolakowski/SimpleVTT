@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.911.0] - 2026-07-05 — "The FreeForm"
+
+**Schema version:** 100
+
+**Commit summary:** "Free polygon" tools renamed **⬡ FreeForm**; the basic 🧱 Wall is now a single two-point wall, and wall FreeForm is an open chain finished with a click.
+
+**Description:** Two changes to wall drawing:
+1. **Renamed** every **⬡ Free polygon** button to **⬡ FreeForm** (walls, terrain, lair zones) + their tooltips/status text.
+2. **Split the two wall tools cleanly.** **🧱 Wall** now places a **single two-point wall** — click a start point, click an end point, done (it no longer auto-extends into a chain). **⬡ FreeForm** is the chaining tool: click a series of points to draw **connected wall segments**, then **click the last point again (or Esc) to finish** — with no need to close back to the first point (an open chain, not a forced loop). Both respect the sticky-tool rules from v2.908.0 (single-shot by default, right-click to keep placing).
+
+Terrain + lair-zone FreeForm are unchanged in behaviour (they still close into an area) — only the label changed.
+
+### Changed
+- `app/templates/map_editor.html` — all three "Free polygon" buttons → "⬡ FreeForm"; 🧱 Wall places a single two-point segment (no chaining) then finishes; ⬡ FreeForm (roomMode) is an open connected-segment chain ended by re-clicking the last point / Esc.
+- `tests/harness_ui/test_map_editor_room.py` — `test_wall_chaining` → `test_freeform_wall_chaining` (chains via ⬡ FreeForm); new `test_basic_wall_is_two_point_no_chain` (🧱 Wall makes one two-point wall, no chain).
+
+### Schema
+- No schema change (still v100 — editor drawing UX; walls remain the same shape).
+
 ## [2.910.0] - 2026-07-05 — "The Drawn Ghost"
 
 **Schema version:** 100
