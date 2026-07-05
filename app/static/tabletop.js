@@ -310,6 +310,26 @@
         return [x, y];
     }
 
+    // v2.917.0 — snap an N×N token so its footprint aligns to the grid. A token
+    // is drawn centred on (x + gridSize/2); its N-cell footprint is centred
+    // there too. For an ODD size the footprint centre wants a cell CENTRE (so
+    // x lands on a grid line — identical to snapToGrid for size 1); for an EVEN
+    // size it wants a grid INTERSECTION (x lands on a half-cell offset) so the
+    // 2×2 / 4×4 block sits squarely on cells instead of straddling them. Hex /
+    // no-grid maps keep the plain snap.
+    function snapTokenFootprint(x, y, size) {
+        if (gridType !== 'square' || gridSize <= 0) return snapToGrid(x, y);
+        const n = Math.max(1, Math.min(4, parseInt(size, 10) || 1));
+        function axis(v) {
+            const c = v + gridSize / 2;  // footprint centre on this axis
+            const snappedC = (n % 2 === 1)
+                ? (Math.floor(c / gridSize) + 0.5) * gridSize  // cell centre (odd)
+                : Math.round(c / gridSize) * gridSize;         // grid line (even)
+            return snappedC - gridSize / 2;
+        }
+        return [axis(x), axis(y)];
+    }
+
     // v2.49.72: snap a canvas point to the CENTER of the grid cell it
     // falls inside (vs. snapToGrid above, which returns the top-left
     // corner for square grids). Used by the ruler picker so both
@@ -1962,6 +1982,11 @@
     window.__tokenRadiusForTest = (t) => _tokenRadius(t || { size: 1 });
     window.__camScaleForTest = () => _camScale;
     window.__tokenMinScreenPx = TOKEN_MIN_SCREEN_PX;
+    // v2.917.0 — footprint snap + hit-test, for the harness (drag simulation is
+    // flaky; assert the geometry directly). gridSize is a per-map const here.
+    window.__snapTokenFootprintForTest = (x, y, size) => snapTokenFootprint(x, y, size);
+    window.__pointInTokenForTest = (px, py, t) => pointInToken(px, py, t);
+    window.__gridSizeForTest = () => gridSize;
     // v2.882.0 — the selection-aware visibility logic (which token draws on top
     // of every effect vs under the veil) is the meat of the feature; expose it
     // so the harness can assert the decision without pixel-sampling the veil.
@@ -4121,7 +4146,9 @@
 
     function pointInToken(x, y, t) {
         const cx = t.x + gridSize / 2, cy = t.y + gridSize / 2;
-        const r = (gridSize * t.size) / 2 - 4;
+        // v2.917.0 — match the drawn radius (includes the per-map token_scale +
+        // the min-screen floor) so the hit target tracks what the GM sees.
+        const r = _tokenRadius(t);
         return (x - cx) ** 2 + (y - cy) ** 2 <= r * r;
     }
 
@@ -4452,7 +4479,10 @@
         }
         if (ev.button === 2) return;
         if (!dragging) return;
-        const [sx, sy] = snapToGrid(dragging.token.x, dragging.token.y);
+        // v2.917.0 — snap by the token's footprint so 2×2 / 4×4 tokens sit
+        // squarely on cells (odd sizes are unchanged vs. the old snapToGrid).
+        const [sx, sy] = snapTokenFootprint(
+            dragging.token.x, dragging.token.y, dragging.token.size);
         dragging.token.x = sx;
         dragging.token.y = sy;
         const tok = dragging.token;
@@ -5964,7 +5994,9 @@
         function endTouches(ev) {
             // Finalize token drag when the last finger lifts.
             if (touchDrag && ev.touches.length === 0) {
-                const [sx, sy] = snapToGrid(touchDrag.token.x, touchDrag.token.y);
+                // v2.917.0 — footprint-aware snap (matches the mouse path).
+                const [sx, sy] = snapTokenFootprint(
+                    touchDrag.token.x, touchDrag.token.y, touchDrag.token.size);
                 touchDrag.token.x = sx;
                 touchDrag.token.y = sy;
                 const tok = touchDrag.token;

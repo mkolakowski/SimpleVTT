@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.917.0] - 2026-07-05 — "The Squared Footprint"
+
+**Schema version:** 101
+
+**Commit summary:** Large tokens snap to their N×N footprint, and the token hit target now tracks the drawn (scaled) radius.
+
+**Description:** Two fixes for larger tokens (v2.915.0):
+1. **Footprint snapping.** Dropping a token now snaps its whole **N×N footprint** onto cells instead of just the top-left 1×1 cell. Odd sizes (Medium 1×1, Huge 3×3) land on a grid line exactly as before; **even sizes (Large 2×2, Gargantuan 4×4) snap to a half-cell offset** so the block sits squarely on four/sixteen cells rather than straddling grid lines. Applies to both the mouse and touch drag paths. Hex / no-grid maps keep the plain snap.
+2. **Scale-aware hit target.** The token click/drag hit radius previously used the raw cell radius (`gridSize·size/2 − 4`), so on a map with `token_scale ≠ 1` the visible token and its clickable area disagreed. `pointInToken` now uses the same `_tokenRadius()` the renderer draws with (per-map scale + min-screen floor) — you can click/right-click exactly what you see.
+
+### Added
+- `snapTokenFootprint(x, y, size)` — parity-aware footprint snap; used at both drop paths.
+- Test hooks `__snapTokenFootprintForTest` / `__pointInTokenForTest` / `__gridSizeForTest`.
+- `tests/harness_ui/test_token_footprint_snap.py` — footprint aligns to cells by parity; hit radius tracks the drawn radius.
+
+### Changed
+- `pointInToken` uses `_tokenRadius(t)` (scale + floor aware) instead of the raw cell radius.
+
+### Schema
+- No schema change (still v101 — client geometry only).
+
 ## [2.916.0] - 2026-07-05 — "The Conjured Menu"
 
 **Schema version:** 101
