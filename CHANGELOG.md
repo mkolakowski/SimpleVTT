@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.916.0] - 2026-07-05 — "The Conjured Menu"
+
+**Schema version:** 101
+
+**Commit summary:** Right-clicking a token as the GM now opens an action menu (open sheet · resize · hide/show · delete) on the tabletop.
+
+**Description:** Turns the tabletop's token right-click into a proper GM **context menu** instead of jumping straight to the sheet. Right-click (or two-finger tap on an iPad trackpad) a token as GM and a floating menu appears at the cursor with: **📋 Open sheet**, a one-click **Size** segmented control (**M/L/H/G** = 1×1…4×4, highlighting the current size), **🚫 Hide / 👁 Show token**, and **🗑 Delete token**. This gives the per-token size override (v2.915.0) a home right on the map, next to the token, without opening the Players/Tokens drawer. The menu closes on an action, an outside click, or Escape, and clamps to the viewport. **Players are unchanged** — a player's right-click still opens the token's sheet directly (they have nothing to manage).
+
+### Added
+- Tabletop: `_showTokenContextMenu()` — a GM-only floating token action menu (`.tt-token-ctx`) wired to the existing `patchToken` / delete endpoints; the right-click + iPad-trackpad pointer paths route GMs to it.
+- `tests/harness_ui/test_token_context_menu.py` — right-clicking a token as GM opens the menu and its size control resizes the token, then the menu closes.
+
+### Changed
+- `_handleRightClick` branches on `ME.isGm`: GMs get the context menu, players keep the direct sheet-open gesture.
+
+### Schema
+- No schema change (still v101 — client-side menu over existing endpoints).
+
 ## [2.915.0] - 2026-07-05 — "The Bigger Beast"
 
 **Schema version:** 101

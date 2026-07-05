@@ -3956,6 +3956,85 @@
         a.remove();
         return true;
     }
+    // v2.916.0 — GM token right-click context menu. Right-click a token as GM
+    // opens a small action menu (open sheet · resize · hide/show · delete)
+    // instead of jumping straight to the sheet. Players keep the direct
+    // sheet-open gesture (see _handleRightClick).
+    let _tokenCtxMenuEl = null;
+    function _closeTokenCtxMenu() {
+        if (_tokenCtxMenuEl) { _tokenCtxMenuEl.remove(); _tokenCtxMenuEl = null; }
+        document.removeEventListener('pointerdown', _onCtxOutside, true);
+        document.removeEventListener('keydown', _onCtxKey, true);
+    }
+    function _onCtxOutside(e) {
+        if (_tokenCtxMenuEl && !_tokenCtxMenuEl.contains(e.target)) _closeTokenCtxMenu();
+    }
+    function _onCtxKey(e) { if (e.key === 'Escape') _closeTokenCtxMenu(); }
+    function _showTokenContextMenu(clientX, clientY, token) {
+        _closeTokenCtxMenu();
+        const menu = document.createElement('div');
+        menu.className = 'tt-token-ctx';
+        menu.style.cssText = 'position:fixed;z-index:9600;min-width:180px;'
+            + 'background:var(--bg);border:1px solid var(--border);border-radius:10px;'
+            + 'box-shadow:0 8px 28px rgba(0,0,0,.4);padding:6px;display:flex;'
+            + 'flex-direction:column;gap:2px;font-size:14px;';
+        const title = document.createElement('div');
+        title.textContent = token.label || 'Token';
+        title.style.cssText = 'font-weight:700;padding:4px 8px 6px;opacity:.8;'
+            + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;';
+        menu.appendChild(title);
+        // Full-width action buttons inherit the global 44px min-height.
+        function actionBtn(label, fn) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = label;
+            b.style.cssText = 'justify-content:flex-start;width:100%;font-size:14px;';
+            b.addEventListener('click', () => { _closeTokenCtxMenu(); fn(); });
+            menu.appendChild(b);
+            return b;
+        }
+        if (token.character_id || token.token_template_id) {
+            actionBtn('📋 Open sheet', () => _openSheetForToken(token));
+        }
+        // Size row — dense, one-click M/L/H/G. 32px min per the compact-UI
+        // exception (a context-menu segmented control, like the init tracker).
+        const sizeWrap = document.createElement('div');
+        sizeWrap.style.cssText = 'display:flex;align-items:center;gap:4px;padding:4px 8px;';
+        const sizeLbl = document.createElement('span');
+        sizeLbl.textContent = 'Size';
+        sizeLbl.style.cssText = 'opacity:.7;font-size:12px;margin-right:2px;';
+        sizeWrap.appendChild(sizeLbl);
+        const curSize = Math.max(1, Math.min(4, parseInt(token.size, 10) || 1));
+        [[1, 'M'], [2, 'L'], [3, 'H'], [4, 'G']].forEach(([val, ch]) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = ch;
+            b.title = { 1: 'Medium (1×1)', 2: 'Large (2×2)', 3: 'Huge (3×3)', 4: 'Gargantuan (4×4)' }[val];
+            b.setAttribute('aria-pressed', val === curSize ? 'true' : 'false');
+            b.style.cssText = 'flex:1 1 0;min-height:32px;min-width:32px;padding:2px 6px;font-size:13px;'
+                + (val === curSize ? 'background:var(--accent);color:#fff;' : '');
+            b.addEventListener('click', () => { _closeTokenCtxMenu(); patchToken(token.id, { size: val }); });
+            sizeWrap.appendChild(b);
+        });
+        menu.appendChild(sizeWrap);
+        actionBtn(token.is_hidden ? '👁 Show token' : '🚫 Hide token',
+            () => patchToken(token.id, { is_hidden: !token.is_hidden }));
+        actionBtn('🗑 Delete token', () => {
+            if (!confirm(`Delete "${token.label || 'token'}"?`)) return;
+            fetch(`/api/campaign/${CAMPAIGN_ID}/tokens/${token.id}`, { method: 'DELETE' });
+        });
+        _tokenCtxMenuEl = menu;
+        document.body.appendChild(menu);
+        // Clamp within the viewport.
+        const r = menu.getBoundingClientRect();
+        const x = Math.min(clientX, window.innerWidth - r.width - 8);
+        const y = Math.min(clientY, window.innerHeight - r.height - 8);
+        menu.style.left = Math.max(8, x) + 'px';
+        menu.style.top = Math.max(8, y) + 'px';
+        document.addEventListener('pointerdown', _onCtxOutside, true);
+        document.addEventListener('keydown', _onCtxKey, true);
+    }
+
     // v2.21.2: debounce flag to prevent double-fire when both
     // ``contextmenu`` and ``pointerdown`` fire for the same gesture
     // (iPad Pro Magic Keyboard trackpad dispatches both).
@@ -3994,6 +4073,13 @@
         for (let i = tokens.length - 1; i >= 0; i--) {
             const t = tokens[i];
             if (!pointInToken(x, y, t)) continue;
+            // v2.916.0 — GMs get the token action menu; players keep the
+            // direct sheet-open gesture (nothing to manage, just view).
+            if (ME && ME.isGm) {
+                _showTokenContextMenu(ev.clientX, ev.clientY, t);
+                _lastSheetOpenAt = Date.now();
+                return;
+            }
             if (_openSheetForToken(t)) {
                 _lastSheetOpenAt = Date.now();
                 return;
