@@ -124346,14 +124346,20 @@ def _sanitize_wall_doors(raw, wall_idx: int) -> list:
         t0 = max(0.0, min(1.0, t0)); t1 = max(0.0, min(1.0, t1))
         if t1 - t0 < 1e-4:  # degenerate / inverted span
             continue
-        out.append({
+        rec = {
             "id": (str(d.get("id") or "").strip()[:40] or f"w{wall_idx}d{j}"),
             "t0": t0, "t1": t1,
             "open": bool(d.get("open")),
             "gate": bool(d.get("gate")),
             "secret": bool(d.get("secret")),
             "flip": bool(d.get("flip")),
-        })
+        }
+        # v2.909.0 — a door may carry its OWN material (so a door on an invisible
+        # wall can still show a wood/stone/… leaf). Stored only when set.
+        dstyle = str(d.get("style") or "").strip()[:20]
+        if dstyle:
+            rec["style"] = dstyle
+        out.append(rec)
     return out
 
 
@@ -124393,6 +124399,10 @@ def _sanitize_wall_segments(raw) -> list:
             # a secret door is hidden from players until opened.
             "window": bool(seg.get("window")),
             "secret": bool(seg.get("secret")),
+            # v2.909.0 — an invisible wall blocks sight like a normal wall but
+            # isn't drawn for players (the GM sees a faint guide). Its embedded
+            # doors still render (with their own material).
+            "invisible": bool(seg.get("invisible")),
             # v2.787.0 — visual opacity [0,1] (1 = solid). Presentation only.
             "opacity": op,
             # v2.772.0 — visual material (stone/wood/brick/metal/cave/…); a

@@ -1203,6 +1203,10 @@
         sm.setAttribute('stroke-width', '2'); sm.setAttribute('stroke-dasharray', '3 3');
         sm.style.pointerEvents = 'none'; _wc.appendChild(sm);
       }
+    } else if (w.invisible) {
+      // v2.909.0 — an invisible wall blocks sight but isn't drawn for players;
+      // in the editor (always GM) show a faint dashed guide so it's editable.
+      seg('rgba(150,180,230,0.4)', 2, 'round', '4 7');
     } else {
       seg(st.casing, st.width + 4);                       // casing (depth)
       seg(st.color, st.width);                            // wall face
@@ -1237,11 +1241,11 @@
     function pt(t) { return [w.x1 + dx * t, w.y1 + dy * t]; }
     function face(t0, t1) {
       var a = pt(t0), b = pt(t1);
-      return { x1: a[0], y1: a[1], x2: b[0], y2: b[1], style: w.style, opacity: w.opacity };
+      return { x1: a[0], y1: a[1], x2: b[0], y2: b[1], style: w.style, opacity: w.opacity, invisible: w.invisible };
     }
     function door(d, t0, t1) {
       var a = pt(t0), b = pt(t1);
-      return { x1: a[0], y1: a[1], x2: b[0], y2: b[1], style: w.style, opacity: w.opacity,
+      return { x1: a[0], y1: a[1], x2: b[0], y2: b[1], style: (d.style || w.style), opacity: w.opacity,
         gate: !!d.gate, door: !d.gate, open: !!d.open, flip: !!d.flip, secret: !!d.secret,
         _embWallId: w.id, _embDoorId: d.id };
     }
@@ -1842,12 +1846,15 @@
                    fn: function () { w.style = key; saveWalls(); } };
         });
         // v2.787.1 — Wall / Door / Gate / Window type submenu.
-        var isGate = !!w.gate, isDoor = !!w.door, isWin = !!w.window;
+        var isGate = !!w.gate, isDoor = !!w.door, isWin = !!w.window, isInvis = !!w.invisible;
         var typeItems = [
-          { label: (!isDoor && !isGate && !isWin ? '✓ ' : '   ') + '🧱 Wall', fn: function () { w.door = false; w.gate = false; w.window = false; saveWalls(); } },
-          { label: (isDoor ? '✓ ' : '   ') + '🚪 Door', fn: function () { w.door = true; w.gate = false; w.window = false; saveWalls(); } },
-          { label: (isGate ? '✓ ' : '   ') + '🚪 Gate (opens in middle)', fn: function () { w.gate = true; w.door = false; w.window = false; saveWalls(); } },
-          { label: (isWin ? '✓ ' : '   ') + '🪟 Window (see-through)', fn: function () { w.window = true; w.door = false; w.gate = false; saveWalls(); } },
+          { label: (!isDoor && !isGate && !isWin && !isInvis ? '✓ ' : '   ') + '🧱 Wall', fn: function () { w.door = false; w.gate = false; w.window = false; w.invisible = false; saveWalls(); } },
+          { label: (isDoor ? '✓ ' : '   ') + '🚪 Door', fn: function () { w.door = true; w.gate = false; w.window = false; w.invisible = false; saveWalls(); } },
+          { label: (isGate ? '✓ ' : '   ') + '🚪 Gate (opens in middle)', fn: function () { w.gate = true; w.door = false; w.window = false; w.invisible = false; saveWalls(); } },
+          { label: (isWin ? '✓ ' : '   ') + '🪟 Window (see-through)', fn: function () { w.window = true; w.door = false; w.gate = false; w.invisible = false; saveWalls(); } },
+          // v2.909.0 — an invisible wall blocks sight but isn't drawn for players
+          // (its embedded doors still show, and can carry their own material).
+          { label: (isInvis ? '✓ ' : '   ') + '👻 Invisible (blocks sight, not drawn)', fn: function () { w.invisible = true; w.door = false; w.gate = false; w.window = false; saveWalls(); } },
         ];
         var items = [
           { label: (isGate ? '🚪 Gate' : isDoor ? '🚪 Door' : '🧱 Wall') + ' — ↔ Move', fn: function () { startMove('wall', w); } },
@@ -1951,6 +1958,13 @@
                 { label: (emb.open ? '🚪 Close door' : '🚪 Open door'), fn: function () { emb.open = !emb.open; saveWalls(); } },
                 { label: (emb.gate ? '✓ ' : '   ') + '🚪 Gate (opens in middle)', fn: function () { emb.gate = !emb.gate; saveWalls(); } },
                 { label: '↻ Flip swing', fn: function () { emb.flip = !emb.flip; saveWalls(); } },
+                // v2.909.0 — a door can carry its OWN material (useful on an
+                // invisible wall); "Wall default" clears the override.
+                { label: '🎨 Door material', sub: [{ label: (!emb.style ? '✓ ' : '   ') + '↩ Wall default', fn: function () { delete emb.style; saveWalls(); } }].concat(
+                  Object.keys(WALL_STYLES).map(function (key) {
+                    return { label: (emb.style === key ? '✓ ' : '   ') + '🧱 ' + key.charAt(0).toUpperCase() + key.slice(1),
+                             fn: function () { emb.style = key; saveWalls(); } };
+                  })) },
                 { label: (emb.secret ? '✓ ' : '   ') + '🔒 Secret (hidden from players)', fn: function () { emb.secret = !emb.secret; saveWalls(); } },
                 { label: '🗑 Delete door', fn: _rmDoor },
               ]);
@@ -2849,12 +2863,15 @@
       var nw = { id: newId('w'), x1: d.x1 + dx, y1: d.y1 + dy,
         x2: d.x2 + dx, y2: d.y2 + dy, door: !!d.door, open: !!d.open,
         gate: !!d.gate, flip: !!d.flip, window: !!d.window, secret: !!d.secret,
+        invisible: !!d.invisible,  // v2.909.0
         opacity: (d.opacity == null ? 1 : d.opacity), style: d.style || 'stone' };
-      // v2.902.0 — carry embedded doors (fresh ids).
+      // v2.902.0 — carry embedded doors (fresh ids). v2.909.0 — + per-door style.
       if (Array.isArray(d.doors) && d.doors.length) {
         nw.doors = d.doors.map(function (x) {
-          return { id: newId('d'), t0: x.t0, t1: x.t1, open: !!x.open,
+          var nd = { id: newId('d'), t0: x.t0, t1: x.t1, open: !!x.open,
             gate: !!x.gate, secret: !!x.secret, flip: !!x.flip };
+          if (x.style) nd.style = x.style;
+          return nd;
         });
       }
       walls.push(nw);

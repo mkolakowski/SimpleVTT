@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.909.0] - 2026-07-05 — "The Invisible Wall"
+
+**Schema version:** 100
+
+**Commit summary:** A new invisible wall type (blocks sight but isn't drawn for players), and embedded doors can carry their own material.
+
+**Description:** Adds an **👻 Invisible** wall type (via a wall's right-click Type submenu). An invisible wall **blocks line of sight + casts lighting shadows like a normal wall**, but **isn't drawn for players** — the GM sees a faint dashed guide so it stays editable. Its **embedded doors still render and function**, and a door can now carry **its own material** (right-click a door → 🎨 Door material) instead of inheriting the wall's — so a door on an invisible wall shows a real wood/stone/… leaf while the wall around it stays unseen. Both `invisible` (wall) and per-door `style` round-trip through the walls PUT/GET and copy/paste.
+
+### Added
+- `app/routes/tabletop_routes.py` — sanitizer accepts `invisible` on walls + `style` on embedded doors.
+- `app/templates/tabletop.html` + `app/templates/map_editor.html` — `drawWallVisual` renders an invisible wall as a GM-only faint dashed guide (nothing for players); `_wallRenderSpans` carries `invisible` on face spans + `d.style || w.style` on doors; the Type submenu gains 👻 Invisible; the door menu gains 🎨 Door material; copy/paste carries both.
+- `tests/harness/test_invisible_wall.py` — `invisible` + per-door `style` round-trip.
+- `tests/harness_ui/test_invisible_wall_render.py` — the GM sees the invisible-wall guide; a player sees nothing.
+
+### Schema
+- No schema change (still v100 — additive fields inside `maps.walls` JSON). An invisible wall blocks sight through the unchanged `_wall_solid_spans` path.
+
 ## [2.908.0] - 2026-07-05 — "The Sticky Tool"
 
 **Schema version:** 100

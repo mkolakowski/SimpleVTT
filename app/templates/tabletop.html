@@ -2595,11 +2595,11 @@
             function pt(t) { return [w.x1 + dx * t, w.y1 + dy * t]; }
             function face(t0, t1) {
                 var a = pt(t0), b = pt(t1);
-                return { x1: a[0], y1: a[1], x2: b[0], y2: b[1], style: w.style, opacity: w.opacity };
+                return { x1: a[0], y1: a[1], x2: b[0], y2: b[1], style: w.style, opacity: w.opacity, invisible: w.invisible };
             }
             function door(d, t0, t1) {
                 var a = pt(t0), b = pt(t1);
-                return { x1: a[0], y1: a[1], x2: b[0], y2: b[1], style: w.style, opacity: w.opacity,
+                return { x1: a[0], y1: a[1], x2: b[0], y2: b[1], style: (d.style || w.style), opacity: w.opacity,
                     gate: !!d.gate, door: !d.gate, open: !!d.open, flip: !!d.flip, secret: !!d.secret,
                     _embWallId: w.id, _embDoorId: d.id };
             }
@@ -2711,6 +2711,10 @@
                     sm.setAttribute('stroke-width', '2'); sm.setAttribute('stroke-dasharray', '3 3');
                     sm.style.pointerEvents = 'none'; _wc.appendChild(sm);
                 }
+            } else if (w.invisible) {
+                // v2.909.0 — an invisible wall blocks sight but isn't drawn for
+                // players; the GM sees a faint dashed guide so it stays editable.
+                if (IS_GM) seg('rgba(150,180,230,0.35)', 2, 'round', '4 7');
             } else {
                 seg(st.casing, st.width + 4);
                 seg(st.color, st.width);
