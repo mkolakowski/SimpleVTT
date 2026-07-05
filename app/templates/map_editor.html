@@ -1814,6 +1814,12 @@
           items.push({ label: (w.secret ? '✓ ' : '   ') + '🔒 Secret (hidden from players)',
             fn: function () { w.secret = !w.secret; saveWalls(); } });
         }
+        // v2.906.0 — insert an embedded door at the right-click point (plain
+        // walls only; a legacy whole-segment door/gate/window can't hold one).
+        if (!isDoor && !isGate && !isWin) {
+          var _doorP = toMap(e);
+          items.push({ label: '🚪 Insert door here', fn: function () { _placeDoorInWall(w, _doorP); } });
+        }
         items.push(
           { label: '📋 Copy', fn: function () { copyObj('wall', w); } },
           { label: '🗑 Delete', fn: function () { deleteWall(w); } });

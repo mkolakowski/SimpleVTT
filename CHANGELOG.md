@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.906.0] - 2026-07-05 — "The Right-Click Door"
+
+**Schema version:** 100
+
+**Commit summary:** A wall's right-click menu gains "🚪 Insert door here" — embed a door at the click point without the Door tool.
+
+**Description:** Right-clicking a plain wall in the map editor now offers **🚪 Insert door here**, which embeds a door at the exact point you clicked (same magnetic-snap placement as the Door tool, but no tool to arm/disarm). It's offered only on plain walls — a legacy whole-segment door/gate/window can't hold an embedded door. Completes the door-editor refinements alongside v2.903–2.905.
+
+### Added
+- `app/templates/map_editor.html` — an "Insert door here" item in the wall context menu (`_placeDoorInWall(w, toMap(e))` at the right-click point).
+- `tests/harness_ui/test_insert_door_menu.py` — right-clicking a wall → Insert door embeds one door and leaves the wall a single object.
+
+### Schema
+- No schema change (still v100).
+
 ## [2.905.0] - 2026-07-05 — "The Single Placement"
 
 **Schema version:** 100
