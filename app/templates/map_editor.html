@@ -441,6 +441,11 @@
       <label style="gap:3px;">x<input type="number" id="me-grid-offx" min="0" value="{{ map.grid_offset_x }}" style="width:48px;min-height:32px;" title="Grid offset X (align the grid to the image)"></label>
       <label style="gap:3px;">y<input type="number" id="me-grid-offy" min="0" value="{{ map.grid_offset_y }}" style="width:48px;min-height:32px;" title="Grid offset Y"></label>
     </div>
+    {# v2.913.0 — per-map default token size: multiplies every token's radius on
+       the tabletop + this editor preview (0.5×–3×). #}
+    <div class="me-sub">
+      <label style="gap:3px;" title="Default token size for this map — scales every token (0.5×–3×)">tokens ×<input type="number" id="me-token-scale" min="0.5" max="3" step="0.1" value="{{ '%.1f'|format(map.token_scale or 1.0) }}" style="width:50px;min-height:32px;"></label>
+    </div>
   </div>
   {# v2.826.0 — the standalone Tags group moved into the File group (far left). #}
   {# v2.812.0 — Weather moved into the Environment group. #}
@@ -760,6 +765,8 @@
   var gridPx = {{ map.grid_size_px }} || 70;
   var gridShow = {{ 'true' if map.show_grid else 'false' }};
   var gridOffX = {{ map.grid_offset_x }} || 0, gridOffY = {{ map.grid_offset_y }} || 0;
+  // v2.913.0 — per-map default token size multiplier (preview mirrors the table).
+  var tokenScale = parseFloat('{{ map.token_scale or 1.0 }}') || 1;
   var gridType = {{ (map.grid_type.value if map.grid_type else 'square') | tojson }};  // v2.788.4 — square / hex / none
   var ambient = {{ map.ambient_light | tojson }} || 'bright';  // v2.774.0 lighting preview
   var snapOn = true;
@@ -2488,7 +2495,8 @@
     // v2.861.0 — more visible: the full cell radius (was 0.85×). No on-screen
     // floor here — these ephemeral sample tokens are interactive, and inflating
     // their map-coord radius when zoomed out would create an oversized hit area.
-    var r = Math.max(11, (gridPx || 70) / 2);
+    // v2.913.0 — scaled by the per-map tokenScale so the preview matches the table.
+    var r = Math.max(11, (gridPx || 70) / 2 * (tokenScale || 1));
     var active = (selectedTokenId === t.id);  // v2.785.2 — perspective active?
     var g = document.createElementNS(NS, 'g');
     g.classList.add('me-token');
@@ -4039,6 +4047,18 @@
   document.getElementById('me-grid').addEventListener('change', function (e) {
     gridPx = Math.max(20, Math.min(300, parseInt(e.target.value, 10) || 70));
     e.target.value = gridPx; pxPerFt = gridPx / 5; render(); saveGrid();
+  });
+  // v2.913.0 — per-map default token size. Clamp 0.5–3×, re-render the preview,
+  // and persist (broadcasts token_scale_update so open tables resize live).
+  var tokenScaleInp = document.getElementById('me-token-scale');
+  if (tokenScaleInp) tokenScaleInp.addEventListener('change', function (e) {
+    tokenScale = Math.max(0.5, Math.min(3, parseFloat(e.target.value) || 1));
+    e.target.value = tokenScale.toFixed(1); render();
+    setStatus('Saving…');
+    fetch('/campaign/' + CID + '/settings/maps/' + MID + '/token_scale', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token_scale: tokenScale }),
+    }).then(function () { setStatus('Saved.'); }).catch(function () { setStatus('Save failed.'); });
   });
   // v2.788.4 — grid type (square / hex / none).
   var gridTypeSel = document.getElementById('me-grid-type');

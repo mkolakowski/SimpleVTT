@@ -124264,6 +124264,39 @@ async def settings_map_weather(
     return {"ok": True, "map_id": m.id, "weather": m.weather}
 
 
+@router.post("/campaign/{campaign_id}/settings/maps/{map_id}/token_scale")
+async def settings_map_token_scale(
+    campaign_id: int,
+    map_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.913.0 — set a map's default token-size multiplier. GM-only. Body:
+    ``{token_scale: float}``, clamped to [0.5, 3.0]. Tokens draw at
+    ``grid_size_px * token.size * token_scale`` on the tabletop + editor
+    preview. Broadcasts ``token_scale_update`` so open clients resize live."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404)
+    body = await request.json()
+    try:
+        val = float(body.get("token_scale", 1.0))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "token_scale must be a number")
+    val = max(0.5, min(3.0, val))
+    m.token_scale = val
+    db.commit()
+    await hub.broadcast(campaign_id, {
+        "type": "token_scale_update",
+        "data": {"map_id": m.id, "token_scale": m.token_scale},
+    })
+    return {"ok": True, "map_id": m.id, "token_scale": m.token_scale}
+
+
 @router.post("/campaign/{campaign_id}/settings/maps/{map_id}/terrain_visibility")
 async def settings_map_terrain_visibility(
     campaign_id: int,
@@ -124441,6 +124474,8 @@ def get_active_map(
         "height_px": int(getattr(m, "height_px", 0) or 0),
         "grid_type": getattr(m.grid_type, "value", m.grid_type) or "square",
         "ambient_light": m.ambient_light,
+        # v2.913.0 — per-map default token-size multiplier.
+        "token_scale": float(getattr(m, "token_scale", 1.0) or 1.0),
         "walls": list(m.walls or []),
         "hotspots": list(getattr(m, "hotspots", None) or []),
         "lights": list(getattr(m, "lights", None) or []),

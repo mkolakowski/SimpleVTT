@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.913.0] - 2026-07-05 — "The Sizing Dial"
+
+**Schema version:** 101
+
+**Commit summary:** Per-map default token size — a GM control in the map editor scales every token on that map (tabletop + editor preview), live.
+
+**Description:** A map's tokens can now be **up- or down-sized as a group** from a single per-map dial. On a big natural-res battle map a size-1 token can read small; on a tight dungeon it can crowd the cells. The new **tokens ×** control in the map editor's **Grid** group sets a per-map multiplier (0.5×–3×) that every token's on-screen radius is scaled by — on the live tabletop *and* in the editor's preview. Changing it broadcasts `token_scale_update`, so any open table resizes its tokens **live** without a reload. The existing zoomed-out legibility floor still applies, so scaling down never makes tokens vanish.
+
+### Added
+- **`maps.token_scale`** (Float, default `1.0`) — per-map default token-size multiplier. Tokens draw at `grid_size_px × token.size × token_scale`.
+- **`POST /campaign/{cid}/settings/maps/{mid}/token_scale`** — GM-only setter, body `{token_scale}` clamped to `[0.5, 3.0]`; broadcasts `token_scale_update` `{map_id, token_scale}`.
+- Map editor: a **tokens ×** number input in the Grid group; changing it re-renders the sample-token preview and persists.
+- `GET /api/campaign/{cid}/active-map` now surfaces `token_scale`.
+- `tests/harness/test_map_token_scale.py` — round-trip + WS broadcast, clamp to [0.5, 3.0], 400 on non-numeric, 403 for non-GM.
+
+### Changed
+- `app/static/tabletop.js` — `_tokenRadius()` and the GIF-token overlay multiply by the per-map `tokenScale`; a `token_scale_update` WS handler updates it live.
+
+### Schema
+- **v101** — `ALTER TABLE maps ADD COLUMN token_scale FLOAT NOT NULL DEFAULT 1.0` (additive).
+
 ## [2.912.1] - 2026-07-05 — "The Remembered Fold"
 
 **Schema version:** 100

@@ -264,6 +264,10 @@
 
     const gridType = canvas.dataset.gridType || 'square';
     const gridSize = parseInt(canvas.dataset.gridSize || '70', 10);
+    // v2.913.0 — per-map default token-size multiplier (GM-set in the editor).
+    // Tokens render at ``gridSize * token.size * tokenScale``. Mutable so the
+    // ``token_scale_update`` WS event resizes every token live. 1.0 = default.
+    let tokenScale = parseFloat(canvas.dataset.tokenScale || '1') || 1;
     // v2.4.0: per-map "show grid overlay" toggle. Defaults to true when
     // the attribute is missing (e.g. on legacy pages without the new
     // template field). ``gridType`` still drives snap-to-grid token
@@ -576,7 +580,7 @@
             keep.add(t.id);
             const cx = t.x + gridSize / 2;
             const cy = t.y + gridSize / 2;
-            const r  = (gridSize * t.size) / 2 - 4;
+            const r  = _tokenRadius(t);  // v2.913.0 — same scaled/floored radius as PNG tokens
             if (!_gifImgMap[t.id]) {
                 const img = document.createElement('img');
                 img.style.cssText = 'position:absolute;border-radius:50%;object-fit:cover;pointer-events:none;';
@@ -1949,7 +1953,9 @@
     // TOKEN_MIN_SCREEN_PX on screen (legible when zoomed out / on large maps).
     // Used by the token, its skull/targeting overlays, so they stay aligned.
     function _tokenRadius(t) {
-        return Math.max((gridSize * (t.size || 1)) / 2, TOKEN_MIN_SCREEN_PX / (_camScale || 1));
+        // v2.913.0 — the per-map tokenScale multiplies the base cell radius; the
+        // on-screen floor still applies so scaled-down tokens stay legible.
+        return Math.max((gridSize * (t.size || 1) * tokenScale) / 2, TOKEN_MIN_SCREEN_PX / (_camScale || 1));
     }
     // Test hooks (v2.861.0): the on-screen radius floor is scale-dependent, so
     // the harness reads the live radius + camera scale rather than the pixels.
@@ -6271,6 +6277,15 @@
                 // v2.808.0 — Maps 2.0: start/stop the ambient weather overlay.
                 if (msg.data && typeof window._onWeatherUpdate === 'function') {
                     try { window._onWeatherUpdate(msg.data); } catch (_) {}
+                }
+            } else if (msg.type === 'token_scale_update') {
+                // v2.913.0 — GM changed the map's default token size: resize every
+                // token live. tokenScale lives in this closure, so update it here
+                // (not via a window._on* hook) and re-render + resync gif tokens.
+                if (msg.data && typeof msg.data.token_scale === 'number') {
+                    tokenScale = msg.data.token_scale;
+                    render();
+                    try { _updateGifOverlay(); } catch (_) {}
                 }
             } else if (msg.type === 'character_death_save') {
                 _onCharacterDeathSave(msg.data);

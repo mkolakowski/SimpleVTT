@@ -2446,6 +2446,7 @@
                     height="{{ active_map.height_px + 2 * _strip_h }}"
                     data-grid-type="{{ active_map.grid_type.value }}"
                     data-grid-size="{{ active_map.grid_size_px }}"
+                    data-token-scale="{{ active_map.token_scale or 1.0 }}"
                     data-show-grid="{{ '1' if active_map.show_grid else '0' }}"
                     data-letterbox-color="{{ active_map.letterbox_color or '' }}"
                     data-strip-h="{{ _strip_h }}"

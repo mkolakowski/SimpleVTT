@@ -1179,6 +1179,17 @@ def _apply_inline_migrations() -> None:
     SessionRecap.__table__.create(bind=engine, checkfirst=True)
     SessionRecapPlayerNote.__table__.create(bind=engine, checkfirst=True)
 
+    # ---- Schema v101 (2.913.0): maps.token_scale ----
+    # Per-map default token-size multiplier: tokens draw at
+    # ``grid_size_px * token.size * token_scale``, so a GM can up/down-size
+    # every token on a map at once. Additive; default 1.0 (pre-feature size).
+    maps_cols_v101 = _column_names("maps")
+    with engine.begin() as conn:
+        if maps_cols_v101 and "token_scale" not in maps_cols_v101:
+            conn.execute(text(
+                "ALTER TABLE maps ADD COLUMN token_scale FLOAT NOT NULL DEFAULT 1.0"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

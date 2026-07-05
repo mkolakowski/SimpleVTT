@@ -341,6 +341,12 @@ class Map(Base):
     # ``grid_type == NONE`` already disabled both overlay AND snapping;
     # this flag adds the orthogonal "snap yes, overlay no" combination.
     show_grid: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    # v2.913.0 — per-map default token size multiplier. Tokens draw at
+    # ``grid_size_px * token.size * token_scale`` on the tabletop (and in the
+    # editor preview), so a GM can make every token on a busy/large map bigger
+    # or smaller without touching each token. 1.0 = the pre-feature size.
+    # Clamped to [0.5, 3.0] by the settings endpoint. Presentation only.
+    token_scale: Mapped[float] = mapped_column(Float, default=1.0, server_default="1.0")
     width_px: Mapped[int] = mapped_column(Integer, default=2000)
     height_px: Mapped[int] = mapped_column(Integer, default=1500)
     # v2.704.0 — Phase 0 of docs/plans/vision-and-light.md: the map's
