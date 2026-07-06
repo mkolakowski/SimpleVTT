@@ -276,7 +276,7 @@
             title="Draw a wall: click two points for a segment. Turn on ⬡ FreeForm (Tools) to chain connected segments — click the last point again or press Esc to finish.">🧱 Wall</button>
     <button type="button" id="me-door-btn" class="me-tool-btn" aria-pressed="false"
             title="Place a door: click an existing wall to drop a door into it (players can open/close it at the table)">🚪 Door</button>
-    <label class="me-capsel" title="Material/look for new walls + doors — or the double-click-selected wall">
+    <label class="me-capsel me-capsel--stack" title="Material/look for new walls + doors — or the double-click-selected wall">
       <span class="me-cap" id="me-wall-cap">material</span>
       <select id="me-wall-style" style="min-height:32px;font-size:12px;width:100%;">
         <option value="stone">Stone</option>
@@ -292,12 +292,16 @@
         <option value="invisible">👻 Invisible</option>
       </select>
     </label>
-    {# v2.921.0 — transparency for new walls / the selected wall. Most useful on
-       a 🪟 Window: 100% = frosted glass, 0% = a fully open window (no pane). #}
-    <label class="me-capsel" title="Wall/window opacity — slide down to 0% for a fully open window (no glass drawn); sight passes through a window at any value">
+    {# v2.930.0 — opacity is a 0–100% (step 10) dropdown, caption stacked above.
+       Most useful on a 🪟 Window: 100% = frosted glass, 0% = a fully open
+       window (no pane). Sight passes through a window at any value. #}
+    <label class="me-capsel me-capsel--stack" title="Wall/window opacity — 0% is a fully open window (no glass drawn); sight passes through a window at any value">
       <span class="me-cap">opacity</span>
-      <input type="range" id="me-wall-opacity" min="0" max="100" step="5" value="100"
-             style="width:100%;min-height:24px;">
+      <select id="me-wall-opacity" style="min-height:32px;font-size:12px;width:100%;">
+        {% for pct in [100, 90, 80, 70, 60, 50, 40, 30, 20, 10, 0] %}
+        <option value="{{ pct }}"{% if pct == 100 %} selected{% endif %}>{{ pct }}%</option>
+        {% endfor %}
+      </select>
     </label>
   </div>
   {# v2.924.0 — Theme A (docs/plans/editor-controls-reorg.md): the old Markers +
@@ -3196,7 +3200,8 @@
       var s = document.getElementById('me-wall-style');
       if (s) s.value = w.window ? 'window' : (w.invisible ? 'invisible' : (w.style || 'stone'));  // v2.910.0/v2.921.0
       var op = document.getElementById('me-wall-opacity');  // v2.921.0
-      if (op) op.value = Math.round((w.opacity == null ? 1 : w.opacity) * 100);
+      // v2.930.0 — round to the nearest 10% so the dropdown always has a match.
+      if (op) op.value = String(Math.round((w.opacity == null ? 1 : w.opacity) * 10) * 10);
     }
     _setSelectedObj(w ? { kind: 'wall', obj: w } : null);
     _syncEditCaps();  // v2.925.0
@@ -3482,7 +3487,8 @@
   // v2.921.0 — transparency slider: edits the selected wall's opacity live (0% =
   // a fully open window), else sets the default opacity for newly-drawn walls.
   var wallOpacityInp = document.getElementById('me-wall-opacity');
-  if (wallOpacityInp) wallOpacityInp.addEventListener('input', function () {
+  // v2.930.0 — opacity is a dropdown (0–100% step 10); 'change' fires on select.
+  if (wallOpacityInp) wallOpacityInp.addEventListener('change', function () {
     var o = Math.max(0, Math.min(1, (parseInt(wallOpacityInp.value, 10) || 0) / 100));
     if (selectedWall) { selectedWall.opacity = o; saveWalls(); render(); }
     else { defaultWallOpacity = o; }

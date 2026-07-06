@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.930.0] - 2026-07-05 — "The Opacity Dropdown"
+
+**Schema version:** 101
+
+**Commit summary:** Walls group — captions stack above their dropdowns, and opacity becomes a 0–100% (step 10) dropdown.
+
+**Description:** In the map editor's **Walls** group, the **material** and **opacity** captions now sit **above** their controls (the `.me-capsel--stack` variant) instead of beside them — so the Theme-D "✎ selected wall" caption reads directly above the material dropdown. The **opacity** control is now a **dropdown of 0–100% in 10% steps** (was a slider); picking **0%** still yields a fully open window. The selected wall's opacity snaps to the nearest 10% when the dropdown mirrors it.
+
+### Changed
+- `app/templates/map_editor.html` — Walls material + opacity labels use `me-capsel--stack`; `#me-wall-opacity` is a `<select>` (100…0%); the change handler listens for `change`; `selectWall` rounds opacity to the nearest 10%.
+- `tests/harness_ui/test_editor_window_wall.py` — sets opacity via `select_option("#me-wall-opacity", "0")`.
+
+### Schema
+- No schema change (still v101 — editor control type + layout).
+
 ## [2.929.0] - 2026-07-05 — "The Gathered Environment"
 
 **Schema version:** 101

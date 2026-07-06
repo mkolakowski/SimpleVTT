@@ -60,10 +60,8 @@ def test_opacity_slider_opens_the_window(gm_page: Page) -> None:
             )
             gm_page.mouse.dblclick(hit["x"], hit["y"])
             gm_page.wait_for_timeout(200)
-            # Slide opacity to 0 → a fully open window.
-            slider = gm_page.locator("#me-wall-opacity")
-            slider.fill("0")
-            slider.dispatch_event("input")
+            # v2.930.0 — opacity is a dropdown now; pick 0% → a fully open window.
+            gm_page.select_option("#me-wall-opacity", "0")
             gm_page.wait_for_timeout(400)
             w = _walls(c, mid)[0]
             assert w["opacity"] == 0, w
