@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.936.0] - 2026-07-06 — "The Map Super-Group"
+
+**Schema version:** 101
+
+**Commit summary:** Move the Notes (Annotations) + Tokens groups from the Draw zone into the Map zone.
+
+**Description:** The **Notes** (Hotspots · Labels · GM pins) and **Tokens** (sample tokens + the per-map token-size dial) groups move out of the **Draw** zone and into the **Map** zone, next to Grid · Layers. So the Map zone now reads **Grid · Layers · Notes · Tokens**, and the Draw zone ends at **Walls · Terrain · Lighting · Environment · Lair**. Every control keeps its element ID — behaviour is unchanged; only the group's zone + the collapse membership change.
+
+### Changed
+- `app/templates/map_editor.html` — Annotations + Tokens groups relocated below Layers (Map zone); `ZONE_MEMBERS` drops them from `Draw` and adds them to `Map`.
+- Tests: `test_map_editor_toolbar.py` label order + `test_map_editor_collapse.py` / `test_editor_group_collapse.py` Draw-member lists updated.
+
+### Schema
+- No schema change (still v101 — toolbar layout only).
+
 ## [2.935.1] - 2026-07-06 — "The Inline B"
 
 **Schema version:** 101

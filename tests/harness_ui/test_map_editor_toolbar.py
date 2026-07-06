@@ -22,9 +22,10 @@ def test_toolbar_grouped(gm_page: Page) -> None:
     # v2.870.0 — Lair group added (lair-action zones) between Environment + Tokens.
     # v2.924.0 — Theme A: Markers + Environment split into Terrain · Lighting ·
     # Fog · Weather · Notes (Annotations) — see docs/plans/editor-controls-reorg.md.
-    # v2.932.0 — View moved beside Tools (Actions zone); Map zone is Grid+Layers.
+    # v2.932.0 — View beside Tools (Actions). v2.936.0 — Notes + Tokens moved to
+    # the Map zone (after Grid · Layers); Draw ends at Lair.
     assert labels == ["FILE", "TOOLS", "VIEW", "WALLS", "TERRAIN", "LIGHTING", "ENVIRONMENT",
-                      "NOTES", "LAIR", "TOKENS", "GRID", "LAYERS"], labels
+                      "LAIR", "GRID", "LAYERS", "NOTES", "TOKENS"], labels
 
     # v2.817.0 — zone dividers; v2.932.0 — Actions is now a collapsible zone too.
     zones = [s.upper() for s in gm_page.locator(".me-zone-sep .me-zone-lbl").all_inner_texts()]
