@@ -213,6 +213,79 @@ Without the full inspector, just relabel the shared caption + add a status hint.
 And rename **🖱 Select &amp; move** → **🖱 Grab** so it stops colliding with the
 box-**⬚ Select** tool.
 
+### 5.5 Try it — a clickable demo
+
+A toy of the **Theme A** toolbar wired up so you can feel the flow (it's a
+mockup, not the real editor): **click a tool** to arm it → **click the map** to
+drop a piece → **click a placed piece** to open its inspector (Theme B) →
+**click a group's title** to collapse it. **Reset** clears the board.
+
+<div id="me-demo" style="margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);box-sizing:border-box;background:#12141d;border:1px solid #2a2e40;border-radius:10px;padding:16px 28px;font-family:system-ui,sans-serif;">
+<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start;">
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div data-grp style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;cursor:pointer;" title="Click to collapse/expand">▾ Walls &amp; Doors</div><div data-grpbody><span data-tool="wall" style="display:block;font-size:12px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:4px 8px;margin:3px 0;white-space:nowrap;cursor:pointer;">🧱 Wall</span><span data-tool="door" style="display:block;font-size:12px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:4px 8px;margin:3px 0;white-space:nowrap;cursor:pointer;">🚪 Door</span></div></div>
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div data-grp style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;cursor:pointer;" title="Click to collapse/expand">▾ Terrain</div><div data-grpbody><span data-tool="terrain" style="display:block;font-size:12px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:4px 8px;margin:3px 0;white-space:nowrap;cursor:pointer;">⛰ Terrain</span></div></div>
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div data-grp style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;cursor:pointer;" title="Click to collapse/expand">▾ Lighting</div><div data-grpbody><span data-tool="light" style="display:block;font-size:12px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:4px 8px;margin:3px 0;white-space:nowrap;cursor:pointer;">💡 Lights</span></div></div>
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div data-grp style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;cursor:pointer;" title="Click to collapse/expand">▾ Tokens</div><div data-grpbody><span data-tool="token" style="display:block;font-size:12px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:4px 8px;margin:3px 0;white-space:nowrap;cursor:pointer;">🔵 Token</span></div></div>
+</div>
+<div data-demo="map" style="position:relative;height:220px;margin-top:12px;border:2px dashed #3a4058;border-radius:8px;background:repeating-linear-gradient(0deg,#171a26,#171a26 33px,#1b1e2c 33px,#1b1e2c 34px),repeating-linear-gradient(90deg,#171a26,#171a26 33px,#1b1e2c 33px,#1b1e2c 34px);cursor:crosshair;overflow:hidden;"></div>
+<div style="display:flex;align-items:center;gap:12px;margin-top:10px;"><div data-demo="status" style="flex:1 1 auto;font-size:13px;color:#9fd3ab;background:#1b2430;border:1px solid #34573b;border-radius:6px;padding:7px 11px;">Pick a tool above to begin.</div><button data-demo="reset" type="button" style="font-size:13px;color:#f2d7cf;background:#3a2a26;border:1px solid #5a3b34;border-radius:6px;padding:7px 14px;cursor:pointer;">↺ Reset</button></div>
+<div data-demo="inspector" style="display:none;margin-top:10px;max-width:280px;background:#1b2430;border:1px solid #57b26a;border-radius:8px;padding:8px 9px;"><div data-demo="insp-title" style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#9fd3ab;font-weight:700;margin-bottom:6px;">Selected · Wall</div><span style="display:block;font-size:12px;color:#e7e9f3;background:#243040;border:1px solid #3a4a5e;border-radius:5px;padding:4px 8px;margin:4px 0;">material [ Stone ▾ ]</span><span style="display:block;font-size:12px;color:#e7e9f3;background:#243040;border:1px solid #3a4a5e;border-radius:5px;padding:4px 8px;margin:4px 0;">opacity ▭▬▬▬▬▬▬ 70%</span><span style="display:block;font-size:12px;color:#e7e9f3;background:#243040;border:1px solid #3a4a5e;border-radius:5px;padding:4px 8px;margin:4px 0;">↻ flip · 🔒 secret · 🗑 delete</span></div>
+</div>
+<script>
+(function(){
+  var root = document.getElementById('me-demo'); if(!root) return;
+  var map = root.querySelector('[data-demo="map"]');
+  var statusEl = root.querySelector('[data-demo="status"]');
+  var insp = root.querySelector('[data-demo="inspector"]');
+  var glyph = { wall:'🧱', door:'🚪', terrain:'⛰', light:'💡', token:'🔵' };
+  var tool = null;
+  function say(t){ statusEl.textContent = t; }
+  function clearArm(){ root.querySelectorAll('[data-tool]').forEach(function(c){ c.style.outline=''; c.style.borderColor='#3a4058'; }); }
+  root.querySelectorAll('[data-tool]').forEach(function(chip){
+    chip.addEventListener('click', function(e){
+      e.stopPropagation();
+      if(tool === chip.dataset.tool){ tool=null; clearArm(); say('Tool cleared — pick a tool, or click a placed piece to edit it.'); return; }
+      tool = chip.dataset.tool; clearArm();
+      chip.style.outline='2px solid #ffd24a'; chip.style.borderColor='#ffd24a';
+      say(chip.textContent.trim()+' armed — click the map to place it.');
+    });
+  });
+  map.addEventListener('click', function(e){
+    insp.style.display='none';
+    if(!tool){ say('No tool armed — pick one above first.'); return; }
+    var r = map.getBoundingClientRect();
+    var piece = document.createElement('span');
+    piece.textContent = glyph[tool] || '▪';
+    piece.dataset.piece = tool;
+    piece.style.cssText='position:absolute;transform:translate(-50%,-50%);font-size:22px;cursor:pointer;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));';
+    piece.style.left=(e.clientX-r.left)+'px'; piece.style.top=(e.clientY-r.top)+'px';
+    var kind = tool;
+    piece.addEventListener('click', function(ev){
+      ev.stopPropagation();
+      insp.querySelector('[data-demo="insp-title"]').textContent='Selected · '+kind.charAt(0).toUpperCase()+kind.slice(1);
+      insp.style.display='block';
+      say('Selected a '+kind+' — the inspector shows just its properties (Theme B).');
+    });
+    map.appendChild(piece);
+    say('Placed a '+tool+'. Click it to select (inspector), or keep placing.');
+  });
+  root.querySelectorAll('[data-grp]').forEach(function(lbl){
+    lbl.addEventListener('click', function(e){
+      e.stopPropagation();
+      var body = lbl.parentElement.querySelector('[data-grpbody]');
+      if(!body) return;
+      var hidden = body.style.display==='none';
+      body.style.display = hidden ? '' : 'none';
+      lbl.textContent = (hidden?'▾ ':'▸ ') + lbl.textContent.replace(/^[▾▸]\s*/,'');
+    });
+  });
+  root.querySelector('[data-demo="reset"]').addEventListener('click', function(){
+    map.querySelectorAll('[data-piece]').forEach(function(p){ p.remove(); });
+    tool=null; clearArm(); insp.style.display='none'; say('Reset — pick a tool to begin.');
+  });
+})();
+</script>
+
 ## 6. Suggested phasing
 
 1. **Phase 1 (mechanical, low-risk):** Theme A regrouping + move token-scale into Tokens

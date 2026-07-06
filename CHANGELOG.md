@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.923.4] - 2026-07-05 — "The Clickable Draft"
+
+**Schema version:** 101
+
+**Commit summary:** Add an interactive clickable demo of the reorganized toolbar to the editor-reorg plan.
+
+**Description:** Adds **§5.5 "Try it — a clickable demo"** to [`docs/plans/editor-controls-reorg.md`](docs/plans/editor-controls-reorg.md): a small, self-contained interactive mock of the Theme A toolbar (inline HTML + a scoped `<script>`, which the wiki markdown renderer passes through and the browser executes since there's no CSP). Clicking a **tool** arms it (yellow ring + status line); clicking the **map** drops that piece; clicking a **placed piece** opens the Theme B "Selected · …" inspector; clicking a **group title** collapses/expands it; **Reset** clears the board. It demonstrates the proposed flow (arm → place → select → inspect, plus group collapse) without touching the real editor. Verified the script + markup are emitted unescaped and unmangled on `/wiki/doc/plan-editor-controls-reorg`.
+
+### Changed
+- `docs/plans/editor-controls-reorg.md` — new §5.5 interactive demo (scoped to `#me-demo`, no global side effects).
+
+### Schema
+- No schema change (still v101 — doc content only).
+
 ## [2.923.3] - 2026-07-05 — "The Full Bleed"
 
 **Schema version:** 101
