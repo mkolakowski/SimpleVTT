@@ -1,6 +1,6 @@
 # Map-editor control reorganization — review & proposals
 
-**Status:** 🟠 Phase 1 (Theme A) shipped v2.924.0 — Draw zone regrouped by concern + token-scale dial moved to Tokens. Themes B/C/D + Phase 2–4 still proposed.
+**Status:** 🟠 Phase 1 (Theme A, v2.924.0) + Phase 2 (Theme D, v2.925.0) shipped — Draw zone regrouped by concern; token-scale dial moved to Tokens; context-aware captions + Select&move→Grab rename. Theme B (inspector) + Theme C (shape mode) still proposed.
 **Audience:** contributors / the maintainer
 **Scope:** the floating toolbar of the map editor (`app/templates/map_editor.html`), not the tabletop.
 

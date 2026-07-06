@@ -250,8 +250,10 @@
     {# v2.854.0 — Select & Move: double-click an object to select it, then drag
        it to move; walls/doors/terrain also light up their resize handles. On
        by default. #}
+    {# v2.925.0 — Theme D: renamed "Select & move" → "Grab" so it stops colliding
+       with the box-⬚ Select tool (docs/plans/editor-controls-reorg.md). #}
     <button type="button" id="me-selmove-btn" class="me-tool-btn" aria-pressed="true"
-            title="Select &amp; move (on by default): double-click any object to select it, then drag it to move. Walls, doors and terrain also show resize handles. Toggle off to double-click for toolbar editing only.">🖱 Select &amp; move</button>
+            title="Grab (on by default): double-click any object to select it, then drag it to move. Walls, doors and terrain also show resize handles. Toggle off to double-click for toolbar editing only.">🖱 Grab</button>
   </div>
   {# v2.817.0 — Actions │ Draw zone boundary. v2.820.0 — label folds the zone. #}
   <div class="me-zone-sep"><span class="me-zone-lbl">Draw</span></div>
@@ -267,8 +269,8 @@
        last point again (or Esc) to finish — no need to close back to the start. #}
     <button type="button" id="me-room-btn" class="me-tool-btn" aria-pressed="false"
             title="FreeForm walls: click a chain of points to draw connected wall segments; click the last point again (or Esc) to finish — no need to close the loop. Right-click to keep it armed.">⬡ FreeForm</button>
-    <label class="me-capsel" title="Material/look for new walls + doors">
-      <span class="me-cap">material</span>
+    <label class="me-capsel" title="Material/look for new walls + doors — or the double-click-selected wall">
+      <span class="me-cap" id="me-wall-cap">material</span>
       <select id="me-wall-style" style="min-height:32px;font-size:12px;width:100%;">
         <option value="stone">Stone</option>
         <option value="wood">Wood</option>
@@ -303,8 +305,8 @@
        vertices (min 3) and closing on the first point — any map. #}
     <button type="button" id="me-terrain-poly-btn" class="me-tool-btn" aria-pressed="false"
             title="FreeForm terrain: when on, click to drop terrain vertices (any number) and click the first dot to close the shape — instead of dragging a rectangle.">⬡ FreeForm</button>
-    <label class="me-capsel" title="Terrain type for new regions">
-      <span class="me-cap">terrain</span>
+    <label class="me-capsel" title="Terrain type for new regions — or the double-click-selected region">
+      <span class="me-cap" id="me-terrain-cap">terrain</span>
       <select id="me-terrain-type" style="min-height:32px;font-size:12px;width:100%;">
         <option value="difficult">🟤 Difficult</option>
         <option value="water">🔵 Water</option>
@@ -422,7 +424,7 @@
     {# v2.879.0 — the zone-colour wheel sits to the LEFT of the action dropdown
        (the preset swatches were dropped — the native colour wheel is enough). #}
     <label class="me-capsel" title="The lair action this zone is bound to. Triggering it targets the tokens inside the zone.">
-      <span class="me-cap">Lair Actions</span>
+      <span class="me-cap" id="me-lair-cap">Lair Actions</span>
       <div class="me-sub" style="gap:4px;">
         <input type="color" id="me-lairzone-color" value="#d24b3a"
                title="Zone colour — for new zones, or the selected zone"
@@ -3127,9 +3129,9 @@
       if (di) di.value = L.dim_ft || 0;
       if (c1 && /^#[0-9a-f]{6}$/i.test(L.color || '')) c1.value = L.color;
       if (c2 && /^#[0-9a-f]{6}$/i.test(L.color2 || '')) c2.value = L.color2;
-      if (cap) cap.textContent = 'editing selected light';
+      if (cap) { cap.textContent = '✎ selected light'; cap.style.color = 'var(--accent)'; cap.style.fontWeight = '700'; }
     } else if (cap) {
-      cap.textContent = 'flicker colours';
+      cap.textContent = 'flicker colours'; cap.style.color = ''; cap.style.fontWeight = '';
     }
   }
   function selectLight(L) {
@@ -3138,6 +3140,22 @@
     syncLightToolbar();
     setStatus(L ? 'Light selected — the Markers controls edit it; drag to move (Esc deselects).' : '');
     render();
+  }
+  // v2.925.0 — Theme D: a group's caption tells you whether its controls are
+  // making a NEW object or editing the double-click-SELECTED one. Accented +
+  // relabelled while a selection of that kind is live (docs/plans/editor-controls-reorg.md).
+  function _setCap(id, text, editing) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text;
+    el.style.color = editing ? 'var(--accent)' : '';
+    el.style.fontWeight = editing ? '700' : '';
+  }
+  function _syncEditCaps() {
+    _setCap('me-wall-cap', selectedWall ? '✎ selected wall' : 'material', !!selectedWall);
+    _setCap('me-terrain-cap', selectedTerrain ? '✎ selected terrain' : 'terrain', !!selectedTerrain);
+    _setCap('me-lair-cap', (typeof selectedLairZone !== 'undefined' && selectedLairZone) ? '✎ selected zone' : 'Lair Actions',
+      typeof selectedLairZone !== 'undefined' && !!selectedLairZone);
   }
   // v2.851.0 — same select-to-edit for walls (material) + terrain (type):
   // double-click selects; the matching toolbar select mirrors + edits it.
@@ -3165,6 +3183,7 @@
       if (op) op.value = Math.round((w.opacity == null ? 1 : w.opacity) * 100);
     }
     _setSelectedObj(w ? { kind: 'wall', obj: w } : null);
+    _syncEditCaps();  // v2.925.0
     setStatus(w ? 'Wall selected — the material select edits it; drag to move, corner-handles resize (Esc deselects).' : '');
     render();
   }
@@ -3175,6 +3194,7 @@
       if (s) s.value = tr.type || 'difficult';
     }
     _setSelectedObj(tr ? { kind: 'terrain', obj: tr } : null);
+    _syncEditCaps();  // v2.925.0
     setStatus(tr ? 'Terrain selected — the type select edits it; drag to move, corner-handles resize (Esc deselects).' : '');
     render();
   }
@@ -3212,7 +3232,7 @@
     selectedLight = null; selectedWall = null; selectedTerrain = null;
     resizing = null; resizingTerrain = null;
     selectedObj = null;
-    if (had) { syncLightToolbar(); setStatus(''); render(); }
+    if (had) { syncLightToolbar(); _syncEditCaps(); setStatus(''); render(); }  // v2.925.0
     return !!had;
   }
   // Translate an object of a given kind by (dx, dy) in map pixels. Mirrors
@@ -3365,6 +3385,7 @@
       var cEl = document.getElementById('me-lairzone-color');
       if (cEl) cEl.value = selectedLairZone.color || '#d24b3a';
     }
+    if (typeof _syncEditCaps === 'function') _syncEditCaps();  // v2.925.0
   }
   if (lairZoneBtn) lairZoneBtn.addEventListener('click', function () { setMode(lairZoneMode ? null : 'lairzone'); });
   if (lairZonePolyBtn) lairZonePolyBtn.addEventListener('click', function () {
@@ -3435,8 +3456,8 @@
     selMoveBtn.setAttribute('aria-pressed', selectMoveOn ? 'true' : 'false');
     // Re-arm (or drop) the resize handles on the current selection to match.
     if (selectedObj) _setSelectedObj(selectedObj);
-    setStatus(selectMoveOn ? 'Select & move ON — double-click an object, then drag.'
-                           : 'Select & move OFF — double-click edits via the toolbar only.');
+    setStatus(selectMoveOn ? 'Grab ON — double-click an object, then drag.'
+                           : 'Grab OFF — double-click edits via the toolbar only.');
     render();
   });
   function syncStageCursor() {

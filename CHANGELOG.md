@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.925.0] - 2026-07-05 — "The Labelled Selection"
+
+**Schema version:** 101
+
+**Commit summary:** Map-editor Theme D: context-aware group captions + rename "Select & move" → "Grab".
+
+**Description:** Ships **Phase 2 / Theme D** from [`docs/plans/editor-controls-reorg.md`](docs/plans/editor-controls-reorg.md) — the cheap polish that makes the dual-purpose controls legible:
+
+- **Context captions.** A toolbar group's caption now tells you whether its controls make a **new** object or edit the **double-click-selected** one. Select a wall and the Walls caption flips **`material` → `✎ selected wall`** (accented); the same for **Terrain** (`terrain → ✎ selected terrain`), **Lighting** (`flicker colours → ✎ selected light`), and **Lair** (`Lair Actions → ✎ selected zone`). Deselect (Esc / click away) and every caption reverts.
+- **Grab rename.** The **🖱 Select & move** tool is renamed **🖱 Grab** (button + tooltip + status lines) so it no longer reads the same as the box-select **⬚ Select** tool.
+
+Behaviour is unchanged — this is caption text + the button label only; the underlying select/drag/resize logic is untouched.
+
+### Changed
+- `app/templates/map_editor.html` — `_setCap()` / `_syncEditCaps()` accent + relabel the wall/terrain/lair captions on selection (light already had one, now accented); `selectWall`/`selectTerrain`/`syncLairZoneToolbar`/`clearObjectSelection` call it. `#me-selmove-btn` → "🖱 Grab".
+
+### Added
+- `tests/harness_ui/test_editor_context_labels.py` — the tool is labelled "Grab" (not "Select & move"); double-click-selecting a wall relabels its caption to "✎ selected wall" (bold/accented) and Esc reverts it to "material".
+
+### Schema
+- No schema change (still v101 — editor labels only).
+
 ## [2.924.0] - 2026-07-05 — "The Concern Groups"
 
 **Schema version:** 101
