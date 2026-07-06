@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.930.1] - 2026-07-05 — "The Stacked Terrain"
+
+**Schema version:** 101
+
+**Commit summary:** Stack the Terrain group's caption above its type dropdown.
+
+**Description:** The map editor's **Terrain** group caption (`terrain` / the Theme-D `✎ selected terrain`) now sits **above** its type dropdown (the `.me-capsel--stack` variant), matching the Walls material/opacity and Environment ambient/weather captions. Cosmetic layout only.
+
+### Changed
+- `app/templates/map_editor.html` — the terrain-type `me-capsel` uses `me-capsel--stack`.
+
+### Schema
+- No schema change (still v101 — caption placement only).
+
 ## [2.930.0] - 2026-07-05 — "The Opacity Dropdown"
 
 **Schema version:** 101
