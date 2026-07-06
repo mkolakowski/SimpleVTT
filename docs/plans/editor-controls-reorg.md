@@ -1,6 +1,6 @@
 # Map-editor control reorganization — review & proposals
 
-**Status:** 🟠 Phases 1–3 shipped — Theme A (regroup, v2.924.0) · Theme D (context captions + Grab rename, v2.925.0) · Theme B (floating Selected-object inspector, v2.926.0). Only Theme C (unified shape mode) still proposed.
+**Status:** ✅ all four themes shipped — Theme A (regroup, v2.924.0) · Theme D (context captions + Grab rename, v2.925.0) · Theme B (floating Selected-object inspector, v2.926.0) · Theme C (one shared FreeForm toggle, v2.927.0).
 **Audience:** contributors / the maintainer
 **Scope:** the floating toolbar of the map editor (`app/templates/map_editor.html`), not the tabletop.
 

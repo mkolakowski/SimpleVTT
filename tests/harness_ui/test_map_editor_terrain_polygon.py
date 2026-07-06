@@ -27,8 +27,9 @@ def test_free_polygon_placement(gm_page: Page) -> None:
             gm_page.wait_for_timeout(400)
 
             # Enable the free-polygon toggle (also flips into terrain mode).
-            gm_page.click("#me-terrain-poly-btn")
-            assert gm_page.get_attribute("#me-terrain-poly-btn", "aria-pressed") == "true"
+            gm_page.click("#me-terrain-btn")   # arm the terrain tool
+            gm_page.click("#me-freeform-btn")  # v2.927.0 — shared FreeForm toggle
+            assert gm_page.get_attribute("#me-freeform-btn", "aria-pressed") == "true"
 
             # Click 5 vertices around a pentagon over the stage's lower half,
             # then click the first vertex again to close.

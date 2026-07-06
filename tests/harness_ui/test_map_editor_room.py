@@ -31,7 +31,8 @@ def test_free_polygon_walls_close_into_a_loop(gm_page: Page) -> None:
         c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
         try:
             _open(gm_page, mid)
-            gm_page.locator("#me-room-btn").click()  # ⬡ Free polygon (walls)
+            gm_page.locator("#me-freeform-btn").click()  # v2.927.0 — shared FreeForm toggle
+            gm_page.locator("#me-wall-btn").click()      # the active draw tool
             ov = gm_page.locator("#me-overlay").bounding_box()
             corners = [(90, 70), (260, 70), (260, 190), (90, 190)]
             for (dx, dy) in corners:
@@ -77,7 +78,8 @@ def test_freeform_wall_chaining(gm_page: Page) -> None:
         c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": []})
         try:
             _open(gm_page, mid)
-            gm_page.locator("#me-room-btn").click()  # ⬡ FreeForm
+            gm_page.locator("#me-freeform-btn").click()  # v2.927.0 — shared FreeForm toggle
+            gm_page.locator("#me-wall-btn").click()      # the active draw tool
             ov = gm_page.locator("#me-overlay").bounding_box()
             # Chain of 3 points → 2 connected segments (no tool re-click
             # between). Small waits let each per-segment save land in order.

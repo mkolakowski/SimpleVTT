@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.927.0] - 2026-07-05 — "The Shared Shape"
+
+**Schema version:** 101
+
+**Commit summary:** Map-editor Theme C: one shared "⬡ FreeForm" toggle replaces the three per-group FreeForm buttons — completes the editor-controls-reorg plan.
+
+**Description:** Ships **Phase 4 / Theme C** (the last) from [`docs/plans/editor-controls-reorg.md`](docs/plans/editor-controls-reorg.md). The **⬡ FreeForm** control was duplicated three times — once each in Walls (as a separate chained-wall tool), Terrain, and Lair zones. They're now a **single shared toggle in the Tools group** that applies to whichever draw tool is active:
+
+- **🧱 Wall** + FreeForm → chains connected segments (was the separate FreeForm-walls tool); off → a single two-point wall.
+- **⛰ Terrain** + FreeForm → placed by clicking vertices + closing on the first dot; off → rectangle drag.
+- **🎯 Lair zone** + FreeForm → polygon placement; off → rectangle drag.
+
+The toggle persists across tool switches, so the concept is taught once. Internally the separate `roomMode` was folded into `wallMode` + a shared `freeFormOn` flag (which drives `terrainPolyOn` / `lairZonePolyOn`); the dead `roomDots` preview path is retired. Grab + FreeForm now share one Tools row so the group stays compact.
+
+**This completes the editor-controls-reorg plan** (Themes A · D · B · C all shipped, v2.924.0–v2.927.0).
+
+### Changed
+- `app/templates/map_editor.html` — removed `#me-room-btn` / `#me-terrain-poly-btn` / `#me-lairzone-poly-btn`; added `#me-freeform-btn` (Tools); merged the wall click handler (freeform chain vs two-point); dropped `roomMode` from the mode set / no-tool checks / `setMode` / sticky list / hotkeys.
+- Tests: `test_map_editor_room.py`, `test_map_editor_terrain_polygon.py`, `test_map_editor_lair_zone.py` arm the tool then toggle the shared `#me-freeform-btn`.
+
+### Schema
+- No schema change (still v101 — editor toolbar only).
+
 ## [2.926.0] - 2026-07-05 — "The Inspector"
 
 **Schema version:** 101

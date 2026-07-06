@@ -252,23 +252,27 @@
        by default. #}
     {# v2.925.0 — Theme D: renamed "Select & move" → "Grab" so it stops colliding
        with the box-⬚ Select tool (docs/plans/editor-controls-reorg.md). #}
-    <button type="button" id="me-selmove-btn" class="me-tool-btn" aria-pressed="true"
-            title="Grab (on by default): double-click any object to select it, then drag it to move. Walls, doors and terrain also show resize handles. Toggle off to double-click for toolbar editing only.">🖱 Grab</button>
+    {# v2.927.0 — Theme C: Grab + the shared FreeForm toggle share one row (both
+       are mode toggles) so the Tools group stays compact after FreeForm moved in. #}
+    <div class="me-sub">
+      <button type="button" id="me-selmove-btn" class="me-tool-btn" aria-pressed="true" style="flex:1 1 0;"
+              title="Grab (on by default): double-click any object to select it, then drag it to move. Walls, doors and terrain also show resize handles. Toggle off to double-click for toolbar editing only.">🖱 Grab</button>
+      <button type="button" id="me-freeform-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
+              title="FreeForm placement (off by default): applies to the active draw tool — 🧱 Wall chains connected segments; ⛰ Terrain / 🎯 Lair zones are placed by clicking vertices and closing on the first dot, instead of a rectangle.">⬡ FreeForm</button>
+    </div>
   </div>
   {# v2.817.0 — Actions │ Draw zone boundary. v2.820.0 — label folds the zone. #}
   <div class="me-zone-sep"><span class="me-zone-lbl">Draw</span></div>
   <div class="me-group" role="group" aria-label="Walls">
     <span class="me-grp-lbl">Walls</span>
+    {# v2.927.0 — Theme C: the per-group ⬡ FreeForm toggles (walls / terrain /
+       lair) collapsed into ONE shared "⬡ FreeForm" toggle in the Tools group.
+       🧱 Wall places a single two-point segment normally, or chains connected
+       segments while FreeForm is on. #}
     <button type="button" id="me-wall-btn" class="me-tool-btn" aria-pressed="false"
-            title="Draw connected walls: click a chain of points; click the last point again or press Esc to finish">🧱 Wall</button>
+            title="Draw a wall: click two points for a segment. Turn on ⬡ FreeForm (Tools) to chain connected segments — click the last point again or press Esc to finish.">🧱 Wall</button>
     <button type="button" id="me-door-btn" class="me-tool-btn" aria-pressed="false"
             title="Place a door: click an existing wall to drop a door into it (players can open/close it at the table)">🚪 Door</button>
-    {# v2.898.0 — replaced the two-corner Room tool with a free-polygon wall
-       mode. v2.911.0 — renamed "FreeForm" + now an OPEN chain: 🧱 Wall places a
-       single two-point wall, ⬡ FreeForm chains connected segments; click the
-       last point again (or Esc) to finish — no need to close back to the start. #}
-    <button type="button" id="me-room-btn" class="me-tool-btn" aria-pressed="false"
-            title="FreeForm walls: click a chain of points to draw connected wall segments; click the last point again (or Esc) to finish — no need to close the loop. Right-click to keep it armed.">⬡ FreeForm</button>
     <label class="me-capsel" title="Material/look for new walls + doors — or the double-click-selected wall">
       <span class="me-cap" id="me-wall-cap">material</span>
       <select id="me-wall-style" style="min-height:32px;font-size:12px;width:100%;">
@@ -300,11 +304,7 @@
   <div class="me-group" role="group" aria-label="Terrain">
     <span class="me-grp-lbl">Terrain</span>
     <button type="button" id="me-terrain-btn" class="me-tool-btn" aria-pressed="false"
-            title="Terrain: drag a rectangle to mark difficult terrain / water / lava…; on a gridless map, click four dots to place a free-form quad instead; right-click a region to change its type, resize by its corners, or delete">⛰ Terrain</button>
-    {# v2.855.0 — free-polygon terrain: when on, terrain is placed by clicking
-       vertices (min 3) and closing on the first point — any map. #}
-    <button type="button" id="me-terrain-poly-btn" class="me-tool-btn" aria-pressed="false"
-            title="FreeForm terrain: when on, click to drop terrain vertices (any number) and click the first dot to close the shape — instead of dragging a rectangle.">⬡ FreeForm</button>
+            title="Terrain: drag a rectangle to mark difficult terrain / water / lava…. Turn on ⬡ FreeForm (Tools) to place by clicking vertices and closing on the first dot instead. Right-click a region to change type, resize, or delete.">⛰ Terrain</button>
     <label class="me-capsel" title="Terrain type for new regions — or the double-click-selected region">
       <span class="me-cap" id="me-terrain-cap">terrain</span>
       <select id="me-terrain-type" style="min-height:32px;font-size:12px;width:100%;">
@@ -414,13 +414,10 @@
      inside the zone. #}
   <div class="me-group" role="group" aria-label="Lair zones">
     <span class="me-grp-lbl">Lair</span>
-    {# v2.879.0 — the tool + free-polygon toggle share one row. #}
-    <div class="me-sub">
-      <button type="button" id="me-lairzone-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
-              title="Lair zone: drag a rectangle (or use ⬡ FreeForm) to mark where a lair action strikes; pick its lair action below. Double-click a zone to edit it; Delete removes the selected zone.">🎯 Lair Zone</button>
-      <button type="button" id="me-lairzone-poly-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
-              title="FreeForm lair zone: when on, click to drop zone vertices and click the first dot to close the shape — instead of dragging a rectangle.">⬡ FreeForm</button>
-    </div>
+    {# v2.927.0 — Theme C: the per-group FreeForm toggle moved to the shared one
+       in Tools; the zone tool is a full-width button now. #}
+    <button type="button" id="me-lairzone-btn" class="me-tool-btn" aria-pressed="false"
+            title="Lair zone: drag a rectangle to mark where a lair action strikes; pick its lair action below. Turn on ⬡ FreeForm (Tools) to place by clicking vertices instead. Double-click a zone to edit it; Delete removes the selected zone.">🎯 Lair Zone</button>
     {# v2.879.0 — the zone-colour wheel sits to the LEFT of the action dropdown
        (the preset swatches were dropped — the native colour wheel is enough). #}
     <label class="me-capsel" title="The lair action this zone is bound to. Triggering it targets the tokens inside the zone.">
@@ -639,7 +636,8 @@
     for (var i = 0; i < TERRAIN_TYPES.length; i++) if (TERRAIN_TYPES[i].key === key) return TERRAIN_TYPES[i];
     return TERRAIN_TYPES[0];
   }
-  var wallMode = false, doorMode = false, roomMode = false, spotMode = false, lightMode = false, fogMode = false, terrainMode = false, pinMode = false, propMode = false, labelMode = false, lairZoneMode = false, pending = null, seq = 0;
+  var wallMode = false, doorMode = false, spotMode = false, lightMode = false, fogMode = false, terrainMode = false, pinMode = false, propMode = false, labelMode = false, lairZoneMode = false, pending = null, seq = 0;
+  var freeFormOn = false;  // v2.927.0 — Theme C: shared FreeForm placement toggle (walls chain / terrain + lair polygons)
   // v2.772.0 — wall/door material looks. Walls draw as a thick casing + face
   // line; doors draw as a panel + knob (open = ajar/green).
   // v2.787.2 — thicker walls + per-material texture keys.
@@ -1543,7 +1541,7 @@
       // state (so you can right-click a region to Resize/Move/retype it), but
       // inert while another drawing tool or a relocate is active. A left-press
       // has no handler here, so it still bubbles to the stage for panning.
-      var noTool = !(wallMode || doorMode || roomMode || spotMode || lightMode
+      var noTool = !(wallMode || doorMode || spotMode || lightMode
         || fogMode || pinMode || propMode || labelMode || measureMode || selectMode
         || lairZoneMode);  // v2.870.0 — don't let terrain grab lair-zone drags
       var active = (terrainMode || eraseMode || noTool) && !relocating;
@@ -1709,7 +1707,7 @@
       // no-tool state (like terrain), so a zone can always be double-clicked
       // to select or right-clicked for its menu; inert while another drawing
       // tool or a relocate is active.
-      var _zNoTool = !(wallMode || doorMode || roomMode || spotMode || lightMode
+      var _zNoTool = !(wallMode || doorMode || spotMode || lightMode
         || fogMode || pinMode || propMode || labelMode || measureMode || selectMode
         || terrainMode);
       var zActive = (lairZoneMode || eraseMode || _zNoTool) && !relocating;
@@ -3466,7 +3464,7 @@
   // Toolbar wiring.
   var wallBtn = document.getElementById('me-wall-btn');
   var doorBtn = document.getElementById('me-door-btn');
-  var roomBtn = document.getElementById('me-room-btn');
+  var freeFormBtn = document.getElementById('me-freeform-btn');  // v2.927.0 — shared FreeForm toggle
   var styleSel = document.getElementById('me-wall-style');
   // v2.851.0 — when a wall is dbl-click-selected, the material select edits it
   // (with nothing selected it stays the default for NEW walls, as before).
@@ -3495,7 +3493,6 @@
   });
   // v2.870.0 — lair-zone tool wiring.
   var lairZoneBtn = document.getElementById('me-lairzone-btn');
-  var lairZonePolyBtn = document.getElementById('me-lairzone-poly-btn');
   // v2.875.0 — a single "Lair Actions" <select> replaces the label + free-text
   // actions inputs. The chosen action's id is the zone's bound action; its name
   // becomes the zone label; its text shows in #me-lairzone-desc (hover = full).
@@ -3528,15 +3525,8 @@
     if (typeof renderInspector === 'function') renderInspector();
   }
   if (lairZoneBtn) lairZoneBtn.addEventListener('click', function () { setMode(lairZoneMode ? null : 'lairzone'); });
-  if (lairZonePolyBtn) lairZonePolyBtn.addEventListener('click', function () {
-    lairZonePolyOn = !lairZonePolyOn;
-    lairZonePolyBtn.setAttribute('aria-pressed', lairZonePolyOn ? 'true' : 'false');
-    lairZoneDots = [];
-    if (lairZonePolyOn && !lairZoneMode) setMode('lairzone');
-    setStatus(lairZonePolyOn
-      ? 'FreeForm ON — click zone vertices, then click the first dot to close.' : '');
-    render();
-  });
+  // v2.927.0 — Theme C: the per-group lair FreeForm toggle is gone; lairZonePolyOn
+  // now follows the shared FreeForm toggle (see #me-freeform-btn).
   if (lairZoneActionsEl) lairZoneActionsEl.addEventListener('change', function () {
     var a = _selectedLairAction();
     _showLairActionDesc(a ? a.id : '');
@@ -3578,18 +3568,8 @@
   if (selectBtn) selectBtn.addEventListener('click', function () { setMode(selectMode ? null : 'select'); });
   // v2.854.0 — Select & Move toggle (on by default). When off, an existing
   // selection loses its resize handles + drag; the toolbar-mirror stays.
-  // v2.855.0 — free-polygon terrain toggle.
-  var terrainPolyBtn = document.getElementById('me-terrain-poly-btn');
-  if (terrainPolyBtn) terrainPolyBtn.addEventListener('click', function () {
-    terrainPolyOn = !terrainPolyOn;
-    terrainPolyBtn.setAttribute('aria-pressed', terrainPolyOn ? 'true' : 'false');
-    terrainDots = [];  // abandon any pending dots when switching placement style
-    if (terrainPolyOn && !terrainMode) setMode('terrain');  // convenience
-    setStatus(terrainPolyOn
-      ? 'FreeForm ON — click terrain vertices, then click the first dot to close.'
-      : '');
-    render();
-  });
+  // v2.927.0 — Theme C: the per-group terrain FreeForm toggle is gone;
+  // terrainPolyOn now follows the shared FreeForm toggle (see #me-freeform-btn).
   var selMoveBtn = document.getElementById('me-selmove-btn');
   if (selMoveBtn) selMoveBtn.addEventListener('click', function () {
     selectMoveOn = !selectMoveOn;
@@ -3606,7 +3586,7 @@
   function syncStageCursor() {
     // The overlay captures empty-area clicks when placing/painting/relocating.
     // (Objects stay individually clickable for erase/right-click regardless.)
-    var on = wallMode || doorMode || roomMode || spotMode || lightMode || fogMode || terrainMode || lairZoneMode || pinMode || propMode || labelMode || measureMode || selectMode || relocating || resizing || resizingTerrain;
+    var on = wallMode || doorMode || spotMode || lightMode || fogMode || terrainMode || lairZoneMode || pinMode || propMode || labelMode || measureMode || selectMode || relocating || resizing || resizingTerrain;
     svg.style.pointerEvents = on ? 'auto' : 'none';
     svg.style.cursor = on ? 'crosshair' : 'default';
   }
@@ -3787,7 +3767,7 @@
   // v2.866.0 — 'a' for the Label tool (🔤/ABC), the last placement tool that
   // lacked a hotkey — every other map-element tool already had one.
   var TOOL_KEYS = {
-    w: 'me-wall-btn', d: 'me-door-btn', r: 'me-room-btn', l: 'me-light-btn',
+    w: 'me-wall-btn', d: 'me-door-btn', l: 'me-light-btn',
     f: 'me-fog-btn', t: 'me-terrain-btn', m: 'me-measure-btn', v: 'me-select-btn',
     p: 'me-spot-btn', g: 'me-pin-btn', e: 'me-erase-btn', a: 'me-label-btn',
   };
@@ -3851,7 +3831,7 @@
     // v2.908.0 — "sticky" (right-click) keeps the tool armed for placing many;
     // a plain left-click is single-shot (auto-off after one placement).
     stickyTool = !!(mode && sticky);
-    wallMode = (mode === 'wall'); doorMode = (mode === 'door'); roomMode = (mode === 'room');
+    wallMode = (mode === 'wall'); doorMode = (mode === 'door');
     spotMode = (mode === 'spot'); lightMode = (mode === 'light'); fogMode = (mode === 'fog');
     terrainMode = (mode === 'terrain'); pinMode = (mode === 'pin');
     propMode = (mode === 'prop'); labelMode = (mode === 'label');
@@ -3863,7 +3843,6 @@
     if (!selectMode) { selectDrag = null; selGroupDrag = null; selection = []; }  // clear selection on tool change
     if (selectBtn) selectBtn.setAttribute('aria-pressed', selectMode ? 'true' : 'false');
     wallBtn.setAttribute('aria-pressed', wallMode ? 'true' : 'false');
-    if (roomBtn) roomBtn.setAttribute('aria-pressed', roomMode ? 'true' : 'false');
     if (terrainBtn) terrainBtn.setAttribute('aria-pressed', terrainMode ? 'true' : 'false');
     if (pinBtn) pinBtn.setAttribute('aria-pressed', pinMode ? 'true' : 'false');
     if (propBtn) propBtn.setAttribute('aria-pressed', propMode ? 'true' : 'false');
@@ -3930,13 +3909,24 @@
   });
   wallBtn.addEventListener('click', function () { setMode(wallMode ? null : 'wall'); });
   if (doorBtn) doorBtn.addEventListener('click', function () { setMode(doorMode ? null : 'door'); });
-  if (roomBtn) roomBtn.addEventListener('click', function () { setMode(roomMode ? null : 'room'); });
+  // v2.927.0 — Theme C: the shared FreeForm toggle drives free-form placement of
+  // whatever draw tool is active (chained walls / poly terrain / poly lair zones).
+  if (freeFormBtn) freeFormBtn.addEventListener('click', function () {
+    freeFormOn = !freeFormOn;
+    terrainPolyOn = freeFormOn; lairZonePolyOn = freeFormOn;  // the two rect-vs-poly tools follow
+    freeFormBtn.setAttribute('aria-pressed', freeFormOn ? 'true' : 'false');
+    pending = null; terrainDots = []; lairZoneDots = [];  // abandon any half-placed shape
+    setStatus(freeFormOn
+      ? 'FreeForm ON — the active draw tool places by clicking vertices (walls chain; click the first dot / Esc to finish).'
+      : '');
+    render();
+  });
   spotBtn.addEventListener('click', function () { setMode(spotMode ? null : 'spot'); });
   if (lightBtn) lightBtn.addEventListener('click', function () { setMode(lightMode ? null : 'light'); });
   // v2.908.0 — right-click a placeable-tool button to arm it in "sticky" mode
   // (stays on for placing many, shown by a yellow ring); a left-click is
   // single-shot (auto-off after the item is placed / a polygon closes).
-  [[wallBtn, 'wall'], [doorBtn, 'door'], [roomBtn, 'room'], [spotBtn, 'spot'],
+  [[wallBtn, 'wall'], [doorBtn, 'door'], [spotBtn, 'spot'],
    [lightBtn, 'light'], [terrainBtn, 'terrain'], [pinBtn, 'pin'], [propBtn, 'prop'],
    [labelBtn, 'label'], [lairZoneBtn, 'lairzone']].forEach(function (pair) {
     var b = pair[0], m = pair[1];
@@ -4287,34 +4277,33 @@
     }
     var p = toMap(e); if (!p) return;
     if (wallMode) {
-      // v2.911.0 — the basic Wall places a single TWO-POINT segment (no
-      // auto-extend). Click the first point, then the second → done. (⬡ FreeForm
-      // is the chaining tool.)
       p = snapPoint(p);
-      if (!pending) { pending = p; render(); return; }
-      if (p.x === pending.x && p.y === pending.y) { pending = null; render(); return; }
-      walls.push(_newWallFromStyle(pending, p));
-      pending = null;  // two-point wall — no chaining
-      saveWalls(); _afterPlace(); render();
+      if (freeFormOn) {
+        // v2.911.0/v2.927.0 — FreeForm ON: an OPEN chain of connected segments.
+        // Each click adds a wall from the previous point to here; click the LAST
+        // point again (or Esc) to finish — no need to close back to the first.
+        if (!pending) {
+          pending = p;
+          setStatus('FreeForm walls — click the next point; click the last point again (or Esc) to finish.');
+          render(); return;
+        }
+        if (p.x === pending.x && p.y === pending.y) { pending = null; setStatus(''); _afterPlace(); render(); return; }
+        walls.push(_newWallFromStyle(pending, p));
+        pending = p;  // the chain continues from the new endpoint
+        saveWalls();
+      } else {
+        // v2.911.0 — the basic Wall places a single TWO-POINT segment (no chain).
+        if (!pending) { pending = p; render(); return; }
+        if (p.x === pending.x && p.y === pending.y) { pending = null; render(); return; }
+        walls.push(_newWallFromStyle(pending, p));
+        pending = null;  // two-point wall — no chaining
+        saveWalls(); _afterPlace(); render();
+      }
     } else if (doorMode) {
       // v2.897.0 — a door must be placed IN a wall. Clicking an existing wall
       // is handled by the wall hit-line (splits it + inserts a door); a click
       // on empty map just hints.
       if (window.showToast) showToast('Doors must be placed on a wall — click an existing wall.');
-    } else if (roomMode) {
-      // v2.911.0 — FreeForm walls: an OPEN chain of connected segments. Each
-      // click adds a wall from the previous point to here; click the LAST point
-      // again (or Esc) to finish — no need to close back to the first point.
-      p = snapPoint(p);
-      if (!pending) {
-        pending = p;
-        setStatus('FreeForm — click the next point; click the last point again (or Esc) to finish.');
-        render(); return;
-      }
-      if (p.x === pending.x && p.y === pending.y) { pending = null; setStatus(''); _afterPlace(); render(); return; }
-      walls.push(_newWallFromStyle(pending, p));
-      pending = p;  // the chain continues from the new endpoint
-      saveWalls();
     } else if (spotMode) {
       var label = window.prompt('Hotspot label:', '');
       if (label === null) return;

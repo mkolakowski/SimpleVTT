@@ -91,8 +91,9 @@ def test_lair_zone_free_polygon_placement(gm_page: Page) -> None:
             _prime_pointer(gm_page, cx, cy)
 
             # Free-polygon toggle also flips into lair-zone mode.
-            gm_page.click("#me-lairzone-poly-btn")
-            assert gm_page.get_attribute("#me-lairzone-poly-btn", "aria-pressed") == "true"
+            gm_page.click("#me-lairzone-btn")  # arm the lair-zone tool
+            gm_page.click("#me-freeform-btn")  # v2.927.0 — shared FreeForm toggle
+            assert gm_page.get_attribute("#me-freeform-btn", "aria-pressed") == "true"
 
             pts = [(-110, -60), (110, -60), (130, 50), (0, 100), (-130, 50)]
             for dx, dy in pts:
