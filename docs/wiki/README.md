@@ -61,7 +61,7 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 
 | Plan | Format | Audience | Status |
 |------|--------|----------|--------|
-| [Map-editor control reorganization (review & proposals)](../plans/editor-controls-reorg.md) | Markdown (design) | Contributors | 🟠 Phases 1–2 (Themes A + D) shipped v2.924.0–v2.925.0 |
+| [Map-editor control reorganization (review & proposals)](../plans/editor-controls-reorg.md) | Markdown (design) | Contributors | 🟠 Phases 1–3 (Themes A · D · B) shipped v2.924.0–v2.926.0 |
 | [Notes & handouts (GM prep + E2E-encrypted player notes)](../plans/notes-and-handouts.md) | Markdown (design) | Contributors | ✅ all phases shipped (v2.554.0–v2.561.0) |
 | [Persistent-AoE enter-trigger](../plans/aoe-enter-trigger.md) | Markdown (design) | Contributors | ✅ Phases 1+3 shipped (v2.567.0–v2.568.0 · radius shapes; Phase 2 N/A) |
 | [Fork & tweak SRD mechanics as homebrew](../plans/homebrew-fork-srd.md) | Markdown (design) | Contributors | ✅ shipped (v2.569.0–v2.572.0 · fork/edit/search endpoints + Workshop UI w/ SRD browse) |

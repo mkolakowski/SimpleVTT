@@ -538,6 +538,23 @@
   <canvas id="me-weather-canvas" style="position:absolute;top:0;left:0;pointer-events:none;"></canvas>
   <svg id="me-overlay" width="{{ map.width_px }}" height="{{ map.height_px }}"
        viewBox="0 0 {{ map.width_px }} {{ map.height_px }}"></svg>
+  {# v2.926.0 — Theme B (docs/plans/editor-controls-reorg.md): a floating
+     "Selected object" inspector. Appears only when an object is double-click-
+     selected; shows just that object's editable properties (walls: material /
+     opacity / type / flip / secret / delete). Frosted panel, bottom-right. #}
+  <div id="me-inspector" style="display:none;position:absolute;bottom:14px;right:14px;z-index:40;
+       width:206px;box-sizing:border-box;padding:9px 10px;border-radius:10px;
+       border:1px solid color-mix(in srgb, var(--accent) 55%, var(--border));
+       background:color-mix(in srgb, var(--bg) 82%, transparent);
+       -webkit-backdrop-filter:blur(14px) saturate(150%);backdrop-filter:blur(14px) saturate(150%);
+       box-shadow:0 8px 28px rgba(0,0,0,.4);font-size:12px;color:var(--fg);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;gap:8px;">
+      <span id="me-insp-title" style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--accent);font-weight:700;">Selected</span>
+      <button type="button" id="me-insp-close" title="Deselect (Esc)"
+              style="min-height:24px;min-width:24px;padding:0 6px;font-size:13px;line-height:1;">✕</button>
+    </div>
+    <div id="me-insp-body"></div>
+  </div>
 </div>
 {# v2.827.0 — removed the bottom hint paragraph (it duplicated the tooltips). #}
 
@@ -3206,12 +3223,132 @@
   var selectedObj = null;
   function _setSelectedObj(sel) {
     selectedObj = sel;
+    // v2.926.0 — a fresh object selection clears any lair-zone selection so the
+    // inspector + resize handles never straddle two selection systems.
+    if (sel && sel.obj && typeof selectedLairZone !== 'undefined') selectedLairZone = null;
     // Arm the resize handles for walls/doors + terrain when Select & Move is on.
     resizing = null; resizingTerrain = null;
     if (sel && selectMoveOn) {
       if (sel.kind === 'wall' || sel.kind === 'door') resizing = sel.obj;
       else if (sel.kind === 'terrain') resizingTerrain = sel.obj;
     }
+    renderInspector();  // v2.926.0 — Theme B floating inspector
+  }
+  // v2.926.0 — Theme B: the floating "Selected object" inspector. Driven by
+  // `selectedObj`; walls get full inline editing (material/opacity/type/flip/
+  // secret/delete), other kinds a compact panel. Lair zones keep their own
+  // group editor (they don't set selectedObj).
+  var _INSP_KIND = { wall: 'Wall', door: 'Door', terrain: 'Terrain', light: 'Light',
+    hotspot: 'Hotspot', gmpin: 'GM pin', label: 'Label', prop: 'Prop' };
+  function _inspRow(labelText, ctrl) {
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:6px;margin:5px 0;';
+    var l = document.createElement('span');
+    l.textContent = labelText;
+    l.style.cssText = 'flex:0 0 52px;font-size:11px;color:var(--fg-mute);';
+    row.appendChild(l);
+    if (ctrl) { ctrl.style.flex = '1 1 auto'; row.appendChild(ctrl); }
+    return row;
+  }
+  function _inspBtn(text, fn, extra) {
+    var b = document.createElement('button'); b.type = 'button'; b.textContent = text;
+    b.style.cssText = 'min-height:28px;padding:2px 8px;font-size:12px;' + (extra || '');
+    b.addEventListener('click', fn); return b;
+  }
+  function _inspDelBtn(fn) {
+    return _inspBtn('🗑 Delete', function () { fn(); clearObjectSelection(); },
+      'width:100%;margin-top:8px;background:#7a1f14;color:#ffd9d2;border:1px solid #b5321f;');
+  }
+  function renderInspector() {
+    var panel = document.getElementById('me-inspector'); if (!panel) return;
+    var titleEl = document.getElementById('me-insp-title');
+    var body = document.getElementById('me-insp-body');
+    var sel = selectedObj;
+    if (!sel || !sel.obj) { panel.style.display = 'none'; if (body) body.innerHTML = ''; return; }
+    var kind = sel.kind, o = sel.obj;
+    var name = _INSP_KIND[kind] || 'Object';
+    if (kind === 'wall' || kind === 'door') {
+      name = o.window ? 'Window' : o.gate ? 'Gate' : (o.door ? 'Door' : (o.invisible ? 'Invisible wall' : 'Wall'));
+    }
+    titleEl.textContent = 'Selected · ' + name;
+    body.innerHTML = '';
+    if (kind === 'wall' || kind === 'door') {
+      var mat = document.createElement('select'); mat.style.minHeight = '28px';
+      ['stone', 'wood', 'brick', 'metal', 'cave'].forEach(function (k) {
+        var op = document.createElement('option'); op.value = k;
+        op.textContent = k.charAt(0).toUpperCase() + k.slice(1);
+        if ((o.style || 'stone') === k) op.selected = true; mat.appendChild(op);
+      });
+      mat.addEventListener('change', function () { o.style = mat.value; saveWalls(); render(); });
+      body.appendChild(_inspRow('material', mat));
+      var opac = document.createElement('input'); opac.type = 'range';
+      opac.min = '0'; opac.max = '100'; opac.step = '5';
+      opac.value = String(Math.round((o.opacity == null ? 1 : o.opacity) * 100));
+      opac.addEventListener('input', function () { o.opacity = (parseInt(opac.value, 10) || 0) / 100; saveWalls(); render(); });
+      body.appendChild(_inspRow('opacity', opac));
+      var typeWrap = document.createElement('div'); typeWrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;';
+      function isType(t) {
+        if (t === 'wall') return !o.door && !o.gate && !o.window && !o.invisible;
+        if (t === 'door') return !!o.door && !o.gate;
+        return !!o[t];
+      }
+      [['wall', '🧱'], ['door', '🚪'], ['gate', '⛩'], ['window', '🪟'], ['invisible', '👻']].forEach(function (pair) {
+        var t = pair[0];
+        var b = document.createElement('button'); b.type = 'button'; b.textContent = pair[1]; b.title = t;
+        b.style.cssText = 'flex:1 1 0;min-height:26px;min-width:26px;font-size:12px;padding:2px;'
+          + (isType(t) ? 'background:var(--accent);color:#fff;' : '');
+        b.addEventListener('click', function () {
+          o.door = false; o.gate = false; o.window = false; o.invisible = false;
+          if (t === 'door') o.door = true; else if (t !== 'wall') o[t] = true;
+          saveWalls(); render(); renderInspector();
+        });
+        typeWrap.appendChild(b);
+      });
+      body.appendChild(_inspRow('type', typeWrap));
+      if (o.door || o.gate) {
+        var fs = document.createElement('div'); fs.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:2px;';
+        fs.appendChild(_inspBtn('↻ Flip', function () { o.flip = !o.flip; saveWalls(); render(); }));
+        var secLbl = document.createElement('label'); secLbl.style.cssText = 'display:flex;align-items:center;gap:3px;font-size:11px;';
+        var sec = document.createElement('input'); sec.type = 'checkbox'; sec.checked = !!o.secret;
+        sec.style.minHeight = '0';
+        sec.addEventListener('change', function () { o.secret = sec.checked; saveWalls(); render(); });
+        secLbl.appendChild(sec); secLbl.appendChild(document.createTextNode('🔒 secret'));
+        fs.appendChild(secLbl);
+        body.appendChild(fs);
+      }
+      body.appendChild(_inspDelBtn(function () { deleteWall(o); }));
+    } else if (kind === 'terrain') {
+      var ts = document.createElement('select'); ts.style.minHeight = '28px';
+      [['difficult', '🟤 Difficult'], ['water', '🔵 Water'], ['lava', '🔴 Lava'],
+       ['ice', '🧊 Ice'], ['swamp', '🟢 Swamp'], ['rubble', '⚪ Rubble']].forEach(function (pr) {
+        var op = document.createElement('option'); op.value = pr[0]; op.textContent = pr[1];
+        if ((o.type || 'difficult') === pr[0]) op.selected = true; ts.appendChild(op);
+      });
+      ts.addEventListener('change', function () { o.type = ts.value; saveTerrain(); render(); });
+      body.appendChild(_inspRow('type', ts));
+      body.appendChild(_inspDelBtn(function () { terrain = terrain.filter(function (x) { return x !== o; }); saveTerrain(); }));
+    } else if (kind === 'light') {
+      var lsel = document.createElement('select'); lsel.style.minHeight = '28px';
+      LIGHT_TYPES.forEach(function (p) { var op = document.createElement('option'); op.value = p.key; op.textContent = p.label; lsel.appendChild(op); });
+      lsel.value = matchLightPreset(o) || 'custom';
+      lsel.addEventListener('change', function () {
+        var p = LIGHT_TYPES.find(function (x) { return x.key === lsel.value; });
+        if (p) { o.bright_ft = p.bright; o.dim_ft = p.dim; o.color = p.color; o.color2 = p.color2; saveLights(); syncLightToolbar(); render(); }
+      });
+      body.appendChild(_inspRow('light', lsel));
+      body.appendChild(_inspDelBtn(function () { deleteLight(o); }));
+    } else {
+      var note = document.createElement('div'); note.style.cssText = 'font-size:11px;color:var(--fg-mute);margin:2px 0 2px;';
+      note.textContent = 'Drag to move · right-click for options.';
+      body.appendChild(note);
+      body.appendChild(_inspDelBtn(function () {
+        if (kind === 'hotspot') { deleteHotspot(o); }
+        else if (kind === 'gmpin') { gmPins = gmPins.filter(function (x) { return x !== o; }); saveGmPins(); }
+        else if (kind === 'label') { labels = labels.filter(function (x) { return x !== o; }); saveLabels(); }
+        else if (kind === 'prop') { props = props.filter(function (x) { return x !== o; }); saveProps(); }
+      }));
+    }
+    panel.style.display = 'block';
   }
   // Select any object kind (used by the non-toolbar kinds: hotspot/prop/label/
   // gmpin). Point objects get drag-move only (no resize handles).
@@ -3232,7 +3369,7 @@
     selectedLight = null; selectedWall = null; selectedTerrain = null;
     resizing = null; resizingTerrain = null;
     selectedObj = null;
-    if (had) { syncLightToolbar(); _syncEditCaps(); setStatus(''); render(); }  // v2.925.0
+    if (had) { syncLightToolbar(); _syncEditCaps(); renderInspector(); setStatus(''); render(); }  // v2.925.0 / v2.926.0
     return !!had;
   }
   // Translate an object of a given kind by (dx, dy) in map pixels. Mirrors
@@ -3386,6 +3523,9 @@
       if (cEl) cEl.value = selectedLairZone.color || '#d24b3a';
     }
     if (typeof _syncEditCaps === 'function') _syncEditCaps();  // v2.925.0
+    // v2.926.0 — a lair-zone selection owns the panel; drop any object selection.
+    if (selectedLairZone) selectedObj = null;
+    if (typeof renderInspector === 'function') renderInspector();
   }
   if (lairZoneBtn) lairZoneBtn.addEventListener('click', function () { setMode(lairZoneMode ? null : 'lairzone'); });
   if (lairZonePolyBtn) lairZonePolyBtn.addEventListener('click', function () {
@@ -3460,6 +3600,9 @@
                            : 'Grab OFF — double-click edits via the toolbar only.');
     render();
   });
+  // v2.926.0 — the inspector's ✕ deselects (same as Esc).
+  var inspCloseBtn = document.getElementById('me-insp-close');
+  if (inspCloseBtn) inspCloseBtn.addEventListener('click', function () { clearObjectSelection(); });
   function syncStageCursor() {
     // The overlay captures empty-area clicks when placing/painting/relocating.
     // (Objects stay individually clickable for erase/right-click regardless.)

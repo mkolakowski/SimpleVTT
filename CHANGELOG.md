@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.926.0] - 2026-07-05 — "The Inspector"
+
+**Schema version:** 101
+
+**Commit summary:** Map-editor Theme B: a floating "Selected object" inspector (walls first).
+
+**Description:** Ships **Phase 3 / Theme B** from [`docs/plans/editor-controls-reorg.md`](docs/plans/editor-controls-reorg.md) — the highest-leverage UX fix. Double-click-selecting an object now pops a compact **frosted inspector** (bottom-right of the stage) showing *just that object's* editable properties, so "make a new thing" (tool groups) and "edit the thing I clicked" (inspector) are two visibly distinct surfaces (pain point #5).
+
+- **Walls / doors (the flagship):** material · opacity slider · a type segmented control (🧱 Wall / 🚪 Door / ⛩ Gate / 🪟 Window / 👻 Invisible) · flip + secret (for doors/gates) · Delete. Every edit round-trips through the existing save + render; the title tracks the type.
+- **Terrain:** type select + Delete. **Light:** preset select + Delete. **Hotspot / Label / Pin / Prop:** a compact panel with Delete (+ "drag / right-click for options" — their group/menu still edits).
+- The panel appears only while an object is selected, closes on **✕**, **Esc**, or an empty-space click, and yields to a lair-zone selection (which keeps its own group editor).
+
+No behaviour change to the underlying object model — the inspector drives the same `saveWalls`/`saveTerrain`/`saveLights`/delete paths the toolbar + right-click menus already use.
+
+### Added
+- `#me-inspector` floating panel + `renderInspector()` (driven by `selectedObj`); wired into `_setSelectedObj` / `clearObjectSelection` / `syncLairZoneToolbar`, with an ✕ close button.
+- `tests/harness_ui/test_editor_inspector.py` — the wall inspector appears on double-click, its material/opacity/type controls round-trip, the title follows the type, and Delete removes the wall + hides the panel.
+
+### Schema
+- No schema change (still v101 — editor UI only; existing endpoints/payloads).
+
 ## [2.925.0] - 2026-07-05 — "The Labelled Selection"
 
 **Schema version:** 101
