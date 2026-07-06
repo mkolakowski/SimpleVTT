@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.935.0] - 2026-07-06 — "The Flicker Speed"
+
+**Schema version:** 101
+
+**Commit summary:** Add a per-light flicker-speed dropdown (off / slow / normal / fast).
+
+**Description:** Lights can now flicker at a chosen **speed**. A new **flicker-speed dropdown** in the Lighting group — 💤 off (steady) · 🐢 slow · 🔥 normal · ⚡ fast — sets how fast a light's glow wavers between its two flicker colours. The value is a multiplier (0 = steady, 1 = normal, up to 4) stored on the light (`flicker`); the tabletop's glow layer scales its oscillation frequencies by it. New lights take the dropdown's value; selecting a placed light mirrors + edits it.
+
+### Added
+- Light `flicker` field — persisted by `_sanitize_lights` (default 1, clamped 0–4); the tabletop `_lgColorAt` glow uses it (`flicker <= 0` = steady).
+- Editor: `#me-light-flicker` dropdown + wiring (`_flickerVal`, sync on select, new-light default, paste-preserve).
+- `tests/harness/test_map_lights.py::test_light_flicker_round_trips_and_clamps` + `tests/harness_ui/test_map_lights_editor.py::test_editor_light_flicker_speed`.
+
+### Changed
+- Toolbar compaction guard relaxed 240→265px (the Lighting group legitimately grew with the requested per-light flicker controls).
+
+### Schema
+- No `SCHEMA_VERSION` change — `flicker` lives in the existing `maps.lights` JSON column.
+
 ## [2.934.0] - 2026-07-06 — "The Recent Palette"
 
 **Schema version:** 101

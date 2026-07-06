@@ -81,6 +81,31 @@ async def test_light_color2_round_trips(gm_client):
             f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lights", json={"lights": []})
 
 
+async def test_light_flicker_round_trips_and_clamps(gm_client):
+    # v2.935.0 — the flicker-speed multiplier persists (default 1; clamped 0..4).
+    mid = await _active_map_id(gm_client)
+    try:
+        r = await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lights",
+            json={"lights": [
+                {"x": 10, "y": 10, "bright_ft": 20, "dim_ft": 20, "flicker": 2},
+                {"x": 20, "y": 20, "bright_ft": 5, "dim_ft": 5},          # default → 1
+                {"x": 30, "y": 30, "bright_ft": 5, "dim_ft": 5, "flicker": 99},  # clamp → 4
+                {"x": 40, "y": 40, "bright_ft": 5, "dim_ft": 5, "flicker": 0},   # off
+            ]})
+        ls = r.json()["lights"]
+        assert ls[0]["flicker"] == 2.0, ls
+        assert ls[1]["flicker"] == 1.0, ls  # absent → default 1
+        assert ls[2]["flicker"] == 4.0, ls  # clamped
+        assert ls[3]["flicker"] == 0.0, ls  # steady
+        got = (await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lights")).json()["lights"]
+        assert got[0]["flicker"] == 2.0, got
+    finally:
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lights", json={"lights": []})
+
+
 async def test_light_type_round_trips(gm_client):
     # v2.778.0 — the optional light-source preset tag persists.
     mid = await _active_map_id(gm_client)

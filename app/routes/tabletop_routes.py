@@ -124649,6 +124649,12 @@ def _sanitize_lights(raw) -> list:
                 return max(0.0, float(h.get(key) or 0))
             except (TypeError, ValueError):
                 return 0.0
+        # v2.935.0 — optional flicker SPEED multiplier applied to the glow
+        # oscillation (0 = steady/no flicker … up to 4). Defaults to 1 (normal).
+        try:
+            fl = max(0.0, min(4.0, float(h.get("flicker", 1))))
+        except (TypeError, ValueError):
+            fl = 1.0
         out.append({
             "id": (str(h.get("id") or "").strip()[:40] or f"l{i}"),
             "x": x, "y": y,
@@ -124657,6 +124663,7 @@ def _sanitize_lights(raw) -> list:
             "color": str(h.get("color") or "").strip()[:16],
             "color2": str(h.get("color2") or "").strip()[:16],
             "type": str(h.get("type") or "").strip()[:20],
+            "flicker": fl,
         })
     return out
 

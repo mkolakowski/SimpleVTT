@@ -42,3 +42,25 @@ def test_editor_places_light(gm_page: Page) -> None:
             c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lights", json={"lights": []})
 
     assert not errors, f"JS errors: {errors}"
+
+
+def test_editor_light_flicker_speed(gm_page: Page) -> None:
+    """v2.935.0 — the flicker-speed dropdown sets a new light's flicker rate."""
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
+        c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
+        c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lights", json={"lights": []})
+        try:
+            gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
+            expect(gm_page.locator("#me-overlay")).to_be_visible()
+            me_clear_toolbar(gm_page)
+            gm_page.locator("#me-light-btn").click()
+            gm_page.select_option("#me-light-flicker", "2")  # ⚡ fast
+            box = gm_page.locator("#me-overlay").bounding_box()
+            gm_page.mouse.click(box["x"] + 140, box["y"] + 140)
+            gm_page.wait_for_timeout(400)
+            lights = c.get(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lights").json()["lights"]
+            assert len(lights) == 1, lights
+            assert lights[0]["flicker"] == 2.0, lights[0]
+        finally:
+            c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lights", json={"lights": []})

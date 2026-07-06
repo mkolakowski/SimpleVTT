@@ -3462,9 +3462,11 @@
         function _lgColorAt(L, t) {
             var a = _lgHexToRgb(L.color) || [255, 210, 127];
             var b = _lgHexToRgb(L.color2);
-            if (!b || L.color2 === L.color) return a;
+            // v2.935.0 — per-light flicker SPEED (0 = steady, 1 = normal, up to 4).
+            var sp = (L.flicker == null) ? 1 : L.flicker;
+            if (!b || L.color2 === L.color || sp <= 0) return a;
             var s1 = _lgSeed(L, 'f1'), s2 = _lgSeed(L, 'f2');
-            var f1 = 1.7 + s1 * 2.3, f2 = 4.1 + s2 * 3.7;
+            var f1 = (1.7 + s1 * 2.3) * sp, f2 = (4.1 + s2 * 3.7) * sp;
             var mix = 0.5 + 0.35 * Math.sin(t * f1 * 6.283 + s1 * 6.28)
                           + 0.15 * Math.sin(t * f2 * 6.283 + s2 * 6.28);
             mix = Math.max(0, Math.min(1, mix));

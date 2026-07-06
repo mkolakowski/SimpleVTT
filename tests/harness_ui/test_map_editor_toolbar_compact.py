@@ -25,9 +25,11 @@ def test_toolbar_is_compact_and_all_layers_visible(gm_page: Page) -> None:
     h = gm_page.evaluate(
         "() => Math.round(document.querySelector('.me-toolbar').getBoundingClientRect().height)"
     )
-    # Comfortably below the pre-v2.889.0 ~284px (guards against a regression
-    # that re-stacks the caption-selects or un-pairs the File buttons).
-    assert h < 240, f"editor toolbar too tall ({h}px) — the compaction regressed"
+    # Below the pre-v2.889.0 ~284px (guards against a regression that re-stacks
+    # the caption-selects or un-pairs the File buttons). v2.935.0 — bumped 240→265
+    # after the Lighting group gained the per-light flicker controls (colour
+    # pickers + recent palette + a flicker-speed dropdown) the GM asked for.
+    assert h < 265, f"editor toolbar too tall ({h}px) — the compaction regressed"
 
     # All 9 layer rows stay present + visible (compaction must not hide layers).
     rows = gm_page.locator(".me-layer-row")

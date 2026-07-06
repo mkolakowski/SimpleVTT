@@ -384,6 +384,15 @@
       <span id="me-light-recent" style="display:flex;gap:3px;align-items:center;flex:1 1 auto;flex-wrap:wrap;"
             title="Recent flicker colours — click one to reuse it"></span>
     </div>
+    {# v2.935.0 — flicker speed: how fast the glow wavers between the two colours
+       (self-labelling options, so no separate caption). #}
+    <select id="me-light-flicker" title="Flicker speed — for new lights, or the selected light"
+            style="min-height:32px;font-size:12px;width:100%;">
+      <option value="0">💤 Flicker: off</option>
+      <option value="0.5">🐢 Flicker: slow</option>
+      <option value="1" selected>🔥 Flicker: normal</option>
+      <option value="2">⚡ Flicker: fast</option>
+    </select>
   </div>
   {# v2.929.0 — Environment: the whole-map atmosphere — ambient light level, fog
      of war, and ambient weather — gathered into one group (ambient moved from
@@ -3084,7 +3093,8 @@
     } else if (clipboard.kind === 'light') {
       lights.push({ id: newId('l'), x: p.x, y: p.y,
         bright_ft: d.bright_ft || 0, dim_ft: d.dim_ft || 0,
-        color: d.color || '#ffd27f', type: d.type || '' });
+        color: d.color || '#ffd27f', color2: d.color2 || '', type: d.type || '',
+        flicker: (d.flicker == null ? 1 : d.flicker) });  // v2.935.0
       saveLights();
     } else if (clipboard.kind === 'prop') {
       props.push({ id: newId('pr'), x: p.x, y: p.y, kind: d.kind || '📦',
@@ -3155,6 +3165,8 @@
       if (di) di.value = L.dim_ft || 0;
       if (c1 && /^#[0-9a-f]{6}$/i.test(L.color || '')) c1.value = L.color;
       if (c2 && /^#[0-9a-f]{6}$/i.test(L.color2 || '')) c2.value = L.color2;
+      var fk = document.getElementById('me-light-flicker');  // v2.935.0
+      if (fk) fk.value = String(L.flicker == null ? 1 : L.flicker);
       if (cap) { cap.textContent = '✎ selected light'; cap.style.color = 'var(--accent)'; cap.style.fontWeight = '700'; }
     } else if (cap) {
       cap.textContent = 'flicker colours'; cap.style.color = ''; cap.style.fontWeight = '';
@@ -4022,6 +4034,16 @@
     }
   });
   _renderLightRecent();
+  // v2.935.0 — flicker speed: edits the selected light, else the default for new.
+  function _flickerVal() {
+    var fk = document.getElementById('me-light-flicker');
+    var v = fk ? parseFloat(fk.value) : 1;
+    return isNaN(v) ? 1 : Math.max(0, Math.min(4, v));
+  }
+  var flickerSel = document.getElementById('me-light-flicker');
+  if (flickerSel) flickerSel.addEventListener('change', function () {
+    editSelectedLight(function (L) { L.flicker = _flickerVal(); });
+  });
   if (fogBtn) fogBtn.addEventListener('click', function () {
     var entering = !fogMode;
     setMode(entering ? 'fog' : null);
@@ -4378,7 +4400,7 @@
       var nc2 = (document.getElementById('me-light-c2') || {}).value || t.color2 || t.color;
       var nl = { id: 'l' + Date.now() + '_' + (seq++), x: p.x, y: p.y,
         bright_ft: Math.max(0, bv), dim_ft: Math.max(0, dv),
-        color: nc1, color2: nc2, type: t.key };
+        color: nc1, color2: nc2, type: t.key, flicker: _flickerVal() };  // v2.935.0
       nl.type = matchLightPreset(nl) || 'custom';
       lights.push(nl);
       saveLights();
