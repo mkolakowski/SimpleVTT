@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.934.0] - 2026-07-06 — "The Recent Palette"
+
+**Schema version:** 101
+
+**Commit summary:** The flicker-colour pickers remember the last 5 colours picked.
+
+**Description:** Next to the two flicker-colour pickers in the Lighting group, a strip of **up to 5 recent-colour swatches** now appears — every colour you pick (in either picker) is remembered (newest first, de-duped, capped at 5, persisted in `localStorage`). **Click a swatch** to reuse that colour in the **last-focused picker**. Sits on the same row as the pickers, so it adds no toolbar height.
+
+### Added
+- `#me-light-recent` swatch strip + JS (`_renderLightRecent` / `_pushLightRecent`, last-focused-picker tracking).
+- `tests/harness_ui/test_editor_light_recent.py` — picking two colours yields two swatches; clicking one fills the focused picker; survives reload.
+
+### Schema
+- No schema change (still v101 — client-side palette memory).
+
 ## [2.933.0] - 2026-07-06 — "The Tidy Light"
 
 **Schema version:** 101

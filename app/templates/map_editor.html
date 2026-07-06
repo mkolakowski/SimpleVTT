@@ -379,6 +379,10 @@
              style="width:44px;height:32px;padding:1px;border-radius:6px;">
       <input type="color" id="me-light-c2" value="#ff7a1a" title="Flicker colour 2 — for new lights, or the selected light"
              style="width:44px;height:32px;padding:1px;border-radius:6px;">
+      {# v2.934.0 — the last 5 flicker colours picked; click a swatch to reuse it
+         in the last-focused picker. #}
+      <span id="me-light-recent" style="display:flex;gap:3px;align-items:center;flex:1 1 auto;flex-wrap:wrap;"
+            title="Recent flicker colours — click one to reuse it"></span>
     </div>
   </div>
   {# v2.929.0 — Environment: the whole-map atmosphere — ambient light level, fog
@@ -3973,13 +3977,51 @@
       editSelectedLight(function (L) { if (k === 0) L.bright_ft = v; else L.dim_ft = v; });
     });
   });
+  // v2.934.0 — remember the last 5 flicker colours picked (persisted per browser).
+  var lightRecent = (function () {
+    try { return (JSON.parse(localStorage.getItem('me-light-recent') || '[]') || []).slice(0, 5); }
+    catch (e) { return []; }
+  })();
+  var _lastLightPicker = 'me-light-c1';  // which picker a recent-swatch click fills
+  function _renderLightRecent() {
+    var box = document.getElementById('me-light-recent'); if (!box) return;
+    box.textContent = '';
+    lightRecent.forEach(function (hex) {
+      var sw = document.createElement('button');
+      sw.type = 'button'; sw.title = hex + ' — click to reuse';
+      // Dense colour palette: 24px chips (below the 32px floor by design — a
+      // swatch grid, like the initiative tracker's compact rows).
+      sw.style.cssText = 'width:24px;height:24px;min-height:24px;padding:0;border-radius:5px;'
+        + 'border:1px solid rgba(255,255,255,.35);cursor:pointer;background:' + hex + ';';
+      sw.addEventListener('click', function () {
+        var el = document.getElementById(_lastLightPicker) || document.getElementById('me-light-c1');
+        if (!el) return;
+        el.value = hex;
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      box.appendChild(sw);
+    });
+  }
+  function _pushLightRecent(hex) {
+    if (!/^#[0-9a-f]{6}$/i.test(hex || '')) return;
+    hex = hex.toLowerCase();
+    lightRecent = [hex].concat(lightRecent.filter(function (x) { return x !== hex; })).slice(0, 5);
+    try { localStorage.setItem('me-light-recent', JSON.stringify(lightRecent)); } catch (e) {}
+    _renderLightRecent();
+  }
   ['me-light-c1', 'me-light-c2'].forEach(function (id, k) {
     var el = document.getElementById(id);
-    if (el) el.addEventListener('change', function () {
-      var v = el.value;
-      editSelectedLight(function (L) { if (k === 0) L.color = v; else L.color2 = v; });
-    });
+    if (el) {
+      el.addEventListener('focus', function () { _lastLightPicker = id; });
+      el.addEventListener('change', function () {
+        var v = el.value;
+        _lastLightPicker = id;
+        _pushLightRecent(v);  // v2.934.0 — record every picked colour
+        editSelectedLight(function (L) { if (k === 0) L.color = v; else L.color2 = v; });
+      });
+    }
   });
+  _renderLightRecent();
   if (fogBtn) fogBtn.addEventListener('click', function () {
     var entering = !fogMode;
     setMode(entering ? 'fog' : null);
