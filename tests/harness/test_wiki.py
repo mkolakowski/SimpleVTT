@@ -115,6 +115,7 @@ async def test_wiki_plans_page_renders():
         "plan-race-features", "plan-full-feature-automation",
         "plan-notes-and-handouts", "plan-app-wide-roles-and-storage",
         "plan-pending-resolution-state-machine", "plan-backup-export-overhaul",
+        "plan-editor-controls-reorg",
         "plan-spell-upcasting", "plan-reactions-automation",
         "plan-campaign-stats", "plan-vision-and-light",
     ):
@@ -411,6 +412,18 @@ async def test_wiki_doc_serves_plan():
     assert "text/html" in resp.headers.get("content-type", "")
     # The test-harness plan's H1 is "Autonomous click-through test harness — plan"
     assert "click-through" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_editor_controls_reorg_plan():
+    """v2.923.0: GET /wiki/doc/plan-editor-controls-reorg — 200 + body contains
+    the plan's H1 + the nav menu. Resolves through _DOC_ALLOWLIST to
+    ``docs/plans/editor-controls-reorg.md``."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-editor-controls-reorg")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "control reorganization" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

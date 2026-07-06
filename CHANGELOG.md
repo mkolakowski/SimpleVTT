@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.923.0] - 2026-07-05 — "The Drafting Table"
+
+**Schema version:** 101
+
+**Commit summary:** A design plan reviewing the map-editor controls and proposing a few reorganizations.
+
+**Description:** Adds a design-only plan, [`docs/plans/editor-controls-reorg.md`](docs/plans/editor-controls-reorg.md), that reviews the current map-editor toolbar organization and offers a menu of reorganization options. It inventories every group/control as shipped (v2.922.0), calls out the main pain points (lighting split across Environment + Markers; the token-scale dial stranded under Grid; the overloaded "Markers" group; the invisible "new-object default vs selected-object edit" dual role), and proposes four composable themes — **A** regroup the Draw zone by concern (Walls & Doors · Terrain · Lighting · Fog & Vision · Annotations · Tokens-with-scale), **B** a contextual "Selected object" inspector, **C** one shared shape-mode control, **D** cheap default-vs-selection labels — with a suggested phasing, test-impact notes, and a recommendation (ship A+D first). Surfaced through the wiki per the docs rule.
+
+### Added
+- `docs/plans/editor-controls-reorg.md` — the review + proposals (⚪ proposed / design only).
+- Wiki surfacing: `_DOC_ALLOWLIST` slug `plan-editor-controls-reorg`, a row in the `/wiki/plans` table (`wiki_plans.html`) and `docs/wiki/README.md`.
+- `tests/harness/test_wiki.py::test_wiki_doc_serves_editor_controls_reorg_plan` + the slug added to `test_wiki_plans_page_renders`.
+
+### Schema
+- No schema change (still v101 — doc + wiki plumbing only).
+
 ## [2.922.0] - 2026-07-05 — "The Portable Map"
 
 **Schema version:** 101
