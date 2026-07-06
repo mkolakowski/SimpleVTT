@@ -132,7 +132,88 @@ work. Rename **Select & move** → "Grab" or "Move" to disambiguate from box **S
 
 ---
 
-## 5. Suggested phasing
+## 5. Visual mockups (before → after)
+
+Wireframes (not pixel-exact) of the floating toolbar strip. Each `[ … ]` is a
+collapsible group; `║ Draw ║` / `║ Map ║` are the zone dividers.
+
+### 5.1 Today (v2.922.0)
+
+```
+ Actions                       ║Draw║                                                                              ║Map║
+┌File────┐┌Tools────┐ ┌Walls──────┐┌Markers──────────┐┌Environment────────┐┌Lair────┐┌Tokens┐ ┌Grid──────────┐┌Layers─┐┌View─┐
+│↶  ↷    ││🗑 Erase  │ │🧱 Wall     ││📍Hotspot 💡Light ││ ambient ▾         ││🎯 Lair  ││🔵 🟠 │ │grid type ▾   ││👁 All ││ Fit │
+│💾 Save ││🧲 Snap   │ │🚪 Door     ││light type ▾      ││🌫Fog   ⛰Terrain  ││⬡ Free  ││      │ │show☑ px[70]  ││🧱Walls││🔍-+ │
+│🗑 Del  ││📏 Measure│ │⬡ FreeForm  ││ B[  ] D[  ]      ││⬡ FreeForm terrain ││🎨act ▾ ││      │ │x[0]  y[0]    ││⛰Terr ││     │
+│⬇ ⬆ i/o ││⬚ Select  │ │material ▾  ││🎨 🎨 flicker     ││terrain ▾ weather ▾││(desc…) ││      │ │tokens×[1.0]  ││💡… ✕8 ││     │
+│Tags…   ││🖱 Sel&mv │ │opacity ▭▬▬ ││🔤Label  📌Pin    ││                   ││        ││      │ │[S][M][L][XL] ││       ││     │
+└────────┘└─────────┘ └───────────┘└─────────────────┘└───────────────────┘└────────┘└──────┘ └──────────────┘└───────┘└─────┘
+                        ▲ lighting is here (ambient) …and here (Lights)      token size is stranded under “Grid” ▲
+```
+
+Two things to notice: **lighting** is split between *Environment* (ambient) and
+*Markers* (the Lights tool + its 3 config rows), and the **token-size** dial +
+presets sit under **Grid**, unrelated to grid setup.
+
+### 5.2 Theme A — regrouped by concern
+
+```
+ Actions               ║Draw║                                                                          ║Map║
+┌File┐┌Tools┐ ┌Walls &──┐┌Terrain─┐┌Lighting────┐┌Fog &───┐┌Annotations┐┌Lair┐┌Tokens──────┐ ┌Grid────┐┌Layers┐┌View┐
+│ …  ││  …  │ │  Doors  ││⛰ Terrain││ ambient ▾  ││ Vision ││📍 Hotspots ││ …  ││🔵 🟠 Token  │ │grid ▾  ││ …    ││ …  │
+│    ││     │ │🧱 Wall   ││⬡ Free  ││💡 Lights   ││🌫 Fog  ││🔤 Label    ││    ││tokens×[1.0]│ │show☑   ││      ││    │
+│    ││     │ │🚪 Door   ││terrain▾││light type▾ ││ on ☑   ││📌 Pin      ││    ││[S][M][L][X]│ │px[70]  ││      ││    │
+│    ││     │ │⬡ Free   ││        ││ B[ ] D[ ]  ││explore☑││            ││    ││            │ │x[0]y[0]││      ││    │
+│    ││     │ │material▾ ││        ││🎨 🎨       ││↺ reset ││            ││    ││            │ │        ││      ││    │
+│    ││     │ │opacity ▭ ││        ││            ││        ││            ││    ││            │ │        ││      ││    │
+└────┘└─────┘ └─────────┘└────────┘└────────────┘└────────┘└───────────┘└────┘└────────────┘ └────────┘└──────┘└────┘
+                                    ▲ ambient + Lights, together   ▲ fog split out   token size lives with Tokens ▲
+```
+
+Every group now answers one question. `Grid` is grid-only; `Lighting` owns both
+ambient level and placed lights; `Tokens` owns the size dial; `Fog & Vision` and
+`Terrain` are their own concerns instead of a shared *Environment* bin.
+(`Weather` folds into `Lighting`/atmosphere or becomes its own tiny group.)
+
+### 5.3 Theme B — a "Selected object" inspector
+
+The tool group advertises only **new-object defaults**; the moment you
+double-click an object, a compact inspector floats next to it with *that
+object's* live properties:
+
+```
+   Nothing selected                     A wall selected
+ ┌ Walls & Doors ─────┐          ┌ Selected · Wall ───────────┐
+ │ 🧱 Wall  🚪 Door   │          │ material  [ Stone       ▾] │
+ │ ⬡ FreeForm         │          │ opacity   ▭▭▭▭▭▭▭──  70 %  │
+ │ material  [Stone ▾]│  ◄─────► │ type      (Wall)Door Window│
+ │ opacity   ▭▬▬▬▬▬▬  │          │ ↻ flip    🔒 secret        │
+ └────────────────────┘          │ 🗑 Delete                  │
+   “make NEW walls”               └────────────────────────────┘
+                                   floats by the selection · Esc closes
+```
+
+This makes the current dual role (a knob edits *either* the default *or* the
+selection) two visibly distinct surfaces.
+
+### 5.4 Theme D — label the context (cheap version of B)
+
+Without the full inspector, just relabel the shared caption + add a status hint:
+
+```
+  nothing selected          wall selected
+ ┌──────────────┐          ┌──────────────────┐
+ │ New wall     │    →     │ Selected wall     │
+ │ material  ▾  │          │ material  ▾       │
+ │ opacity ▭▬▬  │          │ opacity ▭▬▬       │
+ └──────────────┘          └──────────────────┘
+   status: “Editing selected door — Esc to deselect”
+```
+
+And rename **🖱 Select & move** → **🖱 Grab** so it stops colliding with the
+box-**⬚ Select** tool.
+
+## 6. Suggested phasing
 
 1. **Phase 1 (mechanical, low-risk):** Theme A regrouping + move token-scale into Tokens
    (Theme A's token row). Pure DOM reshuffle; existing handlers keep their element IDs.
@@ -142,7 +223,7 @@ work. Rename **Select & move** → "Grab" or "Move" to disambiguate from box **S
 3. **Phase 3 (opt-in, higher effort):** Theme B inspector, walls first, then terrain/lights.
 4. **Phase 4 (optional):** Theme C unified shape mode.
 
-## 6. Risks & test impact
+## 7. Risks & test impact
 
 - The `harness_ui` editor tests locate controls by **element ID** (`#me-wall-btn`,
   `#me-token-scale`, …), not by group. **Theme A keeps every ID**, so those tests should
@@ -158,7 +239,7 @@ work. Rename **Select & move** → "Grab" or "Move" to disambiguate from box **S
 
 ---
 
-## 7. Recommendation
+## 8. Recommendation
 
 Ship **Theme A (regroup by concern)** + **Theme D (labels/rename)** first — together they
 remove the two worst papercuts (scattered lighting/token controls; the invisible

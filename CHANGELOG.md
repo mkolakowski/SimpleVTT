@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.923.1] - 2026-07-05 — "The Wireframes"
+
+**Schema version:** 101
+
+**Commit summary:** Add before/after visual wireframes to the map-editor control-reorg plan.
+
+**Description:** Expands [`docs/plans/editor-controls-reorg.md`](docs/plans/editor-controls-reorg.md) with a new **§5 Visual mockups** section — ASCII wireframes (fenced code, so they render identically in the terminal and through the wiki) showing: the toolbar **today** (annotating the split lighting + the stranded token-size dial under Grid), the **Theme A** regrouped-by-concern strip (Walls & Doors · Terrain · Lighting · Fog & Vision · Annotations · Lair · Tokens-with-scale · Grid-only), the **Theme B** floating "Selected object" inspector, and the **Theme D** context-labelled captions + the Select→Grab rename. Subsequent sections renumbered (Phasing §6, Risks §7, Recommendation §8).
+
+### Changed
+- `docs/plans/editor-controls-reorg.md` — added §5 visual mockups; renumbered §6–§8.
+
+### Schema
+- No schema change (still v101 — doc content only).
+
 ## [2.923.0] - 2026-07-05 — "The Drafting Table"
 
 **Schema version:** 101
