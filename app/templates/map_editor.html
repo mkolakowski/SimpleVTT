@@ -438,7 +438,10 @@
      label); the action's text shows below. On the tabletop the GM/players
      toggle the overlay and triggering the bound action targets the tokens
      inside the zone. #}
-  <div class="me-group" role="group" aria-label="Lair zones">
+  {# v2.937.0 — cap the group width so the long lair-action option names in the
+     select don't balloon it; the action-name select shrinks + the description
+     wraps to the compact width. #}
+  <div class="me-group" role="group" aria-label="Lair zones" style="max-width:210px;">
     <span class="me-grp-lbl">Lair</span>
     {# v2.927.0 — Theme C: the per-group FreeForm toggle moved to the shared one
        in Tools; the zone tool is a full-width button now. #}
@@ -460,11 +463,11 @@
         </select>
       </div>
     </label>
-    {# The selected action's text — wraps to the group's width (the width:0 +
-       min-width:100% keeps the long text from widening the group). v2.877.1 —
-       shows up to 6 lines (was 2); hover still shows the full text. #}
+    {# v2.937.0 — the selected action's text wraps to a fixed compact width so it
+       doesn't balloon the group (the old width:0/min-width:100% hack let the
+       group grow to ~300px). Shows up to 6 lines; hover shows the full text. #}
     <div id="me-lairzone-desc"
-         style="width:0;min-width:100%;box-sizing:border-box;font-size:11px;line-height:1.35;color:var(--fg-mute);white-space:normal;overflow-wrap:break-word;word-break:break-word;max-height:8.1em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;cursor:help;"></div>
+         style="width:190px;max-width:190px;box-sizing:border-box;font-size:11px;line-height:1.35;color:var(--fg-mute);white-space:normal;overflow-wrap:break-word;word-break:break-word;max-height:8.1em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;cursor:help;"></div>
   </div>
   {# v2.817.0 — Draw │ Map zone boundary. v2.820.0 — label folds the zone. #}
   <div class="me-zone-sep"><span class="me-zone-lbl">Map</span></div>

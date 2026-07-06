@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.937.0] - 2026-07-06 — "The Wrapped Lair"
+
+**Schema version:** 101
+
+**Commit summary:** Keep the Lair group compact so the action description wraps to a normal width instead of ballooning the group to ~300px.
+
+**Description:** The Lair group was growing to ~312px wide because the **Lair Actions** `<select>`'s longest option name set its max-content width, and the description's old `width:0 / min-width:100%` hack then wrapped to that whole width. The group is now **capped (`max-width:210px`)** so the action-name select shrinks and the **description wraps to a fixed compact 190px** column (still up to 6 lines; hover shows the full text). The Lair group is a normal toolbar width again.
+
+### Fixed
+- `app/templates/map_editor.html` — Lair group `max-width:210px`; `#me-lairzone-desc` uses a fixed `width:190px` (was `width:0;min-width:100%`).
+
+### Schema
+- No schema change (still v101 — CSS only).
+
 ## [2.936.0] - 2026-07-06 — "The Map Super-Group"
 
 **Schema version:** 101
