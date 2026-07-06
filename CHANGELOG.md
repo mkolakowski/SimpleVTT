@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.933.0] - 2026-07-06 — "The Tidy Light"
+
+**Schema version:** 101
+
+**Commit summary:** Lighting/Environment control tidy — B/D inline, flicker caption above the pickers, drop the "light type" and "ambient" captions.
+
+**Description:** Layout cleanup in the map editor's **Lighting** and **Environment** groups:
+- The **Bright/Dim (B/D)** radius inputs sit on one row, each label **inline with its number field** (the fields flex to fill the width).
+- The **flicker colours** caption now sits **above** the two colour pickers (was beside them).
+- Removed the **"light type"** caption above the light-type dropdown (the option icons already say it; the tooltip covers it).
+- Removed the **"ambient"** caption above the ambient dropdown in Environment.
+
+Captions/tooltips + layout only — every control keeps its element ID and behaviour.
+
+### Changed
+- `app/templates/map_editor.html` — Lighting: light-type is a bare `<select>` (no caption); B/D one row with flexing fields; flicker caption above the pickers. Environment: ambient is a bare `<select>`.
+
+### Schema
+- No schema change (still v101 — layout only).
+
 ## [2.932.0] - 2026-07-06 — "The Actions Zone"
 
 **Schema version:** 101

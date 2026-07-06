@@ -350,32 +350,31 @@
             title="Click the map to place a light source of the chosen type; click a light to delete">💡 Lights</button>
     {# v2.850.0 — double-click a placed light to SELECT it: these controls then
        mirror + live-edit the selection (edits flip its type to custom).
-       v2.931.0 — light type on its own row (caption above); the Bright/Dim
-       radius inputs sit on the row BELOW it, each label inline with its field. #}
-    <label class="me-capsel me-capsel--stack" title="Light type for new lights — or for the double-click-selected light (sets radii + flicker colours)">
-      <span class="me-cap">light type</span>
-      <select id="me-light-type" style="min-height:32px;font-size:12px;width:100%;">
-        <option value="candle">🕯 Candle</option>
-        <option value="torch" selected>🔥 Torch</option>
-        <option value="lamp">💡 Lamp</option>
-        <option value="lantern">🏮 Hooded lantern</option>
-        <option value="bullseye">🔦 Bullseye</option>
-        <option value="light">✨ Light cantrip</option>
-        <option value="daylight">☀ Daylight</option>
-        <option value="custom">✎ Custom</option>
-      </select>
-    </label>
+       v2.933.0 — no "light type" caption (the icons say it); B/D each on their
+       own row inline with the field; flicker caption above the colour pickers. #}
+    <select id="me-light-type" title="Light type for new lights — or the double-click-selected light (sets radii + flicker colours)"
+            style="min-height:32px;font-size:12px;width:100%;">
+      <option value="candle">🕯 Candle</option>
+      <option value="torch" selected>🔥 Torch</option>
+      <option value="lamp">💡 Lamp</option>
+      <option value="lantern">🏮 Hooded lantern</option>
+      <option value="bullseye">🔦 Bullseye</option>
+      <option value="light">✨ Light cantrip</option>
+      <option value="daylight">☀ Daylight</option>
+      <option value="custom">✎ Custom</option>
+    </select>
     <div class="me-sub">
-      <label style="gap:3px;" title="Bright light radius (ft) — for new lights, or the selected light">B<input
+      <label style="gap:5px;flex:1 1 0;" title="Bright light radius (ft) — for new lights, or the selected light">B<input
           type="number" id="me-light-bright" min="0" max="500" value="20"
-          style="width:56px;min-height:32px;"></label>
-      <label style="gap:3px;" title="Dim light radius (ft) — for new lights, or the selected light">D<input
+          style="flex:1 1 auto;min-width:0;min-height:32px;"></label>
+      <label style="gap:5px;flex:1 1 0;" title="Dim light radius (ft) — for new lights, or the selected light">D<input
           type="number" id="me-light-dim" min="0" max="500" value="20"
-          style="width:56px;min-height:32px;"></label>
+          style="flex:1 1 auto;min-width:0;min-height:32px;"></label>
     </div>
-    {# v2.850.0 — the two flicker colours (the glow wavers between them). #}
-    <div class="me-sub" style="align-items:center;">
-      <span class="me-cap" style="flex:1 1 auto;" id="me-light-sel-cap">flicker colours</span>
+    {# v2.850.0 — the two flicker colours (the glow wavers between them).
+       v2.933.0 — the caption sits ABOVE the pickers. #}
+    <span class="me-cap" id="me-light-sel-cap">flicker colours</span>
+    <div class="me-sub">
       <input type="color" id="me-light-c1" value="#ffb347" title="Flicker colour 1 — for new lights, or the selected light"
              style="width:44px;height:32px;padding:1px;border-radius:6px;">
       <input type="color" id="me-light-c2" value="#ff7a1a" title="Flicker colour 2 — for new lights, or the selected light"
@@ -387,14 +386,12 @@
      Lighting; fog + weather merged from their v2.924.0 split groups). #}
   <div class="me-group" role="group" aria-label="Environment">
     <span class="me-grp-lbl">Environment</span>
-    <label class="me-capsel me-capsel--stack" title="Ambient light level for the whole map">
-      <span class="me-cap">ambient</span>
-      <select id="me-ambient" style="min-height:32px;width:100%;">
+    {# v2.933.0 — no "ambient" caption; the tooltip covers it. #}
+    <select id="me-ambient" title="Ambient light level for the whole map" style="min-height:32px;width:100%;">
         {% for lvl in ['bright','dim','dark'] %}
         <option value="{{ lvl }}" {% if map.ambient_light == lvl %}selected{% endif %}>{{ lvl }}</option>
         {% endfor %}
-      </select>
-    </label>
+    </select>
     <button type="button" id="me-fog-btn" class="me-tool-btn" aria-pressed="false"
             title="Fog of war: drag to reveal an area; click a revealed area to re-hide it">🌫 Fog</button>
     <label id="me-fog-on-lbl" style="display:none;"><input type="checkbox" id="me-fog-on-cb"> fog on</label>
