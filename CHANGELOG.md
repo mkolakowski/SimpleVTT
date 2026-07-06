@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.928.0] - 2026-07-05 — "The Stacked View"
+
+**Schema version:** 101
+
+**Commit summary:** The map-editor View group's zoom controls stack vertically to take up less horizontal space.
+
+**Description:** The View group's zoom stepper was a wide horizontal row (🔍− 100% 🔍+). It's now a slim vertical stack — **Fit · 🔍+ · % · 🔍−** — so the group is a narrow column instead of a wide row, reclaiming horizontal space on the floating toolbar. Still within the toolbar's compaction height budget.
+
+### Changed
+- `app/templates/map_editor.html` — View group: the zoom row unwrapped into stacked buttons.
+
+### Added
+- `tests/harness_ui/test_editor_view_stack.py` — the zoom-in button sits above zoom-out at the same x (stacked).
+
+### Schema
+- No schema change (still v101 — editor layout only).
+
 ## [2.927.0] - 2026-07-05 — "The Shared Shape"
 
 **Schema version:** 101
