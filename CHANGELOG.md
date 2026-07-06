@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.931.0] - 2026-07-06 — "The Stacked Radii"
+
+**Schema version:** 101
+
+**Commit summary:** Lighting group — the Bright/Dim radius inputs drop to their own row below the light-type dropdown.
+
+**Description:** In the map editor's **Lighting** group, the light-type dropdown, Bright radius, and Dim radius previously shared one cramped row. Now the **light type** sits on its own row (caption above), and the **B**/**D** number inputs are on the row **below** it, each label inline with its field. Same element IDs + behaviour; layout only.
+
+### Changed
+- `app/templates/map_editor.html` — light-type is a stacked `me-capsel`; `#me-light-bright` / `#me-light-dim` moved to a row beneath it.
+
+### Schema
+- No schema change (still v101 — layout only).
+
 ## [2.930.2] - 2026-07-06 — "The Full Name"
 
 **Schema version:** 101

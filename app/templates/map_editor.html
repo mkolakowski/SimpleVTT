@@ -332,29 +332,30 @@
     <span class="me-grp-lbl">Lighting</span>
     <button type="button" id="me-light-btn" class="me-tool-btn" aria-pressed="false"
             title="Click the map to place a light source of the chosen type; click a light to delete">💡 Lights</button>
-    {# v2.785.1 — light type + bright + dim share one line.
-       v2.850.0 — double-click a placed light to SELECT it: these controls then
-       mirror + live-edit the selection (edits flip its type to custom). #}
-    <div class="me-sub" style="align-items:flex-end;">
-      <label style="display:flex;flex-direction:column;align-items:stretch;gap:1px;flex:1 1 auto;" title="Light type for new lights — or for the double-click-selected light (sets radii + flicker colours)">
-        <span class="me-cap">light type</span>
-        <select id="me-light-type" style="min-height:32px;font-size:12px;width:100%;">
-          <option value="candle">🕯 Candle</option>
-          <option value="torch" selected>🔥 Torch</option>
-          <option value="lamp">💡 Lamp</option>
-          <option value="lantern">🏮 Hooded lantern</option>
-          <option value="bullseye">🔦 Bullseye</option>
-          <option value="light">✨ Light cantrip</option>
-          <option value="daylight">☀ Daylight</option>
-          <option value="custom">✎ Custom</option>
-        </select>
-      </label>
-      <label style="gap:2px;" title="Bright light radius (ft) — for new lights, or the selected light">B<input
+    {# v2.850.0 — double-click a placed light to SELECT it: these controls then
+       mirror + live-edit the selection (edits flip its type to custom).
+       v2.931.0 — light type on its own row (caption above); the Bright/Dim
+       radius inputs sit on the row BELOW it, each label inline with its field. #}
+    <label class="me-capsel me-capsel--stack" title="Light type for new lights — or for the double-click-selected light (sets radii + flicker colours)">
+      <span class="me-cap">light type</span>
+      <select id="me-light-type" style="min-height:32px;font-size:12px;width:100%;">
+        <option value="candle">🕯 Candle</option>
+        <option value="torch" selected>🔥 Torch</option>
+        <option value="lamp">💡 Lamp</option>
+        <option value="lantern">🏮 Hooded lantern</option>
+        <option value="bullseye">🔦 Bullseye</option>
+        <option value="light">✨ Light cantrip</option>
+        <option value="daylight">☀ Daylight</option>
+        <option value="custom">✎ Custom</option>
+      </select>
+    </label>
+    <div class="me-sub">
+      <label style="gap:3px;" title="Bright light radius (ft) — for new lights, or the selected light">B<input
           type="number" id="me-light-bright" min="0" max="500" value="20"
-          style="width:60px;min-height:32px;"></label>
-      <label style="gap:2px;" title="Dim light radius (ft) — for new lights, or the selected light">D<input
+          style="width:56px;min-height:32px;"></label>
+      <label style="gap:3px;" title="Dim light radius (ft) — for new lights, or the selected light">D<input
           type="number" id="me-light-dim" min="0" max="500" value="20"
-          style="width:60px;min-height:32px;"></label>
+          style="width:56px;min-height:32px;"></label>
     </div>
     {# v2.850.0 — the two flicker colours (the glow wavers between them). #}
     <div class="me-sub" style="align-items:center;">
