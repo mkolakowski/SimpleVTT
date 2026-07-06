@@ -132,157 +132,203 @@ work. Rename **Select & move** → "Grab" or "Move" to disambiguate from box **S
 
 ---
 
-## 5. Visual mockups (before → after)
+## 5. Interactive mockups (before → after)
 
-Rendered HTML mockups of the floating toolbar strip (indicative, not
-pixel-exact). Each rounded panel is a collapsible **group**; the vertical
-labels are the **zone** dividers.
+**These are live** — click them. They're toys (not the real editor), just enough to feel
+each proposal. Each rounded panel is a collapsible **group**; vertical labels are **zone**
+dividers.
 
-<div style="font-size:12px;color:#8f98bd;margin:2px 0 12px;">Legend: <span style="border-left:3px solid #e0674f;padding-left:6px;margin-right:16px;color:#e0a99c;">red&nbsp;=&nbsp;a control in the wrong / duplicated place today</span><span style="border-left:3px solid #57b26a;padding-left:6px;color:#9fd3ab;">green&nbsp;=&nbsp;where it moves to</span></div>
+<style>
+.mde-wrap{margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);box-sizing:border-box;background:#12141d;border:1px solid #2a2e40;border-radius:10px;padding:14px 28px;font-family:system-ui,sans-serif;}
+.mde-row{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;}
+.mde-grp{background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 8px;}
+.mde-t{font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;}
+.mde-t.clk{cursor:pointer;user-select:none;}
+.mde-t.clk:hover{color:#c7cef0;}
+.mde-chip{display:block;font-size:12px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:4px 8px;margin:3px 0;white-space:nowrap;}
+.mde-chip.clk{cursor:pointer;}
+.mde-chip.clk:hover{border-color:#5b6690;}
+.mde-chip.armed{outline:2px solid #ffd24a;border-color:#ffd24a;}
+.mde-chip.red{color:#f2d7cf;background:#3a2a26;border-color:#5a3b34;border-left:3px solid #e0674f;}
+.mde-chip.green{color:#d7f2dc;background:#243a29;border-color:#34573b;border-left:3px solid #57b26a;}
+.mde-zone{writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;font-weight:700;color:#7b84ab;align-self:stretch;display:flex;align-items:center;padding:0 1px;}
+.mde-map{position:relative;height:200px;margin-top:12px;border:2px dashed #3a4058;border-radius:8px;background:repeating-linear-gradient(0deg,#171a26,#171a26 33px,#1b1e2c 33px,#1b1e2c 34px),repeating-linear-gradient(90deg,#171a26,#171a26 33px,#1b1e2c 33px,#1b1e2c 34px);cursor:crosshair;overflow:hidden;}
+.mde-bar{display:flex;align-items:center;gap:12px;margin-top:10px;}
+.mde-status{flex:1 1 auto;font-size:13px;color:#9fd3ab;background:#1b2430;border:1px solid #34573b;border-radius:6px;padding:7px 11px;}
+.mde-btn{font-size:13px;color:#f2d7cf;background:#3a2a26;border:1px solid #5a3b34;border-radius:6px;padding:7px 14px;cursor:pointer;}
+.mde-insp{background:#1b2430;border:1px solid #57b26a;border-radius:8px;padding:8px 9px;min-width:200px;}
+.mde-insp .mde-chip{background:#243040;border-color:#3a4a5e;color:#e7e9f3;}
+.mde-collapsed .mde-body{display:none;}
+.mde-hint{font-size:12px;color:#9fd3ab;background:#1b2430;border:1px solid #34573b;border-radius:6px;padding:6px 10px;margin-top:8px;}
+.mde-ctl{font-size:12px;color:#e7e9f3;background:#243040;border:1px solid #3a4a5e;border-radius:5px;padding:3px 6px;}
+</style>
 
-### 5.1 Today (v2.922.0)
+### 5.1 Today (v2.922.0) — click a group title to collapse; click a red control to see the problem
 
-<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);box-sizing:border-box;background:#12141d;border:1px solid #2a2e40;border-radius:10px;padding:12px 28px;font-family:system-ui,sans-serif;">
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">File</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">↶ ↷ · 💾 Save</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">⬇ Export · ⬆ Import</span></div>
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Tools</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🗑 · 🧲 · 📏</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">⬚ Select · 🖱 Sel&amp;move</span></div>
-<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;font-weight:700;color:#7b84ab;align-self:stretch;display:flex;align-items:center;padding:0 1px;">Draw</div>
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Walls</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🧱 Wall · 🚪 Door</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">material ▾ · opacity ▭</span></div>
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Markers</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">📍 Hotspots</span><span style="display:block;font-size:11.5px;color:#f2d7cf;background:#33262330;background:#3a2a26;border:1px solid #5a3b34;border-left:3px solid #e0674f;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">💡 Lights · light type ▾ · B D</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🔤 Label · 📌 Pin</span></div>
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Environment</div><span style="display:block;font-size:11.5px;color:#f2d7cf;background:#3a2a26;border:1px solid #5a3b34;border-left:3px solid #e0674f;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">ambient ▾</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🌫 Fog · ⛰ Terrain</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">terrain ▾ · weather ▾</span></div>
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Lair</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🎯 Lair Zone</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">action ▾</span></div>
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Tokens</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🔵 · 🟠</span></div>
-<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;font-weight:700;color:#7b84ab;align-self:stretch;display:flex;align-items:center;padding:0 1px;">Map</div>
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Grid</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">grid ▾ · show ☑ · px</span><span style="display:block;font-size:11.5px;color:#f2d7cf;background:#3a2a26;border:1px solid #5a3b34;border-left:3px solid #e0674f;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">tokens × [1.0] · S M L XL</span></div>
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Layers · View</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">👁 layers ✕8</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">Fit · 🔍 −/+</span></div>
+<div class="mde-wrap" id="mde-today">
+<div class="mde-row">
+<div class="mde-grp"><div class="mde-t clk">▾ File</div><div class="mde-body"><span class="mde-chip">↶ ↷ · 💾 Save</span><span class="mde-chip">⬇ Export · ⬆ Import</span></div></div>
+<div class="mde-grp"><div class="mde-t clk">▾ Tools</div><div class="mde-body"><span class="mde-chip">🗑 · 🧲 · 📏</span><span class="mde-chip">⬚ Select · 🖱 Sel&amp;move</span></div></div>
+<div class="mde-zone">Draw</div>
+<div class="mde-grp"><div class="mde-t clk">▾ Walls</div><div class="mde-body"><span class="mde-chip">🧱 Wall · 🚪 Door</span><span class="mde-chip">material ▾ · opacity ▭</span></div></div>
+<div class="mde-grp"><div class="mde-t clk">▾ Markers</div><div class="mde-body"><span class="mde-chip">📍 Hotspots</span><span class="mde-chip red clk" data-note="Problem: lighting lives HERE (the Lights tool + its 3 config rows) …">💡 Lights · light type ▾ · B D</span><span class="mde-chip">🔤 Label · 📌 Pin</span></div></div>
+<div class="mde-grp"><div class="mde-t clk">▾ Environment</div><div class="mde-body"><span class="mde-chip red clk" data-note="… and ALSO here (ambient) — that's the split. A GM lighting a room looks in two groups.">ambient ▾</span><span class="mde-chip">🌫 Fog · ⛰ Terrain</span><span class="mde-chip">terrain ▾ · weather ▾</span></div></div>
+<div class="mde-grp"><div class="mde-t clk">▾ Lair</div><div class="mde-body"><span class="mde-chip">🎯 Lair Zone</span><span class="mde-chip">action ▾</span></div></div>
+<div class="mde-grp"><div class="mde-t clk">▾ Tokens</div><div class="mde-body"><span class="mde-chip">🔵 · 🟠</span></div></div>
+<div class="mde-zone">Map</div>
+<div class="mde-grp"><div class="mde-t clk">▾ Grid</div><div class="mde-body"><span class="mde-chip">grid ▾ · show ☑ · px</span><span class="mde-chip red clk" data-note="Problem: the token-SIZE dial is stranded under Grid — nothing to do with grid setup.">tokens × [1.0] · S M L XL</span></div></div>
+<div class="mde-grp"><div class="mde-t clk">▾ Layers · View</div><div class="mde-body"><span class="mde-chip">👁 layers ✕8</span><span class="mde-chip">Fit · 🔍 −/+</span></div></div>
+</div>
+<div class="mde-bar"><div class="mde-status" data-status>Click a group title to collapse it. Click a red control to see why it's mis-placed today.</div></div>
 </div>
 
-Two things to notice (red above): **lighting** is split between *Environment*
-(ambient) and *Markers* (the Lights tool + its config rows), and the
-**token-size** dial + presets sit under **Grid**, unrelated to grid setup.
+### 5.2 Theme A — regrouped by concern (a working toy: arm a tool → click the map → click a piece to inspect)
 
-### 5.2 Theme A — regrouped by concern
-
-<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);box-sizing:border-box;background:#12141d;border:1px solid #2a2e40;border-radius:10px;padding:12px 28px;font-family:system-ui,sans-serif;">
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Actions</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">File · Tools</span></div>
-<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;font-weight:700;color:#7b84ab;align-self:stretch;display:flex;align-items:center;padding:0 1px;">Draw</div>
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Walls &amp; Doors</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🧱 Wall · 🚪 Door</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">material ▾ · opacity ▭</span></div>
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Terrain</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">⛰ Terrain · ⬡</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">terrain ▾</span></div>
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Lighting</div><span style="display:block;font-size:11.5px;color:#d7f2dc;background:#26361f;background:#243a29;border:1px solid #34573b;border-left:3px solid #57b26a;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">ambient ▾</span><span style="display:block;font-size:11.5px;color:#d7f2dc;background:#243a29;border:1px solid #34573b;border-left:3px solid #57b26a;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">💡 Lights · type ▾ · B D · 🎨</span></div>
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Fog &amp; Vision</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🌫 Fog · on ☑</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">explore ☑ · ↺ reset</span></div>
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Annotations</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">📍 Hotspots</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🔤 Label · 📌 Pin</span></div>
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Lair</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🎯 Lair Zone</span></div>
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Tokens</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🔵 · 🟠 Token</span><span style="display:block;font-size:11.5px;color:#d7f2dc;background:#243a29;border:1px solid #34573b;border-left:3px solid #57b26a;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">tokens × [1.0] · S M L XL</span></div>
-<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;font-weight:700;color:#7b84ab;align-self:stretch;display:flex;align-items:center;padding:0 1px;">Map</div>
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Grid</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">grid ▾ · show ☑</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">px · x/y offset</span></div>
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Layers · View</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">👁 layers ✕8</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">Fit · 🔍 −/+</span></div>
+<div class="mde-wrap" id="mde-a">
+<div class="mde-row">
+<div class="mde-grp"><div class="mde-t clk">▾ Actions</div><div class="mde-body"><span class="mde-chip">File · Tools</span></div></div>
+<div class="mde-zone">Draw</div>
+<div class="mde-grp"><div class="mde-t clk">▾ Walls &amp; Doors</div><div class="mde-body"><span class="mde-chip clk" data-tool="wall">🧱 Wall</span><span class="mde-chip clk" data-tool="door">🚪 Door</span><span class="mde-chip">material ▾ · opacity ▭</span></div></div>
+<div class="mde-grp"><div class="mde-t clk">▾ Terrain</div><div class="mde-body"><span class="mde-chip clk" data-tool="terrain">⛰ Terrain</span><span class="mde-chip">terrain ▾</span></div></div>
+<div class="mde-grp"><div class="mde-t clk">▾ Lighting</div><div class="mde-body"><span class="mde-chip green">ambient ▾</span><span class="mde-chip green clk" data-tool="light">💡 Lights · type ▾</span></div></div>
+<div class="mde-grp"><div class="mde-t clk">▾ Fog &amp; Vision</div><div class="mde-body"><span class="mde-chip clk" data-tool="fog">🌫 Fog</span><span class="mde-chip">explore ☑ · ↺</span></div></div>
+<div class="mde-grp"><div class="mde-t clk">▾ Annotations</div><div class="mde-body"><span class="mde-chip clk" data-tool="hotspot">📍 Hotspot</span><span class="mde-chip">🔤 Label · 📌 Pin</span></div></div>
+<div class="mde-grp"><div class="mde-t clk">▾ Lair</div><div class="mde-body"><span class="mde-chip clk" data-tool="lair">🎯 Lair Zone</span></div></div>
+<div class="mde-grp"><div class="mde-t clk">▾ Tokens</div><div class="mde-body"><span class="mde-chip clk" data-tool="token">🔵 Token</span><span class="mde-chip green">tokens × [1.0] · S M L XL</span></div></div>
+<div class="mde-zone">Map</div>
+<div class="mde-grp"><div class="mde-t clk">▾ Grid</div><div class="mde-body"><span class="mde-chip">grid ▾ · show ☑</span><span class="mde-chip">px · x/y</span></div></div>
+</div>
+<div class="mde-map" data-map></div>
+<div class="mde-bar"><div class="mde-status" data-status>Green = moved/merged here. Click a tool above, then click the map to place it; click a placed piece to select it.</div><button class="mde-btn" type="button" data-reset>↺ Reset</button></div>
+<div class="mde-insp" data-insp style="display:none;margin-top:10px;max-width:300px;"><div class="mde-t" data-insp-title>Selected · Wall</div><span class="mde-chip">material [ Stone ▾ ]</span><span class="mde-chip">opacity ▭▬▬▬▬▬▬ 70%</span><span class="mde-chip">↻ flip · 🔒 secret · 🗑 delete</span></div>
 </div>
 
-Every group now answers one question: **Lighting** owns ambient level *and*
-placed lights (green — merged from two groups); **Tokens** owns the size dial
-(green — moved out of Grid); **Grid** is grid-only; **Fog & Vision** and
-**Terrain** split out of the old *Environment* bin. (Weather folds into an
-atmosphere group or its own tiny one.)
+### 5.3 Theme B — the "Selected object" inspector (click **Select a wall** to summon it; the controls are live)
 
-### 5.3 Theme B — a "Selected object" inspector
-
-The tool group advertises only **new-object defaults**; the moment you
-double-click an object, a compact inspector floats next to it with *that
-object's* live properties.
-
-<div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);box-sizing:border-box;background:#12141d;border:1px solid #2a2e40;border-radius:10px;padding:16px 28px;font-family:system-ui,sans-serif;">
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:8px 9px;min-width:150px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:6px;">Walls &amp; Doors <span style="color:#6a7398;">· defaults</span></div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:4px 8px;margin:4px 0;white-space:nowrap;">🧱 Wall · 🚪 Door · ⬡</span><span style="display:block;font-size:11.5px;color:#c9cee6;background:#252a39;border:1px solid #3a4058;border-radius:5px;padding:4px 8px;margin:4px 0;white-space:nowrap;">material [ Stone ▾ ]</span><span style="display:block;font-size:11.5px;color:#c9cee6;background:#252a39;border:1px solid #3a4058;border-radius:5px;padding:4px 8px;margin:4px 0;white-space:nowrap;">opacity ▭▬▬▬▬▬▬</span><div style="font-size:11px;color:#6a7398;margin-top:4px;">makes NEW walls</div></div>
-<div style="align-self:center;color:#57b26a;font-size:20px;font-weight:700;">⇄</div>
-<div style="background:#1b2430;border:1px solid #57b26a;box-shadow:0 4px 18px rgba(0,0,0,.4);border-radius:8px;padding:8px 9px;min-width:190px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#9fd3ab;font-weight:700;margin-bottom:6px;">Selected · Wall</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#243040;border:1px solid #3a4a5e;border-radius:5px;padding:4px 8px;margin:4px 0;white-space:nowrap;">material [ Stone ▾ ]</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#243040;border:1px solid #3a4a5e;border-radius:5px;padding:4px 8px;margin:4px 0;white-space:nowrap;">opacity ▭▬▬▬▬▬▬ 70%</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#243040;border:1px solid #3a4a5e;border-radius:5px;padding:4px 8px;margin:4px 0;white-space:nowrap;">type ( Wall ) Door · Window</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#243040;border:1px solid #3a4a5e;border-radius:5px;padding:4px 8px;margin:4px 0;white-space:nowrap;">↻ flip · 🔒 secret · 🗑 delete</span><div style="font-size:11px;color:#6a7398;margin-top:4px;">floats by the selection · Esc closes</div></div>
+<div class="mde-wrap" id="mde-b">
+<div class="mde-row" style="align-items:center;">
+<div class="mde-grp" style="min-width:150px;"><div class="mde-t">Walls &amp; Doors · defaults</div><span class="mde-chip">🧱 Wall · 🚪 Door · ⬡</span><span class="mde-chip" style="color:#c9cee6;background:#252a39;">material [ Stone ▾ ]</span><span class="mde-chip" style="color:#c9cee6;background:#252a39;">opacity ▭▬▬▬▬▬▬</span><div style="font-size:11px;color:#6a7398;margin-top:4px;">makes NEW walls</div></div>
+<button class="mde-btn" type="button" data-b-toggle style="background:#243040;border-color:#3a4a5e;color:#e7e9f3;">Select a wall ▸</button>
+<div class="mde-insp" data-b-insp style="display:none;"><div class="mde-t" style="color:#9fd3ab;">Selected · Wall</div><div style="margin:4px 0;"><label style="font-size:11px;color:#9aa3c0;">material </label><select class="mde-ctl" data-b-mat><option>Stone</option><option>Wood</option><option>Brick</option><option>Metal</option><option>Cave</option><option>🪟 Window</option></select></div><div style="margin:4px 0;"><label style="font-size:11px;color:#9aa3c0;">opacity </label><input type="range" min="0" max="100" value="70" data-b-op style="vertical-align:middle;"></div><span class="mde-chip">↻ flip · 🔒 secret · 🗑 delete</span><div class="mde-hint" data-b-prev>preview: Stone wall @ 70% opacity</div></div>
+</div>
+<div style="font-size:12px;color:#8f98bd;margin-top:6px;">The tool group shows only <em>new-wall defaults</em>; the green inspector edits <em>the selected wall</em> — two visibly distinct surfaces (change the material / opacity above and watch the preview).</div>
 </div>
 
-This makes the current dual role (a knob edits *either* the default *or* the
-selection) two visibly distinct surfaces.
+### 5.4 Theme D — label the context + the Select→Grab rename (toggle them)
 
-### 5.4 Theme D — label the context (cheap version of B)
-
-Without the full inspector, just relabel the shared caption + add a status hint.
-
-<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);box-sizing:border-box;background:#12141d;border:1px solid #2a2e40;border-radius:10px;padding:16px 28px;font-family:system-ui,sans-serif;">
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:8px 9px;min-width:120px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:6px;">New wall</div><span style="display:block;font-size:11.5px;color:#c9cee6;background:#252a39;border:1px solid #3a4058;border-radius:5px;padding:4px 8px;margin:4px 0;">material ▾</span><span style="display:block;font-size:11.5px;color:#c9cee6;background:#252a39;border:1px solid #3a4058;border-radius:5px;padding:4px 8px;margin:4px 0;">opacity ▭▬▬</span></div>
-<div style="color:#57b26a;font-size:20px;font-weight:700;">→</div>
-<div style="background:#1b2430;border:1px solid #57b26a;border-radius:8px;padding:8px 9px;min-width:140px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#9fd3ab;font-weight:700;margin-bottom:6px;">Selected wall</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#243040;border:1px solid #3a4a5e;border-radius:5px;padding:4px 8px;margin:4px 0;">material ▾</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#243040;border:1px solid #3a4a5e;border-radius:5px;padding:4px 8px;margin:4px 0;">opacity ▭▬▬ 70%</span></div>
+<div class="mde-wrap" id="mde-d">
+<div class="mde-row" style="align-items:center;">
+<div class="mde-grp" style="min-width:150px;" data-d-card><div class="mde-t" data-d-title>New wall</div><span class="mde-chip" data-d-c1 style="color:#c9cee6;background:#252a39;">material ▾</span><span class="mde-chip" data-d-c2 style="color:#c9cee6;background:#252a39;">opacity ▭▬▬</span></div>
+<button class="mde-btn" type="button" data-d-sel style="background:#243040;border-color:#3a4a5e;color:#e7e9f3;">Select the wall ▸</button>
+<div class="mde-grp"><div class="mde-t">Tools</div><span class="mde-chip clk" data-d-chip data-d-name="Select &amp; move">🖱 Select &amp; move</span><button class="mde-btn" type="button" data-d-rename style="margin-top:4px;font-size:11px;padding:4px 8px;">rename ↔</button></div>
+</div>
+<div class="mde-hint" data-d-hint style="display:none;">status: Editing <b>selected wall</b> — Esc to deselect</div>
 </div>
 
-<div style="font-size:12px;color:#9fd3ab;background:#1b2430;border:1px solid #34573b;border-radius:6px;padding:6px 10px;margin:8px 0;font-family:system-ui,sans-serif;">status: Editing <b>selected door</b> — Esc to deselect</div>
-
-And rename **🖱 Select &amp; move** → **🖱 Grab** so it stops colliding with the
-box-**⬚ Select** tool.
-
-### 5.5 Try it — a clickable demo
-
-A toy of the **Theme A** toolbar wired up so you can feel the flow (it's a
-mockup, not the real editor): **click a tool** to arm it → **click the map** to
-drop a piece → **click a placed piece** to open its inspector (Theme B) →
-**click a group's title** to collapse it. **Reset** clears the board.
-
-<div id="me-demo" style="margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);box-sizing:border-box;background:#12141d;border:1px solid #2a2e40;border-radius:10px;padding:16px 28px;font-family:system-ui,sans-serif;">
-<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start;">
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div data-grp style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;cursor:pointer;" title="Click to collapse/expand">▾ Walls &amp; Doors</div><div data-grpbody><span data-tool="wall" style="display:block;font-size:12px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:4px 8px;margin:3px 0;white-space:nowrap;cursor:pointer;">🧱 Wall</span><span data-tool="door" style="display:block;font-size:12px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:4px 8px;margin:3px 0;white-space:nowrap;cursor:pointer;">🚪 Door</span></div></div>
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div data-grp style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;cursor:pointer;" title="Click to collapse/expand">▾ Terrain</div><div data-grpbody><span data-tool="terrain" style="display:block;font-size:12px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:4px 8px;margin:3px 0;white-space:nowrap;cursor:pointer;">⛰ Terrain</span></div></div>
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div data-grp style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;cursor:pointer;" title="Click to collapse/expand">▾ Lighting</div><div data-grpbody><span data-tool="light" style="display:block;font-size:12px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:4px 8px;margin:3px 0;white-space:nowrap;cursor:pointer;">💡 Lights</span></div></div>
-<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div data-grp style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;cursor:pointer;" title="Click to collapse/expand">▾ Tokens</div><div data-grpbody><span data-tool="token" style="display:block;font-size:12px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:4px 8px;margin:3px 0;white-space:nowrap;cursor:pointer;">🔵 Token</span></div></div>
-</div>
-<div data-demo="map" style="position:relative;height:220px;margin-top:12px;border:2px dashed #3a4058;border-radius:8px;background:repeating-linear-gradient(0deg,#171a26,#171a26 33px,#1b1e2c 33px,#1b1e2c 34px),repeating-linear-gradient(90deg,#171a26,#171a26 33px,#1b1e2c 33px,#1b1e2c 34px);cursor:crosshair;overflow:hidden;"></div>
-<div style="display:flex;align-items:center;gap:12px;margin-top:10px;"><div data-demo="status" style="flex:1 1 auto;font-size:13px;color:#9fd3ab;background:#1b2430;border:1px solid #34573b;border-radius:6px;padding:7px 11px;">Pick a tool above to begin.</div><button data-demo="reset" type="button" style="font-size:13px;color:#f2d7cf;background:#3a2a26;border:1px solid #5a3b34;border-radius:6px;padding:7px 14px;cursor:pointer;">↺ Reset</button></div>
-<div data-demo="inspector" style="display:none;margin-top:10px;max-width:280px;background:#1b2430;border:1px solid #57b26a;border-radius:8px;padding:8px 9px;"><div data-demo="insp-title" style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#9fd3ab;font-weight:700;margin-bottom:6px;">Selected · Wall</div><span style="display:block;font-size:12px;color:#e7e9f3;background:#243040;border:1px solid #3a4a5e;border-radius:5px;padding:4px 8px;margin:4px 0;">material [ Stone ▾ ]</span><span style="display:block;font-size:12px;color:#e7e9f3;background:#243040;border:1px solid #3a4a5e;border-radius:5px;padding:4px 8px;margin:4px 0;">opacity ▭▬▬▬▬▬▬ 70%</span><span style="display:block;font-size:12px;color:#e7e9f3;background:#243040;border:1px solid #3a4a5e;border-radius:5px;padding:4px 8px;margin:4px 0;">↻ flip · 🔒 secret · 🗑 delete</span></div>
-</div>
 <script>
 (function(){
-  var root = document.getElementById('me-demo'); if(!root) return;
-  var map = root.querySelector('[data-demo="map"]');
-  var statusEl = root.querySelector('[data-demo="status"]');
-  var insp = root.querySelector('[data-demo="inspector"]');
-  var glyph = { wall:'🧱', door:'🚪', terrain:'⛰', light:'💡', token:'🔵' };
-  var tool = null;
-  function say(t){ statusEl.textContent = t; }
-  function clearArm(){ root.querySelectorAll('[data-tool]').forEach(function(c){ c.style.outline=''; c.style.borderColor='#3a4058'; }); }
-  root.querySelectorAll('[data-tool]').forEach(function(chip){
-    chip.addEventListener('click', function(e){
+  // Generic collapse: any ".mde-t.clk" toggles its group + flips the arrow.
+  document.querySelectorAll('.mde-wrap .mde-t.clk').forEach(function(t){
+    t.addEventListener('click', function(e){
       e.stopPropagation();
-      if(tool === chip.dataset.tool){ tool=null; clearArm(); say('Tool cleared — pick a tool, or click a placed piece to edit it.'); return; }
-      tool = chip.dataset.tool; clearArm();
-      chip.style.outline='2px solid #ffd24a'; chip.style.borderColor='#ffd24a';
-      say(chip.textContent.trim()+' armed — click the map to place it.');
+      var grp = t.closest('.mde-grp'); if(!grp) return;
+      var open = !grp.classList.toggle('mde-collapsed');
+      t.textContent = (open ? '▾ ' : '▸ ') + t.textContent.replace(/^[▾▸]\s*/,'');
     });
   });
-  map.addEventListener('click', function(e){
-    insp.style.display='none';
-    if(!tool){ say('No tool armed — pick one above first.'); return; }
-    var r = map.getBoundingClientRect();
-    var piece = document.createElement('span');
-    piece.textContent = glyph[tool] || '▪';
-    piece.dataset.piece = tool;
-    piece.style.cssText='position:absolute;transform:translate(-50%,-50%);font-size:22px;cursor:pointer;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));';
-    piece.style.left=(e.clientX-r.left)+'px'; piece.style.top=(e.clientY-r.top)+'px';
-    var kind = tool;
-    piece.addEventListener('click', function(ev){
-      ev.stopPropagation();
-      insp.querySelector('[data-demo="insp-title"]').textContent='Selected · '+kind.charAt(0).toUpperCase()+kind.slice(1);
-      insp.style.display='block';
-      say('Selected a '+kind+' — the inspector shows just its properties (Theme B).');
+  // 5.1 — red controls explain the problem in the status line.
+  (function(){
+    var root = document.getElementById('mde-today'); if(!root) return;
+    var st = root.querySelector('[data-status]');
+    root.querySelectorAll('.mde-chip.red').forEach(function(c){
+      c.addEventListener('click', function(e){ e.stopPropagation(); st.textContent = c.getAttribute('data-note'); });
     });
-    map.appendChild(piece);
-    say('Placed a '+tool+'. Click it to select (inspector), or keep placing.');
-  });
-  root.querySelectorAll('[data-grp]').forEach(function(lbl){
-    lbl.addEventListener('click', function(e){
-      e.stopPropagation();
-      var body = lbl.parentElement.querySelector('[data-grpbody]');
-      if(!body) return;
-      var hidden = body.style.display==='none';
-      body.style.display = hidden ? '' : 'none';
-      lbl.textContent = (hidden?'▾ ':'▸ ') + lbl.textContent.replace(/^[▾▸]\s*/,'');
+  })();
+  // 5.2 — arm a tool, place on the map, click a piece to inspect.
+  (function(){
+    var root = document.getElementById('mde-a'); if(!root) return;
+    var map = root.querySelector('[data-map]');
+    var st = root.querySelector('[data-status]');
+    var insp = root.querySelector('[data-insp]');
+    var glyph = { wall:'🧱', door:'🚪', terrain:'⛰', light:'💡', fog:'🌫', hotspot:'📍', lair:'🎯', token:'🔵' };
+    var tool = null;
+    function clearArm(){ root.querySelectorAll('[data-tool]').forEach(function(c){ c.classList.remove('armed'); }); }
+    root.querySelectorAll('[data-tool]').forEach(function(chip){
+      chip.addEventListener('click', function(e){
+        e.stopPropagation();
+        if(tool === chip.dataset.tool){ tool=null; clearArm(); st.textContent='Tool cleared — pick a tool, or click a placed piece.'; return; }
+        tool = chip.dataset.tool; clearArm(); chip.classList.add('armed');
+        st.textContent = chip.textContent.trim()+' armed — click the map to place it.';
+      });
     });
-  });
-  root.querySelector('[data-demo="reset"]').addEventListener('click', function(){
-    map.querySelectorAll('[data-piece]').forEach(function(p){ p.remove(); });
-    tool=null; clearArm(); insp.style.display='none'; say('Reset — pick a tool to begin.');
-  });
+    map.addEventListener('click', function(e){
+      insp.style.display='none';
+      if(!tool){ st.textContent='No tool armed — pick one above first.'; return; }
+      var r = map.getBoundingClientRect();
+      var piece = document.createElement('span');
+      var kind = tool;
+      piece.textContent = glyph[kind] || '▪';
+      piece.setAttribute('data-piece','1');
+      piece.style.cssText='position:absolute;transform:translate(-50%,-50%);font-size:22px;cursor:pointer;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));';
+      piece.style.left=(e.clientX-r.left)+'px'; piece.style.top=(e.clientY-r.top)+'px';
+      piece.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        insp.querySelector('[data-insp-title]').textContent='Selected · '+kind.charAt(0).toUpperCase()+kind.slice(1);
+        insp.style.display='block';
+        st.textContent='Selected a '+kind+' — the inspector shows just its properties (that’s Theme B).';
+      });
+      map.appendChild(piece);
+      st.textContent='Placed a '+kind+'. Click it to select, or keep placing.';
+    });
+    root.querySelector('[data-reset]').addEventListener('click', function(){
+      map.querySelectorAll('[data-piece]').forEach(function(p){ p.remove(); });
+      tool=null; clearArm(); insp.style.display='none'; st.textContent='Reset — pick a tool to begin.';
+    });
+  })();
+  // 5.3 — summon the inspector; material + opacity update a live preview.
+  (function(){
+    var root = document.getElementById('mde-b'); if(!root) return;
+    var btn = root.querySelector('[data-b-toggle]');
+    var insp = root.querySelector('[data-b-insp]');
+    var mat = root.querySelector('[data-b-mat]');
+    var op = root.querySelector('[data-b-op]');
+    var prev = root.querySelector('[data-b-prev]');
+    function refresh(){ prev.textContent = 'preview: '+mat.value+' wall @ '+op.value+'% opacity'; }
+    btn.addEventListener('click', function(){
+      var shown = insp.style.display!=='none';
+      insp.style.display = shown ? 'none' : 'block';
+      btn.textContent = shown ? 'Select a wall ▸' : 'Deselect ▾';
+      if(!shown) refresh();
+    });
+    mat.addEventListener('change', refresh);
+    op.addEventListener('input', refresh);
+  })();
+  // 5.4 — toggle the label context + the Select&move ↔ Grab rename.
+  (function(){
+    var root = document.getElementById('mde-d'); if(!root) return;
+    var card = root.querySelector('[data-d-card]');
+    var title = root.querySelector('[data-d-title]');
+    var selBtn = root.querySelector('[data-d-sel]');
+    var hint = root.querySelector('[data-d-hint]');
+    var c1 = root.querySelector('[data-d-c1]');
+    var c2 = root.querySelector('[data-d-c2]');
+    var selected = false;
+    selBtn.addEventListener('click', function(){
+      selected = !selected;
+      title.textContent = selected ? 'Selected wall' : 'New wall';
+      title.style.color = selected ? '#9fd3ab' : '#8f98bd';
+      card.style.borderColor = selected ? '#57b26a' : '#333850';
+      [c1,c2].forEach(function(c){ c.style.color = selected?'#e7e9f3':'#c9cee6'; c.style.background = selected?'#243040':'#252a39'; });
+      hint.style.display = selected ? 'block' : 'none';
+      selBtn.textContent = selected ? 'Deselect ▾' : 'Select the wall ▸';
+    });
+    var chip = root.querySelector('[data-d-chip]');
+    var grab = false;
+    root.querySelector('[data-d-rename]').addEventListener('click', function(){
+      grab = !grab;
+      chip.textContent = grab ? '🖱 Grab' : '🖱 Select & move';
+    });
+  })();
 })();
 </script>
 

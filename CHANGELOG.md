@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.923.5] - 2026-07-05 — "The Playable Plan"
+
+**Schema version:** 101
+
+**Commit summary:** Make every §5 interface mockup in the editor-reorg plan interactive.
+
+**Description:** Rebuilds §5 of [`docs/plans/editor-controls-reorg.md`](docs/plans/editor-controls-reorg.md) so **all four** proposal mockups are live/clickable (previously only the separate §5.5 demo was). Adds a shared `<style>` block (class-based, replacing the repeated inline styles) and one consolidated `<script>` (executes in the wiki — no CSP), all scoped to per-demo container IDs:
+- **5.1 Today** — every group title collapses; clicking a **red** control prints *why* it's mis-placed (the split lighting; the token-dial-under-Grid).
+- **5.2 Theme A** — a working toy: arm a tool → click the map to place it → click a placed piece to open the Theme B inspector; groups collapse; green chips mark what moved/merged; Reset clears.
+- **5.3 Theme B** — a **Select a wall** button summons the inspector, whose **material `<select>` + opacity slider** update a live preview (the two-surface idea, demonstrated).
+- **5.4 Theme D** — toggles that flip the caption **New wall ↔ Selected wall** (+ status hint) and rename **🖱 Select & move ↔ 🖱 Grab**.
+
+Verified all four containers, the `<style>`, and the `<script>` render unescaped/unmangled on `/wiki/doc/plan-editor-controls-reorg` (the only `&lt;` is the intentional code span in §4).
+
+### Changed
+- `docs/plans/editor-controls-reorg.md` — §5 rewritten: shared CSS classes + one scoped script; all four mockups interactive (the standalone §5.5 demo folded into §5.2).
+
+### Schema
+- No schema change (still v101 — doc content only).
+
 ## [2.923.4] - 2026-07-05 — "The Clickable Draft"
 
 **Schema version:** 101
