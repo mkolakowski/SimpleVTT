@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.932.0] - 2026-07-06 — "The Actions Zone"
+
+**Schema version:** 101
+
+**Commit summary:** Move View beside Tools and make the Actions zone (File · Tools · View) collapsible.
+
+**Description:** The **View** group moves from the far-right (Map zone) to sit **next to Tools** in the Actions zone. The Actions zone — **File · Tools · View** — now has its own **collapsible zone divider** (labelled "Actions"), matching the existing Draw / Map zone dividers: click it to fold the whole left cluster. The Map zone is now just Grid · Layers.
+
+### Changed
+- `app/templates/map_editor.html` — View group relocated after Tools; a new leading `Actions` zone divider added; `ZONE_MEMBERS` gains `Actions: [File, Tools, View]` and drops View from `Map`.
+- `tests/harness_ui/test_map_editor_toolbar.py` — updated group-label order + the zone list (`ACTIONS · DRAW · MAP`).
+
+### Added
+- `tests/harness_ui/test_editor_actions_zone.py` — View sits left of the Draw divider; clicking the Actions divider collapses File · Tools · View.
+
+### Schema
+- No schema change (still v101 — toolbar layout only).
+
 ## [2.931.1] - 2026-07-06 — "The Scrollless Layers"
 
 **Schema version:** 101

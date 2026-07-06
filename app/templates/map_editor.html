@@ -201,6 +201,9 @@
 <div class="me-toolbar">
   {# v2.783.0 — controls organised into labelled sub-groups: Walls · Markers ·
      Fog · Tokens · Tools · Grid · Lighting · View. #}
+  {# v2.932.0 — the Actions zone (File · Tools · View) gets its own collapsible
+     zone divider, matching Draw / Map. #}
+  <div class="me-zone-sep"><span class="me-zone-lbl">Actions</span></div>
   {# v2.810.0 — undo / redo history, pinned to the far left.
      v2.826.0 — renamed "File": Save + Undo/Redo + the map's Tags all together. #}
   <div class="me-group me-group--stack" role="group" aria-label="File">
@@ -264,6 +267,18 @@
       <button type="button" id="me-freeform-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
               title="FreeForm placement (off by default): applies to the active draw tool — 🧱 Wall chains connected segments; ⛰ Terrain / 🎯 Lair zones are placed by clicking vertices and closing on the first dot, instead of a rectangle.">⬡ FreeForm</button>
     </div>
+  </div>
+  {# v2.932.0 — View sits beside Tools in the Actions zone (was at the far right
+     under Map). Zoom controls stack vertically (Fit · 🔍+ · % · 🔍−). #}
+  <div class="me-group me-group--stack" role="group" aria-label="View">
+    <span class="me-grp-lbl">View</span>
+    <button type="button" id="me-zoom-fit" class="me-tool-btn" title="Fit the map to the view">Fit</button>
+    <button type="button" id="me-zoom-in" class="me-tool-btn" title="Zoom in">🔍+</button>
+    <span id="me-zoom-lbl" style="font-size:12px;color:var(--fg-mute);text-align:center;">100%</span>
+    <button type="button" id="me-zoom-out" class="me-tool-btn" title="Zoom out">🔍−</button>
+    {# v2.786.1 — map image resolution. #}
+    <span id="me-resolution" class="me-cap" style="text-align:center;text-transform:none;letter-spacing:0;font-weight:600;"
+          title="Map image resolution (pixels)">{{ map.width_px }} × {{ map.height_px }} px</span>
   </div>
   {# v2.817.0 — Actions │ Draw zone boundary. v2.820.0 — label folds the zone. #}
   <div class="me-zone-sep"><span class="me-zone-lbl">Draw</span></div>
@@ -514,18 +529,6 @@
       <label class="me-layer-row" data-layer="lairzones"><input type="checkbox" id="me-layer-lairzones" checked> <span class="me-layer-name">🎯 Lair zones</span><span class="me-layer-drag" title="Drag to reorder (top = drawn on top)">⠿</span></label>
       <label class="me-layer-row" data-layer="tokens"><input type="checkbox" id="me-layer-tokens" checked> <span class="me-layer-name">🔵 Tokens</span><span class="me-layer-drag" title="Drag to reorder (top = drawn on top)">⠿</span></label>
     </div>
-  </div>
-  <div class="me-group me-group--stack" role="group" aria-label="View">
-    <span class="me-grp-lbl">View</span>
-    {# v2.928.0 — the zoom controls stack vertically (Fit · 🔍+ · % · 🔍−) so the
-       View group is a slim column instead of a wide zoom row. #}
-    <button type="button" id="me-zoom-fit" class="me-tool-btn" title="Fit the map to the view">Fit</button>
-    <button type="button" id="me-zoom-in" class="me-tool-btn" title="Zoom in">🔍+</button>
-    <span id="me-zoom-lbl" style="font-size:12px;color:var(--fg-mute);text-align:center;">100%</span>
-    <button type="button" id="me-zoom-out" class="me-tool-btn" title="Zoom out">🔍−</button>
-    {# v2.786.1 — map image resolution. #}
-    <span id="me-resolution" class="me-cap" style="text-align:center;text-transform:none;letter-spacing:0;font-weight:600;"
-          title="Map image resolution (pixels)">{{ map.width_px }} × {{ map.height_px }} px</span>
   </div>
   <span class="me-status" id="me-status"></span>
 </div>
@@ -4828,10 +4831,12 @@
   // that zone at once (the bulk version of the per-group collapse above). Reuses
   // the same collapsedGroups store so per-group + per-zone state stay in sync.
   var ZONE_MEMBERS = {
+    // v2.932.0 — the Actions zone (File · Tools · View) is collapsible too.
+    Actions: ['File', 'Tools', 'View'],
     // v2.924.0 — Theme A: Markers + Environment split into concern-coherent
     // groups (Terrain · Lighting · Fog & Vision · Weather · Annotations).
     Draw: ['Walls', 'Terrain', 'Lighting', 'Environment', 'Annotations', 'Lair zones', 'Tokens'],  // v2.929.0 — fog+weather+ambient merged into Environment
-    Map: ['Grid', 'Layers', 'View'],  // v2.826.0 — Tags moved to the File group
+    Map: ['Grid', 'Layers'],  // v2.932.0 — View moved to the Actions zone
   };
   Array.prototype.forEach.call(document.querySelectorAll('.me-zone-sep > .me-zone-lbl'), function (lbl) {
     var zone = (lbl.textContent || '').trim();

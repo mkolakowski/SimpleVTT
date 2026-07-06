@@ -22,12 +22,13 @@ def test_toolbar_grouped(gm_page: Page) -> None:
     # v2.870.0 — Lair group added (lair-action zones) between Environment + Tokens.
     # v2.924.0 — Theme A: Markers + Environment split into Terrain · Lighting ·
     # Fog · Weather · Notes (Annotations) — see docs/plans/editor-controls-reorg.md.
-    assert labels == ["FILE", "TOOLS", "WALLS", "TERRAIN", "LIGHTING", "ENVIRONMENT",
-                      "NOTES", "LAIR", "TOKENS", "GRID", "LAYERS", "VIEW"], labels
+    # v2.932.0 — View moved beside Tools (Actions zone); Map zone is Grid+Layers.
+    assert labels == ["FILE", "TOOLS", "VIEW", "WALLS", "TERRAIN", "LIGHTING", "ENVIRONMENT",
+                      "NOTES", "LAIR", "TOKENS", "GRID", "LAYERS"], labels
 
-    # v2.817.0 — two zone dividers make the Actions │ Draw │ Map zoning visible.
+    # v2.817.0 — zone dividers; v2.932.0 — Actions is now a collapsible zone too.
     zones = [s.upper() for s in gm_page.locator(".me-zone-sep .me-zone-lbl").all_inner_texts()]
-    assert zones == ["DRAW", "MAP"], zones
+    assert zones == ["ACTIONS", "DRAW", "MAP"], zones
 
     # v2.822.0 — the edit bar is translucent (frosted): a backdrop blur is set.
     blur = gm_page.eval_on_selector(
