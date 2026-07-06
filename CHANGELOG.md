@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.929.0] - 2026-07-05 — "The Gathered Environment"
+
+**Schema version:** 101
+
+**Commit summary:** Gather ambient light + fog + weather into one "Environment" group (captions stacked above their dropdowns).
+
+**Description:** Consolidates the whole-map atmosphere controls. **Ambient light** (previously in Lighting), the **Fog of war** tool + its exploration sub-controls, and the **weather** overlay are now one **Environment** group. The **ambient** and **weather** captions sit **above** their dropdowns (a new `.me-capsel--stack` variant) instead of beside them. Lighting keeps only the placed light sources + their config. Every control keeps its element ID — behaviour is unchanged; only grouping + caption placement change.
+
+### Changed
+- `app/templates/map_editor.html` — new **Environment** group (`aria-label="Environment"`, label "Environ") holding ambient / fog / weather; ambient removed from Lighting; the Fog & Vision + Weather groups retired. `.me-capsel--stack` CSS stacks a caption above its control. `ZONE_MEMBERS.Draw` updated.
+- Tests: `test_map_editor_toolbar.py` / `test_map_editor_collapse.py` / `test_editor_group_collapse.py` group-name assertions updated for the merged Environment group.
+
+### Schema
+- No schema change (still v101 — editor grouping only).
+
 ## [2.928.0] - 2026-07-05 — "The Stacked View"
 
 **Schema version:** 101

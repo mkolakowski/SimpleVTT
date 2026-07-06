@@ -162,6 +162,9 @@
   .me-capsel { display:flex; flex-direction:row; align-items:center; gap:5px; }
   .me-capsel > .me-cap { text-align:left; flex:0 0 auto; white-space:nowrap; }
   .me-capsel > select { flex:1 1 auto; min-width:0; }
+  /* v2.929.0 — a capsel variant that stacks the caption ABOVE its control. */
+  .me-capsel--stack { flex-direction:column; align-items:stretch; gap:2px; }
+  .me-capsel--stack > .me-cap { text-align:left; }
   /* v2.785.5 — drop the spinner arrows on all toolbar number inputs. */
   .me-toolbar input[type=number] { -moz-appearance:textfield; appearance:textfield; }
   .me-toolbar input[type=number]::-webkit-outer-spin-button,
@@ -319,16 +322,10 @@
   </div>
   {# v2.924.0 — Lighting: whole-map ambient level (was in Environment) + placed
      light sources & their config (was in Markers) — one home for "lighting". #}
+  {# v2.929.0 — Lighting now holds the placed light sources only; ambient light
+     moved to the new Environment group (with fog + weather). #}
   <div class="me-group" role="group" aria-label="Lighting">
     <span class="me-grp-lbl">Lighting</span>
-    <label class="me-capsel" title="Ambient light level for the whole map">
-      <span class="me-cap">ambient</span>
-      <select id="me-ambient" style="min-height:32px;width:100%;">
-        {% for lvl in ['bright','dim','dark'] %}
-        <option value="{{ lvl }}" {% if map.ambient_light == lvl %}selected{% endif %}>{{ lvl }}</option>
-        {% endfor %}
-      </select>
-    </label>
     <button type="button" id="me-light-btn" class="me-tool-btn" aria-pressed="false"
             title="Click the map to place a light source of the chosen type; click a light to delete">💡 Lights</button>
     {# v2.785.1 — light type + bright + dim share one line.
@@ -364,10 +361,19 @@
              style="width:44px;height:32px;padding:1px;border-radius:6px;">
     </div>
   </div>
-  {# v2.924.0 — Fog & Vision: the fog-of-war tool + its exploration sub-controls
-     (split out of the old Environment group). #}
-  <div class="me-group" role="group" aria-label="Fog & Vision">
-    <span class="me-grp-lbl">Fog</span>
+  {# v2.929.0 — Environment: the whole-map atmosphere — ambient light level, fog
+     of war, and ambient weather — gathered into one group (ambient moved from
+     Lighting; fog + weather merged from their v2.924.0 split groups). #}
+  <div class="me-group" role="group" aria-label="Environment">
+    <span class="me-grp-lbl">Environ</span>
+    <label class="me-capsel me-capsel--stack" title="Ambient light level for the whole map">
+      <span class="me-cap">ambient</span>
+      <select id="me-ambient" style="min-height:32px;width:100%;">
+        {% for lvl in ['bright','dim','dark'] %}
+        <option value="{{ lvl }}" {% if map.ambient_light == lvl %}selected{% endif %}>{{ lvl }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <button type="button" id="me-fog-btn" class="me-tool-btn" aria-pressed="false"
             title="Fog of war: drag to reveal an area; click a revealed area to re-hide it">🌫 Fog</button>
     <label id="me-fog-on-lbl" style="display:none;"><input type="checkbox" id="me-fog-on-cb"> fog on</label>
@@ -379,11 +385,7 @@
       <input type="checkbox" id="me-fog-dyn-cb"> explore (dynamic)</label>
     <button type="button" id="me-fog-reset-btn" class="me-tool-btn" style="display:none;"
             title="Reset explored: clear everywhere the party has already seen on this map">↺ Reset explored</button>
-  </div>
-  {# v2.924.0 — Weather: ambient weather overlay (split out of Environment). #}
-  <div class="me-group" role="group" aria-label="Weather">
-    <span class="me-grp-lbl">Weather</span>
-    <label class="me-capsel" title="Ambient weather shown on the live tabletop">
+    <label class="me-capsel me-capsel--stack" title="Ambient weather shown on the live tabletop">
       <span class="me-cap">weather</span>
       <select id="me-weather" style="min-height:32px;font-size:12px;width:100%;">
         <option value="">∅ No weather</option>
@@ -4820,7 +4822,7 @@
   var ZONE_MEMBERS = {
     // v2.924.0 — Theme A: Markers + Environment split into concern-coherent
     // groups (Terrain · Lighting · Fog & Vision · Weather · Annotations).
-    Draw: ['Walls', 'Terrain', 'Lighting', 'Fog & Vision', 'Weather', 'Annotations', 'Lair zones', 'Tokens'],
+    Draw: ['Walls', 'Terrain', 'Lighting', 'Environment', 'Annotations', 'Lair zones', 'Tokens'],  // v2.929.0 — fog+weather+ambient merged into Environment
     Map: ['Grid', 'Layers', 'View'],  // v2.826.0 — Tags moved to the File group
   };
   Array.prototype.forEach.call(document.querySelectorAll('.me-zone-sep > .me-zone-lbl'), function (lbl) {

@@ -44,7 +44,7 @@ def test_zone_divider_collapses_whole_zone(gm_page: Page) -> None:
 
     # v2.924.0 — Theme A: Draw zone = Walls · Terrain · Lighting · Fog & Vision ·
     # Weather · Annotations · Lair · Tokens.
-    draw_groups = ["Walls", "Terrain", "Lighting", "Fog & Vision", "Annotations", "Tokens"]
+    draw_groups = ["Walls", "Terrain", "Lighting", "Environment", "Annotations", "Tokens"]
     for g in draw_groups:
         assert "me-collapsed" not in (
             gm_page.locator(f'.me-group[aria-label="{g}"]').get_attribute("class") or "")
