@@ -26,10 +26,10 @@ def test_editor_dynamic_fog_toggle_and_reset(gm_page: Page) -> None:
             expect(gm_page.locator("#me-overlay")).to_be_visible()
             gm_page.wait_for_timeout(300)
 
-            # The dynamic controls are hidden until Fog mode is entered.
-            expect(gm_page.locator("#me-fog-dyn-lbl")).to_be_hidden()
-            gm_page.click("#me-fog-btn")
+            # v2.938.0 — the fog controls are always visible now (the fog-mode
+            # paint button was removed); no need to enter a mode first.
             expect(gm_page.locator("#me-fog-dyn-lbl")).to_be_visible()
+            expect(gm_page.locator("#me-fog-on-cb")).to_be_visible()
 
             # Tick "explore (dynamic)" → fog_dynamic persists via the fog PUT.
             gm_page.check("#me-fog-dyn-cb")

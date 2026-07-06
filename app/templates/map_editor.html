@@ -410,17 +410,7 @@
         <option value="{{ lvl }}" {% if map.ambient_light == lvl %}selected{% endif %}>{{ lvl }}</option>
         {% endfor %}
     </select>
-    <button type="button" id="me-fog-btn" class="me-tool-btn" aria-pressed="false"
-            title="Fog of war: drag to reveal an area; click a revealed area to re-hide it">🌫 Fog</button>
-    <label id="me-fog-on-lbl" style="display:none;"><input type="checkbox" id="me-fog-on-cb"> fog on</label>
-    {# v2.845.0 — exploration-tracking fog: auto-reveal what the party's tokens
-       see as they move (base sight + light, wall-occluded); explored ground
-       stays revealed as dimmed memory. + a reset for the accumulated memory. #}
-    <label id="me-fog-dyn-lbl" style="display:none;"
-           title="Dynamic fog: the party's tokens auto-reveal what they can see as they move; explored areas stay revealed (dimmed) — instead of hand-painting reveals.">
-      <input type="checkbox" id="me-fog-dyn-cb"> explore (dynamic)</label>
-    <button type="button" id="me-fog-reset-btn" class="me-tool-btn" style="display:none;"
-            title="Reset explored: clear everywhere the party has already seen on this map">↺ Reset explored</button>
+    {# v2.938.0 — weather sits above the fog controls. #}
     <label class="me-capsel me-capsel--stack" title="Ambient weather shown on the live tabletop">
       <span class="me-cap">weather</span>
       <select id="me-weather" style="min-height:32px;font-size:12px;width:100%;">
@@ -430,6 +420,16 @@
         <option value="fog">🌫 Fog</option>
       </select>
     </label>
+    {# v2.938.0 — the fog-of-war controls are always visible (the dedicated
+       "🌫 Fog" paint-mode button was removed): tick "fog on" to hide the map
+       under fog; tick "explore (dynamic)" to auto-reveal what the party sees as
+       they move; "Reset explored" clears the accumulated memory. #}
+    <label id="me-fog-on-lbl"><input type="checkbox" id="me-fog-on-cb"> fog on</label>
+    <label id="me-fog-dyn-lbl"
+           title="Dynamic fog: the party's tokens auto-reveal what they can see as they move; explored areas stay revealed (dimmed).">
+      <input type="checkbox" id="me-fog-dyn-cb"> explore (dynamic)</label>
+    <button type="button" id="me-fog-reset-btn" class="me-tool-btn"
+            title="Reset explored: clear everywhere the party has already seen on this map">↺ Reset explored</button>
   </div>
   {# v2.936.0 — the Notes (Annotations) + Tokens groups moved to the Map zone. #}
   {# v2.870.0 — Lair zones: areas bound to a creature's lair action. Drawn like
@@ -3801,7 +3801,7 @@
   // lacked a hotkey — every other map-element tool already had one.
   var TOOL_KEYS = {
     w: 'me-wall-btn', d: 'me-door-btn', l: 'me-light-btn',
-    f: 'me-fog-btn', t: 'me-terrain-btn', m: 'me-measure-btn', v: 'me-select-btn',
+    t: 'me-terrain-btn', m: 'me-measure-btn', v: 'me-select-btn',
     p: 'me-spot-btn', g: 'me-pin-btn', e: 'me-erase-btn', a: 'me-label-btn',
   };
   // Surface each shortcut in its button's tooltip so it's discoverable.
@@ -3884,11 +3884,9 @@
     if (doorBtn) doorBtn.setAttribute('aria-pressed', doorMode ? 'true' : 'false');
     spotBtn.setAttribute('aria-pressed', spotMode ? 'true' : 'false');
     if (lightBtn) lightBtn.setAttribute('aria-pressed', lightMode ? 'true' : 'false');
-    if (fogBtn) fogBtn.setAttribute('aria-pressed', fogMode ? 'true' : 'false');
-    if (fogOnLbl) fogOnLbl.style.display = fogMode ? 'inline-flex' : 'none';
-    // v2.845.0 — the dynamic-fog toggle + reset button ride alongside "fog on".
-    if (fogDynLbl) fogDynLbl.style.display = fogMode ? 'inline-flex' : 'none';
-    if (fogResetBtn) fogResetBtn.style.display = (fogMode && fogDynamic) ? 'inline-flex' : 'none';
+    // v2.938.0 — the fog controls (on / explore / reset) are always visible now
+    // (the "🌫 Fog" paint-mode button was removed), so setMode no longer toggles
+    // their visibility.
     pending = null; fogDrag = null;
     terrainDots = [];  // v2.848.0 — abandon a half-placed quad on tool change
     roomDots = [];  // v2.898.0 — abandon a half-placed free-polygon wall loop
@@ -3931,8 +3929,7 @@
     fogDynamic = fogDynCb.checked;
     // Turning on exploration implies fog is on.
     if (fogDynamic && !fogEnabled) { fogEnabled = true; if (fogOnCb) fogOnCb.checked = true; }
-    if (fogResetBtn) fogResetBtn.style.display = (fogMode && fogDynamic) ? 'inline-flex' : 'none';
-    saveFog();
+    saveFog();  // v2.938.0 — reset button is always visible now
   });
   if (fogResetBtn) fogResetBtn.addEventListener('click', async function () {
     try {

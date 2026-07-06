@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.938.0] - 2026-07-06 — "The Always-On Fog"
+
+**Schema version:** 101
+
+**Commit summary:** Environment group — weather sits above the fog controls, and the fog checkboxes + Reset explored are always visible (the fog-mode paint button is removed).
+
+**Description:** Two Environment-group changes:
+- The **weather** dropdown moves **above** the fog controls (right under ambient).
+- The dedicated **🌫 Fog** paint-mode button is **removed**; its fog controls — **fog on**, **explore (dynamic)**, and **↺ Reset explored** — are now **always visible** instead of being revealed only after clicking the button.
+
+**Trade-off:** removing the fog-mode button also removes the editor's *hand-painted* fog reveals (drag-to-reveal). Fog is now driven by the checkboxes: **fog on** hides the map, **explore (dynamic)** auto-reveals what the party's tokens see as they move (the modern workflow), and **Reset explored** clears that memory. The `f` hotkey (was Fog tool) is retired. The tabletop fog rendering + the fog API are unchanged.
+
+### Changed
+- `app/templates/map_editor.html` — Environment group reordered (ambient · weather · fog controls); `#me-fog-btn` removed; fog controls no longer `display:none`; `setMode` no longer toggles their visibility; `f` dropped from the tool hotkeys.
+- Tests: `test_map_editor_fog_dynamic.py` (controls always visible) + `test_map_editor_toolbar.py` (fog-on checkbox in the present-controls list).
+
+### Schema
+- No schema change (still v101 — editor UI only; the fog data model + endpoints are unchanged).
+
 ## [2.937.0] - 2026-07-06 — "The Wrapped Lair"
 
 **Schema version:** 101

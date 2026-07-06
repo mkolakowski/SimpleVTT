@@ -39,7 +39,7 @@ def test_toolbar_grouped(gm_page: Page) -> None:
 
     # Every tool still present (grouping preserved the IDs the JS + tests use).
     for sel in ["#me-wall-btn", "#me-door-btn", "#me-wall-style", "#me-spot-btn",
-                "#me-light-btn", "#me-light-type", "#me-fog-btn", "#me-token-btn",
+                "#me-light-btn", "#me-light-type", "#me-fog-on-cb", "#me-token-btn",
                 "#me-erase-btn", "#me-snap-btn", "#me-grid-show", "#me-ambient",
                 "#me-zoom-in", "#me-zoom-fit"]:
         assert gm_page.locator(sel).count() == 1, sel
