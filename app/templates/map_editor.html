@@ -133,8 +133,9 @@
      v2.889.0 — compact rows so all 9 layers stay visible in one column while
      the floating toolbar is much shorter (was ~284px tall, dominated by this
      group) and hides less of the full-bleed map behind it. */
-  .me-layers-grid { display:flex; flex-direction:column; row-gap:0; margin-top:1px;
-    max-height:170px; overflow-y:auto; padding-right:2px; }
+  /* v2.931.1 — no max-height/scroll: all 9 layer rows show at once (they're
+     one-line-tall each), so the group never grows a scrollbar. */
+  .me-layers-grid { display:flex; flex-direction:column; row-gap:0; margin-top:1px; }
   .me-layer-row { display:flex; flex-direction:row; align-items:center; gap:5px;
     white-space:nowrap; font-size:11px; line-height:1.2; padding:0; }
   /* v2.889.0 — drop the checkbox's default vertical margin so each row is one

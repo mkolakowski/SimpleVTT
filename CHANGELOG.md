@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.931.1] - 2026-07-06 — "The Scrollless Layers"
+
+**Schema version:** 101
+
+**Commit summary:** Remove the scrollbar from the map-editor Layers group — all 9 layer rows show at once.
+
+**Description:** The **Layers** group had a `max-height` that its 9 one-line rows just exceeded, so it grew a vertical scrollbar. Dropped the cap; the rows are compact enough to all show without scrolling.
+
+### Changed
+- `app/templates/map_editor.html` — `.me-layers-grid` no longer sets `max-height` / `overflow-y:auto`.
+
+### Schema
+- No schema change (still v101 — CSS only).
+
 ## [2.931.0] - 2026-07-06 — "The Stacked Radii"
 
 **Schema version:** 101
