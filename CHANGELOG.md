@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.923.2] - 2026-07-05 — "The Rendered Mockup"
+
+**Schema version:** 101
+
+**Commit summary:** Swap the editor-reorg plan's ASCII wireframes for rendered HTML mockups.
+
+**Description:** Replaces the §5 ASCII wireframes in [`docs/plans/editor-controls-reorg.md`](docs/plans/editor-controls-reorg.md) with **styled HTML mockups** that render as real toolbar visuals through the wiki (the wiki markdown renderer passes raw block HTML through untouched). The mockups are self-contained dark "toolbar strip" cards with grouped control chips, colour-coded callouts (red = a control in the wrong/duplicated place today; green = where it moves to), vertical zone dividers, and — for Theme B/D — a floating "Selected · Wall" inspector card and the New-wall→Selected-wall label swap. Verified the HTML is emitted unescaped (no `&lt;div` leakage) on `/wiki/doc/plan-editor-controls-reorg`.
+
+### Changed
+- `docs/plans/editor-controls-reorg.md` — §5 mockups are now inline HTML (legend + four rendered panels) instead of fenced ASCII art.
+
+### Schema
+- No schema change (still v101 — doc content only).
+
 ## [2.923.1] - 2026-07-05 — "The Wireframes"
 
 **Schema version:** 101

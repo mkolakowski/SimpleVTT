@@ -134,83 +134,83 @@ work. Rename **Select & move** → "Grab" or "Move" to disambiguate from box **S
 
 ## 5. Visual mockups (before → after)
 
-Wireframes (not pixel-exact) of the floating toolbar strip. Each `[ … ]` is a
-collapsible group; `║ Draw ║` / `║ Map ║` are the zone dividers.
+Rendered HTML mockups of the floating toolbar strip (indicative, not
+pixel-exact). Each rounded panel is a collapsible **group**; the vertical
+labels are the **zone** dividers.
+
+<div style="font-size:12px;color:#8f98bd;margin:2px 0 12px;">Legend: <span style="border-left:3px solid #e0674f;padding-left:6px;margin-right:16px;color:#e0a99c;">red&nbsp;=&nbsp;a control in the wrong / duplicated place today</span><span style="border-left:3px solid #57b26a;padding-left:6px;color:#9fd3ab;">green&nbsp;=&nbsp;where it moves to</span></div>
 
 ### 5.1 Today (v2.922.0)
 
-```
- Actions                       ║Draw║                                                                              ║Map║
-┌File────┐┌Tools────┐ ┌Walls──────┐┌Markers──────────┐┌Environment────────┐┌Lair────┐┌Tokens┐ ┌Grid──────────┐┌Layers─┐┌View─┐
-│↶  ↷    ││🗑 Erase  │ │🧱 Wall     ││📍Hotspot 💡Light ││ ambient ▾         ││🎯 Lair  ││🔵 🟠 │ │grid type ▾   ││👁 All ││ Fit │
-│💾 Save ││🧲 Snap   │ │🚪 Door     ││light type ▾      ││🌫Fog   ⛰Terrain  ││⬡ Free  ││      │ │show☑ px[70]  ││🧱Walls││🔍-+ │
-│🗑 Del  ││📏 Measure│ │⬡ FreeForm  ││ B[  ] D[  ]      ││⬡ FreeForm terrain ││🎨act ▾ ││      │ │x[0]  y[0]    ││⛰Terr ││     │
-│⬇ ⬆ i/o ││⬚ Select  │ │material ▾  ││🎨 🎨 flicker     ││terrain ▾ weather ▾││(desc…) ││      │ │tokens×[1.0]  ││💡… ✕8 ││     │
-│Tags…   ││🖱 Sel&mv │ │opacity ▭▬▬ ││🔤Label  📌Pin    ││                   ││        ││      │ │[S][M][L][XL] ││       ││     │
-└────────┘└─────────┘ └───────────┘└─────────────────┘└───────────────────┘└────────┘└──────┘ └──────────────┘└───────┘└─────┘
-                        ▲ lighting is here (ambient) …and here (Lights)      token size is stranded under “Grid” ▲
-```
+<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start;background:#12141d;border:1px solid #2a2e40;border-radius:10px;padding:10px;font-family:system-ui,sans-serif;">
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">File</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">↶ ↷ · 💾 Save</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">⬇ Export · ⬆ Import</span></div>
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Tools</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🗑 · 🧲 · 📏</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">⬚ Select · 🖱 Sel&amp;move</span></div>
+<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;font-weight:700;color:#7b84ab;align-self:stretch;display:flex;align-items:center;padding:0 1px;">Draw</div>
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Walls</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🧱 Wall · 🚪 Door</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">material ▾ · opacity ▭</span></div>
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Markers</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">📍 Hotspots</span><span style="display:block;font-size:11.5px;color:#f2d7cf;background:#33262330;background:#3a2a26;border:1px solid #5a3b34;border-left:3px solid #e0674f;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">💡 Lights · light type ▾ · B D</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🔤 Label · 📌 Pin</span></div>
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Environment</div><span style="display:block;font-size:11.5px;color:#f2d7cf;background:#3a2a26;border:1px solid #5a3b34;border-left:3px solid #e0674f;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">ambient ▾</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🌫 Fog · ⛰ Terrain</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">terrain ▾ · weather ▾</span></div>
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Lair</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🎯 Lair Zone</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">action ▾</span></div>
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Tokens</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🔵 · 🟠</span></div>
+<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;font-weight:700;color:#7b84ab;align-self:stretch;display:flex;align-items:center;padding:0 1px;">Map</div>
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Grid</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">grid ▾ · show ☑ · px</span><span style="display:block;font-size:11.5px;color:#f2d7cf;background:#3a2a26;border:1px solid #5a3b34;border-left:3px solid #e0674f;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">tokens × [1.0] · S M L XL</span></div>
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Layers · View</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">👁 layers ✕8</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">Fit · 🔍 −/+</span></div>
+</div>
 
-Two things to notice: **lighting** is split between *Environment* (ambient) and
-*Markers* (the Lights tool + its 3 config rows), and the **token-size** dial +
-presets sit under **Grid**, unrelated to grid setup.
+Two things to notice (red above): **lighting** is split between *Environment*
+(ambient) and *Markers* (the Lights tool + its config rows), and the
+**token-size** dial + presets sit under **Grid**, unrelated to grid setup.
 
 ### 5.2 Theme A — regrouped by concern
 
-```
- Actions               ║Draw║                                                                          ║Map║
-┌File┐┌Tools┐ ┌Walls &──┐┌Terrain─┐┌Lighting────┐┌Fog &───┐┌Annotations┐┌Lair┐┌Tokens──────┐ ┌Grid────┐┌Layers┐┌View┐
-│ …  ││  …  │ │  Doors  ││⛰ Terrain││ ambient ▾  ││ Vision ││📍 Hotspots ││ …  ││🔵 🟠 Token  │ │grid ▾  ││ …    ││ …  │
-│    ││     │ │🧱 Wall   ││⬡ Free  ││💡 Lights   ││🌫 Fog  ││🔤 Label    ││    ││tokens×[1.0]│ │show☑   ││      ││    │
-│    ││     │ │🚪 Door   ││terrain▾││light type▾ ││ on ☑   ││📌 Pin      ││    ││[S][M][L][X]│ │px[70]  ││      ││    │
-│    ││     │ │⬡ Free   ││        ││ B[ ] D[ ]  ││explore☑││            ││    ││            │ │x[0]y[0]││      ││    │
-│    ││     │ │material▾ ││        ││🎨 🎨       ││↺ reset ││            ││    ││            │ │        ││      ││    │
-│    ││     │ │opacity ▭ ││        ││            ││        ││            ││    ││            │ │        ││      ││    │
-└────┘└─────┘ └─────────┘└────────┘└────────────┘└────────┘└───────────┘└────┘└────────────┘ └────────┘└──────┘└────┘
-                                    ▲ ambient + Lights, together   ▲ fog split out   token size lives with Tokens ▲
-```
+<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start;background:#12141d;border:1px solid #2a2e40;border-radius:10px;padding:10px;font-family:system-ui,sans-serif;">
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Actions</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">File · Tools</span></div>
+<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;font-weight:700;color:#7b84ab;align-self:stretch;display:flex;align-items:center;padding:0 1px;">Draw</div>
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Walls &amp; Doors</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🧱 Wall · 🚪 Door</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">material ▾ · opacity ▭</span></div>
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Terrain</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">⛰ Terrain · ⬡</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">terrain ▾</span></div>
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Lighting</div><span style="display:block;font-size:11.5px;color:#d7f2dc;background:#26361f;background:#243a29;border:1px solid #34573b;border-left:3px solid #57b26a;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">ambient ▾</span><span style="display:block;font-size:11.5px;color:#d7f2dc;background:#243a29;border:1px solid #34573b;border-left:3px solid #57b26a;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">💡 Lights · type ▾ · B D · 🎨</span></div>
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Fog &amp; Vision</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🌫 Fog · on ☑</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">explore ☑ · ↺ reset</span></div>
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Annotations</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">📍 Hotspots</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🔤 Label · 📌 Pin</span></div>
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Lair</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🎯 Lair Zone</span></div>
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Tokens</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">🔵 · 🟠 Token</span><span style="display:block;font-size:11.5px;color:#d7f2dc;background:#243a29;border:1px solid #34573b;border-left:3px solid #57b26a;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">tokens × [1.0] · S M L XL</span></div>
+<div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;font-weight:700;color:#7b84ab;align-self:stretch;display:flex;align-items:center;padding:0 1px;">Map</div>
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Grid</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">grid ▾ · show ☑</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">px · x/y offset</span></div>
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:6px 7px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:5px;">Layers · View</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">👁 layers ✕8</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:3px 7px;margin:3px 0;white-space:nowrap;">Fit · 🔍 −/+</span></div>
+</div>
 
-Every group now answers one question. `Grid` is grid-only; `Lighting` owns both
-ambient level and placed lights; `Tokens` owns the size dial; `Fog & Vision` and
-`Terrain` are their own concerns instead of a shared *Environment* bin.
-(`Weather` folds into `Lighting`/atmosphere or becomes its own tiny group.)
+Every group now answers one question: **Lighting** owns ambient level *and*
+placed lights (green — merged from two groups); **Tokens** owns the size dial
+(green — moved out of Grid); **Grid** is grid-only; **Fog & Vision** and
+**Terrain** split out of the old *Environment* bin. (Weather folds into an
+atmosphere group or its own tiny one.)
 
 ### 5.3 Theme B — a "Selected object" inspector
 
 The tool group advertises only **new-object defaults**; the moment you
 double-click an object, a compact inspector floats next to it with *that
-object's* live properties:
+object's* live properties.
 
-```
-   Nothing selected                     A wall selected
- ┌ Walls & Doors ─────┐          ┌ Selected · Wall ───────────┐
- │ 🧱 Wall  🚪 Door   │          │ material  [ Stone       ▾] │
- │ ⬡ FreeForm         │          │ opacity   ▭▭▭▭▭▭▭──  70 %  │
- │ material  [Stone ▾]│  ◄─────► │ type      (Wall)Door Window│
- │ opacity   ▭▬▬▬▬▬▬  │          │ ↻ flip    🔒 secret        │
- └────────────────────┘          │ 🗑 Delete                  │
-   “make NEW walls”               └────────────────────────────┘
-                                   floats by the selection · Esc closes
-```
+<div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;background:#12141d;border:1px solid #2a2e40;border-radius:10px;padding:14px;font-family:system-ui,sans-serif;">
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:8px 9px;min-width:150px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:6px;">Walls &amp; Doors <span style="color:#6a7398;">· defaults</span></div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#2b3040;border:1px solid #3a4058;border-radius:5px;padding:4px 8px;margin:4px 0;white-space:nowrap;">🧱 Wall · 🚪 Door · ⬡</span><span style="display:block;font-size:11.5px;color:#c9cee6;background:#252a39;border:1px solid #3a4058;border-radius:5px;padding:4px 8px;margin:4px 0;white-space:nowrap;">material [ Stone ▾ ]</span><span style="display:block;font-size:11.5px;color:#c9cee6;background:#252a39;border:1px solid #3a4058;border-radius:5px;padding:4px 8px;margin:4px 0;white-space:nowrap;">opacity ▭▬▬▬▬▬▬</span><div style="font-size:11px;color:#6a7398;margin-top:4px;">makes NEW walls</div></div>
+<div style="align-self:center;color:#57b26a;font-size:20px;font-weight:700;">⇄</div>
+<div style="background:#1b2430;border:1px solid #57b26a;box-shadow:0 4px 18px rgba(0,0,0,.4);border-radius:8px;padding:8px 9px;min-width:190px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#9fd3ab;font-weight:700;margin-bottom:6px;">Selected · Wall</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#243040;border:1px solid #3a4a5e;border-radius:5px;padding:4px 8px;margin:4px 0;white-space:nowrap;">material [ Stone ▾ ]</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#243040;border:1px solid #3a4a5e;border-radius:5px;padding:4px 8px;margin:4px 0;white-space:nowrap;">opacity ▭▬▬▬▬▬▬ 70%</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#243040;border:1px solid #3a4a5e;border-radius:5px;padding:4px 8px;margin:4px 0;white-space:nowrap;">type ( Wall ) Door · Window</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#243040;border:1px solid #3a4a5e;border-radius:5px;padding:4px 8px;margin:4px 0;white-space:nowrap;">↻ flip · 🔒 secret · 🗑 delete</span><div style="font-size:11px;color:#6a7398;margin-top:4px;">floats by the selection · Esc closes</div></div>
+</div>
 
 This makes the current dual role (a knob edits *either* the default *or* the
 selection) two visibly distinct surfaces.
 
 ### 5.4 Theme D — label the context (cheap version of B)
 
-Without the full inspector, just relabel the shared caption + add a status hint:
+Without the full inspector, just relabel the shared caption + add a status hint.
 
-```
-  nothing selected          wall selected
- ┌──────────────┐          ┌──────────────────┐
- │ New wall     │    →     │ Selected wall     │
- │ material  ▾  │          │ material  ▾       │
- │ opacity ▭▬▬  │          │ opacity ▭▬▬       │
- └──────────────┘          └──────────────────┘
-   status: “Editing selected door — Esc to deselect”
-```
+<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;background:#12141d;border:1px solid #2a2e40;border-radius:10px;padding:14px;font-family:system-ui,sans-serif;">
+<div style="background:#20232f;border:1px solid #333850;border-radius:8px;padding:8px 9px;min-width:120px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8f98bd;font-weight:700;margin-bottom:6px;">New wall</div><span style="display:block;font-size:11.5px;color:#c9cee6;background:#252a39;border:1px solid #3a4058;border-radius:5px;padding:4px 8px;margin:4px 0;">material ▾</span><span style="display:block;font-size:11.5px;color:#c9cee6;background:#252a39;border:1px solid #3a4058;border-radius:5px;padding:4px 8px;margin:4px 0;">opacity ▭▬▬</span></div>
+<div style="color:#57b26a;font-size:20px;font-weight:700;">→</div>
+<div style="background:#1b2430;border:1px solid #57b26a;border-radius:8px;padding:8px 9px;min-width:140px;"><div style="font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#9fd3ab;font-weight:700;margin-bottom:6px;">Selected wall</div><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#243040;border:1px solid #3a4a5e;border-radius:5px;padding:4px 8px;margin:4px 0;">material ▾</span><span style="display:block;font-size:11.5px;color:#e7e9f3;background:#243040;border:1px solid #3a4a5e;border-radius:5px;padding:4px 8px;margin:4px 0;">opacity ▭▬▬ 70%</span></div>
+</div>
 
-And rename **🖱 Select & move** → **🖱 Grab** so it stops colliding with the
+<div style="font-size:12px;color:#9fd3ab;background:#1b2430;border:1px solid #34573b;border-radius:6px;padding:6px 10px;margin:8px 0;font-family:system-ui,sans-serif;">status: Editing <b>selected door</b> — Esc to deselect</div>
+
+And rename **🖱 Select &amp; move** → **🖱 Grab** so it stops colliding with the
 box-**⬚ Select** tool.
 
 ## 6. Suggested phasing
