@@ -291,17 +291,45 @@
              style="width:100%;min-height:24px;">
     </label>
   </div>
-  <div class="me-group" role="group" aria-label="Markers">
-    <span class="me-grp-lbl">Markers</span>
-    {# v2.785.6 — Hotspots + Lights share one line. #}
-    <div class="me-sub">
-      <button type="button" id="me-spot-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
-              title="Click the map to place a description hotspot; click a hotspot to delete">📍 Hotspots</button>
-      <button type="button" id="me-light-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
-              title="Click the map to place a light source of the chosen type; click a light to delete">💡 Lights</button>
-    </div>
+  {# v2.924.0 — Theme A (docs/plans/editor-controls-reorg.md): the old Markers +
+     Environment grab-bags split into concern-coherent groups. Every control
+     keeps its element ID, so the JS handlers + harness tests are untouched;
+     only the enclosing group + order change. #}
+  <div class="me-group" role="group" aria-label="Terrain">
+    <span class="me-grp-lbl">Terrain</span>
+    <button type="button" id="me-terrain-btn" class="me-tool-btn" aria-pressed="false"
+            title="Terrain: drag a rectangle to mark difficult terrain / water / lava…; on a gridless map, click four dots to place a free-form quad instead; right-click a region to change its type, resize by its corners, or delete">⛰ Terrain</button>
+    {# v2.855.0 — free-polygon terrain: when on, terrain is placed by clicking
+       vertices (min 3) and closing on the first point — any map. #}
+    <button type="button" id="me-terrain-poly-btn" class="me-tool-btn" aria-pressed="false"
+            title="FreeForm terrain: when on, click to drop terrain vertices (any number) and click the first dot to close the shape — instead of dragging a rectangle.">⬡ FreeForm</button>
+    <label class="me-capsel" title="Terrain type for new regions">
+      <span class="me-cap">terrain</span>
+      <select id="me-terrain-type" style="min-height:32px;font-size:12px;width:100%;">
+        <option value="difficult">🟤 Difficult</option>
+        <option value="water">🔵 Water</option>
+        <option value="lava">🔴 Lava</option>
+        <option value="ice">🧊 Ice</option>
+        <option value="swamp">🟢 Swamp</option>
+        <option value="rubble">⚪ Rubble</option>
+      </select>
+    </label>
+  </div>
+  {# v2.924.0 — Lighting: whole-map ambient level (was in Environment) + placed
+     light sources & their config (was in Markers) — one home for "lighting". #}
+  <div class="me-group" role="group" aria-label="Lighting">
+    <span class="me-grp-lbl">Lighting</span>
+    <label class="me-capsel" title="Ambient light level for the whole map">
+      <span class="me-cap">ambient</span>
+      <select id="me-ambient" style="min-height:32px;width:100%;">
+        {% for lvl in ['bright','dim','dark'] %}
+        <option value="{{ lvl }}" {% if map.ambient_light == lvl %}selected{% endif %}>{{ lvl }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="button" id="me-light-btn" class="me-tool-btn" aria-pressed="false"
+            title="Click the map to place a light source of the chosen type; click a light to delete">💡 Lights</button>
     {# v2.785.1 — light type + bright + dim share one line.
-       v2.785.9 — "light type" caption above the dropdown.
        v2.850.0 — double-click a placed light to SELECT it: these controls then
        mirror + live-edit the selection (edits flip its type to custom). #}
     <div class="me-sub" style="align-items:flex-end;">
@@ -333,36 +361,13 @@
       <input type="color" id="me-light-c2" value="#ff7a1a" title="Flicker colour 2 — for new lights, or the selected light"
              style="width:44px;height:32px;padding:1px;border-radius:6px;">
     </div>
-    {# v2.810.0 — Label + GM pin tools folded into Markers. #}
-    <div class="me-sub">
-      <button type="button" id="me-label-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
-              title="Text label: click the map to write a visible label (room name etc.); right-click to edit, recolour, resize, or delete">🔤 Label</button>
-      <button type="button" id="me-pin-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
-              title="GM pin: click the map to drop a private note marker (trap DCs, reminders) — players never see these">📌 Pin</button>
-    </div>
   </div>
-  {# v2.810.0 — Fog & Light merged with Terrain into one Environment group. #}
-  <div class="me-group" role="group" aria-label="Environment">
-    <span class="me-grp-lbl">Environment</span>
-    {# v2.785.1 — ambient lighting select sits above the Fog button. #}
-    <label class="me-capsel" title="Ambient light level for the whole map">
-      <span class="me-cap">ambient</span>
-      <select id="me-ambient" style="min-height:32px;width:100%;">
-        {% for lvl in ['bright','dim','dark'] %}
-        <option value="{{ lvl }}" {% if map.ambient_light == lvl %}selected{% endif %}>{{ lvl }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <div class="me-sub">
-      <button type="button" id="me-fog-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
-              title="Fog of war: drag to reveal an area; click a revealed area to re-hide it">🌫 Fog</button>
-      <button type="button" id="me-terrain-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
-              title="Terrain: drag a rectangle to mark difficult terrain / water / lava…; on a gridless map, click four dots to place a free-form quad instead; right-click a region to change its type, resize by its corners, or delete">⛰ Terrain</button>
-    </div>
-    {# v2.855.0 — free-polygon terrain: when on, terrain is placed by clicking
-       vertices (min 3) and closing on the first point — any map. #}
-    <button type="button" id="me-terrain-poly-btn" class="me-tool-btn" aria-pressed="false"
-            title="FreeForm terrain: when on, click to drop terrain vertices (any number) and click the first dot to close the shape — instead of dragging a rectangle.">⬡ FreeForm</button>
+  {# v2.924.0 — Fog & Vision: the fog-of-war tool + its exploration sub-controls
+     (split out of the old Environment group). #}
+  <div class="me-group" role="group" aria-label="Fog & Vision">
+    <span class="me-grp-lbl">Fog</span>
+    <button type="button" id="me-fog-btn" class="me-tool-btn" aria-pressed="false"
+            title="Fog of war: drag to reveal an area; click a revealed area to re-hide it">🌫 Fog</button>
     <label id="me-fog-on-lbl" style="display:none;"><input type="checkbox" id="me-fog-on-cb"> fog on</label>
     {# v2.845.0 — exploration-tracking fog: auto-reveal what the party's tokens
        see as they move (base sight + light, wall-occluded); explored ground
@@ -372,18 +377,10 @@
       <input type="checkbox" id="me-fog-dyn-cb"> explore (dynamic)</label>
     <button type="button" id="me-fog-reset-btn" class="me-tool-btn" style="display:none;"
             title="Reset explored: clear everywhere the party has already seen on this map">↺ Reset explored</button>
-    <label class="me-capsel" title="Terrain type for new regions">
-      <span class="me-cap">terrain</span>
-      <select id="me-terrain-type" style="min-height:32px;font-size:12px;width:100%;">
-        <option value="difficult">🟤 Difficult</option>
-        <option value="water">🔵 Water</option>
-        <option value="lava">🔴 Lava</option>
-        <option value="ice">🧊 Ice</option>
-        <option value="swamp">🟢 Swamp</option>
-        <option value="rubble">⚪ Rubble</option>
-      </select>
-    </label>
-    {# v2.812.0 — ambient weather folded into Environment. #}
+  </div>
+  {# v2.924.0 — Weather: ambient weather overlay (split out of Environment). #}
+  <div class="me-group" role="group" aria-label="Weather">
+    <span class="me-grp-lbl">Weather</span>
     <label class="me-capsel" title="Ambient weather shown on the live tabletop">
       <span class="me-cap">weather</span>
       <select id="me-weather" style="min-height:32px;font-size:12px;width:100%;">
@@ -393,6 +390,19 @@
         <option value="fog">🌫 Fog</option>
       </select>
     </label>
+  </div>
+  {# v2.924.0 — Annotations: the non-lighting markers (Hotspots · Labels · GM
+     pins) — the old Markers group with Lights lifted out into Lighting. #}
+  <div class="me-group" role="group" aria-label="Annotations">
+    <span class="me-grp-lbl">Notes</span>
+    <button type="button" id="me-spot-btn" class="me-tool-btn" aria-pressed="false"
+            title="Click the map to place a description hotspot; click a hotspot to delete">📍 Hotspots</button>
+    <div class="me-sub">
+      <button type="button" id="me-label-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
+              title="Text label: click the map to write a visible label (room name etc.); right-click to edit, recolour, resize, or delete">🔤 Label</button>
+      <button type="button" id="me-pin-btn" class="me-tool-btn" aria-pressed="false" style="flex:1 1 0;"
+              title="GM pin: click the map to drop a private note marker (trap DCs, reminders) — players never see these">📌 Pin</button>
+    </div>
   </div>
   {# v2.870.0 — Lair zones: areas bound to a creature's lair action. Drawn like
      terrain (rect drag, or ⬡ free polygon). v2.875.0 — a zone binds to one lair
@@ -438,6 +448,19 @@
             title="Drop a blue sample token; left-click it for its line of sight, drag to move, right-click to remove (preview only — not saved)">🔵 Token</button>
     <button type="button" id="me-token2-btn" class="me-tool-btn"
             title="Drop a second (orange) sample token so you can compare two vantage points">🟠 Token</button>
+    {# v2.924.0 — Theme A: the per-map default token size lives with Tokens now
+       (was under Grid). Multiplies every token's radius on the tabletop + this
+       editor preview (0.5×–3×). #}
+    <div class="me-sub">
+      <label style="gap:3px;" title="Default token size for this map — scales every token (0.5×–3×)">tokens ×<input type="number" id="me-token-scale" min="0.5" max="3" step="0.1" value="{{ '%.1f'|format(map.token_scale or 1.0) }}" style="width:50px;min-height:32px;"></label>
+    </div>
+    {# v2.914.0 — one-click size presets for the token dial. #}
+    <div class="me-sub" role="group" aria-label="Token size presets">
+      <button type="button" class="me-tool-btn me-token-preset" data-scale="0.75" title="Small tokens (0.75×)" style="flex:1 1 0;">S</button>
+      <button type="button" class="me-tool-btn me-token-preset" data-scale="1" title="Medium — default (1×)" style="flex:1 1 0;">M</button>
+      <button type="button" class="me-tool-btn me-token-preset" data-scale="1.5" title="Large tokens (1.5×)" style="flex:1 1 0;">L</button>
+      <button type="button" class="me-tool-btn me-token-preset" data-scale="2" title="Extra-large tokens (2×)" style="flex:1 1 0;">XL</button>
+    </div>
   </div>
   {# v2.817.0 — Draw │ Map zone boundary. v2.820.0 — label folds the zone. #}
   <div class="me-zone-sep"><span class="me-zone-lbl">Map</span></div>
@@ -461,18 +484,8 @@
       <label style="gap:3px;">x<input type="number" id="me-grid-offx" min="0" value="{{ map.grid_offset_x }}" style="width:48px;min-height:32px;" title="Grid offset X (align the grid to the image)"></label>
       <label style="gap:3px;">y<input type="number" id="me-grid-offy" min="0" value="{{ map.grid_offset_y }}" style="width:48px;min-height:32px;" title="Grid offset Y"></label>
     </div>
-    {# v2.913.0 — per-map default token size: multiplies every token's radius on
-       the tabletop + this editor preview (0.5×–3×). #}
-    <div class="me-sub">
-      <label style="gap:3px;" title="Default token size for this map — scales every token (0.5×–3×)">tokens ×<input type="number" id="me-token-scale" min="0.5" max="3" step="0.1" value="{{ '%.1f'|format(map.token_scale or 1.0) }}" style="width:50px;min-height:32px;"></label>
-    </div>
-    {# v2.914.0 — one-click size presets for the token dial. #}
-    <div class="me-sub" role="group" aria-label="Token size presets">
-      <button type="button" class="me-tool-btn me-token-preset" data-scale="0.75" title="Small tokens (0.75×)" style="flex:1 1 0;">S</button>
-      <button type="button" class="me-tool-btn me-token-preset" data-scale="1" title="Medium — default (1×)" style="flex:1 1 0;">M</button>
-      <button type="button" class="me-tool-btn me-token-preset" data-scale="1.5" title="Large tokens (1.5×)" style="flex:1 1 0;">L</button>
-      <button type="button" class="me-tool-btn me-token-preset" data-scale="2" title="Extra-large tokens (2×)" style="flex:1 1 0;">XL</button>
-    </div>
+    {# v2.924.0 — Theme A: the token-scale dial + S/M/L/XL presets moved to the
+       Tokens group (they had nothing to do with grid setup). #}
   </div>
   {# v2.826.0 — the standalone Tags group moved into the File group (far left). #}
   {# v2.812.0 — Weather moved into the Environment group. #}
@@ -4653,8 +4666,9 @@
   // that zone at once (the bulk version of the per-group collapse above). Reuses
   // the same collapsedGroups store so per-group + per-zone state stay in sync.
   var ZONE_MEMBERS = {
-    // v2.912.0 — the Lair group collapses with the rest of the Draw zone.
-    Draw: ['Walls', 'Markers', 'Environment', 'Lair zones', 'Tokens'],  // v2.835.0 — Props removed
+    // v2.924.0 — Theme A: Markers + Environment split into concern-coherent
+    // groups (Terrain · Lighting · Fog & Vision · Weather · Annotations).
+    Draw: ['Walls', 'Terrain', 'Lighting', 'Fog & Vision', 'Weather', 'Annotations', 'Lair zones', 'Tokens'],
     Map: ['Grid', 'Layers', 'View'],  // v2.826.0 — Tags moved to the File group
   };
   Array.prototype.forEach.call(document.querySelectorAll('.me-zone-sep > .me-zone-lbl'), function (lbl) {

@@ -42,8 +42,9 @@ def test_zone_divider_collapses_whole_zone(gm_page: Page) -> None:
     expect(gm_page.locator("#me-overlay")).to_be_visible()
     gm_page.wait_for_timeout(300)
 
-    # The Draw zone spans Walls · Markers · Environment · Props · Tokens.
-    draw_groups = ["Walls", "Markers", "Environment", "Tokens"]  # v2.835.0 — Props removed
+    # v2.924.0 — Theme A: Draw zone = Walls · Terrain · Lighting · Fog & Vision ·
+    # Weather · Annotations · Lair · Tokens.
+    draw_groups = ["Walls", "Terrain", "Lighting", "Fog & Vision", "Annotations", "Tokens"]
     for g in draw_groups:
         assert "me-collapsed" not in (
             gm_page.locator(f'.me-group[aria-label="{g}"]').get_attribute("class") or "")

@@ -28,7 +28,8 @@ def test_draw_zone_collapse_includes_lair_and_label_is_vertical(gm_page: Page) -
 
     # The Lair group collapsed along with the other Draw-zone groups.
     assert "me-collapsed" in (lair.get_attribute("class") or ""), lair.get_attribute("class")
-    for label in ("Walls", "Markers", "Environment", "Tokens"):
+    # v2.924.0 — Theme A group names.
+    for label in ("Walls", "Terrain", "Lighting", "Fog & Vision", "Annotations", "Tokens"):
         g = gm_page.locator(f'.me-group[aria-label="{label}"]')
         assert "me-collapsed" in (g.get_attribute("class") or ""), label
 
@@ -61,6 +62,6 @@ def test_zone_collapse_persists_across_reload(gm_page: Page) -> None:
     gm_page.reload()
     expect(gm_page.locator("#me-overlay")).to_be_visible()
     gm_page.wait_for_timeout(400)
-    for label in ("Walls", "Markers", "Environment", "Lair zones", "Tokens"):
+    for label in ("Walls", "Terrain", "Lighting", "Weather", "Lair zones", "Tokens"):
         g = gm_page.locator(f'.me-group[aria-label="{label}"]')
         assert "me-collapsed" in (g.get_attribute("class") or ""), f"{label} not persisted"

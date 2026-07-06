@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.924.0] - 2026-07-05 — "The Concern Groups"
+
+**Schema version:** 101
+
+**Commit summary:** Map-editor Theme A: regroup the Draw zone by concern + move the token-scale dial to Tokens.
+
+**Description:** Ships **Phase 1 / Theme A** from [`docs/plans/editor-controls-reorg.md`](docs/plans/editor-controls-reorg.md). The two old grab-bag groups — **Markers** (Hotspots + Lights + Labels + Pins) and **Environment** (ambient + Fog + Terrain + Weather) — are split into concern-coherent groups, so each group answers one question:
+
+- **Terrain** — Terrain tool + FreeForm + terrain type (was in Environment).
+- **Lighting** — ambient light level (was in Environment) **+** the Lights tool & its config: type · Bright/Dim · flicker colours (was in Markers). Lighting now lives in one place.
+- **Fog & Vision** — the Fog tool + its exploration sub-controls (was in Environment).
+- **Weather** — the weather overlay select (was in Environment).
+- **Annotations** — Hotspots · Labels · GM Pins (the old Markers group with Lights lifted out).
+- **Tokens** — the sample-token drops **+ the per-map token-scale dial + S/M/L/XL presets**, moved out of **Grid** (which is now grid-only).
+
+The new Draw-zone order is **Walls · Terrain · Lighting · Fog & Vision · Weather · Annotations · Lair · Tokens**. This is a **pure DOM/regroup change**: every control keeps its element ID, so all JS handlers are untouched and behaviour is identical — only the enclosing group + order change.
+
+### Changed
+- `app/templates/map_editor.html` — Markers + Environment groups replaced by Terrain / Lighting / Fog & Vision / Weather / Annotations; token-scale dial + presets moved from Grid to Tokens; `ZONE_MEMBERS.Draw` updated to the new group set.
+- Tests updated for the new group names (`test_map_editor_toolbar.py`, `test_map_editor_collapse.py`, `test_editor_group_collapse.py`) — they locate controls by element ID, so only the group-label assertions changed.
+- Plan `docs/plans/editor-controls-reorg.md` marked **🟠 Phase 1 (Theme A) shipped**; wiki plans index + `docs/wiki/README.md` status updated to match.
+
+### Schema
+- No schema change (still v101 — toolbar layout only; no server/payload changes).
+
 ## [2.923.5] - 2026-07-05 — "The Playable Plan"
 
 **Schema version:** 101
