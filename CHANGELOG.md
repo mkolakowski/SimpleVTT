@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.935.1] - 2026-07-06 — "The Inline B"
+
+**Schema version:** 101
+
+**Commit summary:** Fix the Bright/Dim light labels stacking the letter above the field — they now read "B [field] D [field]" inline.
+
+**Description:** The global `label { flex-direction: column }` rule in `style.css` was leaking into the editor toolbar, so plain toolbar labels (the **B**/**D** light-radius fields, grid x/y offsets, the tokens× dial, fog checkboxes) stacked their text **above** the field instead of beside it. The editor's `.me-toolbar label` rule now forces **`flex-direction: row`** (label inline with its control), and the caption-above variant `.me-capsel--stack` keeps its column layout via a higher-specificity selector. Net: **B [20] D [20]** on one row, and every stacked caption (material / opacity / terrain / ambient / weather) is unchanged.
+
+### Fixed
+- `app/templates/map_editor.html` — `.me-toolbar label` sets `flex-direction:row`; `.me-toolbar label.me-capsel--stack` keeps `column`.
+
+### Added
+- `tests/harness_ui/test_editor_light_bd_inline.py` — the B/D labels are one-row `row` (input right of the letter, same row); the stacked material caption stays `column`.
+
+### Schema
+- No schema change (still v101 — CSS only).
+
 ## [2.935.0] - 2026-07-06 — "The Flicker Speed"
 
 **Schema version:** 101
