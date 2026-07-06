@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.930.2] - 2026-07-06 — "The Full Name"
+
+**Schema version:** 101
+
+**Commit summary:** Show the Environment group's full label ("Environment", not "Environ").
+
+**Description:** The map-editor Environment group's title read the abbreviated "Environ"; it now shows the full **Environment**.
+
+### Changed
+- `app/templates/map_editor.html` — Environment group label "Environ" → "Environment"; `test_map_editor_toolbar.py` label assertion updated.
+
+### Schema
+- No schema change (still v101 — label text only).
+
 ## [2.930.1] - 2026-07-05 — "The Stacked Terrain"
 
 **Schema version:** 101

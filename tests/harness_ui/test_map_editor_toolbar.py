@@ -22,7 +22,7 @@ def test_toolbar_grouped(gm_page: Page) -> None:
     # v2.870.0 — Lair group added (lair-action zones) between Environment + Tokens.
     # v2.924.0 — Theme A: Markers + Environment split into Terrain · Lighting ·
     # Fog · Weather · Notes (Annotations) — see docs/plans/editor-controls-reorg.md.
-    assert labels == ["FILE", "TOOLS", "WALLS", "TERRAIN", "LIGHTING", "ENVIRON",
+    assert labels == ["FILE", "TOOLS", "WALLS", "TERRAIN", "LIGHTING", "ENVIRONMENT",
                       "NOTES", "LAIR", "TOKENS", "GRID", "LAYERS", "VIEW"], labels
 
     # v2.817.0 — two zone dividers make the Actions │ Draw │ Map zoning visible.
