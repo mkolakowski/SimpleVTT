@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.923.3] - 2026-07-05 — "The Full Bleed"
+
+**Schema version:** 101
+
+**Commit summary:** The editor-reorg plan's HTML mockups now span the full display width.
+
+**Description:** The plan is rendered inside the wiki's 880px-max content column, which cramped the toolbar mockups and forced the groups to wrap. Each of the four §5 mockup containers now **breaks out to full viewport width** via the negative-margin full-bleed trick (`margin: 0 calc(50% - 50vw)`, which avoids the `100vw`-plus-scrollbar overflow gotcha), with a little extra side padding — so the "toolbar strip" visuals lay out edge-to-edge like the real editor toolbar instead of stacking in a narrow column.
+
+### Changed
+- `docs/plans/editor-controls-reorg.md` — §5 mockup containers are full-bleed (span the display width); the surrounding prose stays in the reading column.
+
+### Schema
+- No schema change (still v101 — doc styling only).
+
 ## [2.923.2] - 2026-07-05 — "The Rendered Mockup"
 
 **Schema version:** 101
