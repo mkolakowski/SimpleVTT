@@ -449,9 +449,11 @@
             title="Lair zone: drag a rectangle to mark where a lair action strikes; pick its lair action below. Turn on ⬡ FreeForm (Tools) to place by clicking vertices instead. Double-click a zone to edit it; Delete removes the selected zone.">🎯 Lair Zone</button>
     {# v2.879.0 — the zone-colour wheel sits to the LEFT of the action dropdown
        (the preset swatches were dropped — the native colour wheel is enough). #}
-    <label class="me-capsel" title="The lair action this zone is bound to. Triggering it targets the tokens inside the zone.">
+    {# v2.938.1 — display:flex + width:100% so the capsel fills (and stays within)
+       the capped group; the action-name select shrinks instead of overflowing. #}
+    <label class="me-capsel" style="display:flex;width:100%;box-sizing:border-box;min-width:0;" title="The lair action this zone is bound to. Triggering it targets the tokens inside the zone.">
       <span class="me-cap" id="me-lair-cap">Lair Actions</span>
-      <div class="me-sub" style="gap:4px;">
+      <div class="me-sub" style="gap:4px;flex:1 1 auto;min-width:0;">
         <input type="color" id="me-lairzone-color" value="#d24b3a"
                title="Zone colour — for new zones, or the selected zone"
                style="width:34px;height:32px;min-height:32px;padding:1px;border-radius:6px;cursor:pointer;flex-shrink:0;">

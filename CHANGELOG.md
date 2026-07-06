@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.938.1] - 2026-07-06 — "The Contained Lair"
+
+**Schema version:** 101
+
+**Commit summary:** Stop the Lair group overflowing into neighbouring groups.
+
+**Description:** After capping the Lair group width (v2.937.0), its **Lair Actions** `<label class="me-capsel">` was still `display:inline-flex` (from `.me-toolbar label`), so it sized to its *content* (~253px) and ignored the group's 210px cap — the action-name select spilled past the group's right edge and overlapped the Grid group. The capsel is now `display:flex; width:100%` (with the inner row `min-width:0`), so it fills — and stays within — the capped group; the select shrinks (≈82px) instead of overflowing. No more overlap.
+
+### Fixed
+- `app/templates/map_editor.html` — Lair Actions capsel `display:flex; width:100%; min-width:0`; its `.me-sub` row `flex:1 1 auto; min-width:0`.
+
+### Schema
+- No schema change (still v101 — CSS only).
+
 ## [2.938.0] - 2026-07-06 — "The Always-On Fog"
 
 **Schema version:** 101
