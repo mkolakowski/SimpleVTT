@@ -3252,19 +3252,22 @@
         _updateWallFogMask();  // v2.950.0 — reveal walls only where the player can see
     }
 
-    // v2.950.0 — show walls/doors to players only where they can SEE: CSS-mask
-    // the #wall-overlay (raised to z-8, above the veil) by the same fog veil the
-    // light glow uses. Opaque-white mask = reveal; the fog (opaque where hidden)
-    // is punched out so walls disappear beyond the fog / past unexplored cells,
-    // and reappear as the party explores. The GM (no fog veil) always sees every
-    // wall. Cheap enough per render() — pan/zoom is CSS-only and doesn't re-render.
+    // v2.950.0 / v2.952.1 — show walls/doors to players only where they can SEE:
+    // CSS-mask the #wall-overlay (raised to z-8, above the veil) so wall/door
+    // outlines appear where the party has explored + currently sees, and stay
+    // hidden beyond the fog. The GM (no fog) always sees every wall.
+    //
+    // v2.952.1 — build the mask from the fog CELL STATE (explored ∪ visible ∪
+    // GM-revealed rects) at FULL opacity, instead of the linear fog veil. The old
+    // veil-derived mask left explored-memory walls at only ~40% (255−0.6·255),
+    // so walls read as "not showing" in the lit/seen area; now any seen cell
+    // reveals its walls at 100%. Cheap per render() — pan/zoom is CSS-only.
     let _wallMaskCanvas = null, _wallOverlayEl = null;
     function _updateWallFogMask() {
         if (!_wallOverlayEl) _wallOverlayEl = document.getElementById('wall-overlay');
         if (!_wallOverlayEl) return;
-        const fog = window._glowFogMask;
-        // GM sees all walls; no fog veil drawn → nothing to hide → clear the mask.
-        if ((typeof ME !== 'undefined' && ME && ME.isGm) || !fog) {
+        // GM sees all walls; fog off / no veil drawn → nothing to hide → no mask.
+        if ((typeof ME !== 'undefined' && ME && ME.isGm) || !window._glowFogMask) {
             if (_wallOverlayEl.style.maskImage || _wallOverlayEl.style.webkitMaskImage) {
                 _wallOverlayEl.style.maskImage = '';
                 _wallOverlayEl.style.webkitMaskImage = '';
@@ -3276,12 +3279,20 @@
         if (_wallMaskCanvas.height !== MAP_H) _wallMaskCanvas.height = MAP_H;
         const mc = _wallMaskCanvas.getContext('2d');
         mc.globalCompositeOperation = 'source-over';
-        mc.clearRect(0, 0, MAP_W, MAP_H);
-        mc.fillStyle = '#fff';
-        mc.fillRect(0, 0, MAP_W, MAP_H);        // opaque white = reveal the wall
-        mc.globalCompositeOperation = 'destination-out';
-        mc.drawImage(fog, 0, 0);                 // punch out where fog is opaque → hide
-        mc.globalCompositeOperation = 'source-over';
+        mc.clearRect(0, 0, MAP_W, MAP_H);        // transparent = wall hidden
+        mc.fillStyle = '#fff';                    // opaque white = wall fully revealed
+        const paintCell = (k) => {
+            const p = k.split(',');
+            mc.fillRect(p[0] * gridSize, p[1] * gridSize, gridSize + 1, gridSize + 1);
+        };
+        if (mapFogDynamic) {
+            mapFogExplored.forEach(paintCell);    // remembered → full-opacity walls
+            mapFogVisible.forEach(paintCell);     // currently seen → full-opacity walls
+        }
+        (mapFogRevealed || []).forEach((r) => {   // GM-revealed rectangles
+            const w = Number(r.w || 0), h = Number(r.h || 0);
+            if (w > 0 && h > 0) mc.fillRect(Number(r.x || 0), Number(r.y || 0), w, h);
+        });
         const url = _wallMaskCanvas.toDataURL();
         _wallOverlayEl.style.webkitMaskImage = 'url(' + url + ')';
         _wallOverlayEl.style.maskImage = 'url(' + url + ')';
@@ -3289,6 +3300,7 @@
         _wallOverlayEl.style.maskSize = '100% 100%';
         _wallOverlayEl.style.webkitMaskRepeat = 'no-repeat';
         _wallOverlayEl.style.maskRepeat = 'no-repeat';
+        window.__wallMaskForTest = _wallMaskCanvas;  // harness sampling hook
     }
 
     // v2.710.0 — Phase 5 of vision-and-light: render the lighting model

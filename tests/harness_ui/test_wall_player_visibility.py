@@ -59,3 +59,37 @@ def test_wall_overlay_not_masked_for_gm(gm_page: Page) -> None:
     assert r["isGm"] is True, r
     assert r["z"] == "8", r
     assert "url(" not in r["mask"], r           # GM sees every wall (no fog mask)
+
+
+def test_wall_mask_full_opacity_where_player_has_seen(alice_page: Page) -> None:
+    """v2.952.1 — walls render at FULL opacity where the player has explored/can
+    see (the old veil-derived mask left explored walls at ~40%)."""
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as gm:
+        gm.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        cid = _goblin_warrens_cid(gm)
+        tok = gm.post(f"/api/campaign/{cid}/tokens",
+                      json={"label": "Scout", "x": 700, "y": 760}).json()
+        tid = tok["id"]
+        try:
+            alice_page.goto(f"{BASE_URL}/campaign/{cid}")
+            alice_page.wait_for_selector("#wall-overlay", timeout=10000)
+            aid = alice_page.evaluate("() => window.ME.id")
+            r = gm.patch(f"/api/campaign/{cid}/token/{tid}",
+                         json={"controller_user_id": aid})
+            assert r.status_code == 200, r.text
+            alice_page.reload()
+            alice_page.wait_for_function("() => window.__wallMaskForTest && window.__gridSizeForTest",
+                                         timeout=10000)
+            alice_page.wait_for_timeout(1500)
+            r = alice_page.evaluate(
+                """() => {
+                    const m = window.__wallMaskForTest;
+                    const a = (x, y) => m.getContext('2d')
+                        .getImageData(Math.round(x), Math.round(y), 1, 1).data[3];
+                    return { atToken: a(735, 795) };  // the scout's own cell → seen
+                }"""
+            )
+            # Full-opacity reveal where the player has seen (not ~99/255).
+            assert r["atToken"] == 255, r
+        finally:
+            gm.request("DELETE", f"/api/campaign/{cid}/tokens/{tid}")

@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.952.1] - 2026-07-07 — "The Clear Wall"
+
+**Schema version:** 101
+
+**Commit summary:** Player walls render at full opacity where seen (fix the too-dim fog mask).
+
+**Description:** Fixes walls reading as "not showing" for players in their line of sight. The v2.950.0 wall fog-mask was derived from the linear fog veil, so an explored-memory cell (fog ≈ 0.6) left its walls at only ~40% opacity — dim and easily lost against the map art. The mask is now built from the fog **cell state**: any cell the party currently sees, has explored, or the GM revealed is painted **fully opaque**, so walls/doors there render at 100%; never-seen cells stay hidden. The GM still sees every wall unmasked.
+
+### Fixed
+- `app/static/tabletop.js::_updateWallFogMask` — build the mask from `mapFogVisible ∪ mapFogExplored ∪ mapFogRevealed` at full opacity instead of the linear fog veil.
+
+### Added
+- `tests/harness_ui/test_wall_player_visibility.py::test_wall_mask_full_opacity_where_player_has_seen` — the wall mask is 255 (full) at a cell the player has seen.
+
 ## [2.952.0] - 2026-07-07 — "The Solid Wall"
 
 **Schema version:** 101
