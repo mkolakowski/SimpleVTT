@@ -3345,7 +3345,7 @@
         let _srcCanvas = null;
         function _eraseWallShadows(sctx, sx, sy) {
             if (!solidWalls.length) return;
-            const ext = (MAP_W + MAP_H) * 2;  // project past the map edge
+            const ext = (MAP_W + MAP_H) * 50;  // v2.953.0 — project FAR past the map edge: a wide wall directly above/below a token projects its endpoints nearly horizontally, so a short reach left the far side lit (vision leaked past the wall)
             sctx.save();
             sctx.globalCompositeOperation = 'destination-out';
             sctx.fillStyle = 'rgba(0,0,0,1)';
@@ -3480,7 +3480,7 @@
     // shadow-quad math drawLighting() uses for its per-source light shadows.
     function _fogEraseWallShadows(sctx, sx, sy, walls) {
         if (!walls.length) return;
-        const ext = (MAP_W + MAP_H) * 2;
+        const ext = (MAP_W + MAP_H) * 50;  // v2.953.0 — see _eraseWallShadows: long reach so wide-wall shadows fully cover the far side
         walls.forEach(w => {
             const proj = (px, py) => {
                 const dx = px - sx, dy = py - sy;

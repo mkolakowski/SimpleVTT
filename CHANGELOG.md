@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.953.0] - 2026-07-07 — "The Long Shadow"
+
+**Schema version:** 101
+
+**Commit summary:** Fix vision leaking past wide walls (a PC near a wall could see the far side).
+
+**Description:** A token's wall shadows are cast by projecting each wall endpoint away from the token and filling the quad behind the wall. The projection reach was `(MAP_W + MAP_H) × 2`, which is too short for a **wide wall directly above/below the token**: those endpoints project nearly **horizontally**, so the shadow quad's far edge stopped partway up the map and the far side stayed lit — as a PC approached the fence, the tunnels beyond it became visible. Reach bumped to `× 50` so the shadow fully covers the far side. Fixes the fog-of-war vision engine (`_fogEraseWallShadows`) and the dynamic-lighting shadows (`_eraseWallShadows`), which also feed the selected-token POV veil and the light glow.
+
+### Fixed
+- `app/static/tabletop.js` — wall-shadow projection reach `(MAP_W+MAP_H)*2` → `*50` in `_fogEraseWallShadows` and `_eraseWallShadows`.
+
+### Added
+- `tests/harness_ui/test_wall_shadow_reach.py` — a token below a full-width wall sees its own side but neither the near far-side nor the far top of the map.
+
 ## [2.952.1] - 2026-07-07 — "The Clear Wall"
 
 **Schema version:** 101
