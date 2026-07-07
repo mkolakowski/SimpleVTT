@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.947.0] - 2026-07-07 — "No Peeking"
+
+**Schema version:** 101
+
+**Commit summary:** Players can't bypass line of sight on fog-OFF maps — an untargeted player is still bounded to their own PCs' vision.
+
+**Description:** Fixes a fog-of-war bypass: on a map with **fog disabled** (like the Goblin Warrens), a player whose PC wasn't targeted could see the whole lit map, **past walls** — because `drawFog` returns early when fog is off and nothing else bounded the default view. Now, for a non-GM player with fog off, `render()` applies the player's own PCs' **line-of-sight veil** (from every token they control, wall-occluded) even when no token is targeted. With fog ON, `drawFog` already bounds the view to wall-aware visible cells, so that path is unchanged. The GM is exempt (sees the whole map by design). `drawSelectedVisionVeil()` now accepts an explicit source-token list.
+
+### Fixed
+- `app/static/tabletop.js` — `render()` applies `drawSelectedVisionVeil(_fogPartyTokens())` for a fog-off non-GM player when nothing is targeted; `drawSelectedVisionVeil()` takes optional explicit sources.
+
+### Added
+- `tests/harness_ui/test_vtt_selected_vision_veil.py::test_player_cannot_see_past_walls_with_fog_off` — an untargeted player on the fog-off Goblin Warrens sees their own token's cell but the far side of the fence stays veiled.
+
 ## [2.946.0] - 2026-07-06 — "The Raised Banner"
 
 **Schema version:** 101

@@ -53,3 +53,44 @@ def test_gm_target_narrows_to_that_tokens_line_of_sight(gm_page: Page) -> None:
             assert r["farAlpha"] - r["nearAlpha"] > 120, r
         finally:
             c.request("DELETE", f"/api/campaign/{cid}/tokens/{tid}")
+
+
+def test_player_cannot_see_past_walls_with_fog_off(alice_page: Page) -> None:
+    """v2.947.0 — anti-bypass: on a fog-OFF map an UNtargeted player is still
+    bounded to their own PCs' line of sight, so they can't see past walls. The
+    Goblin Warrens ships fog OFF; a token alice owns below the fence reveals its
+    cell but the far side of the closed-gate wall stays veiled."""
+    with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as gm:
+        gm.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+        cid = _goblin_warrens_cid(gm)
+        tok = gm.post(f"/api/campaign/{cid}/tokens",
+                      json={"label": "AlicePC", "x": 700, "y": 900}).json()
+        tid = tok["id"]
+        try:
+            alice_page.goto(f"{BASE_URL}/campaign/{cid}")
+            alice_page.wait_for_selector("#token-veil-canvas", timeout=10000)
+            alice_id = alice_page.evaluate("() => window.ME.id")
+            # Give alice control of the token, then reload so her client owns it.
+            r = gm.patch(f"/api/campaign/{cid}/token/{tid}",
+                         json={"controller_user_id": alice_id})
+            assert r.status_code == 200, r.text
+            alice_page.reload()
+            alice_page.wait_for_selector("#token-veil-canvas", timeout=10000)
+            alice_page.wait_for_timeout(1200)
+
+            res = alice_page.evaluate(
+                """() => {
+                    if (window._renderCanvas) window._renderCanvas();  // no target set
+                    const cv = window.__visionVeilForTest;
+                    if (!cv) return { err: 'no veil canvas — player view is NOT bounded' };
+                    const px = (x, y) => cv.getContext('2d').getImageData(x, y, 1, 1).data[3];
+                    return { isGm: !!window.ME.isGm,
+                             nearAlpha: px(735, 935), farAlpha: px(60, 60) };
+                }"""
+            )
+            assert "err" not in res, res
+            assert res["isGm"] is False, res
+            assert res["nearAlpha"] < 40, res    # own token's cell revealed
+            assert res["farAlpha"] > 150, res    # past the fence → veiled (no bypass)
+        finally:
+            gm.request("DELETE", f"/api/campaign/{cid}/tokens/{tid}")

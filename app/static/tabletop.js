@@ -3175,8 +3175,15 @@
         // and veil what it can't see (POV parity with the map editor's
         // darkvision preview; works with fog OFF). Drawn BEFORE the on-top pass
         // so the adopted token can ride back on top of its own veil.
+        // v2.947.0 — anti-bypass: a player must never see past walls. With fog
+        // ENABLED, drawFog already bounds their view to wall-aware visible cells.
+        // With fog DISABLED there's no such bound, so apply the player's own PCs'
+        // line-of-sight veil from ALL tokens they control. The GM is exempt (sees
+        // the whole map by design).
         if (_anyTokenSelected()) {
             drawSelectedVisionVeil();
+        } else if (!(ME && ME.isGm) && !mapFogEnabled) {
+            drawSelectedVisionVeil(_fogPartyTokens());
         }
         // v2.882.0 / v2.944.0 — redraw the "on top" tokens above every effect
         // (lighting + fog + POV veil). `_tokenDrawsOnTop` encodes the layering
@@ -3622,8 +3629,11 @@
         const isGm = _fogViewerIsGm();
         return (tokens || []).filter(t => t && ids.has(t.id) && (isGm || _controlsToken(t)));
     }
-    function drawSelectedVisionVeil() {
-        const src = _perspectiveSourceTokens();
+    function drawSelectedVisionVeil(explicitSources) {
+        // v2.947.0 — callers can pass an explicit source-token list (e.g. a
+        // player's whole owned set for the fog-OFF default view); otherwise the
+        // adopted (targeted) tokens are used.
+        const src = explicitSources || _perspectiveSourceTokens();
         if (!src.length) return;  // enemy selected / no POV adopted → leave as-is
         if (!_povVeilCanvas) _povVeilCanvas = document.createElement('canvas');
         if (_povVeilCanvas.width !== MAP_W) _povVeilCanvas.width = MAP_W;
