@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.955.0] - 2026-07-07 — "The Right Swing"
+
+**Schema version:** 101
+
+**Commit summary:** Fix gate/door swing arcs to curve the way the door actually opens.
+
+**Description:** A door's dashed swing arc (the "opening" indicator that arcs from the closed leaf to the open leaf) always used SVG sweep-flag `1`. That's only correct for a leaf rotating one way — a **gate**'s two leaves rotate in **opposite** senses (and a **flipped** door reverses too), so one leaf's arc bulged the wrong way and didn't reflect the door's opening direction. The sweep flag is now derived from the sign of `(closed−hinge) × (open−hinge)`, so every arc is the minor arc centred on its hinge, curving the way the leaf truly swings. Fixed on the tabletop and in the map editor (same door renderer).
+
+### Fixed
+- `app/templates/tabletop.html` + `app/templates/map_editor.html` — `arc()` computes the SVG sweep-flag per leaf from its hinge; gate leaves + single/flipped doors pass their hinge.
+
+### Added
+- `tests/harness_ui/test_gate_door_swing.py` — an open gate's two swing arcs use opposite sweep flags (`[0, 1]`), not both `1`.
+
 ## [2.954.0] - 2026-07-07 — "The Finer Veil"
 
 **Schema version:** 101

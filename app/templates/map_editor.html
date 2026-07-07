@@ -1289,9 +1289,19 @@
       function jamb(cx, cy) {
         line2(cx - G.px * jw / 2, cy - G.py * jw / 2, cx + G.px * jw / 2, cy + G.py * jw / 2, st.casing, 5);
       }
-      function arc(fromP, toP, r) {
+      function arc(fromP, toP, r, hinge) {
+        // v2.955.0 — sweep-flag from (fromP-hinge)×(toP-hinge) so the swing arc
+        // traces the leaf's real rotation about its hinge (a gate's two leaves
+        // rotate in opposite senses; a flipped door reverses too). Mirrors the
+        // tabletop fix.
+        var sweep = 1;
+        if (hinge) {
+          var cross = (fromP[0] - hinge[0]) * (toP[1] - hinge[1])
+                    - (fromP[1] - hinge[1]) * (toP[0] - hinge[0]);
+          sweep = cross > 0 ? 1 : 0;
+        }
         var a = document.createElementNS(NS, 'path');
-        a.setAttribute('d', 'M ' + fromP[0] + ' ' + fromP[1] + ' A ' + r + ' ' + r + ' 0 0 1 ' + toP[0] + ' ' + toP[1]);
+        a.setAttribute('d', 'M ' + fromP[0] + ' ' + fromP[1] + ' A ' + r + ' ' + r + ' 0 0 ' + sweep + ' ' + toP[0] + ' ' + toP[1]);
         a.setAttribute('fill', 'none');
         a.setAttribute('stroke', open ? 'rgba(120,220,150,0.75)' : 'rgba(255,255,255,0.30)');
         a.setAttribute('stroke-width', '1.5'); a.setAttribute('stroke-dasharray', '5 5');
@@ -1305,11 +1315,12 @@
       }
       jamb(w.x1, w.y1); jamb(w.x2, w.y2);
       if (G.gate) {
-        arc(G.a.closed, G.a.open, G.half); arc(G.b.closed, G.b.open, G.half);
+        arc(G.a.closed, G.a.open, G.half, G.a.hinge);
+        arc(G.b.closed, G.b.open, G.half, G.b.hinge);
         leaf(G.a.hinge, open ? G.a.open : G.a.closed);
         leaf(G.b.hinge, open ? G.b.open : G.b.closed);
       } else {
-        arc(G.closed, G.open, G.L);
+        arc(G.closed, G.open, G.L, G.hinge);
         leaf(G.hinge, open ? G.open : G.closed);
       }
       if (w.secret) {  // v2.788.3 — magenta dashed marker (GM sees it's secret)
