@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.944.0] - 2026-07-06 — "The Turn to Shine"
+
+**Schema version:** 101
+
+**Commit summary:** Turn-aware token top-layer rules — GM raises the targeted token over its POV veil; players raise their token on its turn.
+
+**Description:** Refines which tokens ride ON TOP of the lighting/fog/POV veil (`_tokenDrawsOnTop`). **GM:** with nothing selected, every visible token is top-most (unchanged); once a token is targeted, only THAT token rides on top — over its own line-of-sight veil, so you see whose vantage you're previewing — while everyone else narrows under the veil. **Players:** only tokens they control are ever raised — the selected one when selecting, and during a live battle **only on that token's turn** (it drops under the veil off-turn); out of combat (no live initiative) their tokens stay raised as before. The on-top redraw now runs after the POV veil so the raised token composites above it.
+
+### Changed
+- `app/static/tabletop.js` — rewrote `_tokenDrawsOnTop`; added `_battleActive` / `_activeCombatant` / `_isActiveTurnToken` / `_isTargeted`; `render()` draws the POV veil then the on-top pass.
+- `tests/harness_ui/test_token_visibility_perspective.py` — GM test asserts the targeted token rides on top while others lower; new test asserts a player's token is top-most only on its turn.
+
 ## [2.943.0] - 2026-07-06 — "The Adopted Eye"
 
 **Schema version:** 101

@@ -586,15 +586,49 @@
         const ids = window._targetingState && window._targetingState.tokenIds;
         return !!(ids && ids.size);
     }
-    // v2.882.0 — should this token be redrawn ON TOP of every effect (above the
-    // lighting + fog veil) for maximum visibility? Only when nothing is selected:
-    // GM → every visible token; player → only the tokens they control. Once a
-    // token is selected we drop back under the veil and narrow to its vision.
+    // v2.944.0 — is a battle actually running (initiative live with combatants)?
+    function _battleActive() {
+        const b = window.battle;
+        return !!(b && b.active && Array.isArray(b.combatants) && b.combatants.length);
+    }
+    // v2.944.0 — the combatant whose turn it currently is (null if no live turn).
+    function _activeCombatant() {
+        if (!_battleActive()) return null;
+        const b = window.battle;
+        return b.combatants[b.turn_index % b.combatants.length] || null;
+    }
+    // v2.944.0 — does this token belong to the active-turn combatant? Mirrors the
+    // token→combatant match used by the targeting resolver (getTargets).
+    function _isActiveTurnToken(t) {
+        const cur = _activeCombatant();
+        if (!cur || !t) return false;
+        if (cur.source_token_id != null && cur.source_token_id === t.id) return true;
+        if (t.character_id && cur.char_id === t.character_id) return true;
+        if (t.token_template_id && cur.token_template_id === t.token_template_id
+                && cur.name === t.label) return true;
+        return false;
+    }
+    // v2.944.0 — is this token in the current targeting/selection set?
+    function _isTargeted(t) {
+        return !!(t && _fogTargetTokenIds().has(t.id));
+    }
+    // v2.882.0 / v2.944.0 — should this token be redrawn ON TOP of every effect
+    // (above the lighting/fog/POV veil)? The rules the GM asked for:
+    //   • GM, nothing selected → every visible token rides on top.
+    //   • GM, a token targeted → ONLY the targeted token(s) ride on top, over
+    //     that token's POV veil (so you see whose vantage you're in); everyone
+    //     else stays under the veil (narrowed to what the target sees).
+    //   • Player → only tokens they control are ever raised: the selected one
+    //     when selecting, else (in combat) only on that token's turn, else
+    //     (exploration, no live initiative) raised by default.
     function _tokenDrawsOnTop(t) {
-        if (_anyTokenSelected()) return false;
         if (_isTokenHiddenFromMe(t)) return false;
-        if (ME && ME.isGm) return true;
-        return _controlsToken(t);
+        const anySel = _anyTokenSelected();
+        if (ME && ME.isGm) return anySel ? _isTargeted(t) : true;
+        if (!_controlsToken(t)) return false;
+        if (anySel) return _isTargeted(t);
+        if (_battleActive()) return _isActiveTurnToken(t);
+        return true;
     }
 
     function _updateGifOverlay() {
@@ -3129,20 +3163,18 @@
         // room that hasn't been explored).
         drawFog();
 
-        // v2.882.0 — maximum token visibility: with NO token selected, redraw
-        // the "always-visible" tokens ON TOP of the lighting + fog veil so they
-        // read clearly above every effect. GM → every visible token; player →
-        // only the tokens they control. (When a token IS selected we skip this
-        // and instead narrow the view to that token's line of sight.)
-        if (!_anyTokenSelected()) {
-            (tokens || []).forEach(t => { if (_tokenDrawsOnTop(t)) drawToken(t); });
-        } else {
-            // v2.943.0 — POV parity with the map editor: adopt the
-            // selected/targeted token's line of sight and veil what it can't
-            // see. Works with fog OFF (the editor's darkvision-LOS model), so a
-            // GM targeting a token gets the same vantage the editor previews.
+        // v2.943.0 — when a token is selected/targeted, adopt its line of sight
+        // and veil what it can't see (POV parity with the map editor's
+        // darkvision preview; works with fog OFF). Drawn BEFORE the on-top pass
+        // so the adopted token can ride back on top of its own veil.
+        if (_anyTokenSelected()) {
             drawSelectedVisionVeil();
         }
+        // v2.882.0 / v2.944.0 — redraw the "on top" tokens above every effect
+        // (lighting + fog + POV veil). `_tokenDrawsOnTop` encodes the layering
+        // rules: GM idle → all tokens; GM targeting → only the targeted token;
+        // player → their controlled token when selected or when it's its turn.
+        (tokens || []).forEach(t => { if (_tokenDrawsOnTop(t)) drawToken(t); });
 
         // v2.50.0 — grid coordinate labels drawn LAST so the gutter
         // sits on top of every other rendered element. Tokens sliding
