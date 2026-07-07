@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.940.0] - 2026-07-06 — "The Rebuilt Warren"
+
+**Schema version:** 101
+
+**Commit summary:** Re-author the Goblin Warrens demo map from a map-editor JSON export.
+
+**Description:** Replaces the hand-written Goblin Warrens (entrance) demo layout with one exported from the map editor: a single full-width **wood wall carrying an open gate** (embedded door) plus a **ring of 10 flickering torch/brazier lights** (one bright hearth at flicker 1×, nine dimmer wall braziers at 0.5×), under **dark ambient + dynamic (exploration) fog**. The old cave walls, secret door, "Pit trap" hotspot, GM "Ambush" pin, and static fog-reveal rectangle are gone. Coordinates from the export (natural 1484×1060 image space) are un-scaled by ÷1.06 into the spec's 1400×1000 design space, so the loader's ×1.06 rescale lands them exactly on the exported positions — and the party/NPC token start positions (authored in design space) are unaffected. Verified an exact DB round-trip after a reseed.
+
+### Changed
+- `app/demo_campaigns.py` — `_GOBLIN_WARRENS["map"]` walls/lights/fog replaced from the export; hotspots + GM pins removed.
+- `tests/harness/test_demo_map_elements.py::test_goblin_warrens_ships_walls_and_hotspots` — expects one wood wall with an embedded gate door + dynamic fog (no secret door / hotspot / static reveal).
+
+### Schema
+- No schema change (still v101 — demo seed content only; the flicker field rides the existing lights JSON).
+
 ## [2.939.1] - 2026-07-06 — "The Visible Ghost"
 
 **Schema version:** 101

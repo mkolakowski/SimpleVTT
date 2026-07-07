@@ -34,24 +34,23 @@ async def test_goblin_warrens_ships_walls_and_hotspots(gm_client):
     am = await _active_map(gm_client, cid)
 
     walls = am["walls"]
-    assert walls, "Goblin Warrens should ship with seeded cave walls + a door"
+    assert walls, "Goblin Warrens should ship with a seeded wall + a door"
     for w in walls:
         assert isinstance(w["id"], str) and w["id"]
         for k in ("x1", "y1", "x2", "y2"):
             assert isinstance(w[k], (int, float)), (k, w)
         # Sanitizer-filled defaults are present on every seeded wall.
         assert isinstance(w["door"], bool) and isinstance(w["secret"], bool)
-    assert any(w["door"] for w in walls), "expected at least one door"
-    assert any(w["secret"] for w in walls), "expected a hidden secret door"
+    # v2.940.0 — the layout (from a map-editor export) is one wood wall carrying
+    # an embedded gate door (legacy whole-segment door OR an embedded `doors`).
+    assert any(w["door"] or w.get("doors") for w in walls), "expected at least one door"
 
-    hotspots = am["hotspots"]
-    assert hotspots and hotspots[0]["label"], "expected a labelled hotspot"
-
-    # v2.842.0 — the warren is a dark, torch-lit, fog-explored dungeon.
+    # v2.940.0 — the warren is a dark, torch-lit, dynamically-explored dungeon
+    # (no static reveals, no hotspots in this layout).
     assert am["ambient_light"] == "dark", am["ambient_light"]
-    assert am["lights"], "expected seeded torch/lantern lights"
+    assert am["lights"], "expected seeded torch/brazier lights"
     assert am["fog_enabled"] is True, "expected fog of war enabled"
-    assert am["fog_revealed"], "expected a revealed fog region over the play area"
+    assert am["fog_dynamic"] is True, "expected exploration (dynamic) fog"
 
 
 async def test_caldera_throne_ships_lava_polygons(gm_client):

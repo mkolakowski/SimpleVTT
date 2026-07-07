@@ -65,40 +65,31 @@ _GOBLIN_WARRENS = {
              "been raiding the trade road from a warren of tunnels. Each PC "
              "shows off a feature their class gains around level 3. Demo "
              "campaign — resets on a fixed interval."),
-    # v2.840.0 — dungeon showcase: cave walls with a swinging door + a hidden
-    # secret door, a trapped-floor hotspot, and a GM-only ambush pin.
-    # v2.842.0 — dark warren lit only by wall torches, explored under fog.
-    # v2.847.0 — gridless: organic, art-matched coords (irregular cave walls,
-    # torches at the tunnel mouths); party at the palisade approach (SW),
-    # goblins at the tunnel mouths (NE), Grukk deep in the warren.
+    # v2.842.0 — dark warren, explored under dynamic fog.
+    # v2.847.0 — gridless: organic, art-matched coords; party at the palisade
+    # approach (SW), goblins at the tunnel mouths (NE), Grukk deep in the warren.
+    # v2.940.0 — layout replaced from a map-editor JSON export (a full-width wood
+    # wall with an open gate + a ring of flickering torch/brazier lights). Coords
+    # are authored in the 1400×1000 design space; the loader scales them ×1.06 to
+    # the goblin-warrens.png natural size (1484×1060) — same as every other spec.
     "map": {"name": "The Goblin Warrens (entrance)", "width": 1400, "height": 1000,
             "image": "/static/demo/maps/goblin-warrens.png",
             "gridless": True,
             "ambient_light": "dark",
-            "lights": [
-                {"id": "gw-l1", "x": 293, "y": 287, "bright_ft": 15, "dim_ft": 30,
-                 "color": "#f59e0b", "color2": "#ff7a1a", "type": "torch"},
-                {"id": "gw-l2", "x": 622, "y": 501, "bright_ft": 15, "dim_ft": 30,
-                 "color": "#f59e0b", "color2": "#ff7a1a", "type": "torch"},
-                {"id": "gw-l3", "x": 988, "y": 343, "bright_ft": 20, "dim_ft": 40,
-                 "color": "#fbbf24", "color2": "#f59e0b", "type": "lantern"}],
             "fog_enabled": True, "fog_dynamic": True,
-            "fog_revealed": [{"x": 56, "y": 188, "w": 1288, "h": 672}],
             "walls": [
-                {"id": "gw-w1", "x1": 152, "y1": 163, "x2": 684, "y2": 131, "style": "cave"},
-                {"id": "gw-w2", "x1": 152, "y1": 163, "x2": 129, "y2": 706, "style": "cave"},
-                {"id": "gw-w3", "x1": 129, "y1": 706, "x2": 1271, "y2": 731, "style": "cave"},
-                {"id": "gw-d1", "x1": 684, "y1": 131, "x2": 693, "y2": 274,
-                 "door": True, "open": False, "style": "wood"},
-                {"id": "gw-s1", "x1": 1123, "y1": 411, "x2": 1131, "y2": 553,
-                 "door": True, "secret": True, "style": "cave"}],
-            "hotspots": [
-                {"id": "gw-h1", "x": 531, "y": 566, "label": "Pit trap",
-                 "description": "A covered pit. DC 13 DEX save or fall 10 ft (2d6 bludgeoning).",
-                 "roll": "1d20"}],
-            "gm_pins": [
-                {"id": "gw-p1", "x": 921, "y": 366, "label": "Ambush",
-                 "note": "Three goblins fire from the ledge the moment the party crosses the hall."}]},
+                {"id": "w1783385893138_0", "x1": 0.0, "y1": 563.2, "x2": 1408.5, "y2": 576.4, "style": "wood", "doors": [{"id": "d1783385944228_1", "t0": 0.391137, "t1": 0.55392, "open": True, "gate": True}]}],
+            "lights": [
+                {"id": "l1783385987241_4", "x": 661.3, "y": 887.7, "bright_ft": 26, "dim_ft": 56, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 1},
+                {"id": "l1783386030996_5", "x": 668.9, "y": 100.0, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.5},
+                {"id": "l1783386072255_6", "x": 927.4, "y": 123.6, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.5},
+                {"id": "l1783386075750_7", "x": 1069.8, "y": 294.3, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.5},
+                {"id": "l1783386077640_8", "x": 1183.0, "y": 448.1, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.5},
+                {"id": "l1783386081600_9", "x": 488.7, "y": 81.1, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.5},
+                {"id": "l1783386083460_10", "x": 345.3, "y": 200.0, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.5},
+                {"id": "l1783386084923_11", "x": 242.5, "y": 323.6, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.5},
+                {"id": "l1783386113266_12", "x": 549.1, "y": 483.0, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.5},
+                {"id": "l1783386115981_13", "x": 779.2, "y": 492.5, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.5}]},
     # Organic token placement (parallel to "party" / "npc_tokens" below).
     "party_pos": [(196, 742), (287, 803), (358, 715), (233, 641), (415, 795)],
     "npc_pos": [(842, 337), (1013, 268), (925, 472), (1146, 351)],
