@@ -60,7 +60,8 @@ def test_player_fog_reveals_only_own_tokens_vision(alice_page: Page) -> None:
                             controller_user_id: myId + 99999, character_id: null };
             const r = window.__testDrawFog({ tokens: [owned, other], walls: [], explored: [] });
             const g = window.__gridSizeForTest();
-            const cell = (t) => Math.floor((t.x + g / 2) / g) + ',' + Math.floor((t.y + g / 2) / g);
+            const fc = window.__fogCellForTest();  // v2.954.0 — fog cells are FOG_CELL-sized
+            const cell = (t) => Math.floor((t.x + g / 2) / fc) + ',' + Math.floor((t.y + g / 2) / fc);
             const vis = new Set(r.visible);
             return { isGm: !!window.ME.isGm, ownedVisible: vis.has(cell(owned)),
                      otherVisible: vis.has(cell(other)), n: r.visible.length };

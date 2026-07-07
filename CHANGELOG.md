@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.954.0] - 2026-07-07 — "The Finer Veil"
+
+**Schema version:** 101
+
+**Commit summary:** Track/render fog of war on a finer grid (half the 5-ft cell) for smoother edges + tighter wall boundaries.
+
+**Description:** Fog of war was tracked and drawn in whole **5-ft grid cells** (`gridSize`, 70 px), so the fog edge and the player wall-reveal stepped by a full square. Fog now uses a **`FOG_CELL`** = `gridSize / FOG_SUBDIV` (2 → 2.5-ft, 35 px) sub-grid for vision sampling, the explored/visible memory, the fog render, and the player wall mask — so fog edges hug vision and walls far more closely. To keep the finer sampling cheap, `computeVisibleCells` now reads the whole alpha buffer once and indexes it instead of thousands of 1×1 reads. Fog cell keys (`"c,r"`) + the server-stored explored memory are in `FOG_CELL` units (the server is cell-size-agnostic); accumulated coarse memory clears on the next reveal/reseed.
+
+### Changed
+- `app/static/tabletop.js` — `FOG_CELL`/`FOG_SUBDIV`; `computeVisibleCells`, `drawFog`, and `_updateWallFogMask` use `FOG_CELL`; single full-buffer visibility sampling; `window.__fogCellForTest` hook.
+- `tests/harness_ui/test_map_fog_dynamic.py` / `test_map_fog_gm_perspective.py` / `test_map_fog_player.py` / `test_wall_shadow_reach.py` — compute fog cell keys via `__fogCellForTest` (were hard-coded 70-px cells).
+
 ## [2.953.1] - 2026-07-07 — "The Wall at Hand"
 
 **Schema version:** 101

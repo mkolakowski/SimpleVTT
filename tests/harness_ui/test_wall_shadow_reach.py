@@ -19,8 +19,10 @@ def test_wide_wall_shadow_hides_far_side(alice_page: Page) -> None:
 
     r = alice_page.evaluate(
         """() => {
-            const g = 70;
-            // A full-width solid wall at y=600; a token I control just below it.
+            const fc = window.__fogCellForTest();
+            const key = (px, py) => Math.floor(px / fc) + ',' + Math.floor(py / fc);
+            // A full-width solid wall at y=600; a token I control just below it
+            // (center ~935,695). Wall blocks the far (upper) side.
             const out = window.__testDrawFog({
                 dynamic: true,
                 walls: [{ x1: 0, y1: 600, x2: 4000, y2: 600 }],
@@ -31,9 +33,9 @@ def test_wide_wall_shadow_hides_far_side(alice_page: Page) -> None:
             });
             const vis = new Set(out.visible);
             return {
-                belowWall: vis.has('13,9'),   // token side of the wall → seen
-                justAbove: vis.has('13,8'),   // far side, near → hidden
-                farTop: vis.has('13,1'),      // far side, top of map → hidden
+                belowWall: vis.has(key(935, 665)),   // token side of the wall → seen
+                justAbove: vis.has(key(935, 560)),   // far side, near → hidden
+                farTop: vis.has(key(935, 105)),      // far side, top of map → hidden
             };
         }"""
     )

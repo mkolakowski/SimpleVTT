@@ -46,12 +46,14 @@ def test_gm_targeting_shows_that_entitys_view(gm_page: Page) -> None:
     # explored → dim memory; (7,3) is behind the wall, never seen → opaque.
     res = gm_page.evaluate("""() => {
         const g = 70;
+        const fc = window.__fogCellForTest();  // v2.954.0 — finer fog cells
         window.__testDrawFog({
             gm: true, targetIds: [1], dynamic: true,
             walls: [{ x1: 5*g, y1: 0, x2: 5*g, y2: 6*g }],
             tokens: [{ id: 1, x: 2*g, y: 2*g, size: 1, team: 'hero',
                        light_bright_ft: 0, light_dim_ft: 0 }],
-            explored: [[7, 2]],
+            // the fog cell covering the memory sample pixel (7g+g/2, 2g+g/2)
+            explored: [[Math.floor((7*g + g/2) / fc), Math.floor((2*g + g/2) / fc)]],
         });
         const cx = window.__fogCanvasForTest.getContext('2d');
         const cell = (c, r) => cx.getImageData(c*g + g/2, r*g + g/2, 1, 1).data[3];

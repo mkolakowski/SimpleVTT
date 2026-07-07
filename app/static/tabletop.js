@@ -309,6 +309,15 @@
 
     const gridType = canvas.dataset.gridType || 'square';
     const gridSize = parseInt(canvas.dataset.gridSize || '70', 10);
+    // v2.954.0 — fog of war is tracked/rendered on a FINER grid than the 5-ft
+    // movement grid: FOG_SUBDIV sub-cells per grid cell (2 → 2.5-ft fog cells).
+    // Smaller fog cells → smoother fog edges + wall boundaries that hug the wall
+    // instead of stepping by a full 5-ft square. Fog cell keys ("c,r") + the
+    // server-stored explored memory are in FOG_CELL units (cell-size-agnostic on
+    // the server). Keep it an integer divisor of gridSize so cells tile evenly.
+    const FOG_SUBDIV = 2;
+    const FOG_CELL = Math.max(8, Math.round(gridSize / FOG_SUBDIV));
+    window.__fogCellForTest = () => FOG_CELL;  // harness: fog cell size in px
     // v2.913.0 — per-map default token-size multiplier (GM-set in the editor).
     // Tokens render at ``gridSize * token.size * tokenScale``. Mutable so the
     // ``token_scale_update`` WS event resizes every token live. 1.0 = default.
@@ -3281,15 +3290,15 @@
         mc.globalCompositeOperation = 'source-over';
         mc.clearRect(0, 0, MAP_W, MAP_H);        // transparent = wall hidden
         mc.fillStyle = '#fff';                    // opaque white = wall fully revealed
-        // v2.953.1 — dilate each seen cell by half a cell so a wall on the vision
-        // BOUNDARY still shows: a wall blocks sight, so its own cell is on the
-        // hidden far side — without this the wall you're standing against would be
-        // masked out. Reveals walls within ~2.5 ft of a seen cell; walls deeper in
-        // unexplored fog stay hidden.
-        const _m = gridSize / 2;
+        // v2.953.1 — dilate each seen cell by half a (fog) cell so a wall on the
+        // vision BOUNDARY still shows: a wall blocks sight, so its own cell is on
+        // the hidden far side — without this the wall you're standing against
+        // would be masked out. Walls deeper in unexplored fog stay hidden.
+        // v2.954.0 — fog cells are FOG_CELL-sized now.
+        const _m = FOG_CELL / 2;
         const paintCell = (k) => {
             const p = k.split(',');
-            mc.fillRect(p[0] * gridSize - _m, p[1] * gridSize - _m, gridSize * 2, gridSize * 2);
+            mc.fillRect(p[0] * FOG_CELL - _m, p[1] * FOG_CELL - _m, FOG_CELL * 2, FOG_CELL * 2);
         };
         if (mapFogDynamic) {
             mapFogExplored.forEach(paintCell);    // remembered → full-opacity walls
@@ -3556,13 +3565,16 @@
             sc.restore();
             vc.drawImage(_visSrcCanvas, 0, 0);
         });
-        // Sample each grid cell center (tiny 1×1 reads — cheap vs a full copy).
-        const cols = Math.ceil(MAP_W / gridSize), rows = Math.ceil(MAP_H / gridSize);
+        // v2.954.0 — sample each FOG_CELL centre. Read the whole alpha buffer
+        // once and index into it (one getImageData beats thousands of 1×1 reads
+        // now that fog cells are 2× finer).
+        const cols = Math.ceil(MAP_W / FOG_CELL), rows = Math.ceil(MAP_H / FOG_CELL);
+        const data = vc.getImageData(0, 0, MAP_W, MAP_H).data;
         for (let r = 0; r < rows; r++) {
             for (let c = 0; c < cols; c++) {
-                const sx = Math.min(MAP_W - 1, Math.floor(c * gridSize + gridSize / 2));
-                const sy = Math.min(MAP_H - 1, Math.floor(r * gridSize + gridSize / 2));
-                if (vc.getImageData(sx, sy, 1, 1).data[3] > 40) out.add(`${c},${r}`);
+                const sx = Math.min(MAP_W - 1, Math.floor(c * FOG_CELL + FOG_CELL / 2));
+                const sy = Math.min(MAP_H - 1, Math.floor(r * FOG_CELL + FOG_CELL / 2));
+                if (data[(sy * MAP_W + sx) * 4 + 3] > 40) out.add(`${c},${r}`);
             }
         }
         return out;
@@ -3679,17 +3691,19 @@
         fc.globalCompositeOperation = 'destination-out';
         if (mapFogDynamic) {
             // Explored memory: partial erase (0.6) → the area shows dimmed.
+            // v2.954.0 — cells are FOG_CELL-sized (finer than the movement grid);
+            // +1 px overlap avoids hairline seams between adjacent sub-cells.
             fc.fillStyle = 'rgba(0,0,0,0.6)';
             mapFogExplored.forEach(k => {
                 const p = k.split(',');
-                fc.fillRect(p[0] * gridSize, p[1] * gridSize, gridSize, gridSize);
+                fc.fillRect(p[0] * FOG_CELL, p[1] * FOG_CELL, FOG_CELL + 1, FOG_CELL + 1);
             });
             // Currently visible (party, or the GM's targeted entity): full
             // erase → fully clear (drawn on top of the memory layer).
             fc.fillStyle = 'rgba(0,0,0,1)';
             visibleSet.forEach(k => {
                 const p = k.split(',');
-                fc.fillRect(p[0] * gridSize, p[1] * gridSize, gridSize, gridSize);
+                fc.fillRect(p[0] * FOG_CELL, p[1] * FOG_CELL, FOG_CELL + 1, FOG_CELL + 1);
             });
         }
         // GM-painted revealed rectangles are always fully clear.
