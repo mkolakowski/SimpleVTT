@@ -84,9 +84,10 @@ def test_player_only_controlled_tokens_draw_on_top(alice_page: Page) -> None:
     assert r["onTopMine"] is True and r["onTopTheirs"] is False, r
 
 
-def test_player_controlled_token_on_top_only_on_its_turn(alice_page: Page) -> None:
-    """v2.944.0 — during a live battle a player's controlled token rides on top
-    only on its own turn; off-turn it drops under the veil."""
+def test_player_my_tokens_on_top_toggle_gates_turn_behavior(alice_page: Page) -> None:
+    """v2.944.0 / v2.946.0 — the "⬆ My tokens on top" toggle (default ON) keeps a
+    player's controlled tokens on top at all times. Unchecked, the v2.944.0 rule
+    applies: during a live battle they ride on top only on their own turn."""
     alice_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}")
     alice_page.wait_for_function("() => window.__tokenVisForTest && window.ME", timeout=8000)
     alice_page.wait_for_timeout(300)
@@ -97,17 +98,44 @@ def test_player_controlled_token_on_top_only_on_its_turn(alice_page: Page) -> No
             window._targetingState = { tokenIds: new Set() };
             const myId = window.ME.id;
             const mine = { id: 10, size: 1, controller_user_id: myId };
-            // Live initiative; my token (id 10) is the active combatant.
-            window.battle = { active: true, turn_index: 0,
+            // Live initiative; the OTHER combatant is active → my token is off-turn.
+            window.battle = { active: true, turn_index: 1,
                 combatants: [{ id: 1, source_token_id: 10 }, { id: 2, source_token_id: 77 }] };
-            const onTurn = V.drawsOnTop(mine);
-            // Advance the turn to the other combatant → my token is off-turn.
-            window.battle.turn_index = 1;
-            const offTurn = V.drawsOnTop(mine);
+            // Toggle ON (default) → on top even off-turn.
+            localStorage.setItem('tt-mytokens-ontop', '1');
+            const onTopWhenAlwaysOn = V.drawsOnTop(mine);
+            // Toggle OFF → turn-gated: off-turn drops under the veil…
+            localStorage.setItem('tt-mytokens-ontop', '0');
+            const offTurnGated = V.drawsOnTop(mine);
+            // …and on its own turn it rides on top again.
+            window.battle.turn_index = 0;
+            const onTurnGated = V.drawsOnTop(mine);
+            localStorage.removeItem('tt-mytokens-ontop');
             window.battle = { active: false, combatants: [], turn_index: 0 };
-            return { onTurn, offTurn };
+            return { onTopWhenAlwaysOn, offTurnGated, onTurnGated };
         }"""
     )
-    # On its turn → on top; off its turn → under the veil.
-    assert r["onTurn"] is True, r
-    assert r["offTurn"] is False, r
+    assert r["onTopWhenAlwaysOn"] is True, r   # toggle ON → always on top
+    assert r["offTurnGated"] is False, r       # toggle OFF, off-turn → under veil
+    assert r["onTurnGated"] is True, r         # toggle OFF, on-turn → on top
+
+
+def test_my_tokens_on_top_toggle_renders_for_player_and_persists(alice_page: Page) -> None:
+    """v2.946.0 — the "⬆ My tokens on top" checkbox shows for a player, defaults
+    checked, and persists to localStorage when unchecked."""
+    alice_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}")
+    alice_page.wait_for_selector("#mytokens-ontop-cb", timeout=8000)
+    cb = alice_page.locator("#mytokens-ontop-cb")
+    assert cb.is_checked(), "toggle should default ON"
+    cb.uncheck()
+    stored = alice_page.evaluate("() => localStorage.getItem('tt-mytokens-ontop')")
+    assert stored == "0", stored
+    alice_page.evaluate("() => localStorage.removeItem('tt-mytokens-ontop')")
+
+
+def test_my_tokens_on_top_toggle_hidden_for_gm(gm_page: Page) -> None:
+    """v2.946.0 — the player-only toggle is not rendered for the GM (whose idle
+    view already puts every token on top)."""
+    gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}")
+    gm_page.wait_for_selector("#token-veil-canvas", timeout=8000)
+    assert gm_page.locator("#mytokens-ontop-cb").count() == 0

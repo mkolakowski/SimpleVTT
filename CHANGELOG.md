@@ -10,6 +10,19 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.946.0] - 2026-07-06 — "The Raised Banner"
+
+**Schema version:** 101
+
+**Commit summary:** Player toggle "⬆ My tokens on top" — keep your controlled tokens on the top layer at all times.
+
+**Description:** Adds a per-player view toggle (a frosted checkbox at the bottom-left of the map, **players only**) that keeps the tokens you control on the **top layer** — above the lighting/fog/POV veil — at all times. It defaults **ON**, so a player's own tokens are always presented on top. Unchecking it restores the v2.944.0 turn-gated behavior (in combat, your token surfaces only on its own turn). The setting persists per browser in `localStorage` (`tt-mytokens-ontop`) and re-renders on change.
+
+### Added
+- `app/templates/tabletop.html` — the `#mytokens-ontop-cb` checkbox overlay inside `#map-pane` (rendered only for non-GM players; 32px compact control per the touch-target exception).
+- `app/static/tabletop.js` — `_myTokensAlwaysOnTop()` (localStorage, default ON); the toggle short-circuits `_tokenDrawsOnTop`'s player branch; checkbox wired to persist + re-render.
+- `tests/harness_ui/test_token_visibility_perspective.py` — the toggle gates the turn behavior (ON → always on top; OFF → turn-gated); renders + persists for a player; hidden for the GM.
+
 ## [2.945.0] - 2026-07-06 — "Through Their Own Eyes"
 
 **Schema version:** 101

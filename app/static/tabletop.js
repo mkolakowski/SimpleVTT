@@ -612,6 +612,13 @@
     function _isTargeted(t) {
         return !!(t && _fogTargetTokenIds().has(t.id));
     }
+    // v2.946.0 — per-player toggle (localStorage, default ON): keep the tokens
+    // you control on the top layer at all times, vs. only on their turn in
+    // combat. Wired to the #mytokens-ontop-cb checkbox below.
+    function _myTokensAlwaysOnTop() {
+        try { return localStorage.getItem('tt-mytokens-ontop') !== '0'; }
+        catch (_) { return true; }
+    }
     // v2.882.0 / v2.944.0 — should this token be redrawn ON TOP of every effect
     // (above the lighting/fog/POV veil)? The rules the GM asked for:
     //   • GM, nothing selected → every visible token rides on top.
@@ -627,6 +634,7 @@
         if (ME && ME.isGm) return anySel ? _isTargeted(t) : true;
         if (!_controlsToken(t)) return false;
         if (anySel) return _isTargeted(t);
+        if (_myTokensAlwaysOnTop()) return true;   // v2.946.0 — player toggle (default ON)
         if (_battleActive()) return _isActiveTurnToken(t);
         return true;
     }
@@ -3792,6 +3800,19 @@
     window._renderCanvas = render;
 
     render();
+
+    // v2.946.0 — wire the "⬆ My tokens on top" player toggle (checkbox lives in
+    // tabletop.html inside #map-pane; players only). Reflect the stored state,
+    // then persist + re-render on change.
+    (function _wireMyTokensOnTopToggle() {
+        const cb = document.getElementById('mytokens-ontop-cb');
+        if (!cb) return;
+        cb.checked = _myTokensAlwaysOnTop();
+        cb.addEventListener('change', () => {
+            try { localStorage.setItem('tt-mytokens-ontop', cb.checked ? '1' : '0'); } catch (_) {}
+            render();
+        });
+    })();
 
     // ---------- Pan & zoom ----------
     let scale = 1;

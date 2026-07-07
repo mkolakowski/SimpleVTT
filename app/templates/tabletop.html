@@ -2399,6 +2399,25 @@
                 <span class="presence-dot"></span>{{ user.display_name }}
             </span>
         </div>
+        {% if not is_gm %}
+        {# v2.946.0 — per-player view toggle: keep the tokens you control on the
+           TOP layer (above the lighting/fog/POV veil) at all times. Unchecked →
+           they surface only on their turn during combat (the v2.944.0 rule).
+           Wired + persisted (localStorage `tt-mytokens-ontop`) by tabletop.js.
+           Compact 32px overlay control (below the 44px min by design — a dense
+           floating map affordance, per the touch-target exception). #}
+        <label id="mytokens-ontop-wrap"
+               style="position:absolute;left:10px;bottom:10px;z-index:40;display:inline-flex;
+                      align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-size:12px;
+                      cursor:pointer;min-height:32px;box-sizing:border-box;color:#dfe6f5;
+                      background:rgba(20,24,36,0.72);border:1px solid rgba(140,170,230,0.35);
+                      backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);"
+               title="Keep the tokens you control on top of the map at all times. Unchecked: they surface only on their turn during combat.">
+          <input type="checkbox" id="mytokens-ontop-cb" checked
+                 style="margin:0;min-height:auto;width:16px;height:16px;accent-color:#7fb2ff;">
+          <span>⬆ My tokens on top</span>
+        </label>
+        {% endif %}
         {% if active_map %}
             {# v2.88.0 — compute the gutter strip width server-side so the
                canvas can be sized BIGGER than the map image, leaving room
