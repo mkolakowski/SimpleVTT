@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.943.0] - 2026-07-06 — "The Adopted Eye"
+
+**Schema version:** 101
+
+**Commit summary:** VTT selected-token POV veil — darkvision line-of-sight parity with the map editor.
+
+**Description:** Targeting a token in the tabletop now narrows the view to **that token's line of sight**, the way the map editor's darkvision preview does — and, crucially, **independent of fog of war**. Previously the VTT's GM-target "perspective" was implemented entirely through fog-of-war narrowing, so on a fog-OFF map (like the re-authored Goblin Warrens) targeting a token did nothing, and it never dimmed "what the token cannot see in the dark" the way the editor previews it. The new `drawSelectedVisionVeil()` mirrors the editor's model: veil the whole map at `rgba(2,4,12,0.72)` and reveal only the adopted token's reach — a **darkvision disk** (default 60 ft, the editor's sample-token default, or the token's own carried light, whichever is farther) in dark ambient, or the whole map in dim/bright — **minus wall + closed-door shadows** (reusing the fog engine's `_fogSolidWalls` / `_fogEraseWallShadows`). GM adopts any targeted token; a player adopts only a token they control. Fog-of-war narrowing still composes on top when fog is enabled.
+
+### Added
+- `app/static/tabletop.js` — `drawSelectedVisionVeil()` + `_perspectiveSourceTokens()`; wired into `render()` when a token is selected (replaces the "no perspective adopted" branch). Exposes `window.__visionVeilForTest`.
+- `tests/harness_ui/test_vtt_selected_vision_veil.py` — targeting a token below the Goblin Warrens fence reveals its own cell and veils the far side of the closed-gate wall.
+
+### Notes
+- Real per-token darkvision is not yet on the token payload (the editor also defaults to 60 ft); surfacing resolved darkvision/senses per token is a follow-up.
+
 ## [2.942.0] - 2026-07-06 — "The Barred Gate"
 
 **Schema version:** 101

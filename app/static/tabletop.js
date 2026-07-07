@@ -3133,9 +3133,15 @@
         // the "always-visible" tokens ON TOP of the lighting + fog veil so they
         // read clearly above every effect. GM → every visible token; player →
         // only the tokens they control. (When a token IS selected we skip this
-        // and let the veil narrow the view to that token's vision instead.)
+        // and instead narrow the view to that token's line of sight.)
         if (!_anyTokenSelected()) {
             (tokens || []).forEach(t => { if (_tokenDrawsOnTop(t)) drawToken(t); });
+        } else {
+            // v2.943.0 — POV parity with the map editor: adopt the
+            // selected/targeted token's line of sight and veil what it can't
+            // see. Works with fog OFF (the editor's darkvision-LOS model), so a
+            // GM targeting a token gets the same vantage the editor previews.
+            drawSelectedVisionVeil();
         }
 
         // v2.50.0 — grid coordinate labels drawn LAST so the gutter
@@ -3554,6 +3560,68 @@
         try { render(); } catch (e) { return String(e); }
         return { visible: [...mapFogVisible], explored: [...mapFogExplored] };
     };
+
+    // v2.943.0 — selected-token line-of-sight veil: POV parity with the map
+    // editor's darkvision preview (map_editor.html drawTokenVision). When a
+    // token is selected/targeted and its POV is adopted (GM → any targeted
+    // token; player → a token they control), veil the whole map and reveal only
+    // what that token can see: a darkvision-reach disk in the dark (or the whole
+    // map in dim/bright), minus wall + closed-door shadows. Independent of
+    // fog-of-war, so it works on fog-OFF maps exactly as the editor previews it.
+    const POV_DEFAULT_DARKVISION_FT = 60;  // editor sample-token default
+    let _povVeilCanvas = null, _povSrcCanvas = null;
+    function _perspectiveSourceTokens() {
+        const ids = _fogTargetTokenIds();
+        if (!ids.size) return [];
+        const isGm = _fogViewerIsGm();
+        return (tokens || []).filter(t => t && ids.has(t.id) && (isGm || _controlsToken(t)));
+    }
+    function drawSelectedVisionVeil() {
+        const src = _perspectiveSourceTokens();
+        if (!src.length) return;  // enemy selected / no POV adopted → leave as-is
+        if (!_povVeilCanvas) _povVeilCanvas = document.createElement('canvas');
+        if (_povVeilCanvas.width !== MAP_W) _povVeilCanvas.width = MAP_W;
+        if (_povVeilCanvas.height !== MAP_H) _povVeilCanvas.height = MAP_H;
+        const vc = _povVeilCanvas.getContext('2d');
+        vc.clearRect(0, 0, MAP_W, MAP_H);
+        // Veil everything outside the adopted line of sight (editor alpha).
+        vc.globalCompositeOperation = 'source-over';
+        vc.fillStyle = 'rgba(2,4,12,0.72)';
+        vc.fillRect(0, 0, MAP_W, MAP_H);
+        const pxPerFt = gridSize / 5;
+        const dark = mapAmbientLight === 'dark';
+        const walls = _fogSolidWalls();  // open doors → gaps (reuse the fog engine)
+        if (!_povSrcCanvas) _povSrcCanvas = document.createElement('canvas');
+        if (_povSrcCanvas.width !== MAP_W) _povSrcCanvas.width = MAP_W;
+        if (_povSrcCanvas.height !== MAP_H) _povSrcCanvas.height = MAP_H;
+        const sc = _povSrcCanvas.getContext('2d');
+        src.forEach(t => {
+            const cx = t.x + gridSize / 2, cy = t.y + gridSize / 2;
+            // Reach: in the dark, darkvision (default 60 ft, editor parity) or
+            // the token's own carried light, whichever is farther; in dim/bright
+            // it sees across the map (walls permitting).
+            const dv = Number(t.darkvision_ft != null ? t.darkvision_ft : POV_DEFAULT_DARKVISION_FT);
+            const carried = Math.max(Number(t.light_bright_ft || 0), Number(t.light_dim_ft || 0));
+            const R = dark ? Math.max(dv, carried) * pxPerFt : Math.hypot(MAP_W, MAP_H);
+            if (R <= 0) return;  // blind in the dark → reveals nothing
+            sc.clearRect(0, 0, MAP_W, MAP_H);
+            sc.globalCompositeOperation = 'source-over';
+            sc.fillStyle = 'rgba(0,0,0,1)';
+            sc.beginPath(); sc.arc(cx, cy, R, 0, Math.PI * 2); sc.fill();
+            if (walls.length) {
+                sc.save();
+                sc.globalCompositeOperation = 'destination-out';
+                sc.fillStyle = 'rgba(0,0,0,1)';
+                _fogEraseWallShadows(sc, cx, cy, walls);
+                sc.restore();
+            }
+            vc.globalCompositeOperation = 'destination-out';
+            vc.drawImage(_povSrcCanvas, 0, 0);
+            vc.globalCompositeOperation = 'source-over';
+        });
+        ctx.drawImage(_povVeilCanvas, 0, 0);
+        window.__visionVeilForTest = _povVeilCanvas;  // harness sampling hook
+    }
 
     /* v2.8.1: movement breadcrumb. Drawn on top of tokens so the line
      * stays visible when a token sits on a waypoint. Reads
