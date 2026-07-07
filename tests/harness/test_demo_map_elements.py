@@ -44,13 +44,15 @@ async def test_goblin_warrens_ships_walls_and_hotspots(gm_client):
     # v2.940.0 — the layout (from a map-editor export) is one wood wall carrying
     # an embedded gate door (legacy whole-segment door OR an embedded `doors`).
     assert any(w["door"] or w.get("doors") for w in walls), "expected at least one door"
+    # v2.942.0 — the gate ships CLOSED (open=False on the embedded door).
+    embedded = [d for w in walls for d in (w.get("doors") or [])]
+    assert embedded and all(d.get("open") is False for d in embedded), embedded
 
-    # v2.940.0 — the warren is a dark, torch-lit, dynamically-explored dungeon
-    # (no static reveals, no hotspots in this layout).
+    # v2.940.0 — the warren is a dark, torch-lit dungeon (no hotspots in this
+    # layout). v2.942.0 — fog of war is OFF (a lit, explored entrance).
     assert am["ambient_light"] == "dark", am["ambient_light"]
     assert am["lights"], "expected seeded torch/brazier lights"
-    assert am["fog_enabled"] is True, "expected fog of war enabled"
-    assert am["fog_dynamic"] is True, "expected exploration (dynamic) fog"
+    assert am["fog_enabled"] is False, "expected fog of war disabled"
     # v2.941.1 — every brazier flickers at the "very slow" (0.25×) rate, and the
     # map carries no ambient weather.
     assert all(lt.get("flicker") == 0.25 for lt in am["lights"]), \

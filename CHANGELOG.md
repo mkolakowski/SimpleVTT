@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.942.0] - 2026-07-06 — "The Barred Gate"
+
+**Schema version:** 101
+
+**Commit summary:** Re-author the Goblin Warrens demo map from a fresh editor export — fog off, gate closed, tighter torch ring.
+
+**Description:** Applies the latest map-editor export to the Goblin Warrens (entrance) seed: **fog of war is now OFF** (the entrance reads as a lit, already-explored camp), the **gate door ships CLOSED** (`open: False`), and the lighting is a tighter ring — the central **hearth is 13/53 ft** (was 26/56) plus **seven 3/9-ft wall torches** (was nine 7/17-ft), all still at the 0.25× "very slow" flicker. Export coordinates (natural 1484×1060 space) are un-scaled ÷1.06 into the seed's 1400×1000 design space so the loader's ×1.06 rescale reproduces the exported positions.
+
+### Changed
+- `app/demo_campaigns.py` — `_GOBLIN_WARRENS["map"]`: `fog_enabled` False, embedded gate `open` False, lights replaced (hearth 13/53 + seven 3/9-ft torches).
+- `tests/harness/test_demo_map_elements.py::test_goblin_warrens_ships_walls_and_hotspots` — asserts fog is disabled and the embedded gate ships closed.
+
 ## [2.941.1] - 2026-07-06 — "The Still Warren"
 
 **Schema version:** 101
