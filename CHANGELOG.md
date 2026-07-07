@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.948.0] - 2026-07-07 — "Snuffed"
+
+**Schema version:** 101
+
+**Commit summary:** Hide the light glow behind the fog of war.
+
+**Description:** The colored torch-glow layer (`#light-glow-canvas`, z-7) sits above the fog veil, so torch color used to shine through unexplored fog. Now the glow is masked by the viewer's fog: `drawFog` exposes its fog veil as `window._glowFogMask` (null on every early return — fog off, or a GM who sees all), and the glow loop erases itself (`destination-out`) by that mask each frame. A torch the player can't see — behind fog or past a wall (the fog veil is wall-aware) — no longer glows; visible torches are untouched, and the GM (no fog) still sees every glow.
+
+### Fixed
+- `app/static/tabletop.js::drawFog` — exposes `window._glowFogMask` (the fog veil, or null).
+- `app/templates/tabletop.html::_lgStep` — erases the glow by `window._glowFogMask` after drawing each frame.
+
+### Added
+- `tests/harness_ui/test_light_glow_fog_mask.py` — a tunnel torch behind the Goblin Warrens fence is under opaque fog for a player below it, so its glow is erased while the hearth beside them still glows.
+
 ## [2.947.1] - 2026-07-07 — "The Fog Returns"
 
 **Schema version:** 101

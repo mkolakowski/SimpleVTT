@@ -3536,6 +3536,10 @@
     // that entity sees (its wall-occluded vision + explored memory, opaque
     // everywhere else). Players are unaffected (their party's view).
     function drawFog() {
+        // v2.948.0 — expose the fog veil so the light-glow layer (tabletop.html)
+        // can hide torch color behind the fog. Cleared on every early return
+        // (fog off / GM sees all) so the glow shows fully when there's no veil.
+        window._glowFogMask = null;
         if (!mapFogEnabled) return;
         const isGm = _fogViewerIsGm();
         const targetIds = _fogTargetTokenIds();
@@ -3591,6 +3595,7 @@
         });
         fc.globalCompositeOperation = 'source-over';
         ctx.drawImage(_fogCanvas, 0, 0);
+        window._glowFogMask = _fogCanvas;   // v2.948.0 — mask the light-glow layer
         window.__fogCanvasForTest = _fogCanvas;
     }
     // v2.844.0 — deterministic harness hook: drive the exploration-fog state

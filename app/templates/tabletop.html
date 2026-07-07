@@ -3518,6 +3518,16 @@
                 c.fillStyle = g;
                 c.beginPath(); c.arc(L.x, L.y, rpx, 0, 6.283); c.fill();
             }
+            // v2.948.0 — hide light glow behind the fog of war: erase the glow
+            // wherever the viewer's fog veil is opaque (unexplored / past walls).
+            // The mask is the fog canvas exposed by tabletop.js's drawFog (same
+            // map-pixel dimensions; null when no fog veil was drawn → glow shown
+            // in full, e.g. for the GM).
+            var _fogMask = window._glowFogMask;
+            if (_fogMask) {
+                c.globalCompositeOperation = 'destination-out';
+                c.drawImage(_fogMask, 0, 0);
+            }
             c.globalCompositeOperation = 'source-over';
             _lgRAF = requestAnimationFrame(_lgStep);
         }
