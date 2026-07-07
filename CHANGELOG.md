@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.940.2] - 2026-07-06 — "The Torch Color"
+
+**Schema version:** 101
+
+**Commit summary:** Raise the light-glow layer above the darkness/fog veil so torch color shows on dark maps.
+
+**Description:** The colored torch-flicker glow (`#light-glow-canvas`) is the layer where light **color** shows — the darkness veil only punches colorless holes. It sat at z-index 3, but v2.861.0 ("The Raised Piece") moved the darkness+fog veil onto `#token-veil-canvas` at z-6, which left the glow **buried under the veil**: on a dark map (like the newly re-authored Goblin Warrens) the warm torch color was covered by the darkness and didn't show. Raised the glow to z-7 (above the veil), restoring the pre-v2.861.0 stacking where the glow rendered above the veil (which then lived on `#vtt-canvas` z-1).
+
+### Fixed
+- `app/templates/tabletop.html` — `#light-glow-canvas` z-index 3 → 7 (above `#token-veil-canvas` z-6) so the colored light glow layers over the darkness/fog veil.
+- `tests/harness_ui/test_token_layering.py` — assert the glow sits ABOVE the veil (was asserting the veil above the glow, which buried the light color).
+
 ## [2.940.1] - 2026-07-06 — "The Narrowed Eye"
 
 **Schema version:** 101

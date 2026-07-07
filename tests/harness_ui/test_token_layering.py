@@ -2,10 +2,13 @@
 
 Two guards for "The Raised Piece":
   * Layering — tokens (and the gameplay markers) draw on ``#token-veil-canvas``,
-    which sits ABOVE the map decoration (``#wall-overlay`` / ``#light-glow-canvas``
-    z-3, ``#weather-canvas`` z-4) so terrain/walls no longer paint over tokens.
-    The veil canvas is ``pointer-events:none`` so token drag + door clicks still
-    fall through. The canvas actually carries drawn pixels (tokens render there).
+    which sits ABOVE the map decoration (``#wall-overlay`` z-3, ``#weather-canvas``
+    z-4) so terrain/walls no longer paint over tokens. The veil canvas is
+    ``pointer-events:none`` so token drag + door clicks still fall through. The
+    canvas actually carries drawn pixels (tokens render there).
+    v2.940.2 — the ``#light-glow-canvas`` (colored torch glow) sits ABOVE the
+    veil (z-7 > z-6): the darkness/fog veil renders on the veil canvas, so the
+    warm light COLOR must layer on top of it or dark maps show no torch color.
   * Min on-screen size — the token radius is floored to ``TOKEN_MIN_SCREEN_PX``
     on screen, so a size-1 token stays legible when the camera is zoomed out on a
     large natural-res map.
@@ -41,10 +44,12 @@ def test_token_veil_is_above_decoration_and_click_transparent(gm_page: Page) -> 
             };
         }"""
     )
-    # Tokens (on the veil) sit above every decoration layer.
+    # Tokens (on the veil) sit above the wall + weather decoration layers.
     assert r["veilZ"] > r["wallZ"], r
-    assert r["veilZ"] > r["glowZ"], r
     assert r["veilZ"] > r["weatherZ"], r
+    # v2.940.2 — the colored light glow sits ABOVE the veil so torch COLOR shows
+    # over the darkness/fog veil (which renders on the veil canvas) on dark maps.
+    assert r["glowZ"] > r["veilZ"], r
     # Clicks fall through to the interactive layers below (drag / doors).
     assert r["pointerEvents"] == "none", r
     # Tokens actually render on the veil canvas.

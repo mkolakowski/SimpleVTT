@@ -2468,11 +2468,16 @@
                  viewBox="0 0 {{ active_map.width_px }} {{ active_map.height_px }}"
                  style="position:absolute;top:0;left:0;z-index:3;pointer-events:none;overflow:visible;"></svg>
             {# v2.849.0 — light-glow overlay: colored, torch-flickering glows at
-               each map light source (the lighting veil on the main canvas only
-               punches colorless holes — this layer is where light COLOR shows).
-               Map coords; the wrapper transform pans/zooms it with the map. #}
+               each map light source (the lighting veil only punches colorless
+               holes — this layer is where light COLOR shows). Map coords; the
+               wrapper transform pans/zooms it with the map.
+               v2.940.2 — z-index 7 (above #token-veil-canvas z6). The darkness
+               veil + fog moved onto the token-veil canvas (z6) in v2.861.0, which
+               left this glow at z3 BURIED under the veil (colored light didn't
+               show on dark maps). It must sit ABOVE the veil, as it did pre-2.861
+               when the veil lived on #vtt-canvas (z1). #}
             <canvas id="light-glow-canvas" width="{{ active_map.width_px }}" height="{{ active_map.height_px }}"
-                    style="position:absolute;top:0;left:0;z-index:3;pointer-events:none;"></canvas>
+                    style="position:absolute;top:0;left:0;z-index:7;pointer-events:none;"></canvas>
             {# v2.808.0 — ambient weather overlay (rain / snow / fog), animated. #}
             <canvas id="weather-canvas" width="{{ active_map.width_px }}" height="{{ active_map.height_px }}"
                     style="position:absolute;top:0;left:0;z-index:4;pointer-events:none;"></canvas>
