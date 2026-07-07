@@ -3360,7 +3360,7 @@
         let _srcCanvas = null;
         function _eraseWallShadows(sctx, sx, sy) {
             if (!solidWalls.length) return;
-            const ext = (MAP_W + MAP_H) * 50;  // v2.953.0 — project FAR past the map edge: a wide wall directly above/below a token projects its endpoints nearly horizontally, so a short reach left the far side lit (vision leaked past the wall)
+            const ext = (MAP_W + MAP_H) * 6;  // v2.955.1 — project well past the map edge so wide-wall shadows cover the far side; *6 clears the map for realistic token/wall configs without the extreme (±100k) fill coords that *50 produced (they under-filled the shadow polygon)
             sctx.save();
             sctx.globalCompositeOperation = 'destination-out';
             sctx.fillStyle = 'rgba(0,0,0,1)';
@@ -3475,6 +3475,12 @@
         mapAmbientLight = amb || 'dark';
         lightEmitters = emitters || [];
         mapWalls = wallSegs || [];
+        // v2.955.1 — isolate the lighting model to the passed emitters: clear the
+        // demo map's own token/placed lights so a reseeded torch near a sample
+        // point can't punch through the test wall's shadow (a flaky "the shadow
+        // point got lit" failure that varied with the campaign's live state).
+        tokens = [];
+        mapLights = [];
         try { drawLighting(); } catch (e) { return String(e); }
         return true;
     };
@@ -3495,7 +3501,7 @@
     // shadow-quad math drawLighting() uses for its per-source light shadows.
     function _fogEraseWallShadows(sctx, sx, sy, walls) {
         if (!walls.length) return;
-        const ext = (MAP_W + MAP_H) * 50;  // v2.953.0 — see _eraseWallShadows: long reach so wide-wall shadows fully cover the far side
+        const ext = (MAP_W + MAP_H) * 6;  // v2.955.1 — see _eraseWallShadows (moderate reach; *50 made extreme fill coords)
         walls.forEach(w => {
             const proj = (px, py) => {
                 const dx = px - sx, dy = py - sy;

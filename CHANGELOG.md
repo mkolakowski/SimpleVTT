@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.955.1] - 2026-07-07 — "The Bounded Shadow"
+
+**Schema version:** 101
+
+**Commit summary:** Tame the wall-shadow reach + de-flake the lighting-shadow test.
+
+**Description:** Two robustness follow-ups to the v2.953.0 vision-leak fix. (1) The wall-shadow projection reach was `×50` of the map size, which produced extreme (±100k px) fill coordinates and an ultra-thin shadow polygon; dialled back to `×6` — still far enough to cover the far side of a wide wall for realistic token/wall configs (the Goblin-fence leak test still passes), without the extreme coords. (2) `window.__testDrawLighting` now clears the demo map's own tokens + placed lights before compositing, so a reseeded torch near a sample point can't punch through the test wall's shadow — fixing the long-standing environmental flake in `test_wall_lighting_shadow` (the shadow point occasionally read as lit depending on the campaign's live state).
+
+### Changed
+- `app/static/tabletop.js` — `_eraseWallShadows` / `_fogEraseWallShadows` reach `×50` → `×6`; `__testDrawLighting` isolates the lighting model (clears `tokens` + `mapLights`).
+
 ## [2.955.0] - 2026-07-07 — "The Right Swing"
 
 **Schema version:** 101
