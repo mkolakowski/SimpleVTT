@@ -3281,9 +3281,15 @@
         mc.globalCompositeOperation = 'source-over';
         mc.clearRect(0, 0, MAP_W, MAP_H);        // transparent = wall hidden
         mc.fillStyle = '#fff';                    // opaque white = wall fully revealed
+        // v2.953.1 — dilate each seen cell by half a cell so a wall on the vision
+        // BOUNDARY still shows: a wall blocks sight, so its own cell is on the
+        // hidden far side — without this the wall you're standing against would be
+        // masked out. Reveals walls within ~2.5 ft of a seen cell; walls deeper in
+        // unexplored fog stay hidden.
+        const _m = gridSize / 2;
         const paintCell = (k) => {
             const p = k.split(',');
-            mc.fillRect(p[0] * gridSize, p[1] * gridSize, gridSize + 1, gridSize + 1);
+            mc.fillRect(p[0] * gridSize - _m, p[1] * gridSize - _m, gridSize * 2, gridSize * 2);
         };
         if (mapFogDynamic) {
             mapFogExplored.forEach(paintCell);    // remembered → full-opacity walls

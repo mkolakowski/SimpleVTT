@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.953.1] - 2026-07-07 — "The Wall at Hand"
+
+**Schema version:** 101
+
+**Commit summary:** Reveal walls sitting on the vision boundary (the wall you're standing against).
+
+**Description:** With wall occlusion working, a wall's own cell is on the HIDDEN far side (a wall blocks sight, so you see up to it but not past it) — so the fog mask hid the very wall a player was standing against. The wall mask now dilates each seen cell by **half a cell**, so walls bordering the party's visible/explored area render; walls deeper in unexplored fog stay hidden.
+
+### Fixed
+- `app/static/tabletop.js::_updateWallFogMask` — dilate each seen cell by `gridSize/2` when building the wall mask.
+
 ## [2.953.0] - 2026-07-07 — "The Long Shadow"
 
 **Schema version:** 101
