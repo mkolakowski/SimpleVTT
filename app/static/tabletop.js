@@ -3382,8 +3382,14 @@
         });
     }
     function _fogPartyTokens() {
-        return (tokens || []).filter(t => t && !_isTokenHiddenFromMe(t) &&
-            (t.team === 'hero' || t.controller_user_id != null));
+        // v2.945.0 — a player sees only through the tokens they OWN (not the
+        // whole party's shared vision). The GM keeps the full hero/controlled
+        // set (though the GM's own fog is off by default — this feeds the
+        // no-target party view + the __testDrawFog harness path).
+        const mineOnly = !_fogViewerIsGm();
+        return (tokens || []).filter(t => t && !_isTokenHiddenFromMe(t) && (
+            mineOnly ? _controlsToken(t)
+                     : (t.team === 'hero' || t.controller_user_id != null)));
     }
     let _visCanvas = null, _visSrcCanvas = null;
     // Return a Set of "col,row" grid cells ``sourceTokens`` can currently see

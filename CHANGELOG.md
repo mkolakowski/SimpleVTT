@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.945.0] - 2026-07-06 — "Through Their Own Eyes"
+
+**Schema version:** 101
+
+**Commit summary:** Players see only through the tokens they own, not the whole party's shared vision.
+
+**Description:** A non-GM player's fog-of-war view is now the union of only **their own tokens'** sight, instead of the whole party's combined vision. `_fogPartyTokens()` (the default source set for `computeVisibleCells`) filters to `_controlsToken(t)` when the viewer isn't the GM, so each player sees the map through their own character(s) only. The GM is unchanged (fog off by default; target-perspective uses explicit sources). The click-to-adopt POV veil and `drawFog`'s player branch already restricted to owned tokens; this closes the remaining gap (the default no-selection view).
+
+### Changed
+- `app/static/tabletop.js::_fogPartyTokens` — players resolve to owned tokens only; GM keeps the full hero/controlled set.
+
+### Added
+- `tests/harness_ui/test_map_fog_player.py::test_player_fog_reveals_only_own_tokens_vision` — a token alice owns reveals its cell; a far token she doesn't own does not.
+
 ## [2.944.0] - 2026-07-06 — "The Turn to Shine"
 
 **Schema version:** 101
