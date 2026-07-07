@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.952.0] - 2026-07-07 — "The Solid Wall"
+
+**Schema version:** 101
+
+**Commit summary:** Player tokens can't pass through walls or closed doors — moves clamp at the wall.
+
+**Description:** A player dragging a token whose straight center-path crosses a **solid wall** or a **closed door** now has the move **clamped to just before the wall** instead of sliding through it. Open embedded doors and windows leave a real gap (via `_wallSolidSpans`), so tokens pass through those freely. The GM is unrestricted (places tokens anywhere). Works for mouse and touch drags. Client-side for now (the GM remains the authority; server-side enforcement is a follow-up).
+
+### Fixed
+- `app/static/tabletop.js` — `_clampMoveToWalls()` + `_segCrossT()` + `_applyWallCollision()`; wired into the mouse `mouseup` and touch `endTouches` drop handlers before the footprint snap (players only).
+
+### Added
+- `tests/harness_ui/test_token_wall_collision.py` — a move across a closed gate / solid wall is blocked and clamped; an open gate or a parallel move is not.
+
 ## [2.951.0] - 2026-07-07 — "The Measured Step"
 
 **Schema version:** 101

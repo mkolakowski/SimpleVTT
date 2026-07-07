@@ -169,6 +169,47 @@
         }));
     }
     window._wallSolidSpans = _wallSolidSpans;  // harness hook
+    // v2.952.0 — token movement collision. A move whose straight center-path
+    // crosses a solid wall span (a wall, or a CLOSED embedded door — open doors
+    // leave a gap via _wallSolidSpans) is clamped to just before the wall, so
+    // tokens can't pass through walls/closed doors. Returns t∈[0,1] where the
+    // segment p0→p1 crosses p2→p3, or null.
+    function _segCrossT(p0, p1, p2, p3) {
+        const s1x = p1.x - p0.x, s1y = p1.y - p0.y;
+        const s2x = p3.x - p2.x, s2y = p3.y - p2.y;
+        const denom = (-s2x * s1y + s1x * s2y);
+        if (Math.abs(denom) < 1e-9) return null;             // parallel/degenerate
+        const s = (-s1y * (p0.x - p2.x) + s1x * (p0.y - p2.y)) / denom;
+        const t = (s2x * (p0.y - p2.y) - s2y * (p0.x - p2.x)) / denom;
+        return (s >= 0 && s <= 1 && t >= 0 && t <= 1) ? t : null;
+    }
+    // Clamp a move (token-center ox,oy → dx,dy) at the nearest solid wall it
+    // crosses. Returns {x, y, blocked}. Open doors / windows don't block.
+    function _clampMoveToWalls(ox, oy, dx, dy) {
+        const spans = (mapWalls || []).flatMap(_wallSolidSpans);
+        if (!spans.length) return { x: dx, y: dy, blocked: false };
+        const p0 = { x: ox, y: oy }, p1 = { x: dx, y: dy };
+        let minT = Infinity;
+        spans.forEach(w => {
+            const t = _segCrossT(p0, p1, { x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 });
+            if (t != null && t < minT) minT = t;
+        });
+        if (!isFinite(minT)) return { x: dx, y: dy, blocked: false };
+        // Stop a hair short of the wall so the token sits against it, not on it.
+        const t = Math.max(0, minT - 0.02);
+        return { x: ox + (dx - ox) * t, y: oy + (dy - oy) * t, blocked: true };
+    }
+    // v2.952.0 — apply the wall clamp to a dragged token in place (players only;
+    // the GM places freely). Applies on all map types.
+    function _applyWallCollision(dragState) {
+        if (!dragState || (typeof ME !== 'undefined' && ME && ME.isGm)) return;
+        const half = gridSize / 2;
+        const c = _clampMoveToWalls(
+            dragState.origX + half, dragState.origY + half,
+            dragState.token.x + half, dragState.token.y + half);
+        if (c.blocked) { dragState.token.x = c.x - half; dragState.token.y = c.y - half; }
+    }
+    window.__clampMoveToWallsForTest = (ox, oy, dx, dy) => _clampMoveToWalls(ox, oy, dx, dy);
     // A fingerprint of every wall's open state (segment + embedded doors) so
     // vision caches invalidate when a door toggles (the walls array length
     // alone doesn't change on a toggle).
@@ -4833,6 +4874,9 @@
         }
         if (ev.button === 2) return;
         if (!dragging) return;
+        // v2.952.0 — block player tokens from crossing solid walls / closed
+        // doors: clamp the move to just before the wall it crosses (GM is free).
+        _applyWallCollision(dragging);
         // v2.917.0 — snap by the token's footprint so 2×2 / 4×4 tokens sit
         // squarely on cells (odd sizes are unchanged vs. the old snapToGrid).
         const [sx, sy] = snapTokenFootprint(
@@ -6353,6 +6397,8 @@
         function endTouches(ev) {
             // Finalize token drag when the last finger lifts.
             if (touchDrag && ev.touches.length === 0) {
+                // v2.952.0 — wall collision (players only), matching the mouse path.
+                _applyWallCollision(touchDrag);
                 // v2.917.0 — footprint-aware snap (matches the mouse path).
                 const [sx, sy] = snapTokenFootprint(
                     touchDrag.token.x, touchDrag.token.y, touchDrag.token.size);
