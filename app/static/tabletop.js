@@ -578,7 +578,13 @@
     // selection we maximize token visibility; with a selection we narrow to that
     // token's vision.
     function _anyTokenSelected() {
-        return !!(window._targetingState && (window._targetingState.tokenIds || []).length);
+        // v2.940.1 — `tokenIds` is a Set (see `_targeting` below); a Set has no
+        // `.length`, so the old `.length` read was always `undefined` → this
+        // returned false even with a token targeted, and the GM/player "narrow
+        // to the selected token's vision" perspective never engaged (every token
+        // was redrawn on top of the veil in render()). Read `.size`.
+        const ids = window._targetingState && window._targetingState.tokenIds;
+        return !!(ids && ids.size);
     }
     // v2.882.0 — should this token be redrawn ON TOP of every effect (above the
     // lighting + fog veil) for maximum visibility? Only when nothing is selected:

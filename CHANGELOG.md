@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.940.1] - 2026-07-06 — "The Narrowed Eye"
+
+**Schema version:** 101
+
+**Commit summary:** Fix the GM/player selected-token perspective — `_anyTokenSelected` read `.length` on a Set.
+
+**Description:** Targeting a token (GM "see what they see", or a player selecting a token they control) is meant to **narrow the view to that token's vision**: the render stops redrawing every token on top of the lighting+fog veil so the veil can hide/dim what the token can't see. That never engaged. `_anyTokenSelected()` tested `window._targetingState.tokenIds.length`, but `tokenIds` is a **Set** — a Set has no `.length`, so the read was always `undefined` and the check always returned `false`. Every token kept drawing on top of the veil even with one selected, so the perspective looked broken (all tokens still floated above the fog). Read `.size` instead. Broken since v2.882.0.
+
+### Fixed
+- `app/static/tabletop.js::_anyTokenSelected` — read `tokenIds.size` (Set), not `.length`, so selecting/targeting a token engages the narrow-to-its-vision perspective.
+- `tests/harness_ui/test_token_visibility_perspective.py` — the test set `tokenIds` as an **array** (`.length` worked), masking the bug; it now uses the real `Set` shape so it guards the `.size` contract.
+
 ## [2.940.0] - 2026-07-06 — "The Rebuilt Warren"
 
 **Schema version:** 101

@@ -23,12 +23,17 @@ def test_gm_all_tokens_on_top_until_one_is_selected(gm_page: Page) -> None:
     r = gm_page.evaluate(
         """() => {
             const V = window.__tokenVisForTest;
-            window._targetingState = { tokenIds: [] };
+            // v2.940.1 — the real targeting state stores `tokenIds` as a Set (not
+            // an array); this test must mirror that shape so it catches a `.size`
+            // vs `.length` regression in _anyTokenSelected (the array `.length`
+            // passed while production's Set `.length` was undefined → perspective
+            // never engaged).
+            window._targetingState = { tokenIds: new Set() };
             const before = { any: V.anySelected(), onTop: V.drawsOnTop({ id: 1, size: 1 }) };
             // Selecting a token suppresses the "everything on top" redraw.
-            window._targetingState = { tokenIds: [1] };
+            window._targetingState = { tokenIds: new Set([1]) };
             const after = { any: V.anySelected(), onTop: V.drawsOnTop({ id: 1, size: 1 }) };
-            window._targetingState = { tokenIds: [] };
+            window._targetingState = { tokenIds: new Set() };
             return { before, after, isGm: !!(window.ME && window.ME.isGm) };
         }"""
     )
@@ -47,7 +52,7 @@ def test_player_only_controlled_tokens_draw_on_top(alice_page: Page) -> None:
     r = alice_page.evaluate(
         """() => {
             const V = window.__tokenVisForTest;
-            window._targetingState = { tokenIds: [] };
+            window._targetingState = { tokenIds: new Set() };
             const myId = window.ME.id;
             const mine = { id: 10, size: 1, controller_user_id: myId };
             const theirs = { id: 11, size: 1, controller_user_id: myId + 9999, character_id: null };
