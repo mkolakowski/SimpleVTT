@@ -113,6 +113,13 @@
     color:var(--fg-mute); opacity:.6; user-select:none; cursor:pointer; }
   /* v2.820.0 — the zone label folds/expands its whole zone; hover hints it. */
   .me-zone-sep > .me-zone-lbl:hover { opacity:1; color:var(--accent); }
+  /* v2.939.0 — the three zone toggle buttons on the far left show/hide whole
+     zones; a "pressed" (open) button reads accented, a released one dim. */
+  .me-zone-toggles { flex:0 0 auto; align-self:center; display:flex; flex-direction:column; gap:3px; margin-right:2px; }
+  .me-zone-toggle { min-height:28px; padding:2px 9px; font-size:11px; font-weight:700; white-space:nowrap; }
+  .me-zone-toggle[aria-pressed="true"] { background:var(--accent); color:#fff; }
+  .me-zone-toggle[aria-pressed="false"] { opacity:.6; }
+  .me-group.me-zone-hidden { display:none !important; }
   /* v2.783.0 — labelled sub-groups, stacked + width-equalised to the widest. */
   .me-group { display:flex; flex-direction:column; align-items:stretch; gap:3px;
     padding:2px 6px 4px; border:1px solid var(--border); border-radius:7px;
@@ -206,9 +213,17 @@
 <div class="me-toolbar">
   {# v2.783.0 — controls organised into labelled sub-groups: Walls · Markers ·
      Fog · Tokens · Tools · Grid · Lighting · View. #}
-  {# v2.932.0 — the Actions zone (File · Tools · View) gets its own collapsible
-     zone divider, matching Draw / Map. #}
-  <div class="me-zone-sep"><span class="me-zone-lbl">Actions</span></div>
+  {# v2.939.0 — the three zone dividers became toggle BUTTONS on the far left:
+     each shows/hides its whole zone (Actions · Draw · Map). Any mix can be open
+     at once; the open/closed state is remembered per map. #}
+  <div class="me-zone-toggles">
+    <button type="button" class="me-tool-btn me-zone-toggle" data-zone="Actions" aria-pressed="true"
+            title="Show / hide the Actions groups (File · Tools · View)">⚙ Actions</button>
+    <button type="button" class="me-tool-btn me-zone-toggle" data-zone="Draw" aria-pressed="true"
+            title="Show / hide the Draw groups (Walls · Terrain · Lighting · Environment · Lair)">✏ Draw</button>
+    <button type="button" class="me-tool-btn me-zone-toggle" data-zone="Map" aria-pressed="true"
+            title="Show / hide the Map groups (Grid · Layers · Notes · Tokens)">🗺 Map</button>
+  </div>
   {# v2.810.0 — undo / redo history, pinned to the far left.
      v2.826.0 — renamed "File": Save + Undo/Redo + the map's Tags all together. #}
   <div class="me-group me-group--stack" role="group" aria-label="File">
@@ -285,8 +300,8 @@
     <span id="me-resolution" class="me-cap" style="text-align:center;text-transform:none;letter-spacing:0;font-weight:600;"
           title="Map image resolution (pixels)">{{ map.width_px }} × {{ map.height_px }} px</span>
   </div>
-  {# v2.817.0 — Actions │ Draw zone boundary. v2.820.0 — label folds the zone. #}
-  <div class="me-zone-sep"><span class="me-zone-lbl">Draw</span></div>
+  {# v2.939.0 — the Draw/Map zone dividers are gone; the far-left zone toggle
+     buttons show/hide these zones now. #}
   <div class="me-group" role="group" aria-label="Walls">
     <span class="me-grp-lbl">Walls</span>
     {# v2.927.0 — Theme C: the per-group ⬡ FreeForm toggles (walls / terrain /
@@ -471,8 +486,6 @@
     <div id="me-lairzone-desc"
          style="width:190px;max-width:190px;box-sizing:border-box;font-size:11px;line-height:1.35;color:var(--fg-mute);white-space:normal;overflow-wrap:break-word;word-break:break-word;max-height:8.1em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;cursor:help;"></div>
   </div>
-  {# v2.817.0 — Draw │ Map zone boundary. v2.820.0 — label folds the zone. #}
-  <div class="me-zone-sep"><span class="me-zone-lbl">Map</span></div>
   <div class="me-group" role="group" aria-label="Grid">
     <span class="me-grp-lbl">Grid</span>
     {# v2.788.4 — grid type (square / hex / none) drives the overlay + snapping. #}
@@ -4906,24 +4919,30 @@
     Draw: ['Walls', 'Terrain', 'Lighting', 'Environment', 'Lair zones'],  // v2.936.0 — Notes + Tokens moved to Map
     Map: ['Grid', 'Layers', 'Annotations', 'Tokens'],  // v2.932.0 View→Actions; v2.936.0 Notes+Tokens→Map
   };
-  Array.prototype.forEach.call(document.querySelectorAll('.me-zone-sep > .me-zone-lbl'), function (lbl) {
-    var zone = (lbl.textContent || '').trim();
-    var members = ZONE_MEMBERS[zone] || [];
-    lbl.setAttribute('title', 'Click to collapse / expand the whole ' + zone + ' zone');
-    lbl.addEventListener('click', function () {
-      var groups = members.map(function (k) {
-        return document.querySelector('.me-toolbar .me-group[aria-label="' + k + '"]');
-      }).filter(Boolean);
-      // Collapse the zone if ANY member is still expanded; otherwise expand all.
-      var collapse = groups.some(function (g) { return !g.classList.contains('me-collapsed'); });
-      groups.forEach(function (g) {
-        var key = g.getAttribute('aria-label') || '';
-        g.classList.toggle('me-collapsed', collapse);
-        var i = collapsedGroups.indexOf(key);
-        if (collapse && i < 0) collapsedGroups.push(key);
-        else if (!collapse && i >= 0) collapsedGroups.splice(i, 1);
-      });
-      saveCollapsed();
+  // v2.939.0 — the far-left zone toggle buttons show / hide each zone's groups.
+  // Any combination can be open at once; the hidden set persists per map. (This
+  // is separate from the per-group collapse-to-strip above.)
+  var hiddenZones = (function () {
+    try { return JSON.parse(localStorage.getItem('me-zones-hidden-' + MID) || '[]') || []; }
+    catch (e) { return []; }
+  })();
+  function _applyZone(zone) {
+    var hidden = hiddenZones.indexOf(zone) >= 0;
+    (ZONE_MEMBERS[zone] || []).forEach(function (k) {
+      var g = document.querySelector('.me-toolbar .me-group[aria-label="' + k + '"]');
+      if (g) g.classList.toggle('me-zone-hidden', hidden);
+    });
+    var btn = document.querySelector('.me-zone-toggle[data-zone="' + zone + '"]');
+    if (btn) btn.setAttribute('aria-pressed', hidden ? 'false' : 'true');
+  }
+  Object.keys(ZONE_MEMBERS).forEach(_applyZone);  // apply the remembered state on load
+  Array.prototype.forEach.call(document.querySelectorAll('.me-zone-toggle'), function (btn) {
+    btn.addEventListener('click', function () {
+      var zone = btn.getAttribute('data-zone');
+      var i = hiddenZones.indexOf(zone);
+      if (i >= 0) hiddenZones.splice(i, 1); else hiddenZones.push(zone);
+      try { localStorage.setItem('me-zones-hidden-' + MID, JSON.stringify(hiddenZones)); } catch (e) {}
+      _applyZone(zone);
     });
   });
   // Show the whole map on load.

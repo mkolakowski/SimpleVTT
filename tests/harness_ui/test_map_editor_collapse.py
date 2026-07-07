@@ -33,38 +33,40 @@ def test_group_collapses_and_persists(gm_page: Page) -> None:
     assert gm_page.locator("#me-grid-type").is_visible()
 
 
-def test_zone_divider_collapses_whole_zone(gm_page: Page) -> None:
-    """v2.820.0 — clicking a zone divider label folds every group in that zone."""
+def test_zone_button_toggles_whole_zone(gm_page: Page) -> None:
+    """v2.939.0 — the far-left zone toggle buttons show / hide a whole zone; the
+    open/closed state is remembered per map, and zones are independent."""
     with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
     gm_page.goto(f"{BASE_URL}/campaign/{CAMPAIGN_ID}/map/{mid}/edit")
     expect(gm_page.locator("#me-overlay")).to_be_visible()
     gm_page.wait_for_timeout(300)
+    # Start from a known state (nothing hidden).
+    gm_page.evaluate("(mid) => localStorage.removeItem('me-zones-hidden-' + mid)", mid)
+    gm_page.reload()
+    expect(gm_page.locator("#me-overlay")).to_be_visible()
+    gm_page.wait_for_timeout(300)
 
-    # v2.924.0 — Theme A: Draw zone = Walls · Terrain · Lighting · Fog & Vision ·
-    # Weather · Annotations · Lair · Tokens.
-    draw_groups = ["Walls", "Terrain", "Lighting", "Environment"]  # v2.936.0 — Notes+Tokens now in Map
+    draw_groups = ["Walls", "Terrain", "Lighting", "Environment", "Lair zones"]
+    draw_btn = gm_page.locator('.me-zone-toggle[data-zone="Draw"]')
     for g in draw_groups:
-        assert "me-collapsed" not in (
-            gm_page.locator(f'.me-group[aria-label="{g}"]').get_attribute("class") or "")
+        expect(gm_page.locator(f'.me-group[aria-label="{g}"]')).to_be_visible()
+    assert draw_btn.get_attribute("aria-pressed") == "true"
 
-    # Click the "Draw" zone divider label → every Draw group collapses.
-    gm_page.locator('.me-zone-sep > .me-zone-lbl', has_text="Draw").click()
+    # Click the Draw zone button → every Draw group hides (Map untouched).
+    draw_btn.click()
     gm_page.wait_for_timeout(150)
     for g in draw_groups:
-        assert "me-collapsed" in (
-            gm_page.locator(f'.me-group[aria-label="{g}"]').get_attribute("class") or ""), g
-    # The Map zone is untouched (Grid still expanded).
-    assert gm_page.locator("#me-grid-type").is_visible()
+        expect(gm_page.locator(f'.me-group[aria-label="{g}"]')).to_be_hidden()
+    assert draw_btn.get_attribute("aria-pressed") == "false"
+    assert gm_page.locator("#me-grid-type").is_visible()  # Map zone still open
 
-    # Persists across reload, then a second click re-expands the whole zone.
+    # Persists across reload, then a second click re-opens the zone.
     gm_page.reload()
     gm_page.wait_for_timeout(400)
-    assert "me-collapsed" in (
-        gm_page.locator('.me-group[aria-label="Walls"]').get_attribute("class") or "")
-    gm_page.locator('.me-zone-sep > .me-zone-lbl', has_text="Draw").click()
+    expect(gm_page.locator('.me-group[aria-label="Walls"]')).to_be_hidden()
+    gm_page.locator('.me-zone-toggle[data-zone="Draw"]').click()
     gm_page.wait_for_timeout(150)
     for g in draw_groups:
-        assert "me-collapsed" not in (
-            gm_page.locator(f'.me-group[aria-label="{g}"]').get_attribute("class") or ""), g
+        expect(gm_page.locator(f'.me-group[aria-label="{g}"]')).to_be_visible()

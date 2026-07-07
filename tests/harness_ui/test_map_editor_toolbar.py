@@ -27,9 +27,10 @@ def test_toolbar_grouped(gm_page: Page) -> None:
     assert labels == ["FILE", "TOOLS", "VIEW", "WALLS", "TERRAIN", "LIGHTING", "ENVIRONMENT",
                       "LAIR", "GRID", "LAYERS", "NOTES", "TOKENS"], labels
 
-    # v2.817.0 — zone dividers; v2.932.0 — Actions is now a collapsible zone too.
-    zones = [s.upper() for s in gm_page.locator(".me-zone-sep .me-zone-lbl").all_inner_texts()]
-    assert zones == ["ACTIONS", "DRAW", "MAP"], zones
+    # v2.939.0 — the three zone dividers became far-left toggle buttons.
+    zones = gm_page.locator(".me-zone-toggle").evaluate_all(
+        "els => els.map(e => e.getAttribute('data-zone'))")
+    assert zones == ["Actions", "Draw", "Map"], zones
 
     # v2.822.0 — the edit bar is translucent (frosted): a backdrop blur is set.
     blur = gm_page.eval_on_selector(

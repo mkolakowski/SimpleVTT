@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.939.0] - 2026-07-06 — "The Zone Toggles"
+
+**Schema version:** 101
+
+**Commit summary:** Replace the three zone dividers with far-left toggle buttons that show/hide each zone independently (remembered per map).
+
+**Description:** The three vertical zone dividers (Actions · Draw · Map) — which collapsed a zone's groups to strips — are replaced by three **toggle buttons stacked on the far left** of the toolbar (⚙ Actions · ✏ Draw · 🗺 Map). Each button **shows or hides its entire zone's groups**; **any combination can be open at once** (a pressed/accent button = open, a dim one = hidden), and the open/closed state is **remembered per map** in `localStorage`. Per-group collapse (clicking a group's own label to fold it to a vertical strip) is unchanged and independent.
+
+### Changed
+- `app/templates/map_editor.html` — the three `.me-zone-sep` dividers removed; a `.me-zone-toggles` button column added at the toolbar start; new `_applyZone` / persistence logic (`me-zones-hidden-<MID>`) replaces the divider-click collapse; `.me-zone-hidden` hides a group.
+- Tests: `test_map_editor_collapse.py` (`test_zone_button_toggles_whole_zone`), `test_editor_group_collapse.py` (button-hide + a separate per-group vertical-strip test), `test_editor_actions_zone.py`, and `test_map_editor_toolbar.py` (zone list read from the buttons) updated to the new behaviour.
+
+### Schema
+- No schema change (still v101 — editor toolbar only).
+
 ## [2.938.1] - 2026-07-06 — "The Contained Lair"
 
 **Schema version:** 101
