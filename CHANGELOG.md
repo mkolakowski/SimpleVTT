@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.956.0] - 2026-07-07 — "Out of Sight"
+
+**Schema version:** 101
+
+**Commit summary:** Dynamic fog hides tokens outside the player's current line of sight; fog grid halved again (quarter of the 5-ft cell).
+
+**Description:** Two fog-of-war changes. (1) **Tokens are only visible while in the player's current line of sight.** Exploration memory used to reveal a remembered room *and everything standing in it* — so a player could still see NPCs behind a now-closed door if they'd been in that room before. Now a non-owned token in explored-but-not-currently-visible ground is hidden: the player remembers the room, not who's in it. Opening a door (a walls change) recomputes vision and reveals the room + its tokens again; closing it hides them. The viewer's own tokens are always shown; the GM sees everything. (2) The **fog tracking grid is finer again** — `FOG_SUBDIV` 2 → 4, so fog cells are a quarter of the 5-ft movement cell (~1.25 ft), for smoother fog edges and vision boundaries.
+
+### Changed
+- `app/static/tabletop.js` — `_isTokenHiddenFromMe` hides non-owned tokens not in `mapFogVisible` (dynamic fog); `_setMapWalls` recomputes vision (`revealFromVision`) on door/wall changes so a door toggle reveals/hides the room live; `FOG_SUBDIV` 2 → 4; `__tokenVisForTest.hidden` hook.
+
+### Added
+- `tests/harness_ui/test_fog_hides_npcs_out_of_los.py` — an NPC behind a closed wall is hidden even when the room is explored, and revealed when the wall opens.
+
 ## [2.955.1] - 2026-07-07 — "The Bounded Shadow"
 
 **Schema version:** 101

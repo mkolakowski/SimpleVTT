@@ -133,7 +133,14 @@
     let mapWalls = [];
     window._setMapWalls = function (w) {
         mapWalls = Array.isArray(w) ? w : [];
-        try { render(); } catch (_) {}  // full redraw (map+tokens+lighting)
+        // v2.956.0 — walls/doors changed → recompute what the party can see
+        // (opening a door reveals the room + its tokens; closing it hides them
+        // again). Static-fog / no-fog maps just do a plain redraw.
+        if (mapFogEnabled && mapFogDynamic && typeof revealFromVision === 'function') {
+            try { revealFromVision(); } catch (_) { try { render(); } catch (_) {} }
+        } else {
+            try { render(); } catch (_) {}  // full redraw (map+tokens+lighting)
+        }
     };
     // v2.900.0 — the solid (sight-blocking) sub-segments of a wall, as a list of
     // {x1,y1,x2,y2}. A window blocks nothing; a legacy whole-segment open
@@ -315,7 +322,7 @@
     // instead of stepping by a full 5-ft square. Fog cell keys ("c,r") + the
     // server-stored explored memory are in FOG_CELL units (cell-size-agnostic on
     // the server). Keep it an integer divisor of gridSize so cells tile evenly.
-    const FOG_SUBDIV = 2;
+    const FOG_SUBDIV = 4;
     const FOG_CELL = Math.max(8, Math.round(gridSize / FOG_SUBDIV));
     window.__fogCellForTest = () => FOG_CELL;  // harness: fog cell size in px
     // v2.913.0 — per-map default token-size multiplier (GM-set in the editor).
@@ -610,6 +617,16 @@
         const hf = t.hidden_from_user_ids;
         if (Array.isArray(hf) && ME && typeof ME.id === 'number' && hf.includes(ME.id)) {
             return true;
+        }
+        // v2.956.0 — dynamic fog: a player sees a token only while it's in their
+        // CURRENT line of sight. A token in explored-but-not-visible ground (an
+        // NPC behind a now-closed door, say) is remembered terrain, not a live
+        // sighting — hide it, so exploration memory reveals the room, not who's
+        // in it now. The viewer's own tokens are always shown.
+        if (mapFogEnabled && mapFogDynamic && !_controlsToken(t)) {
+            const cx = Math.floor((t.x + gridSize / 2) / FOG_CELL);
+            const cy = Math.floor((t.y + gridSize / 2) / FOG_CELL);
+            if (!mapFogVisible.has(cx + ',' + cy)) return true;
         }
         return false;
     }
@@ -2096,6 +2113,7 @@
         anySelected: () => _anyTokenSelected(),
         drawsOnTop: (t) => _tokenDrawsOnTop(t),
         controls: (t) => _controlsToken(t),
+        hidden: (t) => _isTokenHiddenFromMe(t),  // v2.956.0
     };
 
     // v2.872.0 — zone-driven lair-action targeting. Lives here (not in
