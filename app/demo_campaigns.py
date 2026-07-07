@@ -77,10 +77,11 @@ _GOBLIN_WARRENS = {
             "gridless": True,
             "ambient_light": "dark",
             "weather": "",  # v2.941.1 — no ambient weather on this map
-            # v2.942.0 — re-authored from a map-editor export: fog of war OFF
-            # (the warren reads as a lit, explored entrance), the gate CLOSED,
+            # v2.942.0 — re-authored from a map-editor export: the gate CLOSED,
             # and a tighter torch ring (hearth 13/53 + seven 3/9-ft wall torches).
-            "fog_enabled": False, "fog_dynamic": True,
+            # v2.947.1 — fog of war back ON (dynamic exploration) so players are
+            # bounded to their PCs' line of sight.
+            "fog_enabled": True, "fog_dynamic": True,
             "walls": [
                 {"id": "w1783385893138_0", "x1": 0.0, "y1": 563.2, "x2": 1408.5, "y2": 576.4, "style": "wood", "doors": [{"id": "d1783385944228_1", "t0": 0.391137, "t1": 0.55392, "open": False, "gate": True}]}],
             "lights": [

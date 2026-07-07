@@ -10,6 +10,19 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.947.1] - 2026-07-07 — "The Fog Returns"
+
+**Schema version:** 101
+
+**Commit summary:** Turn fog of war back ON for the Goblin Warrens demo map.
+
+**Description:** Re-enables dynamic (exploration) fog of war on the Goblin Warrens (entrance) seed — it shipped fog-OFF in v2.942.0. With fog on, players are bounded to their PCs' wall-aware visible cells + explored memory (`drawFog`), which is the intended play experience. The v2.947.0 fog-OFF anti-bypass test no longer depends on the seed default: it now forces fog off via the fog endpoint and restores it, so it stays valid for any map.
+
+### Changed
+- `app/demo_campaigns.py` — `_GOBLIN_WARRENS["map"]` `fog_enabled` False → True (dynamic still True).
+- `tests/harness/test_demo_map_elements.py` — asserts fog enabled + dynamic again.
+- `tests/harness_ui/test_vtt_selected_vision_veil.py::test_player_cannot_see_past_walls_with_fog_off` — forces fog OFF itself (PUT /fog) and restores it, decoupling from the seed default.
+
 ## [2.947.0] - 2026-07-07 — "No Peeking"
 
 **Schema version:** 101

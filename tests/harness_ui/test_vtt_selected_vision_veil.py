@@ -57,12 +57,16 @@ def test_gm_target_narrows_to_that_tokens_line_of_sight(gm_page: Page) -> None:
 
 def test_player_cannot_see_past_walls_with_fog_off(alice_page: Page) -> None:
     """v2.947.0 — anti-bypass: on a fog-OFF map an UNtargeted player is still
-    bounded to their own PCs' line of sight, so they can't see past walls. The
-    Goblin Warrens ships fog OFF; a token alice owns below the fence reveals its
-    cell but the far side of the closed-gate wall stays veiled."""
+    bounded to their own PCs' line of sight, so they can't see past walls. This
+    test forces fog OFF on the Goblin Warrens (which now ships fog ON), so it's
+    independent of the seed's fog default; a token alice owns below the fence
+    reveals its cell but the far side of the closed-gate wall stays veiled."""
     with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as gm:
         gm.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
         cid = _goblin_warrens_cid(gm)
+        mid = gm.get(f"/api/campaign/{cid}/active-map").json()["map_id"]
+        # Force fog OFF for this test (exercises the fog-off anti-bypass branch).
+        gm.put(f"/api/campaign/{cid}/map/{mid}/fog", json={"enabled": False})
         tok = gm.post(f"/api/campaign/{cid}/tokens",
                       json={"label": "AlicePC", "x": 700, "y": 900}).json()
         tid = tok["id"]
@@ -94,3 +98,4 @@ def test_player_cannot_see_past_walls_with_fog_off(alice_page: Page) -> None:
             assert res["farAlpha"] > 150, res    # past the fence → veiled (no bypass)
         finally:
             gm.request("DELETE", f"/api/campaign/{cid}/tokens/{tid}")
+            gm.put(f"/api/campaign/{cid}/map/{mid}/fog", json={"enabled": True})
