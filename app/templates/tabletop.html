@@ -2483,9 +2483,14 @@
                it pans/zooms with the map; SVG coords == map-pixel coords. Walls
                render as solid lines, doors as dashed (green when open). Pointer
                events are off except in GM wall-edit mode. #}
+            {# v2.950.0 — wall/door overlay at z-8 (above the token+veil canvas and
+               the light glow) so walls read clearly for players even in the dark.
+               tabletop.js CSS-masks this layer by the fog veil for players, so
+               walls appear only where the party can see and stay hidden beyond
+               fog; the GM (no fog) always sees every wall. #}
             <svg id="wall-overlay" width="{{ active_map.width_px }}" height="{{ active_map.height_px }}"
                  viewBox="0 0 {{ active_map.width_px }} {{ active_map.height_px }}"
-                 style="position:absolute;top:0;left:0;z-index:3;pointer-events:none;overflow:visible;"></svg>
+                 style="position:absolute;top:0;left:0;z-index:8;pointer-events:none;overflow:visible;"></svg>
             {# v2.849.0 — light-glow overlay: colored, torch-flickering glows at
                each map light source (the lighting veil only punches colorless
                holes — this layer is where light COLOR shows). Map coords; the

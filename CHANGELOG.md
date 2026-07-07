@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.950.0] - 2026-07-07 — "The Seen Walls"
+
+**Schema version:** 101
+
+**Commit summary:** Show walls/doors to players — only where they can see (fog-masked).
+
+**Description:** Walls and doors are now visible to players in the area their party can see, and hidden beyond the fog of war. The `#wall-overlay` moved above the token/veil canvas (z-3 → z-8) so walls read clearly even in dark rooms (they were dimmed under the darkness veil before), and for players tabletop.js CSS-masks the overlay by the same fog veil the light glow uses — so wall/door outlines appear as the party explores and disappear past unexplored fog (explored-memory cells show them dimmed). The GM (who has no fog veil) always sees every wall with no mask. Secret doors and invisible walls stay GM-only as before.
+
+### Changed
+- `app/templates/tabletop.html` — `#wall-overlay` z-index 3 → 8.
+- `app/static/tabletop.js` — `_updateWallFogMask()` (called at the end of `render()`) CSS-masks the wall overlay by the fog veil for players; clears the mask for the GM / fog-off.
+- `tests/harness_ui/test_token_layering.py` — walls now sit above the veil (z-8), asserted accordingly.
+
+### Added
+- `tests/harness_ui/test_wall_player_visibility.py` — the wall overlay is fog-masked for a player (and renders children), and unmasked for the GM.
+
 ## [2.949.0] - 2026-07-07 — "Load-Bearing"
 
 **Schema version:** 101

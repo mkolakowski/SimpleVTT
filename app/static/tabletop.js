@@ -3200,6 +3200,46 @@
 
         ctx = mainCtx;  // v2.861.0 — restore for any draw outside render()
         _updateGifOverlay();
+        _updateWallFogMask();  // v2.950.0 — reveal walls only where the player can see
+    }
+
+    // v2.950.0 — show walls/doors to players only where they can SEE: CSS-mask
+    // the #wall-overlay (raised to z-8, above the veil) by the same fog veil the
+    // light glow uses. Opaque-white mask = reveal; the fog (opaque where hidden)
+    // is punched out so walls disappear beyond the fog / past unexplored cells,
+    // and reappear as the party explores. The GM (no fog veil) always sees every
+    // wall. Cheap enough per render() — pan/zoom is CSS-only and doesn't re-render.
+    let _wallMaskCanvas = null, _wallOverlayEl = null;
+    function _updateWallFogMask() {
+        if (!_wallOverlayEl) _wallOverlayEl = document.getElementById('wall-overlay');
+        if (!_wallOverlayEl) return;
+        const fog = window._glowFogMask;
+        // GM sees all walls; no fog veil drawn → nothing to hide → clear the mask.
+        if ((typeof ME !== 'undefined' && ME && ME.isGm) || !fog) {
+            if (_wallOverlayEl.style.maskImage || _wallOverlayEl.style.webkitMaskImage) {
+                _wallOverlayEl.style.maskImage = '';
+                _wallOverlayEl.style.webkitMaskImage = '';
+            }
+            return;
+        }
+        if (!_wallMaskCanvas) _wallMaskCanvas = document.createElement('canvas');
+        if (_wallMaskCanvas.width !== MAP_W) _wallMaskCanvas.width = MAP_W;
+        if (_wallMaskCanvas.height !== MAP_H) _wallMaskCanvas.height = MAP_H;
+        const mc = _wallMaskCanvas.getContext('2d');
+        mc.globalCompositeOperation = 'source-over';
+        mc.clearRect(0, 0, MAP_W, MAP_H);
+        mc.fillStyle = '#fff';
+        mc.fillRect(0, 0, MAP_W, MAP_H);        // opaque white = reveal the wall
+        mc.globalCompositeOperation = 'destination-out';
+        mc.drawImage(fog, 0, 0);                 // punch out where fog is opaque → hide
+        mc.globalCompositeOperation = 'source-over';
+        const url = _wallMaskCanvas.toDataURL();
+        _wallOverlayEl.style.webkitMaskImage = 'url(' + url + ')';
+        _wallOverlayEl.style.maskImage = 'url(' + url + ')';
+        _wallOverlayEl.style.webkitMaskSize = '100% 100%';
+        _wallOverlayEl.style.maskSize = '100% 100%';
+        _wallOverlayEl.style.webkitMaskRepeat = 'no-repeat';
+        _wallOverlayEl.style.maskRepeat = 'no-repeat';
     }
 
     // v2.710.0 — Phase 5 of vision-and-light: render the lighting model
