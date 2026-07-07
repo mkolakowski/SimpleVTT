@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.949.0] - 2026-07-07 — "Load-Bearing"
+
+**Schema version:** 101
+
+**Commit summary:** Fix a parse-vs-fetch race that left vision/lighting/fog on empty walls until a WS update.
+
+**Description:** On load, `tabletop.html`'s `load()` fetches `/active-map` and pushes walls/lights/fog into `tabletop.js` via `window._setMap*`. Those setters live in `tabletop.js`, which parses *after* the wall script — so when the fetch resolved first (a warm cache), the guarded pushes silently no-op'd and `tabletop.js` was left with **empty walls**. The result: a GM whose token was targeted on load saw **past walls** (the darkvision/fog vision had no occluders), and torch glow leaked **through fog**, until a `walls_update` WS (e.g. toggling a door) re-pushed the walls and everything snapped into place. Now `load()` buffers the bootstrap on `window.__ttMapBootstrap` and `tabletop.js` re-applies it on init (`window.__reapplyMapBootstrap`), so walls/lights/fog are correct from the first render regardless of fetch timing.
+
+### Fixed
+- `app/templates/tabletop.html::load` — stashes the fetched map data on `window.__ttMapBootstrap` before the guarded `_setMap*` pushes.
+- `app/static/tabletop.js` — `window.__reapplyMapBootstrap()` re-applies walls/lights/fog from the buffer on init (idempotent), recovering the dropped push.
+
+### Added
+- `tests/harness_ui/test_wall_bootstrap_race.py` — drops the walls (reproducing the race) and asserts the buffer recovery restores wall occlusion in a targeted-token POV veil.
+
 ## [2.948.0] - 2026-07-07 — "Snuffed"
 
 **Schema version:** 101

@@ -3015,6 +3015,19 @@
                 props = d.props || []; labels = d.labels || []; render();
                 applyWeather(d.weather || '');  // v2.808.0 — start/stop the weather overlay
                 fetchGmPins();  // v2.790.2 — GM-only (no-op for players)
+                // v2.949.0 — buffer the map bootstrap so tabletop.js can pick it
+                // up even if THIS fetch resolved before tabletop.js parsed. The
+                // guarded _setMap* calls below no-op when their setters aren't
+                // defined yet (the parse-vs-fetch race the glow comment notes) —
+                // which silently left vision/lighting/fog stuck on EMPTY walls
+                // until the next walls_update WS (e.g. a door toggle). tabletop.js
+                // re-applies from this buffer on init.
+                window.__ttMapBootstrap = {
+                    walls: walls, lights: d.lights || [],
+                    fog_enabled: d.fog_enabled, fog_revealed: d.fog_revealed || [],
+                    fog_dynamic: d.fog_dynamic, fog_explored: d.fog_explored,
+                    map_id: d.map_id,
+                };
                 if (window._setMapWalls) window._setMapWalls(walls);
                 if (window._setMapLights) window._setMapLights(d.lights || []);
                 // v2.849.0 — feed the flicker-glow layer directly too: it lives

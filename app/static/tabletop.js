@@ -3816,6 +3816,26 @@
 
     render();
 
+    // v2.949.0 — parse-vs-fetch race guard: tabletop.html's load() fetches
+    // /active-map and pushes walls/lights/fog via window._setMap*, but if that
+    // fetch resolved BEFORE this script parsed, those calls were dropped (their
+    // guards no-op when the setters are undefined) — leaving vision/lighting/fog
+    // stuck on EMPTY walls until the next WS update (which is what silently
+    // "fixed" it when a door was toggled). Re-apply from the buffer tabletop.html
+    // stashed. Idempotent + safe to call after the pushes also ran.
+    window.__reapplyMapBootstrap = function () {
+        const b = window.__ttMapBootstrap;
+        if (!b) return false;
+        try { if (Array.isArray(b.walls)) window._setMapWalls(b.walls); } catch (_) {}
+        try { if (Array.isArray(b.lights)) window._setMapLights(b.lights); } catch (_) {}
+        try {
+            if (b.fog_enabled !== undefined) window._setMapFog(
+                b.fog_enabled, b.fog_revealed || [], b.fog_dynamic, b.fog_explored, b.map_id);
+        } catch (_) {}
+        return true;
+    };
+    window.__reapplyMapBootstrap();
+
     // v2.946.0 — wire the "⬆ My tokens on top" player toggle (checkbox lives in
     // tabletop.html inside #map-pane; players only). Reflect the stored state,
     // then persist + re-render on change.
