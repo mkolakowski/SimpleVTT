@@ -76,20 +76,21 @@ _GOBLIN_WARRENS = {
             "image": "/static/demo/maps/goblin-warrens.png",
             "gridless": True,
             "ambient_light": "dark",
+            "weather": "",  # v2.941.1 — no ambient weather on this map
             "fog_enabled": True, "fog_dynamic": True,
             "walls": [
                 {"id": "w1783385893138_0", "x1": 0.0, "y1": 563.2, "x2": 1408.5, "y2": 576.4, "style": "wood", "doors": [{"id": "d1783385944228_1", "t0": 0.391137, "t1": 0.55392, "open": True, "gate": True}]}],
             "lights": [
-                {"id": "l1783385987241_4", "x": 661.3, "y": 887.7, "bright_ft": 26, "dim_ft": 56, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 1},
-                {"id": "l1783386030996_5", "x": 668.9, "y": 100.0, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.5},
-                {"id": "l1783386072255_6", "x": 927.4, "y": 123.6, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.5},
-                {"id": "l1783386075750_7", "x": 1069.8, "y": 294.3, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.5},
-                {"id": "l1783386077640_8", "x": 1183.0, "y": 448.1, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.5},
-                {"id": "l1783386081600_9", "x": 488.7, "y": 81.1, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.5},
-                {"id": "l1783386083460_10", "x": 345.3, "y": 200.0, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.5},
-                {"id": "l1783386084923_11", "x": 242.5, "y": 323.6, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.5},
-                {"id": "l1783386113266_12", "x": 549.1, "y": 483.0, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.5},
-                {"id": "l1783386115981_13", "x": 779.2, "y": 492.5, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.5}]},
+                {"id": "l1783385987241_4", "x": 661.3, "y": 887.7, "bright_ft": 26, "dim_ft": 56, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.25},
+                {"id": "l1783386030996_5", "x": 668.9, "y": 100.0, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.25},
+                {"id": "l1783386072255_6", "x": 927.4, "y": 123.6, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.25},
+                {"id": "l1783386075750_7", "x": 1069.8, "y": 294.3, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.25},
+                {"id": "l1783386077640_8", "x": 1183.0, "y": 448.1, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.25},
+                {"id": "l1783386081600_9", "x": 488.7, "y": 81.1, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.25},
+                {"id": "l1783386083460_10", "x": 345.3, "y": 200.0, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.25},
+                {"id": "l1783386084923_11", "x": 242.5, "y": 323.6, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.25},
+                {"id": "l1783386113266_12", "x": 549.1, "y": 483.0, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.25},
+                {"id": "l1783386115981_13", "x": 779.2, "y": 492.5, "bright_ft": 7, "dim_ft": 17, "color": "#ffb347", "color2": "#ff7a1a", "type": "custom", "flicker": 0.25}]},
     # Organic token placement (parallel to "party" / "npc_tokens" below).
     "party_pos": [(196, 742), (287, 803), (358, 715), (233, 641), (415, 795)],
     "npc_pos": [(842, 337), (1013, 268), (925, 472), (1146, 351)],
@@ -1085,6 +1086,9 @@ def _seed_one(db: Session, spec: dict, users: dict[str, User]) -> Campaign:
         grid_size_px=70, width_px=map_w, height_px=map_h,
         grid_type=GridType.NONE if gridless else GridType.SQUARE,
         show_grid=not gridless,
+        # v2.941.1 — ambient weather is seed-declarable ("" none / rain / snow /
+        # fog); default "" so a reseed enforces "no weather" (clears any live edit).
+        weather=mp.get("weather", ""),
         # v2.733.0 — ship every demo with the "match surround to map" toggle
         # ON: paint the canvas background the map image's average colour.
         letterbox_color=average_image_color(mp.get("image")),

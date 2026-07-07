@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.941.1] - 2026-07-06 — "The Still Warren"
+
+**Schema version:** 101
+
+**Commit summary:** Retune the Goblin Warrens — all braziers to "very slow" flicker + declare the map weatherless.
+
+**Description:** All ten Goblin Warrens lights now flicker at the new **0.25× "very slow"** rate (was one hearth at 1× + nine braziers at 0.5×), so the warren's torchlight wavers slowly and calmly instead of guttering. The map is also explicitly declared **weatherless**: the demo seeder now applies a seed-declarable `weather` field (default `""` none), so a reseed enforces "no ambient weather" and clears any weather set live in a session.
+
+### Changed
+- `app/demo_campaigns.py` — Goblin Warrens lights all set to `flicker: 0.25`; map dict declares `weather: ""`; `_seed_one` applies `weather=mp.get("weather", "")`.
+- `tests/harness/test_demo_map_elements.py::test_goblin_warrens_ships_walls_and_hotspots` — asserts every light flickers at 0.25 and the map has no weather.
+
 ## [2.941.0] - 2026-07-06 — "The Guttering Ember"
 
 **Schema version:** 101

@@ -51,6 +51,11 @@ async def test_goblin_warrens_ships_walls_and_hotspots(gm_client):
     assert am["lights"], "expected seeded torch/brazier lights"
     assert am["fog_enabled"] is True, "expected fog of war enabled"
     assert am["fog_dynamic"] is True, "expected exploration (dynamic) fog"
+    # v2.941.1 — every brazier flickers at the "very slow" (0.25×) rate, and the
+    # map carries no ambient weather.
+    assert all(lt.get("flicker") == 0.25 for lt in am["lights"]), \
+        [lt.get("flicker") for lt in am["lights"]]
+    assert am.get("weather", "") == "", am.get("weather")
 
 
 async def test_caldera_throne_ships_lava_polygons(gm_client):
