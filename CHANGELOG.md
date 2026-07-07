@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.951.0] - 2026-07-07 — "The Measured Step"
+
+**Schema version:** 101
+
+**Commit summary:** Live movement ruler while dragging a token on a gridless map.
+
+**Description:** When a player or the GM drags a token on a **gridless** map, a live ruler now draws from the token's start to the cursor — a colored line plus a distance chip in feet — so you can see how far the move is **before** you drop. Square/hex maps already convey distance via cells, so this is gridless-only. When the dragged token is the active combatant, the chip shows `moved / speed ft` and the line turns **green within** the token's walk speed (incl. Dash) and **red over** it; otherwise it's a neutral amber `N ft`. Works for mouse and touch drags. The ruler renders above the lighting/fog veil so it stays legible, and clears on drop.
+
+### Added
+- `app/static/tabletop.js` — `_dragRuler` state + `drawDragRuler()` (called at the end of `render()`, gridless-only); `_dragSpeedCapFor()` reads the active combatant's effective speed; set/cleared in the mouse + touch drag handlers.
+- `tests/harness_ui/test_gridless_drag_ruler.py` — the ruler computes euclidean feet (700px → 50 ft), paints an amber line on drag, and clears on drop.
+
 ## [2.950.0] - 2026-07-07 — "The Seen Walls"
 
 **Schema version:** 101

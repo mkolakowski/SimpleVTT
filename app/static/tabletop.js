@@ -223,6 +223,10 @@
     let mapFogExplored = new Set();   // "c,r" keys — accumulated seen cells
     let mapFogVisible = new Set();    // "c,r" keys — currently in view
     let mapFogMapId = (typeof MAP_ID !== 'undefined' ? MAP_ID : null);
+    // v2.951.0 — live movement-ruler state while dragging a token on a gridless
+    // map ({origX, origY, x, y, token}); null when not dragging. Declared here
+    // (before render()) so render() can read it without a `dragging`-var TDZ.
+    let _dragRuler = null;
     window._setMapFog = function (enabled, revealed, dynamic, explored, mapId) {
         mapFogEnabled = !!enabled;
         mapFogRevealed = Array.isArray(revealed) ? revealed : [];
@@ -3191,6 +3195,10 @@
         // player → their controlled token when selected or when it's its turn.
         (tokens || []).forEach(t => { if (_tokenDrawsOnTop(t)) drawToken(t); });
 
+        // v2.951.0 — live drag ruler on gridless maps, above the veil so it stays
+        // legible while dragging (players + GM).
+        drawDragRuler();
+
         // v2.50.0 — grid coordinate labels drawn LAST so the gutter
         // sits on top of every other rendered element. Tokens sliding
         // along the map edge will pass under the strip, which is
@@ -3735,6 +3743,73 @@
      * cumulative-distance label is drawn at the midpoint of the LAST
      * segment only, instead of one per segment, to reduce visual
      * clutter on multi-drag turns. */
+    // v2.951.0 — the movement budget (ft) for a token being dragged, if known:
+    // the active combatant's effective walk speed (+ Dash) from the breadcrumb.
+    // Returns null when the token isn't the active-turn combatant (no cap → the
+    // ruler just shows raw distance).
+    function _dragSpeedCapFor(token) {
+        if (!token || !_isActiveTurnToken(token)) return null;
+        const bc = window._movementBreadcrumb;
+        if (!bc) return null;
+        const effWalk = (typeof bc.effective_speed_walk === 'number')
+            ? bc.effective_speed_walk
+            : Math.max(0, (Number(bc.speed_walk) || 30) - (Number(bc.speed_reduction_ft) || 0));
+        return Math.max(0, effWalk + (Number(bc.dash_bonus_ft) || 0));
+    }
+    // v2.951.0 — a live ruler shown WHILE dragging a token on a gridless map, so
+    // players + the GM can see how far the move is before dropping. Gridless-only
+    // (square/hex maps already convey distance via cells). Green within the
+    // token's speed (active combatant), red over it, amber when no speed is known.
+    function drawDragRuler() {
+        const dr = _dragRuler;
+        if (!dr || gridType !== 'none') return;
+        const half = gridSize / 2;
+        const ax = dr.origX + half, ay = dr.origY + half;
+        const bx = dr.x + half, by = dr.y + half;
+        const ft = _computeRulerDistanceFt({ x: dr.origX, y: dr.origY }, { x: dr.x, y: dr.y });
+        const cap = _dragSpeedCapFor(dr.token);
+        const over = cap != null && ft > cap + 0.001;
+        const color = (cap == null) ? '#ffd24a' : (over ? '#ff6060' : '#4cd964');
+        const glow = (cap == null) ? 'rgba(255,210,74,0.55)'
+            : (over ? 'rgba(255,96,96,0.6)' : 'rgba(76,217,100,0.55)');
+        ctx.save();
+        ctx.strokeStyle = glow; ctx.lineWidth = 8; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+        ctx.strokeStyle = color; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(ax, ay, 4.5, 0, Math.PI * 2); ctx.fill();  // origin dot
+        ctx.restore();
+        // Distance chip near the moving end (colored to match).
+        const label = (cap != null)
+            ? `${Math.round(ft * 10) / 10} / ${Math.round(cap)} ft`
+            : `${Math.round(ft * 10) / 10} ft`;
+        ctx.save();
+        ctx.font = 'bold 13px system-ui, sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        const w = ctx.measureText(label).width + 14, h = 20;
+        const cx = bx, cy = by - gridSize * 0.55;
+        ctx.fillStyle = 'rgba(20,20,28,0.88)';
+        ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(cx - w / 2, cy - h / 2, w, h, 5);
+        else ctx.rect(cx - w / 2, cy - h / 2, w, h);
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = color; ctx.fillText(label, cx, cy);
+        ctx.restore();
+    }
+    // v2.951.0 — harness hook: the drag-ruler math + gating + speed cap, and a
+    // way to drive/clear the live ruler for a canvas-pixel check.
+    window.__dragRulerTest = {
+        compute: (origX, origY, x, y, token) => ({
+            gridless: gridType === 'none',
+            ft: _computeRulerDistanceFt({ x: origX, y: origY }, { x, y }),
+            cap: _dragSpeedCapFor(token || {}),
+        }),
+        set: (dr) => { _dragRuler = dr; render(); },
+        clear: () => { _dragRuler = null; render(); },
+    };
+
     function drawMovementBreadcrumb() {
         const bc = window._movementBreadcrumb;
         if (!bc || !Array.isArray(bc.path) || bc.path.length < 2) return;
@@ -4739,6 +4814,10 @@
         const [x, y] = clientToCanvas(ev);
         dragging.token.x = x - dragging.offsetX;
         dragging.token.y = y - dragging.offsetY;
+        _dragRuler = {  // v2.951.0 — feed the live gridless drag ruler
+            origX: dragging.origX, origY: dragging.origY,
+            x: dragging.token.x, y: dragging.token.y, token: dragging.token,
+        };
         render();
     });
 
@@ -4764,6 +4843,7 @@
         const origX = dragging.origX;
         const origY = dragging.origY;
         dragging = null;
+        _dragRuler = null;  // v2.951.0 — clear the live ruler on drop
         canvas.style.cursor = 'grab';
         render();
         _commitTokenMove(tok, origX, origY, sx, sy);
@@ -6253,6 +6333,10 @@
                 const [wx, wy] = clientToCanvasXY(t.clientX, t.clientY);
                 touchDrag.token.x = wx - touchDrag.offsetX;
                 touchDrag.token.y = wy - touchDrag.offsetY;
+                _dragRuler = {  // v2.951.0 — live gridless drag ruler (touch)
+                    origX: touchDrag.origX, origY: touchDrag.origY,
+                    x: touchDrag.token.x, y: touchDrag.token.y, token: touchDrag.token,
+                };
                 render();
                 ev.preventDefault();
                 return;
@@ -6278,6 +6362,7 @@
                 const origX = touchDrag.origX;
                 const origY = touchDrag.origY;
                 touchDrag = null;
+                _dragRuler = null;  // v2.951.0 — clear the live ruler on drop
                 render();
                 tapStart = null;
                 // v2.8.3: route through the shared pre-commit gate so
