@@ -1320,9 +1320,12 @@
         sm.style.pointerEvents = 'none'; _wc.appendChild(sm);
       }
     } else if (w.invisible) {
-      // v2.909.0 — an invisible wall blocks sight but isn't drawn for players;
-      // in the editor (always GM) show a faint dashed guide so it's editable.
-      seg('rgba(150,180,230,0.4)', 2, 'round', '4 7');
+      // v2.909.0 — an invisible wall blocks sight but isn't drawn for players.
+      // v2.940.0 — in the editor (always GM) draw a clearly-visible glowing
+      // dashed "ghost" guide (soft halo + bright dashed core) so it's easy to
+      // see + edit. The tabletop still shows players nothing.
+      seg('rgba(120,150,255,0.32)', 9, 'round');          // soft blue halo
+      seg('rgba(160,195,255,0.95)', 3, 'round', '8 6');   // bright dashed core
     } else {
       seg(st.casing, st.width + 4);                       // casing (depth)
       seg(st.color, st.width);                            // wall face

@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.939.1] - 2026-07-06 — "The Visible Ghost"
+
+**Schema version:** 101
+
+**Commit summary:** Make invisible walls clearly visible in the map editor (a glowing dashed "ghost" guide).
+
+**Description:** An invisible wall was drawn in the editor as a thin, very faint 2px dashed line that was hard to see + select. Since the editor is always the GM, it now renders as a **clearly-visible glowing dashed guide** — a soft blue halo (9px) under a bright dashed core (3px, `8 6` dashes). The tabletop is unchanged (players still see nothing; the GM still sees the subtle table-side guide). Embedded doors on an invisible wall keep their own material, so they were already visible.
+
+### Changed
+- `app/templates/map_editor.html` — `drawWallVisual` invisible-wall branch now draws a halo + bright dashed core instead of a single faint 2px line.
+
+### Added
+- `tests/harness_ui/test_editor_invisible_wall_visibility.py` — an invisible wall renders with the bright `8 6` dashed core + a ≥8px halo in the editor overlay.
+
+### Schema
+- No schema change (still v101 — editor rendering only).
+
 ## [2.939.0] - 2026-07-06 — "The Zone Toggles"
 
 **Schema version:** 101
