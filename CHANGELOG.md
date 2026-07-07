@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.941.0] - 2026-07-06 — "The Guttering Ember"
+
+**Schema version:** 101
+
+**Commit summary:** Add a "very slow" (0.25×) light flicker-speed option to the map editor.
+
+**Description:** The flicker-speed dropdown gained a **🐌 very slow** step between "off" and "🐢 slow" — a 0.25× multiplier on the glow's colour-oscillation frequency, for embers/braziers that waver almost imperceptibly. The server already accepts any 0..4 float, so no schema/endpoint change is needed; this is purely the new preset in the editor's `#me-light-flicker` select. Order is now off (0) → very slow (0.25) → slow (0.5) → normal (1) → fast (2).
+
+### Added
+- `app/templates/map_editor.html` — `#me-light-flicker` gains a `🐌 Flicker: very slow` (0.25) option.
+
+### Changed
+- `tests/harness_ui/test_map_lights_editor.py::test_editor_light_flicker_speed` — also places a light with the new 0.25 option and asserts it persists.
+
 ## [2.940.2] - 2026-07-06 — "The Torch Color"
 
 **Schema version:** 101

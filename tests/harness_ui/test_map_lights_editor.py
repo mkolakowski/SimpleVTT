@@ -62,5 +62,12 @@ def test_editor_light_flicker_speed(gm_page: Page) -> None:
             lights = c.get(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lights").json()["lights"]
             assert len(lights) == 1, lights
             assert lights[0]["flicker"] == 2.0, lights[0]
+            # v2.941.0 — the new "🐌 very slow" option persists a 0.25 multiplier.
+            c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lights", json={"lights": []})
+            gm_page.select_option("#me-light-flicker", "0.25")  # 🐌 very slow
+            gm_page.mouse.click(box["x"] + 200, box["y"] + 200)
+            gm_page.wait_for_timeout(400)
+            slow = c.get(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lights").json()["lights"]
+            assert len(slow) == 1 and slow[0]["flicker"] == 0.25, slow
         finally:
             c.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/lights", json={"lights": []})
