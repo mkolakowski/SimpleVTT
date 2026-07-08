@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.964.1] - 2026-07-07 — "The Reachable Latch"
+
+**Schema version:** 102
+
+**Commit summary:** Lock the editor reachability of the door open-check with a UI test.
+
+**Description:** Follow-up coverage for checked doors (v2.963.0/v2.964.0) — a Playwright test that right-clicks a door in the map editor and asserts the **"🎲 Open check"** menu item is present, so a regression that drops the authoring affordance is caught. No behavior change.
+
+### Added
+- `tests/harness_ui/test_map_editor_door_check.py` — the door context menu exposes the "Open check" submenu item.
+
 ## [2.964.0] - 2026-07-07 — "The Threshold Test"
 
 **Schema version:** 102
