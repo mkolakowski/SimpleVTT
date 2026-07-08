@@ -292,6 +292,139 @@ def _combatants(heroes: list, villains: list) -> list:
     return combs
 
 
+# ── Combat rounds ────────────────────────────────────────────────────────────
+
+# How many rounds to simulate, and how many of each side act per round. Capped
+# so the report + runtime stay bounded (some demo battles have 14 combatants);
+# a representative party + monster subset still exercises the whole loop.
+_ROUNDS = 2
+_MAX_PC_PER_ROUND = 3
+_MAX_NPC_PER_ROUND = 2
+_COMBAT_WS_TIMEOUT = 2.0
+
+
+async def _get_battle(client, cid):
+    r = await client.get(f"/api/campaign/{cid}/battle")
+    return (r.json().get("battle") if r.status_code == 200 else None) or {}
+
+
+def _hp_of(state: dict, combatant_id: str):
+    for c in state.get("combatants", []):
+        if c.get("id") == combatant_id:
+            return c.get("hp_current")
+    return None
+
+
+async def _combat_rounds(client, collector, cid, node, report, combs) -> None:
+    """Drive a few rounds. Each round is a node; each acting combatant is an
+    actor node under it with an attack check + a turn-advance check."""
+    heroes = [c for c in combs if c.get("char_id") is not None]
+    villains = [c for c in combs if c.get("char_id") is None]
+    if not heroes or not villains:
+        return
+    actors = heroes[:_MAX_PC_PER_ROUND] + villains[:_MAX_NPC_PER_ROUND]
+    # Targets: heroes hit the first villain, villains hit the first hero.
+    v_target, h_target = villains[0], heroes[0]
+
+    turn = 0
+    for rnd in range(1, _ROUNDS + 1):
+        round_node = {"round": rnd, "status": "running", "tally": _empty_tally(), "actors": []}
+        node["rounds"].append(round_node)
+        _publish(report)
+
+        for comb in actors:
+            is_pc = comb.get("char_id") is not None
+            actor_node = {
+                "actor": comb.get("name") or ("Hero" if is_pc else "Villain"),
+                "kind": "pc" if is_pc else "npc",
+                "combatant_id": comb["id"], "status": "running",
+                "tally": _empty_tally(), "checks": [],
+            }
+            round_node["actors"].append(actor_node)
+            _publish(report)
+
+            # --- the actor's attack ---
+            try:
+                if is_pc:
+                    tgt = v_target
+                    before = _hp_of(await _get_battle(client, cid), tgt["id"])
+                    collector.mark() if collector else None
+                    r = await client.post(
+                        f"/api/campaign/{cid}/attack",
+                        json={"character_id": comb["char_id"], "attack_index": 0,
+                              "target_combatant_id": tgt["id"], "override": True})
+                    bcast = await collector.wait_for("weapon_attack", _COMBAT_WS_TIMEOUT) if collector else None
+                    after = _hp_of(await _get_battle(client, cid), tgt["id"])
+                    body = r.json() if r.status_code == 200 else {}
+                    ok = r.status_code == 200 and bcast is not None
+                    actor_node["checks"].append(_check(
+                        "pc_attack", f"{actor_node['actor']} attacks {tgt['name']} (attack #0)",
+                        "HTTP 200 (attack_total + damage_total), weapon_attack broadcast",
+                        f"HTTP {r.status_code}, attack_total={body.get('attack_total')}, "
+                        f"damage_total={body.get('damage_total')}, "
+                        f"broadcast {'seen' if bcast else 'MISSING'}",
+                        "pass" if ok else "fail",
+                        f"target HP {before}→{after}"))
+                else:
+                    tgt = h_target
+                    before = _hp_of(await _get_battle(client, cid), tgt["id"])
+                    collector.mark() if collector else None
+                    r = await client.post(
+                        f"/api/campaign/{cid}/npc_attack",
+                        json={"combatant_id": comb["id"], "action_name": "Strike",
+                              "attack_bonus": "+4", "damage": "1d8", "damage_type": "bludgeoning",
+                              "range": "5 ft", "target_combatant_id": tgt["id"],
+                              # Seeded tokens sit at map distance; this is a
+                              # synthetic strike, so bypass the range gate (the
+                              # GM click-again-to-override escape hatch).
+                              "override_range": True})
+                    bcast = await collector.wait_for("weapon_attack", _COMBAT_WS_TIMEOUT) if collector else None
+                    after = _hp_of(await _get_battle(client, cid), tgt["id"])
+                    ok = r.status_code == 200 and bcast is not None
+                    actor_node["checks"].append(_check(
+                        "npc_attack", f"{actor_node['actor']} strikes {tgt['name']}",
+                        "HTTP 200, weapon_attack broadcast (hit resolved vs target AC)",
+                        f"HTTP {r.status_code}, broadcast {'seen' if bcast else 'MISSING'}",
+                        "pass" if ok else "fail",
+                        f"target HP {before}→{after}"))
+            except Exception as e:  # noqa: BLE001
+                actor_node["checks"].append(_check(
+                    "pc_attack" if is_pc else "npc_attack",
+                    f"{actor_node['actor']} acts", "an attack + broadcast",
+                    f"exception: {e}", "error"))
+            _publish(report)
+
+            # --- advance the turn (preserving mutated HP/economy) ---
+            try:
+                state = await _get_battle(client, cid)
+                n = len(state.get("combatants", [])) or 1
+                new_turn = (turn + 1) % n
+                cur_round = state.get("round", rnd) or rnd
+                new_round = cur_round + (1 if new_turn == 0 else 0)
+                state["turn_index"] = new_turn
+                state["round"] = new_round
+                state["active"] = True
+                collector.mark() if collector else None
+                pr = await client.put(f"/api/campaign/{cid}/battle", json=state)
+                bcast = await collector.wait_for("battle_update", _COMBAT_WS_TIMEOUT) if collector else None
+                after = await _get_battle(client, cid)
+                advanced = after.get("turn_index") == new_turn
+                ok = pr.status_code == 200 and advanced and bcast is not None
+                actor_node["checks"].append(_check(
+                    "turn_advance", f"End {actor_node['actor']}'s turn (advance initiative)",
+                    f"HTTP 200, battle_update broadcast, turn_index → {new_turn}"
+                    + (f" (round {new_round})" if new_turn == 0 else ""),
+                    f"HTTP {pr.status_code}, turn_index={after.get('turn_index')}, "
+                    f"round={after.get('round')}, broadcast {'seen' if bcast else 'MISSING'}",
+                    "pass" if ok else "fail"))
+                turn = new_turn
+            except Exception as e:  # noqa: BLE001
+                actor_node["checks"].append(_check(
+                    "turn_advance", f"End {actor_node['actor']}'s turn",
+                    "turn advances + battle_update", f"exception: {e}", "error"))
+            _publish(report)
+
+
 # ── Per-campaign run ─────────────────────────────────────────────────────────
 
 async def _run_campaign(camp: dict, node: dict, report: dict) -> None:
@@ -312,6 +445,7 @@ async def _run_campaign(camp: dict, node: dict, report: dict) -> None:
     collector = None
     moved: list = []          # (token_id, orig_x, orig_y) to restore
     battle_snapshot = None    # prior battle state to restore
+    combs_for_combat = None   # combatants seeded by initiative, for the rounds
 
     try:
         # --- login as the campaign GM ---
@@ -426,8 +560,8 @@ async def _run_campaign(camp: dict, node: dict, report: dict) -> None:
                     f"HTTP {pr.status_code} {pr.json()}, active={active}, "
                     f"battle_update {'seen' if bcast else 'MISSING'}",
                     "pass" if ok else "fail"))
-                # stash combatants for Phase 2 combat on the node
-                node["_combatants"] = combs
+                if ok:
+                    combs_for_combat = combs
             except Exception as e:  # noqa: BLE001
                 setup.append(_check(
                     "initiative", "Start initiative (PUT battle)",
@@ -438,6 +572,10 @@ async def _run_campaign(camp: dict, node: dict, report: dict) -> None:
                 "heroes and villains to seed combat",
                 "insufficient tokens", "skip"))
         _publish(report)
+
+        # --- combat rounds: per round → per actor (PC/NPC) ---
+        if combs_for_combat:
+            await _combat_rounds(client, collector, cid, node, report, combs_for_combat)
 
     finally:
         # --- teardown: restore token positions + battle state ---

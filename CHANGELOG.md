@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.973.0] - 2026-07-08 — "The Sparring Ring"
+
+**Schema version:** 102
+
+**Commit summary:** Demo self-test Phase 2 — simulate a few combat rounds per campaign (PC/NPC attacks + turn advance), grouped round → actor.
+
+**Description:** Extends the Admin-Center demo self-test ("The Proving Ground") from setup-only to a real **combat simulation**. After starting initiative, each campaign now runs **two rounds**; each round is a node in the report, and under it every acting combatant (a representative **3 PCs + 2 NPCs**) is its own **PC/NPC actor node**. Per actor the runner asserts an **attack** — PCs via `POST /attack` (asserts HTTP 200 with `attack_total`/`damage_total` + a `weapon_attack` broadcast, reporting the target's HP delta), NPCs via `POST /npc_attack` (HTTP 200 + `weapon_attack`, range-gate bypassed for the synthetic strike) — followed by a **turn advance** via `PUT /battle` (asserts the `battle_update` broadcast and that `turn_index` moved, wrapping to the next round). Turn advances re-PUT the *current* battle state so an auto-applied hit's HP change is preserved rather than reset. The whole run (movement + setup + 2 rounds across all six demo campaigns) is ~7s and remains non-destructive — token positions + battle state are restored at the end. The report tree (campaign → round → actor → checks) is fully collapsible with live roll-up ✓/✗ badges, so you can drill into any single attack while the run streams.
+
+### Added
+- `app/admin_center/selftest.py` — `_combat_rounds()` (per-round → per-actor PC/NPC attack + turn-advance checks) + `_get_battle`/`_hp_of` helpers; wired into `_run_campaign` after initiative. `_ROUNDS`/`_MAX_PC_PER_ROUND`/`_MAX_NPC_PER_ROUND` cap the sim so the tree + runtime stay bounded on 14-combatant battles.
+- `tests/harness/test_selftest.py` — the live run-to-completion test now also asserts the combat tree: rounds are present with PC/NPC actor nodes carrying `pc_attack`/`npc_attack`/`turn_advance` checks.
+
 ## [2.972.0] - 2026-07-08 — "The Proving Ground"
 
 **Schema version:** 102

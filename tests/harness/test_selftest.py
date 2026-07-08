@@ -160,3 +160,19 @@ def test_selftest_run_to_completion_reports_all_campaigns():
         assert summed == totals
         # A healthy stack should have no runner-level errors.
         assert totals["error"] == 0, f"self-test surfaced errors: {totals}"
+
+        # Combat rounds (Phase 2): at least one campaign ran rounds with PC + NPC
+        # actor nodes carrying attack + turn-advance checks.
+        cats = set()
+        kinds = set()
+        rounds_seen = 0
+        for camp in report["campaigns"]:
+            for rnd in camp.get("rounds", []):
+                rounds_seen += 1
+                for actor in rnd.get("actors", []):
+                    kinds.add(actor.get("kind"))
+                    for ch in actor.get("checks", []):
+                        cats.add(ch["category"])
+        assert rounds_seen > 0, "no combat rounds were simulated"
+        assert {"pc", "npc"} <= kinds, f"missing actor kinds: {kinds}"
+        assert {"pc_attack", "npc_attack", "turn_advance"} <= cats, f"missing combat checks: {cats}"
