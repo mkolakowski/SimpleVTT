@@ -621,6 +621,7 @@ def selftest_page(request: Request):
             "enabled": _ADMIN_TOOLS_ENABLED,
             "demo_mode": _demo_mode(),
             "status": selftest.run_status(),
+            "history": selftest.list_runs() if (_ADMIN_TOOLS_ENABLED and _demo_mode()) else [],
         },
     )
 
@@ -649,6 +650,29 @@ def selftest_run_status(request: Request):
         return JSONResponse({"state": "disabled"})
     from . import selftest
     return JSONResponse(selftest.run_status())
+
+
+@app.get("/selftest/history")
+def selftest_history_list(request: Request):
+    """Newest-first run-history headers — lets the page refresh the table after
+    a run without a full reload."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return JSONResponse({"runs": []})
+    from . import selftest
+    return JSONResponse({"runs": selftest.list_runs()})
+
+
+@app.get("/selftest/history/{run_id}")
+def selftest_history(request: Request, run_id: str):
+    """Full archived report for a past run (id from the history table). 404 if
+    the id is unknown/invalid."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    from . import selftest
+    rep = selftest.load_run(run_id)
+    if rep is None:
+        raise HTTPException(status_code=404, detail="Run not found.")
+    return JSONResponse(rep)
 
 
 # ── Admin tools (Phase 1 — opt-in, demo operator tools) ──────────────────────

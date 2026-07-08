@@ -61,7 +61,16 @@
   </div>
 
   <div id="st-summary"></div>
+  <div id="st-viewing" class="muted" style="margin:6px 0"></div>
   <div id="st-report" class="muted">No run yet — click <b>Run self-test</b>.</div>
+
+  <div class="card" style="margin-top:18px">
+    <h2>📜 Run history</h2>
+    <p class="muted" style="margin-top:0">The most recent runs (newest first). Click one to reopen its full report above.</p>
+    <table id="st-history"><thead>
+      <tr><th>When (UTC)</th><th>Version</th><th class="num">Pass</th><th class="num">Fail</th><th class="num">Err</th><th class="num">Skip</th><th class="num">Dur</th></tr>
+    </thead><tbody></tbody></table>
+  </div>
   {% endif %}
 </main>
 
@@ -180,8 +189,61 @@
     reportEl.innerHTML = html || '<p class="muted">No campaigns found.</p>';
   }
 
+  var viewingEl = document.getElementById('st-viewing');
+  var histBody = document.querySelector('#st-history tbody');
+  var lastLiveState = null;
+
+  function renderHistory(runs) {
+    if (!histBody) return;
+    if (!runs || !runs.length) {
+      histBody.innerHTML = '<tr><td colspan="7" class="muted">No archived runs yet.</td></tr>';
+      return;
+    }
+    histBody.innerHTML = runs.map(function (r) {
+      var t = r.totals || {};
+      var when = (r.finished_at || r.started_at || r.id || '').replace('T', ' ').replace('+00:00', '');
+      return '<tr data-run="' + esc(r.id) + '" style="cursor:pointer">'
+        + '<td><a href="#" data-run="' + esc(r.id) + '">' + esc(when) + '</a>'
+        + (r.state === 'error' ? ' <span class="pill error">error</span>' : '') + '</td>'
+        + '<td>' + esc(r.app_version || '') + '</td>'
+        + '<td class="num">' + (t.passed || 0) + '</td>'
+        + '<td class="num">' + (t.failed || 0) + '</td>'
+        + '<td class="num">' + (t.error || 0) + '</td>'
+        + '<td class="num">' + (t.skipped || 0) + '</td>'
+        + '<td class="num">' + (r.duration_s != null ? r.duration_s + 's' : '') + '</td>'
+        + '</tr>';
+    }).join('');
+  }
+  function loadHistory() {
+    fetch('/selftest/history').then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d) renderHistory(d.runs); }).catch(function () {});
+  }
+  if (histBody) {
+    histBody.addEventListener('click', function (e) {
+      var tr = e.target.closest('tr[data-run]');
+      if (!tr) return;
+      e.preventDefault();
+      var id = tr.dataset.run;
+      fetch('/selftest/history/' + encodeURIComponent(id))
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (rep) {
+          if (!rep) return;
+          seeded.clear(); openKeys.clear();
+          render(rep);
+          viewingEl.innerHTML = '📂 Viewing archived run <b>' + esc(id) + '</b> — '
+            + '<a href="#" id="st-back-live">back to latest</a>';
+          var back = document.getElementById('st-back-live');
+          if (back) back.addEventListener('click', function (ev) {
+            ev.preventDefault(); viewingEl.textContent = '';
+            if (lastLiveState) { seeded.clear(); openKeys.clear(); apply(lastLiveState); }
+          });
+        }).catch(function () {});
+    });
+  }
+
   function apply(s) {
     if (!s) return;
+    lastLiveState = s;
     chip.textContent = s.state || 'idle';
     chip.className = 'pill ' + (s.state === 'done' ? 'pass' : s.state === 'error' ? 'failed' : s.state === 'running' ? 'admin' : 'skip');
     bar.style.width = (s.pct || 0) + '%';
@@ -191,11 +253,14 @@
     runBtn.textContent = s.state === 'running' ? '⏳ Running…' : '▶ Run self-test';
   }
 
+  var wasRunning = false;
   function poll() {
     fetch('/selftest/run-status').then(function (r) { return r.ok ? r.json() : null; })
       .then(function (s) {
-        apply(s);
-        if (s && s.state === 'running') setTimeout(poll, 1000);
+        // Don't clobber the tree while the user is viewing an archived run.
+        if (!viewingEl.textContent) apply(s); else lastLiveState = s;
+        if (s && s.state === 'running') { wasRunning = true; setTimeout(poll, 1000); }
+        else if (wasRunning) { wasRunning = false; loadHistory(); }
       }).catch(function () { setTimeout(poll, 2000); });
   }
 
@@ -206,7 +271,8 @@
       .catch(function () { poll(); });
   });
 
-  // Seed from the initial state, then keep polling if a run is in flight.
+  // Seed the history table + initial state, then keep polling if a run is live.
+  renderHistory({{ history | tojson }});
   apply({{ status | tojson }});
   poll();
 })();

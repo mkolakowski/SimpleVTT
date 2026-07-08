@@ -184,6 +184,9 @@ services:
       # not localhost (which is the admin-center itself). Compose sets it
       # automatically; a localhost fallback keeps the runner usable in dev.
       SELFTEST_APP_URL: ${SELFTEST_APP_URL:-http://app:8013}
+      # v2.977.0 — where completed self-test runs are archived for the
+      # history table (a dedicated admin-center-owned volume, mounted below).
+      SELFTEST_RESULTS_DIR: ${SELFTEST_RESULTS_DIR:-/data/selftest-results}
       ADMIN_CENTER_USER: ${ADMIN_CENTER_USER:-admin}
       ADMIN_CENTER_PASS: ${ADMIN_CENTER_PASS:-changeme}
       ADMIN_CENTER_PORT: ${ADMIN_CENTER_PORT:-8015}
@@ -256,6 +259,8 @@ services:
       # backup artifacts + drop a "run now" trigger file. Same path the
       # sidecar mounts it at (/backups).
       - backup_data:/backups
+      # v2.977.0 — admin-center-owned store for demo self-test run history.
+      - selftest_results:/data/selftest-results
     ports:
       - "${ADMIN_CENTER_PORT:-8015}:${ADMIN_CENTER_PORT:-8015}"
     command:
@@ -496,3 +501,6 @@ volumes:
   # v2.485.7 — unban control spool shared between admin-center (writer,
   # non-root) and fail2ban (watcher, root). Small request files only.
   fail2ban_control:
+  # v2.977.0 — admin-center demo self-test run history (archived JSON
+  # reports the /selftest page lists + reopens). Owned by admin-center.
+  selftest_results:

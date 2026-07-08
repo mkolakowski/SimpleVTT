@@ -79,6 +79,18 @@ def test_combatants_shape():
         assert set(c["economy"]) == {"action", "bonus", "reaction", "movement"}
 
 
+def test_load_run_rejects_bad_ids(tmp_path, monkeypatch):
+    # Path-traversal / junk ids never resolve, and a clean id round-trips.
+    monkeypatch.setattr(selftest, "_RESULTS_DIR", tmp_path)
+    assert selftest.load_run("../../etc/passwd") is None
+    assert selftest.load_run("nope/../x") is None
+    assert selftest.load_run("") is None
+    assert selftest.load_run("does-not-exist") is None
+    (tmp_path / "selftest-20260101T000000Z.json").write_text('{"totals": {"total": 3}}')
+    got = selftest.load_run("20260101T000000Z")
+    assert got and got["totals"]["total"] == 3
+
+
 def test_run_status_is_json_safe_and_drops_private_keys():
     # Simulate a thread handle parked on the status (as start_run does).
     selftest._STATUS["_thread"] = object()
@@ -163,6 +175,16 @@ def test_selftest_run_to_completion_reports_all_campaigns():
         assert summed == totals
         # Negative-path gate checks (driven as a non-GM player) ran.
         assert "gate" in setup_cats, f"no gate checks in setup: {setup_cats}"
+
+        # Run history: the completed run was archived and is reopenable, and the
+        # id guard rejects traversal.
+        hist = c.get("/selftest/history").json().get("runs", [])
+        assert hist, "run history is empty after a completed run"
+        newest = hist[0]["id"]
+        reopened = c.get(f"/selftest/history/{newest}")
+        assert reopened.status_code == 200
+        assert reopened.json().get("campaigns"), "reopened run has no campaigns"
+        assert c.get("/selftest/history/..%2f..%2fetc").status_code == 404
         # A healthy stack should have no runner-level errors.
         assert totals["error"] == 0, f"self-test surfaced errors: {totals}"
 

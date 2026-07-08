@@ -71,6 +71,15 @@ is a row showing its **category, what was tested, expected, actual, and result**
 Open any branch to drill into a single attack or turn advance; the tree keeps
 the sections you've opened as it refreshes.
 
+## Run history
+
+Every completed run is archived (the most recent 25) and listed in the
+**📜 Run history** table — date, app version, pass/fail/error/skip totals, and
+duration, newest first. **Click a row to reopen that run's full report** in the
+tree above (a "back to latest" link returns to the live view). The table
+refreshes automatically when a live run finishes, so you can watch the trend
+across deploys.
+
 A green run means the core loop — auth, map movement + realtime broadcasts,
 initiative, attacks, damage application, and turn advancement — is working across
 all the demo campaigns. Any red or amber check points at exactly which endpoint

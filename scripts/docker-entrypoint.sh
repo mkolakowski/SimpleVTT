@@ -27,6 +27,7 @@ APP_PATHS="
 /app/app/data/homebrew
 /var/log/simplevtt
 /data/control
+/data/selftest-results
 "
 
 for p in $APP_PATHS; do

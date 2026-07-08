@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.977.0] - 2026-07-08 — "The Logbook"
+
+**Schema version:** 102
+
+**Commit summary:** Demo self-test — persist run history + reopen past runs from the Self-Test page.
+
+**Description:** Completed self-test runs are now **archived** so operators can see a trend and compare over time. Each finished run (including its full report) is written as JSON to a dedicated admin-center-owned volume (`SELFTEST_RESULTS_DIR`, pruned to the most recent 25); the entrypoint chowns the volume so the non-root `appuser` can write it. The **Self-Test page** gains a **📜 Run history** table — date, app version, pass/fail/error/skip totals, and duration, newest first — and **clicking a row reopens that run's full collapsible report** in place (fetched from a new history endpoint; a "back to latest" link returns to the live view). The table refreshes automatically when a live run finishes. History ids are charset-validated so the reopen endpoint can't traverse out of the results dir. Verified live: consecutive runs accumulate in the history (including a transient all-error run captured when the app was mid-restart, demonstrating failures are logged too), reopen renders the archived tree, and the traversal guard returns 404.
+
+### Added
+- `app/admin_center/selftest.py` — `_persist()` (archive + prune) on run completion, plus `list_runs()` / `load_run()` (id-guarded) readers; the report now carries `app_version`.
+- `app/admin_center/main.py` — `GET /selftest/history` (list) + `GET /selftest/history/{run_id}` (full archived report, 404 on unknown/invalid id); the page passes the initial history.
+- `app/admin_center/templates/selftest.html` — the **📜 Run history** table + reopen-a-past-run wiring (with a back-to-latest link) and auto-refresh on completion.
+- `docker-compose.yml` / `scripts/docker-entrypoint.sh` — a `selftest_results` volume mounted at `/data/selftest-results` (chowned to `appuser`) + the `SELFTEST_RESULTS_DIR` env.
+- `tests/harness/test_selftest.py` — `test_load_run_rejects_bad_ids` (traversal/junk guard + round-trip) and live assertions that a completed run is listed, reopenable, and traversal-guarded.
+
 ## [2.976.0] - 2026-07-08 — "The Locked Gate"
 
 **Schema version:** 102

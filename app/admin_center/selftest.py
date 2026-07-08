@@ -30,14 +30,25 @@ import json
 import logging
 import math
 import os
+import re
 import threading
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 import websockets
 
+from ..version import APP_VERSION
+
 log = logging.getLogger("simplevtt.admin_center.selftest")
+
+# Where completed run reports are archived so the page can show a history +
+# reopen a past run. A dedicated admin-center-owned volume (see docker-compose);
+# persistence degrades gracefully (skipped) if the dir isn't writable.
+_RESULTS_DIR = Path(os.getenv("SELFTEST_RESULTS_DIR", "/data/selftest-results"))
+_KEEP_RUNS = 25
+_RUN_ID_RE = re.compile(r"^[0-9A-Za-z_-]+$")
 
 # The main app's base URL, reachable from the admin-center container. In
 # docker compose the app service is named ``app``; the localhost fallback
@@ -159,6 +170,62 @@ def run_status() -> dict:
     """The current run status + latest report snapshot (polled by the page).
     Drops private keys (e.g. the Thread handle) so the result is JSON-safe."""
     return {k: v for k, v in _STATUS.items() if not k.startswith("_")}
+
+
+# ── Run-history persistence (JSON files on an admin-center-owned volume) ──────
+
+def _persist(report: dict) -> None:
+    """Archive a completed report as ``selftest-<stamp>.json`` and prune to the
+    most recent _KEEP_RUNS. Best-effort — never raises into the runner."""
+    try:
+        _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        (_RESULTS_DIR / f"selftest-{stamp}.json").write_text(json.dumps(report))
+        files = sorted(_RESULTS_DIR.glob("selftest-*.json"), key=lambda p: p.name, reverse=True)
+        for stale in files[_KEEP_RUNS:]:
+            try:
+                stale.unlink()
+            except OSError:
+                pass
+    except Exception as e:  # noqa: BLE001
+        log.warning("self-test run history not persisted: %s", e)
+
+
+def list_runs(limit: int = _KEEP_RUNS) -> list:
+    """Newest-first run-history headers (id + timestamps + totals) for the page."""
+    if not _RESULTS_DIR.is_dir():
+        return []
+    out = []
+    files = sorted(_RESULTS_DIR.glob("selftest-*.json"), key=lambda p: p.name, reverse=True)
+    for p in files[:limit]:
+        try:
+            rep = json.loads(p.read_text())
+        except Exception:  # noqa: BLE001
+            continue
+        out.append({
+            "id": p.stem.replace("selftest-", ""),
+            "started_at": rep.get("started_at"),
+            "finished_at": rep.get("finished_at"),
+            "duration_s": rep.get("duration_s"),
+            "app_version": rep.get("app_version"),
+            "state": rep.get("state"),
+            "totals": rep.get("totals") or _empty_tally(),
+        })
+    return out
+
+
+def load_run(run_id: str) -> "dict | None":
+    """Full archived report for a history id, or None (id is charset-validated
+    so it can't traverse out of the results dir)."""
+    if not run_id or not _RUN_ID_RE.match(run_id):
+        return None
+    p = _RESULTS_DIR / f"selftest-{run_id}.json"
+    if not p.is_file():
+        return None
+    try:
+        return json.loads(p.read_text())
+    except Exception:  # noqa: BLE001
+        return None
 
 
 # ── Demo campaign discovery ──────────────────────────────────────────────────
@@ -836,6 +903,7 @@ async def _run_all() -> None:
         "finished_at": None,
         "duration_s": 0.0,
         "app_url": _APP_URL,
+        "app_version": APP_VERSION,
         "state": "running",
         "totals": _empty_tally(),
         "campaigns": [],
@@ -847,7 +915,9 @@ async def _run_all() -> None:
     if not campaigns:
         _STATUS.update(state="error", current="no demo campaigns found")
         report["state"] = "error"
+        report["finished_at"] = _iso()
         _publish(report)
+        _persist(report)
         return
 
     n = len(campaigns)
@@ -874,6 +944,7 @@ async def _run_all() -> None:
     report["duration_s"] = round(time.time() - started, 1)
     _STATUS.update(state="done", pct=100, current="complete", finished=time.time())
     _publish(report)
+    _persist(report)
 
 
 def _worker() -> None:
