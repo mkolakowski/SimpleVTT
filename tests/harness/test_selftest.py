@@ -153,11 +153,16 @@ def test_selftest_run_to_completion_reports_all_campaigns():
         totals = report["totals"]
         assert totals["total"] > 0
         summed = {"passed": 0, "failed": 0, "error": 0, "skipped": 0, "total": 0}
+        setup_cats = set()
         for camp in report["campaigns"]:
             assert camp["setup_checks"], f"{camp['name']} ran no setup checks"
+            for ch in camp["setup_checks"]:
+                setup_cats.add(ch["category"])
             for k in summed:
                 summed[k] += camp["tally"][k]
         assert summed == totals
+        # Negative-path gate checks (driven as a non-GM player) ran.
+        assert "gate" in setup_cats, f"no gate checks in setup: {setup_cats}"
         # A healthy stack should have no runner-level errors.
         assert totals["error"] == 0, f"self-test surfaced errors: {totals}"
 

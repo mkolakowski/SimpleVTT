@@ -191,6 +191,20 @@ def _demo_campaigns() -> list:
         db.close()
 
 
+def _user_email(user_id) -> "str | None":
+    """Resolve a user id → email (for logging in as a token's owning player)."""
+    if not user_id:
+        return None
+    from ..database import SessionLocal
+    from ..models import User
+    db = SessionLocal()
+    try:
+        u = db.query(User).filter(User.id == user_id).first()
+        return u.email if u else None
+    finally:
+        db.close()
+
+
 # ── Minimal WS collector (local copy of the harness helper) ──────────────────
 
 class _WSCollector:
@@ -529,6 +543,93 @@ async def _combat_rounds(client, collector, cid, node, report, combs, spell_cast
             _publish(report)
 
 
+# ── Negative-path gate checks (driven as a non-GM player) ────────────────────
+
+async def _gate_checks(gm_client, cid, checks, report, heroes, combs, gm_email) -> None:
+    """Assert the gates a non-GM player hits (the GM bypasses them, so these run
+    as the player who owns a token): an off-turn move is 403, and an attack on an
+    already-spent action is 409 over_budget. Appended to the given ``checks`` list
+    with category ``gate``. Non-mutating — both actions are expected to be
+    rejected, so nothing to restore."""
+    # Find a player-owned hero token (controller is a non-GM user).
+    player_tok = None
+    player_email = None
+    for t in heroes:
+        email = _user_email(t.get("controller_user_id"))
+        if email and email != gm_email:
+            player_tok, player_email = t, email
+            break
+    if not player_tok:
+        checks.append(_check(
+            "gate", "Player-side gate checks (off-turn move / over-budget)",
+            "a player-owned token to drive the gates",
+            "no non-GM-owned hero token in this campaign", "skip"))
+        _publish(report)
+        return
+
+    player_cid = f"tok_stH_{player_tok['id']}"
+    villain = next((c for c in combs if c.get("char_id") is None), None)
+    if villain is None:
+        return
+    v_index = combs.index(villain)
+
+    player_client = None
+    try:
+        player_client = httpx.AsyncClient(base_url=_APP_URL, follow_redirects=True, timeout=20.0)
+        lr = await player_client.post("/login", data={"email": player_email, "password": _DEMO_PASSWORD})
+        if lr.status_code not in (200, 303):
+            checks.append(_check(
+                "gate", f"Log in as player {player_email}",
+                "HTTP 200/303", f"HTTP {lr.status_code}", "error"))
+            _publish(report)
+            return
+
+        # Seed a controlled battle: active, a villain's turn (so the player is
+        # off-turn), and the player's action already spent.
+        state_combs = []
+        for c in combs:
+            c2 = dict(c)
+            if c2["id"] == player_cid:
+                c2["economy"] = {**c2.get("economy", {}), "action": True}
+            state_combs.append(c2)
+        await gm_client.put(
+            f"/api/campaign/{cid}/battle",
+            json={"combatants": state_combs, "turn_index": v_index, "round": 1, "active": True})
+
+        # 1) Off-turn move → 403.
+        ox, oy = float(player_tok.get("x") or 0), float(player_tok.get("y") or 0)
+        mr = await player_client.post(
+            f"/api/campaign/{cid}/token/{player_tok['id']}/move", json={"x": ox + 35, "y": oy})
+        checks.append(_check(
+            "gate", f"{player_email} moves off-turn (it's a villain's turn)",
+            "HTTP 403 (not your turn) — the off-turn movement gate blocks it",
+            f"HTTP {mr.status_code}", "pass" if mr.status_code == 403 else "fail",
+            str(mr.text)[:80]))
+        _publish(report)
+
+        # 2) Attack on an already-spent action, no override → 409 over_budget.
+        ar = await player_client.post(
+            f"/api/campaign/{cid}/attack",
+            json={"character_id": player_tok["character_id"], "attack_index": 0,
+                  "target_combatant_id": villain["id"]})
+        err = ar.json().get("error") if ar.status_code == 409 else None
+        checks.append(_check(
+            "gate", f"{player_email} attacks with its action spent (no override)",
+            "HTTP 409 {error: over_budget} — the action-economy gate blocks it",
+            f"HTTP {ar.status_code}" + (f", error={err}" if err else ""),
+            "pass" if (ar.status_code == 409 and err == "over_budget") else "fail",
+            str(ar.text)[:80]))
+        _publish(report)
+    except Exception as e:  # noqa: BLE001
+        checks.append(_check(
+            "gate", "Player-side gate checks", "gates reject the player's actions",
+            f"exception: {e}", "error"))
+        _publish(report)
+    finally:
+        if player_client is not None:
+            await player_client.aclose()
+
+
 # ── Per-campaign run ─────────────────────────────────────────────────────────
 
 async def _run_campaign(camp: dict, node: dict, report: dict) -> None:
@@ -677,6 +778,11 @@ async def _run_campaign(camp: dict, node: dict, report: dict) -> None:
                 "heroes and villains to seed combat",
                 "insufficient tokens", "skip"))
         _publish(report)
+
+        # --- negative-path gate checks (driven as a non-GM player) ---
+        if combs_for_combat:
+            await _gate_checks(
+                client, cid, setup, report, heroes, combs_for_combat, gm_email)
 
         # --- combat rounds: per round → per actor (PC/NPC) ---
         if combs_for_combat:

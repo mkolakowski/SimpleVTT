@@ -53,7 +53,13 @@ few seconds.
      slots are refilled with a long rest during restore;
    - **ends its turn** — advance initiative and assert the `battle_update`
      broadcast and that the turn index moved (wrapping to the next round).
-5. **Restore** — move the tokens back and reset the battle to its prepped state.
+5. **Gate checks (negative paths)** — because the GM bypasses the gates, the
+   runner logs in as the **player who owns a hero token** and asserts two
+   rejections: an **off-turn move** returns `403`, and an **attack with the
+   action already spent** (no override) returns `409 over_budget`. Both are
+   expected to fail, so nothing is mutated.
+6. **Restore** — move the tokens back, reset the battle to its prepped state,
+   and long-rest any caster that spent a slot.
 
 ## Reading the report
 

@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.976.0] - 2026-07-08 — "The Locked Gate"
+
+**Schema version:** 102
+
+**Commit summary:** Demo self-test — negative-path gate checks: off-turn move → 403 and over-budget attack → 409, driven as a real player.
+
+**Description:** Rounds out the demo self-test with **failure-mode validation**, not just happy paths. Because the GM bypasses the gates, each campaign now logs in as the **player who owns a hero token** and asserts two rejections: (1) an **off-turn move** while it's a villain's turn returns **403** (the off-turn movement gate), and (2) an **attack with the action already spent**, sent **without `override`**, returns **409 `over_budget`** (the action-economy gate). The runner seeds a controlled battle state via the GM (active, a villain's turn, the player's action pre-marked) so both gates fire deterministically; both actions are *expected to be rejected*, so nothing is mutated. Non-caster campaigns with no player-owned token record a skip. Verified live: **190 passed, 8 skipped, 0 failed** across all six demo campaigns (~14s), with the gate checks green as `demo-alice`/`demo-bob`/`demo-carol`/`demo-dave`.
+
+### Added
+- `app/admin_center/selftest.py` — `_gate_checks()` (logs in as the token's owning player; asserts 403 off-turn move + 409 over_budget attack) + `_user_email()` id→email helper; wired into `_run_campaign` after initiative.
+- `tests/harness/test_selftest.py` — the live test now also asserts a `gate` check category is present in the setup checks.
+
 ## [2.975.0] - 2026-07-08 — "The Incantation"
 
 **Schema version:** 102
