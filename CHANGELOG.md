@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.972.0] - 2026-07-08 — "The Proving Ground"
+
+**Schema version:** 102
+
+**Commit summary:** Admin-Center demo self-test — a one-click live smoke test of movement + battle setup across every demo campaign, with a live, collapsible report.
+
+**Description:** Adds a **🧬 Self-Test** page to the Admin Center that drives the *real* game loop against each of the six demo campaigns and streams back a nested, human-readable report of **what was tested, the expected outcome, and the actual outcome**. This first phase covers, per campaign: **reachability** (GM login + roster + map tokens), **movement across the map** (moves a hero token and asserts the DB position changed *and* a `token_move` broadcast fired with a real distance), and **battle setup** (Start Initiative via `PUT /battle`, asserting the `battle_update` broadcast + active state). It then **restores** each campaign's token positions and battle state, so repeated runs are non-destructive on the live demo. The runner talks to the main app over HTTP + WebSocket exactly like the harness — logging in as each campaign's demo GM (GM drives bypass the action-economy/turn gates) — and runs on a background thread so the report **fills in live**: the page's campaign → group → check tree is collapsible with roll-up ✓/✗ badges at every level, and you can open sections while the run is still going. Combat rounds (per-round → per-actor PC/NPC attacks) land in the next phase. Opt-in behind `ADMIN_CENTER_ADMIN_TOOLS` and gated to `DEMO_MODE`.
+
+### Added
+- `app/admin_center/selftest.py` — the background runner + nested report model (campaign → setup/rounds/teardown → checks, with live-recomputed roll-up tallies) + a minimal WS collector; drives the app at `SELFTEST_APP_URL`.
+- `app/admin_center/main.py` — `GET /selftest` (page), `POST /selftest/run` (starts a background run; gated by `ADMIN_CENTER_ADMIN_TOOLS` + `DEMO_MODE`), `GET /selftest/run-status` (JSON poll target).
+- `app/admin_center/templates/selftest.html` — the live, collapsible pass/fail report tree (native `<details>`, preserves the user's open sections across polls) + the run button/progress bar; `_nav.html` gains a **🧬 Self-Test** link.
+- `docker-compose.yml` / `.env.example` — `SELFTEST_APP_URL` (default `http://app:8013`, the app service on the internal network) on the admin-center service, which now also `depends_on` the app.
+
 ## [2.971.0] - 2026-07-08 — "The Spyglass"
 
 **Schema version:** 102

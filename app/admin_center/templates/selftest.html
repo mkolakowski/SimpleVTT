@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Self-Test — SimpleVTT Admin Center</title>
+<link rel="icon" href="/favicon.svg">
+{% include "_theme.html" %}
+<style>
+  .st-node { border:1px solid var(--line); border-radius:8px; margin:8px 0; background:var(--panel); }
+  .st-node > summary { padding:10px 12px; display:flex; align-items:center; gap:10px; list-style:none; }
+  .st-node > summary::-webkit-details-marker { display:none; }
+  .st-node > summary .tri { color:var(--muted); font-size:12px; width:12px; }
+  .st-node[open] > summary .tri::before { content:"▾"; }
+  .st-node:not([open]) > summary .tri::before { content:"▸"; }
+  .st-name { font-weight:600; }
+  .st-badge { margin-left:auto; font-size:12px; color:var(--muted); white-space:nowrap; }
+  .st-badge b.ok { color:var(--ok); } .st-badge b.bad { color:var(--bad); } .st-badge b.err { color:var(--warn); }
+  .st-body { padding:2px 12px 12px; }
+  .st-round { margin-left:8px; } .st-actor { margin-left:8px; }
+  .dot.pass { background:var(--ok); } .dot.fail { background:var(--bad); }
+  .dot.error { background:var(--warn); } .dot.pending { background:#5a6280; } .dot.running { background:var(--accent); }
+  table.checks td { vertical-align:top; }
+  table.checks td.exp, table.checks td.act { color:var(--muted); font-size:12px; max-width:340px; }
+  .pill.pass { background:#1e3a24; color:#b6f0c2; }
+  .pill.skip { background:#2b303a; color:#9aa4b2; }
+  #st-run:disabled { opacity:.6; cursor:default; }
+  .kind { font-size:11px; }
+</style>
+</head>
+<body>
+{% set nav_active = "selftest" %}{% include "_nav.html" %}
+<main>
+  <h1 style="font-size:18px;margin:0 0 14px">🧬 Demo self-test</h1>
+
+  {% if not enabled %}
+  <div class="card">
+    <h2>Disabled</h2>
+    <p class="muted">Set <code>ADMIN_CENTER_ADMIN_TOOLS=true</code> to enable the
+      self-test. It drives live gameplay (movement + combat) against the demo
+      campaigns and then restores their state, so it's an opt-in write surface.</p>
+  </div>
+  {% elif not demo_mode %}
+  <div class="card">
+    <h2>Needs demo mode</h2>
+    <p class="muted">The self-test validates the built-in demo campaigns using the
+      demo GM accounts, so it only runs with <code>DEMO_MODE=true</code>.</p>
+  </div>
+  {% else %}
+  <div class="card">
+    <p class="muted" style="margin-top:0">Drives a live smoke test of the whole
+      game loop against every demo campaign — token movement across the map and
+      combat rounds — then restores each campaign's tokens + battle state. Watch
+      the report fill in below; you can open the sections while it runs.</p>
+    <div class="row-actions">
+      <button id="st-run" type="button">▶ Run self-test</button>
+      <span id="st-chip" class="pill skip">idle</span>
+      <span id="st-current" class="muted"></span>
+    </div>
+    <div class="bar" style="margin-top:12px"><i id="st-bar" style="width:0%"></i></div>
+  </div>
+
+  <div id="st-summary"></div>
+  <div id="st-report" class="muted">No run yet — click <b>Run self-test</b>.</div>
+  {% endif %}
+</main>
+
+{% if enabled and demo_mode %}
+<script>
+(function () {
+  var runBtn = document.getElementById('st-run');
+  var chip = document.getElementById('st-chip');
+  var bar = document.getElementById('st-bar');
+  var curEl = document.getElementById('st-current');
+  var summaryEl = document.getElementById('st-summary');
+  var reportEl = document.getElementById('st-report');
+
+  // Preserve which <details> the user has opened across re-renders.
+  var openKeys = new Set(), seeded = new Set();
+  function wantOpen(key, defOpen) {
+    if (!seeded.has(key)) { seeded.add(key); if (defOpen) openKeys.add(key); }
+    return openKeys.has(key);
+  }
+  document.addEventListener('toggle', function (e) {
+    var d = e.target;
+    if (!d.dataset || !d.dataset.key) return;
+    if (d.open) openKeys.add(d.dataset.key); else openKeys.delete(d.dataset.key);
+  }, true);
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function badge(t) {
+    if (!t || !t.total) return '<span class="st-badge">pending</span>';
+    var parts = ['<b class="ok">✓ ' + t.passed + '/' + t.total + '</b>'];
+    if (t.failed) parts.push('<b class="bad">✗ ' + t.failed + '</b>');
+    if (t.error) parts.push('<b class="err">⚠ ' + t.error + '</b>');
+    if (t.skipped) parts.push('<span>– ' + t.skipped + '</span>');
+    return '<span class="st-badge">' + parts.join(' &nbsp;') + '</span>';
+  }
+  function checksTable(checks) {
+    if (!checks || !checks.length) return '<p class="muted sub">No checks.</p>';
+    var rows = checks.map(function (c) {
+      var det = c.detail ? '<div class="muted" style="font-size:11px">' + esc(c.detail) + '</div>' : '';
+      return '<tr>'
+        + '<td><span class="pill">' + esc(c.category) + '</span></td>'
+        + '<td>' + esc(c.description) + det + '</td>'
+        + '<td class="exp">' + esc(c.expected) + '</td>'
+        + '<td class="act">' + esc(c.actual) + '</td>'
+        + '<td><span class="pill ' + esc(c.status === 'pass' ? 'pass' : c.status === 'skip' ? 'skip' : c.status === 'error' ? 'error' : 'failed') + '">'
+        + esc(c.status) + '</span></td>'
+        + '</tr>';
+    }).join('');
+    return '<table class="checks"><thead><tr>'
+      + '<th>Category</th><th>What was tested</th><th>Expected</th><th>Actual</th><th>Result</th>'
+      + '</tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+  function node(key, title, extra, tally, bodyHtml, defOpen, statusForDot) {
+    var open = wantOpen(key, defOpen) ? ' open' : '';
+    var dot = statusForDot ? '<span class="dot ' + statusForDot + '"></span>' : '';
+    return '<details class="st-node" data-key="' + key + '"' + open + '>'
+      + '<summary><span class="tri"></span>' + dot
+      + '<span class="st-name">' + esc(title) + '</span>'
+      + (extra ? '<span class="muted kind">' + esc(extra) + '</span>' : '')
+      + badge(tally) + '</summary>'
+      + '<div class="st-body">' + bodyHtml + '</div></details>';
+  }
+  function groupChecks(key, title, checks, defOpen) {
+    var t = { passed: 0, failed: 0, error: 0, skipped: 0, total: 0 };
+    (checks || []).forEach(function (c) {
+      t.total++; if (c.status === 'pass') t.passed++; else if (c.status === 'fail') t.failed++;
+      else if (c.status === 'error') t.error++; else if (c.status === 'skip') t.skipped++;
+    });
+    if (!t.total) return '';
+    var st = t.error ? 'error' : t.failed ? 'fail' : 'pass';
+    return node(key, title, '', t, checksTable(checks), defOpen && st !== 'pass', st);
+  }
+
+  function render(rep) {
+    if (!rep || !rep.campaigns) { return; }
+    // Summary stacked bar
+    var T = rep.totals || {};
+    var tot = T.total || 0;
+    function pct(n) { return tot ? (100 * n / tot) : 0; }
+    summaryEl.innerHTML =
+      '<div class="card"><div class="totals">'
+      + '<span>Campaigns: <b>' + rep.campaigns.length + '</b></span>'
+      + '<span>Checks: <b>' + tot + '</b></span>'
+      + '<span>✓ Passed: <b>' + (T.passed || 0) + '</b></span>'
+      + '<span>✗ Failed: <b>' + (T.failed || 0) + '</b></span>'
+      + '<span>⚠ Errors: <b>' + (T.error || 0) + '</b></span>'
+      + (T.skipped ? '<span>– Skipped: <b>' + T.skipped + '</b></span>' : '')
+      + (rep.duration_s ? '<span>Duration: <b>' + rep.duration_s + 's</b></span>' : '')
+      + '</div><div class="stacked">'
+      + '<div class="seg pass" style="width:' + pct(T.passed || 0) + '%"></div>'
+      + '<div class="seg fail" style="width:' + pct(T.failed || 0) + '%"></div>'
+      + '<div class="seg err" style="width:' + pct(T.error || 0) + '%"></div>'
+      + '<div class="seg skip" style="width:' + pct(T.skipped || 0) + '%"></div>'
+      + '</div></div>';
+
+    var html = rep.campaigns.map(function (c) {
+      var ck = 'c' + c.campaign_id;
+      var inner = groupChecks(ck + '.setup', 'Setup', c.setup_checks, true);
+      (c.rounds || []).forEach(function (r) {
+        var rk = ck + '.r' + r.round;
+        var actors = (r.actors || []).map(function (a, i) {
+          var ak = rk + '.a' + i;
+          return node(ak, a.actor, a.kind ? a.kind.toUpperCase() : '', a.tally,
+            checksTable(a.checks), a.status !== 'pass', a.status);
+        }).join('');
+        inner += node(rk, 'Round ' + r.round, '', r.tally,
+          '<div class="st-round">' + (actors || '<p class="muted sub">No actors.</p>') + '</div>',
+          r.status !== 'pass', r.status);
+      });
+      inner += groupChecks(ck + '.teardown', 'Teardown', c.teardown_checks, true);
+      return node(ck, c.name, c.map, c.tally, inner, c.status !== 'pass', c.status);
+    }).join('');
+    reportEl.innerHTML = html || '<p class="muted">No campaigns found.</p>';
+  }
+
+  function apply(s) {
+    if (!s) return;
+    chip.textContent = s.state || 'idle';
+    chip.className = 'pill ' + (s.state === 'done' ? 'pass' : s.state === 'error' ? 'failed' : s.state === 'running' ? 'admin' : 'skip');
+    bar.style.width = (s.pct || 0) + '%';
+    curEl.textContent = s.current ? (s.state === 'running' ? '▸ ' + s.current : '') : '';
+    if (s.report) render(s.report);
+    runBtn.disabled = (s.state === 'running');
+    runBtn.textContent = s.state === 'running' ? '⏳ Running…' : '▶ Run self-test';
+  }
+
+  function poll() {
+    fetch('/selftest/run-status').then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (s) {
+        apply(s);
+        if (s && s.state === 'running') setTimeout(poll, 1000);
+      }).catch(function () { setTimeout(poll, 2000); });
+  }
+
+  runBtn.addEventListener('click', function () {
+    runBtn.disabled = true; runBtn.textContent = '⏳ Running…';
+    fetch('/selftest/run', { method: 'POST' })
+      .then(function () { setTimeout(poll, 400); })
+      .catch(function () { poll(); });
+  });
+
+  // Seed from the initial state, then keep polling if a run is in flight.
+  apply({{ status | tojson }});
+  poll();
+})();
+</script>
+{% endif %}
+</body>
+</html>

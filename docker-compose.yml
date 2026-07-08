@@ -150,6 +150,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      # v2.972.0 — the demo self-test drives the app over HTTP+WS, so the
+      # app service should be up first (service_started; the app has no
+      # healthcheck). The runner still degrades gracefully if it's down.
+      app:
+        condition: service_started
     environment:
       # v2.485.0 — read-only DB access for the data-inventory panel
       # (row counts). Same connection string as the app service.
@@ -174,6 +179,11 @@ services:
       # demo credentials the /admin portal on a public box.
       DEMO_GM_SITE_ADMIN: ${DEMO_GM_SITE_ADMIN:-true}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8013}
+      # v2.972.0 — where the demo self-test (/selftest) drives the main app
+      # over HTTP+WS. From inside this container the app is the `app` service,
+      # not localhost (which is the admin-center itself). Compose sets it
+      # automatically; a localhost fallback keeps the runner usable in dev.
+      SELFTEST_APP_URL: ${SELFTEST_APP_URL:-http://app:8013}
       ADMIN_CENTER_USER: ${ADMIN_CENTER_USER:-admin}
       ADMIN_CENTER_PASS: ${ADMIN_CENTER_PASS:-changeme}
       ADMIN_CENTER_PORT: ${ADMIN_CENTER_PORT:-8015}

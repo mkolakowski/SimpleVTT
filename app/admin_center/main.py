@@ -604,6 +604,53 @@ def tests_dashboard(request: Request):
     )
 
 
+# ── Demo self-test (live game-loop smoke test) ───────────────────────────────
+@app.get("/selftest", response_class=HTMLResponse)
+def selftest_page(request: Request):
+    """Live demo self-test: drive token movement + (Phase 2) combat rounds
+    against every demo campaign and stream a nested pass/fail report. Opt-in via
+    ADMIN_CENTER_ADMIN_TOOLS (it mutates campaign state, then restores it) and
+    only meaningful in DEMO_MODE (needs the demo campaigns + accounts)."""
+    from . import selftest
+    return templates.TemplateResponse(
+        "selftest.html",
+        {
+            "request": request,
+            "app_version": APP_VERSION,
+            "admin_user": request.session.get("admin_user", ""),
+            "enabled": _ADMIN_TOOLS_ENABLED,
+            "demo_mode": _demo_mode(),
+            "status": selftest.run_status(),
+        },
+    )
+
+
+@app.post("/selftest/run")
+def selftest_run(request: Request):
+    """Kick off a background self-test run. Gated by ADMIN_CENTER_ADMIN_TOOLS +
+    DEMO_MODE. 409 if a run is already in flight."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    if not _demo_mode():
+        return RedirectResponse(
+            "/selftest?err=Self-test+needs+DEMO_MODE", status_code=303)
+    from . import selftest
+    started = selftest.start_run()
+    log.info("admin-center operator %r %s a demo self-test",
+             request.session.get("admin_user", "?"),
+             "started" if started else "re-requested (already running)")
+    return JSONResponse({"started": started, "state": selftest.run_status().get("state")})
+
+
+@app.get("/selftest/run-status")
+def selftest_run_status(request: Request):
+    """Current run state + the growing report snapshot — polled by the page."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return JSONResponse({"state": "disabled"})
+    from . import selftest
+    return JSONResponse(selftest.run_status())
+
+
 # ── Admin tools (Phase 1 — opt-in, demo operator tools) ──────────────────────
 _TOOLS_DISABLED = HTMLResponse(
     "<h1>Admin tools are disabled</h1><p>Set "
