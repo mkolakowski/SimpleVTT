@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.956.1] - 2026-07-07 — "No Free Steps"
+
+**Schema version:** 101
+
+**Commit summary:** Lock in opportunity-attack enforcement on gridless maps with a test.
+
+**Description:** Attacks of opportunity are enforced on gridless maps the same as gridded ones — `_distance_ft_between_points` already selects **Euclidean** distance for any non-square `grid_type`, so the OA trigger detection, the `/preview_move` flag, and the `/token/move` **409 `oa_confirmation_required`** gate all fire when a mover leaves a watcher's reach on a gridless map. Every existing OA test ran only on the square-grid demo campaign, so nothing guarded the gridless path; this adds that coverage (flip the active map to `grid_type: none`, verify the preview flag + 409 gate + trigger list, and a control that a within-reach shuffle doesn't provoke). No behavior change — a regression net.
+
+### Added
+- `tests/harness/test_opportunity_attack_gridless.py` — OA enforced on a gridless map (preview flag, 409 gate, trigger list); no OA when the move stays within reach.
+
 ## [2.956.0] - 2026-07-07 — "Out of Sight"
 
 **Schema version:** 101
