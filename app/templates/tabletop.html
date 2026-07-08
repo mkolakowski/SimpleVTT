@@ -9340,7 +9340,14 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // set). Falsy initiative (0 / undefined) → not yet rolled.
                 let promptBtn = '';
                 if (IS_GM && c.char_id && !c.initiative) {
-                    const _owner = (charById[c.char_id] || {}).owner_user_id;
+                    // v2.960.0 — `charById` lives in tabletop.js's module
+                    // scope and isn't visible to this inline script (it threw
+                    // a ReferenceError, blanking the owner id on the 🎲 Prompt
+                    // button). Look the owner up via the exposed
+                    // `vttGetCharacters` global instead.
+                    const _chars = (typeof window.vttGetCharacters === 'function')
+                        ? window.vttGetCharacters() : [];
+                    const _owner = ((_chars || []).find(x => x.id === c.char_id) || {}).owner_user_id;
                     promptBtn = `<button type="button" class="init-sheet-btn init-prompt-btn"
                         data-combatant-id="${c.id}" data-owner-id="${_owner || ''}"
                         data-char-name="${c.name}"

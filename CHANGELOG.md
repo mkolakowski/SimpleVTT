@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.960.0] - 2026-07-07 — "The Name on the Prompt"
+
+**Schema version:** 102
+
+**Commit summary:** Fix a ReferenceError on the GM init tracker's "🎲 Prompt" button (out-of-scope `charById`).
+
+**Description:** The GM initiative tracker's per-combatant **"🎲 Prompt"** button (shown for a PC combatant that hasn't rolled initiative yet) read the owner's user id from `charById[c.char_id]` — but `charById` lives in **`tabletop.js`'s module scope** and isn't visible to the inline `tabletop.html` script, so that line threw `charById is not defined` every time the branch rendered. The error blanked the button's `data-owner-id` (so the roll request couldn't address the right player) and polluted the console. Now the owner is looked up via the already-exposed `window.vttGetCharacters()` global. This also un-breaks two `harness_ui` movement-modal tests that asserted a clean console (`test_movement_dash_modals.py`) — the pre-existing error was surfacing through their `pageerror` guard.
+
+### Fixed
+- `app/templates/tabletop.html` — the init-tracker "🎲 Prompt" owner lookup uses `window.vttGetCharacters()` instead of the out-of-scope `charById` (was a `ReferenceError` that blanked `data-owner-id`).
+
 ## [2.959.0] - 2026-07-07 — "No Silent Steps"
 
 **Schema version:** 102
