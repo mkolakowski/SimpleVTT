@@ -196,6 +196,13 @@
                 </span>
             </label>
             <label style="flex-direction:row;align-items:center;gap:10px;margin-top:10px;">
+                <input type="checkbox" name="enforce_gm_ranges"
+                       {% if campaign.enforce_gm_ranges %}checked{% endif %}>
+                <span><strong>Enforce weapon/spell range for the GM too</strong>
+                    <span class="muted" style="font-size:12px;display:block;">By default the GM is the rules authority and can attack or cast at <em>any</em> distance — the out-of-range guard only applies to players. When on, the GM is held to the same range check: an attack or spell whose target is beyond the weapon/spell range returns the same <strong>out-of-range</strong> prompt players get, with an <strong>override</strong> button to narrate past it. Handy if you want the "am I actually in reach?" guardrail while running NPCs. Off by default.</span>
+                </span>
+            </label>
+            <label style="flex-direction:row;align-items:center;gap:10px;margin-top:10px;">
                 <input type="checkbox" name="auto_apply_damage"
                        {% if campaign.auto_apply_damage %}checked{% endif %}>
                 <span><strong>Auto-apply damage to targets</strong>

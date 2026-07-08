@@ -264,6 +264,14 @@ class Campaign(Base):
     # input and can't be snapped back.
     strict_action_economy: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false")
+    # v2.958.0: enforce weapon/spell RANGE for the GM too. By default the
+    # GM is the rules authority and bypasses the out-of-range 409 (Tier 1
+    # of _check_cast_range). When True, the GM is held to the same range
+    # gate as players — an out-of-range attack/cast returns the 409 and the
+    # GM must click the override button to narrate past it. Useful for GMs
+    # who want the same "am I in reach?" guardrail their players get.
+    enforce_gm_ranges: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false")
     # v2.24.0 Phase T.2: auto-apply damage to targeted creatures.
     # When False (default), /attack rolls damage + broadcasts but the
     # GM/player still manually applies HP via the init-tracker HP

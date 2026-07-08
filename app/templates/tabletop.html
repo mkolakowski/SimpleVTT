@@ -7922,6 +7922,16 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         }
                         _t0 = { combatant_id: _picked[0] || '', character_id: null, name: '' };
                     }
+                    // v2.958.0: PC weapon-attack range override. Mirrors the
+                    // NPC-attack click-again-to-override pattern. Normally the
+                    // GM auto-bypasses range, but when the campaign has
+                    // ``enforce_gm_ranges`` on the GM gets the same out-of-range
+                    // 409 players do — this stash lets the second Strike within
+                    // 10s send ``override_range: true`` to narrate past it.
+                    window._lastPcRangeOverride = window._lastPcRangeOverride || {};
+                    const _pcRangeKey = `${charId}|${idx}|${_t0 ? (_t0.combatant_id || _t0.character_id || _t0.name || '') : ''}`;
+                    const _pcPrevRange = window._lastPcRangeOverride[_pcRangeKey];
+                    const _pcRangeOverride = !!(_pcPrevRange && (Date.now() - _pcPrevRange) < 10000);
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/attack`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -7929,6 +7939,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                             character_id: charId,
                             attack_index: idx,
                             override: !!override,
+                            override_range: _pcRangeOverride,
                             ...(_t0 ? {
                                 target_combatant_id: _t0.combatant_id || '',
                                 target_character_id: _t0.character_id || null,
@@ -7937,6 +7948,20 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         }),
                     });
                     let resp = await doFetch(false);
+                    // v2.958.0: out-of-range gate (before the over-budget one —
+                    // handleOverBudget bails on any non-over_budget 409 body).
+                    if (resp.status === 409) {
+                        let _rb = null; try { _rb = await resp.clone().json(); } catch (_) {}
+                        if (_rb && _rb.error === 'out_of_range') {
+                            const _d = Math.round(_rb.distance_ft || 0), _m = _rb.range_ft || 0;
+                            window._lastPcRangeOverride[_pcRangeKey] = Date.now();
+                            (window.showToast || alert)(
+                                `🚫 ${_rb.source_name || 'Attacker'}: ${_rb.spell_name || atkName} out of range (${_d} ft / ${_m} ft). Click Strike again to override.`,
+                                'error');
+                            return;
+                        }
+                    }
+                    delete window._lastPcRangeOverride[_pcRangeKey];
                     // v2.6.1: Phase 4 over-budget gate. The server returns
                     // 409 for player clicks on already-used slots; the GM
                     // skips the gate so the modal never appears for them.

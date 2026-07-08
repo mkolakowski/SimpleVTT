@@ -5327,6 +5327,15 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             _tgtBody = picked;
                         }
                     }
+                    // v2.958.0: PC weapon-attack range override (mirrors the
+                    // tabletop mini-sheet handler). When the campaign has
+                    // ``enforce_gm_ranges`` on the GM gets the same out-of-range
+                    // 409 players do; a second Strike within 10s sends
+                    // ``override_range: true`` to narrate past it.
+                    window._lastPcRangeOverride = window._lastPcRangeOverride || {};
+                    const _pcRangeKey = `${MY_CHAR_ID}|${idx}|${(_tgtBody && (_tgtBody.target_combatant_id || _tgtBody.target_character_id || _tgtBody.target_name)) || ''}`;
+                    const _pcPrevRange = window._lastPcRangeOverride[_pcRangeKey];
+                    const _pcRangeOverride = !!(_pcPrevRange && (Date.now() - _pcPrevRange) < 10000);
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/attack`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -5334,11 +5343,28 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             character_id: MY_CHAR_ID,
                             attack_index: idx,
                             override: !!override,
+                            override_range: _pcRangeOverride,
                             ...upliftBody,
                             ..._tgtBody,
                         }),
                     });
                     let resp = await doFetch(false);
+                    // v2.958.0: out-of-range gate — checked before the
+                    // over-budget one, since handleOverBudget bails on any
+                    // non-over_budget 409 body (would abort the strike silently).
+                    if (resp.status === 409) {
+                        let _rb = null; try { _rb = await resp.clone().json(); } catch (_) {}
+                        if (_rb && _rb.error === 'out_of_range') {
+                            const _d = Math.round(_rb.distance_ft || 0), _m = _rb.range_ft || 0;
+                            window._lastPcRangeOverride[_pcRangeKey] = Date.now();
+                            (window.showToast || function (m) { alert(m); })(
+                                `🚫 ${_rb.source_name || 'Attacker'}: ${_rb.spell_name || 'Attack'} out of range (${_d} ft / ${_m} ft). Click Strike again to override.`,
+                                'error');
+                            btn.disabled = false;
+                            return;
+                        }
+                    }
+                    delete window._lastPcRangeOverride[_pcRangeKey];
                     // v2.6.1: Phase 4 — server returns 409 over_budget when
                     // the action slot is already used. Surface the Layer B
                     // confirm modal; on Confirm the same fetch re-fires

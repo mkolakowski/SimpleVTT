@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.958.0] - 2026-07-07 — "The GM's Own Yardstick"
+
+**Schema version:** 102
+
+**Commit summary:** New campaign toggle holds the GM to the same weapon/spell range gate players get (with an override).
+
+**Description:** The GM has always been the rules authority and **auto-bypassed the out-of-range check** — a GM-driven attack or spell landed at any distance, so testing "is my token actually in reach?" as the GM showed no enforcement (`_check_cast_range` Tier 1 returns early when `user_is_gm`). This adds a per-campaign **"Enforce weapon/spell range for the GM too"** toggle. When on, the GM falls through to the same distance check and gets the same **409 `out_of_range`** players do — but the GM can still narrate past it: the second Strike within 10 s (or `override_range: true`) clears the gate unconditionally (rules authority, even under strict mode). Off by default, so the rules-authority bypass is unchanged unless a table opts in. The NPC-attack path (`/npc_attack`) already enforced range with no GM bypass; this closes the matching gap on the PC `/attack` + spell-cast path and wires the click-again-to-override UX into the two PC weapon-attack handlers (the over-budget 409 handler bailed on the range 409, aborting the strike silently).
+
+### Added
+- `app/models.py` — `Campaign.enforce_gm_ranges` (bool, default false).
+- `app/templates/campaign_settings.html` — "Enforce weapon/spell range for the GM too" house-rule toggle.
+- `tests/harness/test_enforce_gm_ranges.py` — toggle OFF: GM out-of-range attack succeeds (bypass); ON: 409 `out_of_range`; ON + override clears; ON in-range unaffected.
+
+### Changed
+- `app/routes/tabletop_routes.py::_check_cast_range` — Tier 1 GM bypass now respects `enforce_gm_ranges`; the GM's `override_range` clears the gate even in strict mode.
+- `app/templates/tabletop.html`, `app/templates/sheet_dnd5e.html` — PC weapon-attack handlers surface the `out_of_range` 409 with a click-again-to-override toast (was silently aborted by `handleOverBudget`).
+
+### Schema
+- **v102** — `campaigns.enforce_gm_ranges BOOLEAN NOT NULL DEFAULT FALSE` (additive; `_apply_inline_migrations`).
+
 ## [2.957.0] - 2026-07-07 — "The Big Reach"
 
 **Schema version:** 101

@@ -10022,11 +10022,16 @@ def _check_cast_range(
     user_is_gm: bool,
     strict: bool,
 ) -> dict | None:
-    # Tier 1: GM bypass.
-    if user_is_gm:
+    # Tier 1: GM bypass — UNLESS the campaign opts into enforcing ranges
+    # for the GM too (v2.958.0). With enforce_gm_ranges on, the GM falls
+    # through to the same distance check as players and gets the 409, but
+    # can still override (Tier 2 grants the GM an unconditional override).
+    enforce_gm = bool(getattr(campaign, "enforce_gm_ranges", False))
+    if user_is_gm and not enforce_gm:
         return None
-    # Tier 2: player + override + not strict.
-    if override_range and not strict:
+    # Tier 2: override. The GM's override always clears (rules authority);
+    # a player's override clears only when strict mode is off.
+    if override_range and (user_is_gm or not strict):
         return None
     # Parse the range string. None / 0 → skip the check.
     from ..content.range_parser import max_range_ft, parse_range_ft
@@ -14195,6 +14200,9 @@ async def campaign_settings_save(
     # v2.8.0: strict action-economy. When on, players can't override the
     # Phase 4 over-budget modal — only the GM can clear a spent chip.
     strict_action_economy: bool = Form(False),
+    # v2.958.0: enforce weapon/spell range for the GM too (hold the GM to
+    # the same out-of-range 409 gate as players; override still available).
+    enforce_gm_ranges: bool = Form(False),
     # v2.24.0 Phase T.2: auto-apply HP damage on attacks that hit. Off
     # by default — GM opts in via the campaign settings page.
     auto_apply_damage: bool = Form(False),
@@ -14219,6 +14227,8 @@ async def campaign_settings_save(
     campaign.potions_as_bonus_action = potions_as_bonus_action
     # v2.8.0: strict action-economy gating
     campaign.strict_action_economy = strict_action_economy
+    # v2.958.0: enforce weapon/spell range for the GM too
+    campaign.enforce_gm_ranges = enforce_gm_ranges
     # v2.24.0 Phase T.2: auto-apply damage toggle
     campaign.auto_apply_damage = auto_apply_damage
     # v2.102.0: movement-lock default (seeds movement_locked on each

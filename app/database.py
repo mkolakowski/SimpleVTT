@@ -1190,6 +1190,20 @@ def _apply_inline_migrations() -> None:
                 "ALTER TABLE maps ADD COLUMN token_scale FLOAT NOT NULL DEFAULT 1.0"
             ))
 
+    # ---- Schema v102 (2.958.0): campaigns.enforce_gm_ranges ----
+    # Per-campaign toggle that holds the GM to the same weapon/spell RANGE
+    # gate as players. When True, _check_cast_range no longer auto-bypasses
+    # for the GM (Tier 1) — an out-of-range attack/cast returns the 409 and
+    # the GM must override to narrate past it. Additive; default false =
+    # GM keeps the rules-authority bypass.
+    camp_cols_v102 = _column_names("campaigns")
+    with engine.begin() as conn:
+        if camp_cols_v102 and "enforce_gm_ranges" not in camp_cols_v102:
+            conn.execute(text(
+                "ALTER TABLE campaigns ADD COLUMN enforce_gm_ranges "
+                "BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""
