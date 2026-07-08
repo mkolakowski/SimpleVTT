@@ -36,6 +36,7 @@ COPY docs/demo /app/docs/demo
 COPY docs/encounters-plan.md /app/docs/encounters-plan.md
 COPY docs/multi-system-refactor.md /app/docs/multi-system-refactor.md
 COPY docs/roll-log-card-layout.md /app/docs/roll-log-card-layout.md
+COPY docs/self-test.md /app/docs/self-test.md
 COPY docs/test-harness-coverage.md /app/docs/test-harness-coverage.md
 COPY docs/automation-coverage.md /app/docs/automation-coverage.md
 # v2.384.1 — condition-enforcement audit doc (v2.384.0 shipped the file

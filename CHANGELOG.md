@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.974.0] - 2026-07-08 — "The Operator's Handbook"
+
+**Schema version:** 102
+
+**Commit summary:** New wiki reference documenting the Admin-Center demo self-test, surfaced through `/wiki`.
+
+**Description:** An operator guide for the demo self-test shipped across v2.972–2.973, surfaced through the in-repo wiki. Covers where the Self-Test page lives (Admin Center, gated by `ADMIN_CENTER_ADMIN_TOOLS` + `DEMO_MODE`), how it drives the app over HTTP+WS as each campaign's demo GM, what it checks per campaign (reachability, movement across the map, initiative, two combat rounds of PC/NPC attacks + turn advances), its non-destructive snapshot/restore, and how to read the collapsible campaign → round → actor → checks report. Doc-only; surfaced per the wiki rule.
+
+### Added
+- `docs/self-test.md` — the "Demo self-test" operator guide (served at `/wiki/doc/self-test`).
+- `app/routes/wiki_routes.py` — `_DOC_ALLOWLIST` entry `self-test` → `docs/self-test.md`; `Dockerfile` COPYs the new doc.
+- `app/templates/wiki.html` + `docs/wiki/README.md` — References table row for the new guide.
+- `tests/harness/test_wiki.py` — `test_wiki_doc_serves_self_test` (slug serves 200 + H1 + nav) and a `/wiki/doc/self-test` assertion in `test_wiki_home_renders`.
+
 ## [2.973.0] - 2026-07-08 — "The Sparring Ring"
 
 **Schema version:** 102

@@ -80,6 +80,7 @@ async def test_wiki_home_renders():
     # References + Repo documentation sections stay on the landing page.
     assert "/wiki/doc/changelog" in resp.text
     assert "/wiki/doc/roll-log-card-layout" in resp.text
+    assert "/wiki/doc/self-test" in resp.text                   # v2.972.0
     assert "/wiki/doc/automation-coverage" in resp.text         # v2.99.447
     assert "/wiki/doc/condition-enforcement-audit" in resp.text # v2.384.0
     assert "/wiki/doc/todone" in resp.text                      # v2.151.3
@@ -758,6 +759,19 @@ async def test_wiki_doc_serves_ruler_plan():
     # The plan's H1 is "Ruler & Range Enforcement — Design Plan".
     assert "ruler" in resp.text.lower()
     assert "range" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_self_test():
+    """v2.972.0: GET /wiki/doc/self-test — 200 + body contains the doc's H1 +
+    the nav menu. Resolves through _DOC_ALLOWLIST to ``docs/self-test.md``.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/self-test")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    # The doc's H1 is "Demo self-test".
+    assert "demo self-test" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

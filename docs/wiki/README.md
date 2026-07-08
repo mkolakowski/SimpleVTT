@@ -126,6 +126,7 @@ Reference docs at `docs/` that aren't operator/GM guides but are useful to contr
 | Reference | Format | Audience | Status |
 |-----------|--------|----------|--------|
 | [Roll-log card layout](../roll-log-card-layout.md) | Markdown (semantic ref) | Contributors | ✅ shipped |
+| [Demo self-test](../self-test.md) | Markdown (operator guide) | Operators | ✅ shipped (v2.972–2.973) |
 | [Test harness coverage catalog](../test-harness-coverage.md) | Markdown (index) | Contributors | ✅ shipped · living |
 | [Automation coverage audit](../automation-coverage.md) | Markdown (index) | Contributors | ✅ shipped · living |
 | [Condition enforcement audit](../condition-enforcement-audit.md) | Markdown (audit) | Contributors | ✅ shipped (v2.384.0) · Charmed / Grappled / Incapacitated per-clause review |
