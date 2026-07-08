@@ -4319,6 +4319,32 @@
         applyTransform();
     }, { passive: false });
 
+    // v2.971.0 — Tools-tab zoom buttons. Mirror the wheel handler's
+    // focal-point math but pin the focus to the pane centre so the
+    // view scales around the middle of the visible map (matching what a
+    // user expects from ➖ / ➕ buttons). Exposed on ``window`` so the
+    // markup in #gm-tools-drawer can wire onclick handlers without
+    // reaching into this IIFE's private ``scale``/``applyTransform``.
+    function zoomBy(factor) {
+        const rect = mapPane.getBoundingClientRect();
+        const cx = rect.width / 2;
+        const cy = rect.height / 2;
+        const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale * factor));
+        if (newScale === scale) return;
+        panX = cx - (cx - panX) * (newScale / scale);
+        panY = cy - (cy - panY) * (newScale / scale);
+        scale = newScale;
+        applyTransform();
+    }
+    // One button press ≈ two wheel notches at the default zoom speed so
+    // the step feels deliberate without being sluggish.
+    const _btnZoomStep = Math.pow(1.12, _zoomSpeed() * 2);
+    window.vttZoomIn = () => zoomBy(_btnZoomStep);
+    window.vttZoomOut = () => zoomBy(1 / _btnZoomStep);
+    // Reset = re-fit the whole map to the viewport (the natural "home"
+    // camera). ``fitToViewport`` already clamps + re-rasters.
+    window.vttZoomReset = () => { fitToViewport(); };
+
     // v2.21.0 Phase T.0: right-click opens the character or monster
     // sheet. Was a bare preventDefault — double-click used to open the
     // sheet, but T.0 took that gesture for targeting.

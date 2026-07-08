@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.971.0] - 2026-07-08 — "The Spyglass"
+
+**Schema version:** 102
+
+**Commit summary:** Zoom in / out / fit buttons for the map, in the Tools tab.
+
+**Description:** Adds explicit **map zoom controls** to the **⚙ Tools** drawer so zoom no longer requires a scroll wheel or trackpad pinch — useful on touch devices and for anyone who wants a discoverable, one-tap zoom. A new **🔍 Map Zoom** panel at the top of the drawer body (visible to GM and players alike) offers **➖ zoom out**, **⤢ Fit** (re-fit the whole map to the viewport — the "home" camera), and **➕ zoom in**. Zoom in/out scale around the pane centre and are clamped to the same `MIN_SCALE`/`MAX_SCALE` bounds as the wheel; one press ≈ two wheel notches at the user's zoom speed. Purely client-side — the buttons drive new `window.vttZoomIn` / `vttZoomOut` / `vttZoomReset` helpers exposed from the existing pan/zoom code; no endpoint or broadcast change.
+
+### Added
+- `app/static/tabletop.js` — `zoomBy(factor)` (pane-centre focal zoom) + `window.vttZoomIn` / `vttZoomOut` / `vttZoomReset` (reset re-fits via `fitToViewport`), wired next to the wheel handler inside the pan/zoom IIFE.
+- `app/templates/tabletop.html` — `#zoom-controls-panel` (➖ / ⤢ Fit / ➕ buttons) at the top of the `#gm-tools-drawer` body.
+
 ## [2.970.0] - 2026-07-07 — "The Doorkeeper's Manual"
 
 **Schema version:** 102
