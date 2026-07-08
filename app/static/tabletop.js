@@ -5956,7 +5956,7 @@
         // gate below sets it to true after the user clicks Continue.
         // No flag = first try; if the server returns 409 the snapback
         // fires + the legacy advisory still surfaces on the chat-log.
-        const postMove = (oaConfirmed = false, overSpeedConfirmed = false) => {
+        const postMove = async (oaConfirmed = false, overSpeedConfirmed = false) => {
             const body = { x: sx, y: sy };
             if (oaConfirmed) body.oa_confirmed = true;
             /* v2.99.99 — Dash-modal accept path passes
@@ -5965,11 +5965,34 @@
              * client modal and chose to proceed; the gate exists
              * to catch scripted clients, not to double-prompt. */
             if (overSpeedConfirmed) body.over_speed_confirmed = true;
-            return fetch(`/api/campaign/${CAMPAIGN_ID}/token/${tokenId}/move`, {
+            const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/token/${tokenId}/move`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
             });
+            /* v2.959.0 — hard-block backstop. The pre-move OA preview
+             * above is best-effort: if it failed / raced / was skipped,
+             * an OA-provoking move reaches this direct postMove() and
+             * the server 409s `oa_confirmation_required`. Without this
+             * the token stayed visually moved while the server rejected
+             * it (a silent desync that reads as "OA didn't stop me").
+             * Snap the token back and surface the SAME Continue/Stop
+             * modal so the block is real on every path — never commit
+             * an OA move without an explicit confirm. */
+            if (resp.status === 409 && !oaConfirmed) {
+                let d = null; try { d = await resp.clone().json(); } catch (_) {}
+                if (d && d.error === 'oa_confirmation_required') {
+                    snapBack();
+                    _showPreMoveOaModal({
+                        tokenLabel: token.label || 'Token',
+                        triggers: Array.isArray(d.triggers) ? d.triggers : [],
+                        distanceFt: Number(d.distance_ft) || 0,
+                        onContinue: () => postMove(true, true),
+                        onStop: snapBack,
+                    });
+                }
+            }
+            return resp;
         };
         const snapBack = () => {
             token.x = origX;

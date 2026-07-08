@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.959.0] - 2026-07-07 — "No Silent Steps"
+
+**Schema version:** 102
+
+**Commit summary:** OA hard-block backstop — a provoking move can never silently commit when the pre-move preview misses.
+
+**Description:** The pre-move opportunity-attack **preview** (`/preview_move`) is best-effort — if it fails, races, or is skipped, an OA-provoking move falls through to the direct `postMove()` and the server 409s `oa_confirmation_required`. That fetch result was **ignored**, so the token stayed visually moved while the server rejected it — a silent desync that reads as "the OA didn't stop me." `postMove()` now catches that 409, **snaps the token back**, and surfaces the **same Continue/Stop modal** the preview path shows — so an OA-provoking move is hard-blocked on *every* path and never commits without an explicit confirm. The server 409 gate (no GM bypass) was already the enforcement; this makes the client honor it on the fallthrough path too.
+
+### Fixed
+- `app/static/tabletop.js` — `postMove()` (in `_commitTokenMove`) now handles the `oa_confirmation_required` 409 as a backstop: snap back + reopen the OA Continue/Stop modal, instead of leaving the token desynced from the server.
+
+### Added
+- `tests/harness_ui/test_oa_hardblock_backstop.py` — stubs `/preview_move` to report no OA while the real `/move` 409s; asserts the OA modal appears anyway (backstop) and Stop snaps the token back.
+
 ## [2.958.0] - 2026-07-07 — "The GM's Own Yardstick"
 
 **Schema version:** 102
