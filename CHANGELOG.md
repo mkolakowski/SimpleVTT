@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.964.0] - 2026-07-07 — "The Threshold Test"
+
+**Schema version:** 102
+
+**Commit summary:** Checked doors enforce their roll — opening one rolls the acting token's check vs the DC; a fail keeps it shut.
+
+**Description:** Phase 2 of checked doors (see v2.963.0) — the enforcement. When a **non-GM opens** a door that carries a `{check, dc}` (closed→open), the **acting token's character rolls the check** server-side (`1d20` + the resolved ability/skill modifier, reusing `_resolve_stat_modifier`): **pass → the door opens; fail → it stays shut.** A **public roll card** is posted to the log either way (`🚪 Force the door | Athletics (prof) | DC 15 — ✓ Pass / ✗ Fail`), so the whole table sees the attempt. The **GM bypasses** the check (rules authority — opens freely), and **closing** a door never rolls. The tabletop `toggleDoor` now sends the acting `character_id` (the player's first controlled token) and toasts the failure ("… failed the check (12 vs DC 15) — the door holds"); a checked door clicked with no controlled token returns 400 with a nudge to control a token. Free doors (no check) behave exactly as before.
+
+### Added
+- `app/routes/tabletop_routes.py::_roll_door_open_check` — rolls + persists + broadcasts the public door-check roll card; returns `(passed, total)`.
+- `tests/harness/test_door_open_check.py` — player passing (DC 1) opens; player failing (DC 999) stays shut (verified server-side); GM bypasses; no-token → 400; closing needs no check.
+
+### Changed
+- `app/routes/tabletop_routes.py::toggle_map_door` — accepts a body `{character_id}`; gates a closed→open transition of a checked door on the roll (fail returns `open:false` with no `walls_update`); response carries a `check` result object.
+- `app/static/tabletop.js` — `window.vttActingCharacterId()` exposes the player's controlled-token character for the door open-check.
+- `app/templates/tabletop.html` — `toggleDoor` sends `character_id`, surfaces the failed-check toast + the 400 "control a token" nudge.
+
 ## [2.963.0] - 2026-07-07 — "The Marked Door"
 
 **Schema version:** 102

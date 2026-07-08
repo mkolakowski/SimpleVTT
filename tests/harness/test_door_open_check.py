@@ -66,3 +66,79 @@ async def test_no_check_is_a_free_door(gm_client, check_map):
          "doors": [{"id": "d", "t0": 0.2, "t1": 0.8}]}])
     d = next(w for w in walls if w["id"] == "free")["doors"][0]
     assert "check" not in d and "dc" not in d, d
+
+
+# --- Phase 2: enforcement (the toggle rolls the check + gates opening) -------
+
+async def _door_open_state(gm_client, mid, wall_id, door_id):
+    walls = (await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls")).json()["walls"]
+    w = next(w for w in walls if w["id"] == wall_id)
+    return next(d for d in w["doors"] if d["id"] == door_id)["open"]
+
+
+async def _set_checked_door(gm_client, mid, dc, *, check="Athletics", open=False):
+    await gm_client.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
+        {"id": "cw", "x1": 385, "y1": 300, "x2": 385, "y2": 400,
+         "doors": [{"id": "d1", "t0": 0.3, "t1": 0.7, "open": open,
+                    "check": check, "dc": dc}]}]})
+
+
+async def test_player_passing_check_opens_door(alice_client, gm_client, roster, check_map):
+    """DC 1 → any 1d20+mod clears it → the door opens, response reports the pass."""
+    pip = roster["Pip Quickfingers"]
+    await _set_checked_door(gm_client, check_map, 1)
+    r = await alice_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/map/{check_map}/door/cw:d1/toggle",
+        json={"character_id": pip["id"]})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["open"] is True, body
+    assert body["check"]["passed"] is True, body
+    assert body["check"]["dc"] == 1 and body["check"]["character_id"] == pip["id"], body
+    assert await _door_open_state(gm_client, check_map, "cw", "d1") is True
+
+
+async def test_player_failing_check_keeps_door_shut(alice_client, gm_client, roster, check_map):
+    """DC 999 → the check always fails → the door stays closed."""
+    pip = roster["Pip Quickfingers"]
+    await _set_checked_door(gm_client, check_map, 999)
+    r = await alice_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/map/{check_map}/door/cw:d1/toggle",
+        json={"character_id": pip["id"]})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["open"] is False, body
+    assert body["check"]["passed"] is False, body
+    # Door genuinely stayed shut server-side.
+    assert await _door_open_state(gm_client, check_map, "cw", "d1") is False
+
+
+async def test_gm_bypasses_check(gm_client, check_map):
+    """The GM is the rules authority — a DC 999 door opens for the GM with no
+    check (and no character needed)."""
+    await _set_checked_door(gm_client, check_map, 999)
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/map/{check_map}/door/cw:d1/toggle", json={})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["open"] is True, body
+    assert body["check"] is None, body
+
+
+async def test_player_without_token_gets_400(alice_client, gm_client, check_map):
+    """A checked door with no acting character → 400 (control a token first)."""
+    await _set_checked_door(gm_client, check_map, 10)
+    r = await alice_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/map/{check_map}/door/cw:d1/toggle", json={})
+    assert r.status_code == 400, r.text
+
+
+async def test_closing_a_checked_door_needs_no_check(alice_client, gm_client, roster, check_map):
+    """CLOSING never rolls — a player closes an already-open checked door freely,
+    even with an impossible DC."""
+    await _set_checked_door(gm_client, check_map, 999, open=True)
+    r = await alice_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/map/{check_map}/door/cw:d1/toggle", json={})
+    assert r.status_code == 200, r.text
+    assert r.json()["open"] is False, r.json()
+    assert await _door_open_state(gm_client, check_map, "cw", "d1") is False

@@ -125403,11 +125403,67 @@ async def set_map_labels(
     return {"ok": True, "map_id": m.id, "labels": list(m.labels or [])}
 
 
+async def _roll_door_open_check(db, campaign, user, char, check_key: str, dc: int):
+    """v2.964.0 — roll a door's OPEN-check for ``char`` (1d20 + the resolved
+    ability/skill modifier) vs ``dc``, persist + broadcast a PUBLIC roll card
+    to the log, and return ``(passed: bool, total: int)``. Reuses
+    ``_resolve_stat_modifier`` (same stat_key/skill vocabulary as roll
+    requests)."""
+    mod, stat_label = _resolve_stat_modifier(
+        char.sheet or {}, char.template, check_key)
+    if mod > 0:
+        expr = f"1d20+{mod}"
+    elif mod < 0:
+        expr = f"1d20{mod}"
+    else:
+        expr = "1d20"
+    try:
+        result = dice_mod.roll(expr)
+    except dice_mod.DiceParseError:
+        result = dice_mod.roll("1d20")
+    passed = result.total >= int(dc)
+    outcome = "✓ Pass — the door opens" if passed else "✗ Fail — the door holds"
+    note = f"🚪 Force the door | {stat_label or check_key} | DC {dc} — {outcome}"[:200]
+    rec = DiceRoll(
+        campaign_id=campaign.id, user_id=user.id, expression=expr,
+        breakdown=result.breakdown, total=result.total,
+        visibility=Visibility.PUBLIC, note=note, character_id=char.id,
+    )
+    db.add(rec)
+    db.commit()
+    db.refresh(rec)
+    _membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign.id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    _player_color = (
+        _membership.color if _membership and _membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign.id, {
+        "type": "roll",
+        "data": {
+            "id": rec.id, "user_id": user.id, "user_name": user.display_name,
+            "char_name": char.name,
+            "user_color": (char.color if char.color else _player_color),
+            "portrait_url": char.portrait_url,
+            "expression": rec.expression, "breakdown": rec.breakdown,
+            "total": rec.total, "visibility": rec.visibility.value,
+            "note": rec.note,
+            "created_at": rec.created_at.isoformat() if rec.created_at else None,
+        },
+    })
+    return passed, result.total
+
+
 @router.post("/api/campaign/{campaign_id}/map/{map_id}/door/{door_id}/toggle")
 async def toggle_map_door(
     campaign_id: int,
     map_id: int,
     door_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
@@ -125442,8 +125498,7 @@ async def toggle_map_door(
                     break
         if door is None:
             raise HTTPException(404, "Door not found")
-        door["open"] = not bool(door.get("open"))
-        new_open = door["open"]
+        door_obj = door
     else:
         target = next(
             (w for w in walls
@@ -125452,8 +125507,53 @@ async def toggle_map_door(
             None)
         if target is None:
             raise HTTPException(404, "Door not found")
-        target["open"] = not bool(target.get("open"))
-        new_open = target["open"]
+        door_obj = target
+    # v2.964.0 — open-check gate. If this door carries a {check, dc} and a
+    # non-GM is OPENING it (closed→open), the acting character rolls the check
+    # first: pass → the door opens, fail → it stays shut (a public roll card is
+    # posted either way). The GM (rules authority) bypasses, and CLOSING a door
+    # never rolls. The acting character comes from the request body
+    # (``character_id`` — the player's controlled token).
+    current_open = bool(door_obj.get("open"))
+    _chk = str(door_obj.get("check") or "").strip()
+    try:
+        _dc = int(door_obj.get("dc") or 0)
+    except (TypeError, ValueError):
+        _dc = 0
+    check_result = None
+    if (not current_open) and _chk and _dc > 0 and not _user_is_gm(user, campaign, db):
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        if not isinstance(body, dict):
+            body = {}
+        char = None
+        _cid = body.get("character_id")
+        if _cid:
+            try:
+                char = db.query(Character).filter(
+                    Character.id == int(_cid),
+                    Character.campaign_id == campaign_id).first()
+            except (TypeError, ValueError):
+                char = None
+        if char is None:
+            raise HTTPException(
+                400,
+                "This door requires an open-check — control a token to attempt it.")
+        passed, total = await _roll_door_open_check(
+            db, campaign, user, char, _chk, _dc)
+        check_result = {
+            "passed": passed, "total": total, "dc": _dc, "check": _chk,
+            "character_id": char.id, "character_name": char.name,
+        }
+        if not passed:
+            # Door stays shut — no flip, no walls_update. The roll card is
+            # already broadcast so the table sees the failed attempt.
+            return {"ok": True, "door_id": did, "open": False,
+                    "check": check_result}
+    door_obj["open"] = not current_open
+    new_open = door_obj["open"]
     m.walls = walls
     # Flag the JSON column dirty (in-place mutation of a JSON list isn't
     # always tracked by SQLAlchemy).
@@ -125464,7 +125564,7 @@ async def toggle_map_door(
         "type": "walls_update",
         "data": {"map_id": m.id, "walls": walls},
     })
-    return {"ok": True, "door_id": did, "open": new_open}
+    return {"ok": True, "door_id": did, "open": new_open, "check": check_result}
 
 
 @router.get("/campaign/{campaign_id}/map/{map_id}/edit", response_class=HTMLResponse)

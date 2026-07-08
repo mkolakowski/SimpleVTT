@@ -4781,6 +4781,13 @@
     // edit form opens; clear it when the form closes. Arming + the
     // click-to-set landing flow are gated by the context being set.
     window.vttGetCharacters = function () { return characters; };
+    // v2.964.0 — the acting character for a door open-check: the player's first
+    // controlled token's linked character id (null for the GM / no token — the
+    // GM bypasses door checks server-side, a tokenless player gets a toast).
+    window.vttActingCharacterId = function () {
+        const t = findMyFirstControlledToken();
+        return (t && t.character_id != null) ? t.character_id : null;
+    };
     // Lookup a token on the active map by character id (or null). Used
     // by the spawn-points editor so clicking Set on a character who's
     // already placed copies that token's position instead of requiring

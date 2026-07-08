@@ -3125,11 +3125,32 @@
             if (!mapId || !w || !w.id) return;
             // v2.900.0 — an embedded door is addressed by a composite id.
             var did = embDoorId ? (w.id + ':' + embDoorId) : w.id;
+            // v2.964.0 — open-check gate. Send the acting character id so the
+            // server can roll this door's required check (if any). The GM
+            // bypasses server-side; players roll and a fail keeps it shut.
+            var _actor = (typeof window.vttActingCharacterId === 'function')
+                ? window.vttActingCharacterId() : null;
             try {
-                await fetch('/api/campaign/' + CID + '/map/' + mapId
+                var _resp = await fetch('/api/campaign/' + CID + '/map/' + mapId
                     + '/door/' + encodeURIComponent(did) + '/toggle',
-                    { method: 'POST' });
-                // walls_update WS re-renders for everyone.
+                    { method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(_actor ? { character_id: _actor } : {}) });
+                // walls_update WS re-renders for everyone on a successful open.
+                if (_resp.status === 400) {
+                    (window.showToast || alert)(
+                        '🚪 This door needs a controlled token to attempt its check.', 'warning');
+                    return;
+                }
+                var _body = null; try { _body = await _resp.json(); } catch (e) {}
+                // A failed open-check: the door stays shut. The roll card is
+                // already in the log; nudge the acting player so they know why.
+                if (_body && _body.check && _body.check.passed === false) {
+                    (window.showToast || alert)(
+                        '🚪 ' + (_body.check.character_name || 'You') + ' failed the check ('
+                        + _body.check.total + ' vs DC ' + _body.check.dc + ') — the door holds.',
+                        'warning');
+                }
             } catch (e) {}
         }
         // Called by the walls_update / hotspots_update WS handlers in tabletop.js.
