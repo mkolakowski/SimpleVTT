@@ -125451,18 +125451,68 @@ def _char_holds_item(sheet, item_name: str) -> bool:
     return False
 
 
-async def _roll_door_open_check(db, campaign, user, char, check_key: str, dc: int,
+def _resolve_door_actor(db, campaign_id: int, map_id: int, body: dict):
+    """v2.968.0 — resolve the token that's opening a door into an actor dict
+    ``{sheet, template, name, char_id, color, portrait}`` for the gate roll.
+
+    Prefers the body's ``token_id`` (the click-selected / controlled token):
+    a PC token → its Character sheet; an NPC token → its TokenTemplate stat
+    block via ``_monster_template_to_sheet`` (so a GM-selected monster rolls
+    its own ability/skill). Falls back to the legacy ``character_id``. Returns
+    ``None`` when nothing resolves (a tokenless GM → bypass; player → 400)."""
+    tok = None
+    tid = (body or {}).get("token_id")
+    if tid:
+        try:
+            tok = db.query(Token).filter(
+                Token.id == int(tid), Token.map_id == map_id).first()
+        except (TypeError, ValueError):
+            tok = None
+    if tok is not None:
+        if tok.character_id:
+            char = db.query(Character).filter(
+                Character.id == int(tok.character_id),
+                Character.campaign_id == campaign_id).first()
+            if char:
+                return {"sheet": char.sheet or {}, "template": char.template,
+                        "name": char.name, "char_id": char.id,
+                        "color": char.color, "portrait": char.portrait_url}
+        elif tok.token_template_id:
+            tmpl = db.query(TokenTemplate).filter(
+                TokenTemplate.id == int(tok.token_template_id)).first()
+            if tmpl:
+                return {"sheet": _monster_template_to_sheet(tmpl, campaign_id),
+                        "template": tmpl.template or "dnd5e",
+                        "name": tok.label or tmpl.name, "char_id": None,
+                        "color": tok.color,
+                        "portrait": tok.image_url or tmpl.image_url}
+    cid = (body or {}).get("character_id")
+    if cid:
+        try:
+            char = db.query(Character).filter(
+                Character.id == int(cid),
+                Character.campaign_id == campaign_id).first()
+        except (TypeError, ValueError):
+            char = None
+        if char:
+            return {"sheet": char.sheet or {}, "template": char.template,
+                    "name": char.name, "char_id": char.id,
+                    "color": char.color, "portrait": char.portrait_url}
+    return None
+
+
+async def _roll_door_open_check(db, campaign, user, actor: dict, check_key: str, dc: int,
                                 verb: str = "Force the door",
                                 pass_txt: str = "the door opens",
                                 fail_txt: str = "the door holds"):
-    """v2.964.0 — roll a door gate-check for ``char`` (1d20 + the resolved
+    """v2.964.0 — roll a door gate-check for ``actor`` (1d20 + the resolved
     ability/skill modifier) vs ``dc``, persist + broadcast a PUBLIC roll card
-    to the log, and return ``(passed: bool, total: int)``. Reuses
-    ``_resolve_stat_modifier`` (same stat_key/skill vocabulary as roll
-    requests). ``verb``/``pass_txt``/``fail_txt`` flavor the log note (force vs
-    pick-the-lock)."""
+    to the log, and return ``(passed: bool, total: int)``. ``actor`` is a dict
+    from ``_resolve_door_actor`` (a PC sheet OR an NPC monster stat block), so
+    a GM-selected monster rolls its own stats. ``verb``/``pass_txt``/``fail_txt``
+    flavor the log note (force vs pick-the-lock)."""
     mod, stat_label = _resolve_stat_modifier(
-        char.sheet or {}, char.template, check_key)
+        actor.get("sheet") or {}, actor.get("template") or "dnd5e", check_key)
     if mod > 0:
         expr = f"1d20+{mod}"
     elif mod < 0:
@@ -125479,7 +125529,7 @@ async def _roll_door_open_check(db, campaign, user, char, check_key: str, dc: in
     rec = DiceRoll(
         campaign_id=campaign.id, user_id=user.id, expression=expr,
         breakdown=result.breakdown, total=result.total,
-        visibility=Visibility.PUBLIC, note=note, character_id=char.id,
+        visibility=Visibility.PUBLIC, note=note, character_id=actor.get("char_id"),
     )
     db.add(rec)
     db.commit()
@@ -125498,9 +125548,9 @@ async def _roll_door_open_check(db, campaign, user, char, check_key: str, dc: in
         "type": "roll",
         "data": {
             "id": rec.id, "user_id": user.id, "user_name": user.display_name,
-            "char_name": char.name,
-            "user_color": (char.color if char.color else _player_color),
-            "portrait_url": char.portrait_url,
+            "char_name": actor.get("name"),
+            "user_color": (actor.get("color") or _player_color),
+            "portrait_url": actor.get("portrait"),
             "expression": rec.expression, "breakdown": rec.breakdown,
             "total": rec.total, "visibility": rec.visibility.value,
             "note": rec.note,
@@ -125569,9 +125619,11 @@ async def toggle_map_door(
     current_open = bool(door_obj.get("open"))
     check_result = None
     lock_result = None
-    # v2.964.0/v2.965.0 — gates fire only when a non-GM is OPENING (closed→open).
-    # The GM (rules authority) bypasses; CLOSING never rolls.
-    if (not current_open) and not _user_is_gm(user, campaign, db):
+    # v2.964.0/v2.965.0/v2.968.0 — gates fire only when OPENING (closed→open).
+    # The acting token is the player's controlled token OR, for the GM, their
+    # click-SELECTED token (which may be a PC or an NPC monster). A GM with
+    # NOTHING selected bypasses (narrative open); CLOSING never rolls.
+    if not current_open:
         _locked = bool(door_obj.get("locked"))
         _chk = str(door_obj.get("check") or "").strip()
         try:
@@ -125579,46 +125631,42 @@ async def toggle_map_door(
         except (TypeError, ValueError):
             _dc = 0
         if _locked or (_chk and _dc > 0):
-            # Both gates need the acting character (from the request body).
             try:
                 body = await request.json()
             except Exception:
                 body = {}
             if not isinstance(body, dict):
                 body = {}
-            char = None
-            _cid = body.get("character_id")
-            if _cid:
-                try:
-                    char = db.query(Character).filter(
-                        Character.id == int(_cid),
-                        Character.campaign_id == campaign_id).first()
-                except (TypeError, ValueError):
-                    char = None
-            if char is None:
-                raise HTTPException(
-                    400,
-                    "This door needs a controlled token to open it.")
+            actor = _resolve_door_actor(db, campaign_id, map_id, body)
+            _is_gm = _user_is_gm(user, campaign, db)
+            if actor is None:
+                # No acting token: the GM opens narratively (bypass); a player
+                # (or a GM with nothing selected... but the GM bypasses) is told
+                # to pick a token.
+                if not _is_gm:
+                    raise HTTPException(
+                        400, "This door needs a controlled token to open it.")
+                # GM bypass → fall through to the flip below.
             # ---- LOCK gate first: a key held OR a successful pick unlocks it.
-            if _locked:
+            elif _locked:
                 _key = str(door_obj.get("key") or "").strip()
                 _lchk = str(door_obj.get("lock_check") or "").strip()
                 try:
                     _ldc = int(door_obj.get("lock_dc") or 0)
                 except (TypeError, ValueError):
                     _ldc = 0
-                if _key and _char_holds_item(char.sheet or {}, _key):
+                if _key and _char_holds_item(actor.get("sheet") or {}, _key):
                     door_obj["locked"] = False  # persisted with the flip below
                     lock_result = {"unlocked": True, "via": "key", "key": _key,
-                                   "character_name": char.name}
+                                   "character_name": actor.get("name")}
                 elif _lchk and _ldc > 0:
                     passed, total = await _roll_door_open_check(
-                        db, campaign, user, char, _lchk, _ldc,
+                        db, campaign, user, actor, _lchk, _ldc,
                         verb="Pick the lock", pass_txt="the lock clicks open",
                         fail_txt="the lock holds")
                     lock_result = {"unlocked": passed, "via": "pick",
                                    "total": total, "dc": _ldc, "check": _lchk,
-                                   "character_name": char.name}
+                                   "character_name": actor.get("name")}
                     if passed:
                         door_obj["locked"] = False
                     else:
@@ -125633,10 +125681,11 @@ async def toggle_map_door(
             # ---- OPEN-CHECK gate: an UNLOCKED but stuck door (force it).
             elif _chk and _dc > 0:
                 passed, total = await _roll_door_open_check(
-                    db, campaign, user, char, _chk, _dc)
+                    db, campaign, user, actor, _chk, _dc)
                 check_result = {
                     "passed": passed, "total": total, "dc": _dc, "check": _chk,
-                    "character_id": char.id, "character_name": char.name,
+                    "character_id": actor.get("char_id"),
+                    "character_name": actor.get("name"),
                 }
                 if not passed:
                     # Door stays shut — no flip, no walls_update. The roll card

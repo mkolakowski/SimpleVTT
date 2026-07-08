@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.969.0] - 2026-07-07 — "The Monster's Hand"
+
+**Schema version:** 102
+
+**Commit summary:** The GM's selected token — PC or NPC — rolls a door's check/pick instead of bypassing.
+
+**Description:** Completes "whatever token opens the door." When the GM opens a gated door with a token **click-selected** (v2.968.0), that token now **rolls the door's open-check / lock-pick** instead of the GM auto-bypassing — and it works for an **NPC** (a monster token resolves its own ability/skill from its stat block via `_monster_template_to_sheet` → the shared `_resolve_stat_modifier`), not just PCs. `toggleDoor` sends the acting **`token_id`**; the server's new `_resolve_door_actor` turns it into an actor (a PC `Character` sheet or an NPC `TokenTemplate` stat block) and the gate rolls for it, posting the public roll card under the acting creature's name/color. A **GM with nothing selected still bypasses** (narrative open), and players are unchanged (their controlled token rolls). Note: SRD-slug monster templates resolve **ability checks** (e.g. `dex_check`) accurately; skill-named checks on those under-resolve until the monster projection carries `skills`/proficiencies (authored/demo/homebrew templates resolve fully).
+
+### Added
+- `app/routes/tabletop_routes.py::_resolve_door_actor` — `token_id` → PC sheet or NPC monster stat block (falls back to legacy `character_id`); returns None → GM bypass / player 400.
+- `tests/harness/test_door_open_check.py` — a GM-selected NPC rolls (fails DC 999 → shut, not bypassed; passes DC 1 → open; picks a DC-1 lock); a GM with nothing selected still bypasses.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `_roll_door_open_check` takes an actor dict (PC or NPC), broadcasting under the creature's name/color/portrait; `toggle_map_door` rolls the gate whenever an acting token resolves (GM-selected included), bypassing only when none does.
+- `app/templates/tabletop.html` — `toggleDoor` sends `token_id` (from `vttActingTokenId()`) alongside `character_id`.
+
 ## [2.968.0] - 2026-07-07 — "The Chosen Token"
 
 **Schema version:** 102

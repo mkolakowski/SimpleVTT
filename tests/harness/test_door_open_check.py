@@ -199,6 +199,79 @@ async def test_gm_bypasses_lock(gm_client, check_map):
     assert r.json()["open"] is True, r.json()
 
 
+# --- GM's SELECTED NPC token rolls (v2.968.0) -------------------------------
+
+async def _place_npc(gm_client, x, y, label="Guard"):
+    templates = (await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")).json()
+    bandit = next((t for t in templates if "bandit" in t["name"].lower()), templates[0])
+    r = await gm_client.post(f"/api/campaign/{CAMPAIGN_ID}/tokens", json={
+        "token_template_id": bandit["id"], "x": float(x), "y": float(y),
+        "label": label, "color": "#aa3333"})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+async def test_gm_selected_npc_rolls_and_can_fail(gm_client, check_map):
+    """A GM opening a checked door with an NPC token SELECTED (token_id) makes
+    the NPC roll — the GM does NOT bypass. DC 999 → the NPC fails → shut."""
+    npc = await _place_npc(gm_client, 120, 120)
+    await _set_checked_door(gm_client, check_map, 999)
+    try:
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{check_map}/door/cw:d1/toggle",
+            json={"token_id": npc["id"]})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["open"] is False, body               # NOT bypassed
+        assert body["check"]["passed"] is False, body
+        assert body["check"]["character_id"] is None, body  # an NPC, no char_id
+        assert await _door_open_state(gm_client, check_map, "cw", "d1") is False
+    finally:
+        await gm_client.delete(f"/api/campaign/{CAMPAIGN_ID}/tokens/{npc['id']}")
+
+
+async def test_gm_selected_npc_passes_low_dc(gm_client, check_map):
+    """DC 1 → the selected NPC clears it → the door opens."""
+    npc = await _place_npc(gm_client, 120, 120)
+    await _set_checked_door(gm_client, check_map, 1)
+    try:
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{check_map}/door/cw:d1/toggle",
+            json={"token_id": npc["id"]})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["open"] is True and body["check"]["passed"] is True, body
+    finally:
+        await gm_client.delete(f"/api/campaign/{CAMPAIGN_ID}/tokens/{npc['id']}")
+
+
+async def test_gm_selected_npc_picks_lock(gm_client, check_map):
+    """A selected NPC with no key picks a DC-1 lock → unlock + open."""
+    npc = await _place_npc(gm_client, 120, 120)
+    await _set_locked_door(gm_client, check_map, key="Iron Key",
+                           lock_check="Sleight of Hand", lock_dc=1)
+    try:
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{check_map}/door/cw:d1/toggle",
+            json={"token_id": npc["id"]})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["open"] is True, body
+        assert body["lock"]["via"] == "pick" and body["lock"]["unlocked"] is True, body
+    finally:
+        await gm_client.delete(f"/api/campaign/{CAMPAIGN_ID}/tokens/{npc['id']}")
+
+
+async def test_gm_no_selection_still_bypasses(gm_client, check_map):
+    """A GM with NO token selected (no token_id/character_id) still bypasses a
+    DC-999 checked door — narrative open."""
+    await _set_checked_door(gm_client, check_map, 999)
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/map/{check_map}/door/cw:d1/toggle", json={})
+    assert r.status_code == 200, r.text
+    assert r.json()["open"] is True, r.json()
+
+
 # --- Phase 2: enforcement (the toggle rolls the check + gates opening) -------
 
 async def _door_open_state(gm_client, mid, wall_id, door_id):

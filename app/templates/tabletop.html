@@ -3168,17 +3168,23 @@
             if (!mapId || !w || !w.id) return;
             // v2.900.0 — an embedded door is addressed by a composite id.
             var did = embDoorId ? (w.id + ':' + embDoorId) : w.id;
-            // v2.964.0 — open-check gate. Send the acting character id so the
-            // server can roll this door's required check (if any). The GM
-            // bypasses server-side; players roll and a fail keeps it shut.
-            var _actor = (typeof window.vttActingCharacterId === 'function')
+            // v2.964.0/v2.968.0 — open-check gate. Send the acting TOKEN (the
+            // click-selected token, else the player's controlled token) so the
+            // server can roll this door's check/pick for a PC sheet OR an NPC
+            // monster stat block. A GM with nothing selected bypasses.
+            var _actorTok = (typeof window.vttActingTokenId === 'function')
+                ? window.vttActingTokenId() : null;
+            var _actorChar = (typeof window.vttActingCharacterId === 'function')
                 ? window.vttActingCharacterId() : null;
+            var _reqBody = {};
+            if (_actorTok != null) _reqBody.token_id = _actorTok;
+            if (_actorChar != null) _reqBody.character_id = _actorChar;
             try {
                 var _resp = await fetch('/api/campaign/' + CID + '/map/' + mapId
                     + '/door/' + encodeURIComponent(did) + '/toggle',
                     { method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify(_actor ? { character_id: _actor } : {}) });
+                      body: JSON.stringify(_reqBody) });
                 // walls_update WS re-renders for everyone on a successful open.
                 if (_resp.status === 400) {
                     (window.showToast || alert)(
