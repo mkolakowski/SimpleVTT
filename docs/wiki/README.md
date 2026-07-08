@@ -38,6 +38,7 @@ How much of the SRD 5.1 ruleset SimpleVTT mechanically automates, by content cat
 | [Map editor tour](map-editor-tour.md) | Markdown (how-to) | GMs | ✅ shipped (v2.841.0) — the editor's element families (walls/doors, lights, terrain, fog, hotspots, GM pins, labels) with the furnished demo maps as worked examples |
 | [Maps, grids & tokens](maps-grids-tokens.md) | Markdown (how-to · screenshots) | GMs | ✅ shipped (v2.637.0) — upload maps, grid overlay, the board, placing tokens, the token tracker, 4 screenshots |
 | [Building an encounter](building-an-encounter.md) | Markdown (how-to · screenshots) | GMs | ✅ shipped (v2.639.0) — encounter library, token templates, bestiary import, spawn points, auto-load, 4 screenshots |
+| [Doors — checks, locks & keys](doors.md) | Markdown (how-to) | GMs | ✅ shipped (v2.970.0) — open-checks (force), locked doors (key + lockpick), player 🔒/🎲 badges, GM select-to-roll for PC/NPC |
 | [Demo mode](demo-mode.md) | Markdown (how-to) | Operators | ✅ shipped (v2.43.21) |
 | [fail2ban deployment](fail2ban-deployment.md) | Markdown (how-to) | Operators | ✅ shipped (v2.476.0) |
 | [Privacy Policy (GDPR-compliant template)](privacy.md) | Markdown (policy) | Operators + Users | ✅ shipped (v2.479.0) |

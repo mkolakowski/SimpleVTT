@@ -10,6 +10,19 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.970.0] - 2026-07-07 — "The Doorkeeper's Manual"
+
+**Schema version:** 102
+
+**Commit summary:** New wiki guide documenting doors — open-checks, locked doors, badges, and GM select-to-roll.
+
+**Description:** A GM how-to guide for the door feature set shipped across v2.963–2.969, surfaced through the in-repo wiki. Covers placing doors in the map editor, **open-checks** (force a stuck door with an ability/skill check + DC), **locked doors** (a key item or a lockpick check), the player-facing **🔒/🎲 badges** + hover detail, and **who rolls** — players automatically, and the GM's **click-selected** PC/NPC token (with the SRD-monster skill-resolution caveat noted). Doc-only; surfaced per the wiki rule.
+
+### Added
+- `docs/wiki/doors.md` — the "Doors — checks, locks & keys" GM guide (served at `/wiki/doors`).
+- `app/templates/wiki.html` + `docs/wiki/README.md` — "Available guides" table row for the new guide.
+- `tests/harness/test_wiki.py::test_wiki_home_renders` — asserts the landing page links `/wiki/doors`.
+
 ## [2.969.0] - 2026-07-07 — "The Monster's Hand"
 
 **Schema version:** 102
