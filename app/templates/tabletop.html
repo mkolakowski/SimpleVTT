@@ -9009,7 +9009,10 @@ let CONC_DATA = {{ conc_by_char | tojson }};
     const _COND_IMPACT_MAP = (typeof window !== 'undefined' && window._COND_IMPACT_MAP) || {};
     function _updateConditionWarnPill(rootEl, buffs) {
         if (!rootEl) return;
-        const header = rootEl.querySelector('.mini-ab-header');
+        // v2.962.0 — the ⚠ Conditions pill + Check/Save toggle now live in the
+        // ``.mini-meta-row`` (alongside the Roll pill + death saves), not the
+        // retired ``.mini-ab-header``.
+        const header = rootEl.querySelector('.mini-meta-row');
         if (!header) return;
         const existing = header.querySelector('.mini-ab-cond-warn');
         if (existing) existing.remove();
@@ -9028,8 +9031,11 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         pill.setAttribute('aria-label', 'Active conditions affecting actions or d20 rolls');
         pill.title = 'Active conditions affecting actions or d20 rolls:\n\n' + parts.join('\n');
         pill.textContent = '⚠ Conditions';
+        // Insert the pill just before the toggle, within the toggle's own
+        // parent (the ``.mini-ab-toggle-group`` wrapper) so it sits inline
+        // with the Check/Save buttons regardless of nesting depth.
         const toggle = header.querySelector('.mini-ab-toggle');
-        if (toggle) header.insertBefore(pill, toggle);
+        if (toggle && toggle.parentNode) toggle.parentNode.insertBefore(pill, toggle);
         else header.appendChild(pill);
     }
 

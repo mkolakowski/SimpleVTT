@@ -115,27 +115,11 @@
                     </div>
                     {% endif %}
                 </div>
-                {# v2.4.21: Roll-state pill + Death-saves tracker share a single
-                   horizontal row instead of stacking vertically. ``.mini-meta-row``
-                   wraps both in a flex container; CSS in tabletop.html makes the
-                   roll pill shrink-to-content and the death-saves tracker pick
-                   up the remaining space. Death-saves pips auto-hide when
-                   ``data-status="alive"`` (no point showing 6 empty dots when
-                   the character isn't dying). #}
-                <div class="mini-meta-row">
-                {% with char=c, sheet=sh, can_edit=_is_owner %}
-                  {% include "_roll_state_pill.html" %}
-                  {% include "_death_saves_tracker.html" %}
-                {% endwith %}
-                </div>
-                {# ── Abilities: name · modifier · roll button (raw score row removed) ── #}
-                {# v2.157.1 — surface BEFORE-click warning of conditions that
-                   modify saves/checks per RAW PHB Appendix A (matches the
-                   v2.152.0–v2.157.0 server-side adv/dis automation). Reads
-                   the v2.97.30 ``_buffs_active`` mirror; computes the
-                   tooltip text from the shared ``CONDITION_IMPACTS`` map
-                   exposed as a Jinja global by ``app/templates.py``
-                   (single source of truth — also rendered to JS as
+                {# v2.157.1 — condition-warning parts (RAW PHB Appendix A adv/dis
+                   automation). Computed BEFORE the meta row (v2.962.0) so the
+                   ⚠ Conditions pill can sit inline with the toggle. Reads the
+                   v2.97.30 ``_buffs_active`` mirror + the shared
+                   ``CONDITION_IMPACTS`` Jinja global (also mirrored to JS as
                    ``window._COND_IMPACT_MAP`` via tabletop.html). #}
                 {% set _ab_warn_ns = namespace(parts=[]) %}
                 {% for _b in (sh.get('_buffs_active') or []) %}
@@ -145,8 +129,19 @@
                         {% set _ = _ab_warn_ns.parts.append(_bname ~ ': ' ~ CONDITION_IMPACTS[_bk]) %}
                     {% endif %}
                 {% endfor %}
-                <div class="mini-ab-header">
-                    <span class="mini-section-label" style="margin:0;flex:1;">Abilities</span>
+                {# v2.4.21 + v2.962.0: Roll-state pill + Death-saves tracker +
+                   the ability Check/Save toggle share ONE horizontal row. The
+                   "Abilities" section label was dropped — the STR/DEX/… grid
+                   below is self-evident. ``.mini-meta-row`` flexes the
+                   death-saves tracker to fill the gap; the toggle group is
+                   pushed to the right edge (``margin-left:auto``) so it lines
+                   up with the Adv/Normal/Dis pill + death-save tracker. #}
+                <div class="mini-meta-row">
+                {% with char=c, sheet=sh, can_edit=_is_owner %}
+                  {% include "_roll_state_pill.html" %}
+                  {% include "_death_saves_tracker.html" %}
+                {% endwith %}
+                  <div class="mini-ab-toggle-group" style="display:flex;align-items:center;gap:6px;margin-left:auto;">
                     {% if _ab_warn_ns.parts %}
                     <span class="mini-ab-cond-warn"
                           title="Active conditions affecting actions or d20 rolls:&#10;&#10;{{ _ab_warn_ns.parts | join('&#10;') }}"
@@ -156,6 +151,7 @@
                         <button type="button" class="mini-ab-toggle-btn active" data-char-id="{{ c.id }}" data-mode="check">Check</button>
                         <button type="button" class="mini-ab-toggle-btn" data-char-id="{{ c.id }}" data-mode="save">Save</button>
                     </div>
+                  </div>
                 </div>
                 <div class="mini-ab-grid" data-char-id="{{ c.id }}">
                     {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}

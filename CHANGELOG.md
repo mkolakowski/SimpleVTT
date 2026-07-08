@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.962.0] - 2026-07-07 — "The Single Row"
+
+**Schema version:** 102
+
+**Commit summary:** Mini-sheet: drop the "Abilities" label; move the Check/Save toggle onto the Roll-state + death-save row.
+
+**Description:** In the tabletop mini-sheet and the initiative-tracker sheet (both the `_mini_sheet_card.html` partial), the ability grid had its own header row reading **"Abilities"** with the **Check / Save** toggle on the right. Per request, the **"Abilities" label is removed** (the STR/DEX/… grid below is self-evident) and the **Check/Save toggle is folded up into the `.mini-meta-row`** so it sits **in line with the Adv / Normal / Dis roll-state pill and the death-save tracker** — one compact control row instead of two. The ⚠ Conditions warning pill rides along with the toggle. The live condition-pill updater (`_updateConditionWarnPill`) now targets the meta-row instead of the retired `.mini-ab-header`.
+
+### Changed
+- `app/templates/_mini_sheet_card.html` — removed the `.mini-ab-header` / "Abilities" `mini-section-label`; the Check/Save toggle (+ ⚠ Conditions pill) now render inside `.mini-meta-row`, right-aligned (`margin-left:auto`) beside the roll-state pill + death-saves tracker. Condition-warning computation hoisted above the row.
+- `app/templates/tabletop.html` — `_updateConditionWarnPill` queries `.mini-meta-row` (was `.mini-ab-header`) and inserts the pill within the toggle's parent group.
+
 ## [2.961.0] - 2026-07-07 — "The Low Prompt"
 
 **Schema version:** 102
