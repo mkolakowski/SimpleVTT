@@ -7199,8 +7199,21 @@ def _check_opportunity_attack_triggers(
             grid_size_px, grid_type, wx, wy, to_x, to_y,
         )
         reach_ft = _combatant_melee_reach_ft(db, c)
+        # v2.957.0 — edge-aware reach. ``dist_*`` are CENTRE-to-centre, but D&D
+        # reach is measured from a creature's SPACE (its edge). A larger creature
+        # threatens from further out, so extend the reach used for the comparison
+        # by half the extra width of each creature — 2.5 ft per size step beyond
+        # 1 (a size-2 creature's centre sits 2.5 ft further from its edge than a
+        # size-1's). Size-1 vs size-1 is unchanged. Especially matters on gridless
+        # maps: a big monster placed next to a hero reads as >5 ft centre-to-centre
+        # and, pre-fix, never provoked its own OA. Reported ``watcher_reach_ft``
+        # stays the BASE reach so chat cards read naturally.
+        mover_size = (int(getattr(mover_token_row, "size", 1) or 1)
+                      if mover_token_row else 1)
+        watcher_size = int(getattr(watcher_token, "size", 1) or 1)
+        effective_reach_ft = reach_ft + 2.5 * (mover_size - 1) + 2.5 * (watcher_size - 1)
         # Exit-reach transition (standard OA, every watcher).
-        if dist_from <= reach_ft and dist_to > reach_ft:
+        if dist_from <= effective_reach_ft and dist_to > effective_reach_ft:
             triggers.append({
                 "watcher_combatant_id": c.get("id"),
                 "watcher_name": c.get("name") or "Combatant",
@@ -7224,11 +7237,11 @@ def _check_opportunity_attack_triggers(
         # outside reach AND the move segment passes within
         # reach_ft of the watcher, fire OA at the (computed) exit
         # point.
-        if dist_from > reach_ft and dist_to > reach_ft:
+        if dist_from > effective_reach_ft and dist_to > effective_reach_ft:
             seg_min_ft = _segment_to_point_min_ft(
                 grid_size_px, from_x, from_y, to_x, to_y, wx, wy,
             )
-            if seg_min_ft <= reach_ft:
+            if seg_min_ft <= effective_reach_ft:
                 triggers.append({
                     "watcher_combatant_id": c.get("id"),
                     "watcher_name": c.get("name") or "Combatant",
@@ -7251,7 +7264,7 @@ def _check_opportunity_attack_triggers(
         # exit transition). Only watchers with the Polearm Master
         # feat trigger this; standard combatants don't get OA on
         # entry. The watcher's reach is still per-combatant.
-        if dist_from > reach_ft and dist_to <= reach_ft:
+        if dist_from > effective_reach_ft and dist_to <= effective_reach_ft:
             if _combatant_has_polearm_master(db, c):
                 triggers.append({
                     "watcher_combatant_id": c.get("id"),

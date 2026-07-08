@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.957.0] - 2026-07-07 — "The Big Reach"
+
+**Schema version:** 101
+
+**Commit summary:** Opportunity-attack reach is edge-aware, so large creatures threaten correctly (fixes their OA on gridless).
+
+**Description:** OA reach compared the watcher's reach against the **center-to-center** distance between tokens, but D&D reach is measured from a creature's **space** (its edge). A larger creature's center sits further from its edge, so a size-2 monster standing next to a size-1 hero read as **7.5 ft** apart (center-to-center) and, with a 5-ft weapon, **never provoked its own OA** when the hero walked away. Now `_check_opportunity_attack_triggers` extends the reach used for the comparison by **2.5 ft per size step beyond 1** for each creature (`effective_reach = reach + 2.5·(mover_size−1) + 2.5·(watcher_size−1)`), so a big monster threatens from its edge. Size-1 vs size-1 is unchanged. The reported `watcher_reach_ft` stays the base reach. Applies to all maps but most visible on gridless, where free placement + big monsters exposed it.
+
+### Fixed
+- `app/routes/tabletop_routes.py::_check_opportunity_attack_triggers` — edge-aware reach (adds each creature's half-size beyond size-1) across the exit, path-cross, and Polearm-Master enter checks.
+
+### Added
+- `tests/harness/test_opportunity_attack_gridless.py::test_oa_large_watcher_reach_is_edge_aware` — a size-2 watcher provokes at a 7.5-ft center gap; a size-1 watcher at the same gap does not.
+
 ## [2.956.1] - 2026-07-07 — "No Free Steps"
 
 **Schema version:** 101
