@@ -68,6 +68,46 @@ async def test_no_check_is_a_free_door(gm_client, check_map):
     assert "check" not in d and "dc" not in d, d
 
 
+# --- Lock config round-trip (v2.965.0) --------------------------------------
+
+async def test_lock_fields_round_trip(gm_client, check_map):
+    """A locked door stores {locked, key, lock_check, lock_dc}."""
+    walls = await _put_get(gm_client, check_map, [
+        {"id": "lw", "x1": 0, "y1": 0, "x2": 0, "y2": 100,
+         "doors": [{"id": "d", "t0": 0.2, "t1": 0.8, "locked": True,
+                    "key": "Iron Key", "lock_check": "Sleight of Hand", "lock_dc": 18}]}])
+    d = next(w for w in walls if w["id"] == "lw")["doors"][0]
+    assert d["locked"] is True, d
+    assert d["key"] == "Iron Key", d
+    assert d["lock_check"] == "Sleight of Hand" and d["lock_dc"] == 18, d
+
+
+async def test_lock_config_persists_while_unlocked(gm_client, check_map):
+    """The key + pick config persist even when ``locked`` is false (so a
+    re-lock keeps them); an unlocked door just omits ``locked``."""
+    walls = await _put_get(gm_client, check_map, [
+        {"id": "uw", "x1": 0, "y1": 0, "x2": 0, "y2": 100,
+         "doors": [{"id": "d", "t0": 0.2, "t1": 0.8, "locked": False,
+                    "key": "Brass Key", "lock_check": "dex_check", "lock_dc": 12}]}])
+    d = next(w for w in walls if w["id"] == "uw")["doors"][0]
+    assert "locked" not in d, d              # false → omitted
+    assert d["key"] == "Brass Key", d        # config kept
+    assert d["lock_dc"] == 12, d
+
+
+async def test_partial_pick_gate_dropped(gm_client, check_map):
+    """A pick check with no DC (or DC<=0) is dropped; DC clamps to 40."""
+    walls = await _put_get(gm_client, check_map, [
+        {"id": "pw", "x1": 0, "y1": 0, "x2": 0, "y2": 100,
+         "doors": [{"id": "a", "t0": 0.1, "t1": 0.4, "locked": True,
+                    "lock_check": "Sleight of Hand", "lock_dc": 0},
+                   {"id": "b", "t0": 0.5, "t1": 0.9, "locked": True,
+                    "lock_check": "dex_check", "lock_dc": 999}]}])
+    doors = {d["id"]: d for d in next(w for w in walls if w["id"] == "pw")["doors"]}
+    assert "lock_check" not in doors["a"] and "lock_dc" not in doors["a"], doors["a"]
+    assert doors["b"]["lock_dc"] == 40, doors["b"]
+
+
 # --- Phase 2: enforcement (the toggle rolls the check + gates opening) -------
 
 async def _door_open_state(gm_client, mid, wall_id, door_id):

@@ -10,6 +10,19 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.965.0] - 2026-07-07 — "The Iron Key"
+
+**Schema version:** 102
+
+**Commit summary:** Doors can be locked — Phase 1: per-door lock (key item + pick-check DC) set in the map editor (storage + UI).
+
+**Description:** Groundwork for **locked doors** — a door that won't open on a click unless the acting token **holds the right key** or **picks the lock**. This phase adds the **data + GM authoring UI** (enforcement lands next). Each door record (embedded + whole-segment) can now carry a lock: `locked` (bool), `key` (an item name to match against the token's inventory, e.g. `Iron Key`), and a pick gate `lock_check` + `lock_dc` (same stat_key/skill vocabulary as the open-check — e.g. Sleight of Hand DC 18). All live in the existing `maps.walls` JSON — **no schema migration**. In the **map editor**, the door right-click menu gains a **"🔒 Lock"** submenu: toggle Locked, set the Key item (prompt), and set the Pick-lock check + DC (or "Can't be picked"). The lock *config* (key + pick) persists across lock/unlock so re-locking keeps it; the sanitizer omits `locked` when false, drops an incomplete pick gate, and clamps the DC to 1–40. **No enforcement yet** — opening a locked door still just toggles it; the key/pick resolution lands next.
+
+### Added
+- `app/routes/tabletop_routes.py::_door_lock_fields` — validates `{locked, key, lock_check, lock_dc}`; applied in both wall sanitizers.
+- `app/templates/map_editor.html` — `_doorLockItem()` builds the "🔒 Lock" submenu (Locked toggle · Key item prompt · Pick-lock check+DC); wired into both door menus.
+- `tests/harness/test_door_open_check.py` — lock fields round-trip; config persists while unlocked; incomplete pick gate dropped + DC clamp.
+
 ## [2.964.2] - 2026-07-07 — "The Saved Toast"
 
 **Schema version:** 102

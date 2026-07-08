@@ -124407,6 +124407,31 @@ def _door_check_fields(d) -> dict:
     return {}
 
 
+def _door_lock_fields(d) -> dict:
+    """v2.965.0 — the optional LOCK on a door: ``{locked, key?, lock_check?,
+    lock_dc?}``. A locked door won't open on a click unless the acting token
+    **holds an item named ``key``** (case-insensitive) or **picks the lock**
+    (``lock_check`` vs ``lock_dc`` — same stat_key/skill vocabulary as the
+    open-check). Stored compactly: ``locked`` only when true; ``key`` when set;
+    the pick gate only when both ``lock_check`` + ``lock_dc`` are set. The lock
+    *config* (key/pick) persists across lock/unlock so re-locking keeps it."""
+    out = {}
+    if bool((d or {}).get("locked")):
+        out["locked"] = True
+    key = str((d or {}).get("key") or "").strip()[:60]
+    if key:
+        out["key"] = key
+    lchk = str((d or {}).get("lock_check") or "").strip()[:40]
+    try:
+        ldc = int((d or {}).get("lock_dc") or 0)
+    except (TypeError, ValueError):
+        ldc = 0
+    if lchk and ldc > 0:
+        out["lock_check"] = lchk
+        out["lock_dc"] = max(1, min(40, ldc))
+    return out
+
+
 def _sanitize_wall_doors(raw, wall_idx: int) -> list:
     """v2.899.0 — embedded doors: a wall keeps its single segment and may hold
     a list of door *openings* along it. Each door is
@@ -124443,6 +124468,8 @@ def _sanitize_wall_doors(raw, wall_idx: int) -> list:
             rec["style"] = dstyle
         # v2.963.0 — optional open-check gate {check, dc} (stored only when set).
         rec.update(_door_check_fields(d))
+        # v2.965.0 — optional lock {locked, key, lock_check, lock_dc}.
+        rec.update(_door_lock_fields(d))
         out.append(rec)
     return out
 
@@ -124497,6 +124524,8 @@ def _sanitize_wall_segments(raw) -> list:
         # v2.963.0 — a whole-segment door/gate may also carry an open-check
         # gate {check, dc} (stored only when set; ignored on plain walls).
         rec.update(_door_check_fields(seg))
+        # v2.965.0 — and an optional lock {locked, key, lock_check, lock_dc}.
+        rec.update(_door_lock_fields(seg))
         # v2.899.0 — embedded door openings (stored only when present).
         doors = _sanitize_wall_doors(seg.get("doors"), i)
         if doors:
