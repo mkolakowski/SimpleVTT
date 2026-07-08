@@ -124388,6 +124388,25 @@ async def settings_map_ambient_light(
     return {"ok": True, "ambient_light": m.ambient_light}
 
 
+def _door_check_fields(d) -> dict:
+    """v2.963.0 — the optional open-check gate on a door: ``{check, dc}``.
+
+    ``check`` is a stat_key (``"str_check"``…``"cha_check"`` / ``"str_save"``…)
+    or an exact skill name (``"Athletics"``, ``"Perception"``, …) — the same
+    vocabulary ``_resolve_stat_modifier`` understands. ``dc`` is the target
+    number (clamped 1–40). Both must be set for the gate to exist; an empty
+    check or a non-positive dc means the door opens freely (the default).
+    Returns ``{}`` when unset so callers can ``rec.update(...)`` it in."""
+    chk = str((d or {}).get("check") or "").strip()[:40]
+    try:
+        dc = int((d or {}).get("dc") or 0)
+    except (TypeError, ValueError):
+        dc = 0
+    if chk and dc > 0:
+        return {"check": chk, "dc": max(1, min(40, dc))}
+    return {}
+
+
 def _sanitize_wall_doors(raw, wall_idx: int) -> list:
     """v2.899.0 — embedded doors: a wall keeps its single segment and may hold
     a list of door *openings* along it. Each door is
@@ -124422,6 +124441,8 @@ def _sanitize_wall_doors(raw, wall_idx: int) -> list:
         dstyle = str(d.get("style") or "").strip()[:20]
         if dstyle:
             rec["style"] = dstyle
+        # v2.963.0 — optional open-check gate {check, dc} (stored only when set).
+        rec.update(_door_check_fields(d))
         out.append(rec)
     return out
 
@@ -124473,6 +124494,9 @@ def _sanitize_wall_segments(raw) -> list:
             # only — occlusion ignores it.
             "style": str(seg.get("style") or "").strip()[:20],
         }
+        # v2.963.0 — a whole-segment door/gate may also carry an open-check
+        # gate {check, dc} (stored only when set; ignored on plain walls).
+        rec.update(_door_check_fields(seg))
         # v2.899.0 — embedded door openings (stored only when present).
         doors = _sanitize_wall_doors(seg.get("doors"), i)
         if doors:

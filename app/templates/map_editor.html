@@ -2009,6 +2009,7 @@
           items.push({ label: '↻ Flip swing', fn: function () { w.flip = !w.flip; saveWalls(); } });
           items.push({ label: (w.secret ? '✓ ' : '   ') + '🔒 Secret (hidden from players)',
             fn: function () { w.secret = !w.secret; saveWalls(); } });
+          items.push(_doorCheckItem(w));
         }
         // v2.906.0 — insert an embedded door at the right-click point (plain
         // walls only; a legacy whole-segment door/gate/window can't hold one).
@@ -2109,6 +2110,7 @@
                              fn: function () { emb.style = key; saveWalls(); } };
                   })) },
                 { label: (emb.secret ? '✓ ' : '   ') + '🔒 Secret (hidden from players)', fn: function () { emb.secret = !emb.secret; saveWalls(); } },
+                _doorCheckItem(emb),
                 { label: '🗑 Delete door', fn: _rmDoor },
               ]);
             });
@@ -2727,6 +2729,41 @@
       setStatus('Saved.');
     } catch (e) { setStatus('Save failed.'); }
     render();
+  }
+  // v2.963.0 — per-door "open check": require an ability/skill check vs a DC to
+  // open the door on the tabletop. ``obj`` is the door record (an embedded door
+  // or a whole-segment door/gate); ``check`` is a stat_key/skill name +
+  // ``dc`` the target number. Returns a context-menu item with a submenu of
+  // door-relevant checks; picking one prompts for the DC. None = opens freely.
+  var DOOR_CHECKS = [
+    ['str_check', '💪 Strength'],
+    ['dex_check', '🤸 Dexterity'],
+    ['Athletics', '🧗 Athletics'],
+    ['Acrobatics', '🤸 Acrobatics'],
+    ['Sleight of Hand', '🖐 Sleight of Hand'],
+    ['Perception', '👁 Perception'],
+    ['Investigation', '🔍 Investigation'],
+  ];
+  function _doorCheckLabel(key) {
+    for (var i = 0; i < DOOR_CHECKS.length; i++) if (DOOR_CHECKS[i][0] === key) return DOOR_CHECKS[i][1];
+    return key;
+  }
+  function _doorCheckItem(obj) {
+    var cur = obj.check || '';
+    var sub = [{ label: (!cur ? '✓ ' : '   ') + '🔓 None (opens freely)',
+                 fn: function () { delete obj.check; delete obj.dc; saveWalls(); } }];
+    DOOR_CHECKS.forEach(function (c) {
+      var on = cur === c[0];
+      sub.push({ label: (on ? '✓ ' : '   ') + c[1] + (on && obj.dc ? ' · DC ' + obj.dc : ''),
+        fn: function () {
+          var d = prompt('DC to open this door with a ' + c[1].replace(/^\S+\s/, '') + ' check:', obj.dc || 12);
+          if (d === null) return;
+          var dc = parseInt(d, 10);
+          if (!(dc > 0)) { alert('Enter a DC greater than 0.'); return; }
+          obj.check = c[0]; obj.dc = Math.max(1, Math.min(40, dc)); saveWalls();
+        } });
+    });
+    return { label: '🎲 Open check' + (cur ? ': ' + _doorCheckLabel(cur) + ' DC ' + (obj.dc || '?') : '…'), sub: sub };
   }
   async function saveHotspots() {
     pushHistory();

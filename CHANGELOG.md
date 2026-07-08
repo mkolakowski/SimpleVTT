@@ -10,6 +10,19 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.963.0] - 2026-07-07 — "The Marked Door"
+
+**Schema version:** 102
+
+**Commit summary:** Doors can require an ability/skill check to open — Phase 1: per-door check + DC set in the map editor (storage + UI).
+
+**Description:** Groundwork for "checked doors" — a door the party must pass a skill/ability check to open (a stuck portcullis, a rusted gate, a barred door). This phase adds the **data + the GM authoring UI**: each door record (embedded doors **and** legacy whole-segment doors) can now carry `check` (a stat_key like `str_check`/`dex_check` or a skill name like `Athletics`, `Perception`, …) + `dc` (1–40). Both live inside the existing `maps.walls` JSON — **no schema migration**. In the **map editor**, the door right-click menu gains a **"🎲 Open check"** submenu: pick a door-relevant check (Strength, Dexterity, Athletics, Acrobatics, Sleight of Hand, Perception, Investigation) and enter a DC, or "None (opens freely)" to clear. The menu label shows the current setting (e.g. `🎲 Open check: 🧗 Athletics DC 15`). The sanitizer clamps the DC to 1–40 and drops an incomplete gate (a check with no DC, or vice-versa) so a half-set door stays free. **This phase does not enforce anything yet** — opening a checked door on the tabletop still just toggles it; the roll-and-gate flow lands next.
+
+### Added
+- `app/routes/tabletop_routes.py::_door_check_fields` — extracts + validates `{check, dc}` (DC clamped 1–40; both required or neither stored); applied in `_sanitize_wall_doors` (embedded) and `_sanitize_wall_segments` (whole-segment).
+- `app/templates/map_editor.html` — `_doorCheckItem()` builds the "🎲 Open check" submenu (curated check list + DC prompt); wired into both the whole-segment door menu and the embedded-door context menu.
+- `tests/harness/test_door_open_check.py` — check/DC round-trips on embedded + whole-segment doors; DC clamps to 40; an incomplete gate is dropped; a plain door carries neither field.
+
 ## [2.962.0] - 2026-07-07 — "The Single Row"
 
 **Schema version:** 102
