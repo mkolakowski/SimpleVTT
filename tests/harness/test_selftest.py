@@ -175,4 +175,7 @@ def test_selftest_run_to_completion_reports_all_campaigns():
                         cats.add(ch["category"])
         assert rounds_seen > 0, "no combat rounds were simulated"
         assert {"pc", "npc"} <= kinds, f"missing actor kinds: {kinds}"
-        assert {"pc_attack", "npc_attack", "turn_advance"} <= cats, f"missing combat checks: {cats}"
+        # PC attack + NPC attack + turn advance + a spell cast (casters cast a
+        # leveled spell or fall back to a cantrip; non-casters record a skip).
+        assert {"pc_attack", "npc_attack", "turn_advance", "spell_cast"} <= cats, \
+            f"missing combat checks: {cats}"

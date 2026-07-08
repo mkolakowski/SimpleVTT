@@ -308,6 +308,36 @@ async def _get_battle(client, cid):
     return (r.json().get("battle") if r.status_code == 200 else None) or {}
 
 
+async def _get_sheet(client, cid, char_id):
+    r = await client.get(f"/api/campaign/{cid}/character/{char_id}/sheet-json")
+    return (r.json().get("sheet") if r.status_code == 200 else None) or {}
+
+
+def _slots_available(sheet: dict) -> int:
+    """Total unspent leveled spell slots across all classes/levels."""
+    avail = 0
+    for per_class in (sheet.get("spell_slots") or {}).values():
+        if not isinstance(per_class, dict):
+            continue
+        for slot in per_class.values():
+            if isinstance(slot, dict):
+                avail += max(0, int(slot.get("total") or 0) - int(slot.get("used") or 0))
+    return avail
+
+
+def _pick_spell(spells: list, has_slot: bool):
+    """Choose (spell_index, is_leveled) to cast. Prefer a leveled spell when a
+    slot is free (tests slot decrement); else a cantrip (level 0, no slot).
+    Returns None when the character can't cast without a slot."""
+    leveled = [i for i, s in enumerate(spells) if isinstance(s, dict) and int(s.get("level") or 0) >= 1]
+    cantrips = [i for i, s in enumerate(spells) if isinstance(s, dict) and int(s.get("level") or 0) == 0]
+    if has_slot and leveled:
+        return leveled[0], True
+    if cantrips:
+        return cantrips[0], False
+    return None
+
+
 def _hp_of(state: dict, combatant_id: str):
     for c in state.get("combatants", []):
         if c.get("id") == combatant_id:
@@ -315,9 +345,77 @@ def _hp_of(state: dict, combatant_id: str):
     return None
 
 
-async def _combat_rounds(client, collector, cid, node, report, combs) -> None:
+async def _pc_spell_check(client, collector, cid, comb, target, actor_node, spell_casters) -> None:
+    """Cast a spell as this PC at ``target`` and record a spell_cast check.
+    Self-contained (own try/except) so it never disturbs the attack check."""
+    char_id = comb["char_id"]
+    try:
+        sheet = await _get_sheet(client, cid, char_id)
+        spells = list(sheet.get("spells") or [])
+        if not spells:
+            actor_node["checks"].append(_check(
+                "spell_cast", f"{actor_node['actor']} casts a spell",
+                "a castable spell", "not a caster (no spells on sheet)", "skip"))
+            return
+        avail_before = _slots_available(sheet)
+        pick = _pick_spell(spells, avail_before > 0)
+        if pick is None:
+            actor_node["checks"].append(_check(
+                "spell_cast", f"{actor_node['actor']} casts a spell",
+                "a cantrip or an available slot", "no slot free and no cantrip known", "skip"))
+            return
+        # Try the chosen spell; if a leveled cast is refused (e.g. a Warlock's
+        # pact slot doesn't match the spell's level), fall back to a cantrip.
+        cantrips = [i for i, s in enumerate(spells)
+                    if isinstance(s, dict) and int(s.get("level") or 0) == 0]
+        attempts = [pick]
+        if pick[1] and cantrips:
+            attempts.append((cantrips[0], False))
+
+        r = None
+        bcast = None
+        spell_index, is_leveled = pick
+        for spell_index, is_leveled in attempts:
+            if collector:
+                collector.mark()
+            r = await client.post(
+                f"/api/campaign/{cid}/cast_spell",
+                json={"character_id": char_id, "spell_index": spell_index,
+                      "target_combatant_id": target["id"], "override": True})
+            bcast = await collector.wait_for("spell_cast", _COMBAT_WS_TIMEOUT) if collector else None
+            if r.status_code == 200:
+                break
+        spell_name = (spells[spell_index] or {}).get("name") or f"spell #{spell_index}"
+        ok = r.status_code == 200 and bcast is not None
+        err = "" if r.status_code == 200 else f" ({str(r.text)[:80]})"
+        detail = f"'{spell_name}' (level {'1+' if is_leveled else '0 cantrip'}) at {target['name']}"
+        if is_leveled and ok:
+            avail_after = _slots_available(await _get_sheet(client, cid, char_id))
+            spell_casters.add(char_id)
+            decremented = avail_after == avail_before - 1
+            actor_node["checks"].append(_check(
+                "spell_cast", f"{actor_node['actor']} casts {spell_name}",
+                "HTTP 200, spell_cast broadcast, one spell slot consumed",
+                f"HTTP {r.status_code}, broadcast {'seen' if bcast else 'MISSING'}, "
+                f"slots {avail_before}→{avail_after}{err}",
+                "pass" if (ok and decremented) else "fail", detail))
+        else:
+            actor_node["checks"].append(_check(
+                "spell_cast", f"{actor_node['actor']} casts {spell_name}",
+                "HTTP 200, spell_cast broadcast (cantrip — no slot spent)",
+                f"HTTP {r.status_code}, broadcast {'seen' if bcast else 'MISSING'}{err}",
+                "pass" if ok else "fail", detail))
+    except Exception as e:  # noqa: BLE001
+        actor_node["checks"].append(_check(
+            "spell_cast", f"{actor_node['actor']} casts a spell",
+            "HTTP 200 + spell_cast broadcast", f"exception: {e}", "error"))
+
+
+async def _combat_rounds(client, collector, cid, node, report, combs, spell_casters) -> None:
     """Drive a few rounds. Each round is a node; each acting combatant is an
-    actor node under it with an attack check + a turn-advance check."""
+    actor node under it with an attack check + a turn-advance check (and, for
+    caster PCs, a spell-cast check). ``spell_casters`` collects the char_ids
+    that spent a slot, so the caller can long-rest them in teardown."""
     heroes = [c for c in combs if c.get("char_id") is not None]
     villains = [c for c in combs if c.get("char_id") is None]
     if not heroes or not villains:
@@ -365,6 +463,12 @@ async def _combat_rounds(client, collector, cid, node, report, combs) -> None:
                         f"broadcast {'seen' if bcast else 'MISSING'}",
                         "pass" if ok else "fail",
                         f"target HP {before}→{after}"))
+
+                    # A caster PC also casts a spell at the villain. Prefer a
+                    # leveled spell when a slot is free (tests slot decrement),
+                    # else a cantrip; non-casters record a skip.
+                    await _pc_spell_check(
+                        client, collector, cid, comb, v_target, actor_node, spell_casters)
                 else:
                     tgt = h_target
                     before = _hp_of(await _get_battle(client, cid), tgt["id"])
@@ -446,6 +550,7 @@ async def _run_campaign(camp: dict, node: dict, report: dict) -> None:
     moved: list = []          # (token_id, orig_x, orig_y) to restore
     battle_snapshot = None    # prior battle state to restore
     combs_for_combat = None   # combatants seeded by initiative, for the rounds
+    spell_casters: set = set()  # char_ids that spent a slot → long-rest to restore
 
     try:
         # --- login as the campaign GM ---
@@ -575,7 +680,8 @@ async def _run_campaign(camp: dict, node: dict, report: dict) -> None:
 
         # --- combat rounds: per round → per actor (PC/NPC) ---
         if combs_for_combat:
-            await _combat_rounds(client, collector, cid, node, report, combs_for_combat)
+            await _combat_rounds(
+                client, collector, cid, node, report, combs_for_combat, spell_casters)
 
     finally:
         # --- teardown: restore token positions + battle state ---
@@ -584,6 +690,10 @@ async def _run_campaign(camp: dict, node: dict, report: dict) -> None:
                 for tid, ox, oy in moved:
                     await client.post(
                         f"/api/campaign/{cid}/token/{tid}/move", json={"x": ox, "y": oy})
+                # Refill spent spell slots so leveled casts are non-destructive.
+                for char_id in spell_casters:
+                    await client.post(
+                        f"/api/campaign/{cid}/character/{char_id}/rest", json={"type": "long"})
                 if battle_snapshot is not None:
                     await client.put(f"/api/campaign/{cid}/battle", json=battle_snapshot)
                 else:
@@ -591,10 +701,11 @@ async def _run_campaign(camp: dict, node: dict, report: dict) -> None:
                         f"/api/campaign/{cid}/battle",
                         json={"combatants": [], "turn_index": 0, "round": 1, "active": False})
                 teardown.append(_check(
-                    "restore", "Restore token positions + battle state",
-                    "tokens moved back and battle reset to its prepped state",
+                    "restore", "Restore token positions + battle + spell slots",
+                    "tokens moved back, battle reset to its prepped state, slots refilled",
                     f"{len(moved)} token(s) restored; battle "
-                    f"{'snapshot' if battle_snapshot is not None else 'cleared'}",
+                    f"{'snapshot' if battle_snapshot is not None else 'cleared'}; "
+                    f"{len(spell_casters)} caster(s) long-rested",
                     "pass"))
             except Exception as e:  # noqa: BLE001
                 teardown.append(_check(

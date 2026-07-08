@@ -46,6 +46,11 @@ few seconds.
    - **attacks** — PCs via the weapon-attack endpoint (asserting the attack /
      damage totals and the `weapon_attack` broadcast, and reporting the target's
      HP change); NPCs via the monster-strike endpoint;
+   - **casts a spell** (caster PCs) — a leveled spell when a slot is free
+     (asserting the `spell_cast` broadcast *and* that one slot was consumed), or
+     a cantrip otherwise; a leveled cast refused by slot rules (e.g. a Warlock's
+     pact slot) falls back to a cantrip, and non-casters record a skip. Spent
+     slots are refilled with a long rest during restore;
    - **ends its turn** — advance initiative and assert the `battle_update`
      broadcast and that the turn index moved (wrapping to the next round).
 5. **Restore** — move the tokens back and reset the battle to its prepped state.

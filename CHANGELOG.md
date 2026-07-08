@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.975.0] - 2026-07-08 — "The Incantation"
+
+**Schema version:** 102
+
+**Commit summary:** Demo self-test — caster PCs also cast a spell each round (leveled slot-spend or cantrip fallback), asserting the spell_cast broadcast + slot decrement.
+
+**Description:** Deepens the demo self-test's combat simulation: each acting **caster PC** now also **casts a spell** at the villain, alongside its weapon attack. The runner reads the character's sheet (`/sheet-json`) and, when a leveled slot is free, casts a **leveled spell** and asserts the `spell_cast` broadcast **and** that exactly one slot was consumed (verified by re-reading the sheet); otherwise it casts a **cantrip** (no slot). A leveled cast that's refused — e.g. a Warlock's pact slot not matching the spell's level — **falls back to a cantrip** so the check reflects a real cast. Non-caster PCs record a `skip` ("not a caster"). Spent slots are **refilled with a long rest in teardown**, keeping the run non-destructive. Verified live: **178 passed, 8 skipped (non-casters), 0 failed** across all six demo campaigns in ~13s — including a Warlock correctly cantrip-falling-back to Eldritch Blast and Clerics/Wizards spending real slots (e.g. Magic Missile 11→10).
+
+### Added
+- `app/admin_center/selftest.py` — `_pc_spell_check()` (per caster PC: leveled-or-cantrip cast + slot-decrement assertion + cantrip fallback) with `_get_sheet` / `_slots_available` / `_pick_spell` helpers; teardown long-rests any PC that spent a slot.
+- `tests/harness/test_selftest.py` — the live combat-tree assertion now also requires a `spell_cast` check category.
+
 ## [2.974.0] - 2026-07-08 — "The Operator's Handbook"
 
 **Schema version:** 102
