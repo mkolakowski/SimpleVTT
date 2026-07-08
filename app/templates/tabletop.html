@@ -2586,7 +2586,7 @@
             // v2.786.7 — native hover tooltip identifying a door/gate + state.
             if ((w.door || w.gate) && (IS_GM || !w.secret)) {
                 var ttl = document.createElementNS(NS, 'title');
-                ttl.textContent = (w.gate ? '🚪 Gate — ' : '🚪 Door — ') + (w.open ? 'open' : 'closed') + ' (click to toggle)';
+                ttl.textContent = (w.gate ? '🚪 Gate — ' : '🚪 Door — ') + (w.open ? 'open' : 'closed') + ' (click to toggle)' + _doorGateTip(w);
                 ln.appendChild(ttl);
             }
             return ln;
@@ -2611,6 +2611,26 @@
             if (G.gate) return [[G.a.hinge, open ? G.a.open : G.a.closed], [G.b.hinge, open ? G.b.open : G.b.closed]];
             return [[G.hinge, open ? G.open : G.closed]];
         }
+        // v2.967.0 — player-facing gate indicator for a door: 🔒 when locked,
+        // else 🎲 when it needs an open-check to force. Empty for a free door.
+        // A CLOSED door shows the badge; an OPEN one doesn't (the gate's moot).
+        function _doorGateBadge(o) {
+            if (!o || o.open) return '';
+            if (o.locked) return '🔒';
+            if (o.check && o.dc) return '🎲';
+            return '';
+        }
+        function _doorGateTip(o) {
+            if (!o) return '';
+            if (o.locked) {
+                var bits = [];
+                if (o.key) bits.push('needs the ' + o.key);
+                if (o.lock_check && o.lock_dc) bits.push('pick DC ' + o.lock_dc);
+                return '\n🔒 Locked' + (bits.length ? ' — ' + bits.join(' or ') : '');
+            }
+            if (o.check && o.dc) return '\n🎲 ' + o.check + ' DC ' + o.dc + ' to open';
+            return '';
+        }
         // v2.900.0 — embedded doors: split a wall with a ``doors`` list into
         // synthetic sub-segments — plain-wall FACE spans (the parts between
         // doors) + one door-glyph span per door. Each door span carries the
@@ -2631,6 +2651,10 @@
                 var a = pt(t0), b = pt(t1);
                 return { x1: a[0], y1: a[1], x2: b[0], y2: b[1], style: (d.style || w.style), opacity: w.opacity,
                     gate: !!d.gate, door: !d.gate, open: !!d.open, flip: !!d.flip, secret: !!d.secret,
+                    // v2.967.0 — carry the gate config so the badge/tooltip work
+                    // on embedded doors (they recurse through the same draw).
+                    check: d.check, dc: d.dc, locked: d.locked, key: d.key,
+                    lock_check: d.lock_check, lock_dc: d.lock_dc,
                     _embWallId: w.id, _embDoorId: d.id };
             }
             var doors = (w.doors || [])
@@ -2745,6 +2769,25 @@
                 } else {
                     arc(G.closed, G.open, G.L, G.hinge);
                     leaf(G.hinge, open ? G.open : G.closed);
+                }
+                // v2.967.0 — a 🔒 (locked) / 🎲 (open-check) badge at the door
+                // midpoint so players see the gate before trying it. Nudged to
+                // the swing side so it doesn't sit on the leaf.
+                var _gb = _doorGateBadge(w);
+                if (_gb) {
+                    var _bmx = (w.x1 + w.x2) / 2 + G.px * (st.width + 9);
+                    var _bmy = (w.y1 + w.y2) / 2 + G.py * (st.width + 9);
+                    var bt = document.createElementNS(NS, 'text');
+                    bt.setAttribute('x', _bmx); bt.setAttribute('y', _bmy);
+                    bt.setAttribute('text-anchor', 'middle');
+                    bt.setAttribute('dominant-baseline', 'central');
+                    bt.setAttribute('font-size', '15');
+                    bt.style.pointerEvents = 'none';
+                    bt.textContent = _gb;
+                    var btt = document.createElementNS(NS, 'title');
+                    btt.textContent = (w.gate ? 'Gate' : 'Door') + _doorGateTip(w);
+                    bt.appendChild(btt);
+                    _wc.appendChild(bt);
                 }
                 if (w.secret) {  // v2.788.3 — GM-only "secret" marker
                     var sm = document.createElementNS(NS, 'circle');

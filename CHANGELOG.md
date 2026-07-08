@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.967.0] - 2026-07-07 — "The Signs on the Door"
+
+**Schema version:** 102
+
+**Commit summary:** Doors show their gate to players — a 🔒 badge on locked doors and 🎲 on check-to-open doors, with details on hover.
+
+**Description:** Players (and the GM) can now **see a door's gate before trying it**. A closed door renders a small badge at its midpoint on the tabletop: **🔒** when it's **locked** (needs a key or a pick) and **🎲** when it needs an **open-check** to force. Hovering the door surfaces the detail in its tooltip — for a lock, the **required key name** and/or the **pick DC** (e.g. `🔒 Locked — needs the Iron Key or pick DC 18`); for an open-check, `🎲 Athletics DC 15 to open`. The badge shows on both whole-segment and embedded doors (the gate config is now carried onto the embedded-door render sub-spans), and only on **closed** doors (an open one's gate is moot). Secret doors still stay hidden from players, and fog still masks a door the party hasn't seen — no information leaks. Purely presentational; the enforcement is unchanged.
+
+### Added
+- `app/templates/tabletop.html` — `_doorGateBadge()` / `_doorGateTip()`; a 🔒/🎲 SVG-text badge at the door midpoint in `drawWallVisual`; gate fields (`check/dc/locked/key/lock_check/lock_dc`) copied onto embedded-door sub-spans in `_wallRenderSpans`; the door hit-line tooltip appends the gate detail.
+- `tests/harness_ui/test_door_gate_badges.py` — a locked door shows 🔒 and a check-to-open door shows 🎲 on the tabletop (whole-segment + embedded).
+
 ## [2.966.0] - 2026-07-07 — "The Turning Key"
 
 **Schema version:** 102
