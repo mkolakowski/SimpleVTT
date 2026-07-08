@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.966.0] - 2026-07-07 — "The Turning Key"
+
+**Schema version:** 102
+
+**Commit summary:** Locked doors enforce — a token opens one with the right key (from its inventory) or by picking the lock; else it holds.
+
+**Description:** Phase 2 of locked doors (see v2.965.0) — the enforcement. When a **non-GM opens a locked door**, the server resolves the acting token's character and, in order: (1) if the character's **inventory holds an item named the door's `key`** (case-insensitive, name or catalog slug — `_char_holds_item`), the door **unlocks and opens** (a "🗝 unlocked with the Iron Key" toast); (2) else if the door has a **pick gate** (`lock_check` + `lock_dc`), the token **rolls to pick it** (`1d20` + the resolved ability/skill mod, public roll card `🚪 Pick the lock | Sleight of Hand | DC 18 — ✓/✗`): success unlocks + opens, failure keeps it shut; (3) else the door simply **won't budge** ("🔒 It's locked"). A successful key/pick **persists the unlock** (`locked` cleared) so it opens freely afterward. The **GM bypasses** locks, and **closing** never rolls. The open-check ("force the door", v2.964.0) still applies to *unlocked* doors — a locked door resolves its lock first. `toggleDoor` sends the acting `character_id` and toasts every outcome.
+
+### Added
+- `app/routes/tabletop_routes.py::_char_holds_item` — case-insensitive inventory name/slug scan (handles dict + legacy string items; ignores equipped/qty).
+- `tests/harness/test_door_open_check.py` — key holder unlocks+opens; no-key/no-pick stays locked; pick DC 1 opens; pick DC 999 stays shut (verified server-side); GM bypasses lock.
+
+### Changed
+- `app/routes/tabletop_routes.py::toggle_map_door` — lock gate before the open-check gate (key → pick → won't-budge); `_roll_door_open_check` gains flavor args (force vs pick); response carries a `lock` result.
+- `app/templates/tabletop.html` — `toggleDoor` surfaces key-unlock / pick success+fail / "it's locked" toasts.
+
 ## [2.965.0] - 2026-07-07 — "The Iron Key"
 
 **Schema version:** 102

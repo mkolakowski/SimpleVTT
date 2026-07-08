@@ -3139,13 +3139,27 @@
                 // walls_update WS re-renders for everyone on a successful open.
                 if (_resp.status === 400) {
                     (window.showToast || alert)(
-                        '🚪 This door needs a controlled token to attempt its check.', 'warning');
+                        '🚪 This door needs a controlled token to open it.', 'warning');
                     return;
                 }
                 var _body = null; try { _body = await _resp.json(); } catch (e) {}
-                // A failed open-check: the door stays shut. The roll card is
-                // already in the log; nudge the acting player so they know why.
-                if (_body && _body.check && _body.check.passed === false) {
+                if (!_body) return;
+                // v2.966.0 — lock outcomes (checked before the open-check).
+                if (_body.lock) {
+                    var L = _body.lock, who = L.character_name || 'You';
+                    if (L.unlocked && L.via === 'key') {
+                        (window.showToast || alert)('🗝 ' + who + ' unlocked the door with the ' + L.key + '.', 'success');
+                    } else if (L.unlocked && L.via === 'pick') {
+                        (window.showToast || alert)('🔓 ' + who + ' picked the lock (' + L.total + ' vs DC ' + L.dc + ').', 'success');
+                    } else if (!L.unlocked && L.via === 'pick') {
+                        (window.showToast || alert)('🔒 ' + who + ' failed to pick the lock (' + L.total + ' vs DC ' + L.dc + ') — it holds.', 'warning');
+                    } else if (!L.unlocked) {
+                        (window.showToast || alert)("🔒 It's locked — you need the right key or a way to pick it.", 'warning');
+                    }
+                }
+                // A failed open-check (force): the door stays shut. The roll
+                // card is already in the log; nudge the acting player.
+                if (_body.check && _body.check.passed === false) {
                     (window.showToast || alert)(
                         '🚪 ' + (_body.check.character_name || 'You') + ' failed the check ('
                         + _body.check.total + ' vs DC ' + _body.check.dc + ') — the door holds.',

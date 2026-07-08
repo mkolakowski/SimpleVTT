@@ -125432,12 +125432,35 @@ async def set_map_labels(
     return {"ok": True, "map_id": m.id, "labels": list(m.labels or [])}
 
 
-async def _roll_door_open_check(db, campaign, user, char, check_key: str, dc: int):
-    """v2.964.0 — roll a door's OPEN-check for ``char`` (1d20 + the resolved
+def _char_holds_item(sheet, item_name: str) -> bool:
+    """v2.965.0 — True if the character's inventory holds an item whose name (or
+    catalog ``_slug``) matches ``item_name`` case-insensitively. Handles dict
+    items and legacy plain-string names; ignores quantity/equipped (a key sits
+    in a pouch, not an equip slot)."""
+    want = str(item_name or "").strip().lower()
+    if not want:
+        return False
+    for item in (sheet.get("inventory") or []):
+        if isinstance(item, dict):
+            if want == str(item.get("name") or "").strip().lower():
+                return True
+            if want == str(item.get("_slug") or "").strip().lower():
+                return True
+        elif isinstance(item, str) and want == item.strip().lower():
+            return True
+    return False
+
+
+async def _roll_door_open_check(db, campaign, user, char, check_key: str, dc: int,
+                                verb: str = "Force the door",
+                                pass_txt: str = "the door opens",
+                                fail_txt: str = "the door holds"):
+    """v2.964.0 — roll a door gate-check for ``char`` (1d20 + the resolved
     ability/skill modifier) vs ``dc``, persist + broadcast a PUBLIC roll card
     to the log, and return ``(passed: bool, total: int)``. Reuses
     ``_resolve_stat_modifier`` (same stat_key/skill vocabulary as roll
-    requests)."""
+    requests). ``verb``/``pass_txt``/``fail_txt`` flavor the log note (force vs
+    pick-the-lock)."""
     mod, stat_label = _resolve_stat_modifier(
         char.sheet or {}, char.template, check_key)
     if mod > 0:
@@ -125451,8 +125474,8 @@ async def _roll_door_open_check(db, campaign, user, char, check_key: str, dc: in
     except dice_mod.DiceParseError:
         result = dice_mod.roll("1d20")
     passed = result.total >= int(dc)
-    outcome = "✓ Pass — the door opens" if passed else "✗ Fail — the door holds"
-    note = f"🚪 Force the door | {stat_label or check_key} | DC {dc} — {outcome}"[:200]
+    outcome = f"✓ Pass — {pass_txt}" if passed else f"✗ Fail — {fail_txt}"
+    note = f"🚪 {verb} | {stat_label or check_key} | DC {dc} — {outcome}"[:200]
     rec = DiceRoll(
         campaign_id=campaign.id, user_id=user.id, expression=expr,
         breakdown=result.breakdown, total=result.total,
@@ -125544,43 +125567,82 @@ async def toggle_map_door(
     # never rolls. The acting character comes from the request body
     # (``character_id`` — the player's controlled token).
     current_open = bool(door_obj.get("open"))
-    _chk = str(door_obj.get("check") or "").strip()
-    try:
-        _dc = int(door_obj.get("dc") or 0)
-    except (TypeError, ValueError):
-        _dc = 0
     check_result = None
-    if (not current_open) and _chk and _dc > 0 and not _user_is_gm(user, campaign, db):
+    lock_result = None
+    # v2.964.0/v2.965.0 — gates fire only when a non-GM is OPENING (closed→open).
+    # The GM (rules authority) bypasses; CLOSING never rolls.
+    if (not current_open) and not _user_is_gm(user, campaign, db):
+        _locked = bool(door_obj.get("locked"))
+        _chk = str(door_obj.get("check") or "").strip()
         try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        if not isinstance(body, dict):
-            body = {}
-        char = None
-        _cid = body.get("character_id")
-        if _cid:
+            _dc = int(door_obj.get("dc") or 0)
+        except (TypeError, ValueError):
+            _dc = 0
+        if _locked or (_chk and _dc > 0):
+            # Both gates need the acting character (from the request body).
             try:
-                char = db.query(Character).filter(
-                    Character.id == int(_cid),
-                    Character.campaign_id == campaign_id).first()
-            except (TypeError, ValueError):
-                char = None
-        if char is None:
-            raise HTTPException(
-                400,
-                "This door requires an open-check — control a token to attempt it.")
-        passed, total = await _roll_door_open_check(
-            db, campaign, user, char, _chk, _dc)
-        check_result = {
-            "passed": passed, "total": total, "dc": _dc, "check": _chk,
-            "character_id": char.id, "character_name": char.name,
-        }
-        if not passed:
-            # Door stays shut — no flip, no walls_update. The roll card is
-            # already broadcast so the table sees the failed attempt.
-            return {"ok": True, "door_id": did, "open": False,
-                    "check": check_result}
+                body = await request.json()
+            except Exception:
+                body = {}
+            if not isinstance(body, dict):
+                body = {}
+            char = None
+            _cid = body.get("character_id")
+            if _cid:
+                try:
+                    char = db.query(Character).filter(
+                        Character.id == int(_cid),
+                        Character.campaign_id == campaign_id).first()
+                except (TypeError, ValueError):
+                    char = None
+            if char is None:
+                raise HTTPException(
+                    400,
+                    "This door needs a controlled token to open it.")
+            # ---- LOCK gate first: a key held OR a successful pick unlocks it.
+            if _locked:
+                _key = str(door_obj.get("key") or "").strip()
+                _lchk = str(door_obj.get("lock_check") or "").strip()
+                try:
+                    _ldc = int(door_obj.get("lock_dc") or 0)
+                except (TypeError, ValueError):
+                    _ldc = 0
+                if _key and _char_holds_item(char.sheet or {}, _key):
+                    door_obj["locked"] = False  # persisted with the flip below
+                    lock_result = {"unlocked": True, "via": "key", "key": _key,
+                                   "character_name": char.name}
+                elif _lchk and _ldc > 0:
+                    passed, total = await _roll_door_open_check(
+                        db, campaign, user, char, _lchk, _ldc,
+                        verb="Pick the lock", pass_txt="the lock clicks open",
+                        fail_txt="the lock holds")
+                    lock_result = {"unlocked": passed, "via": "pick",
+                                   "total": total, "dc": _ldc, "check": _lchk,
+                                   "character_name": char.name}
+                    if passed:
+                        door_obj["locked"] = False
+                    else:
+                        return {"ok": True, "door_id": did, "open": False,
+                                "locked": True, "lock": lock_result}
+                else:
+                    # Locked, no key held, no pick gate → it simply won't budge.
+                    return {"ok": True, "door_id": did, "open": False,
+                            "locked": True,
+                            "lock": {"unlocked": False, "via": "none",
+                                     "key": _key}}
+            # ---- OPEN-CHECK gate: an UNLOCKED but stuck door (force it).
+            elif _chk and _dc > 0:
+                passed, total = await _roll_door_open_check(
+                    db, campaign, user, char, _chk, _dc)
+                check_result = {
+                    "passed": passed, "total": total, "dc": _dc, "check": _chk,
+                    "character_id": char.id, "character_name": char.name,
+                }
+                if not passed:
+                    # Door stays shut — no flip, no walls_update. The roll card
+                    # is already broadcast so the table sees the failed attempt.
+                    return {"ok": True, "door_id": did, "open": False,
+                            "check": check_result}
     door_obj["open"] = not current_open
     new_open = door_obj["open"]
     m.walls = walls
@@ -125593,7 +125655,8 @@ async def toggle_map_door(
         "type": "walls_update",
         "data": {"map_id": m.id, "walls": walls},
     })
-    return {"ok": True, "door_id": did, "open": new_open, "check": check_result}
+    return {"ok": True, "door_id": did, "open": new_open,
+            "check": check_result, "lock": lock_result}
 
 
 @router.get("/campaign/{campaign_id}/map/{map_id}/edit", response_class=HTMLResponse)

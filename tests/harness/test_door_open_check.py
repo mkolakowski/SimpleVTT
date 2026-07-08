@@ -108,6 +108,97 @@ async def test_partial_pick_gate_dropped(gm_client, check_map):
     assert doors["b"]["lock_dc"] == 40, doors["b"]
 
 
+# --- Lock enforcement (v2.966.0) --------------------------------------------
+
+async def _set_inventory(gm_client, char_id, items):
+    r = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-fields",
+        json={"inventory": items})
+    assert r.status_code == 200, r.text
+
+
+@pytest_asyncio.fixture
+async def restore_pip_inv(gm_client, roster):
+    yield
+    await _set_inventory(gm_client, roster["Pip Quickfingers"]["id"], [])
+
+
+async def _set_locked_door(gm_client, mid, **door):
+    base = {"id": "d1", "t0": 0.3, "t1": 0.7, "open": False, "locked": True}
+    base.update(door)
+    await gm_client.put(f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls", json={"walls": [
+        {"id": "cw", "x1": 385, "y1": 300, "x2": 385, "y2": 400, "doors": [base]}]})
+
+
+async def test_key_holder_unlocks_and_opens(alice_client, gm_client, roster, check_map, restore_pip_inv):
+    """A token holding the named key unlocks + opens the door (no roll)."""
+    pip = roster["Pip Quickfingers"]
+    await _set_inventory(gm_client, pip["id"], [{"name": "Iron Key", "type": "gear", "qty": 1}])
+    await _set_locked_door(gm_client, check_map, key="Iron Key")
+    r = await alice_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/map/{check_map}/door/cw:d1/toggle",
+        json={"character_id": pip["id"]})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["open"] is True, body
+    assert body["lock"]["unlocked"] is True and body["lock"]["via"] == "key", body
+    assert await _door_open_state(gm_client, check_map, "cw", "d1") is True
+
+
+async def test_no_key_no_pick_stays_locked(alice_client, gm_client, roster, check_map, restore_pip_inv):
+    """Locked, no key held, no pick gate → it won't budge."""
+    pip = roster["Pip Quickfingers"]
+    await _set_inventory(gm_client, pip["id"], [])
+    await _set_locked_door(gm_client, check_map, key="Iron Key")
+    r = await alice_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/map/{check_map}/door/cw:d1/toggle",
+        json={"character_id": pip["id"]})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["open"] is False and body["locked"] is True, body
+    assert body["lock"]["unlocked"] is False, body
+    assert await _door_open_state(gm_client, check_map, "cw", "d1") is False
+
+
+async def test_pick_success_unlocks(alice_client, gm_client, roster, check_map, restore_pip_inv):
+    """No key, but a pickable lock at DC 1 → the pick always clears → opens."""
+    pip = roster["Pip Quickfingers"]
+    await _set_inventory(gm_client, pip["id"], [])
+    await _set_locked_door(gm_client, check_map, key="Iron Key",
+                           lock_check="Sleight of Hand", lock_dc=1)
+    r = await alice_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/map/{check_map}/door/cw:d1/toggle",
+        json={"character_id": pip["id"]})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["open"] is True, body
+    assert body["lock"]["unlocked"] is True and body["lock"]["via"] == "pick", body
+
+
+async def test_pick_fail_stays_locked(alice_client, gm_client, roster, check_map, restore_pip_inv):
+    """No key, pick DC 999 → the pick always fails → stays locked."""
+    pip = roster["Pip Quickfingers"]
+    await _set_inventory(gm_client, pip["id"], [])
+    await _set_locked_door(gm_client, check_map, lock_check="Sleight of Hand", lock_dc=999)
+    r = await alice_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/map/{check_map}/door/cw:d1/toggle",
+        json={"character_id": pip["id"]})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["open"] is False and body["locked"] is True, body
+    assert body["lock"]["via"] == "pick" and body["lock"]["unlocked"] is False, body
+    assert await _door_open_state(gm_client, check_map, "cw", "d1") is False
+
+
+async def test_gm_bypasses_lock(gm_client, check_map):
+    """The GM opens a locked, keyless, unpickable door freely."""
+    await _set_locked_door(gm_client, check_map, key="Iron Key")
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/map/{check_map}/door/cw:d1/toggle", json={})
+    assert r.status_code == 200, r.text
+    assert r.json()["open"] is True, r.json()
+
+
 # --- Phase 2: enforcement (the toggle rolls the check + gates opening) -------
 
 async def _door_open_state(gm_client, mid, wall_id, door_id):
