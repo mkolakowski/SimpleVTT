@@ -5091,13 +5091,16 @@
         tokenLabel, triggers, distanceFt, onContinue, onStop,
     }) {
         // Backdrop blocks canvas interaction while the modal is open.
+        // v2.961.0 — anchored to the BOTTOM-MIDDLE of the screen (per the
+        // GM's request) so the OA prompt doesn't cover the tokens the GM is
+        // watching mid-move; the map stays visible above it.
         const backdrop = document.createElement('div');
         backdrop.setAttribute('style', [
             'position:fixed', 'inset:0',
             'background:rgba(0,0,0,0.45)',
             'z-index:2147483600',
-            'display:flex', 'align-items:center', 'justify-content:center',
-            'padding:16px',
+            'display:flex', 'align-items:flex-end', 'justify-content:center',
+            'padding:16px 16px 48px',
             'animation:reactionPopIn 180ms ease-out',
         ].join(';'));
         backdrop.setAttribute('role', 'dialog');

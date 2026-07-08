@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.961.0] - 2026-07-07 — "The Low Prompt"
+
+**Schema version:** 102
+
+**Commit summary:** Anchor the Opportunity-Attack Continue/Stop prompt to the bottom-middle of the screen.
+
+**Description:** The pre-move OA "⚠ Opportunity Attack provoked" prompt was centered, covering the tokens the GM is watching mid-move. Per request it now sits at the **bottom-middle** of the screen — the map (and the mover/watcher) stays visible above it while the GM decides Continue vs Stop. Cosmetic only; the modal contents, buttons, backstop, and keyboard/click-out behavior are unchanged.
+
+### Changed
+- `app/static/tabletop.js` — `_showPreMoveOaModal` backdrop uses `align-items:flex-end` + bottom padding so the card anchors bottom-center instead of screen-center.
+
 ## [2.960.0] - 2026-07-07 — "The Name on the Prompt"
 
 **Schema version:** 102
