@@ -632,6 +632,16 @@
     }
 
     // v2.882.0 — does the current viewer control this token? GMs control all;
+    // v2.968.0 — click-to-select: the single on-map token the user last
+    // grabbed/clicked. Distinct from the targeting set (double-click). Drives
+    // the "acting token" for door open-checks (the GM selects an NPC/PC token,
+    // then opens a gated door and THAT token rolls). Declared before render()
+    // so the selection-ring pass can read it at module-init draw time.
+    let _selectedTokenId = null;
+    function _selectedToken() {
+        if (_selectedTokenId == null || typeof tokens === 'undefined') return null;
+        return tokens.find(t => t && t.id === _selectedTokenId) || null;
+    }
     // a player controls a token they're the direct controller of, or one linked
     // to a character they own. (Mirrors canMove()/findMyFirstControlledToken().)
     function _controlsToken(t) {
@@ -2407,6 +2417,26 @@
             ctx.stroke();
             ctx.restore();
         });
+        // v2.968.0 — selected-token ring (click-to-select). A cyan dashed ring
+        // marks the acting token for door open-checks. Drawn on top like the
+        // targeting ring; hidden tokens skipped for non-GM.
+        if (_selectedTokenId != null) {
+            const st = tokens.find(t => t && t.id === _selectedTokenId);
+            if (st && !_isTokenHiddenFromMe(st)) {
+                const cx = st.x + gridSize / 2, cy = st.y + gridSize / 2;
+                const r = (gridSize * st.size) / 2 - 4;
+                ctx.save();
+                ctx.lineWidth = 2.5;
+                ctx.strokeStyle = '#22d3ee';
+                ctx.shadowColor = '#22d3ee';
+                ctx.shadowBlur = 8;
+                ctx.setLineDash([6, 4]);
+                ctx.beginPath();
+                ctx.arc(cx, cy, r + 6, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
         // v2.49.143: target picker range-gate ring. When the spell /
         // attack has a known range, draw a translucent green ring
         // around the caster at the range radius so out-of-range
@@ -4781,13 +4811,26 @@
     // edit form opens; clear it when the form closes. Arming + the
     // click-to-set landing flow are gated by the context being set.
     window.vttGetCharacters = function () { return characters; };
-    // v2.964.0 — the acting character for a door open-check: the player's first
-    // controlled token's linked character id (null for the GM / no token — the
-    // GM bypasses door checks server-side, a tokenless player gets a toast).
+    // v2.964.0 — the acting character for a door open-check: prefer the
+    // click-SELECTED token (v2.968.0 — lets the GM pick which PC/NPC acts),
+    // else the player's first controlled token. Null for the GM with nothing
+    // selected (they bypass door checks server-side).
     window.vttActingCharacterId = function () {
+        const s = _selectedToken();
+        if (s && s.character_id != null) return s.character_id;
         const t = findMyFirstControlledToken();
         return (t && t.character_id != null) ? t.character_id : null;
     };
+    // v2.968.0 — the acting TOKEN id (selected token, else controlled token).
+    // Sent to /door/toggle so the server can resolve a PC sheet OR an NPC
+    // monster stat block (a selected NPC token has no character_id).
+    window.vttActingTokenId = function () {
+        const s = _selectedToken();
+        if (s) return s.id;
+        const t = findMyFirstControlledToken();
+        return t ? t.id : null;
+    };
+    window.vttSelectedTokenId = function () { return _selectedTokenId; };
     // Lookup a token on the active map by character id (or null). Used
     // by the spawn-points editor so clicking Set on a character who's
     // already placed copies that token's position instead of requiring
@@ -4856,6 +4899,11 @@
         }
         if (ev.key === 'Escape' && spawnArmingCharId != null) {
             window.vttCancelSpawnArming();
+        }
+        // v2.968.0 — Escape also clears the click-to-select token.
+        if (ev.key === 'Escape' && _selectedTokenId != null) {
+            _selectedTokenId = null;
+            render();
         }
     });
 
@@ -4952,8 +5000,12 @@
         dragging = null;
         _dragRuler = null;  // v2.951.0 — clear the live ruler on drop
         canvas.style.cursor = 'grab';
+        // v2.968.0 — the grabbed token becomes the SELECTED (acting) token. A
+        // zero-distance grab is a plain click: select it, skip the no-op move.
+        _selectedTokenId = tok.id;
+        const _moved = (sx !== origX || sy !== origY);
         render();
-        _commitTokenMove(tok, origX, origY, sx, sy);
+        if (_moved) _commitTokenMove(tok, origX, origY, sx, sy);
     });
 
     /* v2.99.69 — pre-move Dash modal. Shown BEFORE the v2.99.55 OA

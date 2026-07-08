@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.968.0] - 2026-07-07 — "The Chosen Token"
+
+**Schema version:** 102
+
+**Commit summary:** Click-to-select a token on the tabletop (a cyan selection ring) — the acting token for door checks, set up here.
+
+**Description:** Adds a **single-token selection** to the tabletop, distinct from the double-click targeting set. **Clicking a token** (a plain click, no drag) now **selects** it — a cyan dashed ring marks it — and dragging a token also selects it on drop. **Escape** clears the selection. This is the groundwork for "the GM's selected token rolls a door's check": `window.vttActingCharacterId()` now prefers the selected token, and a new `window.vttActingTokenId()` returns the selected token's id (so the door endpoint can resolve a PC sheet *or* an NPC monster stat block next). A zero-distance click no longer posts a no-op `/move`. No door behavior changes yet — the GM still bypasses server-side until the next commit wires the selected token into the gate.
+
+### Added
+- `app/static/tabletop.js` — `_selectedTokenId` state + `_selectedToken()`; select on token grab/drop; cyan dashed selection ring in `render()`; Escape clears it; `window.vttActingTokenId()` / `window.vttSelectedTokenId()`; `vttActingCharacterId()` prefers the selection.
+- `tests/harness_ui/test_token_click_select.py` — a click selects the token (`vttSelectedTokenId`/`vttActingTokenId`); Escape clears it.
+
+### Changed
+- `app/static/tabletop.js` — the token mouseup skips the no-op `/move` on a zero-distance click (it's now a select).
+
 ## [2.967.0] - 2026-07-07 — "The Signs on the Door"
 
 **Schema version:** 102
