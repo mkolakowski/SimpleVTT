@@ -2726,7 +2726,7 @@
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ walls: walls }),
       });
-      setStatus('Saved.');
+      setStatus('Saved.'); showToast('Saved ✓');
     } catch (e) { setStatus('Save failed.'); }
     render();
   }
@@ -2773,7 +2773,7 @@
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hotspots: hotspots }),
       });
-      setStatus('Saved.');
+      setStatus('Saved.'); showToast('Saved ✓');
     } catch (e) { setStatus('Save failed.'); }
     render();
   }
@@ -2785,7 +2785,7 @@
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ lights: lights }),
       });
-      setStatus('Saved.');
+      setStatus('Saved.'); showToast('Saved ✓');
     } catch (e) { setStatus('Save failed.'); }
     render();
   }
@@ -2797,7 +2797,7 @@
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled: fogEnabled, dynamic: fogDynamic, revealed: fogRevealed }),
       });
-      setStatus('Saved.');
+      setStatus('Saved.'); showToast('Saved ✓');
     } catch (e) { setStatus('Save failed.'); }
     render();
   }
@@ -2809,7 +2809,7 @@
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ terrain: terrain }),
       });
-      setStatus('Saved.');
+      setStatus('Saved.'); showToast('Saved ✓');
     } catch (e) { setStatus('Save failed.'); }
     render();
   }
@@ -2821,7 +2821,7 @@
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ lair_zones: lairZones }),
       });
-      setStatus('Saved.');
+      setStatus('Saved.'); showToast('Saved ✓');
     } catch (e) { setStatus('Save failed.'); }
     render();
   }
@@ -2833,7 +2833,7 @@
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ gm_pins: gmPins }),
       });
-      setStatus('Saved.');
+      setStatus('Saved.'); showToast('Saved ✓');
     } catch (e) { setStatus('Save failed.'); }
     render();
   }
@@ -2845,7 +2845,7 @@
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ props: props }),
       });
-      setStatus('Saved.');
+      setStatus('Saved.'); showToast('Saved ✓');
     } catch (e) { setStatus('Save failed.'); }
     render();
   }
@@ -2857,7 +2857,7 @@
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ labels: labels }),
       });
-      setStatus('Saved.');
+      setStatus('Saved.'); showToast('Saved ✓');
     } catch (e) { setStatus('Save failed.'); }
     render();
   }

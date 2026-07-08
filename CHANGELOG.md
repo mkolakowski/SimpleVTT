@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.964.2] - 2026-07-07 — "The Saved Toast"
+
+**Schema version:** 102
+
+**Commit summary:** Map-editor saves now confirm with the bottom-center toast, not just the small top status text.
+
+**Description:** The map editor's incremental saves (placing/editing walls, doors, hotspots, lights, terrain, lair zones, GM pins, labels, …) only updated the tiny `Saved.` status text in the top toolbar — easy to miss. They now also fire the existing **bottom-center toast** (`Saved ✓`, `.me-toast` at `left:50%; bottom:28px`) that the explicit Save button already used, so every save gives a clear, centered confirmation. Cosmetic only; the top status text still updates too.
+
+### Changed
+- `app/templates/map_editor.html` — the 14 incremental-save success paths (`setStatus('Saved.')`) also call `showToast('Saved ✓')`.
+
 ## [2.964.1] - 2026-07-07 — "The Reachable Latch"
 
 **Schema version:** 102
