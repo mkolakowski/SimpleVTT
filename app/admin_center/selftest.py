@@ -97,7 +97,7 @@ _WS_TIMEOUT = float(os.getenv("SELFTEST_WS_TIMEOUT", "3.0"))
 # (v2.987.0+) that exercises deeper SRD mechanics — each deep phase needs an
 # active battle + a target combatant and is applicability-skipped per demo.
 _CORE_PHASES = ("movement", "combat", "doors", "spells", "gates")
-_DEEP_PHASES = ("rest", "heal", "death_saves", "concentration", "reactions", "saves")
+_DEEP_PHASES = ("rest", "heal", "death_saves", "concentration", "reactions", "saves", "features")
 _ALL_PHASES = _CORE_PHASES + _DEEP_PHASES
 
 # Pacing between visible actions (moves, attacks, door toggles) so a watching GM
@@ -1097,6 +1097,8 @@ async def _deep_checks(client, collector, cid, node, report, combs,
         await _reactions_check(client, collector, cid, combs, deep, report)
     if "saves" in phases:
         await _saves_check(client, collector, cid, heroes, combs, deep, report, spell_casters)
+    if "features" in phases:
+        await _features_check(client, cid, heroes, combs, deep, report, spell_casters, rested_pcs)
 
 
 async def _rest_check(client, cid, heroes, deep, report, rested_pcs) -> None:
@@ -1432,6 +1434,125 @@ async def _saves_check(client, collector, cid, heroes, combs, deep, report, spel
         deep.append(_check("save", f"{name}: save spell",
                            "200 + damage", f"exception: {e}", "error"))
     _publish(report)
+
+
+async def _features_check(client, cid, heroes, combs, deep, report, spell_casters, rested_pcs) -> None:
+    """Class-feature resources (SRD): drive one representative use per feature the
+    party actually has — Rage, Second Wind, Action Surge, Lay on Hands, Stunning
+    Strike (Ki), Bardic Inspiration, Sorcery Points (font of magic), and Divine
+    Smite (a slot-fuelled attack rider). Each is applicability-gated by the
+    sheet's resource rows / class; spent resources restore via the long rest."""
+    # Gather each hero's char id + resource keys + class.
+    info = []
+    for h in heroes:
+        chid = h.get("character_id")
+        if not chid:
+            continue
+        sheet = await _get_sheet(client, cid, chid)
+        keys = {(r.get("key") or "").lower() for r in (sheet.get("resources") or [])}
+        info.append({"chid": chid, "label": h.get("label") or "a hero",
+                     "keys": keys, "klass": (sheet.get("class") or "").lower()})
+    villain = next((c for c in combs if c.get("char_id") is None), None)
+
+    async def _feat(name, chid, coro):
+        try:
+            r = await coro
+            ok = r.status_code == 200
+            deep.append(_check("feature", f"{name}",
+                               "HTTP 200 (feature resource spent / effect applied)",
+                               f"HTTP {r.status_code} {str(r.text)[:90]}",
+                               "pass" if ok else "fail"))
+            if ok and chid:
+                rested_pcs.add(chid)
+        except Exception as e:  # noqa: BLE001
+            deep.append(_check("feature", name, "HTTP 200", f"exception: {e}", "error"))
+        _publish(report)
+
+    ran = 0
+
+    def _first(resource):
+        return next((hi for hi in info if resource in hi["keys"]), None)
+
+    hi = _first("rage")
+    if hi:
+        ran += 1
+        await _feat(f"{hi['label']}: Rage", hi["chid"],
+                    client.post(f"/api/campaign/{cid}/use_rage",
+                                json={"character_id": hi["chid"], "override": True}))
+    hi = _first("second-wind")
+    if hi:
+        ran += 1
+        await _feat(f"{hi['label']}: Second Wind", hi["chid"],
+                    client.post(f"/api/campaign/{cid}/use_second_wind",
+                                json={"character_id": hi["chid"], "override": True}))
+    hi = _first("action-surge")
+    if hi:
+        ran += 1
+        await _feat(f"{hi['label']}: Action Surge", hi["chid"],
+                    client.post(f"/api/campaign/{cid}/use_action_surge",
+                                json={"character_id": hi["chid"], "override": True}))
+    hi = _first("lay-on-hands")
+    if hi:
+        ran += 1
+        ally = next((x["chid"] for x in info if x["chid"] != hi["chid"]), hi["chid"])
+        rested_pcs.add(ally)
+        await _feat(f"{hi['label']}: Lay on Hands", hi["chid"],
+                    client.post(f"/api/campaign/{cid}/use_lay_on_hands",
+                                json={"character_id": hi["chid"], "target_character_id": ally,
+                                      "amount": 5, "override": True}))
+    hi = _first("ki")
+    if hi and villain:
+        ran += 1
+        await _feat(f"{hi['label']}: Stunning Strike (Ki)", hi["chid"],
+                    client.post(f"/api/campaign/{cid}/use_stunning_strike",
+                                json={"character_id": hi["chid"], "target_combatant_id": villain["id"],
+                                      "override": True}))
+    hi = _first("bardic-inspiration")
+    if hi:
+        ally = next((x["chid"] for x in info if x["chid"] != hi["chid"]), None)
+        if ally:
+            ran += 1
+            await _feat(f"{hi['label']}: Bardic Inspiration", hi["chid"],
+                        client.post(f"/api/campaign/{cid}/use_bardic_inspiration",
+                                    json={"character_id": hi["chid"], "target_character_id": ally,
+                                          "override": True}))
+    hi = _first("sorcery-points")
+    if hi:
+        ran += 1
+        await _feat(f"{hi['label']}: Font of Magic (SP → slot)", hi["chid"],
+                    client.post(f"/api/campaign/{cid}/use_font_of_magic_to_slot",
+                                json={"character_id": hi["chid"], "slot_level": 1, "override": True}))
+    # Divine Smite — a paladin spends a spell slot on a melee hit.
+    pal = next((hi for hi in info if hi["klass"] == "paladin"), None)
+    if pal and villain:
+        ran += 1
+        chid = pal["chid"]
+        try:
+            r = await client.post(
+                f"/api/campaign/{cid}/attack",
+                json={"character_id": chid, "attack_index": 0, "target_combatant_id": villain["id"],
+                      "spend_spell_slot": {"class_slug": "paladin", "level": 1},
+                      "bonus_damage": "2d8", "bonus_damage_label": "Divine Smite", "override": True})
+            body = r.json() if r.status_code == 200 else {}
+            ok = r.status_code == 200 and body.get("slot_spent_level")
+            if r.status_code == 200:
+                spell_casters.add(chid)
+            deep.append(_check(
+                "feature", f"{pal['label']}: Divine Smite (spend a slot on a hit)",
+                "HTTP 200, radiant bonus damage, a paladin slot spent",
+                f"HTTP {r.status_code}, bonus={body.get('bonus_damage_total')}, "
+                f"slot_spent=L{body.get('slot_spent_level')}",
+                "pass" if ok else "fail"))
+        except Exception as e:  # noqa: BLE001
+            deep.append(_check("feature", f"{pal['label']}: Divine Smite",
+                               "200 + slot spent", f"exception: {e}", "error"))
+        _publish(report)
+
+    if ran == 0:
+        deep.append(_check("feature", "Class features",
+                           "a resource-backed class feature in this party",
+                           "no drivable class features in this demo", "skip"))
+        _publish(report)
 
 
 # ── Per-campaign run ─────────────────────────────────────────────────────────

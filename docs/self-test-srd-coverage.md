@@ -37,7 +37,7 @@ yet was invisible to the self-test. Endpoints live in
 | Death saves / stabilize | `/character/{id}/death-save`; `/death-save/override`; `/stabilize`; `/medicine_stabilize` | `death_saves` ✅ shipped |
 | Reactions / opportunity attacks | `/attack {is_opportunity_attack:true}`; `/use_reaction` | `reactions` ✅ shipped |
 | Saving-throw → condition / half | `/cast_spell` a save spell, then `/roll_request/{id}/respond`; `/use_repeated_save` | `saves` ✅ shipped (save-for-half) |
-| Class features | `/use_rage` `/use_second_wind` `/use_action_surge` `/use_lay_on_hands` `/use_stunning_strike` `/use_bardic_inspiration` `/use_font_of_magic_to_slot`; Divine Smite = `/attack {spend_spell_slot,bonus_damage,...}` | `features` |
+| Class features | `/use_rage` `/use_second_wind` `/use_action_surge` `/use_lay_on_hands` `/use_stunning_strike` `/use_bardic_inspiration` `/use_font_of_magic_to_slot`; Divine Smite = `/attack {spend_spell_slot,bonus_damage,...}` | `features` ✅ shipped |
 | Buff lifecycle | `/character/{id}/buffs`; `/end_buff {character_id,key}` | (within `saves`/`features`) |
 | Damage undo | `/undo_attack_damage {attack_id}` | deferred |
 | Resistance / immunity / vuln / temp-HP | `/attack` vs a typed/buffed target; assert reduced/doubled/absorbed HP | deferred |

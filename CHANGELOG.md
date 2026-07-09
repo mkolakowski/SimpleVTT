@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.994.0] - 2026-07-09 — "The Whole Toolbox"
+
+**Schema version:** 102
+
+**Commit summary:** Self-test Rules deep-dive — add the `features` phase (class-feature resources), completing the tier.
+
+**Description:** Seventh and final Rules deep-dive phase, unblocked by the v2.993.0 seed enrichment. `features` reads each hero's sheet and drives **one representative use per class feature the party actually has** — **Rage**, **Second Wind**, **Action Surge**, **Lay on Hands**, **Stunning Strike** (Ki), **Bardic Inspiration**, **Font of Magic** (SP → slot), and **Divine Smite** (a slot-fuelled `/attack` rider) — each applicability-gated by the sheet's resource rows / class (features the party lacks simply aren't attempted; a party with none records a skip). Spent resources/slots restore via the teardown long rest. Verified live: **L5** runs Rage + Second Wind + Action Surge (3/3 green); **L9** runs Lay on Hands + Stunning Strike + Bardic Inspiration + Font of Magic + Divine Smite (5/5 green). This completes the **🎓 Rules deep-dive** tier — all 7 phases (`rest, heal, death_saves, concentration, reactions, saves, features`) shipped.
+
+### Added
+- `app/admin_center/selftest.py` — `_features_check` driving the 8 class-feature endpoints applicability-gated; `features` added to `_DEEP_PHASES`.
+- `tests/harness/test_selftest.py` — the deep-phases test now covers all 7 phases including `features`.
+
 ## [2.993.0] - 2026-07-09 — "The Full Kit"
 
 **Schema version:** 102
