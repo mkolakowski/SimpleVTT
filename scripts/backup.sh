@@ -8,12 +8,22 @@
 # produces THREE artefacts sharing one name stem (v2.631.1:
 # YYYY-MM-DD_HHmmss[_<tag>] UTC, e.g. 2026-06-24_210306_manual):
 #   <stem>.sql.gz          — full Postgres dump (every user + campaign +
-#                            character + roll + setting; pg_dump of the whole DB)
+#                            character + roll + setting — including the maps
+#                            table's walls/doors/locks/terrain/lights/fog JSON,
+#                            so map edits are captured here; pg_dump of the
+#                            whole DB)
 #   <stem>.homebrew.tar.gz — the file-based homebrew content volume
 #   <stem>.uploads.tar.gz  — the uploaded media volume (maps, portraits, tokens,
-#                            audio, handouts, thumbnails) the DB rows reference
+#                            token_templates, audio, handouts, encounter_bg,
+#                            thumbnails) the DB rows reference
 # Restore = load the SQL dump, then unpack the homebrew + uploads tarballs into
 # their volumes. The shared stem pairs the three.
+#
+# v2.997.2 — backups NEVER include videos. The self-test screen recordings
+# (.webm) live on their own selftest_results volume, which this sidecar doesn't
+# mount — and as a belt-and-braces guarantee both tar invocations below also
+# exclude any video/ directory and *.webm files, so recordings stay out of
+# backups even if video storage is ever relocated into a backed-up volume.
 set -eu
 
 # v2.620.0 — belt-and-braces: even a manual "run now" is a no-op in demo mode
@@ -89,18 +99,21 @@ PGPASSWORD="${POSTGRES_PASSWORD}" pg_dump --clean --if-exists \
 status running homebrew 60
 echo "[backup] writing ${DAILY_HB}"
 if [ -d "${HOMEBREW_DIR}" ]; then
-    tar -czf "${DAILY_HB}" -C "${HOMEBREW_DIR}" .
+    tar -czf "${DAILY_HB}" --exclude='./video' --exclude='*.webm' \
+        -C "${HOMEBREW_DIR}" .
 else
     tar -czf "${DAILY_HB}" -T /dev/null
 fi
 
-# Uploaded media (maps / portraits / tokens / audio / handouts / thumbnails).
-# The DB rows reference these by /static/uploads/... URL, so a fresh-install
-# restore needs them too. Same empty-dir-still-valid-tarball rule.
+# Uploaded media (maps / portraits / tokens / token_templates / audio /
+# handouts / encounter_bg / thumbnails). The DB rows reference these by
+# /static/uploads/... URL, so a fresh-install restore needs them too. Same
+# empty-dir-still-valid-tarball rule. Videos are explicitly excluded (header).
 status running uploads 80
 echo "[backup] writing ${DAILY_UP}"
 if [ -d "${UPLOADS_DIR}" ]; then
-    tar -czf "${DAILY_UP}" -C "${UPLOADS_DIR}" .
+    tar -czf "${DAILY_UP}" --exclude='./video' --exclude='*.webm' \
+        -C "${UPLOADS_DIR}" .
 else
     tar -czf "${DAILY_UP}" -T /dev/null
 fi

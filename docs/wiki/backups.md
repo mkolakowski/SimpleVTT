@@ -25,13 +25,18 @@ Each run writes **three artifacts** that share one UTC timestamp, into
 
 | Artifact | What it is |
 |---|---|
-| `simplevtt-<ts>.sql.gz` | Gzipped `pg_dump --clean --if-exists` of the **whole database** — every user, campaign, character, dice roll, note, handout, setting. |
+| `simplevtt-<ts>.sql.gz` | Gzipped `pg_dump --clean --if-exists` of the **whole database** — every user, campaign, character, dice roll, note, handout, setting. This includes the `maps` table's **walls / doors / locks / terrain / lights / fog** JSON, so every map edit is captured. |
 | `simplevtt-<ts>.homebrew.tar.gz` | The file-based homebrew content volume (custom classes / monsters / feats / …). |
-| `simplevtt-<ts>.uploads.tar.gz` | Uploaded media — maps, portraits, tokens, audio, handouts, thumbnails (everything under `/static/uploads`). |
+| `simplevtt-<ts>.uploads.tar.gz` | Uploaded media — maps, portraits, tokens, token templates, audio, handouts, encounter backgrounds, thumbnails (everything under `/static/uploads`). |
 
 Together these three are **everything needed to restore the application from a
 fresh install**: the database has the rows, the two tarballs have the files
 those rows reference.
+
+> **Videos are never backed up.** The demo self-test's screen recordings
+> (`.webm`) live on their own `selftest_results` volume, which the backup
+> sidecar doesn't mount — and both tarballs additionally exclude any `video/`
+> directory and `*.webm` files as a belt-and-braces guarantee (v2.997.2).
 
 ### What campaign content is captured
 

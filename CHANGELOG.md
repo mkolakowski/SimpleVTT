@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.997.2] - 2026-07-09 — "The Cutting Room"
+
+**Schema version:** 102
+
+**Commit summary:** Backups — verify the new map features are captured + guarantee videos never enter a backup.
+
+**Description:** Audited the backup pipeline against the recent map work and the self-test recordings. **Finding: map changes were already fully captured** — the `pg_dump` artefact carries the `maps` table's walls/doors/locks/terrain/lights/fog JSON (verified in a live tagged backup: the flagship's `tv-d1` wood door, `tv-s1` secret door, and gate entries appear in the dump) and the uploads tarball carries the map images. **Videos are structurally excluded** — the self-test's `.webm` recordings live on the `selftest_results` volume, which the backup sidecar doesn't mount — and this release adds a **belt-and-braces guarantee**: both tar invocations in `backup.sh` now explicitly `--exclude` any `video/` directory and `*.webm` files, so recordings stay out of backups even if video storage is ever relocated into a backed-up volume. Also refreshed the artefact descriptions (uploads now lists `token_templates` + `encounter_bg`) in the script header and the backups wiki guide. Self-test **run history** (JSON reports) deliberately remains un-backed-up — it's transient diagnostics on a demo box that reseeds hourly.
+
+### Changed
+- `scripts/backup.sh` — `--exclude='./video' --exclude='*.webm'` on the homebrew + uploads tars; accurate artefact/header comments (verified `--exclude` works in the sidecar's busybox tar).
+- `docs/wiki/backups.md` — artefact table notes map walls/doors/locks JSON is in the dump, the full uploads bucket list, and the videos-never-backed-up guarantee.
+
 ## [2.997.1] - 2026-07-09 — "The Clean Rewind"
 
 **Schema version:** 102
