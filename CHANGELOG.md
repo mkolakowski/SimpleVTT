@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.995.0] - 2026-07-09 — "The Rewind"
+
+**Schema version:** 102
+
+**Commit summary:** Self-test Rules deep-dive — add the `undo` phase (damage undo), the first deferred-family follow-on.
+
+**Description:** First of the previously-deferred families. `undo` has a hero land a hit on a living villain (retrying up to 4 swings until damage lands), then calls `/undo_attack_damage` and asserts the villain's HP is **restored to its pre-hit value**. Self-restoring. Verified live: HP 40→31 (hit) → undo → 40.
+
+### Added
+- `app/admin_center/selftest.py` — `_undo_check`; `undo` added to `_DEEP_PHASES`.
+- `tests/harness/test_selftest.py` — the deep-phases test now also covers `undo`.
+
 ## [2.994.1] - 2026-07-09 — "The Live Target"
 
 **Schema version:** 102

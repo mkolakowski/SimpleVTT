@@ -97,7 +97,8 @@ _WS_TIMEOUT = float(os.getenv("SELFTEST_WS_TIMEOUT", "3.0"))
 # (v2.987.0+) that exercises deeper SRD mechanics — each deep phase needs an
 # active battle + a target combatant and is applicability-skipped per demo.
 _CORE_PHASES = ("movement", "combat", "doors", "spells", "gates")
-_DEEP_PHASES = ("rest", "heal", "death_saves", "concentration", "reactions", "saves", "features")
+_DEEP_PHASES = ("rest", "heal", "death_saves", "concentration", "reactions", "saves",
+                "features", "undo")
 _ALL_PHASES = _CORE_PHASES + _DEEP_PHASES
 
 # Pacing between visible actions (moves, attacks, door toggles) so a watching GM
@@ -1099,6 +1100,8 @@ async def _deep_checks(client, collector, cid, node, report, combs,
         await _saves_check(client, collector, cid, heroes, combs, deep, report, spell_casters)
     if "features" in phases:
         await _features_check(client, cid, heroes, combs, deep, report, spell_casters, rested_pcs)
+    if "undo" in phases:
+        await _undo_check(client, cid, combs, deep, report)
 
 
 async def _rest_check(client, cid, heroes, deep, report, rested_pcs) -> None:
@@ -1563,6 +1566,53 @@ async def _features_check(client, cid, heroes, combs, deep, report, spell_caster
                            "a resource-backed class feature in this party",
                            "no drivable class features in this demo", "skip"))
         _publish(report)
+
+
+async def _undo_check(client, cid, combs, deep, report) -> None:
+    """Damage undo: a hero lands a hit on a villain, then the hit is undone and
+    the villain's HP is asserted back to its pre-hit value (self-restoring)."""
+    hero = next((c for c in combs if c.get("char_id") is not None), None)
+    state = await _get_battle(client, cid)
+    villain = next((c for c in state.get("combatants", [])
+                    if c.get("char_id") is None and int(c.get("hp_current") or 0) > 0), None)
+    if not hero or not villain:
+        deep.append(_check("undo", "Undo attack damage",
+                           "a hero + a living villain", "no hero / living villain", "skip"))
+        _publish(report)
+        return
+    name = hero.get("name") or "A hero"
+    try:
+        before = _hp_of(await _get_battle(client, cid), villain["id"])
+        attack_id = None
+        after = before
+        for _ in range(4):  # retry until a swing actually lands damage
+            r = await client.post(
+                f"/api/campaign/{cid}/attack",
+                json={"character_id": hero["char_id"], "attack_index": 0,
+                      "target_combatant_id": villain["id"], "override": True})
+            body = r.json() if r.status_code == 200 else {}
+            hp = _hp_of(await _get_battle(client, cid), villain["id"])
+            if r.status_code == 200 and body.get("id") and hp is not None and hp < before:
+                attack_id, after = body["id"], hp
+                break
+        if not attack_id:
+            deep.append(_check("undo", f"Undo {name}'s hit",
+                               "a landed hit to undo", "no hit landed in 4 swings", "skip"))
+            _publish(report)
+            return
+        ur = await client.post(f"/api/campaign/{cid}/undo_attack_damage",
+                               json={"attack_id": attack_id})
+        restored = _hp_of(await _get_battle(client, cid), villain["id"])
+        ok = ur.status_code == 200 and restored == before
+        deep.append(_check(
+            "undo", f"Undo {name}'s hit on {villain.get('name')}",
+            "HTTP 200, the villain's HP is restored to its pre-hit value",
+            f"HP {before}→{after} (hit), undo {ur.status_code} → {restored}",
+            "pass" if ok else "fail"))
+    except Exception as e:  # noqa: BLE001
+        deep.append(_check("undo", f"{name}: undo damage",
+                           "200 + HP restored", f"exception: {e}", "error"))
+    _publish(report)
 
 
 # ── Per-campaign run ─────────────────────────────────────────────────────────

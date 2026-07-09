@@ -39,7 +39,7 @@ yet was invisible to the self-test. Endpoints live in
 | Saving-throw → condition / half | `/cast_spell` a save spell, then `/roll_request/{id}/respond`; `/use_repeated_save` | `saves` ✅ shipped (save-for-half) |
 | Class features | `/use_rage` `/use_second_wind` `/use_action_surge` `/use_lay_on_hands` `/use_stunning_strike` `/use_bardic_inspiration` `/use_font_of_magic_to_slot`; Divine Smite = `/attack {spend_spell_slot,bonus_damage,...}` | `features` ✅ shipped |
 | Buff lifecycle | `/character/{id}/buffs`; `/end_buff {character_id,key}` | (within `saves`/`features`) |
-| Damage undo | `/undo_attack_damage {attack_id}` | deferred |
+| Damage undo | `/undo_attack_damage {attack_id}` | `undo` ✅ shipped |
 | Resistance / immunity / vuln / temp-HP | `/attack` vs a typed/buffed target; assert reduced/doubled/absorbed HP | deferred |
 | Legendary / lair | `/use_legendary_action`; `/spend_legendary_resistance`; `/trigger_lair_action` | deferred (L18) |
 | Exhaustion, grapple/dash/hide, generic feature/item | `/use_feature` `/use_item` `/use_grapple` `/use_dash` … | deferred |
