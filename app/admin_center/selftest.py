@@ -97,7 +97,7 @@ _WS_TIMEOUT = float(os.getenv("SELFTEST_WS_TIMEOUT", "3.0"))
 # (v2.987.0+) that exercises deeper SRD mechanics — each deep phase needs an
 # active battle + a target combatant and is applicability-skipped per demo.
 _CORE_PHASES = ("movement", "combat", "doors", "spells", "gates")
-_DEEP_PHASES = ("rest", "heal", "death_saves", "concentration")
+_DEEP_PHASES = ("rest", "heal", "death_saves", "concentration", "reactions")
 _ALL_PHASES = _CORE_PHASES + _DEEP_PHASES
 
 # Pacing between visible actions (moves, attacks, door toggles) so a watching GM
@@ -1093,6 +1093,8 @@ async def _deep_checks(client, collector, cid, node, report, combs,
         await _death_saves_check(client, cid, heroes, deep, report)
     if "concentration" in phases:
         await _concentration_check(client, collector, cid, heroes, combs, deep, report, rested_pcs)
+    if "reactions" in phases:
+        await _reactions_check(client, collector, cid, combs, deep, report)
 
 
 async def _rest_check(client, cid, heroes, deep, report, rested_pcs) -> None:
@@ -1327,6 +1329,44 @@ async def _concentration_check(client, collector, cid, heroes, combs, deep, repo
     except Exception as e:  # noqa: BLE001
         deep.append(_check("concentration", f"{name}: concentration",
                            "set + save + end", f"exception: {e}", "error"))
+    _publish(report)
+
+
+async def _reactions_check(client, collector, cid, combs, deep, report) -> None:
+    """Reactions / opportunity attacks (SRD PHB p.190/195): a hero makes an
+    opportunity attack (a reaction) at a villain; assert the swing lands + the
+    reaction economy chip is marked. Restored by the battle snapshot."""
+    hero = next((c for c in combs if c.get("char_id") is not None), None)
+    villain = next((c for c in combs if c.get("char_id") is None), None)
+    if not hero or not villain:
+        deep.append(_check("reaction", "Opportunity attack (reaction)",
+                           "a hero + a villain combatant",
+                           "not enough combatants", "skip"))
+        _publish(report)
+        return
+    name = hero.get("name") or "A hero"
+    try:
+        if collector:
+            collector.mark()
+        r = await client.post(
+            f"/api/campaign/{cid}/attack",
+            json={"character_id": hero["char_id"], "attack_index": 0,
+                  "target_combatant_id": villain["id"],
+                  "is_opportunity_attack": True, "as_reaction": True, "override": True})
+        bcast = await collector.wait_for("weapon_attack", _COMBAT_WS_TIMEOUT) if collector else None
+        state = await _get_battle(client, cid)
+        pc = next((c for c in state.get("combatants", []) if c.get("id") == hero.get("id")), {})
+        reaction_used = bool((pc.get("economy") or {}).get("reaction"))
+        ok = r.status_code == 200 and bcast is not None and reaction_used
+        deep.append(_check(
+            "reaction", f"{name} makes an opportunity attack (reaction) on {villain.get('name')}",
+            "HTTP 200, weapon_attack broadcast, the reaction economy chip is spent",
+            f"HTTP {r.status_code}, broadcast {'seen' if bcast else 'MISSING'}, "
+            f"reaction_used={reaction_used}",
+            "pass" if ok else "fail"))
+    except Exception as e:  # noqa: BLE001
+        deep.append(_check("reaction", f"{name}: opportunity attack",
+                           "200 + reaction economy", f"exception: {e}", "error"))
     _publish(report)
 
 

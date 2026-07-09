@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.991.0] - 2026-07-09 — "The Riposte"
+
+**Schema version:** 102
+
+**Commit summary:** Self-test Rules deep-dive — add the `reactions` phase (opportunity attack + reaction economy).
+
+**Description:** Fifth Rules deep-dive phase. `reactions` has a hero make an **opportunity attack as a reaction** at a villain and asserts the swing lands (`weapon_attack` broadcast) and the **reaction economy chip is spent** (the combatant's `economy.reaction` flips true). Restored by the battle snapshot. Verified live: OA lands, `reaction_used=True`.
+
+### Added
+- `app/admin_center/selftest.py` — `_reactions_check`; `reactions` added to `_DEEP_PHASES`.
+- `tests/harness/test_selftest.py` — the deep-phases test now also covers `reactions`.
+
 ## [2.990.0] - 2026-07-09 — "The Unbroken Focus"
 
 **Schema version:** 102

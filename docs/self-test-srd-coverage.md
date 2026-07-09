@@ -14,7 +14,7 @@ checks layered on top of the original "Core" smoke test).
 - **Rules deep-dive** (added incrementally) — deeper SRD mechanics that need an
   active battle + a target combatant, each **applicability-skipped per demo**
   (a check records `skip`, never `fail`, when the demo lacks the required
-  class/feature/target). Phases: `rest`, `heal`, `death_saves`, `concentration` (shipped), then
+  class/feature/target). Phases: `rest`, `heal`, `death_saves`, `concentration`, `reactions` (shipped), then
   `death_saves`, `reactions`, `saves`, `features`.
 
 Every deep check is a smoke test — endpoint 200 + the expected state delta + the
@@ -35,7 +35,7 @@ yet was invisible to the self-test. Endpoints live in
 | Healing | `/cast_healing_word`; `/cast_spell`(Cure Wounds); `/apply_healing {cast_id}` | `heal` ✅ shipped |
 | Concentration + damage cascade | `/concentration {character_id,spell_name,rounds}`; damage the caster; `DELETE /concentration/{id}` | `concentration` ✅ shipped |
 | Death saves / stabilize | `/character/{id}/death-save`; `/death-save/override`; `/stabilize`; `/medicine_stabilize` | `death_saves` ✅ shipped |
-| Reactions / opportunity attacks | `/attack {is_opportunity_attack:true}`; `/use_reaction` | `reactions` |
+| Reactions / opportunity attacks | `/attack {is_opportunity_attack:true}`; `/use_reaction` | `reactions` ✅ shipped |
 | Saving-throw → condition | `/cast_spell` a save spell, then `/roll_request/{id}/respond`; `/use_repeated_save` | `saves` |
 | Class features | `/use_rage` `/use_second_wind` `/use_action_surge` `/use_lay_on_hands` `/use_stunning_strike` `/use_bardic_inspiration` `/use_font_of_magic_to_slot`; Divine Smite = `/attack {spend_spell_slot,bonus_damage,...}` | `features` |
 | Buff lifecycle | `/character/{id}/buffs`; `/end_buff {character_id,key}` | (within `saves`/`features`) |
@@ -83,7 +83,7 @@ already carries them.
 ## Status
 
 - **Core tier:** shipped (see the [self-test guide](self-test.md)).
-- **Rules deep-dive:** `rest`, `heal`, `death_saves`, `concentration` shipped; `
+- **Rules deep-dive:** `rest`, `heal`, `death_saves`, `concentration`, `reactions` shipped; `
   reactions / saves / features` land incrementally as same-shape additions.
 - **Deferred:** damage-undo, resistance/temp-HP deltas, legendary/lair,
   exhaustion, grapple/dash/hide, generic feature/item.
