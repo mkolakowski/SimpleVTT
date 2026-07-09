@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.988.0] - 2026-07-09 — "The Healing Word"
+
+**Schema version:** 102
+
+**Commit summary:** Self-test Rules deep-dive — add the `heal` phase (a healer restores a wounded ally).
+
+**Description:** Second Rules deep-dive phase. `heal` finds a hero with **Cure Wounds / Healing Word**, has an NPC actually **wound an ally** (so the target's real *sheet* HP drops — PC HP lives on the sheet, not the nominal hub combatant), then casts the heal at the wounded ally and asserts the **HP rises**, a **spell slot is spent**, and the `spell_cast` broadcast fires. Applicability-skips when the demo party has no healer. Non-destructive: the teardown long-rests both the healer (slot) and the wounded ally (HP). Verified live: L3 (0→4, revived) and L5 (16→21), each spending a slot.
+
+### Added
+- `app/admin_center/selftest.py` — `_heal_check` + `_sheet_hp` helper; `heal` added to `_DEEP_PHASES`.
+- `tests/harness/test_selftest.py` — `test_selftest_deep_phases` now runs `rest` + `heal` and asserts both deep-check categories with no runner errors.
+
 ## [2.987.0] - 2026-07-09 — "The Deep End"
 
 **Schema version:** 102

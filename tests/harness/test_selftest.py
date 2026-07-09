@@ -324,12 +324,13 @@ def test_selftest_video_capture():
 
 
 @_LIVE
-def test_selftest_rest_deep_phase():
-    """The Rules deep-dive 'rest' phase runs a short rest as its own deep_checks
-    group (hit-die spend), separate from Core, and restores cleanly."""
+def test_selftest_deep_phases():
+    """The Rules deep-dive tier runs its phases as a separate deep_checks group
+    (not combat rounds) and restores cleanly. Covers the implemented phases;
+    extend the phases list + assertions as more land."""
     import time
     with httpx.Client(base_url=ADMIN_BASE_URL, auth=_AUTH, timeout=30.0) as c:
-        # Pick a leveled campaign (flagship is id 1).
+        # Pick a leveled campaign with a healer (L3 Goblin Warrens has a Cleric).
         c.post("/selftest/run", json={"phases": ["movement"]})
         deadline = time.monotonic() + 90
         rep = None
@@ -340,9 +341,9 @@ def test_selftest_rest_deep_phase():
                 break
             time.sleep(1.0)
         cid = next(x["campaign_id"] for x in rep["campaigns"] if x["campaign_id"] != 1)
-        # Rest-only deep run on that campaign.
-        assert c.post("/selftest/run", json={"campaigns": [cid], "phases": ["rest"]}).status_code == 200
-        deadline = time.monotonic() + 90
+        assert c.post("/selftest/run", json={
+            "campaigns": [cid], "phases": ["rest", "heal"]}).status_code == 200
+        deadline = time.monotonic() + 120
         state, rep = "running", None
         while time.monotonic() < deadline:
             s = c.get("/selftest/run-status").json()
@@ -352,10 +353,10 @@ def test_selftest_rest_deep_phase():
             time.sleep(1.0)
         assert state == "done"
         camp = rep["campaigns"][0]
-        assert not camp["rounds"], "rest-only should not run combat rounds"
+        assert not camp["rounds"], "deep-only should not run combat rounds"
         cats = {ch["category"] for ch in camp["deep_checks"]}
-        assert "rest" in cats, f"no rest check in deep_checks: {cats}"
-        # No runner errors.
+        assert {"rest", "heal"} <= cats, f"missing deep checks: {cats}"
+        # No runner errors (individual checks may skip where inapplicable).
         assert rep["totals"]["error"] == 0
 
 

@@ -97,7 +97,7 @@ _WS_TIMEOUT = float(os.getenv("SELFTEST_WS_TIMEOUT", "3.0"))
 # (v2.987.0+) that exercises deeper SRD mechanics — each deep phase needs an
 # active battle + a target combatant and is applicability-skipped per demo.
 _CORE_PHASES = ("movement", "combat", "doors", "spells", "gates")
-_DEEP_PHASES = ("rest",)
+_DEEP_PHASES = ("rest", "heal")
 _ALL_PHASES = _CORE_PHASES + _DEEP_PHASES
 
 # Pacing between visible actions (moves, attacks, door toggles) so a watching GM
@@ -1087,6 +1087,8 @@ async def _deep_checks(client, collector, cid, node, report, combs,
     deep = node["deep_checks"]
     if "rest" in phases:
         await _rest_check(client, cid, heroes, deep, report, rested_pcs)
+    if "heal" in phases:
+        await _heal_check(client, collector, cid, heroes, deep, report, spell_casters, rested_pcs)
 
 
 async def _rest_check(client, cid, heroes, deep, report, rested_pcs) -> None:
@@ -1125,6 +1127,98 @@ async def _rest_check(client, cid, heroes, deep, report, rested_pcs) -> None:
     except Exception as e:  # noqa: BLE001
         deep.append(_check("rest", f"{name} short rest",
                            "HTTP 200 + hit-die spend", f"exception: {e}", "error"))
+    _publish(report)
+
+
+_HEAL_SLUGS = ("cure-wounds", "healing-word", "mass-cure-wounds", "mass-healing-word")
+
+
+async def _sheet_hp(client, cid, char_id):
+    """A PC's real (sheet) current/max HP — PC damage + healing act on the sheet,
+    not the nominal hub combatant HP. Returns (current, max) or (None, None)."""
+    hp = (await _get_sheet(client, cid, char_id)).get("hp") or {}
+    return hp.get("current"), hp.get("max")
+
+
+async def _heal_check(client, collector, cid, heroes, deep, report, spell_casters, rested_pcs) -> None:
+    """A healer casts Cure Wounds / Healing Word at a wounded ally: assert the
+    target's HP rises + a slot is spent (SRD PHB healing). The target is first
+    actually damaged by an NPC strike (so its real HP is below max and the heal
+    is observable); the teardown long-rest restores it."""
+    healer = spell_index = spell_name = None
+    healer_sheet = None
+    for h in heroes:
+        chid = h.get("character_id")
+        if not chid:
+            continue
+        sheet = await _get_sheet(client, cid, chid)
+        for i, sp in enumerate(sheet.get("spells") or []):
+            slug = (sp.get("_slug") or "").lower()
+            nm = (sp.get("name") or "").lower()
+            if slug in _HEAL_SLUGS or "cure wounds" in nm or "healing word" in nm:
+                healer, spell_index, spell_name, healer_sheet = h, i, sp.get("name"), sheet
+                break
+        if healer:
+            break
+    if not healer:
+        deep.append(_check("heal", "Cast a healing spell",
+                           "a hero with Cure Wounds / Healing Word",
+                           "no healer in this party", "skip"))
+        _publish(report)
+        return
+    try:
+        state = await _get_battle(client, cid)
+        combs = state.get("combatants", [])
+        healer_comb = next((c for c in combs if c.get("char_id") == healer["character_id"]), None)
+        target = next((c for c in combs if c.get("char_id") is not None and c is not healer_comb), healer_comb)
+        attacker = next((c for c in combs if c.get("char_id") is None), None)
+        if target is None or attacker is None:
+            deep.append(_check("heal", "Cast a healing spell", "an ally + an attacker",
+                               "not enough combatants", "skip"))
+            _publish(report)
+            return
+        tgt_char = target["char_id"]
+        rested_pcs.add(tgt_char)  # long-rest restores its real HP
+        # Actually wound the target (its SHEET HP) with NPC strikes so the heal
+        # is observable (PC HP lives on the sheet, not the nominal hub combatant).
+        wounded, hp_max = await _sheet_hp(client, cid, tgt_char)
+        for _ in range(3):
+            if wounded is not None and hp_max is not None and wounded < hp_max:
+                break
+            await client.post(
+                f"/api/campaign/{cid}/npc_attack",
+                json={"combatant_id": attacker["id"], "action_name": "Strike",
+                      "attack_bonus": "+15", "damage": "6d10", "damage_type": "bludgeoning",
+                      "target_combatant_id": target["id"], "override_range": True})
+            wounded, hp_max = await _sheet_hp(client, cid, tgt_char)
+        slots_before = _slots_available(healer_sheet)
+        if collector:
+            collector.mark()
+        r = await client.post(
+            f"/api/campaign/{cid}/cast_spell",
+            json={"character_id": healer["character_id"], "spell_index": spell_index,
+                  "target_combatant_id": target["id"], "override": True})
+        body = r.json() if r.status_code == 200 else {}
+        bcast = await collector.wait_for("spell_cast", _COMBAT_WS_TIMEOUT) if collector else None
+        # Some heals need an explicit apply-claim; auto-heals don't.
+        cast_id = body.get("cast_id") or body.get("id")
+        if r.status_code == 200 and not body.get("auto_heal_applied") and cast_id:
+            await client.post(f"/api/campaign/{cid}/apply_healing", json={"cast_id": cast_id})
+        after, _ = await _sheet_hp(client, cid, tgt_char)
+        slots_after = _slots_available(await _get_sheet(client, cid, healer["character_id"]))
+        if r.status_code == 200:
+            spell_casters.add(healer["character_id"])
+        ok = (r.status_code == 200 and after is not None and wounded is not None
+              and after > wounded)
+        deep.append(_check(
+            "heal", f"{healer.get('label') or 'A healer'} heals {target.get('name')} with {spell_name}",
+            "HTTP 200, spell_cast broadcast, wounded ally's HP rises, one slot spent",
+            f"HTTP {r.status_code}, target HP {wounded}→{after}, slots {slots_before}→{slots_after}, "
+            f"broadcast {'seen' if bcast else 'MISSING'}",
+            "pass" if ok else "fail"))
+    except Exception as e:  # noqa: BLE001
+        deep.append(_check("heal", "Cast a healing spell",
+                           "HTTP 200 + HP rise", f"exception: {e}", "error"))
     _publish(report)
 
 
