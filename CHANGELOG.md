@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.983.0] - 2026-07-08 — "The Surveyor's Line"
+
+**Schema version:** 102
+
+**Commit summary:** Demo self-test — draw shared distance + targeting lines (like a player) so a watching GM sees rulers as tokens move and attack.
+
+**Description:** Makes the self-test's movement and attacks show the same **ruler lines a player would see**, on every watching client. As a token **glides**, the runner broadcasts a **distance line** along its path (via the existing `POST /ruler_broadcast` shared-ruler fan-out), hiding it when the move completes. Before each **attack or spell** — PC or NPC — it draws a **targeting line from the attacker to its target**, then hides it. Degenerate zero-length lines (a token already adjacent) are skipped. All of this rides the existing ruler-broadcast path, so there's no tabletop-client change and it auto-expires like any shared ruler. Verified live: a combat run fires the expected `ruler_broadcast` show/hide frames (movement paths + attacker→target lines) and stays green (31/31 on the L3 demo).
+
+### Added
+- `app/admin_center/selftest.py` — `_ruler_show()` / `_ruler_hide()` / `_target_line()` helpers; `_glide()` shows the movement distance line for the whole path; PC/NPC attacks (and PC spell casts) show an attacker→target line, then hide.
+
 ## [2.982.0] - 2026-07-08 — "The Toast Rack"
 
 **Schema version:** 102

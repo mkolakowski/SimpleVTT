@@ -449,6 +449,48 @@ def _pick_spell(spells: list, has_slot: bool):
 
 # ── Movement + doors (watchable — tokens glide, doors open/close) ────────────
 
+async def _ruler_show(client, cid, points):
+    """Broadcast a shared ruler line (points = [{x,y}, ...]) so watching clients
+    see the distance line a player would see. Best-effort. Skips a degenerate
+    zero-length line (e.g. a token already adjacent to its target)."""
+    if len(points) == 2:
+        (ax, ay), (bx, by) = (points[0]["x"], points[0]["y"]), (points[1]["x"], points[1]["y"])
+        if abs(ax - bx) < 2 and abs(ay - by) < 2:
+            return
+    try:
+        await client.post(f"/api/campaign/{cid}/ruler_broadcast",
+                          json={"action": "show", "points": points})
+    except Exception:  # noqa: BLE001
+        pass
+
+
+async def _ruler_hide(client, cid):
+    try:
+        await client.post(f"/api/campaign/{cid}/ruler_broadcast", json={"action": "hide"})
+    except Exception:  # noqa: BLE001
+        pass
+
+
+async def _tok_pos(client, cid):
+    """token_id → (x, y) for every token on the active map."""
+    try:
+        toks = (await client.get(f"/api/campaign/{cid}/tokens")).json().get("tokens", [])
+        return {t["id"]: (float(t.get("x") or 0), float(t.get("y") or 0)) for t in toks}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+async def _target_line(client, cid, a_tok_id, b_tok_id):
+    """Draw a targeting line between two tokens (like a player picking a target)."""
+    pos = await _tok_pos(client, cid)
+    if a_tok_id in pos and b_tok_id in pos:
+        ax, ay = pos[a_tok_id]
+        bx, by = pos[b_tok_id]
+        await _ruler_show(client, cid, [{"x": ax, "y": ay}, {"x": bx, "y": by}])
+        return True
+    return False
+
+
 async def _move_token(client, collector, cid, token_id, x, y):
     """Move a token one hop, waiting for the token_move broadcast, then pace so a
     watching GM sees it. Returns (response, broadcast)."""
@@ -466,7 +508,10 @@ async def _move_token(client, collector, cid, token_id, x, y):
 
 async def _glide(client, collector, cid, token_id, sx, sy, tx, ty, steps=4):
     """Walk a token from (sx,sy) to (tx,ty) in ``steps`` hops so it visibly moves
-    across the map. Returns (all_ok, broadcasts_seen, last_response)."""
+    across the map, showing the distance line a dragging player would see.
+    Returns (all_ok, broadcasts_seen, last_response)."""
+    # Show the movement ruler for the whole path while the token travels.
+    await _ruler_show(client, cid, [{"x": sx, "y": sy}, {"x": tx, "y": ty}])
     ok = True
     seen = 0
     last = None
@@ -479,6 +524,7 @@ async def _glide(client, collector, cid, token_id, sx, sy, tx, ty, steps=4):
             ok = False
         if b is not None:
             seen += 1
+    await _ruler_hide(client, cid)
     return ok, seen, last
 
 
@@ -706,6 +752,9 @@ async def _combat_rounds(client, collector, cid, node, report, combs, spell_cast
                                 "movement", f"{actor_node['actor']} advances",
                                 "glide toward target", f"exception: {e}", "error"))
                             _publish(report)
+                        # Targeting line PC → target, like a player picking a target.
+                        await _target_line(client, cid, _tok_id(comb), _tok_id(tgt))
+                        await _pace()
                         before = _hp_of(await _get_battle(client, cid), tgt["id"])
                         collector.mark() if collector else None
                         r = await client.post(
@@ -725,14 +774,20 @@ async def _combat_rounds(client, collector, cid, node, report, combs, spell_cast
                             "pass" if ok else "fail",
                             f"target HP {before}→{after}"))
 
+                    await _ruler_hide(client, cid)
+
                     if pc_spell:
                         # A caster PC casts a spell at the villain: a leveled
                         # spell when a slot is free (tests slot decrement), else
-                        # a cantrip; non-casters record a skip.
+                        # a cantrip; non-casters record a skip. Show the target line.
+                        await _target_line(client, cid, _tok_id(comb), _tok_id(v_target))
                         await _pc_spell_check(
                             client, collector, cid, comb, v_target, actor_node, spell_casters)
+                        await _ruler_hide(client, cid)
                 elif npc_attack:
                     tgt = h_target
+                    await _target_line(client, cid, _tok_id(comb), _tok_id(tgt))
+                    await _pace()
                     before = _hp_of(await _get_battle(client, cid), tgt["id"])
                     collector.mark() if collector else None
                     r = await client.post(
@@ -753,6 +808,7 @@ async def _combat_rounds(client, collector, cid, node, report, combs, spell_cast
                         f"HTTP {r.status_code}, broadcast {'seen' if bcast else 'MISSING'}",
                         "pass" if ok else "fail",
                         f"target HP {before}→{after}"))
+                    await _ruler_hide(client, cid)
             except Exception as e:  # noqa: BLE001
                 actor_node["checks"].append(_check(
                     "pc_attack" if is_pc else "npc_attack",

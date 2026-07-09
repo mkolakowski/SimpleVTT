@@ -85,6 +85,10 @@ the page reloads afterward because a reseeded campaign gets a fresh id.
 7. **Restore** — move every token back to its start position, reset the battle to
    its prepped state, and long-rest any caster that spent a slot.
 
+As tokens move and attack, the runner also draws the **shared ruler lines a
+player would see** — a distance line along each glide, and a targeting line from
+an attacker to its target — so a watching GM sees the same rulers as real play.
+
 Every visible action (moves, door toggles) is **paced** so a GM watching the
 campaign sees the tokens glide and interact in real time — like a session in
 progress. Set `SELFTEST_STEP_DELAY=0` for a fast headless run. A separate
