@@ -7516,6 +7516,9 @@
         t.className = 'vtt-toast' + (kind ? ' vtt-toast-' + kind : '');
         t.textContent = msg;
         stack.appendChild(t);
+        // v2.982.0 — cap the visible stack so a burst (e.g. a self-test demo)
+        // can't pile toasts up and cover the page. Drop the oldest beyond 4.
+        while (stack.children.length > 4) { stack.firstChild.remove(); }
         // Force reflow so the fade-in transition runs
         // eslint-disable-next-line no-unused-expressions
         t.offsetHeight;

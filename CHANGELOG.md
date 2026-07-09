@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.982.0] - 2026-07-08 — "The Toast Rack"
+
+**Schema version:** 102
+
+**Commit summary:** Cap the on-screen toast stack at 4 so a burst (e.g. a self-test demo) can't pile toasts up and cover the page.
+
+**Description:** The transient toast overlay (`#vtt-toast-stack`) grew unbounded, so a rapid burst of notifications — most visibly during a fast demo self-test — could stack toasts high enough to block the page. The stack is now **capped at 4**: when a fifth arrives, the oldest is dropped immediately (each still auto-dismisses after its normal timeout). Purely client-side; no endpoint or broadcast change.
+
+### Changed
+- `app/static/tabletop.js` — `showToast()` drops the oldest toast beyond 4 in `#vtt-toast-stack`.
+
 ## [2.981.0] - 2026-07-08 — "The Slow Waltz"
 
 **Schema version:** 102
