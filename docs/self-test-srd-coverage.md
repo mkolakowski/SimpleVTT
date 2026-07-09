@@ -40,10 +40,10 @@ yet was invisible to the self-test. Endpoints live in
 | Class features | `/use_rage` `/use_second_wind` `/use_action_surge` `/use_lay_on_hands` `/use_stunning_strike` `/use_bardic_inspiration` `/use_font_of_magic_to_slot`; Divine Smite = `/attack {spend_spell_slot,bonus_damage,...}` | `features` ✅ shipped |
 | Buff lifecycle | `/character/{id}/buffs`; `/end_buff {character_id,key}` | (within `saves`/`features`) |
 | Damage undo | `/undo_attack_damage {attack_id}` | `undo` ✅ shipped |
-| Resistance / immunity / vuln / temp-HP | `/attack` vs a typed/buffed target; assert reduced/doubled/absorbed HP | deferred |
+| Resistance / immunity / vuln / temp-HP | `/attack` vs a typed/buffed target; assert reduced/doubled/absorbed HP | deferred* |
 | Legendary resistance | `/spend_legendary_resistance` | `legendary` ✅ shipped (L18 dragon; skips elsewhere) |
 | Grapple / Dash | `/use_grapple` `/use_dash` | `grapple` ✅ shipped |
-| Exhaustion, hide, generic feature/item | `/use_feature` `/use_item` `/hide` … | deferred |
+| Exhaustion / hide / generic feature-item | `/use_feature` `/use_item` `/hide` … | deferred* |
 
 ## Evaluation — demos vs SRD (what each demo can test)
 
@@ -84,5 +84,12 @@ class+level) (via a `_class_resources(class, level)` helper injected in `_seed_o
 - **Core tier:** shipped (see the [self-test guide](self-test.md)).
 - **Rules deep-dive:** `rest`, `heal`, `death_saves`, `concentration`, `reactions`, `saves` shipped; `
   reactions / saves / features` land incrementally as same-shape additions.
-- **Deferred:** damage-undo, resistance/temp-HP deltas, legendary/lair,
-  exhaustion, grapple/dash/hide, generic feature/item.
+- **Deferred (`*`):** resistance/immunity/vulnerability/temp-HP deltas,
+  exhaustion, hide, and generic `/use_feature` + `/use_item`. These stay out of
+  the smoke-test tier on purpose: the damage-delta ones need **seeded dice /
+  controlled rolls** to assert deterministically (a resisted 4d10 half vs a full
+  4d10 can overlap by chance), exhaustion's effects are **passive** (speed / HP-
+  max / disadvantage, with no clean apply endpoint), and generic feature/item use
+  is **item-specific**; all four are already owned by the dedicated, dice-seeded
+  harness tests in `tests/harness/` (`test_npc_resistance`, `test_exhaustion*`,
+  `test_use_feature`, `test_use_item`).

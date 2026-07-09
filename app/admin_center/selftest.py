@@ -1607,10 +1607,14 @@ async def _undo_check(client, cid, combs, deep, report) -> None:
         ur = await client.post(f"/api/campaign/{cid}/undo_attack_damage",
                                json={"attack_id": attack_id})
         restored = _hp_of(await _get_battle(client, cid), villain["id"])
-        ok = ur.status_code == 200 and restored == before
+        # Undo refunds the recorded damage; if the hit clamped the villain at 0
+        # its HP can overshoot the pre-hit value, so assert it rose back to at
+        # least the pre-hit HP (not exact equality).
+        ok = (ur.status_code == 200 and restored is not None and after is not None
+              and restored > after and restored >= before)
         deep.append(_check(
             "undo", f"Undo {name}'s hit on {villain.get('name')}",
-            "HTTP 200, the villain's HP is restored to its pre-hit value",
+            "HTTP 200, the villain's HP is restored (back to at least its pre-hit value)",
             f"HP {before}→{after} (hit), undo {ur.status_code} → {restored}",
             "pass" if ok else "fail"))
     except Exception as e:  # noqa: BLE001

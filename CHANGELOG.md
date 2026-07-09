@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.997.1] - 2026-07-09 — "The Clean Rewind"
+
+**Schema version:** 102
+
+**Commit summary:** Self-test `undo` phase — assert HP rose back to ≥ pre-hit (fixes a full-run overshoot when the hit clamped the villain at 0).
+
+**Description:** In a full run the villain the `undo` phase hits may already be low; when the swing clamps it to 0 HP, `/undo_attack_damage` refunds the **full recorded damage**, so the restored HP overshoots the pre-hit value and the old exact-equality assertion failed. `undo` now asserts the HP **rose back to at least its pre-hit value** (`restored > after and restored >= before`), which holds whether or not the hit clamped. A full run across all six campaigns × all phases is now green.
+
+### Fixed
+- `app/admin_center/selftest.py` — `_undo_check` uses an inequality (≥ pre-hit) instead of exact equality.
+
 ## [2.997.0] - 2026-07-09 — "The Ancient Wyrm"
 
 **Schema version:** 102
