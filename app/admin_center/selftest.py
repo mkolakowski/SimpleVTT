@@ -48,6 +48,22 @@ log = logging.getLogger("simplevtt.admin_center.selftest")
 # persistence degrades gracefully (skipped) if the dir isn't writable.
 _RESULTS_DIR = Path(os.getenv("SELFTEST_RESULTS_DIR", "/data/selftest-results"))
 _VID_DIR = _RESULTS_DIR / "video"
+
+
+def _parse_size(s, default=(1600, 900)):
+    """Parse a 'WxH' video-size string, clamped to something sane."""
+    try:
+        w, h = str(s).lower().split("x")
+        w, h = int(w), int(h)
+        if 320 <= w <= 3840 and 240 <= h <= 2160:
+            return (w, h)
+    except Exception:  # noqa: BLE001
+        pass
+    return default
+
+
+# Capture resolution for the video recorder (default 900p / 1600x900).
+_VIDEO_SIZE = _parse_size(os.getenv("SELFTEST_VIDEO_SIZE", "1600x900"))
 _KEEP_RUNS = 25
 _RUN_ID_RE = re.compile(r"^[0-9A-Za-z_-]+$")
 _VIDEO_NAME_RE = re.compile(r"^selftest-vid-[0-9A-Za-z_-]+\.webm$")
@@ -285,10 +301,11 @@ class _Recorder:
         if not self.enabled:
             return None
         try:
+            vw, vh = _VIDEO_SIZE
             ctx = await self._browser.new_context(
-                viewport={"width": 1280, "height": 800},
+                viewport={"width": vw, "height": vh},
                 record_video_dir=str(_VID_DIR),
-                record_video_size={"width": 1280, "height": 800})
+                record_video_size={"width": vw, "height": vh})
             await ctx.add_cookies(cookies)
             page = await ctx.new_page()
             await page.goto(f"{_APP_URL}/campaign/{cid}",
@@ -1394,6 +1411,7 @@ async def _run_all(campaign_ids=None, phases=None, step_delay=None, record=False
             "slow": slow,
             "step_delay": _ACTIVE_STEP_DELAY,
             "record": recorder is not None,
+            "video_size": (f"{_VIDEO_SIZE[0]}x{_VIDEO_SIZE[1]}" if recorder is not None else ""),
         },
         "stats_note": "",
         "totals": _empty_tally(),

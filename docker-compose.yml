@@ -187,6 +187,9 @@ services:
       # v2.977.0 — where completed self-test runs are archived for the
       # history table (a dedicated admin-center-owned volume, mounted below).
       SELFTEST_RESULTS_DIR: ${SELFTEST_RESULTS_DIR:-/data/selftest-results}
+      # v2.986.0 — capture resolution ("WxH") for the self-test video recorder.
+      # Default 900p (1600x900); set 1920x1080 for 1080p.
+      SELFTEST_VIDEO_SIZE: ${SELFTEST_VIDEO_SIZE:-1600x900}
       ADMIN_CENTER_USER: ${ADMIN_CENTER_USER:-admin}
       ADMIN_CENTER_PASS: ${ADMIN_CENTER_PASS:-changeme}
       ADMIN_CENTER_PORT: ${ADMIN_CENTER_PORT:-8015}

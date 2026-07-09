@@ -203,6 +203,7 @@
         + (scope.campaigns ? scope.campaigns.length : rep.campaigns.length) + ' campaign(s) · phases: '
         + esc((scope.phases || []).join(', '))
         + (scope.slow ? ' · <b>🐢 slow run</b> (' + esc(scope.step_delay) + 's/step)' : '')
+        + (scope.record ? ' · <b>🎥 recording</b>' + (scope.video_size ? ' ' + esc(scope.video_size) : '') : '')
         + '</div>'
       : '';
     var noteLine = rep.stats_note

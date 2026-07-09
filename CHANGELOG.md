@@ -10,6 +10,19 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.986.0] - 2026-07-09 — "The Aspect Ratio"
+
+**Schema version:** 102
+
+**Commit summary:** Self-test video capture resolution is configurable via `SELFTEST_VIDEO_SIZE` (default 900p); shown in the report scope.
+
+**Description:** The self-test video recorder was hard-coded to 1280×800. It now reads **`SELFTEST_VIDEO_SIZE`** (a `WxH` string, clamped to a sane range) for both the browser viewport and the encoded video, **defaulting to 900p (`1600x900`)**. docker-compose wires the var with that default, `.env.example` documents it (with a `1920x1080` / 1080p alternative), and the recording resolution is shown on the report's scope line. Operators can bump to 1080p per box without a code change.
+
+### Added
+- `app/admin_center/selftest.py` — `_parse_size()` + `_VIDEO_SIZE` from `SELFTEST_VIDEO_SIZE` (default 1600×900); the recorder uses it; `scope.video_size` is surfaced in the report.
+- `docker-compose.yml` / `.env.example` — `SELFTEST_VIDEO_SIZE` (default `1600x900`, commented `1920x1080` alt).
+- `app/admin_center/templates/selftest.html` — the scope line shows `🎥 recording <WxH>`.
+
 ## [2.985.0] - 2026-07-09 — "The Instant Replay"
 
 **Schema version:** 102

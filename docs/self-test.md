@@ -121,7 +121,9 @@ per campaign**. Each recording is embedded in the report as an in-window player
 and offered as a **download**, and it persists in the run history so you can
 reopen a past run and re-watch it. Recording is opt-in and adds a browser per
 campaign (slower); if the browser can't launch, the run just continues without
-video. Pairs well with **🐢 Run slower** for a more watchable replay.
+video. Pairs well with **🐢 Run slower** for a more watchable replay. The capture
+resolution is set by `SELFTEST_VIDEO_SIZE` (a `WxH` string, default `1600x900` /
+900p; e.g. `1920x1080` for 1080p) and is shown in the report's scope line.
 
 ## Run history
 
