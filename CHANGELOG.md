@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.990.0] - 2026-07-09 — "The Unbroken Focus"
+
+**Schema version:** 102
+
+**Commit summary:** Self-test Rules deep-dive — add the `concentration` phase (start concentration → take damage → end).
+
+**Description:** Fourth Rules deep-dive phase. `concentration` has a caster start concentrating on a spell (asserts HTTP 200 + the `concentration_update` broadcast), then **damages the caster** to trigger the SRD concentration save (reported best-effort via the `concentration_save` broadcast), then **ends** it cleanly (`DELETE`, 200). Applicability-skips when the demo battle has no caster combatant; the caster's HP restores via the teardown long rest. Verified live: set (update seen) + clean end on L3.
+
+### Added
+- `app/admin_center/selftest.py` — `_concentration_check`; `concentration` added to `_DEEP_PHASES`.
+- `tests/harness/test_selftest.py` — the deep-phases test now also covers `concentration`.
+
 ## [2.989.0] - 2026-07-09 — "The Last Breath"
 
 **Schema version:** 102

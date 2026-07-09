@@ -97,7 +97,7 @@ _WS_TIMEOUT = float(os.getenv("SELFTEST_WS_TIMEOUT", "3.0"))
 # (v2.987.0+) that exercises deeper SRD mechanics — each deep phase needs an
 # active battle + a target combatant and is applicability-skipped per demo.
 _CORE_PHASES = ("movement", "combat", "doors", "spells", "gates")
-_DEEP_PHASES = ("rest", "heal", "death_saves")
+_DEEP_PHASES = ("rest", "heal", "death_saves", "concentration")
 _ALL_PHASES = _CORE_PHASES + _DEEP_PHASES
 
 # Pacing between visible actions (moves, attacks, door toggles) so a watching GM
@@ -1091,6 +1091,8 @@ async def _deep_checks(client, collector, cid, node, report, combs,
         await _heal_check(client, collector, cid, heroes, deep, report, spell_casters, rested_pcs)
     if "death_saves" in phases:
         await _death_saves_check(client, cid, heroes, deep, report)
+    if "concentration" in phases:
+        await _concentration_check(client, collector, cid, heroes, combs, deep, report, rested_pcs)
 
 
 async def _rest_check(client, cid, heroes, deep, report, rested_pcs) -> None:
@@ -1268,6 +1270,63 @@ async def _death_saves_check(client, cid, heroes, deep, report) -> None:
                               json={"status": "alive", "successes": 0, "failures": 0})
         except Exception:  # noqa: BLE001
             pass
+    _publish(report)
+
+
+async def _concentration_check(client, collector, cid, heroes, combs, deep, report, rested_pcs) -> None:
+    """Concentration lifecycle (SRD PHB p.203): a caster starts concentrating,
+    takes damage (which triggers a concentration save), then ends it. Asserts the
+    `concentration_update` on set + a clean end; reports the damage-triggered
+    `concentration_save`. The DELETE ends it; the caster's HP restores via long
+    rest."""
+    caster = caster_comb = None
+    for h in heroes:
+        chid = h.get("character_id")
+        if not chid:
+            continue
+        sheet = await _get_sheet(client, cid, chid)
+        if _slots_available(sheet) > 0 or (sheet.get("spells") or []):
+            cc = next((c for c in combs if c.get("char_id") == chid), None)
+            if cc:
+                caster, caster_comb = h, cc
+                break
+    attacker = next((c for c in combs if c.get("char_id") is None), None)
+    if not caster or not attacker:
+        deep.append(_check("concentration", "Concentrate, take damage, end",
+                           "a caster combatant + an attacker",
+                           "no caster/attacker in this battle", "skip"))
+        _publish(report)
+        return
+    char_id = caster["character_id"]
+    name = caster.get("label") or "A caster"
+    try:
+        if collector:
+            collector.mark()
+        r1 = await client.post(
+            f"/api/campaign/{cid}/concentration",
+            json={"character_id": char_id, "spell_name": "Bless", "rounds": 10})
+        b_set = await collector.wait_for("concentration_update", _COMBAT_WS_TIMEOUT) if collector else None
+        # Damage the concentrating caster → triggers a concentration save.
+        if collector:
+            collector.mark()
+        await client.post(
+            f"/api/campaign/{cid}/npc_attack",
+            json={"combatant_id": attacker["id"], "action_name": "Strike",
+                  "attack_bonus": "+15", "damage": "4d10", "damage_type": "bludgeoning",
+                  "target_combatant_id": caster_comb["id"], "override_range": True})
+        b_save = await collector.wait_for("concentration_save", _COMBAT_WS_TIMEOUT) if collector else None
+        rested_pcs.add(char_id)
+        r3 = await client.delete(f"/api/campaign/{cid}/concentration/{char_id}")
+        ok = r1.status_code == 200 and b_set is not None and r3.status_code == 200
+        deep.append(_check(
+            "concentration", f"{name} concentrates on Bless, takes damage, then ends",
+            "HTTP 200 set (+ concentration_update), damage fires a concentration_save, clean end (200)",
+            f"set {r1.status_code} (update {'seen' if b_set else 'MISSING'}); "
+            f"damage save {'seen' if b_save else 'not fired'}; end {r3.status_code}",
+            "pass" if ok else "fail"))
+    except Exception as e:  # noqa: BLE001
+        deep.append(_check("concentration", f"{name}: concentration",
+                           "set + save + end", f"exception: {e}", "error"))
     _publish(report)
 
 
