@@ -74,11 +74,9 @@ The resource-based feature endpoints (`/use_rage`, `/use_second_wind`,
 `sheet["resources"]` and 404 (`"No X resource on this sheet"`) when it's absent.
 The **leveled demo sheets** (`app/demo_campaigns.py`) historically shipped the
 `class_features` text but **not** those resource counters — so those buttons 404
-for players too. The `features` phase's arrival is paired with enriching those
-sheets (`extra={"resources":[…]}`, keys `rage / second-wind / action-surge /
+for players too. As of v2.993.0 those sheets are enriched (`extra={"resources":[…]}`, keys `rage / second-wind / action-surge /
 indomitable / lay-on-hands / ki / bardic-inspiration / sorcery-points`, values by
-class+level) so the features actually work; the flagship (`app/demo_seed.py`)
-already carries them.
+class+level) (via a `_class_resources(class, level)` helper injected in `_seed_one`) so the features work + the buttons no longer 404 for players; the flagship (`app/demo_seed.py`) already carried them.
 
 ## Status
 

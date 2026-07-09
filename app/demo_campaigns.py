@@ -44,6 +44,45 @@ def _notes(desc: str, roleplay: str, how: str) -> str:
     return f"Description: {desc}\nRoleplay: {roleplay}\nHow to play: {how}"
 
 
+def _class_resources(klass: str, level, abilities: dict) -> list[dict]:
+    """v2.993.0 — the class-feature resource rows the /use_* endpoints read from
+    ``sheet["resources"]``, computed from class + level per SRD. Keys must match
+    the endpoints exactly (rage / second-wind / action-surge / indomitable /
+    lay-on-hands / ki / bardic-inspiration / sorcery-points). Only load-bearing
+    fields (key/name/current/max/reset) plus a cosmetic class_slug."""
+    k = (klass or "").strip().lower()
+    lvl = int(level or 0)
+    rows: list[dict] = []
+
+    def row(key, name, mx, reset):
+        rows.append({"key": key, "name": name, "current": mx, "max": mx,
+                     "reset": reset, "class_slug": k})
+
+    if k == "barbarian" and lvl >= 1:
+        rage = 2
+        for thresh, val in ((3, 3), (6, 4), (12, 5), (17, 6)):
+            if lvl >= thresh:
+                rage = val
+        row("rage", "Rage", rage, "long")
+    if k == "fighter":
+        row("second-wind", "Second Wind", 1, "short")
+        if lvl >= 2:
+            row("action-surge", "Action Surge", 2 if lvl >= 17 else 1, "short")
+        if lvl >= 9:
+            row("indomitable", "Indomitable", 1 if lvl < 13 else (2 if lvl < 17 else 3), "long")
+    if k == "paladin" and lvl >= 1:
+        row("lay-on-hands", "Lay on Hands", lvl * 5, "long")
+    if k == "monk" and lvl >= 2:
+        row("ki", "Ki", lvl, "short")
+    if k == "bard" and lvl >= 1:
+        cha = int((abilities or {}).get("CHA", 10))
+        row("bardic-inspiration", "Bardic Inspiration", max(1, (cha - 10) // 2),
+            "short" if lvl >= 5 else "long")
+    if k == "sorcerer" and lvl >= 2:
+        row("sorcery-points", "Sorcery Points", lvl, "long")
+    return rows
+
+
 def _slots(klass: str, **levels: int) -> dict:
     """`_slots("wizard", **{"1": 4, "2": 2})` → the nested spell-slot dict."""
     return {klass: {lvl: {"total": n, "used": 0} for lvl, n in levels.items()}}
@@ -1103,9 +1142,21 @@ def _seed_one(db: Session, spec: dict, users: dict[str, User]) -> Campaign:
 
     chars: list[Character] = []
     for pc in spec["party"]:
+        # v2.993.0 — inject the class-feature resource counters (Rage, Second
+        # Wind, Lay on Hands, Ki, Bardic Inspiration, Sorcery Points, …) the
+        # /use_* endpoints require. The leveled PC sheets historically shipped
+        # the class_features text but not these `resources` rows, so those
+        # buttons 404'd for players. Computed from class+level and merged via
+        # build_dnd5e_sheet's `extra` (the flagship seed authors them directly).
+        _sk = dict(pc["sheet"])
+        _res = _class_resources(_sk.get("klass"), _sk.get("level"), _sk.get("abilities") or {})
+        if _res:
+            _extra = dict(_sk.get("extra") or {})
+            _extra.setdefault("resources", _res)
+            _sk["extra"] = _extra
         ch = Character(
             campaign_id=camp.id, name=pc["name"], template="dnd5e",
-            sheet=build_dnd5e_sheet(pc["name"], **pc["sheet"]),
+            sheet=build_dnd5e_sheet(pc["name"], **_sk),
             owner_user_id=users[pc["owner"]].id,
             # Same 1024×1024 art as the PC's token doubles as the sheet portrait
             # (rendered at 192px on the D&D 5e sheet). Absent → initial-letter fallback.

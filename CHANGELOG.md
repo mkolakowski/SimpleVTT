@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.993.0] - 2026-07-09 — "The Full Kit"
+
+**Schema version:** 102
+
+**Commit summary:** Demo fix — leveled demo PC sheets now carry the class-feature resource counters (Rage, Second Wind, Lay on Hands, Ki, …) the `/use_*` endpoints require.
+
+**Description:** The leveled demo campaigns (`app/demo_campaigns.py`) shipped each PC's `class_features` text but **not** the `resources` rows the class-feature endpoints read from `sheet["resources"]` — so `/use_rage`, `/use_second_wind`, `/use_action_surge`, `/use_lay_on_hands`, `/use_stunning_strike`, `/use_bardic_inspiration`, `/use_font_of_magic_to_slot` all **404'd** (`"No X resource on this sheet"`) — for players clicking those buttons in the demo, too. A new `_class_resources(class, level, abilities)` helper computes the correct rows (SRD keys + maxes + short/long reset) and `_seed_one` injects them via `build_dnd5e_sheet`'s `extra`, enriching every leveled PC from one place; the flagship (`app/demo_seed.py`) already authored them. This unblocks the self-test's upcoming `features` phase **and** fixes the demo product itself. Verified: after a reseed, a demo Barbarian has a `rage` counter and `/use_rage` (+2 damage) and `/use_second_wind` both return 200.
+
+### Added
+- `app/demo_campaigns.py` — `_class_resources()` + injection in `_seed_one`.
+- `tests/harness/test_demo_class_resources.py` — unit tests for the derivation (rage progression, fighter scaling, lay-on-hands pool, ki/bard/sorcerer, exact endpoint keys).
+
 ## [2.992.0] - 2026-07-09 — "The Saving Throw"
 
 **Schema version:** 102
