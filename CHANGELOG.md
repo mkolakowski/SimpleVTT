@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.997.0] - 2026-07-09 — "The Ancient Wyrm"
+
+**Schema version:** 102
+
+**Commit summary:** Self-test Rules deep-dive — add the `legendary` phase (Legendary Resistance), applicability-gated to demos with a legendary monster.
+
+**Description:** Third deferred family. `legendary` probes `/spend_legendary_resistance` on each villain — a 200 means a legendary creature is in the fight and its resistance was spent (the endpoint derives the legendary state from the monster template). Skips (never fails) when there's no legendary monster. Verified live: **L18** spends one of **Pyraxis the Adult Red Dragon**'s Legendary Resistances (green); L3 (goblins) skips.
+
+### Added
+- `app/admin_center/selftest.py` — `_legendary_check`; `legendary` added to `_DEEP_PHASES`.
+- `tests/harness/test_selftest.py` — the deep-phases test now also covers `legendary` (skip on a non-legendary demo counts).
+
 ## [2.996.0] - 2026-07-09 — "The Grappling Hook"
 
 **Schema version:** 102

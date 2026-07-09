@@ -98,7 +98,7 @@ _WS_TIMEOUT = float(os.getenv("SELFTEST_WS_TIMEOUT", "3.0"))
 # active battle + a target combatant and is applicability-skipped per demo.
 _CORE_PHASES = ("movement", "combat", "doors", "spells", "gates")
 _DEEP_PHASES = ("rest", "heal", "death_saves", "concentration", "reactions", "saves",
-                "features", "undo", "grapple")
+                "features", "undo", "grapple", "legendary")
 _ALL_PHASES = _CORE_PHASES + _DEEP_PHASES
 
 # Pacing between visible actions (moves, attacks, door toggles) so a watching GM
@@ -1104,6 +1104,8 @@ async def _deep_checks(client, collector, cid, node, report, combs,
         await _undo_check(client, cid, combs, deep, report)
     if "grapple" in phases:
         await _grapple_check(client, cid, combs, deep, report)
+    if "legendary" in phases:
+        await _legendary_check(client, cid, combs, deep, report)
 
 
 async def _rest_check(client, cid, heroes, deep, report, rested_pcs) -> None:
@@ -1656,6 +1658,34 @@ async def _grapple_check(client, cid, combs, deep, report) -> None:
             "pass" if dr.status_code == 200 else "fail"))
     except Exception as e:  # noqa: BLE001
         deep.append(_check("dash", f"{name}: dash", "200", f"exception: {e}", "error"))
+    _publish(report)
+
+
+async def _legendary_check(client, cid, combs, deep, report) -> None:
+    """Legendary monster mechanics (SRD): probe `spend_legendary_resistance` on
+    each villain — a 200 means a legendary creature is in the fight and its
+    resistance was spent. Applicability-skips (no legendary monster / the seeded
+    combatant doesn't carry legendary state) rather than failing."""
+    state = await _get_battle(client, cid)
+    villains = [c for c in state.get("combatants", []) if c.get("char_id") is None]
+    for v in villains:
+        try:
+            r = await client.post(f"/api/campaign/{cid}/spend_legendary_resistance",
+                                  json={"combatant_id": v["id"]})
+        except Exception:  # noqa: BLE001
+            continue
+        if r.status_code == 200:
+            deep.append(_check(
+                "legendary", f"{v.get('name')}: spend a Legendary Resistance",
+                "HTTP 200 (a legendary-resistance use is spent)",
+                f"HTTP 200 {str(r.text)[:90]}", "pass"))
+            _publish(report)
+            return
+    deep.append(_check(
+        "legendary", "Spend a Legendary Resistance",
+        "a legendary monster tracked in combat",
+        "no legendary monster in this fight (or the seeded combatant carries no "
+        "legendary state)", "skip"))
     _publish(report)
 
 

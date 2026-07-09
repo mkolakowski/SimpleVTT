@@ -342,7 +342,7 @@ def test_selftest_deep_phases():
             time.sleep(1.0)
         cid = next(x["campaign_id"] for x in rep["campaigns"] if x["campaign_id"] != 1)
         assert c.post("/selftest/run", json={
-            "campaigns": [cid], "phases": ["rest", "heal", "death_saves", "concentration", "reactions", "saves", "features", "undo", "grapple"]}).status_code == 200
+            "campaigns": [cid], "phases": ["rest", "heal", "death_saves", "concentration", "reactions", "saves", "features", "undo", "grapple", "legendary"]}).status_code == 200
         deadline = time.monotonic() + 120
         state, rep = "running", None
         while time.monotonic() < deadline:
@@ -355,7 +355,7 @@ def test_selftest_deep_phases():
         camp = rep["campaigns"][0]
         assert not camp["rounds"], "deep-only should not run combat rounds"
         cats = {ch["category"] for ch in camp["deep_checks"]}
-        assert {"rest", "heal", "death_save", "concentration", "reaction", "save", "feature", "undo", "grapple"} <= cats, f"missing deep checks: {cats}"
+        assert {"rest", "heal", "death_save", "concentration", "reaction", "save", "feature", "undo", "grapple", "legendary"} <= cats, f"missing deep checks: {cats}"
         # No runner errors (individual checks may skip where inapplicable).
         assert rep["totals"]["error"] == 0
 

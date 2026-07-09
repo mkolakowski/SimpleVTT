@@ -41,7 +41,7 @@ yet was invisible to the self-test. Endpoints live in
 | Buff lifecycle | `/character/{id}/buffs`; `/end_buff {character_id,key}` | (within `saves`/`features`) |
 | Damage undo | `/undo_attack_damage {attack_id}` | `undo` ✅ shipped |
 | Resistance / immunity / vuln / temp-HP | `/attack` vs a typed/buffed target; assert reduced/doubled/absorbed HP | deferred |
-| Legendary / lair | `/use_legendary_action`; `/spend_legendary_resistance`; `/trigger_lair_action` | deferred (L18) |
+| Legendary resistance | `/spend_legendary_resistance` | `legendary` ✅ shipped (L18 dragon; skips elsewhere) |
 | Grapple / Dash | `/use_grapple` `/use_dash` | `grapple` ✅ shipped |
 | Exhaustion, hide, generic feature/item | `/use_feature` `/use_item` `/hide` … | deferred |
 
