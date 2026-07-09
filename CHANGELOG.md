@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.981.0] - 2026-07-08 — "The Slow Waltz"
+
+**Schema version:** 102
+
+**Commit summary:** Demo self-test — a 🐢 Run slower button (follow-along pacing) + self-test runs no longer skew campaign time stats.
+
+**Description:** Adds a **🐢 Run slower** button next to Run that runs the self-test with a larger per-action delay (`SELFTEST_SLOW_STEP_DELAY`, default 1.5s/step) so a user can comfortably follow the tokens on the tabletop. The run's **scope records `slow` + the step delay**, shown on the report summary and marked with a 🐢 in the run history. Separately — and for **every** run, fast or slow — the self-test now **purges the synthetic stat events it generated** (attacks/casts/damage for the tested campaigns, created during the run) so a self-test (especially a slow one, whose long gaps would otherwise distort time-between-events) **does not count toward the campaign's real activity/time stats**. The report shows a note of how many events were scrubbed. Verified live: a slow single-campaign combat run paces to ~20s (vs ~4s), flags `slow: true` @ 1.5s/step, and reports 19 synthetic stat events purged.
+
+### Added
+- `app/admin_center/selftest.py` — a per-run pacing override (`_ACTIVE_STEP_DELAY`, `_SLOW_STEP_DELAY`) threaded through `start_run`/`_run_all`; `_purge_stat_events()` deletes the run's `CampaignStatEvent` rows for the tested campaigns; the report carries `scope.slow`/`scope.step_delay` + a `stats_note`.
+- `app/admin_center/main.py` — `POST /selftest/run` accepts `{slow: true}` (or `{step_delay}`) → slower pacing.
+- `app/admin_center/templates/selftest.html` — the **🐢 Run slower** button, a slow-run indicator + stats-purge note on the summary, and a 🐢 marker in the history table.
+- `tests/harness/test_selftest.py` — `test_selftest_slow_flag_and_stats_note` (a slow run flags scope + records the purge note); the movement-only test also asserts the flag/note.
+
 ## [2.980.0] - 2026-07-08 — "The Fresh Slate"
 
 **Schema version:** 102

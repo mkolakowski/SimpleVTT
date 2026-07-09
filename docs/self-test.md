@@ -87,7 +87,16 @@ the page reloads afterward because a reseeded campaign gets a fresh id.
 
 Every visible action (moves, door toggles) is **paced** so a GM watching the
 campaign sees the tokens glide and interact in real time — like a session in
-progress. Set `SELFTEST_STEP_DELAY=0` for a fast headless run.
+progress. Set `SELFTEST_STEP_DELAY=0` for a fast headless run. A separate
+**🐢 Run slower** button paces even more (`SELFTEST_SLOW_STEP_DELAY`, default
+1.5s/step) so a user can comfortably follow along; slow runs are flagged in the
+report and history.
+
+**Self-test runs don't skew stats.** Every run (fast or slow) **purges the
+synthetic stat events it generated** for the tested campaigns, so a self-test —
+whose long, paced gaps would otherwise distort time-between-events — never counts
+toward the campaign's real activity/time statistics. The report notes how many
+events were scrubbed.
 
 ## Reading the report
 

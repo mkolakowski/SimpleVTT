@@ -85,6 +85,7 @@
 
     <div class="row-actions" style="margin-top:12px">
       <button id="st-run" type="button">▶ Run selected</button>
+      <button id="st-run-slow" type="button" title="Run with slower pacing so a user can follow along on the tabletop">🐢 Run slower</button>
       <button id="st-reseed" type="button" title="Wipe + reseed the checked campaigns to their pristine demo state">♻ Reseed selected</button>
       <span id="st-chip" class="pill skip">idle</span>
       <span id="st-current" class="muted"></span>
@@ -190,7 +191,12 @@
     var scopeLine = scope.phases
       ? '<div class="muted" style="font-size:12px;margin-bottom:6px">Scope: '
         + (scope.campaigns ? scope.campaigns.length : rep.campaigns.length) + ' campaign(s) · phases: '
-        + esc((scope.phases || []).join(', ')) + '</div>'
+        + esc((scope.phases || []).join(', '))
+        + (scope.slow ? ' · <b>🐢 slow run</b> (' + esc(scope.step_delay) + 's/step)' : '')
+        + '</div>'
+      : '';
+    var noteLine = rep.stats_note
+      ? '<div class="muted" style="font-size:12px;margin-top:6px">📊 ' + esc(rep.stats_note) + '</div>'
       : '';
     summaryEl.innerHTML =
       '<div class="card">' + scopeLine + '<div class="totals">'
@@ -206,7 +212,7 @@
       + '<div class="seg fail" style="width:' + pct(T.failed || 0) + '%"></div>'
       + '<div class="seg err" style="width:' + pct(T.error || 0) + '%"></div>'
       + '<div class="seg skip" style="width:' + pct(T.skipped || 0) + '%"></div>'
-      + '</div></div>';
+      + '</div>' + noteLine + '</div>';
 
     var html = rep.campaigns.map(function (c) {
       var ck = 'c' + c.campaign_id;
@@ -243,6 +249,7 @@
       var when = (r.finished_at || r.started_at || r.id || '').replace('T', ' ').replace('+00:00', '');
       return '<tr data-run="' + esc(r.id) + '" style="cursor:pointer">'
         + '<td><a href="#" data-run="' + esc(r.id) + '">' + esc(when) + '</a>'
+        + (r.slow ? ' 🐢' : '')
         + (r.state === 'error' ? ' <span class="pill error">error</span>' : '') + '</td>'
         + '<td>' + esc(r.app_version || '') + '</td>'
         + '<td class="num">' + (t.passed || 0) + '</td>'
@@ -288,8 +295,13 @@
     bar.style.width = (s.pct || 0) + '%';
     curEl.textContent = s.current ? (s.state === 'running' ? '▸ ' + s.current : '') : '';
     if (s.report) render(s.report);
-    runBtn.disabled = (s.state === 'running');
-    runBtn.textContent = s.state === 'running' ? '⏳ Running…' : '▶ Run self-test';
+    var running = (s.state === 'running');
+    runBtn.disabled = running;
+    runBtn.textContent = running ? '⏳ Running…' : '▶ Run selected';
+    var sb = document.getElementById('st-run-slow');
+    var rb = document.getElementById('st-reseed');
+    if (sb) sb.disabled = running;
+    if (rb) rb.disabled = running;
   }
 
   var wasRunning = false;
@@ -322,6 +334,10 @@
 
   runBtn.addEventListener('click', function () {
     trigger({ campaigns: selectedCampaigns(), phases: selectedPhases() });
+  });
+  var slowBtn = document.getElementById('st-run-slow');
+  slowBtn.addEventListener('click', function () {
+    trigger({ campaigns: selectedCampaigns(), phases: selectedPhases(), slow: true });
   });
   // Per-campaign quick run — the current phase selection, that campaign only.
   Array.prototype.forEach.call(document.querySelectorAll('.st-only'), function (b) {

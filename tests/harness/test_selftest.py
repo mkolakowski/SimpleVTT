@@ -227,10 +227,34 @@ def test_selftest_movement_only_subset():
             time.sleep(1.0)
         assert state == "done", f"subset run did not finish: {state}"
         assert report["scope"]["phases"] == ["movement"]
+        assert report["scope"]["slow"] is False
+        assert report.get("stats_note") is not None  # purge note always set
         for camp in report["campaigns"]:
             assert not camp["rounds"], f"{camp['name']} ran combat despite movement-only"
             cats = {ch["category"] for ch in camp["setup_checks"]}
             assert cats <= {"reachability", "movement"}, f"unexpected setup checks: {cats}"
+
+
+@_LIVE
+def test_selftest_slow_flag_and_stats_note():
+    """A slow run is flagged in scope (slow + a larger step_delay) and every run
+    records a stats-purge note so it doesn't skew campaign time stats. Uses the
+    gates phase so the run stays quick even in slow mode."""
+    import time
+    with httpx.Client(base_url=ADMIN_BASE_URL, auth=_AUTH, timeout=30.0) as c:
+        assert c.post("/selftest/run", json={"phases": ["gates"], "slow": True}).status_code == 200
+        deadline = time.monotonic() + 120
+        state, report = "running", None
+        while time.monotonic() < deadline:
+            s = c.get("/selftest/run-status").json()
+            state, report = s.get("state"), s.get("report")
+            if state in ("done", "error"):
+                break
+            time.sleep(1.0)
+        assert state == "done", f"slow run did not finish: {state}"
+        assert report["scope"]["slow"] is True
+        assert report["scope"]["step_delay"] >= 1.0
+        assert report.get("stats_note"), "no stats-purge note recorded"
 
 
 @_LIVE

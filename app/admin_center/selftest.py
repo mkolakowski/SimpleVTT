@@ -78,13 +78,17 @@ _ALL_PHASES = ("movement", "combat", "doors", "spells", "gates")
 
 # Pacing between visible actions (moves, attacks, door toggles) so a watching GM
 # sees the tokens glide + interact in real time rather than teleporting. Set
-# SELFTEST_STEP_DELAY=0 for a fast headless run.
+# SELFTEST_STEP_DELAY=0 for a fast headless run; the "Run slower" button uses the
+# larger SELFTEST_SLOW_STEP_DELAY so a user can follow along.
 _STEP_DELAY = float(os.getenv("SELFTEST_STEP_DELAY", "0.4"))
+_SLOW_STEP_DELAY = float(os.getenv("SELFTEST_SLOW_STEP_DELAY", "1.5"))
+# The pace the current run uses (set per-run by _run_all; slow runs raise it).
+_ACTIVE_STEP_DELAY = _STEP_DELAY
 
 
 async def _pace():
-    if _STEP_DELAY > 0:
-        await asyncio.sleep(_STEP_DELAY)
+    if _ACTIVE_STEP_DELAY > 0:
+        await asyncio.sleep(_ACTIVE_STEP_DELAY)
 
 
 def _norm_phases(phases) -> set:
@@ -232,6 +236,7 @@ def list_runs(limit: int = _KEEP_RUNS) -> list:
             "duration_s": rep.get("duration_s"),
             "app_version": rep.get("app_version"),
             "state": rep.get("state"),
+            "slow": bool((rep.get("scope") or {}).get("slow")),
             "totals": rep.get("totals") or _empty_tally(),
         })
     return out
@@ -1164,13 +1169,21 @@ def reseed_campaigns(campaign_ids) -> list:
         db.close()
 
 
-async def _run_all(campaign_ids=None, phases=None) -> None:
+async def _run_all(campaign_ids=None, phases=None, step_delay=None) -> None:
+    global _ACTIVE_STEP_DELAY
+    _ACTIVE_STEP_DELAY = _STEP_DELAY if step_delay is None else float(step_delay)
+    slow = _ACTIVE_STEP_DELAY > _STEP_DELAY
     started = time.time()
+    # Purge this run's synthetic stat events afterwards so the self-test (esp. a
+    # slow run) never skews the campaign's real time/activity stats.
+    from datetime import timedelta
+    purge_since = datetime.now(timezone.utc) - timedelta(seconds=5)
     phase_set = _norm_phases(phases)
     campaigns = _demo_campaigns()
     if campaign_ids:
         wanted = {int(x) for x in campaign_ids}
         campaigns = [c for c in campaigns if c["id"] in wanted]
+    tested_ids = [c["id"] for c in campaigns]
     report = {
         "started_at": _iso(),
         "finished_at": None,
@@ -1181,7 +1194,10 @@ async def _run_all(campaign_ids=None, phases=None) -> None:
         "scope": {
             "campaigns": [c["name"] for c in campaigns],
             "phases": sorted(phase_set),
+            "slow": slow,
+            "step_delay": _ACTIVE_STEP_DELAY,
         },
+        "stats_note": "",
         "totals": _empty_tally(),
         "campaigns": [],
     }
@@ -1215,6 +1231,13 @@ async def _run_all(campaign_ids=None, phases=None) -> None:
         _STATUS["pct"] = int((i + 1) / n * 100)
         _publish(report)
 
+    # Scrub the synthetic stat events this run generated so it doesn't count as
+    # real play in the campaign's time/activity stats.
+    purged = _purge_stat_events(tested_ids, purge_since)
+    report["stats_note"] = (
+        f"{purged} synthetic stat event(s) purged — this self-test run does not "
+        f"count toward campaign stats." + (" (slow run)" if slow else ""))
+
     report["state"] = "done"
     report["finished_at"] = _iso()
     report["duration_s"] = round(time.time() - started, 1)
@@ -1223,9 +1246,32 @@ async def _run_all(campaign_ids=None, phases=None) -> None:
     _persist(report)
 
 
-def _worker(campaign_ids, phases) -> None:
+def _purge_stat_events(campaign_ids, since) -> int:
+    """Delete CampaignStatEvent rows for the given campaigns created at/after
+    ``since`` — the self-test's synthetic gameplay. Best-effort. Returns count."""
+    if not campaign_ids:
+        return 0
+    from ..database import SessionLocal
+    from ..models import CampaignStatEvent
+    db = SessionLocal()
     try:
-        asyncio.run(_run_all(campaign_ids, phases))
+        n = (db.query(CampaignStatEvent)
+             .filter(CampaignStatEvent.campaign_id.in_([int(c) for c in campaign_ids]),
+                     CampaignStatEvent.created_at >= since)
+             .delete(synchronize_session=False))
+        db.commit()
+        return int(n or 0)
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        log.warning("self-test stat-event purge failed: %s", e)
+        return 0
+    finally:
+        db.close()
+
+
+def _worker(campaign_ids, phases, step_delay) -> None:
+    try:
+        asyncio.run(_run_all(campaign_ids, phases, step_delay))
     except Exception as e:  # noqa: BLE001
         log.exception("self-test run crashed")
         _STATUS.update(state="error", current=f"crashed: {e}")
@@ -1234,14 +1280,15 @@ def _worker(campaign_ids, phases) -> None:
             _STATUS["_thread"] = None
 
 
-def start_run(campaign_ids=None, phases=None) -> bool:
+def start_run(campaign_ids=None, phases=None, step_delay=None) -> bool:
     """Kick off a background run over an optional subset of campaigns/phases.
-    Returns False if one is already in flight."""
+    ``step_delay`` overrides the per-action pacing (a slow run passes a larger
+    value so a user can follow along). Returns False if one is already running."""
     with _LOCK:
         if _STATUS.get("state") == "running":
             return False
         t = threading.Thread(
-            target=_worker, args=(campaign_ids, phases),
+            target=_worker, args=(campaign_ids, phases, step_delay),
             name="selftest-runner", daemon=True)
         _STATUS["_thread"] = t
         _STATUS.update(state="running", pct=0, current="starting", report=None)
