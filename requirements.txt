@@ -18,3 +18,8 @@ email-validator==2.2.0
 mutagen==1.47.0
 Pillow==11.2.1
 markdown==3.7
+# v2.985.0 — headless Chromium (Playwright) powers the Admin-Center demo
+# self-test's optional video capture (it records each campaign's tabletop while
+# the run drives it). The browser binary is installed separately in the
+# Dockerfile (playwright install chromium). Same version as requirements-dev.
+playwright==1.47.0

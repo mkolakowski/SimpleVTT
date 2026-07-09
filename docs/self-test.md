@@ -112,6 +112,17 @@ is a row showing its **category, what was tested, expected, actual, and result**
 Open any branch to drill into a single attack or turn advance; the tree keeps
 the sections you've opened as it refreshes.
 
+## Recording video
+
+Tick **🎥 Record video** before running and the self-test drives a **headless
+browser** that opens each tested campaign's tabletop and records what it renders
+— the tokens gliding, the ruler/targeting lines, attacks, doors — to a **`.webm`
+per campaign**. Each recording is embedded in the report as an in-window player
+and offered as a **download**, and it persists in the run history so you can
+reopen a past run and re-watch it. Recording is opt-in and adds a browser per
+campaign (slower); if the browser can't launch, the run just continues without
+video. Pairs well with **🐢 Run slower** for a more watchable replay.
+
 ## Run history
 
 Every completed run is archived (the most recent 25) and listed in the

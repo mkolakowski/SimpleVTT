@@ -78,6 +78,22 @@ RUN groupadd --system appuser \
     && useradd --system --gid appuser --home /app --shell /sbin/nologin appuser \
     && chown -R appuser:appuser /app /var/log/simplevtt
 
+# v2.985.0 — install headless Chromium for the Admin-Center self-test video
+# capture. Installed to a shared path (not /root) + chowned so the unprivileged
+# appuser can launch it at runtime. We install the runtime libs by hand rather
+# than `playwright install --with-deps` because --with-deps maps to Ubuntu font
+# packages (ttf-unifont / ttf-ubuntu-font-family) that don't exist on the Debian
+# python:slim base.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+        libdbus-1-3 libxkbcommon0 libatspi2.0-0 libxcomposite1 libxdamage1 \
+        libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 \
+        libxcb1 libx11-6 libx11-xcb1 libxext6 libxcb-shm0 fonts-liberation \
+    && rm -rf /var/lib/apt/lists/* \
+    && playwright install chromium \
+    && chown -R appuser:appuser /ms-playwright
+
 # Install the entrypoint that does chown-then-drop.
 COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 

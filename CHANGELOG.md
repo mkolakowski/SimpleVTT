@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.985.0] - 2026-07-09 — "The Instant Replay"
+
+**Schema version:** 102
+
+**Commit summary:** Demo self-test — optional video capture: a 🎥 Record toggle records each campaign's tabletop to a .webm, replayable in-window + downloadable from the report and run history.
+
+**Description:** Adds **video capture** to the self-test. Tick **🎥 Record video** and the run drives a **headless Chromium** (baked into the image) that opens each tested campaign's tabletop as a second GM session and records what it renders — the tokens gliding, the ruler + targeting lines, attacks, doors — to a **`.webm` per campaign**. Each video is **embedded in the report** (in-window `<video>` player) and **downloadable**, and it persists in the **run history**, so you can reopen a past run and re-watch it. Videos are stored on the admin-center's results volume (a new `video/` subdir), served by a name-validated `GET /selftest/video/{name}` endpoint, and pruned in lockstep with the run history they belong to. Recording is opt-in and adds a browser per campaign (slower), and it degrades gracefully — if the browser can't launch, the run continues without video. Verified live: a recorded movement+combat run produced a 2.2 MB webm that plays + downloads (with a traversal-guarded endpoint).
+
+**Image note:** the shipped image now includes headless Chromium + its runtime libs (~400 MB) to power this. It's used only by the opt-in self-test capture.
+
+### Added
+- `Dockerfile` / `requirements.txt` — `playwright==1.47.0` + `playwright install chromium` (runtime libs installed by hand since `--with-deps` targets Ubuntu font packages absent on the Debian base); installed to `/ms-playwright`, chowned to `appuser`.
+- `app/admin_center/selftest.py` — `_Recorder` (one browser per run, a recording context per campaign) + `video_path()` + video pruning; the report carries `scope.record` + per-campaign `video`, and runs get a stable `run_id`.
+- `app/admin_center/main.py` — `POST /selftest/run` accepts `{record: true}`; `GET /selftest/video/{name}` serves playback/download.
+- `app/admin_center/templates/selftest.html` — 🎥 Record toggle, an in-window video player + download link per campaign, and a 🎥 marker in the history.
+- `tests/harness/test_selftest.py` — `test_video_path_validation` (name guard) + `test_selftest_video_capture` (a recorded run produces a served, traversal-guarded .webm).
+
 ## [2.984.0] - 2026-07-08 — "The Whole Slate"
 
 **Schema version:** 102

@@ -47,8 +47,10 @@ log = logging.getLogger("simplevtt.admin_center.selftest")
 # reopen a past run. A dedicated admin-center-owned volume (see docker-compose);
 # persistence degrades gracefully (skipped) if the dir isn't writable.
 _RESULTS_DIR = Path(os.getenv("SELFTEST_RESULTS_DIR", "/data/selftest-results"))
+_VID_DIR = _RESULTS_DIR / "video"
 _KEEP_RUNS = 25
 _RUN_ID_RE = re.compile(r"^[0-9A-Za-z_-]+$")
+_VIDEO_NAME_RE = re.compile(r"^selftest-vid-[0-9A-Za-z_-]+\.webm$")
 
 # The main app's base URL, reachable from the admin-center container. In
 # docker compose the app service is named ``app``; the localhost fallback
@@ -206,7 +208,7 @@ def _persist(report: dict) -> None:
     most recent _KEEP_RUNS. Best-effort — never raises into the runner."""
     try:
         _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        stamp = report.get("run_id") or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         (_RESULTS_DIR / f"selftest-{stamp}.json").write_text(json.dumps(report))
         files = sorted(_RESULTS_DIR.glob("selftest-*.json"), key=lambda p: p.name, reverse=True)
         for stale in files[_KEEP_RUNS:]:
@@ -214,6 +216,7 @@ def _persist(report: dict) -> None:
                 stale.unlink()
             except OSError:
                 pass
+        _prune_videos(files[:_KEEP_RUNS])
     except Exception as e:  # noqa: BLE001
         log.warning("self-test run history not persisted: %s", e)
 
@@ -237,9 +240,123 @@ def list_runs(limit: int = _KEEP_RUNS) -> list:
             "app_version": rep.get("app_version"),
             "state": rep.get("state"),
             "slow": bool((rep.get("scope") or {}).get("slow")),
+            "record": bool((rep.get("scope") or {}).get("record")),
             "totals": rep.get("totals") or _empty_tally(),
         })
     return out
+
+
+# ── Video capture (headless Chromium records each campaign's tabletop) ────────
+
+class _Recorder:
+    """Optional per-run video capture. Launches one headless Chromium for the
+    run; opens a recording browser context per campaign (a second GM session
+    that just watches the tabletop while the runner drives it over HTTP), and
+    saves a .webm per campaign. Degrades gracefully (disabled) if Playwright /
+    Chromium isn't available."""
+
+    def __init__(self, run_id: str):
+        self.run_id = run_id
+        self._pw = None
+        self._browser = None
+        self.enabled = False
+
+    async def start(self) -> bool:
+        try:
+            from playwright.async_api import async_playwright
+        except Exception as e:  # noqa: BLE001
+            log.warning("selftest video: Playwright unavailable (%s)", e)
+            return False
+        try:
+            _VID_DIR.mkdir(parents=True, exist_ok=True)
+            self._pw = await async_playwright().start()
+            self._browser = await self._pw.chromium.launch(
+                args=["--no-sandbox", "--disable-dev-shm-usage"])
+            self.enabled = True
+            return True
+        except Exception as e:  # noqa: BLE001
+            log.warning("selftest video: browser launch failed (%s)", e)
+            await self.stop()
+            return False
+
+    async def open(self, cid, cookies):
+        """Open a recording context on the campaign's tabletop. Returns an opaque
+        handle (context, page) or None."""
+        if not self.enabled:
+            return None
+        try:
+            ctx = await self._browser.new_context(
+                viewport={"width": 1280, "height": 800},
+                record_video_dir=str(_VID_DIR),
+                record_video_size={"width": 1280, "height": 800})
+            await ctx.add_cookies(cookies)
+            page = await ctx.new_page()
+            await page.goto(f"{_APP_URL}/campaign/{cid}",
+                            wait_until="domcontentloaded", timeout=25000)
+            await page.wait_for_timeout(900)  # let the map + WS connect
+            return (ctx, page)
+        except Exception as e:  # noqa: BLE001
+            log.warning("selftest video: open failed for campaign %s (%s)", cid, e)
+            return None
+
+    async def close(self, handle, cid) -> "str | None":
+        """Finalize the campaign's recording; returns the served filename."""
+        if not handle:
+            return None
+        ctx, page = handle
+        try:
+            vid = page.video
+            await ctx.close()  # finalizes the .webm
+            if not vid:
+                return None
+            src = await vid.path()
+            name = f"selftest-vid-{self.run_id}-{cid}.webm"
+            os.replace(src, str(_VID_DIR / name))
+            return name
+        except Exception as e:  # noqa: BLE001
+            log.warning("selftest video: close failed for campaign %s (%s)", cid, e)
+            return None
+
+    async def stop(self):
+        try:
+            if self._browser:
+                await self._browser.close()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            if self._pw:
+                await self._pw.stop()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def video_path(name: str) -> "Path | None":
+    """Validated path to a served self-test video, or None."""
+    if not name or not _VIDEO_NAME_RE.match(name):
+        return None
+    p = _VID_DIR / name
+    return p if p.is_file() else None
+
+
+def _prune_videos(keep_report_files) -> None:
+    """Delete .webm files no longer referenced by any retained report."""
+    if not _VID_DIR.is_dir():
+        return
+    referenced = set()
+    for rf in keep_report_files:
+        try:
+            rep = json.loads(rf.read_text())
+        except Exception:  # noqa: BLE001
+            continue
+        for camp in rep.get("campaigns", []):
+            if camp.get("video"):
+                referenced.add(camp["video"])
+    for v in _VID_DIR.glob("selftest-vid-*.webm"):
+        if v.name not in referenced:
+            try:
+                v.unlink()
+            except OSError:
+                pass
 
 
 def load_run(run_id: str) -> "dict | None":
@@ -938,7 +1055,7 @@ async def _gate_checks(gm_client, cid, checks, report, heroes, combs, gm_email) 
 
 # ── Per-campaign run ─────────────────────────────────────────────────────────
 
-async def _run_campaign(camp: dict, node: dict, report: dict, phases: set) -> None:
+async def _run_campaign(camp: dict, node: dict, report: dict, phases: set, recorder=None) -> None:
     cid = camp["id"]
     gm_email = camp["gm_email"]
     setup = node["setup_checks"]
@@ -946,6 +1063,7 @@ async def _run_campaign(camp: dict, node: dict, report: dict, phases: set) -> No
     # combat/spells/gates all need an active battle → initiative runs when any is on.
     need_battle = bool(phases & {"combat", "spells", "gates"})
     battle_touched = False
+    rec_handle = None
 
     if not gm_email:
         setup.append(_check(
@@ -1021,6 +1139,12 @@ async def _run_campaign(camp: dict, node: dict, report: dict, phases: set) -> No
                 "reachability", "Fetch roster + map tokens",
                 "HTTP 200 with tokens", f"exception: {e}", "error"))
         _publish(report)
+
+        # --- open the recording browser (captures movement + combat) ---
+        if recorder is not None:
+            cookies = [{"name": k, "value": v, "url": _APP_URL}
+                       for k, v in client.cookies.items()]
+            rec_handle = await recorder.open(cid, cookies)
 
         # --- movement across the map (a visible multi-step glide) ---
         if "movement" not in phases:
@@ -1120,7 +1244,16 @@ async def _run_campaign(camp: dict, node: dict, report: dict, phases: set) -> No
             await _combat_rounds(
                 client, collector, cid, node, report, combs_for_combat, spell_casters, phases)
 
+        # --- finalize the recording before teardown resets the board ---
+        if recorder is not None:
+            node["video"] = await recorder.close(rec_handle, cid)
+            rec_handle = None
+            _publish(report)
+
     finally:
+        # Close a still-open recording (e.g. an exception before combat ended).
+        if recorder is not None and rec_handle is not None:
+            node["video"] = await recorder.close(rec_handle, cid)
         # --- teardown: restore token positions + battle state ---
         if client is not None:
             try:
@@ -1225,16 +1358,23 @@ def reseed_campaigns(campaign_ids) -> list:
         db.close()
 
 
-async def _run_all(campaign_ids=None, phases=None, step_delay=None) -> None:
+async def _run_all(campaign_ids=None, phases=None, step_delay=None, record=False) -> None:
     global _ACTIVE_STEP_DELAY
     _ACTIVE_STEP_DELAY = _STEP_DELAY if step_delay is None else float(step_delay)
     slow = _ACTIVE_STEP_DELAY > _STEP_DELAY
     started = time.time()
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     # Purge this run's synthetic stat events afterwards so the self-test (esp. a
     # slow run) never skews the campaign's real time/activity stats.
     from datetime import timedelta
     purge_since = datetime.now(timezone.utc) - timedelta(seconds=5)
     phase_set = _norm_phases(phases)
+    # Optional video capture (headless Chromium records each tabletop).
+    recorder = _Recorder(run_id) if record else None
+    if recorder is not None:
+        rec_ok = await recorder.start()
+        if not rec_ok:
+            recorder = None
     campaigns = _demo_campaigns()
     if campaign_ids:
         wanted = {int(x) for x in campaign_ids}
@@ -1246,12 +1386,14 @@ async def _run_all(campaign_ids=None, phases=None, step_delay=None) -> None:
         "duration_s": 0.0,
         "app_url": _APP_URL,
         "app_version": APP_VERSION,
+        "run_id": run_id,
         "state": "running",
         "scope": {
             "campaigns": [c["name"] for c in campaigns],
             "phases": sorted(phase_set),
             "slow": slow,
             "step_delay": _ACTIVE_STEP_DELAY,
+            "record": recorder is not None,
         },
         "stats_note": "",
         "totals": _empty_tally(),
@@ -1279,13 +1421,16 @@ async def _run_all(campaign_ids=None, phases=None, step_delay=None) -> None:
         report["campaigns"].append(node)
         _publish(report)
         try:
-            await _run_campaign(camp, node, report, phase_set)
+            await _run_campaign(camp, node, report, phase_set, recorder)
         except Exception as e:  # noqa: BLE001
             node["setup_checks"].append(_check(
                 "reachability", "Run campaign self-test",
                 "campaign completes", f"unhandled exception: {e}", "error"))
         _STATUS["pct"] = int((i + 1) / n * 100)
         _publish(report)
+
+    if recorder is not None:
+        await recorder.stop()
 
     # Scrub the synthetic stat events this run generated so it doesn't count as
     # real play in the campaign's time/activity stats.
@@ -1325,9 +1470,9 @@ def _purge_stat_events(campaign_ids, since) -> int:
         db.close()
 
 
-def _worker(campaign_ids, phases, step_delay) -> None:
+def _worker(campaign_ids, phases, step_delay, record) -> None:
     try:
-        asyncio.run(_run_all(campaign_ids, phases, step_delay))
+        asyncio.run(_run_all(campaign_ids, phases, step_delay, record))
     except Exception as e:  # noqa: BLE001
         log.exception("self-test run crashed")
         _STATUS.update(state="error", current=f"crashed: {e}")
@@ -1336,15 +1481,16 @@ def _worker(campaign_ids, phases, step_delay) -> None:
             _STATUS["_thread"] = None
 
 
-def start_run(campaign_ids=None, phases=None, step_delay=None) -> bool:
+def start_run(campaign_ids=None, phases=None, step_delay=None, record=False) -> bool:
     """Kick off a background run over an optional subset of campaigns/phases.
     ``step_delay`` overrides the per-action pacing (a slow run passes a larger
-    value so a user can follow along). Returns False if one is already running."""
+    value so a user can follow along). ``record`` captures video of each
+    campaign's tabletop. Returns False if one is already running."""
     with _LOCK:
         if _STATUS.get("state") == "running":
             return False
         t = threading.Thread(
-            target=_worker, args=(campaign_ids, phases, step_delay),
+            target=_worker, args=(campaign_ids, phases, step_delay, record),
             name="selftest-runner", daemon=True)
         _STATUS["_thread"] = t
         _STATUS.update(state="running", pct=0, current="starting", report=None)

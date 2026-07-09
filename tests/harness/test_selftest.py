@@ -91,6 +91,19 @@ def test_load_run_rejects_bad_ids(tmp_path, monkeypatch):
     assert got and got["totals"]["total"] == 3
 
 
+def test_video_path_validation(tmp_path, monkeypatch):
+    # Only well-formed selftest-vid-*.webm names that exist resolve; traversal
+    # and junk are refused.
+    monkeypatch.setattr(selftest, "_VID_DIR", tmp_path)
+    assert selftest.video_path("../secret.webm") is None
+    assert selftest.video_path("evil.webm") is None            # wrong prefix
+    assert selftest.video_path("selftest-vid-x.mp4") is None    # wrong ext
+    assert selftest.video_path("selftest-vid-x.webm") is None   # not a file yet
+    (tmp_path / "selftest-vid-run1-2.webm").write_bytes(b"webm")
+    got = selftest.video_path("selftest-vid-run1-2.webm")
+    assert got is not None and got.name == "selftest-vid-run1-2.webm"
+
+
 def test_run_status_is_json_safe_and_drops_private_keys():
     # Simulate a thread handle parked on the status (as start_run does).
     selftest._STATUS["_thread"] = object()
@@ -267,6 +280,47 @@ def test_selftest_reseed_flagship_skipped_and_validation():
         res = r.json().get("results")
         assert res and res[0]["ok"] is False and "leveled" in res[0]["error"]
         assert c.post("/selftest/reseed", json={}).status_code == 400
+
+
+@_LIVE
+def test_selftest_video_capture():
+    """A recorded run flags scope.record and, when the headless browser is
+    available, produces a per-campaign .webm that serves (playback) and is
+    traversal-guarded. Skips the video assertion if recording is unavailable."""
+    import time
+
+    def _wait(c, deadline_s):
+        deadline = time.monotonic() + deadline_s
+        state, report = "running", None
+        while time.monotonic() < deadline:
+            s = c.get("/selftest/run-status").json()
+            state, report = s.get("state"), s.get("report")
+            if state in ("done", "error"):
+                break
+            time.sleep(1.0)
+        return state, report
+
+    with httpx.Client(base_url=ADMIN_BASE_URL, auth=_AUTH, timeout=30.0) as c:
+        # Discover a leveled campaign id (flagship is id 1).
+        c.post("/selftest/run", json={"phases": ["movement"]})
+        st, rep = _wait(c, 90)
+        assert st == "done"
+        cid = next(x["campaign_id"] for x in rep["campaigns"] if x["campaign_id"] != 1)
+        # Recorded movement run on that one campaign.
+        assert c.post("/selftest/run", json={
+            "campaigns": [cid], "phases": ["movement"], "record": True}).status_code == 200
+        st, rep = _wait(c, 150)
+        assert st == "done"
+        assert rep["scope"]["record"] is True
+        vids = [x.get("video") for x in rep["campaigns"] if x.get("video")]
+        if not vids:
+            import pytest as _pt
+            _pt.skip("no video produced (headless browser unavailable on this stack)")
+        v = vids[0]
+        r = c.get(f"/selftest/video/{v}")
+        assert r.status_code == 200 and "webm" in r.headers.get("content-type", "")
+        assert int(r.headers.get("content-length", "0")) > 0
+        assert c.get("/selftest/video/..%2f..%2fpasswd").status_code == 404
 
 
 @_LIVE

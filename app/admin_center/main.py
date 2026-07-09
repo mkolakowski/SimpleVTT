@@ -640,20 +640,21 @@ async def selftest_run(request: Request):
         return RedirectResponse(
             "/selftest?err=Self-test+needs+DEMO_MODE", status_code=303)
     from . import selftest
-    campaign_ids, phases, step_delay = None, None, None
+    campaign_ids, phases, step_delay, record = None, None, None, False
     try:
         body = await request.json()
         if isinstance(body, dict):
             campaign_ids = body.get("campaigns") or None
             phases = body.get("phases") or None
+            record = bool(body.get("record"))
             if body.get("slow"):
                 step_delay = selftest._SLOW_STEP_DELAY
             elif body.get("step_delay") is not None:
                 step_delay = float(body.get("step_delay"))
     except Exception:  # noqa: BLE001 — no/invalid body → full run
-        pass
+        record = False
     started = selftest.start_run(
-        campaign_ids=campaign_ids, phases=phases, step_delay=step_delay)
+        campaign_ids=campaign_ids, phases=phases, step_delay=step_delay, record=record)
     log.info("admin-center operator %r %s a demo self-test (campaigns=%s, phases=%s, slow=%s)",
              request.session.get("admin_user", "?"),
              "started" if started else "re-requested (already running)",
@@ -703,6 +704,21 @@ def selftest_history_list(request: Request):
         return JSONResponse({"runs": []})
     from . import selftest
     return JSONResponse({"runs": selftest.list_runs()})
+
+
+@app.get("/selftest/video/{name}")
+def selftest_video(request: Request, name: str, download: str = ""):
+    """Serve a captured self-test video (in-window playback or download). The
+    name is charset-validated so it can't traverse out of the video dir."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    from . import selftest
+    p = selftest.video_path(name)
+    if p is None:
+        raise HTTPException(status_code=404, detail="Video not found.")
+    return FileResponse(
+        str(p), media_type="video/webm",
+        filename=name if download else None)
 
 
 @app.get("/selftest/history/{run_id}")
