@@ -56,7 +56,10 @@
 
     <div class="grid" style="align-items:start">
       <div>
-        <h2 style="margin-bottom:6px">Campaigns</h2>
+        <h2 style="margin-bottom:6px">Campaigns
+          <a href="#" class="st-all" data-target="st-camp" style="font-size:12px;font-weight:400;margin-left:8px">select all</a> ·
+          <a href="#" class="st-none" data-target="st-camp" style="font-size:12px;font-weight:400">deselect all</a>
+        </h2>
         <div id="st-campaigns">
           {% for c in campaigns %}
           <label style="display:flex;align-items:center;gap:8px;margin:4px 0">
@@ -69,7 +72,10 @@
         </div>
       </div>
       <div>
-        <h2 style="margin-bottom:6px">Phases</h2>
+        <h2 style="margin-bottom:6px">Phases
+          <a href="#" class="st-all" data-target="st-phase" style="font-size:12px;font-weight:400;margin-left:8px">select all</a> ·
+          <a href="#" class="st-none" data-target="st-phase" style="font-size:12px;font-weight:400">deselect all</a>
+        </h2>
         <div id="st-phases">
           {% for p in all_phases %}
           <label style="display:flex;align-items:center;gap:8px;margin:4px 0">
@@ -314,6 +320,16 @@
         else if (wasRunning) { wasRunning = false; loadHistory(); }
       }).catch(function () { setTimeout(poll, 2000); });
   }
+
+  // Select-all / deselect-all for each checkbox group.
+  Array.prototype.forEach.call(document.querySelectorAll('.st-all, .st-none'), function (a) {
+    a.addEventListener('click', function (e) {
+      e.preventDefault();
+      var on = a.classList.contains('st-all');
+      Array.prototype.forEach.call(
+        document.querySelectorAll('.' + a.dataset.target), function (cb) { cb.checked = on; });
+    });
+  });
 
   function selectedCampaigns() {
     return Array.prototype.map.call(

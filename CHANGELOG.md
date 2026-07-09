@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.984.0] - 2026-07-08 — "The Whole Slate"
+
+**Schema version:** 102
+
+**Commit summary:** Self-test scope picker — select-all / deselect-all links for the campaign and phase checkboxes.
+
+**Description:** Small convenience on the Self-Test page: each checkbox group (Campaigns and Phases) gets **select all** / **deselect all** links in its header, so you can flip the whole group in one click instead of ticking each box. Client-only; no endpoint or behavior change.
+
+### Added
+- `app/admin_center/templates/selftest.html` — select-all / deselect-all links for the `.st-camp` and `.st-phase` checkbox groups.
+
 ## [2.983.0] - 2026-07-08 — "The Surveyor's Line"
 
 **Schema version:** 102
