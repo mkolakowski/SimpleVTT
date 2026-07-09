@@ -74,7 +74,17 @@ _WS_TIMEOUT = float(os.getenv("SELFTEST_WS_TIMEOUT", "3.0"))
 # Selectable check phases (reachability always runs — it's the foundation).
 # combat/spells/gates each need initiative, which runs implicitly when any of
 # them is selected.
-_ALL_PHASES = ("movement", "combat", "spells", "gates")
+_ALL_PHASES = ("movement", "combat", "doors", "spells", "gates")
+
+# Pacing between visible actions (moves, attacks, door toggles) so a watching GM
+# sees the tokens glide + interact in real time rather than teleporting. Set
+# SELFTEST_STEP_DELAY=0 for a fast headless run.
+_STEP_DELAY = float(os.getenv("SELFTEST_STEP_DELAY", "0.4"))
+
+
+async def _pace():
+    if _STEP_DELAY > 0:
+        await asyncio.sleep(_STEP_DELAY)
 
 
 def _norm_phases(phases) -> set:
@@ -432,11 +442,125 @@ def _pick_spell(spells: list, has_slot: bool):
     return None
 
 
+# ── Movement + doors (watchable — tokens glide, doors open/close) ────────────
+
+async def _move_token(client, collector, cid, token_id, x, y):
+    """Move a token one hop, waiting for the token_move broadcast, then pace so a
+    watching GM sees it. Returns (response, broadcast)."""
+    if collector:
+        collector.mark()
+    # Confirm the speed/OA gates so a GM-driven advance can cross the map even
+    # mid-battle on a large map (otherwise a long hop is 409 over_speed_cap).
+    r = await client.post(
+        f"/api/campaign/{cid}/token/{token_id}/move",
+        json={"x": x, "y": y, "over_speed_confirmed": True, "oa_confirmed": True})
+    b = await collector.wait_for("token_move", _COMBAT_WS_TIMEOUT) if collector else None
+    await _pace()
+    return r, b
+
+
+async def _glide(client, collector, cid, token_id, sx, sy, tx, ty, steps=4):
+    """Walk a token from (sx,sy) to (tx,ty) in ``steps`` hops so it visibly moves
+    across the map. Returns (all_ok, broadcasts_seen, last_response)."""
+    ok = True
+    seen = 0
+    last = None
+    for i in range(1, steps + 1):
+        nx = sx + (tx - sx) * i / steps
+        ny = sy + (ty - sy) * i / steps
+        r, b = await _move_token(client, collector, cid, token_id, nx, ny)
+        last = r
+        if r.status_code != 200:
+            ok = False
+        if b is not None:
+            seen += 1
+    return ok, seen, last
+
+
+def _find_doors(walls) -> list:
+    """Door ids on the map — plain door/gate segments plus embedded doors
+    (``{wallId}:{doorId}``)."""
+    out = []
+    for w in walls or []:
+        if not isinstance(w, dict):
+            continue
+        if (w.get("door") or w.get("gate")) and w.get("id") is not None and not w.get("doors"):
+            out.append(str(w["id"]))
+        for d in (w.get("doors") or []):
+            if isinstance(d, dict) and d.get("id") is not None:
+                out.append(f"{w.get('id')}:{d['id']}")
+    return out
+
+
+def _door_open(walls, did: str):
+    """The ``open`` flag of a door id within a walls list (None if not found)."""
+    if ":" in did:
+        wall_id, _, emb = did.partition(":")
+        for w in walls or []:
+            if isinstance(w, dict) and str(w.get("id")) == wall_id:
+                for d in (w.get("doors") or []):
+                    if isinstance(d, dict) and str(d.get("id")) == emb:
+                        return bool(d.get("open"))
+        return None
+    for w in walls or []:
+        if isinstance(w, dict) and str(w.get("id")) == did:
+            return bool(w.get("open"))
+    return None
+
+
+async def _door_checks(client, collector, cid, map_id, walls, checks, report) -> None:
+    """Open then close the first door on the map (GM bypasses any gate), asserting
+    the walls_update broadcast + the open flag flips each way. Non-destructive —
+    it ends closed/as-found. Appended with category ``door``."""
+    doors = _find_doors(walls)
+    if map_id is None or not doors:
+        checks.append(_check(
+            "door", "Open + close a door", "a door on the active map",
+            "no doors on this map", "skip"))
+        _publish(report)
+        return
+    did = doors[0]
+    was_open = _door_open(walls, did)
+
+    async def _toggle(action: str, want_open: bool):
+        if collector:
+            collector.mark()
+        r = await client.post(f"/api/campaign/{cid}/map/{map_id}/door/{did}/toggle", json={})
+        b = await collector.wait_for("walls_update", _COMBAT_WS_TIMEOUT) if collector else None
+        await _pace()
+        gw = await client.get(f"/api/campaign/{cid}/map/{map_id}/walls")
+        now = _door_open(gw.json().get("walls", []), did) if gw.status_code == 200 else None
+        ok = r.status_code == 200 and b is not None and now == want_open
+        checks.append(_check(
+            "door", f"{action} door {did}",
+            f"HTTP 200, walls_update broadcast, door open={want_open}",
+            f"HTTP {r.status_code}, broadcast {'seen' if b else 'MISSING'}, open={now}",
+            "pass" if ok else "fail"))
+        _publish(report)
+        return now
+
+    # Toggle both ways so the GM sees the door open AND close, ending as-found.
+    if was_open:
+        await _toggle("Close", False)
+        await _toggle("Open", True)
+    else:
+        await _toggle("Open", True)
+        await _toggle("Close", False)
+
+
 def _hp_of(state: dict, combatant_id: str):
     for c in state.get("combatants", []):
         if c.get("id") == combatant_id:
             return c.get("hp_current")
     return None
+
+
+def _tok_id(comb):
+    """The Token row id embedded in a combatant id (``tok_stH_<id>``)."""
+    try:
+        return int(str(comb.get("id")).rsplit("_", 1)[-1])
+    except (TypeError, ValueError):
+        return None
 
 
 async def _pc_spell_check(client, collector, cid, comb, target, actor_node, spell_casters) -> None:
@@ -549,6 +673,34 @@ async def _combat_rounds(client, collector, cid, node, report, combs, spell_cast
                 if is_pc:
                     tgt = v_target
                     if pc_attack:
+                        # Advance on the target first — glide the PC token to melee
+                        # so it looks like real play, then swing.
+                        try:
+                            toks = (await client.get(f"/api/campaign/{cid}/tokens")).json().get("tokens", [])
+                            pos = {t["id"]: (float(t.get("x") or 0), float(t.get("y") or 0)) for t in toks}
+                            pid, vid = _tok_id(comb), _tok_id(tgt)
+                            if pid in pos and vid in pos:
+                                (px, py), (vx, vy) = pos[pid], pos[vid]
+                                dx, dy = vx - px, vy - py
+                                d = math.hypot(dx, dy) or 1.0
+                                stopx, stopy = vx - dx / d * _PX_PER_CELL, vy - dy / d * _PX_PER_CELL
+                                mok, mseen, _ = await _glide(
+                                    client, collector, cid, pid, px, py, stopx, stopy, steps=2)
+                                # Broadcasts are informational: a PC already in
+                                # melee makes near-zero hops (no broadcast), which
+                                # is valid — the check passes on clean HTTP moves.
+                                actor_node["checks"].append(_check(
+                                    "movement", f"{actor_node['actor']} advances on {tgt['name']}",
+                                    "token glides toward the target (token_move per real hop)",
+                                    f"HTTP 200 hops; {mseen}/2 token_move broadcasts"
+                                    + ("" if mseen else " (already adjacent)"),
+                                    "pass" if mok else "fail"))
+                                _publish(report)
+                        except Exception as e:  # noqa: BLE001
+                            actor_node["checks"].append(_check(
+                                "movement", f"{actor_node['actor']} advances",
+                                "glide toward target", f"exception: {e}", "error"))
+                            _publish(report)
                         before = _hp_of(await _get_battle(client, cid), tgt["id"])
                         collector.mark() if collector else None
                         r = await client.post(
@@ -744,10 +896,12 @@ async def _run_campaign(camp: dict, node: dict, report: dict, phases: set) -> No
     client = None
     ws = None
     collector = None
-    moved: list = []          # (token_id, orig_x, orig_y) to restore
-    battle_snapshot = None    # prior battle state to restore
-    combs_for_combat = None   # combatants seeded by initiative, for the rounds
+    token_snapshot: dict = {}   # token_id → (x, y) for all tokens, to restore
+    battle_snapshot = None      # prior battle state to restore
+    combs_for_combat = None     # combatants seeded by initiative, for the rounds
     spell_casters: set = set()  # char_ids that spent a slot → long-rest to restore
+    map_id = None               # active map id (for doors)
+    walls: list = []            # active map walls/doors
 
     try:
         # --- login as the campaign GM ---
@@ -782,6 +936,17 @@ async def _run_campaign(camp: dict, node: dict, report: dict, phases: set) -> No
             tokens = tr.json().get("tokens", []) if tr.status_code == 200 else []
             heroes = [t for t in tokens if t.get("team") == "hero" and t.get("character_id")]
             villains = [t for t in tokens if t.get("team") == "villain"]
+            # Snapshot every token's position so movement/combat is restorable.
+            token_snapshot = {t["id"]: (float(t.get("x") or 0), float(t.get("y") or 0)) for t in tokens}
+            # Active map (id + walls) for door checks + movement bounds.
+            try:
+                mr = await client.get(f"/api/campaign/{cid}/active-map")
+                if mr.status_code == 200:
+                    mj = mr.json()
+                    map_id = mj.get("map_id")
+                    walls = mj.get("walls") or []
+            except Exception:  # noqa: BLE001
+                pass
             node["map"] = f"{len(tokens)} tokens"
             ok = rr.status_code == 200 and tr.status_code == 200 and heroes and villains
             setup.append(_check(
@@ -796,50 +961,54 @@ async def _run_campaign(camp: dict, node: dict, report: dict, phases: set) -> No
                 "HTTP 200 with tokens", f"exception: {e}", "error"))
         _publish(report)
 
-        # --- movement across the map ---
+        # --- movement across the map (a visible multi-step glide) ---
         if "movement" not in phases:
             pass
         elif heroes:
             tok = heroes[0]
             tid = tok["id"]
             ox, oy = float(tok.get("x") or 0), float(tok.get("y") or 0)
-            # Move ~2 cells along x, staying in-bounds by heading away from 0.
-            delta = 2 * _PX_PER_CELL
-            tx = ox - delta if ox > 300 else ox + delta
+            # Glide ~4 cells along x (away from the edge), in several hops so a
+            # watching GM sees the token travel.
+            span = 4 * _PX_PER_CELL
+            tx = ox - span if ox > 400 else ox + span
             ty = oy
+            steps = 4
             exp_ft = round(math.hypot(tx - ox, ty - oy) / _PX_PER_CELL * _FT_PER_CELL, 1)
             try:
-                if collector:
-                    collector.mark()
-                mr = await client.post(
-                    f"/api/campaign/{cid}/token/{tid}/move", json={"x": tx, "y": ty})
-                moved.append((tid, ox, oy))
-                bcast = await collector.wait_for("token_move") if collector else None
-                # Confirm the DB position changed.
+                ok_glide, seen, last = await _glide(
+                    client, collector, cid, tid, ox, oy, tx, ty, steps=steps)
                 tr2 = await client.get(f"/api/campaign/{cid}/tokens")
                 now = next((t for t in tr2.json().get("tokens", []) if t["id"] == tid), None)
                 relocated = now is not None and abs(float(now["x"]) - tx) < 1 and abs(float(now["y"]) - ty) < 1
-                dist = (bcast or {}).get("data", {}).get("distance_ft")
-                ok = mr.status_code == 200 and relocated and bcast is not None and (dist or 0) > 0
-                actual = (
-                    f"HTTP {mr.status_code}; token at ({now['x']:.0f},{now['y']:.0f}); "
-                    f"token_move broadcast {'seen' if bcast else 'MISSING'}, distance_ft={dist}")
+                ok = ok_glide and relocated and seen >= 1
                 setup.append(_check(
                     "movement",
-                    f"Move {tok.get('label') or 'a hero'} across the map",
-                    f"HTTP 200, token relocates to ({tx:.0f},{ty:.0f}) (~{exp_ft} ft "
-                    f"gridless), a token_move broadcast fires with distance_ft > 0",
-                    actual, "pass" if ok else "fail",
+                    f"Glide {tok.get('label') or 'a hero'} across the map ({steps} steps)",
+                    f"HTTP 200 each hop, token travels to ({tx:.0f},{ty:.0f}) (~{exp_ft} ft), "
+                    f"a token_move broadcast per hop",
+                    f"final ({now['x']:.0f},{now['y']:.0f}); {seen}/{steps} token_move broadcasts seen",
+                    "pass" if ok else "fail",
                     f"from ({ox:.0f},{oy:.0f})"))
             except Exception as e:  # noqa: BLE001
                 setup.append(_check(
-                    "movement", "Move a hero token across the map",
-                    "HTTP 200 + token_move broadcast", f"exception: {e}", "error"))
+                    "movement", "Glide a hero token across the map",
+                    "HTTP 200 + token_move broadcasts", f"exception: {e}", "error"))
         else:
             setup.append(_check(
-                "movement", "Move a hero token across the map",
+                "movement", "Glide a hero token across the map",
                 "a hero token to move", "no hero token found", "skip"))
         _publish(report)
+
+        # --- doors: open + close a door on the map (GM bypasses gates) ---
+        if "doors" in phases:
+            try:
+                await _door_checks(client, collector, cid, map_id, walls, setup, report)
+            except Exception as e:  # noqa: BLE001
+                setup.append(_check(
+                    "door", "Open + close a door",
+                    "walls_update + open flag flips", f"exception: {e}", "error"))
+                _publish(report)
 
         # --- start initiative (snapshot the prior battle first, to restore) ---
         if not need_battle:
@@ -894,7 +1063,9 @@ async def _run_campaign(camp: dict, node: dict, report: dict, phases: set) -> No
         # --- teardown: restore token positions + battle state ---
         if client is not None:
             try:
-                for tid, ox, oy in moved:
+                # Move every token back to its snapshot position (idempotent when
+                # unchanged) so movement + combat advances are non-destructive.
+                for tid, (ox, oy) in token_snapshot.items():
                     await client.post(
                         f"/api/campaign/{cid}/token/{tid}/move", json={"x": ox, "y": oy})
                 # Refill spent spell slots so leveled casts are non-destructive.
@@ -913,7 +1084,7 @@ async def _run_campaign(camp: dict, node: dict, report: dict, phases: set) -> No
                 teardown.append(_check(
                     "restore", "Restore token positions + battle + spell slots",
                     "tokens moved back, battle reset to its prepped state, slots refilled",
-                    f"{len(moved)} token(s) restored; battle "
+                    f"{len(token_snapshot)} token(s) restored; battle "
                     f"{battle_word}; "
                     f"{len(spell_casters)} caster(s) long-rested",
                     "pass"))

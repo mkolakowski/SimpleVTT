@@ -47,13 +47,18 @@ and recorded in the run history.
 
 1. **Reachability** — log in as the campaign GM; fetch the roster and the map's
    tokens; expect at least one hero and one villain token on the active map.
-2. **Movement across the map** — move a hero token a couple of cells and assert
-   the database position changed *and* a `token_move` broadcast fired with a
-   real distance.
-3. **Start initiative** — `PUT` the battle state with combatants built from the
+2. **Movement across the map** — a hero token **glides** several cells in hops
+   (so it visibly travels), asserting the position changed *and* `token_move`
+   broadcasts fired.
+3. **Doors** — open then close a door on the map (the GM bypasses any gate),
+   asserting the `walls_update` broadcast and the `open` flag flipping each way;
+   maps without doors record a skip.
+4. **Start initiative** — `PUT` the battle state with combatants built from the
    tokens; assert the `battle_update` broadcast and that the battle is active.
-4. **Combat rounds** — two rounds. Each round groups a representative set of
+5. **Combat rounds** — two rounds. Each round groups a representative set of
    actors (a few PCs and a couple of NPCs); each actor:
+   - **advances** — the PC token glides toward its target before swinging, so it
+     looks like real play;
    - **attacks** — PCs via the weapon-attack endpoint (asserting the attack /
      damage totals and the `weapon_attack` broadcast, and reporting the target's
      HP change); NPCs via the monster-strike endpoint;
@@ -64,13 +69,17 @@ and recorded in the run history.
      slots are refilled with a long rest during restore;
    - **ends its turn** — advance initiative and assert the `battle_update`
      broadcast and that the turn index moved (wrapping to the next round).
-5. **Gate checks (negative paths)** — because the GM bypasses the gates, the
+6. **Gate checks (negative paths)** — because the GM bypasses the gates, the
    runner logs in as the **player who owns a hero token** and asserts two
    rejections: an **off-turn move** returns `403`, and an **attack with the
    action already spent** (no override) returns `409 over_budget`. Both are
    expected to fail, so nothing is mutated.
-6. **Restore** — move the tokens back, reset the battle to its prepped state,
-   and long-rest any caster that spent a slot.
+7. **Restore** — move every token back to its start position, reset the battle to
+   its prepped state, and long-rest any caster that spent a slot.
+
+Every visible action (moves, door toggles) is **paced** so a GM watching the
+campaign sees the tokens glide and interact in real time — like a session in
+progress. Set `SELFTEST_STEP_DELAY=0` for a fast headless run.
 
 ## Reading the report
 

@@ -10,6 +10,19 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.979.0] - 2026-07-08 — "The Dress Rehearsal"
+
+**Schema version:** 102
+
+**Commit summary:** Demo self-test — watchable play: tokens glide across the map, advance to melee before attacking, and doors open/close, all paced so a GM can watch it live.
+
+**Description:** Makes the self-test **look like a real session in progress** so a GM can watch it on the tabletop. Movement is now a **multi-step glide** (the token visibly travels ~4 cells in hops instead of teleporting); in combat each PC **advances toward its target** before swinging (a per-actor `movement` check); and a new **`doors` phase** opens then closes a door on the map (asserting the `walls_update` broadcast and the `open` flag flipping each way, ending as-found). Every visible action is **paced** (`SELFTEST_STEP_DELAY`, default 0.4s; set 0 for a fast headless run) so the moves + interactions animate in real time for anyone watching the campaign. All token positions are snapshotted up front and restored in teardown (moves stay non-destructive), and GM-driven moves confirm the speed/OA gates so a long advance works mid-battle on large maps. `doors` joins the scope picker. Verified live: **230 passed, 12 skipped, 0 failed** across all six demo campaigns (~61s) — tokens glide, the flagship + Goblin Warrens doors open/close, and everything restores.
+
+### Added
+- `app/admin_center/selftest.py` — `_glide()` / `_move_token()` (paced, speed/OA-confirmed), `_door_checks()` + `_find_doors()` / `_door_open()`, a per-PC "advance on target" `movement` check in combat, an all-token position snapshot/restore, and the `doors` phase (via `/api/campaign/{cid}/active-map` + `/map/{id}/door/{did}/toggle`).
+- `app/admin_center/main.py` / `templates/selftest.html` — `doors` is now a selectable phase in the scope picker.
+- `tests/harness/test_selftest.py` — `test_selftest_doors_subset` (doors-only opens/closes doors, no combat) + the full-run test asserts a `door` check ran; deadline raised for the paced run.
+
 ## [2.978.0] - 2026-07-08 — "The Focused Lens"
 
 **Schema version:** 102

@@ -150,7 +150,7 @@ def test_selftest_run_to_completion_reports_all_campaigns():
         # Start a run (tolerate an already-running one — just poll it).
         rr = c.post("/selftest/run")
         assert rr.status_code == 200, rr.text
-        deadline = time.monotonic() + 90
+        deadline = time.monotonic() + 240  # watchable pacing makes a full run longer
         state, report = "running", None
         while time.monotonic() < deadline:
             s = c.get("/selftest/run-status").json()
@@ -175,6 +175,8 @@ def test_selftest_run_to_completion_reports_all_campaigns():
         assert summed == totals
         # Negative-path gate checks (driven as a non-GM player) ran.
         assert "gate" in setup_cats, f"no gate checks in setup: {setup_cats}"
+        # Door open/close ran (pass where a door exists, skip otherwise).
+        assert "door" in setup_cats, f"no door checks in setup: {setup_cats}"
 
         # Run history: the completed run was archived and is reopenable, and the
         # id guard rejects traversal.
@@ -229,3 +231,26 @@ def test_selftest_movement_only_subset():
             assert not camp["rounds"], f"{camp['name']} ran combat despite movement-only"
             cats = {ch["category"] for ch in camp["setup_checks"]}
             assert cats <= {"reachability", "movement"}, f"unexpected setup checks: {cats}"
+
+
+@_LIVE
+def test_selftest_doors_subset():
+    """A doors-only subset opens/closes doors: every campaign records a door
+    check (pass where a door exists, skip otherwise) and no combat runs."""
+    import time
+    with httpx.Client(base_url=ADMIN_BASE_URL, auth=_AUTH, timeout=30.0) as c:
+        assert c.post("/selftest/run", json={"phases": ["doors"]}).status_code == 200
+        deadline = time.monotonic() + 120
+        state, report = "running", None
+        while time.monotonic() < deadline:
+            s = c.get("/selftest/run-status").json()
+            state, report = s.get("state"), s.get("report")
+            if state in ("done", "error"):
+                break
+            time.sleep(1.0)
+        assert state == "done", f"doors subset did not finish: {state}"
+        assert report["scope"]["phases"] == ["doors"]
+        for camp in report["campaigns"]:
+            assert not camp["rounds"], f"{camp['name']} ran combat despite doors-only"
+            cats = {ch["category"] for ch in camp["setup_checks"]}
+            assert "door" in cats, f"{camp['name']} ran no door check: {cats}"
