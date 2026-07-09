@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.989.0] - 2026-07-09 — "The Last Breath"
+
+**Schema version:** 102
+
+**Commit summary:** Self-test Rules deep-dive — add the `death_saves` phase (death save + stabilize).
+
+**Description:** Third Rules deep-dive phase. `death_saves` sets a hero **dying** (GM `death-save/override`, HP untouched), **rolls a death save** (asserts the state advances — a success/fail counter or a wake/kill transition), and if still dying **stabilizes** it (→ `stable`). Self-restoring: the death-save state is reset to `alive` in a `finally`, and no HP was changed. Verified live: roll → success, stabilize → stable.
+
+### Added
+- `app/admin_center/selftest.py` — `_death_saves_check`; `death_saves` added to `_DEEP_PHASES`.
+- `tests/harness/test_selftest.py` — the deep-phases test now also covers `death_saves`.
+
 ## [2.988.0] - 2026-07-09 — "The Healing Word"
 
 **Schema version:** 102

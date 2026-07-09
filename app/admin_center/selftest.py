@@ -97,7 +97,7 @@ _WS_TIMEOUT = float(os.getenv("SELFTEST_WS_TIMEOUT", "3.0"))
 # (v2.987.0+) that exercises deeper SRD mechanics — each deep phase needs an
 # active battle + a target combatant and is applicability-skipped per demo.
 _CORE_PHASES = ("movement", "combat", "doors", "spells", "gates")
-_DEEP_PHASES = ("rest", "heal")
+_DEEP_PHASES = ("rest", "heal", "death_saves")
 _ALL_PHASES = _CORE_PHASES + _DEEP_PHASES
 
 # Pacing between visible actions (moves, attacks, door toggles) so a watching GM
@@ -1089,6 +1089,8 @@ async def _deep_checks(client, collector, cid, node, report, combs,
         await _rest_check(client, cid, heroes, deep, report, rested_pcs)
     if "heal" in phases:
         await _heal_check(client, collector, cid, heroes, deep, report, spell_casters, rested_pcs)
+    if "death_saves" in phases:
+        await _death_saves_check(client, cid, heroes, deep, report)
 
 
 async def _rest_check(client, cid, heroes, deep, report, rested_pcs) -> None:
@@ -1219,6 +1221,53 @@ async def _heal_check(client, collector, cid, heroes, deep, report, spell_caster
     except Exception as e:  # noqa: BLE001
         deep.append(_check("heal", "Cast a healing spell",
                            "HTTP 200 + HP rise", f"exception: {e}", "error"))
+    _publish(report)
+
+
+async def _death_saves_check(client, cid, heroes, deep, report) -> None:
+    """Death saves + stabilize (SRD PHB p.197). Sets a hero dying (GM override,
+    HP untouched), rolls a death save (asserts the state advances), then
+    stabilizes it — resetting the death-save state afterward (self-restoring)."""
+    hero = next((h for h in heroes if h.get("character_id")), None)
+    if not hero:
+        deep.append(_check("death_save", "Roll a death save + stabilize",
+                           "a hero PC", "no hero PC on the map", "skip"))
+        _publish(report)
+        return
+    char_id = hero["character_id"]
+    name = hero.get("label") or "a hero"
+    base = f"/api/campaign/{cid}/character/{char_id}"
+    try:
+        await client.post(f"{base}/death-save/override",
+                          json={"status": "dying", "successes": 0, "failures": 0})
+        r = await client.post(f"{base}/death-save")
+        body = r.json() if r.status_code == 200 else {}
+        outcome = body.get("outcome")
+        status = body.get("status")
+        rolled = r.status_code == 200 and outcome is not None
+        stab = None
+        if status == "dying":
+            sr = await client.post(f"{base}/stabilize")
+            stab = ((sr.json().get("death_saves") or {}).get("status")
+                    if sr.status_code == 200 else f"HTTP {sr.status_code}")
+        ok = rolled and (status != "dying" or stab == "stable")
+        deep.append(_check(
+            "death_save", f"{name}: roll a death save + stabilize",
+            "HTTP 200, death-save roll advances state; stabilize → stable "
+            "(unless the roll woke/killed the PC)",
+            f"roll {outcome}/{status} (succ {body.get('successes')} / fail {body.get('failures')}); "
+            f"stabilize → {stab}",
+            "pass" if ok else "fail"))
+    except Exception as e:  # noqa: BLE001
+        deep.append(_check("death_save", f"{name}: death save",
+                           "HTTP 200 + state advance", f"exception: {e}", "error"))
+    finally:
+        # Reset death-save state (HP was never changed by the override path).
+        try:
+            await client.post(f"{base}/death-save/override",
+                              json={"status": "alive", "successes": 0, "failures": 0})
+        except Exception:  # noqa: BLE001
+            pass
     _publish(report)
 
 
