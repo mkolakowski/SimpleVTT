@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.992.0] - 2026-07-09 — "The Saving Throw"
+
+**Schema version:** 102
+
+**Commit summary:** Self-test Rules deep-dive — add the `saves` phase (save-for-half damage spell → target rolls a save + takes damage).
+
+**Description:** Sixth Rules deep-dive phase. `saves` finds a caster with a **save-for-half** damage spell (Burning Hands, Fireball, Shatter, Cone of Cold, …) and hurls it at a villain. Because save-for-half deals damage on **either** save outcome, the target's HP drops **deterministically** — a reliable probe of the save-DC + auto-apply pipeline (asserts HTTP 200 + `spell_cast` + the villain's HP falls). Applicability-skips when the party has no such caster; restored by the battle snapshot + long rest (slot). Verified live: L3 (40→38) and L5 (Fireball, 40→34). That completes six deep phases; `features` (class-feature resources) lands next, paired with enriching the demo seeds.
+
+### Added
+- `app/admin_center/selftest.py` — `_saves_check` + `_SAVE_HALF_SLUGS`; `saves` added to `_DEEP_PHASES`.
+- `tests/harness/test_selftest.py` — the deep-phases test now also covers `saves`.
+
 ## [2.991.0] - 2026-07-09 — "The Riposte"
 
 **Schema version:** 102

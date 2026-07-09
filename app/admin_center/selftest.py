@@ -97,7 +97,7 @@ _WS_TIMEOUT = float(os.getenv("SELFTEST_WS_TIMEOUT", "3.0"))
 # (v2.987.0+) that exercises deeper SRD mechanics — each deep phase needs an
 # active battle + a target combatant and is applicability-skipped per demo.
 _CORE_PHASES = ("movement", "combat", "doors", "spells", "gates")
-_DEEP_PHASES = ("rest", "heal", "death_saves", "concentration", "reactions")
+_DEEP_PHASES = ("rest", "heal", "death_saves", "concentration", "reactions", "saves")
 _ALL_PHASES = _CORE_PHASES + _DEEP_PHASES
 
 # Pacing between visible actions (moves, attacks, door toggles) so a watching GM
@@ -1095,6 +1095,8 @@ async def _deep_checks(client, collector, cid, node, report, combs,
         await _concentration_check(client, collector, cid, heroes, combs, deep, report, rested_pcs)
     if "reactions" in phases:
         await _reactions_check(client, collector, cid, combs, deep, report)
+    if "saves" in phases:
+        await _saves_check(client, collector, cid, heroes, combs, deep, report, spell_casters)
 
 
 async def _rest_check(client, cid, heroes, deep, report, rested_pcs) -> None:
@@ -1367,6 +1369,68 @@ async def _reactions_check(client, collector, cid, combs, deep, report) -> None:
     except Exception as e:  # noqa: BLE001
         deep.append(_check("reaction", f"{name}: opportunity attack",
                            "200 + reaction economy", f"exception: {e}", "error"))
+    _publish(report)
+
+
+# Save-for-half damage spells: the target takes damage on a success AND a
+# failure, so a cast at a villain deterministically lowers its HP — a reliable
+# probe of the save-DC damage pipeline.
+_SAVE_HALF_SLUGS = {
+    "burning-hands", "fireball", "thunderwave", "shatter", "cone-of-cold",
+    "ice-storm", "lightning-bolt", "sunburst", "fire-storm", "flame-strike",
+    "circle-of-death", "delayed-blast-fireball", "meteor-swarm",
+}
+
+
+async def _saves_check(client, collector, cid, heroes, combs, deep, report, spell_casters) -> None:
+    """Saving-throw pipeline (SRD PHB p.179): a caster hurls a save-for-half
+    damage spell at a villain. Because save-for-half deals damage on either
+    outcome, the villain's HP drops deterministically — asserting the save-DC +
+    auto-apply path ran. Restored by the battle snapshot; slot by long rest."""
+    caster = spell_index = spell_name = None
+    for h in heroes:
+        chid = h.get("character_id")
+        if not chid:
+            continue
+        sheet = await _get_sheet(client, cid, chid)
+        for i, sp in enumerate(sheet.get("spells") or []):
+            slug = (sp.get("_slug") or "").lower()
+            if slug in _SAVE_HALF_SLUGS:
+                caster, spell_index, spell_name = h, i, sp.get("name")
+                break
+        if caster:
+            break
+    villain = next((c for c in combs if c.get("char_id") is None), None)
+    if not caster or not villain:
+        deep.append(_check("save", "Cast a save-for-half spell",
+                           "a caster with a save-damage spell + a villain",
+                           "no save-spell caster / villain", "skip"))
+        _publish(report)
+        return
+    name = caster.get("label") or "A caster"
+    try:
+        before = _hp_of(await _get_battle(client, cid), villain["id"])
+        if collector:
+            collector.mark()
+        r = await client.post(
+            f"/api/campaign/{cid}/cast_spell",
+            json={"character_id": caster["character_id"], "spell_index": spell_index,
+                  "target_combatant_id": villain["id"], "override": True})
+        bcast = await collector.wait_for("spell_cast", _COMBAT_WS_TIMEOUT) if collector else None
+        after = _hp_of(await _get_battle(client, cid), villain["id"])
+        if r.status_code == 200:
+            spell_casters.add(caster["character_id"])
+        ok = (r.status_code == 200 and bcast is not None
+              and before is not None and after is not None and after < before)
+        deep.append(_check(
+            "save", f"{name} casts {spell_name} (save for half) at {villain.get('name')}",
+            "HTTP 200, spell_cast broadcast, target rolls a save + takes damage (HP drops)",
+            f"HTTP {r.status_code}, target HP {before}→{after}, "
+            f"broadcast {'seen' if bcast else 'MISSING'}",
+            "pass" if ok else "fail"))
+    except Exception as e:  # noqa: BLE001
+        deep.append(_check("save", f"{name}: save spell",
+                           "200 + damage", f"exception: {e}", "error"))
     _publish(report)
 
 
