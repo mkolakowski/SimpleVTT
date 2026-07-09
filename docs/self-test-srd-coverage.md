@@ -42,7 +42,8 @@ yet was invisible to the self-test. Endpoints live in
 | Damage undo | `/undo_attack_damage {attack_id}` | `undo` ✅ shipped |
 | Resistance / immunity / vuln / temp-HP | `/attack` vs a typed/buffed target; assert reduced/doubled/absorbed HP | deferred |
 | Legendary / lair | `/use_legendary_action`; `/spend_legendary_resistance`; `/trigger_lair_action` | deferred (L18) |
-| Exhaustion, grapple/dash/hide, generic feature/item | `/use_feature` `/use_item` `/use_grapple` `/use_dash` … | deferred |
+| Grapple / Dash | `/use_grapple` `/use_dash` | `grapple` ✅ shipped |
+| Exhaustion, hide, generic feature/item | `/use_feature` `/use_item` `/hide` … | deferred |
 
 ## Evaluation — demos vs SRD (what each demo can test)
 

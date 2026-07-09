@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.996.0] - 2026-07-09 — "The Grappling Hook"
+
+**Schema version:** 102
+
+**Commit summary:** Self-test Rules deep-dive — add the `grapple` phase (grapple + Dash movement actions).
+
+**Description:** Second deferred family. `grapple` has a hero **grapple** a living villain (`/use_grapple` — contested check + grappled condition) and take the **Dash** action (`/use_dash` — extra movement), each asserting HTTP 200. Battle-state effects restore via the snapshot. Verified live: grapple (auto contested) + Dash (+30 ft) both green.
+
+### Added
+- `app/admin_center/selftest.py` — `_grapple_check`; `grapple` added to `_DEEP_PHASES`.
+- `tests/harness/test_selftest.py` — the deep-phases test now also covers `grapple`.
+
 ## [2.995.0] - 2026-07-09 — "The Rewind"
 
 **Schema version:** 102

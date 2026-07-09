@@ -98,7 +98,7 @@ _WS_TIMEOUT = float(os.getenv("SELFTEST_WS_TIMEOUT", "3.0"))
 # active battle + a target combatant and is applicability-skipped per demo.
 _CORE_PHASES = ("movement", "combat", "doors", "spells", "gates")
 _DEEP_PHASES = ("rest", "heal", "death_saves", "concentration", "reactions", "saves",
-                "features", "undo")
+                "features", "undo", "grapple")
 _ALL_PHASES = _CORE_PHASES + _DEEP_PHASES
 
 # Pacing between visible actions (moves, attacks, door toggles) so a watching GM
@@ -1102,6 +1102,8 @@ async def _deep_checks(client, collector, cid, node, report, combs,
         await _features_check(client, cid, heroes, combs, deep, report, spell_casters, rested_pcs)
     if "undo" in phases:
         await _undo_check(client, cid, combs, deep, report)
+    if "grapple" in phases:
+        await _grapple_check(client, cid, combs, deep, report)
 
 
 async def _rest_check(client, cid, heroes, deep, report, rested_pcs) -> None:
@@ -1612,6 +1614,48 @@ async def _undo_check(client, cid, combs, deep, report) -> None:
     except Exception as e:  # noqa: BLE001
         deep.append(_check("undo", f"{name}: undo damage",
                            "200 + HP restored", f"exception: {e}", "error"))
+    _publish(report)
+
+
+async def _grapple_check(client, cid, combs, deep, report) -> None:
+    """Movement actions (SRD PHB p.195): a hero grapples a villain and takes the
+    Dash action. Battle-state effects (grapple buff, granted movement) restore
+    via the battle snapshot."""
+    hero = next((c for c in combs if c.get("char_id") is not None), None)
+    state = await _get_battle(client, cid)
+    villain = next((c for c in state.get("combatants", [])
+                    if c.get("char_id") is None and int(c.get("hp_current") or 0) > 0), None)
+    if not hero or not villain:
+        deep.append(_check("grapple", "Grapple + Dash",
+                           "a hero + a living villain", "no hero / living villain", "skip"))
+        _publish(report)
+        return
+    name = hero.get("name") or "A hero"
+    try:
+        gr = await client.post(
+            f"/api/campaign/{cid}/use_grapple",
+            json={"character_id": hero["char_id"], "target_combatant_id": villain["id"],
+                  "override": True})
+        deep.append(_check(
+            "grapple", f"{name} grapples {villain.get('name')}",
+            "HTTP 200 (contested check + grappled condition applied)",
+            f"HTTP {gr.status_code} {str(gr.text)[:90]}",
+            "pass" if gr.status_code == 200 else "fail"))
+        _publish(report)
+    except Exception as e:  # noqa: BLE001
+        deep.append(_check("grapple", f"{name}: grapple", "200", f"exception: {e}", "error"))
+        _publish(report)
+    try:
+        dr = await client.post(
+            f"/api/campaign/{cid}/use_dash",
+            json={"combatant_id": hero["id"], "character_id": hero["char_id"], "grant_ft": 30})
+        deep.append(_check(
+            "dash", f"{name} takes the Dash action",
+            "HTTP 200 (extra movement granted)",
+            f"HTTP {dr.status_code} {str(dr.text)[:90]}",
+            "pass" if dr.status_code == 200 else "fail"))
+    except Exception as e:  # noqa: BLE001
+        deep.append(_check("dash", f"{name}: dash", "200", f"exception: {e}", "error"))
     _publish(report)
 
 
