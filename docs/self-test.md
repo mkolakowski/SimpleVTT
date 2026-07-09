@@ -43,6 +43,14 @@ with the current phase selection. Reachability always runs, and
 starts a battle leaves it untouched. The chosen scope is shown above the report
 and recorded in the run history.
 
+## Reseeding a campaign
+
+The demo has no permanent data, so a **♻ Reseed selected** button (separate from
+Run) wipes and reseeds just the **checked** campaigns back to their pristine
+seeded state — a clean baseline to test against. It reseeds per-campaign (the
+leveled sample campaigns only; the flagship is left to Tools → demo reset), and
+the page reloads afterward because a reseeded campaign gets a fresh id.
+
 ## What it checks, per campaign
 
 1. **Reachability** — log in as the campaign GM; fetch the roster and the map's

@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.980.0] - 2026-07-08 — "The Fresh Slate"
+
+**Schema version:** 102
+
+**Commit summary:** Demo self-test — a separate ♻ Reseed button that wipes + reseeds just the selected campaigns to their pristine state.
+
+**Description:** Adds a standalone **♻ Reseed selected** button to the Self-Test page (separate from Run), so an operator can reset the campaigns they're about to test back to their **pristine seeded state** — the demo has no permanent data, so a fresh baseline is often better than trusting the non-destructive restore. It reseeds **just the checked campaigns** (per-campaign, not the whole demo): each leveled sample campaign is wiped (children + row) and rebuilt via the seed's `_seed_one`, getting a fresh id (the self-test resolves campaigns by name, so that's fine; the page reloads afterward to refresh the picker). The **flagship** (id 1, which the harness pins) is refused per-campaign and points at Tools → demo reset. Gated by `ADMIN_CENTER_ADMIN_TOOLS` + `DEMO_MODE`. Verified live: reseeding a leveled campaign yields a fresh id and a full self-test on it passes 31/31; the flagship is skipped non-destructively.
+
+### Added
+- `app/admin_center/selftest.py` — `reseed_campaigns()` (per-campaign wipe via `campaign_wipe.wipe_campaign_children` + rebuild via `demo_campaigns._seed_one`, rebuilding the demo users map from the DB).
+- `app/admin_center/main.py` — `POST /selftest/reseed` (`{campaigns:[id,…]}`; gated; 400 on empty).
+- `app/admin_center/templates/selftest.html` — the **♻ Reseed selected** button + confirm + result banner + page reload.
+- `tests/harness/test_selftest.py` — `test_selftest_reseed_flagship_skipped_and_validation` (flagship refused non-destructively; empty body → 400).
+
 ## [2.979.0] - 2026-07-08 — "The Dress Rehearsal"
 
 **Schema version:** 102

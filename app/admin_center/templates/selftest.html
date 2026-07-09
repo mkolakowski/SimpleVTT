@@ -85,9 +85,11 @@
 
     <div class="row-actions" style="margin-top:12px">
       <button id="st-run" type="button">▶ Run selected</button>
+      <button id="st-reseed" type="button" title="Wipe + reseed the checked campaigns to their pristine demo state">♻ Reseed selected</button>
       <span id="st-chip" class="pill skip">idle</span>
       <span id="st-current" class="muted"></span>
     </div>
+    <div id="st-reseed-msg" class="muted" style="font-size:12px;margin-top:6px"></div>
     <div class="bar" style="margin-top:12px"><i id="st-bar" style="width:0%"></i></div>
   </div>
 
@@ -325,6 +327,34 @@
   Array.prototype.forEach.call(document.querySelectorAll('.st-only'), function (b) {
     b.addEventListener('click', function () {
       trigger({ campaigns: [parseInt(b.dataset.id, 10)], phases: selectedPhases() });
+    });
+  });
+
+  // Separate ♻ Reseed — wipe + reseed the checked campaigns to pristine state.
+  var reseedBtn = document.getElementById('st-reseed');
+  var reseedMsg = document.getElementById('st-reseed-msg');
+  reseedBtn.addEventListener('click', function () {
+    var camps = selectedCampaigns();
+    if (!camps.length) { reseedMsg.textContent = 'Check at least one campaign to reseed.'; return; }
+    if (!confirm('Wipe + reseed ' + camps.length + ' campaign(s) to their pristine demo state? '
+        + 'This resets tokens, sheets, and battle for those campaigns.')) return;
+    reseedBtn.disabled = true; reseedBtn.textContent = '♻ Reseeding…';
+    reseedMsg.textContent = '';
+    fetch('/selftest/reseed', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ campaigns: camps }),
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      var res = (d && d.results) || [];
+      var ok = res.filter(function (x) { return x.ok; }).length;
+      var bad = res.filter(function (x) { return !x.ok; });
+      reseedMsg.innerHTML = '✓ Reseeded ' + ok + '/' + res.length + ' campaign(s).'
+        + (bad.length ? ' Skipped: ' + bad.map(function (x) { return esc((x.name || x.id) + ' — ' + x.error); }).join('; ') : '')
+        + ' Reloading…';
+      // Campaign ids change on reseed; reload so the picker refreshes.
+      setTimeout(function () { location.reload(); }, 1800);
+    }).catch(function (e) {
+      reseedMsg.textContent = '✕ Reseed failed: ' + (e && e.message || 'error');
+      reseedBtn.disabled = false; reseedBtn.textContent = '♻ Reseed selected';
     });
   });
 

@@ -656,6 +656,31 @@ async def selftest_run(request: Request):
     return JSONResponse({"started": started, "state": selftest.run_status().get("state")})
 
 
+@app.post("/selftest/reseed")
+async def selftest_reseed(request: Request):
+    """Wipe + reseed just the selected demo campaigns to their pristine state.
+    Separate from running the self-test. Gated by ADMIN_CENTER_ADMIN_TOOLS +
+    DEMO_MODE. Body: ``{campaigns: [id, ...]}`` (required)."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    if not _demo_mode():
+        return JSONResponse({"error": "reseed needs DEMO_MODE"}, status_code=400)
+    from . import selftest
+    campaign_ids = None
+    try:
+        body = await request.json()
+        if isinstance(body, dict):
+            campaign_ids = body.get("campaigns") or None
+    except Exception:  # noqa: BLE001
+        pass
+    if not campaign_ids:
+        return JSONResponse({"error": "no campaigns given"}, status_code=400)
+    results = selftest.reseed_campaigns(campaign_ids)
+    log.info("admin-center operator %r reseeded demo campaigns %s -> %s",
+             request.session.get("admin_user", "?"), campaign_ids, results)
+    return JSONResponse({"results": results})
+
+
 @app.get("/selftest/run-status")
 def selftest_run_status(request: Request):
     """Current run state + the growing report snapshot — polled by the page."""

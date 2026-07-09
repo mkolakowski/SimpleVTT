@@ -234,6 +234,18 @@ def test_selftest_movement_only_subset():
 
 
 @_LIVE
+def test_selftest_reseed_flagship_skipped_and_validation():
+    """Reseed endpoint: the flagship (id 1) is refused per-campaign (non-
+    destructive — nothing is wiped), and an empty request is a 400."""
+    with httpx.Client(base_url=ADMIN_BASE_URL, auth=_AUTH, timeout=30.0) as c:
+        r = c.post("/selftest/reseed", json={"campaigns": [1]})
+        assert r.status_code == 200, r.text
+        res = r.json().get("results")
+        assert res and res[0]["ok"] is False and "leveled" in res[0]["error"]
+        assert c.post("/selftest/reseed", json={}).status_code == 400
+
+
+@_LIVE
 def test_selftest_doors_subset():
     """A doors-only subset opens/closes doors: every campaign records a door
     check (pass where a door exists, skip otherwise) and no combat runs."""

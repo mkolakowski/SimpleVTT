@@ -1109,6 +1109,61 @@ def list_campaigns() -> list:
     return [{"id": c["id"], "name": c["name"]} for c in _demo_campaigns()]
 
 
+def reseed_campaigns(campaign_ids) -> list:
+    """Wipe + reseed just the given demo campaigns to their pristine seeded
+    state (the demo has no permanent data). Supported for the leveled sample
+    campaigns (rebuilt via ``_seed_one``); the flagship keeps id 1 and is left to
+    the full demo reset in Tools. Each reseeded campaign gets a fresh id — the
+    self-test resolves campaigns by name, so that's fine. Returns a per-campaign
+    result list."""
+    from ..database import SessionLocal
+    from ..models import Campaign, User
+    from .. import demo_seed as ds
+    from .. import demo_campaigns as dc
+    from ..campaign_wipe import wipe_campaign_children
+    from ..realtime import hub
+
+    specs = {s["name"]: s for s in dc.CAMPAIGN_SPECS}
+    key_email = {
+        "gm": ds.DEMO_GM_EMAIL, "alice": ds.DEMO_ALICE_EMAIL, "bob": ds.DEMO_BOB_EMAIL,
+        "gm2": ds.DEMO_GM2_EMAIL, "carol": ds.DEMO_CAROL_EMAIL,
+        "dave": ds.DEMO_DAVE_EMAIL, "erin": ds.DEMO_ERIN_EMAIL,
+    }
+    out = []
+    db = SessionLocal()
+    try:
+        by_email = {u.email: u for u in db.query(User).filter(
+            User.email.in_(list(key_email.values()))).all()}
+        users = {k: by_email[e] for k, e in key_email.items() if e in by_email}
+        for cid in (campaign_ids or []):
+            try:
+                camp = db.query(Campaign).filter(Campaign.id == int(cid)).first()
+                if not camp:
+                    out.append({"id": cid, "ok": False, "error": "campaign not found"})
+                    continue
+                name = camp.name
+                if name not in specs:
+                    out.append({
+                        "id": cid, "name": name, "ok": False,
+                        "error": "per-campaign reseed is for the leveled demos only "
+                                 "(use Tools → demo reset for the flagship)"})
+                    continue
+                old_id = camp.id
+                wipe_campaign_children(db, [old_id])
+                hub.evict_battle(old_id)
+                db.query(Campaign).filter(Campaign.id == old_id).delete(synchronize_session=False)
+                db.flush()
+                new = dc._seed_one(db, specs[name], users)
+                db.commit()
+                out.append({"id": cid, "name": name, "ok": True, "new_id": new.id})
+            except Exception as e:  # noqa: BLE001
+                db.rollback()
+                out.append({"id": cid, "ok": False, "error": str(e)[:160]})
+        return out
+    finally:
+        db.close()
+
+
 async def _run_all(campaign_ids=None, phases=None) -> None:
     started = time.time()
     phase_set = _norm_phases(phases)
