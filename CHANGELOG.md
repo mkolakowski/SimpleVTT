@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.994.1] - 2026-07-09 — "The Live Target"
+
+**Schema version:** 102
+
+**Commit summary:** Self-test `saves` phase — target a still-living villain + skip when the caster is out of slots (fixes 3 full-run failures).
+
+**Description:** In a **full** run the `saves` phase runs after combat + the other deep phases, which had already killed the seeded first villain (so the save spell hit a 0-HP target and its HP couldn't drop) or drained the caster's slots (a `no_slot` 409). `saves` now picks a villain that's **still alive** from the live battle state and records a **skip** (not a fail) when the caster has no slot left. Verified: a full run across all six campaigns is now **283 passed, 0 failed, 0 errors, 13 skipped** (296 checks, ~103s), completing the Rules deep-dive tier clean end-to-end.
+
+### Fixed
+- `app/admin_center/selftest.py` — `_saves_check` selects a living villain from the live battle + treats `no_slot` as a skip.
+
 ## [2.994.0] - 2026-07-09 — "The Whole Toolbox"
 
 **Schema version:** 102

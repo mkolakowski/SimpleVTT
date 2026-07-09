@@ -1402,11 +1402,15 @@ async def _saves_check(client, collector, cid, heroes, combs, deep, report, spel
                 break
         if caster:
             break
-    villain = next((c for c in combs if c.get("char_id") is None), None)
+    # Pick a still-ALIVE villain from the live battle (combat/earlier phases may
+    # have already killed the seeded first villain).
+    state = await _get_battle(client, cid)
+    villain = next((c for c in state.get("combatants", [])
+                    if c.get("char_id") is None and int(c.get("hp_current") or 0) > 0), None)
     if not caster or not villain:
         deep.append(_check("save", "Cast a save-for-half spell",
-                           "a caster with a save-damage spell + a villain",
-                           "no save-spell caster / villain", "skip"))
+                           "a caster with a save-damage spell + a living villain",
+                           "no save-spell caster / no living villain", "skip"))
         _publish(report)
         return
     name = caster.get("label") or "A caster"
@@ -1418,6 +1422,12 @@ async def _saves_check(client, collector, cid, heroes, combs, deep, report, spel
             f"/api/campaign/{cid}/cast_spell",
             json={"character_id": caster["character_id"], "spell_index": spell_index,
                   "target_combatant_id": villain["id"], "override": True})
+        # No slot left (earlier phases spent them) is a state limitation, not a bug.
+        if r.status_code == 409 and "no_slot" in str(r.text):
+            deep.append(_check("save", f"{name}: cast {spell_name}",
+                               "a spell slot to cast with", "caster is out of slots", "skip"))
+            _publish(report)
+            return
         bcast = await collector.wait_for("spell_cast", _COMBAT_WS_TIMEOUT) if collector else None
         after = _hp_of(await _get_battle(client, cid), villain["id"])
         if r.status_code == 200:
