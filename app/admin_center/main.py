@@ -624,6 +624,8 @@ def selftest_page(request: Request):
             "history": selftest.list_runs() if (_ADMIN_TOOLS_ENABLED and _demo_mode()) else [],
             "campaigns": selftest.list_campaigns() if (_ADMIN_TOOLS_ENABLED and _demo_mode()) else [],
             "all_phases": list(selftest._ALL_PHASES),
+            "core_phases": list(selftest._CORE_PHASES),
+            "deep_phases": list(selftest._DEEP_PHASES),
         },
     )
 

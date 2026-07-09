@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.987.0] - 2026-07-09 — "The Deep End"
+
+**Schema version:** 102
+
+**Commit summary:** Self-test — a new "Rules deep-dive" testing tier (framework + `rest` phase) + an SRD-coverage audit / demo-vs-SRD evaluation doc.
+
+**Description:** Adds a **second level of testing** to the demo self-test: a **🎓 Rules deep-dive** tier that exercises deeper SRD mechanics the Core smoke test never touched, layered on top of (and fully compatible with) the existing phases. This commit lands the **framework** — a `_DEEP_PHASES` group in the scope picker (its own sub-heading), a `deep_checks` report group rolled into the tally, and per-campaign **applicability-skip** (a deep check records `skip`, never `fail`, when a demo lacks the required class/target) — plus the first phase, **`rest`**: a hero takes a short rest and the check asserts a hit die is spent (`current −1`) and HP recovered, restoring cleanly via the teardown long rest (a new `rested_pcs` set long-rests any PC whose sheet the tier mutates). It also ships **`docs/self-test-srd-coverage.md`** — the requested audit of what the self-test does/doesn't cover vs the implemented SRD, and a **per-demo evaluation** of which mechanic families each demo can test given its party/monsters/map — surfaced through the wiki. Follow-on phases (`heal`, `concentration`, `death_saves`, `reactions`, `saves`, `features`) land as same-shape additions. Verified live: a `rest`-only run on L3 shows a green deep-checks group (hit_dice 3→2, recovered 11) and a clean restore.
+
+### Added
+- `app/admin_center/selftest.py` — `_CORE_PHASES`/`_DEEP_PHASES`, `_deep_checks` dispatcher + `_rest_check`, `deep_checks` node group + tally roll-up, `rested_pcs` teardown restore.
+- `app/admin_center/main.py` / `templates/selftest.html` — the picker's "Rules deep-dive" phase group + a `deep_checks` render group.
+- `docs/self-test-srd-coverage.md` (new) — the audit + demo-vs-SRD matrix + tier status; surfaced via the wiki (allowlist, `wiki.html` + `docs/wiki/README.md`, a `test_wiki_doc_serves_*` test + home-page assertion, `Dockerfile` COPY).
+- `tests/harness/test_selftest.py` — `test_selftest_rest_deep_phase` (a rest-only deep run produces a `rest` deep-check, no combat, no errors).
+
 ## [2.986.0] - 2026-07-09 — "The Aspect Ratio"
 
 **Schema version:** 102

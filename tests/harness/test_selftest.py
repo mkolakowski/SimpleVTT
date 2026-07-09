@@ -324,6 +324,42 @@ def test_selftest_video_capture():
 
 
 @_LIVE
+def test_selftest_rest_deep_phase():
+    """The Rules deep-dive 'rest' phase runs a short rest as its own deep_checks
+    group (hit-die spend), separate from Core, and restores cleanly."""
+    import time
+    with httpx.Client(base_url=ADMIN_BASE_URL, auth=_AUTH, timeout=30.0) as c:
+        # Pick a leveled campaign (flagship is id 1).
+        c.post("/selftest/run", json={"phases": ["movement"]})
+        deadline = time.monotonic() + 90
+        rep = None
+        while time.monotonic() < deadline:
+            s = c.get("/selftest/run-status").json()
+            if s.get("state") in ("done", "error"):
+                rep = s.get("report")
+                break
+            time.sleep(1.0)
+        cid = next(x["campaign_id"] for x in rep["campaigns"] if x["campaign_id"] != 1)
+        # Rest-only deep run on that campaign.
+        assert c.post("/selftest/run", json={"campaigns": [cid], "phases": ["rest"]}).status_code == 200
+        deadline = time.monotonic() + 90
+        state, rep = "running", None
+        while time.monotonic() < deadline:
+            s = c.get("/selftest/run-status").json()
+            state, rep = s.get("state"), s.get("report")
+            if state in ("done", "error"):
+                break
+            time.sleep(1.0)
+        assert state == "done"
+        camp = rep["campaigns"][0]
+        assert not camp["rounds"], "rest-only should not run combat rounds"
+        cats = {ch["category"] for ch in camp["deep_checks"]}
+        assert "rest" in cats, f"no rest check in deep_checks: {cats}"
+        # No runner errors.
+        assert rep["totals"]["error"] == 0
+
+
+@_LIVE
 def test_selftest_doors_subset():
     """A doors-only subset opens/closes doors: every campaign records a door
     check (pass where a door exists, skip otherwise) and no combat runs."""

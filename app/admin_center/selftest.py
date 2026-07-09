@@ -92,7 +92,13 @@ _WS_TIMEOUT = float(os.getenv("SELFTEST_WS_TIMEOUT", "3.0"))
 # Selectable check phases (reachability always runs — it's the foundation).
 # combat/spells/gates each need initiative, which runs implicitly when any of
 # them is selected.
-_ALL_PHASES = ("movement", "combat", "doors", "spells", "gates")
+#
+# Two tiers: the original "Core" smoke test, plus a "Rules deep-dive" tier
+# (v2.987.0+) that exercises deeper SRD mechanics — each deep phase needs an
+# active battle + a target combatant and is applicability-skipped per demo.
+_CORE_PHASES = ("movement", "combat", "doors", "spells", "gates")
+_DEEP_PHASES = ("rest",)
+_ALL_PHASES = _CORE_PHASES + _DEEP_PHASES
 
 # Pacing between visible actions (moves, attacks, door toggles) so a watching GM
 # sees the tokens glide + interact in real time rather than teleporting. Set
@@ -183,6 +189,7 @@ def _recompute(report: dict) -> None:
     for camp in report.get("campaigns", []):
         camp_t = _empty_tally()
         _tally_checks(camp.get("setup_checks", []), camp_t)
+        _tally_checks(camp.get("deep_checks", []), camp_t)
         for rnd in camp.get("rounds", []):
             rnd_t = _empty_tally()
             for actor in rnd.get("actors", []):
@@ -1070,6 +1077,57 @@ async def _gate_checks(gm_client, cid, checks, report, heroes, combs, gm_email) 
             await player_client.aclose()
 
 
+# ── Rules deep-dive tier (deeper SRD mechanics) ──────────────────────────────
+
+async def _deep_checks(client, collector, cid, node, report, combs,
+                       heroes, villains, spell_casters, rested_pcs, phases) -> None:
+    """Run the enabled Rules deep-dive phases. Each appends to node["deep_checks"]
+    and is applicability-skipped per demo. Runs with an active battle already
+    established (combs), so target combatants + HP are available."""
+    deep = node["deep_checks"]
+    if "rest" in phases:
+        await _rest_check(client, cid, heroes, deep, report, rested_pcs)
+
+
+async def _rest_check(client, cid, heroes, deep, report, rested_pcs) -> None:
+    """Short rest on a hero: assert a hit die is spent + HP recovered (SRD PHB
+    p.186). Restored by the teardown long-rest."""
+    hero = next((h for h in heroes if h.get("character_id")), None)
+    if not hero:
+        deep.append(_check("rest", "Short rest (spend a hit die)",
+                           "a hero PC", "no hero PC on the map", "skip"))
+        _publish(report)
+        return
+    char_id = hero["character_id"]
+    name = hero.get("label") or "a hero"
+    try:
+        before = await _get_sheet(client, cid, char_id)
+        hd_before = (before.get("hit_dice") or {}).get("current")
+        if hd_before is not None and hd_before <= 0:
+            deep.append(_check("rest", f"{name} takes a short rest",
+                               "a hit die to spend", "no hit dice remaining", "skip"))
+            _publish(report)
+            return
+        r = await client.post(
+            f"/api/campaign/{cid}/character/{char_id}/rest", json={"type": "short"})
+        body = r.json() if r.status_code == 200 else {}
+        hd_after = (body.get("hit_dice") or {}).get("current")
+        recovered = body.get("recovered")
+        ok = (r.status_code == 200 and hd_before is not None and hd_after is not None
+              and hd_after == hd_before - 1)
+        if r.status_code == 200:
+            rested_pcs.add(char_id)
+        deep.append(_check(
+            "rest", f"{name} takes a short rest",
+            "HTTP 200, one hit die spent (current −1), HP recovered",
+            f"HTTP {r.status_code}, hit_dice {hd_before}→{hd_after}, recovered={recovered}",
+            "pass" if ok else "fail"))
+    except Exception as e:  # noqa: BLE001
+        deep.append(_check("rest", f"{name} short rest",
+                           "HTTP 200 + hit-die spend", f"exception: {e}", "error"))
+    _publish(report)
+
+
 # ── Per-campaign run ─────────────────────────────────────────────────────────
 
 async def _run_campaign(camp: dict, node: dict, report: dict, phases: set, recorder=None) -> None:
@@ -1077,8 +1135,9 @@ async def _run_campaign(camp: dict, node: dict, report: dict, phases: set, recor
     gm_email = camp["gm_email"]
     setup = node["setup_checks"]
     teardown = node["teardown_checks"]
-    # combat/spells/gates all need an active battle → initiative runs when any is on.
-    need_battle = bool(phases & {"combat", "spells", "gates"})
+    # combat/spells/gates + every deep-tier phase need an active battle →
+    # initiative runs when any is on.
+    need_battle = bool(phases & ({"combat", "spells", "gates"} | set(_DEEP_PHASES)))
     battle_touched = False
     rec_handle = None
 
@@ -1096,6 +1155,7 @@ async def _run_campaign(camp: dict, node: dict, report: dict, phases: set, recor
     battle_snapshot = None      # prior battle state to restore
     combs_for_combat = None     # combatants seeded by initiative, for the rounds
     spell_casters: set = set()  # char_ids that spent a slot → long-rest to restore
+    rested_pcs: set = set()     # char_ids whose sheet was mutated → long-rest to restore
     map_id = None               # active map id (for doors)
     walls: list = []            # active map walls/doors
 
@@ -1261,6 +1321,12 @@ async def _run_campaign(camp: dict, node: dict, report: dict, phases: set, recor
             await _combat_rounds(
                 client, collector, cid, node, report, combs_for_combat, spell_casters, phases)
 
+        # --- Rules deep-dive tier: deeper SRD mechanics ---
+        if combs_for_combat and (phases & set(_DEEP_PHASES)):
+            await _deep_checks(
+                client, collector, cid, node, report, combs_for_combat,
+                heroes, villains, spell_casters, rested_pcs, phases)
+
         # --- finalize the recording before teardown resets the board ---
         if recorder is not None:
             node["video"] = await recorder.close(rec_handle, cid)
@@ -1279,8 +1345,9 @@ async def _run_campaign(camp: dict, node: dict, report: dict, phases: set, recor
                 for tid, (ox, oy) in token_snapshot.items():
                     await client.post(
                         f"/api/campaign/{cid}/token/{tid}/move", json={"x": ox, "y": oy})
-                # Refill spent spell slots so leveled casts are non-destructive.
-                for char_id in spell_casters:
+                # Refill spent spell slots + any sheet mutated by the deep tier
+                # (rest hit-dice, feature resources) with a long rest.
+                for char_id in (spell_casters | rested_pcs):
                     await client.post(
                         f"/api/campaign/{cid}/character/{char_id}/rest", json={"type": "long"})
                 # Only touch the battle if this run started one.
@@ -1297,7 +1364,7 @@ async def _run_campaign(camp: dict, node: dict, report: dict, phases: set, recor
                     "tokens moved back, battle reset to its prepped state, slots refilled",
                     f"{len(token_snapshot)} token(s) restored; battle "
                     f"{battle_word}; "
-                    f"{len(spell_casters)} caster(s) long-rested",
+                    f"{len(spell_casters | rested_pcs)} PC(s) long-rested",
                     "pass"))
             except Exception as e:  # noqa: BLE001
                 teardown.append(_check(
@@ -1434,7 +1501,7 @@ async def _run_all(campaign_ids=None, phases=None, step_delay=None, record=False
         node = {
             "campaign_id": camp["id"], "name": camp["name"], "gm": camp["gm_email"],
             "map": "", "status": "running", "tally": _empty_tally(),
-            "setup_checks": [], "rounds": [], "teardown_checks": [],
+            "setup_checks": [], "rounds": [], "deep_checks": [], "teardown_checks": [],
         }
         report["campaigns"].append(node)
         _publish(report)

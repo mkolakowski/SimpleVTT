@@ -77,15 +77,25 @@
           <a href="#" class="st-none" data-target="st-phase" style="font-size:12px;font-weight:400">deselect all</a>
         </h2>
         <div id="st-phases">
-          {% for p in all_phases %}
+          {% for p in core_phases %}
           <label style="display:flex;align-items:center;gap:8px;margin:4px 0">
             <input type="checkbox" class="st-phase" value="{{ p }}" checked style="min-height:auto;width:auto">
             <span>{{ p }}</span>
           </label>
           {% endfor %}
+          {% if deep_phases %}
+          <div class="muted" style="font-size:12px;margin:8px 0 2px;text-transform:uppercase;letter-spacing:.04em">🎓 Rules deep-dive</div>
+          {% for p in deep_phases %}
+          <label style="display:flex;align-items:center;gap:8px;margin:4px 0">
+            <input type="checkbox" class="st-phase" value="{{ p }}" checked style="min-height:auto;width:auto">
+            <span>{{ p }}</span>
+          </label>
+          {% endfor %}
+          {% endif %}
         </div>
         <p class="muted" style="font-size:12px;margin:6px 0 0">Reachability always runs;
-          combat / spells / gates each start initiative.</p>
+          combat / spells / gates + the deep-dive phases each start initiative. Deep
+          checks skip when a demo lacks the required class/target.</p>
       </div>
     </div>
 
@@ -246,6 +256,7 @@
           '<div class="st-round">' + (actors || '<p class="muted sub">No actors.</p>') + '</div>',
           r.status !== 'pass', r.status);
       });
+      inner += groupChecks(ck + '.deep', '🎓 Rules deep-dive', c.deep_checks, true);
       inner += groupChecks(ck + '.teardown', 'Teardown', c.teardown_checks, true);
       return node(ck, c.name, c.map, c.tally, inner, c.status !== 'pass', c.status);
     }).join('');
