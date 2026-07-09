@@ -49,11 +49,42 @@
   {% else %}
   <div class="card">
     <p class="muted" style="margin-top:0">Drives a live smoke test of the whole
-      game loop against every demo campaign — token movement across the map and
-      combat rounds — then restores each campaign's tokens + battle state. Watch
-      the report fill in below; you can open the sections while it runs.</p>
-    <div class="row-actions">
-      <button id="st-run" type="button">▶ Run self-test</button>
+      game loop against the demo campaigns — token movement across the map and
+      combat rounds — then restores each campaign's tokens + battle state. Pick a
+      subset below to run and monitor a focused slice; watch the report fill in as
+      it goes (open the sections while it runs).</p>
+
+    <div class="grid" style="align-items:start">
+      <div>
+        <h2 style="margin-bottom:6px">Campaigns</h2>
+        <div id="st-campaigns">
+          {% for c in campaigns %}
+          <label style="display:flex;align-items:center;gap:8px;margin:4px 0">
+            <input type="checkbox" class="st-camp" value="{{ c.id }}" checked style="min-height:auto;width:auto">
+            <span style="flex:1">{{ c.name }}</span>
+            <button type="button" class="st-only" data-id="{{ c.id }}"
+                    style="min-height:32px;padding:4px 8px;font-size:12px">▶ only this</button>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      <div>
+        <h2 style="margin-bottom:6px">Phases</h2>
+        <div id="st-phases">
+          {% for p in all_phases %}
+          <label style="display:flex;align-items:center;gap:8px;margin:4px 0">
+            <input type="checkbox" class="st-phase" value="{{ p }}" checked style="min-height:auto;width:auto">
+            <span>{{ p }}</span>
+          </label>
+          {% endfor %}
+        </div>
+        <p class="muted" style="font-size:12px;margin:6px 0 0">Reachability always runs;
+          combat / spells / gates each start initiative.</p>
+      </div>
+    </div>
+
+    <div class="row-actions" style="margin-top:12px">
+      <button id="st-run" type="button">▶ Run selected</button>
       <span id="st-chip" class="pill skip">idle</span>
       <span id="st-current" class="muted"></span>
     </div>
@@ -153,8 +184,14 @@
     var T = rep.totals || {};
     var tot = T.total || 0;
     function pct(n) { return tot ? (100 * n / tot) : 0; }
+    var scope = rep.scope || {};
+    var scopeLine = scope.phases
+      ? '<div class="muted" style="font-size:12px;margin-bottom:6px">Scope: '
+        + (scope.campaigns ? scope.campaigns.length : rep.campaigns.length) + ' campaign(s) · phases: '
+        + esc((scope.phases || []).join(', ')) + '</div>'
+      : '';
     summaryEl.innerHTML =
-      '<div class="card"><div class="totals">'
+      '<div class="card">' + scopeLine + '<div class="totals">'
       + '<span>Campaigns: <b>' + rep.campaigns.length + '</b></span>'
       + '<span>Checks: <b>' + tot + '</b></span>'
       + '<span>✓ Passed: <b>' + (T.passed || 0) + '</b></span>'
@@ -264,11 +301,31 @@
       }).catch(function () { setTimeout(poll, 2000); });
   }
 
-  runBtn.addEventListener('click', function () {
+  function selectedCampaigns() {
+    return Array.prototype.map.call(
+      document.querySelectorAll('.st-camp:checked'), function (el) { return parseInt(el.value, 10); });
+  }
+  function selectedPhases() {
+    return Array.prototype.map.call(
+      document.querySelectorAll('.st-phase:checked'), function (el) { return el.value; });
+  }
+  function trigger(body) {
     runBtn.disabled = true; runBtn.textContent = '⏳ Running…';
-    fetch('/selftest/run', { method: 'POST' })
-      .then(function () { setTimeout(poll, 400); })
-      .catch(function () { poll(); });
+    viewingEl.textContent = '';
+    fetch('/selftest/run', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {}),
+    }).then(function () { setTimeout(poll, 400); }).catch(function () { poll(); });
+  }
+
+  runBtn.addEventListener('click', function () {
+    trigger({ campaigns: selectedCampaigns(), phases: selectedPhases() });
+  });
+  // Per-campaign quick run — the current phase selection, that campaign only.
+  Array.prototype.forEach.call(document.querySelectorAll('.st-only'), function (b) {
+    b.addEventListener('click', function () {
+      trigger({ campaigns: [parseInt(b.dataset.id, 10)], phases: selectedPhases() });
+    });
   });
 
   // Seed the history table + initial state, then keep polling if a run is live.

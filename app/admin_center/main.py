@@ -622,24 +622,37 @@ def selftest_page(request: Request):
             "demo_mode": _demo_mode(),
             "status": selftest.run_status(),
             "history": selftest.list_runs() if (_ADMIN_TOOLS_ENABLED and _demo_mode()) else [],
+            "campaigns": selftest.list_campaigns() if (_ADMIN_TOOLS_ENABLED and _demo_mode()) else [],
+            "all_phases": list(selftest._ALL_PHASES),
         },
     )
 
 
 @app.post("/selftest/run")
-def selftest_run(request: Request):
-    """Kick off a background self-test run. Gated by ADMIN_CENTER_ADMIN_TOOLS +
-    DEMO_MODE. 409 if a run is already in flight."""
+async def selftest_run(request: Request):
+    """Kick off a background self-test run over an optional subset. Gated by
+    ADMIN_CENTER_ADMIN_TOOLS + DEMO_MODE. Optional JSON body:
+    ``{campaigns: [id,...], phases: ["movement","combat","spells","gates"]}``
+    (both omitted → full run)."""
     if not _ADMIN_TOOLS_ENABLED:
         return _TOOLS_DISABLED
     if not _demo_mode():
         return RedirectResponse(
             "/selftest?err=Self-test+needs+DEMO_MODE", status_code=303)
     from . import selftest
-    started = selftest.start_run()
-    log.info("admin-center operator %r %s a demo self-test",
+    campaign_ids, phases = None, None
+    try:
+        body = await request.json()
+        if isinstance(body, dict):
+            campaign_ids = body.get("campaigns") or None
+            phases = body.get("phases") or None
+    except Exception:  # noqa: BLE001 — no/invalid body → full run
+        pass
+    started = selftest.start_run(campaign_ids=campaign_ids, phases=phases)
+    log.info("admin-center operator %r %s a demo self-test (campaigns=%s, phases=%s)",
              request.session.get("admin_user", "?"),
-             "started" if started else "re-requested (already running)")
+             "started" if started else "re-requested (already running)",
+             campaign_ids or "all", phases or "all")
     return JSONResponse({"started": started, "state": selftest.run_status().get("state")})
 
 

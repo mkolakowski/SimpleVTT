@@ -206,3 +206,26 @@ def test_selftest_run_to_completion_reports_all_campaigns():
         # leveled spell or fall back to a cantrip; non-casters record a skip).
         assert {"pc_attack", "npc_attack", "turn_advance", "spell_cast"} <= cats, \
             f"missing combat checks: {cats}"
+
+
+@_LIVE
+def test_selftest_movement_only_subset():
+    """A phase subset (movement only) runs just that phase: no combat rounds, and
+    setup checks limited to reachability + movement. Scope is recorded."""
+    import time
+    with httpx.Client(base_url=ADMIN_BASE_URL, auth=_AUTH, timeout=30.0) as c:
+        assert c.post("/selftest/run", json={"phases": ["movement"]}).status_code == 200
+        deadline = time.monotonic() + 60
+        state, report = "running", None
+        while time.monotonic() < deadline:
+            s = c.get("/selftest/run-status").json()
+            state, report = s.get("state"), s.get("report")
+            if state in ("done", "error"):
+                break
+            time.sleep(1.0)
+        assert state == "done", f"subset run did not finish: {state}"
+        assert report["scope"]["phases"] == ["movement"]
+        for camp in report["campaigns"]:
+            assert not camp["rounds"], f"{camp['name']} ran combat despite movement-only"
+            cats = {ch["category"] for ch in camp["setup_checks"]}
+            assert cats <= {"reachability", "movement"}, f"unexpected setup checks: {cats}"

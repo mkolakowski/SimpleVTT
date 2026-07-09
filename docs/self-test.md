@@ -32,6 +32,17 @@ positions and battle state, and restores them at the end. (A demo instance also
 reseeds hourly as a backstop.) A full run across all six campaigns takes only a
 few seconds.
 
+## Running a subset
+
+You don't have to run everything. The page has a **scope picker**: tick which
+**campaigns** and which **phases** (`movement`, `combat`, `spells`, `gates`) to
+run, then **▶ Run selected** — handy for monitoring one focused slice. Each
+campaign row also has a **▶ only this** shortcut that runs just that campaign
+with the current phase selection. Reachability always runs, and
+`combat`/`spells`/`gates` each start initiative automatically; a run that never
+starts a battle leaves it untouched. The chosen scope is shown above the report
+and recorded in the run history.
+
 ## What it checks, per campaign
 
 1. **Reachability** — log in as the campaign GM; fetch the roster and the map's

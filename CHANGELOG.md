@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.978.0] - 2026-07-08 — "The Focused Lens"
+
+**Schema version:** 102
+
+**Commit summary:** Demo self-test — run a subset (pick campaigns + phases, or one-click a single campaign) so a focused slice can be monitored.
+
+**Description:** The Self-Test page gains a **scope picker** so an operator/GM can run and monitor a focused slice instead of the whole suite every time. Choose which **campaigns** (checkboxes, all on by default) and which **phases** — `movement`, `combat`, `spells`, `gates` — to run, then **▶ Run selected**; each campaign row also has a **▶ only this** one-click shortcut that runs just that campaign with the current phase selection. Reachability always runs; `combat`/`spells`/`gates` each start initiative implicitly, and a run that doesn't start a battle leaves it **untouched** (no clearing). The chosen scope is shown above the report and archived with each run in the history. `POST /selftest/run` now accepts an optional JSON body `{campaigns:[id…], phases:[…]}` (both omitted → full run). Verified live: movement-only skips combat and leaves the battle untouched; spells-only runs just caster spell casts (no attacks/turn-advance); gates-only runs initiative + the two gate checks.
+
+### Added
+- `app/admin_center/selftest.py` — `start_run(campaign_ids, phases)` + `_norm_phases()` + `list_campaigns()`; `_run_campaign`/`_combat_rounds` gate every check by phase, initiative runs only when a battle is needed, and teardown skips the battle when it was never started; the report carries a `scope`.
+- `app/admin_center/main.py` — `POST /selftest/run` parses the optional subset body; the page passes the campaign list + phase names.
+- `app/admin_center/templates/selftest.html` — campaign + phase checkboxes, **Run selected**, per-campaign **only this** quick-run, and a scope line on the summary.
+- `tests/harness/test_selftest.py` — `test_selftest_movement_only_subset` (a phase subset runs just that phase: no rounds, setup limited to reachability + movement).
+
 ## [2.977.0] - 2026-07-08 — "The Logbook"
 
 **Schema version:** 102

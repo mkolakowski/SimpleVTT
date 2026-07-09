@@ -71,6 +71,19 @@ _FT_PER_CELL = 5.0
 
 _WS_TIMEOUT = float(os.getenv("SELFTEST_WS_TIMEOUT", "3.0"))
 
+# Selectable check phases (reachability always runs — it's the foundation).
+# combat/spells/gates each need initiative, which runs implicitly when any of
+# them is selected.
+_ALL_PHASES = ("movement", "combat", "spells", "gates")
+
+
+def _norm_phases(phases) -> set:
+    """None/empty → all phases; otherwise the recognized subset."""
+    if not phases:
+        return set(_ALL_PHASES)
+    got = {str(p).strip().lower() for p in phases} & set(_ALL_PHASES)
+    return got or set(_ALL_PHASES)
+
 # ── Run state (single background run at a time) ──────────────────────────────
 _LOCK = threading.Lock()
 _STATUS: dict = {
@@ -492,11 +505,14 @@ async def _pc_spell_check(client, collector, cid, comb, target, actor_node, spel
             "HTTP 200 + spell_cast broadcast", f"exception: {e}", "error"))
 
 
-async def _combat_rounds(client, collector, cid, node, report, combs, spell_casters) -> None:
+async def _combat_rounds(client, collector, cid, node, report, combs, spell_casters, phases) -> None:
     """Drive a few rounds. Each round is a node; each acting combatant is an
     actor node under it with an attack check + a turn-advance check (and, for
     caster PCs, a spell-cast check). ``spell_casters`` collects the char_ids
-    that spent a slot, so the caller can long-rest them in teardown."""
+    that spent a slot, so the caller can long-rest them in teardown. ``phases``
+    gates which checks run: "combat" (attacks + turn advance) and/or "spells"."""
+    do_attacks = "combat" in phases
+    do_spells = "spells" in phases
     heroes = [c for c in combs if c.get("char_id") is not None]
     villains = [c for c in combs if c.get("char_id") is None]
     if not heroes or not villains:
@@ -513,6 +529,12 @@ async def _combat_rounds(client, collector, cid, node, report, combs, spell_cast
 
         for comb in actors:
             is_pc = comb.get("char_id") is not None
+            # Which checks apply to this actor under the selected phases?
+            pc_attack = is_pc and do_attacks
+            pc_spell = is_pc and do_spells
+            npc_attack = (not is_pc) and do_attacks
+            if not (pc_attack or pc_spell or npc_attack):
+                continue
             actor_node = {
                 "actor": comb.get("name") or ("Hero" if is_pc else "Villain"),
                 "kind": "pc" if is_pc else "npc",
@@ -522,35 +544,37 @@ async def _combat_rounds(client, collector, cid, node, report, combs, spell_cast
             round_node["actors"].append(actor_node)
             _publish(report)
 
-            # --- the actor's attack ---
+            # --- the actor's attack (+ spell for casters) ---
             try:
                 if is_pc:
                     tgt = v_target
-                    before = _hp_of(await _get_battle(client, cid), tgt["id"])
-                    collector.mark() if collector else None
-                    r = await client.post(
-                        f"/api/campaign/{cid}/attack",
-                        json={"character_id": comb["char_id"], "attack_index": 0,
-                              "target_combatant_id": tgt["id"], "override": True})
-                    bcast = await collector.wait_for("weapon_attack", _COMBAT_WS_TIMEOUT) if collector else None
-                    after = _hp_of(await _get_battle(client, cid), tgt["id"])
-                    body = r.json() if r.status_code == 200 else {}
-                    ok = r.status_code == 200 and bcast is not None
-                    actor_node["checks"].append(_check(
-                        "pc_attack", f"{actor_node['actor']} attacks {tgt['name']} (attack #0)",
-                        "HTTP 200 (attack_total + damage_total), weapon_attack broadcast",
-                        f"HTTP {r.status_code}, attack_total={body.get('attack_total')}, "
-                        f"damage_total={body.get('damage_total')}, "
-                        f"broadcast {'seen' if bcast else 'MISSING'}",
-                        "pass" if ok else "fail",
-                        f"target HP {before}→{after}"))
+                    if pc_attack:
+                        before = _hp_of(await _get_battle(client, cid), tgt["id"])
+                        collector.mark() if collector else None
+                        r = await client.post(
+                            f"/api/campaign/{cid}/attack",
+                            json={"character_id": comb["char_id"], "attack_index": 0,
+                                  "target_combatant_id": tgt["id"], "override": True})
+                        bcast = await collector.wait_for("weapon_attack", _COMBAT_WS_TIMEOUT) if collector else None
+                        after = _hp_of(await _get_battle(client, cid), tgt["id"])
+                        body = r.json() if r.status_code == 200 else {}
+                        ok = r.status_code == 200 and bcast is not None
+                        actor_node["checks"].append(_check(
+                            "pc_attack", f"{actor_node['actor']} attacks {tgt['name']} (attack #0)",
+                            "HTTP 200 (attack_total + damage_total), weapon_attack broadcast",
+                            f"HTTP {r.status_code}, attack_total={body.get('attack_total')}, "
+                            f"damage_total={body.get('damage_total')}, "
+                            f"broadcast {'seen' if bcast else 'MISSING'}",
+                            "pass" if ok else "fail",
+                            f"target HP {before}→{after}"))
 
-                    # A caster PC also casts a spell at the villain. Prefer a
-                    # leveled spell when a slot is free (tests slot decrement),
-                    # else a cantrip; non-casters record a skip.
-                    await _pc_spell_check(
-                        client, collector, cid, comb, v_target, actor_node, spell_casters)
-                else:
+                    if pc_spell:
+                        # A caster PC casts a spell at the villain: a leveled
+                        # spell when a slot is free (tests slot decrement), else
+                        # a cantrip; non-casters record a skip.
+                        await _pc_spell_check(
+                            client, collector, cid, comb, v_target, actor_node, spell_casters)
+                elif npc_attack:
                     tgt = h_target
                     before = _hp_of(await _get_battle(client, cid), tgt["id"])
                     collector.mark() if collector else None
@@ -579,7 +603,9 @@ async def _combat_rounds(client, collector, cid, node, report, combs, spell_cast
                     f"exception: {e}", "error"))
             _publish(report)
 
-            # --- advance the turn (preserving mutated HP/economy) ---
+            # --- advance the turn (combat phase only; preserves HP/economy) ---
+            if not do_attacks:
+                continue
             try:
                 state = await _get_battle(client, cid)
                 n = len(state.get("combatants", [])) or 1
@@ -699,11 +725,14 @@ async def _gate_checks(gm_client, cid, checks, report, heroes, combs, gm_email) 
 
 # ── Per-campaign run ─────────────────────────────────────────────────────────
 
-async def _run_campaign(camp: dict, node: dict, report: dict) -> None:
+async def _run_campaign(camp: dict, node: dict, report: dict, phases: set) -> None:
     cid = camp["id"]
     gm_email = camp["gm_email"]
     setup = node["setup_checks"]
     teardown = node["teardown_checks"]
+    # combat/spells/gates all need an active battle → initiative runs when any is on.
+    need_battle = bool(phases & {"combat", "spells", "gates"})
+    battle_touched = False
 
     if not gm_email:
         setup.append(_check(
@@ -768,7 +797,9 @@ async def _run_campaign(camp: dict, node: dict, report: dict) -> None:
         _publish(report)
 
         # --- movement across the map ---
-        if heroes:
+        if "movement" not in phases:
+            pass
+        elif heroes:
             tok = heroes[0]
             tid = tok["id"]
             ox, oy = float(tok.get("x") or 0), float(tok.get("y") or 0)
@@ -811,11 +842,14 @@ async def _run_campaign(camp: dict, node: dict, report: dict) -> None:
         _publish(report)
 
         # --- start initiative (snapshot the prior battle first, to restore) ---
-        if heroes and villains:
+        if not need_battle:
+            pass
+        elif heroes and villains:
             try:
                 gb = await client.get(f"/api/campaign/{cid}/battle")
                 battle_snapshot = gb.json().get("battle") if gb.status_code == 200 else None
                 combs = _combatants(heroes, villains)
+                battle_touched = True
                 if collector:
                     collector.mark()
                 pr = await client.put(
@@ -847,14 +881,14 @@ async def _run_campaign(camp: dict, node: dict, report: dict) -> None:
         _publish(report)
 
         # --- negative-path gate checks (driven as a non-GM player) ---
-        if combs_for_combat:
+        if combs_for_combat and "gates" in phases:
             await _gate_checks(
                 client, cid, setup, report, heroes, combs_for_combat, gm_email)
 
         # --- combat rounds: per round → per actor (PC/NPC) ---
-        if combs_for_combat:
+        if combs_for_combat and (phases & {"combat", "spells"}):
             await _combat_rounds(
-                client, collector, cid, node, report, combs_for_combat, spell_casters)
+                client, collector, cid, node, report, combs_for_combat, spell_casters, phases)
 
     finally:
         # --- teardown: restore token positions + battle state ---
@@ -867,17 +901,20 @@ async def _run_campaign(camp: dict, node: dict, report: dict) -> None:
                 for char_id in spell_casters:
                     await client.post(
                         f"/api/campaign/{cid}/character/{char_id}/rest", json={"type": "long"})
-                if battle_snapshot is not None:
-                    await client.put(f"/api/campaign/{cid}/battle", json=battle_snapshot)
-                else:
-                    await client.put(
-                        f"/api/campaign/{cid}/battle",
-                        json={"combatants": [], "turn_index": 0, "round": 1, "active": False})
+                # Only touch the battle if this run started one.
+                if battle_touched:
+                    if battle_snapshot is not None:
+                        await client.put(f"/api/campaign/{cid}/battle", json=battle_snapshot)
+                    else:
+                        await client.put(
+                            f"/api/campaign/{cid}/battle",
+                            json={"combatants": [], "turn_index": 0, "round": 1, "active": False})
+                battle_word = ("snapshot" if battle_snapshot is not None else "cleared") if battle_touched else "untouched"
                 teardown.append(_check(
                     "restore", "Restore token positions + battle + spell slots",
                     "tokens moved back, battle reset to its prepped state, slots refilled",
                     f"{len(moved)} token(s) restored; battle "
-                    f"{'snapshot' if battle_snapshot is not None else 'cleared'}; "
+                    f"{battle_word}; "
                     f"{len(spell_casters)} caster(s) long-rested",
                     "pass"))
             except Exception as e:  # noqa: BLE001
@@ -896,8 +933,18 @@ async def _run_campaign(camp: dict, node: dict, report: dict) -> None:
             await client.aclose()
 
 
-async def _run_all() -> None:
+def list_campaigns() -> list:
+    """[{id, name}] of the demo campaigns, for the page's scope picker."""
+    return [{"id": c["id"], "name": c["name"]} for c in _demo_campaigns()]
+
+
+async def _run_all(campaign_ids=None, phases=None) -> None:
     started = time.time()
+    phase_set = _norm_phases(phases)
+    campaigns = _demo_campaigns()
+    if campaign_ids:
+        wanted = {int(x) for x in campaign_ids}
+        campaigns = [c for c in campaigns if c["id"] in wanted]
     report = {
         "started_at": _iso(),
         "finished_at": None,
@@ -905,15 +952,18 @@ async def _run_all() -> None:
         "app_url": _APP_URL,
         "app_version": APP_VERSION,
         "state": "running",
+        "scope": {
+            "campaigns": [c["name"] for c in campaigns],
+            "phases": sorted(phase_set),
+        },
         "totals": _empty_tally(),
         "campaigns": [],
     }
     _STATUS.update(state="running", pct=0, current="starting", started=started, finished=0.0)
     _publish(report)
 
-    campaigns = _demo_campaigns()
     if not campaigns:
-        _STATUS.update(state="error", current="no demo campaigns found")
+        _STATUS.update(state="error", current="no demo campaigns to run")
         report["state"] = "error"
         report["finished_at"] = _iso()
         _publish(report)
@@ -931,7 +981,7 @@ async def _run_all() -> None:
         report["campaigns"].append(node)
         _publish(report)
         try:
-            await _run_campaign(camp, node, report)
+            await _run_campaign(camp, node, report, phase_set)
         except Exception as e:  # noqa: BLE001
             node["setup_checks"].append(_check(
                 "reachability", "Run campaign self-test",
@@ -947,9 +997,9 @@ async def _run_all() -> None:
     _persist(report)
 
 
-def _worker() -> None:
+def _worker(campaign_ids, phases) -> None:
     try:
-        asyncio.run(_run_all())
+        asyncio.run(_run_all(campaign_ids, phases))
     except Exception as e:  # noqa: BLE001
         log.exception("self-test run crashed")
         _STATUS.update(state="error", current=f"crashed: {e}")
@@ -958,12 +1008,15 @@ def _worker() -> None:
             _STATUS["_thread"] = None
 
 
-def start_run() -> bool:
-    """Kick off a background run. Returns False if one is already in flight."""
+def start_run(campaign_ids=None, phases=None) -> bool:
+    """Kick off a background run over an optional subset of campaigns/phases.
+    Returns False if one is already in flight."""
     with _LOCK:
         if _STATUS.get("state") == "running":
             return False
-        t = threading.Thread(target=_worker, name="selftest-runner", daemon=True)
+        t = threading.Thread(
+            target=_worker, args=(campaign_ids, phases),
+            name="selftest-runner", daemon=True)
         _STATUS["_thread"] = t
         _STATUS.update(state="running", pct=0, current="starting", report=None)
     t.start()
