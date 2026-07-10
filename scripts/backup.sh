@@ -47,6 +47,12 @@ UPLOADS_DIR="${UPLOADS_DIR:-/uploads}"
 SETTINGS_FILE="${BACKUP_DIR}/backup-settings.json"
 mkdir -p "${DAILY_DIR}" "${WEEKLY_DIR}"
 
+# v2.998.0 — offsite upload helpers (rclone push to S3/Drive/Dropbox/OneDrive).
+# Guarded so an older deploy without the mount still runs plain local backups.
+if [ -f /usr/local/bin/offsite.sh ]; then
+    . /usr/local/bin/offsite.sh
+fi
+
 # v2.633.0 — coarse progress for the Admin Center "Back up now" toast: the
 # sidecar writes a status file the page polls (GET /backups/run-status). Only
 # the sidecar (root) writes it, so there's no owner conflict with the appuser
@@ -142,6 +148,14 @@ WEEKLY_DAYS=$(( KEEP_WEEKLY * 7 ))
 find "${WEEKLY_DIR}" -type f \( -name '*.sql.gz' -o -name '*.homebrew.tar.gz' -o -name '*.uploads.tar.gz' -o -name '*.tag' \) \
     -mtime +"${WEEKLY_DAYS}" -print -delete || true
 find "${DAILY_DIR}" -type f -name '*.tag' -mtime +"${KEEP_DAILY}" -print -delete || true
+
+# v2.998.0 — offsite upload, AFTER retention so `sync` mode mirrors the pruned
+# state. Never fails the run (artefacts are already safe locally); the outcome
+# lands in .offsite-status for the Admin Center.
+if command -v offsite_enabled >/dev/null 2>&1 && offsite_enabled; then
+    status running offsite 90
+    offsite_push "${STEM}" || true
+fi
 
 status done done 100 "${STEM}"
 echo "[backup] done at $(date -u)"

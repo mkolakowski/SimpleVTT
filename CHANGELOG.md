@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.998.0] - 2026-07-10 — "The Cloud Courier"
+
+**Schema version:** 102
+
+**Commit summary:** Offsite backup uploads (engine) — the backup sidecar can push every run to S3 / Google Drive / Dropbox / OneDrive via rclone; MinIO dev service for local verification.
+
+**Description:** First half of the offsite-backup feature: the **engine**. The backup sidecar's image is now built from a new `Dockerfile.backup` (postgres:16-alpine **+ rclone**), and a new `scripts/offsite.sh` (sourced by both `backup.sh` and the entrypoint) pushes the `daily/` + `weekly/` artefact dirs to an rclone remote named `offsite` after each run — a new `offsite 90%` stage in the run-status. Two **modes**: `copy` (accumulate — remote only ever gains files; the default) and `sync` (mirror — local retention pruning propagates). Two new **trigger files** the Admin Center can drop: `.offsite-test` (connectivity probe → `.offsite-test-result`) and `.offsite-push` (upload existing artefacts without a new backup). Upload failures **never fail the backup** — the outcome lands in `.offsite-status`. On the settings side, `backup_admin` gains `offsite_enabled` / `offsite_mode` / `offsite_path` (threaded through read/write with **preserve-on-omit** semantics so the schedule form can't clobber them), plus `write_offsite_config()` — generates `rclone.conf` (one remote, `chmod 600`, atomic, newline-injection-proof, OAuth tokens normalized to compact JSON) for **s3 / drive / dropbox / onedrive** — and secrets-free `offsite_config_summary()` + status/trigger/delete helpers. A **MinIO** dev-profile compose service (`docker compose --profile dev up -d minio`) is the local S3 target per the third-party-APIs-as-compose-services rule. Verified live end-to-end against MinIO: a run pushed all artefacts (`copy`), the watch-loop triggers work, and `sync` correctly mirrored a local deletion to the remote. The Admin Center web UI (credential forms + status + buttons) lands next.
+
+### Added
+- `Dockerfile.backup` (new) + compose `backup:` build + `./scripts/offsite.sh` mount; `minio` dev-profile service + `minio_data` volume; `.env.example` MinIO notes.
+- `scripts/offsite.sh` (new) — `offsite_enabled` / `offsite_push` / `offsite_test` (busybox-sh, self-contained, conservative rclone timeouts).
+- `scripts/backup.sh` — `offsite 90` stage after retention; `scripts/entrypoint-backup.sh` — `.offsite-test` / `.offsite-push` trigger handling.
+- `app/admin_center/backup_admin.py` — offsite settings threading (preserve-on-omit), `write_offsite_config` / `offsite_config_summary` / `delete_offsite_config` / `offsite_status` / `offsite_test_result` / `trigger_offsite_test` / `trigger_offsite_push`.
+- `tests/harness/test_backup_admin.py` (+4) — settings round-trip/preserve, S3 + OAuth conf generation (0600, secrets-free, injection-flattened), triggers/status/delete.
+
 ## [2.997.2] - 2026-07-09 — "The Cutting Room"
 
 **Schema version:** 102

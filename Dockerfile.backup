@@ -1,0 +1,10 @@
+# Backup sidecar image — postgres:16-alpine (pg_dump/psql, multi-arch) plus
+# rclone for the v2.998.0 offsite-upload feature (S3 / Google Drive / Dropbox /
+# OneDrive). rclone is a single static binary from the Alpine community repo;
+# everything else about the sidecar (entrypoint, backup.sh, offsite.sh) stays
+# bind-mounted from ./scripts so script edits don't need an image rebuild
+# (but DO need `docker compose up -d --force-recreate backup` — single-file
+# bind mounts go stale after host edits).
+FROM postgres:16-alpine
+
+RUN apk add --no-cache rclone

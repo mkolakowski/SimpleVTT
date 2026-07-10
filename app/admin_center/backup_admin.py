@@ -37,6 +37,15 @@ _DEFAULT_KEEP_WEEKLY = 4
 _KEEP_MIN = 1
 _KEEP_MAX = 365
 
+# v2.998.0 — offsite (cloud) upload settings. ``copy`` accumulates (remote only
+# ever gains files — safest default); ``sync`` mirrors local retention. The
+# remote path is "<bucket-or-folder>/<prefix>" under the rclone remote.
+_OFFSITE_MODES = ("copy", "sync")
+_DEFAULT_OFFSITE_MODE = "copy"
+_DEFAULT_OFFSITE_PATH = "simplevtt-backups"
+_OFFSITE_PROVIDERS = ("s3", "drive", "dropbox", "onedrive")
+_OFFSITE_PATH_RE = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._/-]{0,199}\Z")
+
 
 def backups_dir() -> Path:
     return Path(os.environ.get("BACKUP_DIR", "/backups"))
@@ -88,6 +97,20 @@ def _clamp_keep(value, default: int) -> int:
     return max(_KEEP_MIN, min(_KEEP_MAX, n))
 
 
+def _norm_offsite_mode(value) -> str:
+    v = str(value or "").strip().lower()
+    return v if v in _OFFSITE_MODES else _DEFAULT_OFFSITE_MODE
+
+
+def _norm_offsite_path(value) -> str:
+    """Sanitize the remote path ("bucket/prefix"): trimmed, slash-normalized,
+    restricted charset, no traversal. Falls back to the default."""
+    v = str(value or "").strip().strip("/")
+    if not v or ".." in v or not _OFFSITE_PATH_RE.match(v):
+        return _DEFAULT_OFFSITE_PATH
+    return v
+
+
 def read_settings() -> dict:
     """Current backup settings: the on-disk file if present, else the env
     defaults. Always returns the full shape the page renders."""
@@ -100,6 +123,10 @@ def read_settings() -> dict:
                     "cron": data.get("cron") or _DEFAULT_CRON,
                     "keep_daily": _clamp_keep(data.get("keep_daily"), _DEFAULT_KEEP_DAILY),
                     "keep_weekly": _clamp_keep(data.get("keep_weekly"), _DEFAULT_KEEP_WEEKLY),
+                    # v2.998.0 — offsite upload settings ride the same file.
+                    "offsite_enabled": bool(data.get("offsite_enabled")),
+                    "offsite_mode": _norm_offsite_mode(data.get("offsite_mode")),
+                    "offsite_path": _norm_offsite_path(data.get("offsite_path")),
                     "updated_at": data.get("updated_at"),
                     "updated_by": data.get("updated_by"),
                     "source": "file",
@@ -110,6 +137,9 @@ def read_settings() -> dict:
         "cron": os.environ.get("BACKUP_CRON", _DEFAULT_CRON),
         "keep_daily": _clamp_keep(os.environ.get("KEEP_DAILY"), _DEFAULT_KEEP_DAILY),
         "keep_weekly": _clamp_keep(os.environ.get("KEEP_WEEKLY"), _DEFAULT_KEEP_WEEKLY),
+        "offsite_enabled": False,
+        "offsite_mode": _DEFAULT_OFFSITE_MODE,
+        "offsite_path": _DEFAULT_OFFSITE_PATH,
         "updated_at": None,
         "updated_by": None,
         "source": "env",
@@ -123,19 +153,33 @@ def write_settings(
     keep_weekly,
     updated_by: str,
     now_iso: str,
+    offsite_enabled=None,
+    offsite_mode=None,
+    offsite_path=None,
 ) -> dict:
     """Validate + atomically persist the settings file. Raises ``ValueError``
     on a malformed cron expression (the route maps that to a 400-style
-    redirect). Returns the written dict."""
+    redirect). Returns the written dict.
+
+    v2.998.0 — the ``offsite_*`` kwargs default to ``None`` = *preserve the
+    current on-disk value* (so the schedule form's save can't silently clobber
+    the offsite settings, and vice versa)."""
     cron = (cron or "").strip()
     if not validate_cron(cron):
         raise ValueError("Cron expression must be five fields (min hour dom mon dow).")
+    current = read_settings()
     payload = {
         "format": SETTINGS_FORMAT,
         "version": SETTINGS_VERSION,
         "cron": cron,
         "keep_daily": _clamp_keep(keep_daily, _DEFAULT_KEEP_DAILY),
         "keep_weekly": _clamp_keep(keep_weekly, _DEFAULT_KEEP_WEEKLY),
+        "offsite_enabled": bool(current["offsite_enabled"] if offsite_enabled is None
+                                else offsite_enabled),
+        "offsite_mode": _norm_offsite_mode(current["offsite_mode"] if offsite_mode is None
+                                           else offsite_mode),
+        "offsite_path": _norm_offsite_path(current["offsite_path"] if offsite_path is None
+                                           else offsite_path),
         "updated_at": now_iso,
         "updated_by": updated_by or "admin",
     }
@@ -345,6 +389,160 @@ def _tag_for(bucket: str, ts: str) -> Optional[str]:
         except OSError:
             return None
     return None
+
+
+# ── Offsite (cloud) uploads (v2.998.0) ───────────────────────────────────────
+# The Admin Center writes an rclone config (one remote named ``offsite``) +
+# a secrets-free metadata sidecar on the shared volume; the backup sidecar
+# (which has rclone baked in via Dockerfile.backup) pushes after each run and
+# honors the .offsite-test / .offsite-push trigger files. Secrets live ONLY in
+# rclone.conf (0600) — never in the metadata, summaries, or any JSON response.
+
+def _offsite_conf_path() -> Path:
+    return backups_dir() / "rclone.conf"
+
+
+def _offsite_meta_path() -> Path:
+    return backups_dir() / ".offsite-config.json"
+
+
+def _clean_line(value, *, max_len: int = 500) -> str:
+    """Single-line, trimmed config value. Newlines are stripped (rclone.conf is
+    line-oriented — embedded newlines would allow section injection)."""
+    return str(value or "").replace("\r", " ").replace("\n", " ").strip()[:max_len]
+
+
+def _norm_oauth_token(raw: str) -> str:
+    """Validate + normalize a pasted ``rclone authorize`` token to compact
+    single-line JSON (the shape rclone.conf expects). Raises ValueError."""
+    try:
+        tok = json.loads(raw or "")
+    except (TypeError, json.JSONDecodeError):
+        raise ValueError(
+            "Token must be the JSON blob printed by `rclone authorize` "
+            '(looks like {"access_token":"...","expiry":"..."}).')
+    if not isinstance(tok, dict) or not tok:
+        raise ValueError("Token must be a non-empty JSON object.")
+    return json.dumps(tok, separators=(",", ":"))
+
+
+def write_offsite_config(provider: str, fields: dict, *, updated_by: str, now_iso: str) -> None:
+    """Generate ``rclone.conf`` (remote name ``offsite``) for the given
+    provider + a secrets-free metadata sidecar. Raises ``ValueError`` on an
+    unknown provider or missing required fields. Atomic write, chmod 0600."""
+    provider = (provider or "").strip().lower()
+    if provider not in _OFFSITE_PROVIDERS:
+        raise ValueError(f"Unknown provider {provider!r} (expected one of {_OFFSITE_PROVIDERS}).")
+    f = {k: _clean_line(v, max_len=4000 if k == "token" else 500)
+         for k, v in (fields or {}).items()}
+    lines = ["# managed by the SimpleVTT Admin Center — do not edit by hand",
+             "[offsite]"]
+    if provider == "s3":
+        if not f.get("access_key_id") or not f.get("secret_access_key"):
+            raise ValueError("S3 needs an access key id and a secret access key.")
+        lines += ["type = s3",
+                  # An explicit endpoint means an S3-compatible service
+                  # (MinIO / R2 / B2 / Wasabi …) → provider Other.
+                  f"provider = {'Other' if f.get('endpoint') else 'AWS'}",
+                  f"access_key_id = {f['access_key_id']}",
+                  f"secret_access_key = {f['secret_access_key']}"]
+        if f.get("region"):
+            lines.append(f"region = {f['region']}")
+        if f.get("endpoint"):
+            lines.append(f"endpoint = {f['endpoint']}")
+    else:
+        token = _norm_oauth_token(fields.get("token") if fields else "")
+        lines += [f"type = {provider}", f"token = {token}"]
+        if f.get("client_id"):
+            lines.append(f"client_id = {f['client_id']}")
+        if f.get("client_secret"):
+            lines.append(f"client_secret = {f['client_secret']}")
+        if provider == "onedrive":
+            if f.get("drive_id"):
+                lines.append(f"drive_id = {f['drive_id']}")
+            drive_type = f.get("drive_type") or "personal"
+            lines.append(f"drive_type = {drive_type}")
+    conf = "\n".join(lines) + "\n"
+    path = _offsite_conf_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".conf.tmp")
+    tmp.write_text(conf, encoding="utf-8")
+    os.chmod(tmp, 0o600)
+    tmp.replace(path)  # atomic
+    meta = {"provider": provider, "updated_at": now_iso, "updated_by": updated_by or "admin"}
+    mtmp = _offsite_meta_path().with_suffix(".json.tmp")
+    mtmp.write_text(json.dumps(meta), encoding="utf-8")
+    os.chmod(mtmp, 0o600)
+    mtmp.replace(_offsite_meta_path())
+
+
+def offsite_config_summary() -> dict:
+    """Secrets-free view of the offsite config for the page: whether a remote
+    is configured + which provider + when. NEVER includes credential values."""
+    configured = _offsite_conf_path().is_file()
+    out = {"configured": configured, "provider": None,
+           "updated_at": None, "updated_by": None}
+    if configured and _offsite_meta_path().is_file():
+        try:
+            meta = json.loads(_offsite_meta_path().read_text(encoding="utf-8"))
+            if isinstance(meta, dict):
+                out["provider"] = meta.get("provider")
+                out["updated_at"] = meta.get("updated_at")
+                out["updated_by"] = meta.get("updated_by")
+        except (OSError, json.JSONDecodeError):
+            pass
+    return out
+
+
+def delete_offsite_config() -> bool:
+    """Remove the rclone config + metadata (+ stale result files, best-effort —
+    they may be root-owned in the sticky volume root). True if a config was
+    actually removed."""
+    removed = False
+    for p in (_offsite_conf_path(), _offsite_meta_path(),
+              backups_dir() / ".offsite-test-result", backups_dir() / ".offsite-status"):
+        try:
+            if p.is_file():
+                if p == _offsite_conf_path():
+                    removed = True
+                p.unlink()
+        except OSError:
+            pass
+    return removed
+
+
+def _read_json_file(p: Path) -> Optional[dict]:
+    if not p.is_file():
+        return None
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else None
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def offsite_status() -> Optional[dict]:
+    """The sidecar's last upload outcome: {ok, at, mode, path, error?, ts?}."""
+    return _read_json_file(backups_dir() / ".offsite-status")
+
+
+def offsite_test_result() -> Optional[dict]:
+    """The sidecar's last connectivity-probe outcome: {ok, at, path, error?}."""
+    return _read_json_file(backups_dir() / ".offsite-test-result")
+
+
+def trigger_offsite_test() -> None:
+    """Drop the connectivity-test trigger the sidecar watch-loop picks up."""
+    d = backups_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    (d / ".offsite-test").write_text("", encoding="utf-8")
+
+
+def trigger_offsite_push() -> None:
+    """Drop the upload-now trigger (pushes existing artefacts, no new backup)."""
+    d = backups_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    (d / ".offsite-push").write_text("", encoding="utf-8")
 
 
 def backup_files_for(bucket: str, ts: str) -> list:

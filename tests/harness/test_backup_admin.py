@@ -251,3 +251,114 @@ def test_request_restore_rejects_unknown_and_reads_result(tmp_path, monkeypatch)
         json.dumps({"ok": True, "ts": "20260624T030000Z", "db_ok": 1}), encoding="utf-8")
     res = backup_admin.last_restore_result()
     assert res["ok"] is True and res["ts"] == "20260624T030000Z"
+
+
+# ---- offsite (cloud) uploads (v2.998.0) ------------------------------
+
+def test_offsite_settings_round_trip_and_preserve(tmp_path, monkeypatch):
+    monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
+    # Defaults with no file: disabled / copy / default path.
+    s = backup_admin.read_settings()
+    assert s["offsite_enabled"] is False
+    assert s["offsite_mode"] == "copy"
+    assert s["offsite_path"] == "simplevtt-backups"
+    # Write with offsite values → round-trips.
+    backup_admin.write_settings(
+        cron="0 3 * * *", keep_daily=7, keep_weekly=4,
+        updated_by="op", now_iso="t1",
+        offsite_enabled=True, offsite_mode="sync", offsite_path="my-bucket/vtt")
+    s = backup_admin.read_settings()
+    assert s["offsite_enabled"] is True
+    assert s["offsite_mode"] == "sync"
+    assert s["offsite_path"] == "my-bucket/vtt"
+    # A schedule-only save (offsite kwargs omitted) PRESERVES offsite values.
+    backup_admin.write_settings(
+        cron="30 2 * * *", keep_daily=14, keep_weekly=8,
+        updated_by="op", now_iso="t2")
+    s = backup_admin.read_settings()
+    assert s["cron"] == "30 2 * * *"
+    assert s["offsite_enabled"] is True and s["offsite_mode"] == "sync"
+    assert s["offsite_path"] == "my-bucket/vtt"
+    # Bad mode/path are normalized, traversal rejected.
+    backup_admin.write_settings(
+        cron="0 3 * * *", keep_daily=7, keep_weekly=4, updated_by="op",
+        now_iso="t3", offsite_mode="evil", offsite_path="../etc")
+    s = backup_admin.read_settings()
+    assert s["offsite_mode"] == "copy"
+    assert s["offsite_path"] == "simplevtt-backups"
+
+
+def test_offsite_config_s3_and_summary_secret_free(tmp_path, monkeypatch):
+    monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
+    backup_admin.write_offsite_config(
+        "s3",
+        {"access_key_id": "AKIAXX", "secret_access_key": "s3cr3t",
+         "region": "us-east-1", "endpoint": "http://minio:9000"},
+        updated_by="op", now_iso="2026-07-09T00:00:00Z")
+    conf = (tmp_path / "rclone.conf").read_text()
+    assert "[offsite]" in conf and "type = s3" in conf
+    assert "access_key_id = AKIAXX" in conf and "secret_access_key = s3cr3t" in conf
+    assert "endpoint = http://minio:9000" in conf and "provider = Other" in conf
+    # 0600 perms.
+    assert ((tmp_path / "rclone.conf").stat().st_mode & 0o777) == 0o600
+    # Summary is secrets-free.
+    summ = backup_admin.offsite_config_summary()
+    assert summ["configured"] is True and summ["provider"] == "s3"
+    assert "s3cr3t" not in json.dumps(summ) and "AKIAXX" not in json.dumps(summ)
+    # No endpoint → provider AWS.
+    backup_admin.write_offsite_config(
+        "s3", {"access_key_id": "A", "secret_access_key": "B"},
+        updated_by="op", now_iso="t")
+    assert "provider = AWS" in (tmp_path / "rclone.conf").read_text()
+
+
+def test_offsite_config_oauth_token_normalized_and_injection_blocked(tmp_path, monkeypatch):
+    monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
+    tok = '{"access_token": "abc",\n "expiry": "2027-01-01T00:00:00Z"}'
+    backup_admin.write_offsite_config(
+        "drive", {"token": tok, "client_id": "cid\n[evil]\npass = x"},
+        updated_by="op", now_iso="t")
+    conf = (tmp_path / "rclone.conf").read_text()
+    assert "type = drive" in conf
+    # Token compacted to one line; newline injection flattened to spaces — the
+    # attacker's "[evil]" text survives only INSIDE the client_id value line,
+    # never as its own conf section or key.
+    assert '"access_token":"abc"' in conf
+    assert "\n[evil]" not in conf
+    assert "\npass = x" not in conf
+    # onedrive gets a drive_type default; bad providers/tokens raise.
+    backup_admin.write_offsite_config(
+        "onedrive", {"token": '{"access_token":"t"}'}, updated_by="op", now_iso="t")
+    assert "drive_type = personal" in (tmp_path / "rclone.conf").read_text()
+    import pytest as _pt
+    with _pt.raises(ValueError):
+        backup_admin.write_offsite_config("ftp", {}, updated_by="op", now_iso="t")
+    with _pt.raises(ValueError):
+        backup_admin.write_offsite_config("dropbox", {"token": "not json"},
+                                          updated_by="op", now_iso="t")
+    with _pt.raises(ValueError):
+        backup_admin.write_offsite_config("s3", {"access_key_id": "only"},
+                                          updated_by="op", now_iso="t")
+
+
+def test_offsite_triggers_status_and_delete(tmp_path, monkeypatch):
+    monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
+    backup_admin.trigger_offsite_test()
+    backup_admin.trigger_offsite_push()
+    assert (tmp_path / ".offsite-test").is_file()
+    assert (tmp_path / ".offsite-push").is_file()
+    # Status/result readers parse the sidecar's JSON (None when absent).
+    assert backup_admin.offsite_status() is None
+    (tmp_path / ".offsite-status").write_text(
+        json.dumps({"ok": True, "at": "t", "mode": "copy", "path": "b"}))
+    assert backup_admin.offsite_status()["ok"] is True
+    (tmp_path / ".offsite-test-result").write_text(json.dumps({"ok": False, "error": "e"}))
+    assert backup_admin.offsite_test_result()["error"] == "e"
+    # Delete removes conf + metadata (+ stale results).
+    backup_admin.write_offsite_config(
+        "s3", {"access_key_id": "A", "secret_access_key": "B"},
+        updated_by="op", now_iso="t")
+    assert backup_admin.delete_offsite_config() is True
+    assert not (tmp_path / "rclone.conf").exists()
+    assert backup_admin.offsite_config_summary()["configured"] is False
+    assert backup_admin.delete_offsite_config() is False

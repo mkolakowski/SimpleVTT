@@ -18,6 +18,15 @@ SETTINGS_FILE="${BACKUP_DIR}/backup-settings.json"
 RESTORE_TRIGGER="${BACKUP_DIR}/.restore-request"
 RESTORE_RESULT="${BACKUP_DIR}/.restore-result"
 
+# v2.998.0 — offsite upload helpers + the trigger files the Admin Center drops
+# ("Test connection" / "Upload now" on the /backups page). Guarded for older
+# deploys without the mount.
+if [ -f /usr/local/bin/offsite.sh ]; then
+    . /usr/local/bin/offsite.sh
+fi
+OFFSITE_TEST_TRIGGER="${BACKUP_DIR}/.offsite-test"
+OFFSITE_PUSH_TRIGGER="${BACKUP_DIR}/.offsite-push"
+
 is_truthy() {
     case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
         1|true|yes|on) return 0 ;;
@@ -148,6 +157,22 @@ while true; do
     fi
     if [ -f "${RESTORE_TRIGGER}" ]; then
         do_restore
+    fi
+    # v2.998.0 — offsite triggers: connectivity test + upload-existing-artefacts
+    # (no new backup). Both write their result JSON for the page to poll.
+    if [ -f "${OFFSITE_TEST_TRIGGER}" ]; then
+        rm -f "${OFFSITE_TEST_TRIGGER}"
+        echo "[backup] offsite-test trigger — probing the remote" | tee -a /var/log/backup.log
+        command -v offsite_test >/dev/null 2>&1 && offsite_test || true
+    fi
+    if [ -f "${OFFSITE_PUSH_TRIGGER}" ]; then
+        rm -f "${OFFSITE_PUSH_TRIGGER}"
+        echo "[backup] offsite-push trigger — uploading existing artefacts" | tee -a /var/log/backup.log
+        if command -v offsite_enabled >/dev/null 2>&1 && offsite_enabled; then
+            offsite_push || true
+        else
+            echo "[backup] offsite-push: offsite not enabled/configured — skipping" | tee -a /var/log/backup.log
+        fi
     fi
     # v2.633.0 — short poll so "Back up now" / restore triggers fire promptly
     # (the progress toast on the page tracks the run live).
