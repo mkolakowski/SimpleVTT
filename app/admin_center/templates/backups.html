@@ -16,6 +16,8 @@
   {% if ran %}<div class="banner ok">✓ On-demand backup triggered.</div>{% endif %}
   {% if demo_override %}<div class="banner ok">🧪 <strong>Demo mode — backups enabled for testing</strong> (<code>DEMO_BACKUPS_ENABLED=true</code>). The schedule, <strong>Back up now</strong>, download, and restore controls below are live. Heads-up: this is a demo instance that reseeds hourly, so an edited schedule or a restore won't survive the next reset.</div>{% endif %}
   {% if deleted %}<div class="banner ok">🗑 Backup <code>{{ deleted }}</code> deleted.</div>{% endif %}
+  {% if offsite_saved %}<div class="banner ok">☁️ Offsite settings saved. Uploads run after each backup; use <strong>Test connection</strong> to verify the remote now.</div>{% endif %}
+  {% if offsite_deleted %}<div class="banner ok">☁️ Offsite config removed (uploads disabled; already-uploaded artefacts are untouched).</div>{% endif %}
   {% if restored %}<div class="banner ok">♻️ Restore of <code>{{ restored }}</code> queued. The sidecar takes a safety backup first, then overwrites the database + media — this can take a minute and briefly disrupts the app.</div>{% endif %}
   {% if restore_pending %}<div class="banner err">⏳ A restore is in progress — the app may be briefly disrupted. Refresh in a moment.</div>{% endif %}
   {% if last_restore %}<div class="banner {{ 'ok' if last_restore.ok else 'err' }}">{% if last_restore.ok %}✓ Last restore: <code>{{ last_restore.ts }}</code> at {{ last_restore.at }} (db_ok={{ last_restore.db_ok }}).{% else %}⚠️ Last restore failed: {{ last_restore.error }} (<code>{{ last_restore.ts }}</code>).{% endif %}</div>{% endif %}
@@ -59,6 +61,96 @@
     <form method="post" action="/backups/run" id="run-now-form">
       <button type="submit">Back up now</button>
     </form>
+  </div>
+
+  <div class="card">
+    <h2>☁️ Offsite uploads</h2>
+    <p class="muted">Push every backup to cloud storage via rclone — Amazon S3
+      (or any S3-compatible: MinIO / Cloudflare R2 / Backblaze B2 / Wasabi),
+      Google Drive, Dropbox, or OneDrive. Credentials are written to
+      <code>rclone.conf</code> on the backup volume (0600) and never shown
+      again here. See the <a href="http://localhost:8013/wiki/backups" target="_blank">backups guide</a>
+      for per-provider setup.</p>
+
+    {# Status line #}
+    {% if offsite.configured %}
+      <p>Remote: <span class="pill gm">configured — {{ offsite.provider }}</span>
+        {% if settings.offsite_enabled %}<span class="pill gm">enabled</span>{% else %}<span class="pill off">disabled</span>{% endif %}
+        <span class="muted">mode: {{ settings.offsite_mode }} · path: <code>{{ settings.offsite_path }}</code>
+        {% if offsite.updated_at %} · saved {{ offsite.updated_at[:16] }} by {{ offsite.updated_by }}{% endif %}</span></p>
+      {% if offsite_status %}
+        <p class="muted">Last upload:
+          {% if offsite_status.ok %}<span class="pill gm">OK</span>{% else %}<span class="pill failed">FAILED</span> <code>{{ offsite_status.error }}</code>{% endif %}
+          at {{ offsite_status.at }} ({{ offsite_status.mode }})</p>
+      {% endif %}
+      {% if offsite_test %}
+        <p class="muted">Last connection test:
+          {% if offsite_test.ok %}<span class="pill gm">OK</span>{% else %}<span class="pill failed">FAILED</span> <code>{{ offsite_test.error }}</code>{% endif %}
+          at {{ offsite_test.at }}</p>
+      {% endif %}
+    {% else %}
+      <p>Remote: <span class="pill off">not configured</span></p>
+    {% endif %}
+
+    <form method="post" action="/backups/offsite/config" id="offsite-form">
+      <label>Provider
+        <select name="provider" id="offsite-provider">
+          <option value="s3">Amazon S3 / S3-compatible</option>
+          <option value="drive">Google Drive</option>
+          <option value="dropbox">Dropbox</option>
+          <option value="onedrive">OneDrive</option>
+        </select>
+      </label>
+
+      <div class="offsite-fields" data-provider="s3">
+        <label>Access key id <input type="text" name="access_key_id" autocomplete="off"
+          placeholder="{% if offsite.configured %}(leave blank to keep current credentials){% endif %}"></label>
+        <label>Secret access key <input type="password" name="secret_access_key" autocomplete="new-password"></label>
+        <label>Region <input type="text" name="region" placeholder="us-east-1"></label>
+        <label>Endpoint (S3-compatible only) <input type="text" name="endpoint" placeholder="http://minio:9000 · https://…r2.cloudflarestorage.com"></label>
+      </div>
+      <div class="offsite-fields" data-provider="drive dropbox onedrive" style="display:none">
+        <label>OAuth token <textarea name="token" rows="3" autocomplete="off"
+          placeholder='Run on any machine with a browser:  rclone authorize "drive" | "dropbox" | "onedrive"  — then paste the printed JSON blob here.{% if offsite.configured %}  (Leave blank to keep current credentials.){% endif %}'></textarea></label>
+        <label>Client id (optional) <input type="text" name="client_id" autocomplete="off"></label>
+        <label>Client secret (optional) <input type="password" name="client_secret" autocomplete="new-password"></label>
+      </div>
+      <div class="offsite-fields" data-provider="onedrive" style="display:none">
+        <label>Drive id (optional) <input type="text" name="drive_id" autocomplete="off"></label>
+        <label>Drive type
+          <select name="drive_type">
+            <option value="personal">personal</option>
+            <option value="business">business</option>
+            <option value="documentLibrary">documentLibrary</option>
+          </select>
+        </label>
+      </div>
+
+      <label>Remote path (bucket/prefix for S3; folder path for the others)
+        <input type="text" name="offsite_path" value="{{ settings.offsite_path }}" required></label>
+      <label style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" name="offsite_enabled" value="1" style="min-height:auto;width:auto"
+          {% if settings.offsite_enabled %}checked{% endif %}>
+        Upload after every backup run
+      </label>
+      <label>Remote retention
+        <select name="offsite_mode">
+          <option value="copy" {% if settings.offsite_mode == 'copy' %}selected{% endif %}>accumulate (copy) — remote only ever gains files</option>
+          <option value="sync" {% if settings.offsite_mode == 'sync' %}selected{% endif %}>mirror (sync) — local retention pruning propagates</option>
+        </select>
+      </label>
+      <div class="row-actions" style="margin-top:8px">
+        <button type="submit">Save offsite settings</button>
+        <button type="button" id="offsite-test-btn" {% if not offsite.configured %}disabled{% endif %}>🔌 Test connection</button>
+        <button type="button" id="offsite-push-btn" {% if not (offsite.configured and settings.offsite_enabled) %}disabled{% endif %}>⬆ Upload now</button>
+      </div>
+    </form>
+    {% if offsite.configured %}
+    <form method="post" action="/backups/offsite/delete" style="margin-top:8px"
+          onsubmit="return confirm('Remove the offsite remote config?\n\nUploads stop (already-uploaded artefacts are untouched). Credentials will need to be re-entered to re-enable.');">
+      <button type="submit" class="danger">🗑 Remove offsite config</button>
+    </form>
+    {% endif %}
   </div>
   {% endif %}
 
@@ -182,6 +274,53 @@
       btn.disabled = false;
     });
   });
+})();
+
+/* v2.999.0 — ☁️ Offsite uploads: provider field toggling + the Test-connection /
+   Upload-now buttons (drop a trigger file via POST, then poll
+   /backups/offsite/status until the sidecar writes a fresh result, then reload
+   to render it). */
+(function () {
+  var sel = document.getElementById('offsite-provider');
+  if (!sel) return;
+  function toggleFields() {
+    document.querySelectorAll('.offsite-fields').forEach(function (div) {
+      var provs = (div.dataset.provider || '').split(/\s+/);
+      div.style.display = provs.indexOf(sel.value) >= 0 ? '' : 'none';
+    });
+  }
+  sel.addEventListener('change', toggleFields);
+  toggleFields();
+
+  function getStatus() {
+    return fetch('/backups/offsite/status').then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; });
+  }
+  function wire(btnId, postUrl, resultKey, label) {
+    var btn = document.getElementById(btnId);
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      btn.disabled = true;
+      var orig = btn.textContent;
+      btn.textContent = '⏳ ' + label + '…';
+      getStatus().then(function (s) {
+        var baseline = (s && s[resultKey] && s[resultKey].at) || '';
+        return fetch(postUrl, { method: 'POST' }).then(function () {
+          var tries = 0;
+          (function poll() {
+            if (tries++ > 45) { btn.textContent = '⚠️ timed out'; return; }
+            getStatus().then(function (s2) {
+              var at = (s2 && s2[resultKey] && s2[resultKey].at) || '';
+              if (at && at !== baseline) { location.reload(); return; }
+              setTimeout(poll, 1000);
+            });
+          })();
+        });
+      }).catch(function () { btn.disabled = false; btn.textContent = orig; });
+    });
+  }
+  wire('offsite-test-btn', '/backups/offsite/test', 'test', 'Testing');
+  wire('offsite-push-btn', '/backups/offsite/push', 'status', 'Uploading');
 })();
 </script>
 </body>

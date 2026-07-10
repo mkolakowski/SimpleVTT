@@ -973,6 +973,27 @@ def test_login_page_references_favicon():
 
 
 @_LIVE
+def test_backups_offsite_status_secret_free_shape():
+    """v2.999.0 — GET /backups/offsite/status returns the secrets-free offsite
+    state (summary/status/test) and the /backups page renders the offsite card.
+    Read-only (never mutates the operator's real offsite config)."""
+    r = httpx.get(f"{ADMIN_BASE_URL}/backups/offsite/status", auth=_AUTH, timeout=5.0)
+    assert r.status_code == 200
+    d = r.json()
+    if d.get("state") == "disabled":      # tools off on this stack — shape still valid
+        return
+    assert set(d) == {"summary", "status", "test"}
+    assert set(d["summary"]) == {"configured", "provider", "updated_at", "updated_by"}
+    # No credential-ish keys anywhere in the response.
+    import json as _json
+    blob = _json.dumps(d).lower()
+    for needle in ("secret_access_key", "access_key_id", '"token"', "client_secret"):
+        assert needle not in blob
+    page = httpx.get(f"{ADMIN_BASE_URL}/backups", auth=_AUTH, timeout=5.0)
+    assert page.status_code == 200 and "Offsite uploads" in page.text
+
+
+@_LIVE
 def test_healthz_open_without_auth():
     r = httpx.get(f"{ADMIN_BASE_URL}/healthz", timeout=5.0)
     assert r.status_code == 200

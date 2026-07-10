@@ -10,6 +10,19 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.999.0] - 2026-07-10 — "The Courier's Desk"
+
+**Schema version:** 102
+
+**Commit summary:** Offsite backup uploads (web UI) — configure S3 / Google Drive / Dropbox / OneDrive from the Admin Center /backups page: credentials form, enable/mode/path, Test connection, Upload now.
+
+**Description:** Second half of the offsite-backup feature: the **Admin Center UI**. The `/backups` page gains a **☁️ Offsite uploads** card: a provider picker (Amazon S3 / S3-compatible with an endpoint field for MinIO/R2/B2/Wasabi, Google Drive, Dropbox, OneDrive) whose field groups toggle per provider — S3 takes keys directly; the OAuth trio take the token blob printed by a one-liner `rclone authorize "<provider>"` run on any machine with a browser (a full OAuth dance can't complete on a headless server). The form also carries the **enable** toggle, **retention mode** (accumulate/`copy` vs mirror/`sync`, with one-line explanations) and **remote path**; a **settings-only resave keeps the existing credentials** (blank credential fields = keep), and secrets are **write-only** — they land in `rclone.conf` (0600, appuser-owned) and never appear in any page or JSON response. Buttons: **Test connection** and **Upload now** drop the sidecar trigger files and poll `GET /backups/offsite/status` until the result lands; **Remove offsite config** deletes the remote config and disables uploads. Routes are `ADMIN_CENTER_ADMIN_TOOLS`-gated and demo-refused like the other backup writes, and `OSError`s surface as banners (e.g. a root-owned file from a manual docker-exec edit) instead of 500s. Verified live against MinIO end-to-end via the routes: save → 0600 conf, test → OK, upload → OK, credential-preserving resave, delete → unconfigured, and the status JSON is secrets-free.
+
+### Added
+- `app/admin_center/main.py` — `POST /backups/offsite/{config,test,push,delete}` + `GET /backups/offsite/status`; the backups page passes the offsite summary/status/test context.
+- `app/admin_center/templates/backups.html` — the ☁️ Offsite uploads card (provider forms, enable/mode/path, Test/Upload/Remove) + provider-toggle and trigger-poll JS + result banners.
+- `tests/harness/test_admin_center.py` — `test_backups_offsite_status_secret_free_shape` (live: status JSON shape is secrets-free; the page renders the card).
+
 ## [2.998.0] - 2026-07-10 — "The Cloud Courier"
 
 **Schema version:** 102

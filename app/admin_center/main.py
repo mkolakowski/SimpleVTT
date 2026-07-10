@@ -916,10 +916,12 @@ def _restore_allowed(request: Request) -> bool:
 
 
 @app.get("/backups", response_class=HTMLResponse)
-def backups_page(request: Request, saved: str = "", ran: str = "", err: str = "", restored: str = "", deleted: str = ""):
+def backups_page(request: Request, saved: str = "", ran: str = "", err: str = "",
+                 restored: str = "", deleted: str = "",
+                 offsite_saved: str = "", offsite_deleted: str = ""):
     """Backup schedule + retention editor, backup listing (download + restore),
-    and run-now. Opt-in via ADMIN_CENTER_ADMIN_TOOLS; auto-gated by the auth
-    middleware."""
+    run-now, and offsite (cloud) uploads. Opt-in via ADMIN_CENTER_ADMIN_TOOLS;
+    auto-gated by the auth middleware."""
     if not _ADMIN_TOOLS_ENABLED:
         return _TOOLS_DISABLED
     from . import backup_admin
@@ -936,11 +938,17 @@ def backups_page(request: Request, saved: str = "", ran: str = "", err: str = ""
             "restore_allowed": _restore_allowed(request),
             "restore_pending": backup_admin.restore_pending(),
             "last_restore": backup_admin.last_restore_result(),
+            # v2.999.0 — offsite uploads card.
+            "offsite": backup_admin.offsite_config_summary(),
+            "offsite_status": backup_admin.offsite_status(),
+            "offsite_test": backup_admin.offsite_test_result(),
             "saved": saved,
             "ran": ran,
             "err": err,
             "restored": restored,
             "deleted": deleted,
+            "offsite_saved": offsite_saved,
+            "offsite_deleted": offsite_deleted,
         },
     )
 
@@ -1036,6 +1044,123 @@ def backups_run_status(request: Request):
         return JSONResponse({"state": "idle"})
     from . import backup_admin
     return JSONResponse(backup_admin.run_status())
+
+
+# ── Offsite (cloud) uploads (v2.999.0) ───────────────────────────────────────
+
+@app.post("/backups/offsite/config")
+async def backups_offsite_config(request: Request):
+    """Save the offsite destination: enable/mode/path settings + (when
+    credential fields are provided) the rclone remote config. Leaving every
+    credential field blank keeps the existing remote and only updates the
+    settings — so mode/path/enable can be edited without re-entering secrets.
+    Secrets go straight into rclone.conf (0600) and are never echoed back."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    from datetime import datetime, timezone
+
+    from . import backup_admin
+    if backup_admin.demo_mode_active():
+        return RedirectResponse("/backups?err=Backups+are+disabled+in+demo+mode", status_code=303)
+    form = await request.form()
+    operator = request.session.get("admin_user", "?")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    provider = (form.get("provider") or "").strip().lower()
+    cred_fields = {k: (form.get(k) or "") for k in (
+        "access_key_id", "secret_access_key", "region", "endpoint",
+        "token", "client_id", "client_secret", "drive_id", "drive_type")}
+    creds_given = any(v.strip() for v in cred_fields.values())
+    try:
+        if creds_given:
+            backup_admin.write_offsite_config(
+                provider, cred_fields, updated_by=operator, now_iso=now_iso)
+        elif not backup_admin.offsite_config_summary()["configured"]:
+            return RedirectResponse(
+                "/backups?err=Enter+the+provider+credentials+first", status_code=303)
+        current = backup_admin.read_settings()
+        backup_admin.write_settings(
+            cron=current["cron"], keep_daily=current["keep_daily"],
+            keep_weekly=current["keep_weekly"], updated_by=operator, now_iso=now_iso,
+            offsite_enabled=bool(form.get("offsite_enabled")),
+            offsite_mode=form.get("offsite_mode"),
+            offsite_path=form.get("offsite_path"),
+        )
+    except (ValueError, OSError) as exc:
+        # OSError: e.g. a root-owned file on the sticky volume (from a manual
+        # docker-exec edit) that appuser can't replace — surface it, don't 500.
+        return RedirectResponse(f"/backups?err={quote(str(exc))}", status_code=303)
+    log.info("admin-center operator %r saved offsite backup config (provider=%s, creds=%s)",
+             operator, provider or "(unchanged)", "updated" if creds_given else "kept")
+    return RedirectResponse("/backups?offsite_saved=1", status_code=303)
+
+
+@app.post("/backups/offsite/test")
+def backups_offsite_test(request: Request):
+    """Drop the connectivity-probe trigger; the page polls /backups/offsite/status
+    for the result. JSON (the button drives it via fetch)."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    from . import backup_admin
+    if backup_admin.demo_mode_active():
+        return JSONResponse({"error": "demo mode"}, status_code=400)
+    backup_admin.trigger_offsite_test()
+    return JSONResponse({"ok": True})
+
+
+@app.post("/backups/offsite/push")
+def backups_offsite_push(request: Request):
+    """Drop the upload-now trigger (pushes existing artefacts, no new backup)."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    from . import backup_admin
+    if backup_admin.demo_mode_active():
+        return JSONResponse({"error": "demo mode"}, status_code=400)
+    backup_admin.trigger_offsite_push()
+    log.info("admin-center operator %r triggered an offsite upload",
+             request.session.get("admin_user", "?"))
+    return JSONResponse({"ok": True})
+
+
+@app.post("/backups/offsite/delete")
+def backups_offsite_delete(request: Request):
+    """Remove the offsite remote config (and disable offsite) — the artefacts
+    already uploaded are untouched."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    from datetime import datetime, timezone
+
+    from . import backup_admin
+    if backup_admin.demo_mode_active():
+        return RedirectResponse("/backups?err=Backups+are+disabled+in+demo+mode", status_code=303)
+    try:
+        removed = backup_admin.delete_offsite_config()
+        current = backup_admin.read_settings()
+        backup_admin.write_settings(
+            cron=current["cron"], keep_daily=current["keep_daily"],
+            keep_weekly=current["keep_weekly"],
+            updated_by=request.session.get("admin_user", "?"),
+            now_iso=datetime.now(timezone.utc).isoformat(),
+            offsite_enabled=False,
+        )
+    except OSError as exc:
+        return RedirectResponse(f"/backups?err={quote(str(exc))}", status_code=303)
+    log.warning("admin-center operator %r removed the offsite backup config (removed=%s)",
+                request.session.get("admin_user", "?"), removed)
+    return RedirectResponse("/backups?offsite_deleted=1", status_code=303)
+
+
+@app.get("/backups/offsite/status")
+def backups_offsite_status(request: Request):
+    """Secrets-free offsite state for the page's test/push polling: the config
+    summary + the sidecar's last upload + last connectivity-probe results."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return JSONResponse({"state": "disabled"})
+    from . import backup_admin
+    return JSONResponse({
+        "summary": backup_admin.offsite_config_summary(),
+        "status": backup_admin.offsite_status(),
+        "test": backup_admin.offsite_test_result(),
+    })
 
 
 @app.get("/backups/download")
