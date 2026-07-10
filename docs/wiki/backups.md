@@ -167,6 +167,56 @@ single item.
 > The Backups page only appears when the operator write-surface is enabled
 > (`ADMIN_CENTER_ADMIN_TOOLS=true`).
 
+### Offsite (cloud) uploads — S3, Google Drive, Dropbox, OneDrive
+
+Every backup run can also be **pushed offsite** (v2.998–2.999) so a disk
+failure can't take the app *and* its backups. The uploader is **rclone**
+(baked into the sidecar image); configure it from **Admin Center → Backups →
+☁️ Offsite uploads**:
+
+1. **Pick a provider** and enter credentials:
+   - **Amazon S3 / S3-compatible** — paste an access key id + secret. For
+     S3-compatibles (MinIO, Cloudflare R2, Backblaze B2, Wasabi) also set the
+     **endpoint** URL. The **remote path** is `bucket/prefix` (the bucket is
+     created on first use if the key may).
+   - **Google Drive / Dropbox / OneDrive** — OAuth can't complete on a
+     headless server, so run rclone's standard one-liner **on any machine with
+     a browser** (`brew install rclone` / `winget install Rclone.Rclone`):
+
+     ```bash
+     rclone authorize "drive"      # or "dropbox" / "onedrive"
+     ```
+
+     Approve the browser prompt, then paste the printed JSON token blob into
+     the form's **OAuth token** field. (OneDrive business accounts may also
+     need a **drive id** — `rclone config` on your laptop shows it.)
+2. Choose the **retention mode**:
+   - **accumulate (`copy`)** — the remote only ever gains files; old backups
+     are never deleted offsite. Survives local corruption/ransomware best;
+     grows unbounded until you prune it yourself. *(Default.)*
+   - **mirror (`sync`)** — the remote mirrors the local backup dir, so the
+     `KEEP_DAILY`/`KEEP_WEEKLY` pruning propagates and the remote stays
+     bounded.
+3. Tick **Upload after every backup run**, **Save**, then hit
+   **🔌 Test connection** — the sidecar probes the remote and the result
+   appears on the card. **⬆ Upload now** pushes the existing artefacts
+   without taking a new backup.
+
+Mechanics + security notes:
+
+- Uploads run as a final `offsite` stage of each backup (after retention
+  pruning). An upload failure **never fails the backup** — the artefacts are
+  already safe locally; the failure is shown on the card.
+- Credentials are **write-only**: they live solely in `rclone.conf` on the
+  backup volume (mode `0600`), are never echoed back to the page or any JSON
+  endpoint, and are **not inside the backup artefacts themselves**. Re-saving
+  the settings with blank credential fields keeps the existing remote.
+- **Remove offsite config** stops uploads and deletes the stored credentials;
+  artefacts already uploaded are untouched.
+- To try it locally without a cloud account: `docker compose --profile dev up
+  -d minio`, then configure provider *S3* with endpoint `http://minio:9000`
+  and the `minioadmin`/`minioadmin` dev credentials.
+
 ### Structure of an operator backup **download**
 
 The Backups page lists **one row per backup run** (the three artifacts grouped

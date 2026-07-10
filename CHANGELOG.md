@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.999.1] - 2026-07-10 — "The Courier's Manual"
+
+**Schema version:** 102
+
+**Commit summary:** Backups wiki guide — document the offsite (cloud) uploads: per-provider setup, retention modes, security notes, MinIO dev recipe.
+
+**Description:** Documents the v2.998–2.999 offsite-upload feature in the backups wiki guide (`/wiki/backups`): the per-provider setup recipes (S3/S3-compatible keys + endpoint; the `rclone authorize "<provider>"` paste-token flow for Google Drive / Dropbox / OneDrive), the `copy` (accumulate) vs `sync` (mirror) retention semantics, the never-fails-the-backup + write-only-credentials guarantees, and the local MinIO try-it recipe. Doc-only; the guide is already wiki-surfaced.
+
+### Changed
+- `docs/wiki/backups.md` — new "Offsite (cloud) uploads" section.
+
 ## [2.999.0] - 2026-07-10 — "The Courier's Desk"
 
 **Schema version:** 102
