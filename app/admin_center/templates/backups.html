@@ -150,6 +150,53 @@
           onsubmit="return confirm('Remove the offsite remote config?\n\nUploads stop (already-uploaded artefacts are untouched). Credentials will need to be re-entered to re-enable.');">
       <button type="submit" class="danger">🗑 Remove offsite config</button>
     </form>
+
+    <h3 style="margin:16px 0 6px">Remote backups</h3>
+    <p class="muted" style="margin-top:0">Disaster recovery: list what's on the
+      remote and <strong>pull</strong> a run back to this box — it then appears
+      in the Backups table below, where the normal Restore flow takes over.</p>
+    <div class="row-actions">
+      <button type="button" id="offsite-list-btn">🔄 Refresh remote listing</button>
+      {% if offsite_pull %}
+        <span class="muted">Last pull:
+          {% if offsite_pull.ok %}<span class="pill gm">OK</span> <code>{{ offsite_pull.ts }}</code> ({{ offsite_pull.files }} files)
+          {% else %}<span class="pill failed">FAILED</span> <code>{{ offsite_pull.error }}</code>{% endif %}
+          at {{ offsite_pull.at }}</span>
+      {% endif %}
+    </div>
+    {% if offsite_remote %}
+      {% if offsite_remote.ok %}
+        <p class="muted" style="font-size:12px">Listed at {{ offsite_remote.at }}.</p>
+        {% for bucket in ["daily", "weekly"] %}
+          {% if offsite_remote[bucket] %}
+            <h4 style="margin:8px 0 4px">{{ bucket|capitalize }}</h4>
+            <table class="data">
+              <thead><tr><th>Backup</th><th>Files</th><th>Size</th><th></th></tr></thead>
+              <tbody>
+                {% for b in offsite_remote[bucket] %}
+                <tr>
+                  <td><code>{{ b.ts }}</code></td>
+                  <td>{{ b.files|length }}</td>
+                  <td>{{ b.size | bytes }}</td>
+                  <td>
+                    <button type="button" class="offsite-pull-btn" data-bucket="{{ bucket }}" data-ts="{{ b.ts }}"
+                            style="min-height:32px;padding:5px 8px;font-size:12px">⬇ Pull to local</button>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% endif %}
+        {% endfor %}
+        {% if not offsite_remote.daily and not offsite_remote.weekly %}
+          <p class="muted">The remote has no backups yet.</p>
+        {% endif %}
+      {% else %}
+        <p class="banner err" style="margin-top:8px">⚠️ Last listing failed: <code>{{ offsite_remote.error }}</code> ({{ offsite_remote.at }})</p>
+      {% endif %}
+    {% else %}
+      <p class="muted">No remote listing yet — hit <strong>Refresh remote listing</strong>.</p>
+    {% endif %}
     {% endif %}
   </div>
   {% endif %}
@@ -321,6 +368,35 @@
   }
   wire('offsite-test-btn', '/backups/offsite/test', 'test', 'Testing');
   wire('offsite-push-btn', '/backups/offsite/push', 'status', 'Uploading');
+  wire('offsite-list-btn', '/backups/offsite/list', 'listing', 'Listing');
+
+  /* v2.1000.0 — per-run "Pull to local" buttons (form-encoded POST, then the
+     same poll-until-fresh-result pattern keyed on pull.at). */
+  document.querySelectorAll('.offsite-pull-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      btn.disabled = true;
+      btn.textContent = '⏳ Pulling…';
+      getStatus().then(function (s) {
+        var baseline = (s && s.pull && s.pull.at) || '';
+        var body = new URLSearchParams({ bucket: btn.dataset.bucket, ts: btn.dataset.ts });
+        return fetch('/backups/offsite/pull', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body.toString(),
+        }).then(function () {
+          var tries = 0;
+          (function poll() {
+            if (tries++ > 90) { btn.textContent = '⚠️ timed out'; return; }
+            getStatus().then(function (s2) {
+              var at = (s2 && s2.pull && s2.pull.at) || '';
+              if (at && at !== baseline) { location.reload(); return; }
+              setTimeout(poll, 1000);
+            });
+          })();
+        });
+      }).catch(function () { btn.disabled = false; btn.textContent = '⬇ Pull to local'; });
+    });
+  });
 })();
 </script>
 </body>

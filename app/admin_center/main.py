@@ -942,6 +942,9 @@ def backups_page(request: Request, saved: str = "", ran: str = "", err: str = ""
             "offsite": backup_admin.offsite_config_summary(),
             "offsite_status": backup_admin.offsite_status(),
             "offsite_test": backup_admin.offsite_test_result(),
+            # v2.1000.0 — remote-backups browser (disaster recovery).
+            "offsite_remote": backup_admin.remote_backups(),
+            "offsite_pull": backup_admin.offsite_pull_result(),
             "saved": saved,
             "ran": ran,
             "err": err,
@@ -1121,6 +1124,36 @@ def backups_offsite_push(request: Request):
     return JSONResponse({"ok": True})
 
 
+@app.post("/backups/offsite/list")
+def backups_offsite_list(request: Request):
+    """Drop the remote-listing trigger (the ☁️ card's Refresh remote button);
+    the page polls /backups/offsite/status for the fresh listing."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    from . import backup_admin
+    if backup_admin.demo_mode_active():
+        return JSONResponse({"error": "demo mode"}, status_code=400)
+    backup_admin.trigger_offsite_list()
+    return JSONResponse({"ok": True})
+
+
+@app.post("/backups/offsite/pull")
+def backups_offsite_pull(request: Request, bucket: str = Form(...), ts: str = Form(...)):
+    """Queue a pull of one remote backup run into the local volume. The pulled
+    run then appears in the normal Backups table, where the existing
+    (MFA-gated) Restore flow takes over — this route itself is non-destructive."""
+    if not _ADMIN_TOOLS_ENABLED:
+        return _TOOLS_DISABLED
+    from . import backup_admin
+    if backup_admin.demo_mode_active():
+        return JSONResponse({"error": "demo mode"}, status_code=400)
+    if not backup_admin.request_offsite_pull(bucket, ts):
+        return JSONResponse({"error": "bad bucket/timestamp"}, status_code=400)
+    log.info("admin-center operator %r queued an offsite pull of %s/%s",
+             request.session.get("admin_user", "?"), bucket, ts)
+    return JSONResponse({"ok": True})
+
+
 @app.post("/backups/offsite/delete")
 def backups_offsite_delete(request: Request):
     """Remove the offsite remote config (and disable offsite) — the artefacts
@@ -1160,6 +1193,8 @@ def backups_offsite_status(request: Request):
         "summary": backup_admin.offsite_config_summary(),
         "status": backup_admin.offsite_status(),
         "test": backup_admin.offsite_test_result(),
+        "listing": backup_admin.offsite_listing(),
+        "pull": backup_admin.offsite_pull_result(),
     })
 
 

@@ -217,6 +217,15 @@ Mechanics + security notes:
   -d minio`, then configure provider *S3* with endpoint `http://minio:9000`
   and the `minioadmin`/`minioadmin` dev credentials.
 
+**Restoring from offsite (disaster recovery, v2.1000.0).** The card's
+**Remote backups** section lists what's on the remote (🔄 Refresh remote
+listing) with a **⬇ Pull to local** button per run — the pull downloads that
+run's artefacts back into the local backup volume, where it appears in the
+normal Backups table and the standard (safety-backup-first, MFA-gated)
+**Restore** flow takes over. Full recovery on a fresh box: bring the stack up →
+enter the offsite credentials on this card → Refresh remote listing → Pull the
+run you want → Restore it.
+
 ### Structure of an operator backup **download**
 
 The Backups page lists **one row per backup run** (the three artifacts grouped

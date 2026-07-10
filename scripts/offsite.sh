@@ -90,6 +90,81 @@ offsite_push() {
     fi
 }
 
+offsite_list() {
+    # List the remote daily/ + weekly/ artefacts (rclone lsjson emits a JSON
+    # array) into ${BACKUP_DIR}/.offsite-listing {ok, at, daily:[…], weekly:[…]}
+    # for the Admin Center's remote-backups browser. v2.1000.0.
+    bdir="${BACKUP_DIR:-/backups}"
+    rpath="$(_offsite_path)"
+    if [ ! -f "$(_offsite_conf)" ]; then
+        printf '{"ok":false,"at":"%s","error":"no offsite config"}' \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${bdir}/.offsite-listing" 2>/dev/null || true
+        return
+    fi
+    ok=1
+    daily="[]"
+    weekly="[]"
+    for bucket in daily weekly; do
+        out="$(rclone --config "$(_offsite_conf)" \
+                --contimeout 10s --timeout 60s --retries 1 --low-level-retries 2 \
+                lsjson "offsite:${rpath}/${bucket}" 2>&1)" || {
+            # A missing remote dir is an empty listing, not an error; anything
+            # else (auth/network) marks the listing failed.
+            case "${out}" in
+                *"directory not found"*|*"error 404"*) out="[]" ;;
+                *) ok=0 ;;
+            esac
+        }
+        case "${out}" in \[*) ;; *) out="[]" ;; esac   # only embed a JSON array
+        [ "${bucket}" = "daily" ] && daily="${out}" || weekly="${out}"
+    done
+    if [ "${ok}" = "1" ]; then
+        printf '{"ok":true,"at":"%s","path":"%s","daily":%s,"weekly":%s}' \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(_offsite_json_escape "${rpath}")" \
+            "${daily}" "${weekly}" > "${bdir}/.offsite-listing" 2>/dev/null || true
+        echo "[backup] offsite list: offsite:${rpath} listed" | tee -a /var/log/backup.log
+    else
+        printf '{"ok":false,"at":"%s","path":"%s","error":"listing failed (see backup.log)"}' \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(_offsite_json_escape "${rpath}")" \
+            > "${bdir}/.offsite-listing" 2>/dev/null || true
+        echo "[backup] offsite list: FAILED" | tee -a /var/log/backup.log
+    fi
+}
+
+offsite_pull() {
+    # Download one remote backup run's artefacts into the LOCAL bucket dir so
+    # the existing (gated) restore flow can take over. Trigger JSON supplies
+    # {bucket, ts}; both are re-validated here (charset) so a crafted trigger
+    # can't traverse. Writes ${BACKUP_DIR}/.offsite-pull-result. v2.1000.0.
+    bdir="${BACKUP_DIR:-/backups}"
+    rpath="$(_offsite_path)"
+    bucket="$1"
+    ts="$2"
+    fail_pull() {
+        printf '{"ok":false,"at":"%s","ts":"%s","error":"%s"}' \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(_offsite_json_escape "${ts}")" \
+            "$(_offsite_json_escape "$1")" > "${bdir}/.offsite-pull-result" 2>/dev/null || true
+        echo "[backup] offsite pull: FAILED — $1" | tee -a /var/log/backup.log
+    }
+    case "${bucket}" in daily|weekly) ;; *) fail_pull "bad bucket"; return ;; esac
+    case "${ts}" in ''|*[!A-Za-z0-9_-]*) fail_pull "bad timestamp"; return ;; esac
+    [ -f "$(_offsite_conf)" ] || { fail_pull "no offsite config"; return; }
+    out="$(rclone --config "$(_offsite_conf)" ${_RCLONE_COMMON} \
+            copy "offsite:${rpath}/${bucket}" "${bdir}/${bucket}" \
+            --include "${ts}.*" 2>&1)" || { fail_pull "rclone copy failed (see backup.log)"; \
+            printf '%s\n' "${out}" >> /var/log/backup.log; return; }
+    printf '%s\n' "${out}" >> /var/log/backup.log 2>/dev/null || true
+    n="$(ls "${bdir}/${bucket}/${ts}".* 2>/dev/null | wc -l | tr -d ' ')"
+    if [ "${n}" = "0" ]; then
+        fail_pull "no artefacts matched ${ts} on the remote"
+        return
+    fi
+    printf '{"ok":true,"at":"%s","bucket":"%s","ts":"%s","files":%s}' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${bucket}" "${ts}" "${n}" \
+        > "${bdir}/.offsite-pull-result" 2>/dev/null || true
+    echo "[backup] offsite pull: ${bucket}/${ts} → local (${n} files)" | tee -a /var/log/backup.log
+}
+
 offsite_test() {
     # Connectivity probe: create the destination (mkdir also creates an S3
     # bucket) then list it. Writes ${BACKUP_DIR}/.offsite-test-result

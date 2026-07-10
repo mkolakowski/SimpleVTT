@@ -531,6 +531,66 @@ def offsite_test_result() -> Optional[dict]:
     return _read_json_file(backups_dir() / ".offsite-test-result")
 
 
+def trigger_offsite_list() -> None:
+    """Drop the remote-listing trigger; the sidecar writes .offsite-listing."""
+    d = backups_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    (d / ".offsite-list").write_text("", encoding="utf-8")
+
+
+def offsite_listing() -> Optional[dict]:
+    """The sidecar's last remote listing: {ok, at, path, daily:[…], weekly:[…]}
+    (rclone lsjson entries: Name/Size/ModTime), or None."""
+    return _read_json_file(backups_dir() / ".offsite-listing")
+
+
+def remote_backups() -> Optional[dict]:
+    """The remote listing grouped into backup runs (same shape as
+    ``list_backups``: per-bucket [{ts, files, size, mtime}]) so the page can
+    render one row per run with a pull button. None when no listing yet;
+    ``{"ok": False, …}`` passthrough when the last listing failed."""
+    listing = offsite_listing()
+    if listing is None:
+        return None
+    if not listing.get("ok"):
+        return {"ok": False, "at": listing.get("at"), "error": listing.get("error")}
+    out: dict = {"ok": True, "at": listing.get("at"), "daily": [], "weekly": []}
+    for bucket in ("daily", "weekly"):
+        groups: dict[str, dict] = {}
+        for entry in listing.get(bucket) or []:
+            if not isinstance(entry, dict):
+                continue
+            name = str(entry.get("Name") or "")
+            ts = _ts_of(name)
+            if ts is None:
+                continue
+            g = groups.setdefault(ts, {"ts": ts, "files": [], "size": 0, "mtime": ""})
+            g["files"].append(name)
+            g["size"] += int(entry.get("Size") or 0)
+            g["mtime"] = max(g["mtime"], str(entry.get("ModTime") or ""))
+        out[bucket] = sorted(groups.values(), key=lambda g: g["mtime"], reverse=True)
+    return out
+
+
+def request_offsite_pull(bucket: str, ts: str) -> bool:
+    """Queue a pull of one remote backup run into the LOCAL bucket dir (where
+    the normal restore flow takes over). Traversal-proof: bucket allowlisted +
+    ``_TS_RE`` stem, and the sidecar re-validates both. False on bad input."""
+    if bucket not in ("daily", "weekly") or not ts or not _TS_RE.match(ts):
+        return False
+    d = backups_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    tmp = d / ".offsite-pull.tmp"
+    tmp.write_text(json.dumps({"bucket": bucket, "ts": ts}), encoding="utf-8")
+    tmp.replace(d / ".offsite-pull")
+    return True
+
+
+def offsite_pull_result() -> Optional[dict]:
+    """The sidecar's last pull outcome: {ok, at, bucket?, ts, files?|error}."""
+    return _read_json_file(backups_dir() / ".offsite-pull-result")
+
+
 def trigger_offsite_test() -> None:
     """Drop the connectivity-test trigger the sidecar watch-loop picks up."""
     d = backups_dir()

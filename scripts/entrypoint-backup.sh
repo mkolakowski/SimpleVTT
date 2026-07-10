@@ -26,6 +26,10 @@ if [ -f /usr/local/bin/offsite.sh ]; then
 fi
 OFFSITE_TEST_TRIGGER="${BACKUP_DIR}/.offsite-test"
 OFFSITE_PUSH_TRIGGER="${BACKUP_DIR}/.offsite-push"
+# v2.1000.0 — remote-backups browser: list the remote artefacts / pull one run
+# back to the local volume (where the normal restore flow takes over).
+OFFSITE_LIST_TRIGGER="${BACKUP_DIR}/.offsite-list"
+OFFSITE_PULL_TRIGGER="${BACKUP_DIR}/.offsite-pull"
 
 is_truthy() {
     case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
@@ -173,6 +177,19 @@ while true; do
         else
             echo "[backup] offsite-push: offsite not enabled/configured — skipping" | tee -a /var/log/backup.log
         fi
+    fi
+    # v2.1000.0 — remote listing + pull-to-local (disaster recovery).
+    if [ -f "${OFFSITE_LIST_TRIGGER}" ]; then
+        rm -f "${OFFSITE_LIST_TRIGGER}"
+        echo "[backup] offsite-list trigger — listing the remote" | tee -a /var/log/backup.log
+        command -v offsite_list >/dev/null 2>&1 && offsite_list || true
+    fi
+    if [ -f "${OFFSITE_PULL_TRIGGER}" ]; then
+        pull_bucket="$(json_field "${OFFSITE_PULL_TRIGGER}" bucket)"
+        pull_ts="$(json_field "${OFFSITE_PULL_TRIGGER}" ts)"
+        rm -f "${OFFSITE_PULL_TRIGGER}"
+        echo "[backup] offsite-pull trigger — fetching ${pull_bucket}/${pull_ts}" | tee -a /var/log/backup.log
+        command -v offsite_pull >/dev/null 2>&1 && offsite_pull "${pull_bucket}" "${pull_ts}" || true
     fi
     # v2.633.0 — short poll so "Back up now" / restore triggers fire promptly
     # (the progress toast on the page tracks the run live).

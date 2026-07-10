@@ -982,7 +982,7 @@ def test_backups_offsite_status_secret_free_shape():
     d = r.json()
     if d.get("state") == "disabled":      # tools off on this stack — shape still valid
         return
-    assert set(d) == {"summary", "status", "test"}
+    assert set(d) == {"summary", "status", "test", "listing", "pull"}
     assert set(d["summary"]) == {"configured", "provider", "updated_at", "updated_by"}
     # No credential-ish keys anywhere in the response.
     import json as _json

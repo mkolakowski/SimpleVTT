@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1000.0] - 2026-07-10 — "The Salvage Run"
+
+**Schema version:** 102
+
+**Commit summary:** Offsite restore (disaster recovery) — browse the remote backups from the Admin Center and pull a run back to the local volume, where the normal Restore flow takes over.
+
+**Description:** The disaster-recovery half of offsite backups. The ☁️ Offsite uploads card gains a **Remote backups** browser: **🔄 Refresh remote listing** asks the sidecar to `rclone lsjson` the remote's `daily/` + `weekly/` dirs (a `.offsite-list` trigger → `.offsite-listing` result), and each listed run gets a **⬇ Pull to local** button that downloads that run's artefacts back into the local backup volume (`.offsite-pull` trigger, `{bucket, ts}` re-validated on both sides against traversal). A pulled run then appears in the **normal Backups table**, where the existing safety-backup-first, MFA-gated **Restore** flow takes over — the pull itself is non-destructive and no second destructive path is introduced. Full fresh-box recovery: bring the stack up → enter offsite credentials → Refresh listing → Pull → Restore (documented in the wiki guide). Verified live against MinIO: listed 52 remote artefacts, deleted a local run, pulled it back (4 files), and the run reappeared in the local table.
+
+### Added
+- `scripts/offsite.sh` — `offsite_list` (lsjson → `.offsite-listing`, missing-dir = empty not error) + `offsite_pull` (rclone copy `--include "<ts>.*"`, charset-validated) ; `scripts/entrypoint-backup.sh` — `.offsite-list` / `.offsite-pull` trigger handling.
+- `app/admin_center/backup_admin.py` — `trigger_offsite_list` / `offsite_listing` / `remote_backups()` (lsjson grouped into runs) / `request_offsite_pull` (traversal-proof) / `offsite_pull_result`.
+- `app/admin_center/main.py` — `POST /backups/offsite/list` + `POST /backups/offsite/pull`; the offsite status JSON gains `listing` + `pull`.
+- `app/admin_center/templates/backups.html` — the Remote backups table (per-run size/files + Pull button) + refresh/pull poll JS.
+- `tests/harness/test_backup_admin.py` (+1) — listing grouping + pull validation; the live offsite-status test expects the new keys.
+- `docs/wiki/backups.md` — the disaster-recovery recipe.
+
 ## [2.999.1] - 2026-07-10 — "The Courier's Manual"
 
 **Schema version:** 102

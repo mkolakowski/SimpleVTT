@@ -362,3 +362,38 @@ def test_offsite_triggers_status_and_delete(tmp_path, monkeypatch):
     assert not (tmp_path / "rclone.conf").exists()
     assert backup_admin.offsite_config_summary()["configured"] is False
     assert backup_admin.delete_offsite_config() is False
+
+
+def test_offsite_remote_listing_grouping_and_pull_validation(tmp_path, monkeypatch):
+    monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
+    # No listing yet.
+    assert backup_admin.remote_backups() is None
+    # A failed listing passes through.
+    (tmp_path / ".offsite-listing").write_text(json.dumps({"ok": False, "at": "t", "error": "x"}))
+    assert backup_admin.remote_backups()["ok"] is False
+    # A good listing groups artefacts into runs (lsjson shape: Name/Size/ModTime).
+    (tmp_path / ".offsite-listing").write_text(json.dumps({
+        "ok": True, "at": "t", "path": "b",
+        "daily": [
+            {"Name": "2026-07-01_030000_scheduled.sql.gz", "Size": 100, "ModTime": "2026-07-01T03:00:01Z"},
+            {"Name": "2026-07-01_030000_scheduled.homebrew.tar.gz", "Size": 10, "ModTime": "2026-07-01T03:00:02Z"},
+            {"Name": "2026-07-01_030000_scheduled.uploads.tar.gz", "Size": 20, "ModTime": "2026-07-01T03:00:03Z"},
+            {"Name": "junk.txt", "Size": 5, "ModTime": "2026-07-01T03:00:00Z"},
+        ],
+        "weekly": []}))
+    rb = backup_admin.remote_backups()
+    assert rb["ok"] is True and len(rb["daily"]) == 1 and rb["weekly"] == []
+    run = rb["daily"][0]
+    assert run["ts"] == "2026-07-01_030000_scheduled"
+    assert run["size"] == 130 and len(run["files"]) == 3   # junk.txt excluded
+    # Pull request validation: bad bucket / traversal ts refused; good queues.
+    assert backup_admin.request_offsite_pull("evil", "2026-07-01_030000_scheduled") is False
+    assert backup_admin.request_offsite_pull("daily", "../../etc") is False
+    assert backup_admin.request_offsite_pull("daily", "2026-07-01_030000_scheduled") is True
+    trig = json.loads((tmp_path / ".offsite-pull").read_text())
+    assert trig == {"bucket": "daily", "ts": "2026-07-01_030000_scheduled"}
+    # Pull result reader.
+    (tmp_path / ".offsite-pull-result").write_text(
+        json.dumps({"ok": True, "at": "t", "bucket": "daily",
+                    "ts": "2026-07-01_030000_scheduled", "files": 4}))
+    assert backup_admin.offsite_pull_result()["files"] == 4
