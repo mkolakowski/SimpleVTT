@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1005.0] - 2026-07-12 — "The Kindled Ally"
+
+**Schema version:** 102
+
+**Commit summary:** Summon Wildfire Spirit (Wildfire Druid Lv 2+) now stands the spirit up as a real summon combatant — token, battle-state entry, level-scaled HP, caster's init slot — closing the last item of the announce-only survey.
+
+**Description:** The final slice of the v2.1002.0 announce-only survey. `use_summon_wildfire_spirit` consumed the action chip and announced the summon, but the spirit itself never existed — no token, no combatant, nothing to move or damage. It now rides `_summon_companion` (the Find Steed / conjure-family substrate): a new `wildfire-spirit` entry in `_COMPANION_TEMPLATES` (AC 13 per the TCE stat block, fly 30 modeled as speed 30, Small), an `hp=5 + 5 × druid level` override so the HP scales RAW, and `_summon_initiative_for_body` so the spirit lands at the caster's initiative slot ("acts on your turn"). The summon token is controllable by the druid's owner, tagged `is_summon` / `summoned_by` for the standard dismiss/teardown flows, and plugs into the damage/HP/move pipelines for free. The response and `feature_used` broadcast gain `summon_combatant_id` / `summon_token_id`. Still GM-narrated by design: the Wild Shape / spell-slot consumption and the 1-hour expiry. With this, every endpoint the survey flagged as cleanly mechanizable is wired; the remaining lower-confidence bucket (Giant's Might, Bladesong, Arcane Ward, …) needs per-feature read-site design and is recorded in the plan doc.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `wildfire-spirit` companion template; `use_summon_wildfire_spirit` calls `_summon_companion` with level-scaled HP + caster-slot init; response + broadcast gain `summon_combatant_id` / `summon_token_id`.
+- `tests/harness/test_summon_wildfire_spirit.py` (+1) — `test_ws_summon_lands_in_battle_state` (Phase 9 state contract: the `battle_update` broadcast carries the tagged summon with `hp_max` 30 at Lv 5 and the caster's init); the two happy-path tests now dismiss their summons so repeated runs don't accumulate spirits on the demo map.
+- `docs/plans/full-feature-automation.md` — v2.1005.0 bullet; the 2026-07-12 announce-only survey is fully closed.
+- `docs/automation-coverage.md` — `use_summon_wildfire_spirit` row upgraded to the real-summon description.
+- `docs/test-harness-coverage.md` — wildfire-spirit section refreshed; total 4688 → 4689.
+
 ## [2.1004.0] - 2026-07-12 — "The Cantrip's Edge"
 
 **Schema version:** 102

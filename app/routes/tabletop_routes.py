@@ -6129,6 +6129,14 @@ _COMPANION_TEMPLATES: dict[str, dict] = {
     "celestial-spirit": {"name": "Celestial Spirit", "ac": 14, "hp": 18,
                          "speed_walk": 30, "size": 1, "team": "hero",
                          "color": "#f0d060"},
+    # v2.1005.0 — Summon Wildfire Spirit (Wildfire Druid Lv 2+, TCE
+    # p.38). AC 13 per the TCE stat block; HP is level-scaled
+    # (5 + 5 × druid level) so the caller passes ``hp=`` — the registry
+    # value is the Lv-2 floor. Fly 30 modeled as speed 30 (the engine
+    # has one speed channel); Small → size 1.
+    "wildfire-spirit": {"name": "Wildfire Spirit", "ac": 13, "hp": 15,
+                        "speed_walk": 30, "size": 1, "team": "hero",
+                        "color": "#e8642e"},
     # v2.441.0 — Find Steed (RAW PHB p.240, Paladin L2). Phase 1
     # demonstrator #2 of cast-and-broadcast-tail.md. Five steed templates
     # per RAW: warhorse / pony / camel / elk / mastiff. Stats sourced from
@@ -89047,11 +89055,14 @@ async def use_summon_wildfire_spirit(
     rest, unless you expend a spell slot of 2nd level or
     higher to summon it."
 
-    Body: ``{character_id, slot_level?, override?}``. Costs
-    an action chip. `slot_level` (≥2) for the spell-slot
-    variant; otherwise consumes a Wild Shape use. v1
-    announce-only — Wild Shape / slot consumption + summon
-    persistence are GM-tracked.
+    Body: ``{character_id, slot_level?, x?, y?, initiative?,
+    override?}``. Costs an action chip. `slot_level` (≥2) for the
+    spell-slot variant; otherwise consumes a Wild Shape use.
+    v2.1005.0 — the spirit now stands up as a REAL combatant via
+    ``_summon_companion`` (token + battle-state entry + ``is_summon``
+    tag; HP scales 5 + 5 × druid level per the TCE stat block; init
+    defaults to the caster's slot). Still GM-tracked: the Wild Shape /
+    slot consumption and the 1-hour expiry.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -89106,6 +89117,27 @@ async def use_summon_wildfire_spirit(
     druid_lv = _druid_level_from_sheet(sheet)
     resource_used = "spell-slot" if slot_level else "wild-shape"
 
+    # v2.1005.0 — Phase 8: stand the spirit up as a real combatant via
+    # `_summon_companion` (the Find Steed / conjure-family substrate) —
+    # NPC token on the active map + battle-state entry tagged
+    # `is_summon` / `summoned_by`, controllable by the druid's owner.
+    # HP scales per the TCE stat block (5 + 5 × druid level); init
+    # defaults to the caster's slot (RAW: shares the caster's turn).
+    _wf_summon = await _summon_companion(
+        db, campaign_id,
+        owner_char_id=char.id,
+        companion_key="wildfire-spirit",
+        name=f"{char.name}'s Wildfire Spirit",
+        x=float(body.get("x") or 0),
+        y=float(body.get("y") or 0),
+        initiative=_summon_initiative_for_body(campaign_id, char.id, body),
+        hp=5 + 5 * max(1, druid_lv),
+    )
+    summon_combatant_id = (
+        ((_wf_summon or {}).get("combatant") or {}).get("id")
+    )
+    summon_token_id = (_wf_summon or {}).get("token_id")
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -89143,6 +89175,8 @@ async def use_summon_wildfire_spirit(
             "slot_level": slot_level,
             "duration_minutes": 60,
             "druid_level": druid_lv,
+            "summon_combatant_id": summon_combatant_id,
+            "summon_token_id": summon_token_id,
         },
     })
 
@@ -89153,6 +89187,8 @@ async def use_summon_wildfire_spirit(
         "slot_level": slot_level,
         "duration_minutes": 60,
         "druid_level": druid_lv,
+        "summon_combatant_id": summon_combatant_id,
+        "summon_token_id": summon_token_id,
     }
 
 

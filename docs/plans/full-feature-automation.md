@@ -800,6 +800,24 @@ composition. Batch by class, same cadence as the breadth sweep.
   (place_aoe). Harness: `test_potent_spellcasting.py` (+1 end-to-end
   Sacred Flame test). **The survey remainder is now just the Wildfire
   Spirit summon** (`use_summon_wildfire_spirit` → `_summon_companion`).
+- **v2.1005.0 ("The Kindled Ally") — Summon Wildfire Spirit stands up a
+  real combatant** (Wildfire Druid Lv 2+, TCE p.38): closes the LAST item
+  of the 2026-07-12 announce-only survey. New `wildfire-spirit` registry
+  entry in `_COMPANION_TEMPLATES` (AC 13, fly-30-as-speed-30, Small); the
+  endpoint calls `_summon_companion` with a level-scaled `hp=5 + 5 ×
+  druid_lv` override and `_summon_initiative_for_body` (caster's init
+  slot per RAW "acts on your turn"), so the spirit gets a controllable
+  token + `is_summon`/`summoned_by` battle entry and rides the damage /
+  HP / move / dismiss pipelines for free. Surfaces `summon_combatant_id`
+  / `summon_token_id`. Still GM-narrated: Wild Shape / slot consumption
+  + the 1-hour expiry. Harness: `test_summon_wildfire_spirit.py` (+1
+  state-asserting battle_update test; the happy-path tests now dismiss
+  their summons). **With this, every announce-only endpoint the survey
+  flagged as cleanly mechanizable is wired** — what remains in the
+  survey's lower-confidence bucket is the flag-buff-with-no-read-site
+  family (Giant's Might / Bladesong / Arcane Ward / Invincible
+  Conqueror / …), each of which needs its own read-site design, not a
+  substrate ride.
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

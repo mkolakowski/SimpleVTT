@@ -314,7 +314,7 @@ or passive damage-boosters that already ride other code paths
 | `use_strength_of_the_grave` | ✅ tracked | A use/resource |
 | `use_stroke_of_luck` | ✅ tracked | A use/resource |
 | `use_stunning_strike` | ✅ tracked | D buff-install, D/E buff-install |
-| `use_summon_wildfire_spirit` | ✅ tracked | A use/resource |
+| `use_summon_wildfire_spirit` | ✅ tracked | v2.1005.0 — stands the spirit up as a real summon combatant via `_summon_companion` (token + `is_summon` battle entry, HP = 5 + 5 × druid level, caster's init slot); Wild Shape / slot consumption + 1-hour expiry GM-narrated |
 | `use_supreme_sneak` | ✅ tracked | D buff-install |
 | `use_sweeping_attack` | ✅ tracked | A use/resource |
 | `use_tales_from_beyond` | ✅ tracked | v2.695.0 — with `target_combatant_id`, resolves the 4 mechanizable tales: 3/6 temp HP (`_grant_temp_hp`), 4 Brute STR save → Prone + 2d10 force, 5 Tragic Romance WIS save → Charmed (`_resolve_feature_save`); tales 1/2 GM-narrated |
