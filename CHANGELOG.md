@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1002.0] - 2026-07-12 — "The Wild Mend"
+
+**Schema version:** 102
+
+**Commit summary:** Phase 8 — Combat Wild Shape (Moon Druid Lv 2+) heal mode now applies the rolled HP server-side via the heal pipeline, instead of announcing an amount the GM had to apply by hand.
+
+**Description:** Continues the full-feature-automation Phase 8 announce-only flip arc. A fresh survey of the remaining announce-only `use_*` endpoints (the `automation-coverage.md` classifier counts are stale, so the survey grepped the actual substrate call-sites, per the verify-substrate rule) ranked `use_combat_wild_shape` the cleanest candidate: since v2.99.348 its heal mode rolled `<slot_level>d8` and broadcast the number but never touched HP. It now applies the rolled amount to the druid's own combatant via `_apply_heal_to_combatant` — the Undying Sentinel v2.693.0 self-apply shape — capping at max HP, reviving a dying druid through the death-save flip, and working in or out of battle (the PC path writes the sheet directly). The response + `feature_used` broadcast gain `heal_applied` / `hp_after` / `revived`. Still GM-tracked by design: the transform itself, the spell-slot spend, and the "while transformed" prerequisite (trust-the-caller, consistent with the arc's scope notes). The survey also pinned down what actually remains open in this tail — Supreme Healing's `/apply_healing` chat-card path (never calls `_max_dice_total`; only the `/cast_spell` inline path does), the Potent Spellcasting `/cast_spell` read-site (no helper exists yet; `_empowered_evocation_bonus` is the template), and `use_summon_wildfire_spirit` → `_summon_companion` — all recorded in the plan doc for the next slice.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `use_combat_wild_shape` heal mode applies HP via `_apply_heal_to_combatant`; response + broadcast gain `heal_applied` / `hp_after` / `revived`; docstring scope note updated.
+- `tests/harness/test_combat_wild_shape.py` (+1) — `test_use_cws_heal_applies_hp`: state-asserting heal test per the Phase 9 contract (sheet `hp.current` rises by exactly `heal_applied` from a damaged baseline).
+- `docs/plans/full-feature-automation.md` — v2.1002.0 bullet + the survey's findings on the remaining open read-sites.
+- `docs/automation-coverage.md` — `use_combat_wild_shape` row note upgraded from the generic "A use/resource" to the v2.1002.0 heal-apply description.
+- `docs/test-harness-coverage.md` — new `test_combat_wild_shape.py` section (was missing from the catalog); total 4685 → 4686.
+
 ## [2.1001.0] - 2026-07-12 — "The Fallen Foe"
 
 **Schema version:** 102

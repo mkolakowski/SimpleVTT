@@ -753,6 +753,24 @@ composition. Batch by class, same cadence as the breadth sweep.
   spells + light emission stay GM-narrated. Surfaces `aura_installed`.
   Harness: `test_corona_of_light.py` (+1, Sacred Flame disadvantage end-to-end).
 
+- **v2.1002.0 ("The Wild Mend") — Combat Wild Shape heal apply** (Moon Druid
+  Lv 2+): the heal mode rolled `<slot_level>d8` since v2.99.348 but left the
+  HP application GM-tracked — a fresh announce-only survey (2026-07-12)
+  ranked it the cleanest remaining candidate. It now applies the rolled HP
+  to the druid's own combatant via `_apply_heal_to_combatant` (the Undying
+  Sentinel v2.693.0 self-apply shape; caps at max HP, revives a dying druid,
+  works in or out of battle), surfacing `heal_applied`/`hp_after`/`revived`.
+  Still GM-tracked: the transform, the slot spend, the "while transformed"
+  prereq (trust-the-caller). The same survey confirmed the two remaining
+  deferred read-sites are **Supreme Healing in `/apply_healing`** (the
+  `_heal_claims` chat-card path never calls `_max_dice_total` — only the
+  `/cast_spell` inline path does) and **Potent Spellcasting in
+  `/cast_spell`** (no read helper exists; Empowered Evocation's
+  `_empowered_evocation_bonus` is the template), plus one clean summon
+  candidate (`use_summon_wildfire_spirit` → `_summon_companion`). Harness:
+  `test_combat_wild_shape.py` (+1 state-asserting heal test per the Phase 9
+  contract).
+
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`
 `/cast_spell` read site); the earlier "5/6, Improved Reaper is the last" note

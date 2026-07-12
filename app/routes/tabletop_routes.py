@@ -89262,9 +89262,13 @@ async def use_combat_wild_shape(
       - no ``slot_level`` → announce the bonus-action Wild Shape
         (use the existing /transform flow to actually shapeshift).
       - ``slot_level >= 1`` → roll ``<slot_level>d8`` server-side
-        and announce the in-beast-form heal.
-    v1 announce-only — the transform itself + spell-slot spend +
-    HP application stay GM-tracked.
+        and **apply the HP** to the druid via
+        ``_apply_heal_to_combatant`` (v2.1002.0 Phase 8 — the
+        Undying Sentinel v2.693.0 self-apply shape; caps at max HP,
+        revives a dying druid). Surfaces ``heal_applied`` /
+        ``hp_after`` / ``revived``.
+    Still GM-tracked: the transform itself, the spell-slot spend,
+    and the "while transformed" prerequisite (trust-the-caller).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -89322,6 +89326,9 @@ async def use_combat_wild_shape(
     mode = "heal" if slot_level >= 1 else "transform"
     heal_amount = 0
     dice_breakdown = ""
+    heal_applied = 0
+    hp_after = None
+    revived = False
     if mode == "heal":
         try:
             result = dice_mod.roll(f"{slot_level}d8")
@@ -89329,6 +89336,19 @@ async def use_combat_wild_shape(
             dice_breakdown = result.breakdown
         except dice_mod.DiceParseError:
             heal_amount = slot_level
+        # v2.1002.0 — Phase 8: apply the rolled HP to the druid's own
+        # combatant via `_apply_heal_to_combatant` (the Undying
+        # Sentinel v2.693.0 self-apply shape) instead of leaving the
+        # application GM-tracked. Caps at max HP; revives a dying
+        # druid via the death-save flip. Works in or out of battle
+        # (the PC path writes the Character sheet directly).
+        _cws_res = await _apply_heal_to_combatant(
+            db, campaign_id, {"char_id": char.id, "name": char.name},
+            heal_amount,
+        )
+        heal_applied = int(_cws_res.get("applied") or 0)
+        hp_after = _cws_res.get("hp_after")
+        revived = bool(_cws_res.get("revived"))
 
     membership = (
         db.query(CampaignMembership)
@@ -89373,6 +89393,9 @@ async def use_combat_wild_shape(
             "mode": mode,
             "slot_level": slot_level,
             "heal_amount": heal_amount,
+            "heal_applied": heal_applied,
+            "hp_after": hp_after,
+            "revived": revived,
             "dice_breakdown": dice_breakdown,
             "druid_level": druid_lv,
         },
@@ -89384,6 +89407,9 @@ async def use_combat_wild_shape(
         "mode": mode,
         "slot_level": slot_level,
         "heal_amount": heal_amount,
+        "heal_applied": heal_applied,
+        "hp_after": hp_after,
+        "revived": revived,
         "druid_level": druid_lv,
     }
 

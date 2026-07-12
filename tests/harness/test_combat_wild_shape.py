@@ -6,16 +6,21 @@ RAW PHB p.69: use Wild Shape as a bonus action (not an action);
 while transformed, spend a bonus action + one spell slot to
 regain 1d8 HP per slot level.
 
-v1 announce-only — the transform itself + slot spend + HP
-application stay GM-tracked. Bonus chip. Two modes:
+v2.1002.0 (Phase 8) — heal mode now APPLIES the rolled HP to the
+druid via `_apply_heal_to_combatant` (the Undying Sentinel self-apply
+shape), surfacing `heal_applied` / `hp_after` / `revived`. Still
+GM-tracked: the transform itself, the spell-slot spend, and the
+"while transformed" prerequisite. Bonus chip. Two modes:
   - no slot_level → announce bonus-action Wild Shape.
-  - slot_level >= 1 → roll <slot_level>d8 and announce the heal.
+  - slot_level >= 1 → roll <slot_level>d8 and apply the heal.
 
 Mira Greenleaf (Circle of the Moon Lv 5) is the demo fixture.
 
 Tests:
   - Transform mode happy (no slot_level) → mode "transform".
   - Heal mode happy (slot_level=2) → mode "heal", heal in [2,16].
+  - Heal mode state assertion (Phase 9 contract) → sheet HP actually
+    rises by heal_applied from a damaged baseline.
   - Wrong subclass (Circle of the Land) → 409.
   - Wrong class (Caelan paladin) → 409.
 """
@@ -99,6 +104,50 @@ async def test_use_cws_heal_happy(
     feats = _cws_broadcasts(gm_ws, mira["id"])
     assert feats
     assert feats[-1]["data"]["heal_amount"] == data["heal_amount"]
+
+
+async def test_use_cws_heal_applies_hp(
+    gm_client, mira_moon,
+):
+    """v2.1002.0 Phase 9 state contract — the heal actually lands on
+    the sheet: damage Mira to (max - 20), heal with a Lv 2 slot, and
+    the sheet's hp.current rises by exactly heal_applied."""
+    mira = mira_moon
+    data0 = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{mira['id']}/sheet-json",
+    )).json()
+    hp_max = int(((data0.get("sheet") or {}).get("hp") or {}).get("max") or 0)
+    assert hp_max >= 21, f"fixture needs headroom; hp_max={hp_max}"
+    damaged = hp_max - 20
+    await _patch_sheet(
+        gm_client, mira["id"], {"hp": {"current": damaged}},
+    )
+    try:
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_combat_wild_shape",
+            json={"character_id": mira["id"], "slot_level": 2,
+                  "override": True},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["mode"] == "heal"
+        # 20 HP of headroom vs a 2d8 roll (max 16) → full heal lands.
+        assert data["heal_applied"] == data["heal_amount"], data
+        assert data["revived"] is False
+        after = (await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{mira['id']}/sheet-json",
+        )).json()
+        hp_after = int(
+            ((after.get("sheet") or {}).get("hp") or {}).get("current") or 0
+        )
+        assert hp_after == damaged + data["heal_applied"], (
+            f"sheet hp {hp_after} != {damaged} + {data['heal_applied']}"
+        )
+        assert data["hp_after"] == hp_after, data
+    finally:
+        await _patch_sheet(
+            gm_client, mira["id"], {"hp": {"current": hp_max}},
+        )
 
 
 async def test_use_cws_wrong_subclass(

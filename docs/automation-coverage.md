@@ -179,7 +179,7 @@ or passive damage-boosters that already ride other code paths
 | `use_champion_challenge` | ✅ tracked | C save-or-condition |
 | `use_chronal_shift` | ✅ tracked | A use/resource |
 | `use_cleansing_touch` | ✅ tracked | A use/resource |
-| `use_combat_wild_shape` | ✅ tracked | A use/resource |
+| `use_combat_wild_shape` | ✅ tracked | v2.1002.0 — heal mode applies the rolled `<slot>d8` HP to the druid via `_apply_heal_to_combatant` (self-apply; caps at max HP, revives a dying druid); transform + slot spend + "while transformed" gate GM-narrated |
 | `use_commanders_strike` | ✅ tracked | A use/resource |
 | `use_conquering_presence` | ✅ tracked | C save-or-condition |
 | `use_control_undead` | ✅ tracked | C save-or-condition |
