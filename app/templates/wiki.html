@@ -18,56 +18,58 @@
   <h2 id="srd-coverage">SRD 5e automation coverage</h2>
   <p class="lede" style="margin-bottom:8px;">
     How much of the SRD 5.1 ruleset SimpleVTT mechanically automates, by content
-    category, as of <strong>v2.434.0</strong>. "Automated" means the engine
-    derives or enforces the rule (saves, damage, passive item effects, class
-    features, conditions) rather than leaving it to GM narration. Recomputed
-    each audit pass; see <a href="/wiki/doc/todo">TODO</a> for the breakdown and
-    gaps.
+    category, as of the <strong>v2.553.0 audit refresh</strong> (races
+    denominator updated v2.654.0). "Automated" means the engine derives or
+    enforces the rule (saves, damage, passive item effects, class features,
+    conditions) rather than leaving it to GM narration; "supported" additionally
+    counts deliberately GM-narrated resolution per the 2026-06-22 rubric.
+    Recomputed each audit pass; see <a href="/wiki/doc/todo">TODO</a> for the
+    breakdown and gaps.
   </p>
   <table>
     <thead>
       <tr><th>Category</th><th>Count</th><th>Automated</th></tr>
     </thead>
     <tbody>
-      <tr><td>Races</td><td>9</td><td><span class="status-shipped">✅ ~100%</span></td></tr>
+      <tr><td>Races</td><td>14</td><td><span class="status-shipped">✅ ~100%</span></td></tr>
       <tr><td>Monsters</td><td>322</td><td><span class="status-shipped">✅ ~100%</span></td></tr>
-      <tr><td>Conditions</td><td>15</td><td><span class="status-shipped">~92%</span></td></tr>
+      <tr><td>Conditions</td><td>15</td><td><span class="status-shipped">~92% · 100% supported</span></td></tr>
       <tr><td>Class features</td><td>222 rows</td><td><span class="status-shipped">✅ 100%</span></td></tr>
-      <tr><td>Spells</td><td>319</td><td><span class="status-shipped">~85%</span></td></tr>
+      <tr><td>Spells</td><td>319</td><td><span class="status-shipped">~93% · 100% supported</span></td></tr>
       <tr><td>Magic items</td><td>239 / 239 wired</td><td><span class="status-shipped">✅ 100%</span></td></tr>
     </tbody>
   </table>
   <details class="srd-coverage">
-  <summary>Detailed breakdown &amp; notes <span class="srd-summary-meta">— overall ~97% · click to expand</span></summary>
+  <summary>Detailed breakdown &amp; notes <span class="srd-summary-meta">— overall ~98–99% · 100% supported · click to expand</span></summary>
   <p class="lede" style="margin-top:0;">
-    <strong>Overall ~97%.</strong> Magic items joins Monsters + Class features + Races as a
-    strictly-✅ surface after the v2.403.0–v2.404.0 magic-items closure arc — 22 charge-bearing Bucket D items
-    + both Bucket A holdouts (wind-fan, medallion-of-thoughts) wired through the new
-    <code>_use_item_action_announce_only</code> + dedicated handlers (Phase 9.2),
-    plus the 4 umbrella catalog slugs closed in v2.404.0 (potion-of-healing real heal handler with tier picker,
-    spell-scroll real cast handler, weapon-1-2-or-3 + wand-of-the-war-mage-1-2-or-3 passive stubs — Phase 9.3).
-    Spells moved <strong>~79% → ~83%</strong> via the v2.404.1–v2.404.10
-    <a href="/wiki/doc/plan-spell-utility-upcast">spell utility-upcast arc</a>:
-    nine target-scaling utility spells (Invisibility, Fly, Enhance Ability, Longstrider, Charm Person, Bane,
-    Command, Animal Friendship, Blindness/Deafness) now ride the v2.380.0 / v2.381.0
-    cap-extension substrate across both <code>_SPELL_BUFF_MAP</code> and <code>_SPELL_TARGET_CAPS</code>.
-    Prior arcs that already shipped: the v2.392.0–v2.399.2
-    <a href="/wiki/srd-races-implementation">race-features arc</a>
-    (Dragonborn Breath Weapon, Tiefling racial Hellish Rebuke, Hill Dwarf
-    Stonecunning + heavy-armor speed bypass, Rock Gnome Artificer's Lore, plus
-    recognition flags for Halfling Nimbleness + Naturally Stealthy);
-    magic-item content tail (v2.316–v2.344); class-feature
-    strictly-✅ 100% (Aura of Courage v2.368.0; Unarmored Defense / Deflect
-    Missiles / Cleansing Touch v2.369.0–v2.370.1); AoE auto-targeting
-    (sphere/cone/line picker + cast_spell parity v2.373.0–v2.376.0); the
-    lair-action arc end-to-end (v2.377.0–v2.382.0: metallic + Lich + Kraken
-    backfill + condition map + regional effects); and the condition-enforcement
-    audit (v2.385.0–v2.391.0: Sneak Attack ally-skip + 3 PC-action
-    incapacitated gates + Grappled-ends-on-grappler-incap +
-    Charmed-can't-target-charmer). The remaining ~3% is content-layer
-    utility-spell richness (~250 cast-and-broadcast spells with no
-    damage/healing base) + permanently-GM-narrated condition clauses by design.
-    Known defects are tracked in <a href="/wiki/doc/bugs">BUGS</a>.
+    <strong>Overall ~98–99% mechanically automated · 100% supported — the SRD
+    ruleset is functionally complete</strong> (v2.553.0 audit; races denominator
+    updated v2.654.0). Under the 2026-06-22 rubric (the GM is the rules
+    authority, so GM-adjudicated resolution counts as supported) every SRD
+    spell, condition, feature, monster, race, and magic item is either
+    mechanically automated or deliberately GM-narrated. The two big movers
+    since the v2.404.10 snapshot this table previously pinned: the
+    v2.437.0–v2.553.0
+    <a href="/wiki/doc/plan-cast-and-broadcast-tail">cast-and-broadcast utility-spell tail</a>
+    (Phase 1 + Phase 2 #1–#67) wired a cast endpoint for every previously
+    substrate-blocked spell cluster — invisibility-detection
+    (<code>sees_invisible</code> attack-edge), Mirror Image's deflection
+    mechanic, scrying-sensor markers, AoE-shape zone markers (Globe's
+    spell-block and Antilife Shell's movement barrier are fully mechanical),
+    and the conjure-catalog summon override — lifting Spells
+    <strong>~85% → ~93%</strong> automated; and v2.654.0 shipped the 5 SRD
+    subraces missing from the shipped tier (Mountain Dwarf, Wood Elf, Forest
+    Gnome, Stout Halfling, Drow), lifting the Races denominator 9 → 14. The
+    residual automated-only gap is GM-narrated by design: 40,000-sq-ft zone
+    geometry (Forbiddance), remote scrying views (Clairvoyance / Arcane Eye /
+    Project Image), object triggers (Magic Mouth / Illusory Script), and the
+    permanently-narrated condition clauses (Charmed clause 2 social-check,
+    Grappled clause 3 out-of-reach, Deafened hearing-checks). Mechanizing that
+    slice (Maps 2.0 zone geometry, a remote-sensor surface) is an optional
+    future enhancement, not missing coverage; the only genuinely un-built
+    remainder is out-of-SRD-scope content (Tasha's / Xanathar's / 2024 rules —
+    future 3.x). Known defects are tracked in
+    <a href="/wiki/doc/bugs">BUGS</a>.
   </p>
   </details>
 

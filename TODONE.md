@@ -8,6 +8,15 @@ Items are grouped by the section they originally lived under in `TODO.md`. Each 
 
 ---
 
+## Bugs closed (from BUGS.md)
+
+Defects moved here from [`BUGS.md`](BUGS.md) once fixed, per that tracker's "move to TODONE on close" convention.
+
+- ✅ **B15 — Sharpness + Vorpal nat-20 tests silently regressed by /attune cap on finally-restore** · was 🔴 P1 · **FIXED (v2.320.3).** The detune file-mates (`test_sharpness_no_rider_when_detuned` / `test_vorpal_no_decap_when_detuned`) restored attunement via `/attune` in a `finally` block; the carriers are seeded at 4 attuned items, so the 3-cap check silently 409'd and left the rider detuned for the nat-20 tests ("Sources seen: []"). Fixed by routing detune + restore through `_patch_attuned_via_sheet_fields` (fetch `/sheet-json`, flip the inventory `attuned` flag, PATCH `/sheet-fields` — bypasses the `/attune`-only cap). Both nat-20 tests pass locally. (Closed out of BUGS.md v2.1000.1.)
+- ✅ **B7 — Reaction spells only partially automated** · was 🟡 P2 · **FIXED (v2.600.0–v2.664.0).** The "substantial remaining slice" the bug named — the v3 pending-damage state machine — shipped as the [pending-resolution arc](docs/plans/pending-resolution-state-machine.md): the Shield / Defensive Duelist / Parry AC-bump-negation family (v2.600.0–v2.608.0), the Lucky + Silvery Barbs reroll family with retroactive save re-resolution (v2.609.0–v2.612.0), and attack hit↔miss re-resolution (v2.664.0) all auto-resolve server-side. Counterspell auto-prompts since v2.70.0 (Phase 3b) and Hellish Rebuke / Absorb Elements have availability gates wired (`_pc_has_hellish_rebuke_available` / `_pc_has_absorb_elements_available`). The smaller remaining tail (auto-cast routing for "click Cast Spell to resolve" advisories, own-roll reroll surfaces) is filed feature work in the reactions plan, not a defect. (Closed out of BUGS.md v2.1000.1.)
+
+---
+
 ## Touch Target Remediation
 
 Apple's HIG minimum of 44×44 px was applied globally in v1.2.7 via the base `button`, `input`, and `select` CSS rules. The follow-up phases below covered the inline-styled elements that the global pass didn't reach.

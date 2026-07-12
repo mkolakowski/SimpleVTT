@@ -20,3 +20,7 @@ app/static/uploads/
 # Harness run artifacts (scripts/run_harness.sh) — keep the dir, ignore runs
 test-results/*
 !test-results/.gitkeep
+
+# Visual-snapshot current-run artifacts — baselines are Linux-baked; local
+# (macOS) runs regenerate *.current.png diffs that should never be committed
+tests/harness_ui/__snapshots__/*.current.png

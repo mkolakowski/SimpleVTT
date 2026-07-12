@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1000.1] - 2026-07-12 — "The Tidy Ledger"
+
+**Schema version:** 102
+
+**Commit summary:** Doc-hygiene sweep — reconcile the stale tracker rows an open-items review surfaced: wiki SRD coverage refreshed to the v2.553.0 audit, five stale plan-status rows corrected across all three wiki surfaces, B7 + B15 closed out of BUGS.md, visual-snapshot artifacts gitignored.
+
+**Description:** A review of all open items (TODO.md / BUGS.md / the wiki index / plan docs) found the tracking docs had drifted behind the code; this release reconciles them. The SRD 5e coverage table — pinned at the v2.404.10/v2.434.0 snapshot (Races 9, Spells ~83–85%, "overall ~97%") in both `docs/wiki/README.md` and the `/wiki` landing page — now reflects the v2.553.0 audit + the v2.654.0 subrace ship: Races 14, Spells ~93% automated · 100% supported, overall ~98–99% · functionally complete under the 2026-06-22 rubric. Five design-plan status rows were stale in `docs/wiki/README.md` + `wiki_plans.html`: campaign-pc-archive (shipped end-to-end v2.605.0; said "queued"), pending-resolution state machine (attack-flip arc closed v2.664.0; said "attack hit↔miss remains"), reactions-automation (v3 auto-resolution closed via the pending-resolution arc; said "backlog filed"), magic-item automation (239/239 closed v2.404.0; the plans page still said "Phase 9 tail is P2"), and the cast-and-broadcast tail (complete through #67; said "in progress"). In BUGS.md, B15 (FIXED v2.320.3 with its own "move on close" note) and B7 (overtaken by the v2.600.0–v2.664.0 pending-resolution arc — Counterspell auto-prompt + Hellish Rebuke / Absorb Elements gates verified wired in `tabletop_routes.py`) move to a new "Bugs closed (from BUGS.md)" section in TODONE.md, and the footer "not bugs" note's long-reconciled figures (116/239 items, ~110 spells, 24 ⚪ rows) are corrected. The wiki README's guides-to-write list checks off "Backups + restore" (shipped v2.628.0). And `tests/harness_ui/__snapshots__/*.current.png` (local Playwright runs against the Linux-baked baselines) are now gitignored so they stop cluttering `git status`.
+
+### Changed
+- `docs/wiki/README.md` — SRD coverage table + prose refreshed to the v2.553.0 audit (Races 14, Spells ~93% · 100% supported); five plan-status rows corrected; "Backups + restore" checked off in the guides-to-write list.
+- `app/templates/wiki.html` — landing-page SRD coverage intro, table, summary meta, and detail paragraph refreshed to match.
+- `app/templates/wiki_plans.html` — the same five plan-status rows corrected (campaign-pc-archive, pending-resolution, reactions-automation, magic-items-automation, cast-and-broadcast-tail).
+- `BUGS.md` — B7 + B15 removed (closed → TODONE.md); the footer "not bugs" note now cites the v2.553.0 audit instead of long-closed figures.
+- `TODONE.md` — new "Bugs closed (from BUGS.md)" section holding the B15 (v2.320.3) + B7 (v2.600.0–v2.664.0) closure records.
+- `.gitignore` — ignore `tests/harness_ui/__snapshots__/*.current.png` visual-snapshot run artifacts.
+
 ## [2.1000.0] - 2026-07-10 — "The Salvage Run"
 
 **Schema version:** 102
