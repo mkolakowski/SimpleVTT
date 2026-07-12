@@ -434,6 +434,16 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('requirements-dev.txt') }}
 
+      # v2.1006.0 — B1 fix: the skull-overlay test samples the ☠ glyph
+      # from the canvas; without an emoji font the runner draws gray
+      # tofu and the pixel assertion fails. Install the Noto emoji font
+      # BEFORE chromium so the glyph renders. Deliberately NOT added to
+      # the harness_ui job above — its visual-regression baselines were
+      # baked without an emoji font, and changing the font set there
+      # would invalidate all 299 snapshots.
+      - name: Install emoji font (skull-overlay glyph)
+        run: sudo apt-get update && sudo apt-get install -y fonts-noto-color-emoji
+
       - name: Install Playwright chromium + system deps
         run: playwright install --with-deps chromium
 

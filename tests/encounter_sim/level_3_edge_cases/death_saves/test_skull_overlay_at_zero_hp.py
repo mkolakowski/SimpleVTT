@@ -35,7 +35,6 @@ follow-up if this heuristic flakes.
 """
 from __future__ import annotations
 
-import pytest
 from playwright.sync_api import BrowserContext, expect
 
 from ...conftest import tabletop_url
@@ -53,26 +52,12 @@ from ...pages.tabletop import TabletopPage
 PIP_CID = "es_skull_pip"
 
 
-@pytest.mark.skip(reason=(
-    "v2.49.241: skipped pending font diagnosis. On CI's Ubuntu Playwright "
-    "Chromium runner the token-center pixel consistently samples as "
-    "[66, 66, 66, 255] (RGB sum 198) — not the skull-glyph fill (≥700) or "
-    "stroke (≤60) the assertion expects. The same value appears across "
-    "multiple CI runs even after v2.49.240's 24×250ms poll-and-retry, which "
-    "rules out a timing race. Most likely the ☠ emoji font isn't installed "
-    "in the Playwright Chromium container, so the glyph renders as tofu "
-    "(default-gray rectangle). Locally on macOS the test passes — local "
-    "Chromium has the emoji font.\n\n"
-    "Fix paths:\n"
-    "  (a) Install fonts-noto-color-emoji (or equivalent) in the workflow's "
-    "Playwright install step.\n"
-    "  (b) Change the assertion to use a structural check (window.battle "
-    "state + a draw-fired flag) instead of a pixel sample.\n"
-    "  (c) Rewrite the skull overlay to use a SVG/HTML element that's "
-    "easier to assert on than a canvas pixel.\n\n"
-    "Filed in TODO.md → Test Infrastructure. The v2.49.4 regression class "
-    "this test was written to catch is still covered locally."
-))
+# v2.1006.0 — un-skipped (was B1 in BUGS.md, filed v2.49.241). The CI
+# failure was diagnosed as the ☠ glyph rendering as gray tofu because
+# the Ubuntu Playwright runner lacked an emoji font; the encounter-sim
+# workflow job now installs fonts-noto-color-emoji before
+# `playwright install` (fix path (a) from the original skip note), so
+# the token-center pixel sample reads the real skull fill/stroke again.
 def test_skull_overlay_renders_on_zero_hp_token(
     gm_context: BrowserContext,
     roster: dict,

@@ -18,16 +18,6 @@ The single canonical list of known defects, RAW divergences, latent test-couplin
 
 ## Test infrastructure
 
-### B1 — Skull-overlay test skipped in CI (missing emoji font) · 🟡 P2 · OPEN
-**Source:** was `TODO.md` › Test Infrastructure. **Filed 2026-05-25 (v2.49.241).**
-`tests/encounter_sim/level_3_edge_cases/death_saves/test_skull_overlay_at_zero_hp.py::test_skull_overlay_renders_on_zero_hp_token` is skipped pending font diagnosis. CI's Playwright Chromium samples `[66, 66, 66, 255]` (gray tofu) at the token center — the ☠ emoji doesn't render because the runner image lacks an emoji font. Locally (macOS) the skull renders fine.
-**Fix paths:** (1) add `sudo apt-get install -y fonts-noto-color-emoji` to the Playwright job in `.github/workflows/test-harness.yml` before `playwright install` — smallest commit; (2) change the assertion from canvas-pixel sampling to a `window.battle` + draw-fired flag — most resilient; (3) rewrite the overlay as an SVG/HTML element over the canvas — most invasive. The v2.49.4 regression class is still covered locally.
-
-### B2 — Two encounter-sim tests skipped (Garrik not tokenized) · 🟡 P2 · OPEN
-**Source:** was `TODO.md` › Test Infrastructure. **Filed 2026-05-25 (v2.49.236).**
-Skipped: `tests/encounter_sim/level_2_encounter/test_tavern_brawl_baseline.py::test_tavern_brawl_3_pcs_3_npcs_round_cycle` and `tests/encounter_sim/level_3_edge_cases/action_economy/test_action_surge_refunds_chip.py::test_action_surge_refunds_action_chip`. Both seed Garrik (Fighter) via `seed_battle_into_page`, but tabletop orphan-cleanup (`tabletop.html:4807`) drops any combatant whose `char_id` isn't tokenized in the demo seed. v2.49.172's slim from 12 → 6 tokenized PCs removed Garrik from `seed_tokens()` but didn't update these tests.
-**Fix paths:** (1) add Garrik back to `seed_tokens()` (cheapest if no other tokenized PC is a Fighter — the Action Surge test needs a tokenized Fighter); (2) swap fixtures to a tokenized PC (works for the brawl test, not Action Surge); (3) swap one of the tokenized six for Garrik (impacts `class-content-status.md` demo-roster notes). Backbone `tests/harness/test_use_action_surge.py` still covers the chip-refund contract via direct PUT `/battle`; only the Playwright UI assertion is gated.
-
 ### B4 — Encounter-sim coverage gap: pill-drop regressions pass the Python harness · 🟡 P2 · OPEN
 **Source:** `docs/plans/encounter-sim-test-suite.md`. Pure client-side regressions (e.g. an init-tracker pill that fails to drop / render) can pass the Python HTTP+WS harness because it asserts on endpoint contracts, not on rendered DOM. The encounter-sim Playwright layer is the intended net but Level 3 is only partially landed (see B8). Until Level 3 completes, some UI regressions have no automated guard.
 

@@ -36,7 +36,9 @@ from playwright.sync_api import BrowserContext, expect
 from ..conftest import tabletop_url
 from ..helpers.battle import (
     bandit_template_id,
+    delete_token,
     make_combatant,
+    place_token,
     seed_battle,
     seed_battle_into_page,
 )
@@ -52,21 +54,26 @@ BANDIT_BETA_CID = "es_brawl_bandit_beta"
 BANDIT_GAMMA_CID = "es_brawl_bandit_gamma"
 
 
-@pytest.mark.skip(reason=(
-    "v2.49.236: Garrik Ironside is no longer tokenized in the demo seed "
-    "(slimmed to 6 PCs in v2.49.172: Pip/Thalindra/Tavik/Zara/Krieger/Magnus). "
-    "The init-tracker's orphan-cleanup at tabletop.html:4807 drops any "
-    "combatant whose char_id isn't in the campaign's tokenized PC set, so "
-    "the seeded Garrik combatant gets filtered out before the assertion "
-    "runs. Fix path: either (a) re-tokenize Garrik in seed_tokens "
-    "(cascades into encounter setup + initiative roll), or (b) rewrite "
-    "this test to use a currently-tokenized PC like Krieger. TBD."
-))
+@pytest.fixture
+def garrik_tokenized(roster: dict):
+    """v2.1006.0 — un-skips B2 (filed v2.49.236): the init-tracker
+    orphan-cleanup (tabletop.html:4807) drops any combatant whose
+    char_id isn't tokenized, and the demo's tokenized-six has no
+    Fighter. Tokenize Garrik for the test via place-token and remove
+    the token afterward — no demo-seed change, no leftover token on
+    the public map."""
+    garrik = roster["Garrik Ironside"]
+    place_token(garrik["id"], 770.0, 700.0)
+    yield garrik
+    delete_token(garrik["id"])
+
+
 def test_tavern_brawl_3_pcs_3_npcs_round_cycle(
     gm_context: BrowserContext,
     roster: dict,
+    garrik_tokenized: dict,
 ):
-    garrik = roster["Garrik Ironside"]
+    garrik = garrik_tokenized
     magnus = roster["Magnus Hexbinder"]
     tavik = roster["Brother Tavik Stonebrow"]
     bandit_tmpl = bandit_template_id()
@@ -107,9 +114,15 @@ def test_tavern_brawl_3_pcs_3_npcs_round_cycle(
     ]:
         expect(tabletop.combatant_row(name)).to_be_visible(timeout=3000)
 
-    # ── Step 1: round label says "Round 1" ────────────────────────
-    round_label = gm_page.locator("#battle-round-label")
-    expect(round_label).to_have_text("Round 1", timeout=3000)
+    # ── Step 1: battle state says Round 1 ─────────────────────────
+    # v2.1006.0 — the #battle-round-label element was removed from the
+    # template at v2.49.102 (renderBattle's write is guarded by
+    # `if (roundEl)`), so assert on the structural state instead:
+    # renderBattle mirrors the battle onto window.battle (v2.49.5).
+    gm_page.wait_for_function(
+        "() => window.battle && (window.battle.round || 1) === 1",
+        timeout=3000,
+    )
 
     # ── Step 2: DOM order matches initiative order ────────────────
     # Each .init-entry has a .mini-header-name child. Pull them all
@@ -146,8 +159,12 @@ def test_tavern_brawl_3_pcs_3_npcs_round_cycle(
     for _ in range(6):
         next_btn.click()
 
-    # Round label now says "Round 2".
-    expect(round_label).to_have_text("Round 2", timeout=3000)
+    # Battle state now says Round 2 (see the Step-1 note — the round
+    # label element no longer exists; window.battle is the surface).
+    gm_page.wait_for_function(
+        "() => window.battle && window.battle.round === 2",
+        timeout=3000,
+    )
 
     # Active-turn marker wrapped back to Garrik.
     active_after = gm_page.locator(".init-entry.active-turn")

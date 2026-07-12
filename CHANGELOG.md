@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1005.1] - 2026-07-12 — "The Skeleton Crew"
+
+**Schema version:** 102
+
+**Commit summary:** Test-infra bugs B1 + B2 closed — the CI skull-overlay test and the two Garrik encounter-sim tests are un-skipped; three benched Playwright tests return to the regression net.
+
+**Description:** Closes the two P2 test-infrastructure bugs from BUGS.md. **B1** (filed v2.49.241): the skull-overlay pixel test failed on CI because the Ubuntu Playwright runner has no emoji font — the ☠ glyph rendered as gray tofu. The encounter-sim workflow job now installs `fonts-noto-color-emoji` before `playwright install` (fix path (a) from the filing); the font is deliberately NOT added to the harness_ui job, whose 299 Linux-baked visual baselines were rendered without an emoji font and would all invalidate. **B2** (filed v2.49.236): the tavern-brawl and Action-Surge-chip tests seed Garrik (the only Fighter), but the init-tracker orphan-cleanup drops any combatant whose `char_id` isn't tokenized, and the demo's tokenized-six lineup has no Fighter. Rather than changing the public demo's seed (either filed fix path), the tests now tokenize Garrik themselves: new `place_token` / `delete_token` helpers in `tests/encounter_sim/helpers/battle.py` place his token before the run and remove it on teardown, leaving the demo map untouched. Un-skipping the brawl test surfaced a third, hidden rot: its round assertions targeted `#battle-round-label`, an element removed from the template at v2.49.102 — replaced with structural `window.battle.round` checks (the surface `renderBattle` has mirrored since v2.49.5). All three tests pass locally three consecutive runs; the CI font fix gets proven by this push's own workflow run.
+
+### Changed
+- `.github/workflows/test-harness.yml` — the encounter-sim job installs `fonts-noto-color-emoji` before the Playwright install (with a comment on why the harness_ui job must NOT get it).
+- `tests/encounter_sim/helpers/battle.py` — new `place_token` / `delete_token` GM helpers.
+- `tests/encounter_sim/level_3_edge_cases/death_saves/test_skull_overlay_at_zero_hp.py` — skip removed (B1).
+- `tests/encounter_sim/level_3_edge_cases/action_economy/test_action_surge_refunds_chip.py` — skip removed; tokenizes Garrik with teardown (B2).
+- `tests/encounter_sim/level_2_encounter/test_tavern_brawl_baseline.py` — skip removed via a `garrik_tokenized` fixture; dead `#battle-round-label` assertions replaced with `window.battle.round` checks (B2).
+- `BUGS.md` — B1 + B2 removed (closed → TODONE.md's "Bugs closed" section).
+
 ## [2.1005.0] - 2026-07-12 — "The Kindled Ally"
 
 **Schema version:** 102

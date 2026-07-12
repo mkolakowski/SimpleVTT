@@ -145,6 +145,40 @@ def seed_battle(combatants: list[dict]) -> None:
         client.close()
 
 
+def place_token(character_id: int, x: float = 700.0, y: float = 700.0) -> None:
+    """v2.1006.0 — POST /character/{id}/place-token as the GM, putting
+    (or replacing) the PC's token on the active map. Used by tests
+    whose seeded combatant would otherwise be dropped by the
+    init-tracker orphan-cleanup (tabletop.html:4807: any combatant
+    whose char_id isn't in the campaign's tokenized PC set is
+    filtered) — e.g. Garrik, since the demo's tokenized-six lineup
+    (v2.49.172) has no Fighter. Pair with ``delete_token`` in a
+    try/finally so the demo map isn't left with extra tokens.
+    """
+    client = _gm_client()
+    try:
+        resp = client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{character_id}/place-token",
+            json={"x": float(x), "y": float(y)},
+        )
+        resp.raise_for_status()
+    finally:
+        client.close()
+
+
+def delete_token(character_id: int) -> None:
+    """v2.1006.0 — cleanup twin of ``place_token``: DELETE the PC's
+    token from the active map. Best-effort (no raise_for_status —
+    cleanup must not mask the test's own failure)."""
+    client = _gm_client()
+    try:
+        client.delete(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{character_id}/token",
+        )
+    finally:
+        client.close()
+
+
 def seed_battle_into_page(context, combatants: list[dict]) -> None:
     """Pre-populate a Playwright browser context's ``localStorage``
     with the same battle state ``seed_battle`` PUTs to the server.
