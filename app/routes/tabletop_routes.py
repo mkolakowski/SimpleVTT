@@ -37030,6 +37030,77 @@ def _target_has_condition_advantage(
     return None
 
 
+# v2.1001.0 — Phase 3 of the advantage-disadvantage plan (positional
+# prone edge). RAW PHB p.292: "An attack roll against a prone creature
+# has advantage if the attacker is within 5 feet of the creature.
+# Otherwise, the attack roll has disadvantage." The rule is
+# distance-based, not melee/ranged-based — a reach weapon swung from
+# 10 ft still rolls at disadvantage. Prone was deliberately excluded
+# from `_TARGET_ADV_CONDITION_KEYS` at Phase 2a pending this check;
+# the plan filed it as "blocked on Maps 2.0", and the substrate has
+# since shipped (`_combatant_token` v2.99.432 resolves PC + NPC
+# combatants to tokens; `_distance_ft_between_points` v2.61.0 does the
+# grid math), so this rides both with zero new geometry code.
+def _target_prone_positional_edge(
+    db: Session, campaign_id: int,
+    attacker_combatant: "dict | None",
+    target_combatant_id: "str | None",
+) -> "str | None":
+    """Returns ``"advantage"`` when the target combatant is prone and
+    the attacker's token is within 5 ft of it, ``"disadvantage"`` when
+    the target is prone and the attacker is farther away, and ``None``
+    when the target isn't prone OR positions can't be resolved (no
+    battle, no active gridded map, either side has no token) — an
+    off-grid prone target stays GM-adjudicated, the pre-Phase-3
+    behavior.
+
+    ``attacker_combatant`` accepts a real hub combatant dict (NPC path
+    — resolves via ``source_token_id``) or a ``{"char_id": id}``
+    pseudo-dict (PC path); both are shapes ``_combatant_token`` reads.
+    """
+    if not target_combatant_id:
+        return None
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return None
+    target_combatant = None
+    for c in state.get("combatants") or []:
+        if c.get("id") == target_combatant_id:
+            target_combatant = c
+            break
+    if not target_combatant:
+        return None
+    target_prone = any(
+        isinstance(b, dict)
+        and (b.get("key") or "").strip().lower() == "prone"
+        for b in (target_combatant.get("buffs") or [])
+    )
+    if not target_prone:
+        return None
+    atk_tok = _combatant_token(db, campaign_id, attacker_combatant)
+    tgt_tok = _combatant_token(db, campaign_id, target_combatant)
+    if not (atk_tok and tgt_tok):
+        return None
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    map_row = (
+        db.query(Map).filter(Map.id == campaign.active_map_id).first()
+        if campaign and campaign.active_map_id else None
+    )
+    if not map_row or not map_row.grid_size_px:
+        return None
+    grid_type = (
+        getattr(map_row.grid_type, "value", map_row.grid_type) or "square"
+    )
+    dist = _distance_ft_between_points(
+        int(map_row.grid_size_px), str(grid_type).lower(),
+        float(atk_tok.x or 0), float(atk_tok.y or 0),
+        float(tgt_tok.x or 0), float(tgt_tok.y or 0),
+    )
+    if dist is None:
+        return None
+    return "advantage" if dist <= 5.0 else "disadvantage"
+
+
 # v2.154.0 — Phase 2c. NPC-attacker mirrors of the v2.152.0 PC helpers.
 # The PC versions read ``sheet._buffs_active`` (the v2.97.30 mirror copy);
 # NPCs don't have a sheet — their conditions live directly on the hub's
@@ -114194,6 +114265,14 @@ async def use_attack(
         _target_adv_condition = _target_has_condition_advantage(
             campaign_id, target_combatant_id,
         )
+        # v2.1001.0 — Phase 3 (advantage-disadvantage plan): positional
+        # prone edge. RAW PHB p.292 — within 5 ft of a prone target →
+        # advantage; farther → disadvantage. Fires only when both
+        # tokens sit on the active gridded map; off-grid prone stays
+        # GM-adjudicated (edge is None).
+        _prone_edge = _target_prone_positional_edge(
+            db, campaign_id, {"char_id": char.id}, target_combatant_id,
+        )
         # v2.158.53 — Vow of Enmity Phase 2 read (Vengeance Paladin Lv 3+
         # CD, PHB p.88): advantage on attacks vs the marked combatant.
         _voe_advantage = _attacker_has_vow_of_enmity_vs_target(
@@ -114205,6 +114284,7 @@ async def use_attack(
             or _attacker_invisible_adv
             or _vis_attacker_unseen
             or bool(_target_adv_condition)
+            or _prone_edge == "advantage"
             or _voe_advantage
         )
         adv_label = (
@@ -114214,6 +114294,7 @@ async def use_attack(
             "invisible" if _attacker_invisible_adv else
             "unseen_attacker" if _vis_attacker_unseen else
             f"target_{_target_adv_condition}" if _target_adv_condition else
+            "target_prone_within_5ft" if _prone_edge == "advantage" else
             "vow_of_enmity" if _voe_advantage else ""
         )
         # v2.99.207 — Elusive (Rogue Lv 18+). RAW PHB p.96: "No
@@ -114278,6 +114359,7 @@ async def use_attack(
             or bool(_attacker_dis_condition)
             or bool(target_cloak_dis)
             or _target_invisible_dis
+            or _prone_edge == "disadvantage"
         )
         dis_label = (
             "dodging" if target_dodging else
@@ -114289,7 +114371,9 @@ async def use_attack(
             f"attacker_{_attacker_dis_condition}"
             if _attacker_dis_condition else
             "cloak_of_displacement" if target_cloak_dis else
-            "target_invisible" if _target_invisible_dis else ""
+            "target_invisible" if _target_invisible_dis else
+            "target_prone_beyond_5ft"
+            if _prone_edge == "disadvantage" else ""
         )
         if has_adv and has_dis:
             attack_roll_state_applied = f"canceled_{adv_label}_vs_{dis_label}"
@@ -114351,6 +114435,11 @@ async def use_attack(
         _target_adv_condition = _target_has_condition_advantage(
             campaign_id, target_combatant_id,
         )
+        # v2.1001.0 — Phase 3 positional prone edge (bonusless branch
+        # mirror). See the bonused branch above.
+        _prone_edge = _target_prone_positional_edge(
+            db, campaign_id, {"char_id": char.id}, target_combatant_id,
+        )
         # v2.158.53 — Vow of Enmity Phase 2 read (bonusless branch mirror).
         _voe_advantage = _attacker_has_vow_of_enmity_vs_target(
             campaign_id, char.id, target_combatant_id,
@@ -114361,6 +114450,7 @@ async def use_attack(
             or _attacker_invisible_adv
             or _vis_attacker_unseen
             or bool(_target_adv_condition)
+            or _prone_edge == "advantage"
             or _voe_advantage
         )
         adv_label = (
@@ -114370,6 +114460,7 @@ async def use_attack(
             "invisible" if _attacker_invisible_adv else
             "unseen_attacker" if _vis_attacker_unseen else
             f"target_{_target_adv_condition}" if _target_adv_condition else
+            "target_prone_within_5ft" if _prone_edge == "advantage" else
             "vow_of_enmity" if _voe_advantage else ""
         )
         # v2.99.207 — Elusive (Rogue Lv 18+). RAW PHB p.96: "No
@@ -114432,6 +114523,7 @@ async def use_attack(
             or bool(_attacker_dis_condition)
             or bool(target_cloak_dis)
             or _target_invisible_dis
+            or _prone_edge == "disadvantage"
         )
         dis_label = (
             "dodging" if target_dodging else
@@ -114443,7 +114535,9 @@ async def use_attack(
             f"attacker_{_attacker_dis_condition}"
             if _attacker_dis_condition else
             "cloak_of_displacement" if target_cloak_dis else
-            "target_invisible" if _target_invisible_dis else ""
+            "target_invisible" if _target_invisible_dis else
+            "target_prone_beyond_5ft"
+            if _prone_edge == "disadvantage" else ""
         )
         if has_adv and has_dis:
             attack_roll_state_applied = f"canceled_{adv_label}_vs_{dis_label}"
@@ -116123,6 +116217,13 @@ async def use_npc_attack(
     _npc_target_adv_condition = _target_has_condition_advantage(
         campaign_id, target_combatant_id,
     )
+    # v2.1001.0 — Phase 3 positional prone edge (NPC mirror). The
+    # attacker combatant dict resolves to its token via
+    # `source_token_id` inside `_combatant_token`; same RAW PHB p.292
+    # within-5-ft/beyond-5-ft split as the PC `/attack` wiring.
+    _prone_edge = _target_prone_positional_edge(
+        db, campaign_id, attacker, target_combatant_id,
+    )
     # v2.252.0 — Phase 4a: target wears Cloak of Displacement → the NPC
     # attacker rolls at disadvantage. Symmetric with the PC /attack path.
     target_cloak_dis = _target_wearer_imposes_attack_disadvantage(
@@ -116162,12 +116263,14 @@ async def use_npc_attack(
         or _npc_attacker_invisible_adv
         or _vis_attacker_unseen
         or bool(_npc_target_adv_condition)
+        or _prone_edge == "advantage"
     )
     adv_label = (
         "reckless" if target_grants_advantage else
         "invisible" if _npc_attacker_invisible_adv else
         "unseen_attacker" if _vis_attacker_unseen else
-        f"target_{_npc_target_adv_condition}" if _npc_target_adv_condition else ""
+        f"target_{_npc_target_adv_condition}" if _npc_target_adv_condition else
+        "target_prone_within_5ft" if _prone_edge == "advantage" else ""
     )
     # v2.514.0 — See Invisibility target-side (#43 follow-up), NPC mirror:
     # an invisible target imposes disadvantage on the NPC attacker (RAW
@@ -116183,6 +116286,7 @@ async def use_npc_attack(
         or bool(_npc_attacker_dis_condition)
         or bool(target_cloak_dis)
         or _npc_target_invisible_dis
+        or _prone_edge == "disadvantage"
     )
     dis_label = (
         "dodging" if target_dodging else
@@ -116191,7 +116295,9 @@ async def use_npc_attack(
         f"attacker_{_npc_attacker_dis_condition}"
         if _npc_attacker_dis_condition else
         "cloak_of_displacement" if target_cloak_dis else
-        "target_invisible" if _npc_target_invisible_dis else ""
+        "target_invisible" if _npc_target_invisible_dis else
+        "target_prone_beyond_5ft"
+        if _prone_edge == "disadvantage" else ""
     )
     if has_adv and has_dis:
         attack_roll_state_applied = f"canceled_{adv_label}_vs_{dis_label}"

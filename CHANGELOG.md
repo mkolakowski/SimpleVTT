@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1001.0] - 2026-07-12 — "The Fallen Foe"
+
+**Schema version:** 102
+
+**Commit summary:** Advantage-disadvantage Phase 3 — the positional prone edge: attacks against a prone target roll at advantage from within 5 ft and disadvantage from farther away (RAW PHB p.292), across `/attack` and `/npc_attack`, riding the Maps 2.0 distance substrate.
+
+**Description:** Closes the plan's last deferred rules phase, filed since v2.2.0 as "blocked on Maps 2.0." The open-items review noticed the blocker had quietly dissolved — Maps 2.0 shipped v2.752.0–v2.763.0 and the geometry primitives already existed — so Phase 3 ships as pure composition: a new `_target_prone_positional_edge` helper checks the target combatant for a `prone` buff, resolves both sides to tokens via `_combatant_token` (v2.99.432 — PC by `char_id`, NPC by `source_token_id`), and measures via `_distance_ft_between_points` (v2.61.0 — Chebyshev 5-5-5 on square grids, Euclidean on hex). Within 5 ft → advantage (`advantage_target_prone_within_5ft`); farther → disadvantage (`disadvantage_target_prone_beyond_5ft`); the RAW rule is distance-based, so a reach weapon swung from 10 ft is disadvantaged too. Off-grid (either side has no token, no gridded active map) → no edge, exactly the pre-Phase-3 GM-adjudicated behavior. Folded into all three attack sites — `/attack` bonused + bonusless branches and the `/npc_attack` mirror — where the existing PHB p.173 cancel logic and Elusive advantage-suppression compose for free (prone was deliberately excluded from `_TARGET_ADV_CONDITION_KEYS` at Phase 2a pending exactly this check). Attacker-prone disadvantage (Phase 2a) + target-prone-adjacent advantage now cancel to a straight roll, RAW-correct. Verified live: 4 new harness tests pass plus the neighboring adv/dis, unwavering-mark, trip-attack, giant-slayer, aura-range-gate, and attack suites (52 tests total).
+
+### Added
+- `app/routes/tabletop_routes.py` — `_target_prone_positional_edge()` (prone check + token resolution + grid distance; returns advantage/disadvantage/None) folded into the `/attack` bonused + bonusless adv/dis source sets and the `/npc_attack` mirror with the new `target_prone_within_5ft` / `target_prone_beyond_5ft` roll-state labels.
+- `tests/harness/test_attack_prone_positional.py` (+4) — within-5-ft advantage, beyond-5-ft disadvantage, off-grid no-edge fallback, attacker-prone-vs-target-prone cancel (with battle-state cleanup so later suites don't inherit the prone seed).
+
+### Changed
+- `docs/plans/advantage-disadvantage.md` — Phase 3 marked shipped (header status, implementation-status bullet, phase section).
+- `TODO.md` / `docs/wiki/README.md` / `app/templates/wiki_plans.html` — the advantage-disadvantage entry moves to ✅ effectively complete; only the filed tails remain (Elven Accuracy out of scope, Cloak of Elvenkind perception half, Cloak of Displacement suppress-after-damage).
+- `docs/test-harness-coverage.md` — new `test_attack_prone_positional.py` section; total-count header corrected to a fresh `--collect-only` (4685 — the prior 4687 had drifted).
+
 ## [2.1000.1] - 2026-07-12 — "The Tidy Ledger"
 
 **Schema version:** 102

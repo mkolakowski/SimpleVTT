@@ -71,7 +71,7 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 | [Campaign & PC retirement / archive](../plans/campaign-pc-archive.md) | Markdown (design) | Contributors | ✅ shipped end-to-end (v2.602.1–v2.605.0 · campaign archive + PC retirement + demo reseed) |
 | [Pending-resolution state machine](../plans/pending-resolution-state-machine.md) | Markdown (design) | Contributors | ✅ complete (v2.610.1–v2.664.0 · save path closed v2.612.0; attack hit↔miss re-resolution closed v2.664.0) |
 | [Backup / export-import overhaul](../plans/backup-export-overhaul.md) | Markdown (design) | Contributors | ✅ shipped (v2.612.4–v2.627.0) — all phases; see the [backups guide](backups.md) |
-| [Advantage & disadvantage](../plans/advantage-disadvantage.md) | Markdown (design) | Contributors | 🟠 Phases 1 + 2a–2f shipped (v2.2.0–v2.157.0); Phase 3 blocked on Maps 2.0; Phase 4a (Cloak of Displacement) shipped v2.252.0; Phase 4b (Cloak of Elvenkind) shipped v2.253.0 |
+| [Advantage & disadvantage](../plans/advantage-disadvantage.md) | Markdown (design) | Contributors | ✅ effectively complete — Phases 1 + 2a–2f (v2.2.0–v2.157.0) + 4a/4b (v2.252.0–v2.253.0) + Phase 3 positional prone edge (v2.1001.0, on the Maps 2.0 distance substrate); filed tails: Elven Accuracy (out of scope), Elvenkind perception half |
 | [Class / subclass / feat / race content](../plans/class-content-status.md) | Markdown (inventory) | Contributors | 🟢 / 🟠 / ⚪ living inventory |
 | [Full class-feature automation](../plans/full-feature-automation.md) | Markdown (design) | Contributors | 🟠 Phases 0–7 shipped; Phase 8 in progress (v2.158.x) |
 | [On-hit damage riders (automation Phase 2)](../plans/on-hit-riders.md) | Markdown (design) | Contributors | ✅ shipped |

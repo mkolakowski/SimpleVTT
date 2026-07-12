@@ -1076,7 +1076,7 @@ Now lives in [`TODONE.md`](TODONE.md#design-plans-backlog--shipped-end-to-end) �
 - [`encounter-sim-test-suite.md`](docs/plans/encounter-sim-test-suite.md) — **substantial progress** (Level 1 smoke + Level 2 encounter sim shipped through v2.49.x); Level 3 edge-case framework seeded; Phase 4 (Level 3 completion, ~40 tests) pending.
 - [`docs/encounters-plan.md`](docs/encounters-plan.md) — **proposed, not started**. Save/load encounter state.
 - [`docs/multi-system-refactor.md`](docs/multi-system-refactor.md) — **proposed, not started**. Big architectural lift; out of SRD-audit scope but tracked here for completeness.
-- [`advantage-disadvantage.md`](docs/plans/advantage-disadvantage.md) — Phases 1, 2a–2f all ✅ (v2.2.0–v2.157.0); **only Phase 3 (positional / 5-ft prone-melee advantage) remains, blocked on Maps 2.0**. Down-ranked within P2 because the unblocker is itself a multi-session lift.
+- [`advantage-disadvantage.md`](docs/plans/advantage-disadvantage.md) — ✅ **effectively complete (v2.1001.0)**: Phases 1, 2a–2f (v2.2.0–v2.157.0), 4a/4b (v2.252.0–v2.253.0), and **Phase 3 (positional prone edge) shipped v2.1001.0** once Maps 2.0 dissolved the blocker — `_target_prone_positional_edge` rides `_combatant_token` + `_distance_ft_between_points` across `/attack` + `/npc_attack`. Remaining filed tails only: Elven Accuracy (out of scope by design), Cloak of Elvenkind perception-disadvantage half, Cloak of Displacement suppress-after-damage.
 
 ### 🟢 P3 — Lower-priority / living docs
 
