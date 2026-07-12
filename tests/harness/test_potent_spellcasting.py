@@ -4,8 +4,12 @@ H.1 depth ship — first Lv 6/8/17 feature for an already-shipped
 Cleric domain. RAW PHB p.60: Light Domain Lv 8+ — add WIS mod
 to the damage of any cleric cantrip.
 
-v1 ships announce-only. The /cast_spell damage-roll hook is
-filed.
+v2.612.1 turned the endpoint into a `potent-spellcasting-active`
+flag-buff install; v2.1004.0 ships the deferred Phase-2 read site —
+`/cast_spell` (attack-roll + single-target-save + AoE loops) and
+`/place_aoe` add the buff's +WIS to one damage roll of any cantrip
+via `_potent_spellcasting_bonus`, mirroring the Empowered Evocation
+"+N once per cast" plumbing.
 
 Brother Tavik Stonebrow Lv 8 WIS 16 → +3 mod. Tests PATCH his
 subclass to "Light Domain".
@@ -14,11 +18,27 @@ Tests:
   - Happy → wis_mod 3, cantrip_name mirrored, broadcast.
   - Wrong subclass (default Life) → 409.
   - Level gate (Lv 7) → 409.
+  - v2.1004.0 read site → Sacred Flame cast at an NPC fires
+    feature_used(source=potent-spellcasting-bonus, +3) and the save
+    damage breakdown carries the +3.
 """
 import asyncio
+import pytest
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
+
+
+async def _spell_index(gm_client, char_id, name):
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-json",
+    )
+    sheet = (r.json() or {}).get("sheet") or {}
+    for i, sp in enumerate(sheet.get("spells") or []):
+        nm = sp.get("name") if isinstance(sp, dict) else sp
+        if str(nm).strip().lower() == name.strip().lower():
+            return i
+    return -1
 
 
 async def _patch_sheet(gm_client, char_id, fields, class_slug=None):
@@ -260,3 +280,80 @@ async def test_ps_buff_payload_carries_wis_mod_and_class_flags(
         f"/api/campaign/{CAMPAIGN_ID}/end_buff",
         json={"character_id": tavik["id"], "key": "potent-spellcasting-active"},
     )
+
+
+async def test_ps_adds_wis_to_cantrip_damage_on_cast(
+    gm_client, gm_ws, tavik_light_lv8,
+):
+    """v2.1004.0 — the Phase-2 read site: Light Tavik with the buff
+    installed casts Sacred Flame (cleric cantrip, DEX save) at an NPC
+    bandit → the single-target save path adds +3 (WIS) to the damage
+    expression and fires feature_used(source=potent-spellcasting-bonus).
+    Skips if Tavik has no Sacred Flame."""
+    tavik = tavik_light_lv8
+    idx = await _spell_index(gm_client, tavik["id"], "Sacred Flame")
+    if idx < 0:
+        pytest.skip("Tavik has no Sacred Flame to cast")
+    bandit_cid = "tok_ps_bandit"
+    templates = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/templates")).json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": f"tok_ps_t_{tavik['id']}", "char_id": tavik["id"],
+             "name": tavik["name"], "initiative": 12,
+             "hp_current": 55, "hp_max": 55, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": bandit_cid, "char_id": None,
+             "token_template_id": bandit["id"], "name": bandit["name"],
+             "initiative": 8, "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    # Install the Potent Spellcasting buff.
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_potent_spellcasting",
+        json={"character_id": tavik["id"]},
+    )
+    assert r.status_code == 200, r.text
+    try:
+        gm_ws.mark()
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": tavik["id"],
+                "spell_index": idx,
+                "target_combatant_id": bandit_cid,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert r.status_code == 200, r.text
+        await asyncio.sleep(0.3)
+        bonus = [
+            m for m in gm_ws.buffered("feature_used")
+            if (m.get("data") or {}).get("source")
+            == "potent-spellcasting-bonus"
+            and (m.get("data") or {}).get("character_id") == tavik["id"]
+        ]
+        assert bonus, (
+            "expected potent-spellcasting-bonus feature_used after a "
+            "Sacred Flame cast with the buff active"
+        )
+        assert "+3" in bonus[-1]["data"]["feature_name"], (
+            f"expected +3 (WIS mod) in the bonus label; got "
+            f"{bonus[-1]['data']['feature_name']!r}"
+        )
+    finally:
+        # Remove the permanent buff so it doesn't leak to sibling tests.
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+            json={"character_id": tavik["id"],
+                  "key": "potent-spellcasting-active"},
+        )

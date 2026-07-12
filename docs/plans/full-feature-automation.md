@@ -784,6 +784,22 @@ composition. Batch by class, same cadence as the breadth sweep.
   `test_supreme_healing.py` (+1 end-to-end claim-path test). Remaining from
   the survey: the Potent Spellcasting `/cast_spell` read-site + the
   Wildfire Spirit summon.
+- **v2.1004.0 ("The Cantrip's Edge") — Potent Spellcasting Phase 2 read
+  site** (Light/Knowledge/Grave/Peace Cleric Lv 8+): closes the deferred
+  read the v2.612.1 install filed. New `_potent_spellcasting_bonus`
+  (campaign_id, character_id, spell_level) — gate: cantrip (level 0) +
+  the `potent-spellcasting-active` buff — clones the
+  `_empowered_evocation_bonus` "+N to one damage roll" contract and
+  threads through the SAME four sites: the `/cast_spell` spell-attack
+  aggregate, the single-target NPC-save expression, the `/cast_spell`
+  AoE-NPC first-target fallback, and the `/place_aoe` NPC loop (the
+  pending-AoE ctx now stashes `spell_level`; a pre-deploy ctx without the
+  key defaults to -1 so it can't read as a cantrip). Companion
+  `feature_used(source=potent-spellcasting-bonus)` broadcast. Covers
+  Sacred Flame / Toll the Dead (single-target) + Word of Radiance
+  (place_aoe). Harness: `test_potent_spellcasting.py` (+1 end-to-end
+  Sacred Flame test). **The survey remainder is now just the Wildfire
+  Spirit summon** (`use_summon_wildfire_spirit` → `_summon_companion`).
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

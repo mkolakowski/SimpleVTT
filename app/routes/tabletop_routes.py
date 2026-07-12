@@ -26239,6 +26239,21 @@ async def cast_spell(
                 await _broadcast_empowered_evocation_bonus(
                     campaign_id, char, _ee_atk_bonus,
                 )
+            # v2.1004.0 — Potent Spellcasting on the spell-attack-roll
+            # path: +WIS to one damage roll of a cleric cantrip
+            # (Lv 8+ Light/Knowledge/Grave/Peace domains). Same
+            # once-per-cast aggregate wire as Empowered Evocation.
+            _ps_atk_bonus = _potent_spellcasting_bonus(
+                campaign_id, char.id, spell_level,
+            )
+            if _ps_atk_bonus > 0 and any_hit and _dmg_base:
+                agg_damage_rolled += _ps_atk_bonus
+                agg_damage_breakdown_parts.append(
+                    f"Potent Spellcasting +{_ps_atk_bonus}"
+                )
+                await _broadcast_potent_spellcasting_bonus(
+                    campaign_id, char, _ps_atk_bonus,
+                )
             headline = max(beams, key=lambda b: b["total"]) if beams else {}
             auto_attack_total = int(headline.get("total") or 0)
             auto_attack_breakdown = headline.get("breakdown") or ""
@@ -26890,11 +26905,21 @@ async def cast_spell(
             campaign_id, char.id, payload.get("spell_school") or "",
         )
         _ee_fired = False
+        # v2.1004.0 — Potent Spellcasting (+WIS to one damage roll of
+        # a cleric cantrip, Lv 8+ Light/Knowledge/Grave/Peace domain).
+        # Threaded through the same "+N once per cast" plumbing as
+        # Elemental Affinity / Empowered Evocation.
+        _ps_bonus = _potent_spellcasting_bonus(
+            campaign_id, char.id, spell_level,
+        )
+        _ps_fired = False
         _ea_damage_expr = damage_expr
         if _ea_bonus > 0 and damage_expr:
             _ea_damage_expr = f"{_ea_damage_expr}+{_ea_bonus}"
         if _ee_bonus > 0 and damage_expr:
             _ea_damage_expr = f"{_ea_damage_expr}+{_ee_bonus}"
+        if _ps_bonus > 0 and damage_expr:
+            _ea_damage_expr = f"{_ea_damage_expr}+{_ps_bonus}"
         if (
             damage_expr
             and auto_save_target_kind == "npc"
@@ -26918,6 +26943,11 @@ async def cast_spell(
                         campaign_id, char, _ee_bonus,
                     )
                     _ee_fired = True
+                if _ps_bonus > 0:
+                    await _broadcast_potent_spellcasting_bonus(
+                        campaign_id, char, _ps_bonus,
+                    )
+                    _ps_fired = True
             except dice_mod.DiceParseError:
                 auto_save_damage_rolled = 0
             if auto_save_damage_rolled > 0:
@@ -27292,6 +27322,15 @@ async def cast_spell(
                     campaign_id, char, _ee_bonus,
                 )
                 _ee_fired = True
+            # v2.1004.0 — Potent Spellcasting AoE wire. Same first-NPC
+            # fallback as Elemental Affinity / Empowered Evocation so
+            # the +WIS lands on exactly one damage roll per cast.
+            if _ps_bonus > 0 and not _ps_fired and damage_expr:
+                _aoe_dmg_expr = f"{_aoe_dmg_expr}+{_ps_bonus}"
+                await _broadcast_potent_spellcasting_bonus(
+                    campaign_id, char, _ps_bonus,
+                )
+                _ps_fired = True
             if damage_expr and bool(campaign.auto_apply_damage):
                 try:
                     _dr = dice_mod.roll(_aoe_dmg_expr)
@@ -27584,6 +27623,9 @@ async def cast_spell(
             # Empowered Evocation +INT bonus (the spell dict is gone by
             # place_aoe time, mirroring the range_str note below).
             "spell_school": payload.get("spell_school") or "",
+            # v2.1004.0 — stash the level so /place_aoe can apply the
+            # Potent Spellcasting +WIS cantrip bonus (Word of Radiance).
+            "spell_level": int(spell_level),
             "auto_apply_damage": bool(campaign.auto_apply_damage),
             "area": _aoe_area_info or {},
             "is_concentration": _is_concentration,
@@ -28309,6 +28351,18 @@ async def place_aoe(
             ctx.get("spell_school") or "",
         )
     _place_ee_fired = False
+    # v2.1004.0 — Potent Spellcasting +WIS in the /place_aoe NPC loop
+    # (Word of Radiance). Mirrors the EE wire above; the ctx stashes
+    # `spell_level` at cast time so the cantrip gate works here.
+    _place_ps_bonus = 0
+    if _caster_char_for_broadcast:
+        # Default -1 (not 0): a pre-v2.1004.0 pending ctx without the
+        # key must NOT read as "cantrip".
+        _place_ps_bonus = _potent_spellcasting_bonus(
+            campaign_id, int(ctx.get("caster_char_id") or 0),
+            int(ctx.get("spell_level", -1) if ctx.get("spell_level") is not None else -1),
+        )
+    _place_ps_fired = False
 
     # v2.661.0 — Sorcery Phase 1.5: Empowered Spell reroll across the AoE
     # multi-target loop. RAW PHB p.102 — Empowered rerolls up to CHA-mod
@@ -28724,6 +28778,16 @@ async def place_aoe(
                 campaign_id, _caster_char_for_broadcast, _place_ee_bonus,
             )
             _place_ee_fired = True
+        # v2.1004.0 — Potent Spellcasting +WIS at /place_aoe NPC site
+        # (Word of Radiance). Same first-NPC-wins idiom.
+        if (
+            _place_ps_bonus > 0 and not _place_ps_fired and damage_expr
+        ):
+            _place_aoe_dmg_expr = f"{_place_aoe_dmg_expr}+{_place_ps_bonus}"
+            await _broadcast_potent_spellcasting_bonus(
+                campaign_id, _caster_char_for_broadcast, _place_ps_bonus,
+            )
+            _place_ps_fired = True
         if damage_expr and auto_apply_damage:
             # v2.661.0 — Empowered Spell reroll (first-target-wins). Rolls
             # the EA/EE-augmented expr so the metamagic reroll composes with
@@ -56299,6 +56363,67 @@ async def _broadcast_empowered_evocation_bonus(
                 f"damage roll of this wizard evocation spell."
             ),
             "source": "empowered-evocation-bonus",
+        },
+    })
+
+
+def _potent_spellcasting_bonus(
+    campaign_id: int, character_id: "int | None", spell_level: "int | None",
+) -> int:
+    """v2.1004.0 — Phase 2 read site for the v2.612.1
+    ``potent-spellcasting-active`` buff (Light / Knowledge / Grave /
+    Peace Domain Cleric Lv 8+): "add your Wisdom modifier to the
+    damage you deal with any cleric cantrip."
+
+    Returns the +WIS mod the buff should add to one damage roll, or 0
+    when the gate doesn't fire. Gate: the spell is a cantrip
+    (level 0) AND the caster carries the buff (whose
+    ``effects.potent_spellcasting_wis_mod`` was computed at install —
+    the install is already domain- and level-gated, so the cleric
+    check is implicit). Mirrors the ``_empowered_evocation_bonus``
+    "+N to one damage roll" contract so it threads through the same
+    cast_spell / place_aoe application sites.
+    """
+    if not character_id:
+        return 0
+    if int(spell_level or 0) != 0:
+        return 0
+    for b in _get_buffs(campaign_id, int(character_id)):
+        eff = (b or {}).get("effects") or {}
+        if (
+            (b or {}).get("key") == "potent-spellcasting-active"
+            and eff.get("potent_spellcasting_active")
+        ):
+            try:
+                return int(eff.get("potent_spellcasting_wis_mod") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
+async def _broadcast_potent_spellcasting_bonus(
+    campaign_id: int, caster_char: "Character | None", bonus: int,
+) -> None:
+    """Companion broadcast when Potent Spellcasting adds +WIS to a
+    cantrip damage roll. Emits
+    `feature_used(source=potent-spellcasting-bonus)`.
+    """
+    if not caster_char or bonus == 0:
+        return
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": caster_char.id,
+            "character_name": caster_char.name,
+            "user_color": caster_char.color,
+            "feature_name": (
+                f"🌟 Potent Spellcasting (+{bonus} damage)"
+            ),
+            "feature_desc": (
+                f"{caster_char.name} adds +{bonus} (WIS mod) to the "
+                f"damage of this cleric cantrip."
+            ),
+            "source": "potent-spellcasting-bonus",
         },
     })
 

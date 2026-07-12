@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1004.0] - 2026-07-12 — "The Cantrip's Edge"
+
+**Schema version:** 102
+
+**Commit summary:** Potent Spellcasting Phase 2 — cleric cantrips now auto-add the caster's WIS modifier to one damage roll across all four spell-damage sites, closing the read-site the v2.612.1 buff install deferred.
+
+**Description:** Closes the second of the three open items the v2.1002.0 announce-only survey identified. The v2.612.1 `use_potent_spellcasting` endpoint installed a permanent `potent-spellcasting-active` buff (WIS mod + class baked into the effects) but nothing ever read it — a Lv 8+ Light/Knowledge/Grave/Peace cleric's Sacred Flame still rolled bare dice. The new `_potent_spellcasting_bonus` helper clones the `_empowered_evocation_bonus` "+N to one damage roll per cast" contract (gate: the spell is a cantrip AND the buff is present — the install is already domain/level-gated, so the cleric check is implicit) and threads through the same four application sites: the `/cast_spell` spell-attack aggregate, the single-target NPC-save damage expression, the `/cast_spell` AoE-NPC first-target fallback, and the `/place_aoe` NPC loop. For the last one the pending-AoE context now stashes `spell_level` at cast time (a pre-deploy context without the key defaults to −1 so a leveled spell can't misread as a cantrip across the deploy boundary). A companion `feature_used(source=potent-spellcasting-bonus)` broadcast credits the cleric, mirroring the Empowered Evocation card. Covers Sacred Flame and Toll the Dead on the single-target path and Word of Radiance through `/place_aoe`. With this, the survey's remaining queue is just the Wildfire Spirit summon.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `_potent_spellcasting_bonus` + `_broadcast_potent_spellcasting_bonus`; wired into the four spell-damage sites; the pending-AoE ctx stashes `spell_level`.
+- `tests/harness/test_potent_spellcasting.py` (+1) — `test_ps_adds_wis_to_cantrip_damage_on_cast`: end-to-end Sacred Flame vs an NPC bandit fires the `potent-spellcasting-bonus` broadcast with +3.
+- `docs/plans/full-feature-automation.md` — v2.1004.0 bullet; survey remainder now Wildfire Spirit only.
+- `docs/automation-coverage.md` — `use_potent_spellcasting` row notes the shipped read site.
+- `docs/test-harness-coverage.md` — potent-spellcasting section refreshed (the v2.612.1 buff-payload test was missing from its table); total 4687 → 4688.
+
 ## [2.1003.0] - 2026-07-12 — "The Full Measure"
 
 **Schema version:** 102

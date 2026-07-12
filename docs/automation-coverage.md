@@ -366,7 +366,7 @@ or passive damage-boosters that already ride other code paths
 | `use_mask_of_many_faces` | ⚪ announce-only | — |
 | `use_minor_alchemy` | ⚪ announce-only | — |
 | `use_mote_of_potential` | ✅ tracked | v2.670.0 — attack mode applies 1d{die} force damage (`_apply_damage_to_combatant`) + save mode grants 1d{die}+CHA temp HP (`_grant_temp_hp`); check mode stays GM-narrated |
-| `use_potent_spellcasting` | ✅ tracked | v2.612.1 — installs permanent `potent-spellcasting-active` flag-buff (`potent_spellcasting_*`: active/wis_mod/class); Phase 8 cleric/cantrip twin of Empowered Evocation |
+| `use_potent_spellcasting` | ✅ tracked | v2.612.1 — installs permanent `potent-spellcasting-active` flag-buff (`potent_spellcasting_*`: active/wis_mod/class); **v2.1004.0 — Phase 2 read site shipped**: `_potent_spellcasting_bonus` adds the +WIS to one cantrip damage roll across `/cast_spell` (attack-roll, single-target-save, AoE loop) + `/place_aoe`, mirroring the Empowered Evocation plumbing |
 | `use_relentless_avenger` | ⚪ announce-only | — |
 | `use_scornful_rebuke` | ⚪ announce-only | — |
 | `use_sculpt_spells` | ✅ tracked | v2.669.0 — installs a `sculpt-spells-active` protection buff riding the Careful Spell auto-pass substrate (`_caster_has_careful_pending_buff` matches the key); protected creatures auto-succeed + take no damage from the evocation AoE |
