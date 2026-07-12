@@ -4,9 +4,11 @@ H.1 Lv 17 Life ship. RAW PHB p.61: when you would roll dice
 to restore HP with a spell, take the maximum on each die
 instead.
 
-v1 announce-only — the max-dice substitution for heal-spell
-dice is GM-tracked (a follow-up could wire this into the
-heal-spell pipeline). No chip cost — passive permanent.
+v2.143.0 wired the max-dice substitution into the `/cast_spell`
+target-bound auto-heal path; v2.1003.0 closes the last gap — the
+legacy `/apply_healing` heal-claim (chat-card) path now maxes the
+dice too (the filed Phase-1.5 finisher). No chip cost — passive
+permanent.
 
 Tavik is Life Domain in the demo (just bumped to Lv 17).
 
@@ -14,6 +16,8 @@ Tests:
   - Lv 17 happy → max_dice_substitution True.
   - Wrong subclass → 409.
   - Level gate (Lv 16) → 409.
+  - v2.143.0 — /cast_spell targeted heal maxes dice ([max:8]).
+  - v2.1003.0 — /apply_healing claim path maxes dice too.
 """
 import asyncio
 import pytest_asyncio
@@ -171,3 +175,49 @@ async def test_sh_fires_on_cast_spell_heal(
     assert "[max:8]" in bd, (
         f"max-die marker missing from breakdown; got {bd!r}"
     )
+
+
+async def test_sh_fires_on_heal_claim_path(
+    gm_client, tavik_life_lv17,
+):
+    """v2.1003.0 — the legacy `/apply_healing` heal-claim (chat-card)
+    path maxes the healing dice for a Lv 17+ Life cleric caster, in
+    parity with the v2.143.0 `/cast_spell` auto-heal path. Tavik
+    casts Cure Wounds with NO target (claim flow), then the GM claims
+    it → `supreme_healing_applied: True`, the breakdown carries the
+    💗 prefix + `[max:8]`, and `rolled >= 8` (max die + WIS mod +
+    Disciple of Life uplift on top)."""
+    tavik = tavik_life_lv17
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/rest",
+        json={"type": "long"},
+    )
+    CURE_WOUNDS_INDEX = 4
+    cast_resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": tavik["id"],
+            "spell_index": CURE_WOUNDS_INDEX,
+            "slot_level": 1,
+            "class_slug": "cleric",
+            # No target — claim flow.
+            "override": True,
+        },
+    )
+    assert cast_resp.status_code == 200, cast_resp.text
+    cast_id = cast_resp.json()["id"]
+    claim_resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/apply_healing",
+        json={"cast_id": cast_id},
+    )
+    assert claim_resp.status_code == 200, claim_resp.text
+    data = claim_resp.json()
+    assert data.get("supreme_healing_applied") is True, data
+    bd = data.get("breakdown") or ""
+    assert "💗 Supreme Healing" in bd, (
+        f"Supreme Healing prefix missing from claim breakdown; got {bd!r}"
+    )
+    assert "[max:8]" in bd, (
+        f"max-die marker missing from claim breakdown; got {bd!r}"
+    )
+    assert int(data.get("rolled") or 0) >= 8, data

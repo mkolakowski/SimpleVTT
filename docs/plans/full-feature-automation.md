@@ -771,6 +771,20 @@ composition. Batch by class, same cadence as the breadth sweep.
   `test_combat_wild_shape.py` (+1 state-asserting heal test per the Phase 9
   contract).
 
+- **v2.1003.0 ("The Full Measure") — Supreme Healing heal-claim parity**
+  (Life Domain Cleric Lv 17+): closes the filed Phase-1.5 finisher the
+  v2.1002.0 survey re-confirmed. `/cast_spell`'s target-bound auto-heal has
+  maxed every healing die since v2.143.0, but the legacy `/apply_healing`
+  heal-claim (chat-card 🩹 button) path still rolled bare dice. The caster
+  sheet is now loaded before the roll (it was already fetched for the
+  v2.59.2 spellcasting-mod/Disciple-of-Life parity, just after the dice),
+  and a Lv 17+ Life cleric caster routes through `_max_dice_total` with the
+  same `💗 Supreme Healing` breakdown prefix; `supreme_healing_applied`
+  surfaces on the response + `heal_applied` broadcast. Harness:
+  `test_supreme_healing.py` (+1 end-to-end claim-path test). Remaining from
+  the survey: the Potent Spellcasting `/cast_spell` read-site + the
+  Wildfire Spirit summon.
+
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`
 `/cast_spell` read site); the earlier "5/6, Improved Reaper is the last" note

@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1003.0] - 2026-07-12 — "The Full Measure"
+
+**Schema version:** 102
+
+**Commit summary:** Supreme Healing (Life Domain Cleric Lv 17+) now maxes healing dice on the legacy `/apply_healing` heal-claim path too — closing the filed Phase-1.5 finisher; the `/cast_spell` auto-heal path has done this since v2.143.0.
+
+**Description:** Closes the long-filed Supreme Healing Phase-1.5 finisher from TODO.md's per-feature list, re-confirmed open by the v2.1002.0 announce-only survey. When a healing spell is cast without a target, the chat card's 🩹 Apply Healing button routes through `/apply_healing` and the `_heal_claims` registry — and that path still rolled bare dice, so a Lv 17+ Life cleric's Cure Wounds could roll a 2 through the chat card while the same cast at a picked target maxed to 8. The claim's `caster_char_id` (stored since v2.59.2 for the spellcasting-mod/Disciple-of-Life parity) already identifies the caster; the caster-sheet load now happens before the dice roll, and a Lv 17+ Life Domain caster substitutes `_max_dice_total` for the roll with the same `💗 Supreme Healing` breakdown prefix the `/cast_spell` path uses. The spellcasting modifier and Disciple of Life uplift stack on top as before. `supreme_healing_applied` surfaces on the endpoint response and the `heal_applied` broadcast. The `automation-coverage.md` row for `use_supreme_healing` — still marked ⚪ announce-only despite the v2.143.0 mechanization (the stale-classifier problem tracked as B5) — is corrected to ✅ tracked with both pipeline wire-ups noted.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `/apply_healing` loads the caster sheet before the dice roll and maxes every healing die via `_max_dice_total` when the caster is a Life Domain Cleric Lv 17+; response + `heal_applied` broadcast gain `supreme_healing_applied`.
+- `tests/harness/test_supreme_healing.py` (+1) — `test_sh_fires_on_heal_claim_path`: end-to-end target-less cast → claim → maxed dice (`[max:8]` + 💗 prefix + `rolled >= 8`).
+- `TODO.md` — the Supreme Healing Phase-1.5 finisher line removed from the Full Class-Feature Automation backlog.
+- `docs/plans/full-feature-automation.md` — v2.1003.0 bullet; survey remainder now just Potent Spellcasting read-site + Wildfire Spirit summon.
+- `docs/automation-coverage.md` — `use_supreme_healing` flipped ⚪ → ✅ tracked (was stale since v2.143.0).
+- `docs/test-harness-coverage.md` — supreme-healing section refreshed (the v2.143.0 cast-path test was missing from its table); total 4686 → 4687.
+
 ## [2.1002.0] - 2026-07-12 — "The Wild Mend"
 
 **Schema version:** 102

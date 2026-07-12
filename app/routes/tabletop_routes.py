@@ -108442,15 +108442,6 @@ async def apply_healing(
     if not char:
         raise HTTPException(404, "No target character resolved for this heal claim")
 
-    # Roll the healing dice server-side
-    try:
-        r = dice_mod.roll(claim["dice"])
-        rolled = r.total
-        breakdown = r.breakdown
-    except Exception:
-        rolled = 0
-        breakdown = ""
-
     # v2.59.2 — bring the heal-claim flow into parity with the
     # target-bound auto-heal path (v2.58.0 + v2.59.1). Two
     # corrections: (a) add the caster's spellcasting modifier per
@@ -108458,7 +108449,9 @@ async def apply_healing(
     # (b) add Disciple of Life uplift if the caster is a Life
     # Domain Cleric Lv 1+. Pre-v2.59.2 the claim flow rolled bare
     # dice — under-healing on every cast that went through the
-    # legacy "🩹 Apply Healing" button path.
+    # legacy "🩹 Apply Healing" button path. (Loaded before the
+    # dice roll since v2.1003.0 — Supreme Healing reads the caster
+    # sheet at roll time.)
     caster_char = None
     caster_sheet = {}
     if claim.get("caster_char_id"):
@@ -108468,6 +108461,25 @@ async def apply_healing(
         ).first()
         if caster_char:
             caster_sheet = caster_char.sheet or {}
+
+    # Roll the healing dice server-side.
+    # v2.1003.0 — Supreme Healing (Life Domain Cleric Lv 17+) parity
+    # for the heal-claim path: the `/cast_spell` target-bound auto-heal
+    # has maxed every healing die since v2.143.0, but this chat-card
+    # flow still rolled bare dice (the filed Phase-1.5 finisher). Same
+    # read (`_pc_has_life_domain(sheet, 17)` → `_max_dice_total`).
+    supreme_healing_applied = _pc_has_life_domain(caster_sheet, 17)
+    if supreme_healing_applied:
+        rolled, breakdown = _max_dice_total(claim["dice"])
+        breakdown = f"💗 Supreme Healing: {breakdown}"
+    else:
+        try:
+            r = dice_mod.roll(claim["dice"])
+            rolled = r.total
+            breakdown = r.breakdown
+        except Exception:
+            rolled = 0
+            breakdown = ""
     _spc_mod = _caster_spellcasting_mod(caster_sheet)
     _claim_slot_level = int(claim.get("slot_level") or 0)
     _target_is_caster = bool(caster_char and caster_char.id == char.id)
@@ -108590,6 +108602,7 @@ async def apply_healing(
             "dice": claim["dice"],
             "rolled": rolled,
             "breakdown": breakdown,
+            "supreme_healing_applied": supreme_healing_applied,
             "new_hp": new_hp,
             "claimed_count": claimed_count,
             "max_targets": max_targets,
@@ -108608,6 +108621,7 @@ async def apply_healing(
             },
         })
     return {"ok": True, "rolled": rolled, "breakdown": breakdown, "new_hp": new_hp,
+            "supreme_healing_applied": supreme_healing_applied,
             "claimed_count": claimed_count, "max_targets": max_targets}
 
 
