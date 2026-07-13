@@ -4772,10 +4772,27 @@
     clearObjectSelection();
     if (selectedDoor) { selectedDoor = null; setStatus(''); render(); }  // v2.907.0
   });
+  // v2.1007.0 — parity with the tabletop's v2.1006.0 control scheme,
+  // honoring the same per-user "Alternative controls" setting.
+  var ALT_CONTROLS = {{ 'true' if user.alternative_controls else 'false' }};
   stage.addEventListener('wheel', function (e) {
-    // v2.830.0 — the scroll wheel zooms the map (toward the cursor). Drag / the
-    // middle button still pan. Trackpad + mouse wheel both roll deltaY.
+    // v2.830.0 — wheel zoom (toward the cursor). v2.1007.0 — the bare
+    // wheel now PANS the camera by default (vertical → Y; horizontal
+    // wheel / trackpad swipe → X; Shift+vertical-wheel → X) and
+    // Ctrl/Cmd+wheel ZOOMS — trackpad pinch arrives as a ctrlKey wheel,
+    // so pinch keeps zooming. "Alternative controls" restores bare-wheel
+    // zoom here exactly as on the tabletop. Drag / middle-button pan
+    // are unchanged.
     e.preventDefault();
+    var zoomGesture = ALT_CONTROLS || e.ctrlKey || e.metaKey;
+    if (!zoomGesture) {
+      var unit = e.deltaMode === 1 ? 16 : 1;   // Firefox line-deltas → px
+      var dx = e.deltaX * unit, dy = e.deltaY * unit;
+      if (e.shiftKey && dx === 0) { dx = dy; dy = 0; }
+      panX -= dx; panY -= dy;
+      applyPan();
+      return;
+    }
     var rect = stage.getBoundingClientRect();
     zoomAt(e.deltaY < 0 ? 1.1 : 0.9, e.clientX - rect.left, e.clientY - rect.top);
   }, { passive: false });

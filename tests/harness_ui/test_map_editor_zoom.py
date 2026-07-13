@@ -58,7 +58,9 @@ def test_zoom_keeps_drawing_correct(gm_page: Page) -> None:
 
 
 def test_scroll_wheel_zooms(gm_page: Page) -> None:
-    """v2.830.0 — the scroll wheel zooms the map in and out."""
+    """v2.830.0 — wheel zoom; v2.1007.0 — zoom now requires Ctrl+wheel
+    (the bare wheel pans in the default scroll-to-pan scheme, matching
+    the tabletop). Also asserts the bare wheel does NOT change zoom."""
     with httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0) as c:
         c.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
         mid = c.get(f"/api/campaign/{CAMPAIGN_ID}/active-map").json()["map_id"]
@@ -74,15 +76,22 @@ def test_scroll_wheel_zooms(gm_page: Page) -> None:
     gm_page.mouse.move(cx, cy)
 
     before = _pct()
-    # Wheel up (negative deltaY) zooms in.
+    # Bare wheel = pan in the default scheme → zoom must NOT change.
+    gm_page.mouse.wheel(0, -120)
+    gm_page.wait_for_timeout(80)
+    assert _pct() == before, ("bare wheel must pan, not zoom", before, _pct())
+
+    # Ctrl+wheel up (negative deltaY) zooms in.
+    gm_page.keyboard.down("Control")
     for _ in range(3):
         gm_page.mouse.wheel(0, -120)
         gm_page.wait_for_timeout(40)
     zoomed_in = _pct()
     assert zoomed_in > before, (before, zoomed_in)
 
-    # Wheel down (positive deltaY) zooms back out.
+    # Ctrl+wheel down (positive deltaY) zooms back out.
     for _ in range(3):
         gm_page.mouse.wheel(0, 120)
         gm_page.wait_for_timeout(40)
+    gm_page.keyboard.up("Control")
     assert _pct() < zoomed_in, (zoomed_in, _pct())

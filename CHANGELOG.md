@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1007.0] - 2026-07-12 — "The Drafting Table"
+
+**Schema version:** 103
+
+**Commit summary:** Map editor wheel parity — the editor's stage now uses the same scroll-to-pan / Ctrl+wheel-zoom scheme as the tabletop, honoring the same per-user "Alternative controls" setting.
+
+**Description:** Follow-up to v2.1006.0: the map editor (`/campaign/{cid}/map/{id}/edit`) had its own wheel handler that always zoomed, so the two map surfaces disagreed the moment the tabletop switched to scroll-to-pan. The editor's stage wheel now branches identically — a bare wheel pans the camera (vertical → Y; horizontal wheel / trackpad swipe → X; Shift+vertical-wheel → X; Firefox line-deltas normalized), Ctrl/Cmd+wheel zooms toward the cursor via the existing `zoomAt`, and trackpad pinch (a ctrlKey wheel) keeps zooming. The template reads the same `users.alternative_controls` column, so flipping "Alternative controls" in My settings restores bare-wheel zoom on **both** surfaces at once. Drag and middle-button panning are unchanged. No schema change.
+
+### Changed
+- `app/templates/map_editor.html` — the stage wheel handler branches on the scheme (`ALT_CONTROLS` templated from `user.alternative_controls`); bare wheel pans via `applyPan`, Ctrl/Cmd+wheel zooms via `zoomAt`.
+- `tests/harness_ui/test_map_editor_zoom.py` — `test_scroll_wheel_zooms` now asserts the bare wheel does NOT zoom and drives the zoom via Ctrl+wheel.
+
 ## [2.1006.0] - 2026-07-12 — "The Cartographer's Wheel"
 
 **Schema version:** 103
