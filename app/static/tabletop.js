@@ -4305,6 +4305,31 @@
 
     mapPane.addEventListener('wheel', (ev) => {
         ev.preventDefault();
+        // v2.1006.0 — scroll-to-pan is the default control scheme: a
+        // bare wheel PANS the map (vertical wheel → Y; horizontal
+        // wheel / trackpad X-swipe → X; Shift+vertical-wheel → X for
+        // mice whose browser doesn't do the axis swap itself), and
+        // Ctrl/Cmd+wheel ZOOMS at the cursor. Trackpad pinch fires
+        // wheel events with ctrlKey=true, so pinch-to-zoom keeps
+        // working with no key held. Users who prefer the old
+        // bare-wheel-zooms feel flip on "Alternative controls" in
+        // /settings (surfaced here as ME.altControls) — in that
+        // scheme EVERY wheel event zooms, exactly as before.
+        // Right-click-drag and left-drag-on-empty-map panning (the
+        // canvas mousedown paths) work in BOTH schemes.
+        const zoomGesture = !!(ME && ME.altControls) || ev.ctrlKey || ev.metaKey;
+        if (!zoomGesture) {
+            // deltaMode 1 = line-based deltas (Firefox wheel);
+            // normalize to ≈pixels so a notch moves a sane distance.
+            const unit = ev.deltaMode === 1 ? 16 : 1;
+            let dx = ev.deltaX * unit;
+            let dy = ev.deltaY * unit;
+            if (ev.shiftKey && dx === 0) { dx = dy; dy = 0; }
+            panX -= dx;
+            panY -= dy;
+            applyTransform();
+            return;
+        }
         const rect = mapPane.getBoundingClientRect();
         const mouseX = ev.clientX - rect.left;
         const mouseY = ev.clientY - rect.top;

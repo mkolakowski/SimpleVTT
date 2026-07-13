@@ -1204,6 +1204,20 @@ def _apply_inline_migrations() -> None:
                 "BOOLEAN NOT NULL DEFAULT FALSE"
             ))
 
+    # ---- Schema v103 (2.1006.0): users.alternative_controls ----
+    # Per-user tabletop map-control scheme. FALSE (default) = the new
+    # scroll-to-pan scheme (bare wheel pans X/Y, Ctrl+wheel zooms at
+    # the cursor); TRUE = "Alternative controls", the pre-v2.1006.0
+    # wheel-zooms behavior. Right-drag / left-drag-on-empty pan work
+    # in both schemes. See models.User.alternative_controls.
+    user_cols_v103 = _column_names("users")
+    with engine.begin() as conn:
+        if user_cols_v103 and "alternative_controls" not in user_cols_v103:
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN alternative_controls "
+                "BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

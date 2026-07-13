@@ -318,8 +318,12 @@ def test_zoom_in_supersamples_canvas(gm_page: Page) -> None:
     gm_page.mouse.move(cx, cy)
     # Many notches of zoom-in (deltaY < 0). The handler ignores magnitude
     # (only the sign), so each event is one zoom step.
+    # v2.1006.0 — zoom now requires Ctrl+wheel (a bare wheel pans in the
+    # default scroll-to-pan scheme), so hold Control for the notches.
+    gm_page.keyboard.down("Control")
     for _ in range(14):
         gm_page.mouse.wheel(0, -120)
+    gm_page.keyboard.up("Control")
     # Past the 180ms re-raster debounce.
     gm_page.wait_for_timeout(500)
 

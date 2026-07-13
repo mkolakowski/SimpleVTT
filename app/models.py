@@ -133,6 +133,18 @@ class User(Base):
         Boolean, default=False, server_default="false",
     )
 
+    # v2.1006.0 — per-user tabletop map-control scheme. False (default)
+    # = scroll-to-pan: a bare mouse wheel pans the map (vertical wheel
+    # → Y; horizontal wheel / trackpad X-swipe / Shift+wheel → X) and
+    # Ctrl(or Cmd)+wheel zooms at the cursor — trackpad pinch emits
+    # ctrlKey wheel events, so pinch-zoom needs no modifier. True =
+    # "Alternative controls": the pre-v2.1006.0 scheme where a bare
+    # wheel zooms. Right-click-drag and left-drag-on-empty-map pan the
+    # map in BOTH schemes.
+    alternative_controls: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false",
+    )
+
     characters: Mapped[list["Character"]] = relationship(
         back_populates="owner", foreign_keys="Character.owner_user_id"
     )

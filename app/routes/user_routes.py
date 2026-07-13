@@ -595,6 +595,30 @@ def update_sepia_texture(
     return {"ok": True, "sepia_texture": bool(body.enabled)}
 
 
+class _MapControlsBody(BaseModel):
+    alternative: bool
+
+
+@router.post("/api/settings/map_controls")
+def update_map_controls(
+    body: _MapControlsBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.1006.0 — persist the user's tabletop map-control scheme.
+
+    ``alternative=False`` (default) = scroll-to-pan: a bare mouse wheel
+    pans the map (vertical wheel → Y, horizontal wheel / Shift+wheel →
+    X) and Ctrl+wheel zooms at the cursor. ``alternative=True``
+    restores the pre-v2.1006.0 behavior where a bare wheel zooms.
+    Right-drag and left-drag-on-empty-map panning work in both
+    schemes; the tabletop reads the flag via ``ME.altControls``.
+    """
+    user.alternative_controls = bool(body.alternative)
+    db.commit()
+    return {"ok": True, "alternative_controls": bool(body.alternative)}
+
+
 class _GlassAlphaBody(BaseModel):
     alpha: int
 

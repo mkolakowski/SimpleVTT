@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1006.0] - 2026-07-12 — "The Cartographer's Wheel"
+
+**Schema version:** 103
+
+**Commit summary:** Scroll-to-pan map controls — the mouse wheel now pans the tabletop map (vertical + horizontal axes) and Ctrl+wheel zooms at the cursor; the old bare-wheel-zoom scheme moves behind a per-user "Alternative controls" setting. The /settings page is reorganized into titled groups.
+
+**Description:** New default control scheme for the tabletop map. A bare mouse wheel **pans**: vertical wheel moves the map up/down, a horizontal wheel or trackpad side-swipe moves it left/right, and Shift+vertical-wheel pans sideways for mice without a second axis (line-based Firefox wheel deltas are normalized to pixels). **Ctrl (or Cmd) + wheel zooms** at the cursor with the existing focal-point math and per-user zoom-speed multiplier — and because browsers report trackpad pinch as a ctrlKey wheel event, pinch-to-zoom keeps working with no key held. Right-click-drag and left-drag-on-empty-map continue to pan in both schemes, and the wheel-pan path rides the existing `applyTransform` clamp so the map can't be flung off-screen. Users who prefer the classic bare-wheel-zoom feel flip on **Alternative controls** in My settings — a new `users.alternative_controls` column (schema v103), a `POST /api/settings/map_controls` endpoint, and an `ME.altControls` bootstrap on the tabletop page. The **/settings page is reorganized** from a flat 11-section list into titled groups: 🎨 Appearance (theme, font, scale, glass, sepia texture, animated GIFs), 🗺️ Tabletop & controls (the new Map controls picker, zoom speed, tab colors, roll log position), ⚔️ Gameplay (reaction prompts), and 🎵 Audio (category volumes), with section headings demoted under accent-ruled group headers. Verified end-to-end with real wheel events: Playwright tests drive bare-wheel pan (translate changes, scale doesn't), Shift+wheel X-pan, and Ctrl+wheel zoom against the live tabletop.
+
+### Added
+- `app/static/tabletop.js` — the `mapPane` wheel handler branches on scheme: bare wheel pans (deltaX/deltaY, deltaMode-normalized, Shift axis-swap), Ctrl/Cmd+wheel (and `ME.altControls`) zooms via the existing focal-point path.
+- `app/routes/user_routes.py` — `POST /api/settings/map_controls`; `app/models.py` — `User.alternative_controls`; `app/database.py` — schema v103 migration; `app/templates/tabletop.html` — `ME.altControls` bootstrap.
+- `app/templates/user_settings.html` — 🖱️ Map controls picker (Scroll to pan / Alternative controls) in the new Tabletop & controls group.
+- `tests/harness/test_settings_map_controls.py` (+5) — endpoint happy/flip/per-user/422 + the reorganized page render + the ME bootstrap.
+
+### Changed
+- `app/templates/user_settings.html` — the flat section list is reorganized into Appearance / Tabletop & controls / Gameplay / Audio groups (`.settings-group-h` headers; section h2s demoted to h3s).
+- `tests/harness_ui/test_map_pan.py` — `test_wheel_still_zooms` replaced by three scheme-aware tests (bare-wheel pan, Shift+wheel X-pan, Ctrl+wheel zoom); the drag-pan start point is now derived from the live transform so it can't land in the letterbox gutter beside a fitted map (a pre-existing geometry fragility this work surfaced).
+- `tests/harness_ui/test_tabletop_canvas.py` — the supersample-on-zoom test holds Control for its wheel notches.
+- `docs/test-harness-coverage.md` — new section; totals corrected to fresh `--collect-only` counts (4694 harness / 312 harness_ui — the "299" figure had drifted).
+
+### Schema
+- v103 — `users.alternative_controls BOOLEAN NOT NULL DEFAULT FALSE`.
+
 ## [2.1005.1] - 2026-07-12 — "The Skeleton Crew"
 
 **Schema version:** 102

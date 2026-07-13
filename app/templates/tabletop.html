@@ -5999,7 +5999,7 @@
 <script>
 const CAMPAIGN_ID = {{ campaign.id }};
 const MAP_ID = {{ active_map.id if active_map else 'null' }};
-const ME = { id: {{ user.id }}, name: {{ user.display_name|tojson }}, isGm: {{ 'true' if is_gm else 'false' }}, animateGifs: {{ 'true' if user.animate_gifs else 'false' }}, zoomSpeed: {{ user.zoom_speed or 1.0 }}, reactionPromptMode: {{ (user.reaction_prompt_mode or 'popup')|tojson }} };
+const ME = { id: {{ user.id }}, name: {{ user.display_name|tojson }}, isGm: {{ 'true' if is_gm else 'false' }}, animateGifs: {{ 'true' if user.animate_gifs else 'false' }}, zoomSpeed: {{ user.zoom_speed or 1.0 }}, reactionPromptMode: {{ (user.reaction_prompt_mode or 'popup')|tojson }}, altControls: {{ 'true' if user.alternative_controls else 'false' }} };
 // A top-level `const` is lexical only — it does NOT attach to `window`.
 // reaction_prompt.js / roll_toast.js (and the GM-panel guard at ~:2587) all
 // read `window.ME`, so expose it explicitly. Without this `window.ME` is
