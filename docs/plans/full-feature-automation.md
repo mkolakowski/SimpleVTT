@@ -819,6 +819,20 @@ composition. Batch by class, same cadence as the breadth sweep.
   Conqueror / …), each of which needs its own read-site design, not a
   substrate ride.
 
+- **v2.1008.0 ("The Widened Edge") — Superior Critical** (Champion
+  Fighter Lv 17+): a passive read-site enhancement (no `use_*`
+  endpoint) closing the crit-floor TODO the `_attacker_crit_threshold`
+  docstring filed at v2.49.231. Improved Critical (Lv 3+) already
+  dropped the natural-crit threshold 20 → 19; Superior Critical now
+  drops it 19 → 18 at Lv 17+, in both the single-class fast path and
+  the multiclass `classes[]` walk. The `/attack` crit-detection block
+  already reads the helper (min'd with the on-hit-rider crit-range
+  buff), so the wider range propagates with no call-site change.
+  Champion is the SRD fighter subclass → SRD-valid. No Lv-17 PC exists
+  in the demo (Garrik is Lv 7), so it's covered by in-process unit
+  tests of the pure helper rather than a roll-batch harness test.
+  Harness: `test_superior_critical_threshold.py` (+12).
+
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`
 `/cast_spell` read site); the earlier "5/6, Improved Reaper is the last" note

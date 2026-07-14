@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1008.0] - 2026-07-13 — "The Widened Edge"
+
+**Schema version:** 103
+
+**Commit summary:** Champion Fighter Superior Critical (Lv 17+) — the crit floor drops from 19 (Improved Critical) to 18, so a Lv 17+ Champion crits on an 18-20 attack roll.
+
+**Description:** Phase 8 higher-level subclass feature, closing the read site the `_attacker_crit_threshold` docstring filed at v2.49.231. Champion is the SRD fighter subclass, so both crit thresholds are SRD-valid. Improved Critical (Lv 3+) already lowered the natural-crit threshold from 20 to 19; Superior Critical (Lv 17+) now lowers it to 18. `_attacker_crit_threshold(sheet)` returns 18 for a Champion at Lv 17+, 19 at Lv 3-16, and 20 otherwise — in both the single-class fast path and the multiclass `classes[]` walk. The existing `/attack` crit-detection block already reads this helper (and takes `min` with the on-hit-rider crit-range buff), so the wider crit range propagates with no call-site change. No schema change. Because the demo has no Lv-17 PC (Garrik is Lv 7), the crit-on-18 floor can't ride the roster the way Improved Critical does, so it's covered by in-process unit tests of the pure helper.
+
+### Added
+- `tests/harness/test_superior_critical_threshold.py` (new, +12) — unit tests of `_attacker_crit_threshold` across the Lv-2/3/16/17/20 single-class boundaries, non-Champion + non-Fighter + `None` + bad-level regression guards, and three multiclass sheets (Lv 3 → 19, Lv 16 → 19, Lv 17 → 18).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `_attacker_crit_threshold` returns 18 for a Champion Fighter at Lv 17+ (Superior Critical) in both the single-class and multiclass paths; docstring updated to describe the 18 floor.
+- `docs/test-harness-coverage.md` — new `test_superior_critical_threshold.py` section; total bumped 4694 → 4706.
+
 ## [2.1007.0] - 2026-07-12 — "The Drafting Table"
 
 **Schema version:** 103

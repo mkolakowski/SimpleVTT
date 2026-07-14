@@ -35961,9 +35961,9 @@ def _attacker_crit_threshold(sheet: dict) -> int:
     (matches the multiclass convention used by every other class-feature
     helper in this file).
 
-    Returns 20 (default) or 19 (Improved Critical fires). Lv 17 Champion
-    Superior Critical (crit on 18-20) is filed for a future commit —
-    Garrik is Lv 5 in the demo, so the 18 floor isn't reachable today.
+    Returns 20 (default), 19 (Improved Critical, Lv 3+), or 18 (Superior
+    Critical, Lv 17+ — crit on 18-20). Champion is the SRD fighter
+    subclass, so both thresholds are SRD-valid.
     """
     if not sheet:
         return 20
@@ -35977,7 +35977,9 @@ def _attacker_crit_threshold(sheet: dict) -> int:
         if level < 3:
             return 20
         if "champion" in (sheet.get("subclass") or "").strip().lower():
-            return 19
+            # Superior Critical (Lv 17+) lowers the floor to 18; Improved
+            # Critical (Lv 3+) lowers it to 19.
+            return 18 if level >= 17 else 19
         return 20
     # Multiclass path — walk classes[] for a Fighter Champion entry.
     for entry in (sheet.get("classes") or []):
@@ -35990,7 +35992,7 @@ def _attacker_crit_threshold(sheet: dict) -> int:
         if level < 3:
             continue
         if "champion" in (entry.get("subclass") or "").strip().lower():
-            return 19
+            return 18 if level >= 17 else 19
     return 20
 
 
