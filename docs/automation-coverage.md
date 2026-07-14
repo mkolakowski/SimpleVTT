@@ -366,6 +366,7 @@ or passive damage-boosters that already ride other code paths
 | `use_mask_of_many_faces` | ⚪ announce-only | — |
 | `use_minor_alchemy` | ⚪ announce-only | — |
 | `use_mote_of_potential` | ✅ tracked | v2.670.0 — attack mode applies 1d{die} force damage (`_apply_damage_to_combatant`) + save mode grants 1d{die}+CHA temp HP (`_grant_temp_hp`); check mode stays GM-narrated |
+| `use_overchannel` | ✅ tracked | v2.1010.0 — Evocation Wizard Lv 14+. Arms a one-shot `overchannel-armed` buff; the next damaging 1st-5th level spell has every roll maxed by the `/cast_spell` single-target-save + AoE-loop sites (via `_max_dice_total`, gated on `_caster_overchannel_buff`), then the buff drops + the escalating necrotic self-damage (`use_number × spell_level` d12, untyped/ignores resistance) hits the caster on the 2nd+ use since a long rest (`overchannel_uses_since_rest` counter, reset by the long-rest flow). Phase 2 (filed): attack-roll path + `/place_aoe` not yet maxed |
 | `use_potent_spellcasting` | ✅ tracked | v2.612.1 — installs permanent `potent-spellcasting-active` flag-buff (`potent_spellcasting_*`: active/wis_mod/class); **v2.1004.0 — Phase 2 read site shipped**: `_potent_spellcasting_bonus` adds the +WIS to one cantrip damage roll across `/cast_spell` (attack-roll, single-target-save, AoE loop) + `/place_aoe`, mirroring the Empowered Evocation plumbing |
 | `use_relentless_avenger` | ⚪ announce-only | — |
 | `use_scornful_rebuke` | ⚪ announce-only | — |

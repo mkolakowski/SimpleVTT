@@ -846,6 +846,25 @@ composition. Batch by class, same cadence as the breadth sweep.
   SRD-valid (Champion). No Lv-18 PC in the demo, so unit-tested on the
   helper. Harness: `test_champion_survivor_regen.py` (+12).
 
+- **v2.1010.0 ("The Overload") — Overchannel** (Evocation Wizard Lv
+  14+): the marquee Evocation capstone, and the first Phase 8 ship to
+  add a genuinely new spell-damage read-site (not just a passive gate).
+  `POST /use_overchannel` arms a one-shot `overchannel-armed` buff
+  (carrying the per-long-rest use number); when the armed caster casts
+  a damaging 1st-5th level spell, the two `/cast_spell` NPC-auto-damage
+  sites (single-target save + AoE loop) max every roll via the existing
+  `_max_dice_total` (the Supreme Healing maximiser), drop the buff, and
+  apply the escalating necrotic self-damage (`use_number × spell_level`
+  d12, untyped so resistance can't reduce it) on the 2nd+ use since a
+  long rest. Every read is gated behind the armed buff → a complete
+  no-op for unarmed casts, so the hot damage path is unchanged for
+  everyone else. The demo Evocation Wizard (Thalindra) PATCHes to Lv 14
+  so this is happy-path harness-tested end-to-end (unlike the Champion
+  Lv 17/18 features). Phase 2 (filed): the attack-roll spell-damage
+  path + `/place_aoe` aren't maxed yet; PC client-rolled damage stays
+  GM-narrated. Harness: `test_overchannel.py` (+7) +
+  `test_overchannel_self_damage.py` (+9).
+
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`
 `/cast_spell` read site); the earlier "5/6, Improved Reaper is the last" note

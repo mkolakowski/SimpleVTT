@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1010.0] - 2026-07-13 — "The Overload"
+
+**Schema version:** 103
+
+**Commit summary:** Overchannel (Evocation Wizard Lv 14+) — `POST /use_overchannel` arms a one-shot buff so the next damaging 1st-5th level spell deals maximum damage, with the RAW escalating necrotic self-damage on repeated use before a long rest.
+
+**Description:** Phase 8 higher-level subclass feature — the marquee Evocation Wizard capstone, and the first Phase 8 ship that adds a genuinely new read-site to the spell-damage path rather than a passive gate. Evocation is the SRD wizard subclass, so Overchannel is SRD-valid. `POST /use_overchannel` validates an Evocation Wizard Lv 14+, increments a per-long-rest use counter (`overchannel_uses_since_rest` on the sheet, reset by the long-rest flow), and installs a one-shot `overchannel-armed` buff carrying that use number. When the armed caster then casts a damaging 1st-5th level spell, the `/cast_spell` NPC-auto-damage sites (single-target save + the AoE per-target loop) max every damage roll via the existing `_max_dice_total` helper (the same maximiser Supreme Healing uses), drop the buff, and — on the 2nd+ use since a long rest — apply the escalating necrotic self-damage (`use_number × spell_level` d12, ignoring resistance since it's applied untyped) to the caster, broadcasting a `⚡ Overchannel` card. Every read is gated behind the `overchannel-armed` buff, so for every unarmed cast the whole feature is a no-op and the hot damage path is unchanged. Verified end-to-end: Thalindra (the demo Evocation Wizard) PATCHed to Lv 14 maxes Fireball to 48 (8d6), takes no self-damage on the first use, takes 6d12 on the second, and the buff is one-shot. No schema change. Phase 2 (filed): the attack-roll spell-damage path + `/place_aoe` aren't maxed yet (PC client-rolled damage stays GM-narrated as elsewhere).
+
+### Added
+- `app/routes/tabletop_routes.py` — `POST /use_overchannel` endpoint; `_caster_overchannel_buff` (read-site gate) + `_overchannel_self_damage_expr` (self-damage formula) helpers; the max-damage read wired into the single-target-save + AoE-loop damage sites in `/cast_spell`, consuming the buff + applying self-damage once per cast; the response echoes an `overchannel` marker; the long-rest flow resets the use counter.
+- `tests/harness/test_overchannel.py` (new, +7) — Thalindra@Lv14 end-to-end: maxes Fireball to 48 + first-use-free, second-use self-damage (6d12, HP drops), one-shot buff consume, level gate (Lv 7 → 409), and error paths (400 missing id / 404 unknown / 409 wrong class).
+- `tests/harness/test_overchannel_self_damage.py` (new, +9) — unit tests of `_overchannel_self_damage_expr` (first-use free, 2nd/3rd-use escalation across spell levels 1/3/5, bad-input guards).
+
+### Changed
+- `docs/test-harness-coverage.md` — new `test_overchannel*` sections; total bumped 4718 → 4734.
+
 ## [2.1009.0] - 2026-07-13 — "The Last Breath"
 
 **Schema version:** 103

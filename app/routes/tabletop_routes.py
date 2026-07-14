@@ -26921,6 +26921,19 @@ async def cast_spell(
             campaign_id, char.id, spell_level,
         )
         _ps_fired = False
+        # v2.1010.0 — Overchannel (Evocation Wizard Lv 14+). When the
+        # caster armed it via /use_overchannel and this is a damaging
+        # 1st-5th level spell, every damage roll of the spell is maxed
+        # (via `_max_dice_total`) instead of rolled, and the escalating
+        # necrotic self-damage is applied once. `_oc_buff` is None (a
+        # complete no-op) for every unarmed caster, so the damage path
+        # below is unchanged for everyone who isn't a Lv 14+ Evoker.
+        _oc_buff = (
+            _caster_overchannel_buff(campaign_id, char.id, spell_level)
+            if damage_expr else None
+        )
+        _oc_active = _oc_buff is not None
+        _oc_consumed = False
         _ea_damage_expr = damage_expr
         if _ea_bonus > 0 and damage_expr:
             _ea_damage_expr = f"{_ea_damage_expr}+{_ea_bonus}"
@@ -26936,11 +26949,19 @@ async def cast_spell(
             and bool(campaign.auto_apply_damage)
         ):
             try:
-                auto_save_damage_rolled, auto_save_damage_breakdown, empowered_log = (
-                    await _roll_spell_damage_with_metamagic(
-                        campaign_id, char.id, _ea_damage_expr,
+                if _oc_active:
+                    # Overchannel: max every die of the spell's damage.
+                    auto_save_damage_rolled, auto_save_damage_breakdown = (
+                        _max_dice_total(_ea_damage_expr)
                     )
-                )
+                    empowered_log = None
+                    _oc_consumed = True
+                else:
+                    auto_save_damage_rolled, auto_save_damage_breakdown, empowered_log = (
+                        await _roll_spell_damage_with_metamagic(
+                            campaign_id, char.id, _ea_damage_expr,
+                        )
+                    )
                 if _ea_bonus > 0:
                     await _broadcast_elemental_affinity_bonus(
                         campaign_id, char, damage_type, _ea_bonus,
@@ -27341,9 +27362,16 @@ async def cast_spell(
                 _ps_fired = True
             if damage_expr and bool(campaign.auto_apply_damage):
                 try:
-                    _dr = dice_mod.roll(_aoe_dmg_expr)
-                    _dmg_rolled = max(0, int(_dr.total))
-                    _dmg_breakdown = _dr.breakdown
+                    if _oc_active:
+                        # Overchannel maxes every damage roll of the
+                        # spell — so each AoE target takes max too.
+                        _dmg_rolled, _dmg_breakdown = _max_dice_total(
+                            _aoe_dmg_expr)
+                        _oc_consumed = True
+                    else:
+                        _dr = dice_mod.roll(_aoe_dmg_expr)
+                        _dmg_rolled = max(0, int(_dr.total))
+                        _dmg_breakdown = _dr.breakdown
                 except dice_mod.DiceParseError:
                     _dmg_rolled = 0
                 if _dmg_rolled > 0:
@@ -27370,6 +27398,75 @@ async def cast_spell(
                 "damage_type": damage_type,
             })
         payload["auto_save_targets"] = auto_save_targets
+
+        # v2.1010.0 — Overchannel consume: once the spell's damage has
+        # been maxed for every target, drop the one-shot armed buff and
+        # apply the escalating necrotic self-damage (2nd+ use since long
+        # rest: `use_number × spell_level` d12, ignoring resistance).
+        if _oc_active and _oc_consumed:
+            await _remove_buff(campaign_id, int(char.id), "overchannel-armed")
+            _oc_use_number = int(
+                (_oc_buff.get("effects") or {}).get("overchannel_use_number") or 1
+            )
+            _oc_self_expr = _overchannel_self_damage_expr(
+                _oc_use_number, spell_level,
+            )
+            _oc_self_applied = 0
+            if _oc_self_expr:
+                try:
+                    _oc_self_rolled = max(0, int(dice_mod.roll(_oc_self_expr).total))
+                except dice_mod.DiceParseError:
+                    _oc_self_rolled = 0
+                if _oc_self_rolled > 0:
+                    # Resolve the caster's own combatant (mirrors the
+                    # Life-cleric self-uplift lookup): the canonical
+                    # `tok_<id>`, else a walk by char_id, else a
+                    # synthesized off-init PC dict so the heal/damage
+                    # helper still routes through the death-save machine.
+                    _oc_self_comb = _lookup_combatant(
+                        campaign_id, f"tok_{char.id}")
+                    if not _oc_self_comb:
+                        _oc_state = hub.get_battle(campaign_id) or {}
+                        for _oc_c in (_oc_state.get("combatants") or []):
+                            if _oc_c.get("char_id") == char.id:
+                                _oc_self_comb = _oc_c
+                                break
+                    if not _oc_self_comb:
+                        _oc_self_comb = {
+                            "char_id": char.id, "id": "", "name": char.name,
+                        }
+                    # RAW ignores resistance/immunity — apply as untyped
+                    # so `_resistance_halve` can't reduce it.
+                    _oc_self_result = await _apply_damage_to_combatant(
+                        db, campaign_id, _oc_self_comb, _oc_self_rolled,
+                        damage_type="", is_spell=False,
+                    )
+                    _oc_self_applied = int(_oc_self_result.get("applied") or 0)
+            payload["overchannel"] = {
+                "maxed": True,
+                "use_number": _oc_use_number,
+                "self_damage_expr": _oc_self_expr,
+                "self_damage_applied": _oc_self_applied,
+            }
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": char.id,
+                    "character_name": char.name,
+                    "feature_name": "⚡ Overchannel — maximum damage",
+                    "feature_desc": (
+                        f"{char.name} deals maximum damage with "
+                        f"{payload['spell_name']}."
+                        + (
+                            f" Takes {_oc_self_applied} necrotic "
+                            f"({_oc_self_expr}, ignores resistance) — "
+                            f"use #{_oc_use_number} since long rest."
+                            if _oc_self_expr else ""
+                        )
+                    ),
+                    "source": "overchannel",
+                },
+            })
 
         # v2.99.38 — drop the Careful Spell pending buff at end of
         # save resolution. The buff stayed armed across the cast so
@@ -28086,6 +28183,10 @@ async def cast_spell(
         # Present only when the caster's metamagic-empowered-pending
         # buff was consumed by the damage roll. Absent on a regular cast.
         **({"empowered_spell": payload["empowered_spell"]} if "empowered_spell" in payload else {}),
+        # v2.1010.0 — Overchannel (Evocation Wizard Lv 14+): echo the
+        # maxed-damage marker + escalating self-damage. Present only
+        # when an armed caster overchanneled this cast; absent otherwise.
+        **({"overchannel": payload["overchannel"]} if "overchannel" in payload else {}),
         # v2.32.0 Phase T.3c: echo save-or-suck condition install.
         "auto_save_buff_key": payload.get("auto_save_buff_key", ""),
         "auto_save_buff_name": payload.get("auto_save_buff_name", ""),
@@ -50053,6 +50154,60 @@ def _pc_has_evocation_school(sheet: "dict | None", min_level: int) -> bool:
     return _wizard_level_from_sheet(sheet) >= min_level
 
 
+def _caster_overchannel_buff(
+    campaign_id: int, character_id: "int | None", spell_level: "int | None",
+) -> "dict | None":
+    """v2.1010.0 — Overchannel read-site gate (Evocation Wizard Lv 14+,
+    PHB p.117): "When you cast a wizard spell of 1st through 5th level
+    that deals damage, you can deal maximum damage with that spell."
+
+    Returns the ``overchannel-armed`` buff dict (installed by
+    `/use_overchannel`) when the caster carries it AND the spell is 1st-
+    5th level — the RAW gate — else ``None``. The caller (the /cast_spell
+    damage block) maxes every damage roll of the spell via `_max_dice_total`
+    and reads ``effects.overchannel_use_number`` off the returned buff to
+    roll the escalating necrotic self-damage. Gating on the armed buff
+    means the read is a complete no-op for every unarmed cast (the buff
+    only ever exists on a Lv 14+ Evoker who explicitly armed it), so the
+    hot damage path is unchanged for everyone else.
+    """
+    if not character_id:
+        return None
+    try:
+        lvl = int(spell_level)
+    except (TypeError, ValueError):
+        return None
+    if not (1 <= lvl <= 5):
+        return None
+    for b in _get_buffs(campaign_id, int(character_id)):
+        eff = (b or {}).get("effects") or {}
+        if (b or {}).get("key") == "overchannel-armed" and eff.get(
+            "overchannel_active"
+        ):
+            return b
+    return None
+
+
+def _overchannel_self_damage_expr(
+    use_number: "int | None", spell_level: "int | None",
+) -> str:
+    """v2.1010.0 — RAW Overchannel self-damage: the first overchannel
+    since a long rest is free; the ``n``-th use (n≥2) deals ``n`` d12
+    necrotic per spell level, immediately after the cast (ignoring
+    resistance/immunity). Returns the dice expression (e.g. a 3rd-level
+    spell on the 2nd use → ``6d12``) or ``""`` for the free first use /
+    bad inputs — the caller skips the self-damage roll on ``""``.
+    """
+    try:
+        n = int(use_number)
+        lvl = int(spell_level)
+    except (TypeError, ValueError):
+        return ""
+    if n < 2 or lvl < 1:
+        return ""
+    return f"{n * lvl}d12"
+
+
 def _pc_hunters_prey_pick(sheet: "dict | None") -> str:
     """v2.99.223 — RAW Hunter's Prey (Hunter Ranger Lv 3+, PHB
     p.93): pick ONE of Colossus Slayer / Giant Killer / Horde
@@ -62978,6 +63133,130 @@ async def use_empowered_evocation(
         "ok": True,
         "feature": "empowered-evocation",
         "int_mod": int_mod,
+        "buff_installed": buff_installed,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_overchannel")
+async def use_overchannel(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.1010.0 — Overchannel (Evocation Wizard Lv 14+, PHB p.117):
+    "When you cast a wizard spell of 1st through 5th level that deals
+    damage, you can deal maximum damage with that spell. The first time
+    you do so, you suffer no adverse effect. If you use this feature
+    again before you finish a long rest, you take 2d12 necrotic damage
+    for each level of the spell ... increasing by 1d12 [per level] each
+    additional time. This damage ignores resistance and immunity."
+
+    Body: ``{character_id}``. No action cost — Overchannel is a rider on
+    a spell you're about to cast, not its own action.
+
+    Arms a one-shot ``overchannel-armed`` buff on the caster carrying
+    the use number since the last long rest (incremented here on a
+    ``overchannel_uses_since_rest`` sheet counter, reset by the long-rest
+    flow). The next damaging 1st-5th level spell the caster casts is
+    maxed by the /cast_spell read site (`_caster_overchannel_buff` +
+    `_max_dice_total`), which then drops the buff and applies the
+    escalating necrotic self-damage (`_overchannel_self_damage_expr`).
+
+    Phase 2 (deferred): the attack-roll spell-damage path + `/place_aoe`
+    aren't maxed yet (the two NPC-auto-save damage paths in /cast_spell
+    are); PC client-rolled damage stays GM-narrated as elsewhere.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Wizard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_evocation_school(sheet, 14):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "evocation wizard lv 14+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _wizard_level_from_sheet(sheet),
+        })
+
+    # nth use since the last long rest. First use is free; 2nd+ escalate
+    # the necrotic self-damage. The counter resets in the long-rest flow.
+    try:
+        _prev_uses = int(sheet.get("overchannel_uses_since_rest") or 0)
+    except (TypeError, ValueError):
+        _prev_uses = 0
+    use_number = _prev_uses + 1
+    sheet["overchannel_uses_since_rest"] = use_number
+    char.sheet = sheet
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(char, "sheet")
+    db.commit()
+
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "overchannel-armed",
+        "name": "⚡ Overchannel (armed)",
+        "icon": "⚡",
+        "duration_rounds": 100000,
+        "duration_max": 100000,
+        "permanent": False,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "overchannel_active": True,
+            "overchannel_use_number": use_number,
+        },
+        "desc": (
+            f"{char.name}'s next damaging 1st-5th level spell deals "
+            f"maximum damage (Overchannel). Use #{use_number} since long "
+            f"rest"
+            + (
+                f" — will take {use_number}d12 necrotic per spell level "
+                f"(ignores resistance)."
+                if use_number >= 2 else " — first use is free."
+            )
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "⚡ Overchannel — armed",
+            "feature_desc": (
+                f"{char.name}'s next damaging 1st-5th level spell deals "
+                f"maximum damage."
+                + (
+                    f" Use #{use_number} since long rest — will take "
+                    f"{use_number}d12 necrotic per spell level."
+                    if use_number >= 2 else " First use since long rest is free."
+                )
+            ),
+            "source": "overchannel",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "overchannel",
+        "use_number": use_number,
+        "first_free": use_number == 1,
         "buff_installed": buff_installed,
     }
 
@@ -109103,6 +109382,9 @@ async def rest_character(
             pass
         long_rest_new_cur = _lr_max if _lr_max > 0 else hp_cur
         hp["temp"] = 0
+        # v2.1010.0 — reset the Overchannel per-long-rest use counter so
+        # the next overchannel is free again (Evocation Wizard Lv 14+).
+        sheet["overchannel_uses_since_rest"] = 0
         hd["max"] = hd_max
         hd["current"] = min(hd_max, hd_cur + max(1, hd_max // 2)) if hd_max > 0 else hd_cur
         # Reset slots across every class's nested slot map.
