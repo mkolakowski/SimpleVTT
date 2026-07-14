@@ -272,6 +272,7 @@ or passive damage-boosters that already ride other code paths
 | `use_minor_conjuration` | ✅ tracked | A use/resource |
 | `use_mystic_arcanum` | ✅ tracked | A use/resource |
 | `use_natural_recovery` | ✅ tracked | A use/resource |
+| `use_natures_sanctuary` | ✅ tracked | v2.1017.0 — Circle of the Land Druid Lv 14+. Installs a `natures-sanctuary` buff (`effects.dc` = 8 + prof + WIS). A `/npc_attack` gate (`_target_natures_sanctuary_dc` + `_attacker_creature_type` beast/plant check) rolls the attacker's WIS save before hit determination → auto-miss on a fail (`natures_sanctuary_blocked`). 24-hour immunity + controlled-creature exemption GM-narrated |
 | `use_natures_wrath` | ✅ tracked | v2.680.0 — resolves the target's STR/DEX save via `_resolve_feature_save` (NPC inline, PC via RollRequest) + installs Restrained (`_make_restrained_buff`, repeated save) on a fail |
 | `use_open_hand_technique` | ✅ tracked | D buff-install, D/E buff-install, G forced-move |
 | `use_orders_wrath` | ✅ tracked | D buff-install (target-side curse, Phase 1) |

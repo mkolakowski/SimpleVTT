@@ -38202,6 +38202,43 @@ def _target_sanctuary_dc(
     return 0
 
 
+def _target_natures_sanctuary_dc(
+    campaign_id: int,
+    target_combatant_id: str | None,
+) -> int:
+    """v2.1017.0 — Nature's Sanctuary (Land Druid Lv 14+, PHB p.69): a
+    beast or plant that attacks the druid must make a WIS save vs the
+    druid's spell save DC or pick a new target. Returns the DC stamped
+    on the target's ``natures-sanctuary`` buff via ``effects.dc``, or 0
+    when absent. The /npc_attack gate calls this AND checks the
+    attacker's creature type is beast/plant before enforcing (the
+    creature-type restriction is what distinguishes it from the
+    Sanctuary spell, which affects any attacker).
+    """
+    if not target_combatant_id:
+        return 0
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return 0
+    for c in state.get("combatants") or []:
+        if c.get("id") != target_combatant_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            if b.get("key") != "natures-sanctuary":
+                continue
+            effects = b.get("effects")
+            if not isinstance(effects, dict):
+                continue
+            try:
+                return int(effects.get("dc") or 0)
+            except (TypeError, ValueError):
+                return 0
+        return 0
+    return 0
+
+
 def _attacker_has_bane(campaign_id: int, attacker_char_id: int) -> bool:
     """v2.97.34 — closes the v2.97.33 Bane attack-roll mechanical hook.
     Returns True if the attacker has the ``baned`` buff installed
@@ -64268,6 +64305,105 @@ async def use_tranquility(
     return {
         "ok": True,
         "feature": "tranquility",
+        "save_dc": save_dc,
+        "buff_installed": buff_installed,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_natures_sanctuary")
+async def use_natures_sanctuary(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.1017.0 — Nature's Sanctuary (Circle of the Land Druid Lv 14+,
+    PHB p.69): "When a beast or plant creature attacks you, that creature
+    must make a Wisdom saving throw against your druid spell save DC. On
+    a failed save, the creature must choose a different target, or the
+    attack automatically misses. On a successful save, the creature is
+    immune to this effect for 24 hours." Circle of the Land is the SRD
+    druid circle, so this is SRD-valid.
+
+    Body: ``{character_id}``. No action cost — it's a passive ward.
+    Installs a `natures-sanctuary` buff carrying ``effects.dc`` = the
+    druid's spell save DC (8 + prof + WIS mod). The NPC-attack gate
+    (`/npc_attack`) reads it via `_target_natures_sanctuary_dc` and,
+    when the attacker is a beast/plant, rolls the attacker's WIS save —
+    on a fail the attack automatically misses. The 24-hour per-creature
+    immunity on a success + the controlled-creature exemption stay
+    GM-narrated (v1).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Druid character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_land_druid(sheet, 14):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "circle of the land druid lv 14+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _druid_level_from_sheet(sheet),
+        })
+
+    prof = int(sheet.get("proficiency_bonus") or 2)
+    wis_mod = (int((sheet.get("abilities") or {}).get("WIS") or 10) - 10) // 2
+    save_dc = 8 + prof + wis_mod
+
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "natures-sanctuary",
+        "name": "🌿 Nature's Sanctuary",
+        "icon": "🌿",
+        "duration_rounds": 100000,
+        "duration_max": 100000,
+        "permanent": True,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "natures_sanctuary": True,
+            "dc": save_dc,
+        },
+        "desc": (
+            f"Beasts and plants that attack {char.name} must make a WIS "
+            f"save (DC {save_dc}) or the attack automatically misses. "
+            f"(Land Druid Lv 14+ passive.)"
+        ),
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": f"🌿 Nature's Sanctuary (DC {save_dc})",
+            "feature_desc": (
+                f"Beasts and plants that attack {char.name} must make a "
+                f"WIS save (DC {save_dc}) or the attack automatically "
+                f"misses. (Land Druid Lv 14+.)"
+            ),
+            "source": "natures-sanctuary",
+            "save_dc": save_dc,
+            "buff_installed": buff_installed,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "natures-sanctuary",
         "save_dc": save_dc,
         "buff_installed": buff_installed,
     }
@@ -117724,6 +117860,75 @@ async def use_npc_attack(
         )
         if _range_err:
             return JSONResponse(status_code=409, content=_range_err)
+
+    # v2.1017.0 — Nature's Sanctuary (Land Druid Lv 14+, PHB p.69). If
+    # the target (the druid) carries the `natures-sanctuary` buff AND
+    # this NPC attacker is a beast or plant, the attacker must make a WIS
+    # save vs the druid's DC or the attack automatically misses (RAW:
+    # "choose a different target, or the attack automatically misses").
+    # Buff-gated → a complete no-op for every attacker whose target
+    # isn't warded, so the hot NPC-attack path is unchanged otherwise.
+    _nat_sanc_dc = _target_natures_sanctuary_dc(campaign_id, target_combatant_id)
+    if _nat_sanc_dc > 0 and (
+        _attacker_creature_type(db, attacker.get("char_id"), attacker)
+        in ("beast", "plant")
+    ):
+        _ns_save_mod = 0
+        _ns_tmpl_id = attacker.get("token_template_id")
+        if _ns_tmpl_id:
+            try:
+                _ns_tmpl = db.query(TokenTemplate).filter(
+                    TokenTemplate.id == int(_ns_tmpl_id),
+                ).first()
+                if _ns_tmpl is not None:
+                    _ns_sheet = _monster_template_to_sheet(_ns_tmpl, campaign_id)
+                    _ns_smr, _ = _resolve_stat_modifier(
+                        _ns_sheet, "dnd5e", "wis_save")
+                    _ns_save_mod = int(_ns_smr)
+            except Exception:
+                _ns_save_mod = 0
+        try:
+            _ns_r = dice_mod.roll(f"1d20{_ns_save_mod:+d}")
+            _ns_total, _ns_bd = int(_ns_r.total), _ns_r.breakdown
+        except dice_mod.DiceParseError:
+            _ns_total, _ns_bd = _ns_save_mod, ""
+        _ns_passed = _ns_total >= _nat_sanc_dc
+        await hub.broadcast(campaign_id, {
+            "type": "roll",
+            "data": {
+                "expression": f"1d20{_ns_save_mod:+d}", "total": _ns_total,
+                "breakdown": _ns_bd,
+                "note": (
+                    f"🌿 Nature's Sanctuary · {attacker_name} WIS save "
+                    f"vs DC {_nat_sanc_dc}"
+                ),
+                "user_name": attacker_name, "char_name": attacker_name,
+                "visibility": Visibility.PUBLIC.value, "dc": _nat_sanc_dc,
+            },
+        })
+        if not _ns_passed:
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "source": "natures-sanctuary",
+                    "character_name": attacker_name,
+                    "feature_name": "🌿 Nature's Sanctuary — attack averted",
+                    "feature_desc": (
+                        f"{attacker_name} (beast/plant) failed its WIS save "
+                        f"({_ns_total} vs DC {_nat_sanc_dc}) — the attack "
+                        f"automatically misses. (Land Druid Lv 14+.)"
+                    ),
+                    "target_combatant_id": target_combatant_id,
+                },
+            })
+            return {
+                "ok": True,
+                "natures_sanctuary_blocked": True,
+                "hit": False,
+                "save_total": _ns_total,
+                "save_dc": _nat_sanc_dc,
+                "attacker_name": attacker_name,
+            }
 
     # Dodging disadvantage on the target — same buff lookup PCs honor.
     target_dodging = _target_has_dodging(campaign_id, target_combatant_id)

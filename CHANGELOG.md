@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1017.0] - 2026-07-14 — "The Warded Grove"
+
+**Schema version:** 103
+
+**Commit summary:** Nature's Sanctuary (Circle of the Land Druid Lv 14+) — `POST /use_natures_sanctuary` wards the druid so a beast/plant that attacks must WIS-save or the attack automatically misses, enforced in `/npc_attack`.
+
+**Description:** Phase 8 higher-level subclass feature — a real mechanization that extends the NPC-attack path, not just a flag. Circle of the Land is the SRD druid circle, so Nature's Sanctuary is SRD-valid. `POST /use_natures_sanctuary` validates a Land Druid Lv 14+ and installs a `natures-sanctuary` buff carrying `effects.dc` = the druid's spell save DC (8 + prof + WIS mod). A new `/npc_attack` gate reads it via `_target_natures_sanctuary_dc` and, when the attacker's creature type resolves to `beast` or `plant` (via `_attacker_creature_type`), rolls the attacker's WIS save before hit determination — on a **fail** the attack automatically misses (returns `natures_sanctuary_blocked`), on a success it proceeds. The gate is buff-gated, so it's a complete no-op for every attack whose target isn't warded (the 15-test `/npc_attack` regression suite still passes). The 24-hour per-creature immunity on a success + the controlled-creature exemption stay GM-narrated (v1). Verified end-to-end: Mira Greenleaf (the demo Druid) PATCHed to Circle of the Land Lv 14 wards herself; a beast attacker (Dire Wolf) is blocked on a failed save, a humanoid attacker (Bandit) is never blocked (the beast/plant restriction), and the level/error paths gate correctly. No schema change.
+
+### Added
+- `app/routes/tabletop_routes.py` — `POST /use_natures_sanctuary` endpoint + `_target_natures_sanctuary_dc` helper; a beast/plant attacker WIS-save gate in `/npc_attack` that auto-misses on a fail.
+- `tests/harness/test_natures_sanctuary.py` (new, +6) — installs the ward, beast attack blocked (loops until a failed save), humanoid attacker ignored, level gate (Moon Lv 5 → 409), and error paths (400 missing id / 404 unknown).
+
+### Changed
+- `docs/test-harness-coverage.md` — new `test_natures_sanctuary.py` section; total bumped 4771 → 4777.
+
 ## [2.1016.0] - 2026-07-14 — "The Aura of Peace"
 
 **Schema version:** 103

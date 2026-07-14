@@ -938,6 +938,20 @@ composition. Batch by class, same cadence as the breadth sweep.
   The demo Open Hand Monk (Kael) PATCHes to Lv 11 so it's happy-path
   harness-tested. Harness: `test_tranquility.py` (+4).
 
+- **v2.1017.0 ("The Warded Grove") — Nature's Sanctuary** (Circle of
+  the Land Druid Lv 14+): a real NPC-attack-path mechanization. `POST
+  /use_natures_sanctuary` validates a Land Druid Lv 14+ and installs a
+  `natures-sanctuary` buff (`effects.dc` = 8 + prof + WIS). A new
+  `/npc_attack` gate (`_target_natures_sanctuary_dc` + the
+  `_attacker_creature_type` beast/plant check) rolls the attacker's WIS
+  save before hit determination — a fail auto-misses
+  (`natures_sanctuary_blocked`). Buff-gated → no-op for unwarded
+  targets (the 15-test `/npc_attack` regression passes). The 24-hour
+  immunity + controlled-creature exemption stay GM-narrated. The demo
+  Druid (Mira) PATCHes to Circle of the Land Lv 14 so both the block
+  (beast) and ignore (humanoid) paths are harness-tested. Harness:
+  `test_natures_sanctuary.py` (+6).
+
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`
 `/cast_spell` read site); the earlier "5/6, Improved Reaper is the last" note
