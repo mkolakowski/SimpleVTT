@@ -233,6 +233,7 @@ or passive damage-boosters that already ride other code paths
 | `use_halo_of_spores` | ✅ tracked | v2.676.0 — with `target_combatant_id`, rolls the target's CON save server-side (NPC via template, PC via sheet) + applies the necrotic via `_apply_damage_to_combatant` (save-OR-NOTHING: full on fail, 0 on success); announce-only without a resolvable target |
 | `use_hands_of_healing` | ✅ tracked | v2.674.0 — applies the rolled heal (Martial Arts die + WIS) to `target_combatant_id` via `_apply_heal_to_combatant` (caps at max HP, revives a dying PC); announce-only without a target |
 | `use_healing_light` | ✅ tracked | v2.675.0 — applies the rolled pooled-d6 heal to `target_combatant_id` via `_apply_heal_to_combatant` (caps at max HP, revives a dying PC); announce-only without a target |
+| `use_hurl_through_hell` | ✅ tracked | v2.1011.0 — The Fiend Warlock Lv 14+. Auto-bootstraps a 1/long-rest `hurl-through-hell` resource (reset by the long-rest flow), decrements it, and applies 10d10 psychic to `target_combatant_id` via `_apply_damage_to_combatant` — unless the target's creature type is `fiend` (RAW exemption via `_attacker_creature_type`), then 0. End-of-next-turn timing + planar banishment GM-narrated |
 | `use_hexblades_curse` | ✅ tracked | D buff-install |
 | `use_hide_in_plain_sight` | ✅ tracked | D buff-install |
 | `use_holy_nimbus` | ✅ tracked | D buff-install |

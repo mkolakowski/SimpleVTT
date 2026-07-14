@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1011.0] - 2026-07-13 — "The Lower Planes"
+
+**Schema version:** 103
+
+**Commit summary:** Hurl Through Hell (The Fiend Warlock Lv 14+) — `POST /use_hurl_through_hell` banishes a hit target through the lower planes for 10d10 psychic, once per long rest, exempting fiends.
+
+**Description:** Phase 8 higher-level subclass feature. The Fiend is the SRD warlock patron, so Hurl Through Hell is SRD-valid. `POST /use_hurl_through_hell` validates a Fiend Warlock Lv 14+, auto-bootstraps a 1/long-rest `hurl-through-hell` resource (reset by the long-rest flow), gates on a remaining use, decrements it, and applies 10d10 psychic to the target combatant via `_apply_damage_to_combatant` — **unless** the target's creature type resolves to `fiend` (the RAW exemption, via `_attacker_creature_type`), in which case it takes nothing. It rides an attack you already made, so no separate action/reaction chip is marked; the only cost is the once-per-long-rest use. The end-of-next-turn timing + the planar banishment itself stay GM-narrated. Verified end-to-end: Magnus Hexbinder (the demo Fiend Warlock) PATCHed to Lv 14 hurls a humanoid for 10-100 psychic, a fiend-typed target takes 0, and a second hurl before a long rest is refused (409). No schema change.
+
+### Added
+- `app/routes/tabletop_routes.py` — `POST /use_hurl_through_hell` endpoint (Fiend Warlock Lv 14+; auto-bootstrapped 1/long-rest resource; fiend-exempt 10d10 psychic).
+- `tests/harness/test_hurl_through_hell.py` (new, +7) — non-fiend 10d10 damage + use consumed, fiend exemption (0 damage), once-per-long-rest 409, level gate (Lv 5 → 409), and error paths (400 missing id / 400 missing target / 404 unknown).
+
+### Changed
+- `docs/test-harness-coverage.md` — new `test_hurl_through_hell.py` section; total bumped 4734 → 4741.
+
 ## [2.1010.0] - 2026-07-13 — "The Overload"
 
 **Schema version:** 103

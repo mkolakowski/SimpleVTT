@@ -63261,6 +63261,160 @@ async def use_overchannel(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_hurl_through_hell")
+async def use_hurl_through_hell(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.1011.0 — Hurl Through Hell (The Fiend Warlock Lv 14+, PHB
+    p.110): "Once per turn when you hit a creature with an attack, you
+    can use this feature to instantly transport the target through the
+    lower planes. ... At the end of your next turn, the target ... takes
+    10d10 psychic damage as it reels from its horrific experience —
+    unless the target is a fiend, in which case it doesn't take the
+    damage. Once you use this feature, you can't use it again until you
+    finish a long rest." The Fiend is the SRD warlock patron, so this
+    is SRD-valid.
+
+    Body: ``{character_id, target_combatant_id}``. It rides an attack
+    you've already made, so no separate action/reaction chip is marked —
+    the only cost is the 1/long-rest use.
+
+    Validates Fiend Warlock Lv 14+, auto-bootstraps a 1/long-rest
+    `hurl-through-hell` resource (reset by the long-rest flow), gates on
+    a remaining use, decrements it, then applies 10d10 psychic to the
+    target via `_apply_damage_to_combatant` — UNLESS the target's
+    creature type is `fiend` (RAW exemption; `_attacker_creature_type`).
+    The end-of-next-turn delay + planar banishment stay GM-narrated.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_combatant_id = (str(body.get("target_combatant_id") or "")).strip()
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not target_combatant_id:
+        raise HTTPException(400, "target_combatant_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Warlock character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_fiend_warlock(sheet, 14):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "the fiend warlock lv 14+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _warlock_level_from_sheet(sheet),
+        })
+
+    # Auto-bootstrap the 1/long-rest resource (a Lv 14 Fiend Warlock has
+    # exactly one use; the long-rest flow refills it via reset="long").
+    resources = list(sheet.get("resources") or [])
+    h_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "hurl-through-hell":
+            h_idx = i
+            break
+    if h_idx < 0:
+        resources.append({
+            "key": "hurl-through-hell", "label": "Hurl Through Hell",
+            "current": 1, "max": 1, "reset": "long",
+        })
+        h_idx = len(resources) - 1
+    h_row = dict(resources[h_idx])
+    h_cur = int(h_row.get("current") or 0)
+    if h_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Hurl Through Hell",
+        })
+
+    h_row["current"] = h_cur - 1
+    h_max = int(h_row.get("max") or 1)
+    resources[h_idx] = h_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    target = _lookup_combatant(campaign_id, target_combatant_id)
+    target_name = (target or {}).get("name") or ""
+    target_type = _attacker_creature_type(
+        db, (target or {}).get("char_id"), target,
+    )
+    is_fiend = target_type == "fiend"
+
+    damage_rolled = 0
+    damage_breakdown = ""
+    damage_applied = 0
+    if not is_fiend and target is not None:
+        try:
+            _r = dice_mod.roll("10d10")
+            damage_rolled = max(0, int(_r.total))
+            damage_breakdown = _r.breakdown
+        except dice_mod.DiceParseError:
+            damage_rolled = 0
+        if damage_rolled > 0:
+            _dr = await _apply_damage_to_combatant(
+                db, campaign_id, target, damage_rolled,
+                damage_type="psychic", is_spell=True,
+                attacker_char_id=char.id,
+            )
+            damage_applied = int(_dr.get("applied") or 0)
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id, "key": "hurl-through-hell",
+            "current": h_cur - 1, "max": h_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "🔥 Hurl Through Hell",
+            "feature_desc": (
+                f"{char.name} hurls {target_name or 'the target'} through "
+                f"the lower planes"
+                + (
+                    " — but it's a fiend and takes no damage."
+                    if is_fiend else
+                    f" — {damage_applied} psychic damage ({damage_breakdown})."
+                )
+            ),
+            "source": "hurl-through-hell",
+            "target_combatant_id": target_combatant_id,
+            "target_is_fiend": is_fiend,
+            "damage_rolled": damage_rolled,
+            "damage_applied": damage_applied,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "hurl-through-hell",
+        "target_combatant_id": target_combatant_id,
+        "target_is_fiend": is_fiend,
+        "damage_rolled": damage_rolled,
+        "damage_applied": damage_applied,
+        "uses_remaining": h_cur - 1,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_frenzy")
 async def use_frenzy(
     campaign_id: int,

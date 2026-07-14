@@ -865,6 +865,17 @@ composition. Batch by class, same cadence as the breadth sweep.
   GM-narrated. Harness: `test_overchannel.py` (+7) +
   `test_overchannel_self_damage.py` (+9).
 
+- **v2.1011.0 ("The Lower Planes") — Hurl Through Hell** (The Fiend
+  Warlock Lv 14+): `POST /use_hurl_through_hell` validates a Fiend
+  Warlock Lv 14+, auto-bootstraps a 1/long-rest `hurl-through-hell`
+  resource (reset by the long-rest flow), and applies 10d10 psychic to
+  the target via `_apply_damage_to_combatant` — unless the target's
+  creature type is `fiend` (RAW exemption, `_attacker_creature_type`).
+  Rides an attack you already made, so no economy chip is marked. The
+  end-of-next-turn timing + planar banishment stay GM-narrated. The
+  demo Fiend Warlock (Magnus) PATCHes to Lv 14 so it's happy-path
+  harness-tested end-to-end. Harness: `test_hurl_through_hell.py` (+7).
+
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`
 `/cast_spell` read site); the earlier "5/6, Improved Reaper is the last" note
