@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1016.0] - 2026-07-14 — "The Aura of Peace"
+
+**Schema version:** 103
+
+**Commit summary:** Tranquility (Way of the Open Hand Monk Lv 11+) — `POST /use_tranquility` grants the Sanctuary effect (attackers must WIS-save) at the monk's DC.
+
+**Description:** Phase 8 higher-level subclass feature. Way of the Open Hand is the SRD monk subclass, so Tranquility is SRD-valid. `POST /use_tranquility` validates an Open Hand Monk Lv 11+ and installs the **same** `sanctuary` buff the Sanctuary spell uses — carrying `effects.dc = 8 + WIS mod + prof` plus the `sanctuary_attacker_must_save` / `sanctuary_ends_on_offense` flags — so the existing attacker-must-Wis-save gate in `/use_attack` and the ends-on-offense drop in `/use_attack` + `/cast_spell` enforce it for free (a real mechanization on a pre-existing substrate, not a fresh flag). No action cost (it's gained on a long rest); re-invoking refreshes the ward, which lasts until the next long rest or until the monk goes on the offensive. Verified end-to-end: Kael Brightleaf (the demo Open Hand Monk) PATCHed to Lv 11 installs a `sanctuary` buff whose `effects.dc` equals 8 + his WIS mod + prof, and the level/error paths gate correctly. No schema change.
+
+### Added
+- `app/routes/tabletop_routes.py` — `POST /use_tranquility` endpoint (installs the shared `sanctuary` buff at the monk's DC = 8 + WIS + prof).
+- `tests/harness/test_tranquility.py` (new, +4) — installs `sanctuary` with the computed DC + enforcement flag, level gate (Lv 5 → 409), and error paths (400 missing id / 404 unknown).
+
+### Changed
+- `docs/test-harness-coverage.md` — new `test_tranquility.py` section; total bumped 4767 → 4771.
+
 ## [2.1015.0] - 2026-07-14 — "The Infernal Ward"
 
 **Schema version:** 103

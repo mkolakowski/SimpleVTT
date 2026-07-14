@@ -927,6 +927,17 @@ composition. Batch by class, same cadence as the breadth sweep.
   the originally-picked candidate — was found already shipped at
   `use_draconic_wings`; Fiendish Resilience shipped in its place.)*
 
+- **v2.1016.0 ("The Aura of Peace") — Tranquility** (Way of the Open
+  Hand Monk Lv 11+): `POST /use_tranquility` validates an Open Hand
+  Monk Lv 11+ and installs the **same** `sanctuary` buff the Sanctuary
+  spell uses (carrying `effects.dc = 8 + WIS + prof` + the
+  `sanctuary_attacker_must_save` / `sanctuary_ends_on_offense` flags),
+  so the existing attacker-must-Wis-save gate in `/use_attack` + the
+  ends-on-offense drop enforce it for free — a real mechanization on a
+  pre-existing substrate, not a fresh flag. No action cost; refreshable.
+  The demo Open Hand Monk (Kael) PATCHes to Lv 11 so it's happy-path
+  harness-tested. Harness: `test_tranquility.py` (+4).
+
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`
 `/cast_spell` read site); the earlier "5/6, Improved Reaper is the last" note

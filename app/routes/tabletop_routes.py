@@ -64173,6 +64173,106 @@ async def use_fiendish_resilience(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_tranquility")
+async def use_tranquility(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.1016.0 — Tranquility (Way of the Open Hand Monk Lv 11+, PHB
+    p.79): "At the end of a long rest, you gain the effect of a
+    sanctuary spell that lasts until the start of your next long rest
+    (the spell can end early as normal). The saving throw DC ... equals
+    8 + your Wisdom modifier + your proficiency bonus." Way of the Open
+    Hand is the SRD monk subclass, so this is SRD-valid.
+
+    Body: ``{character_id}``. No action cost (it's gained on a long
+    rest). Installs the same ``sanctuary`` buff the Sanctuary spell
+    uses — carrying ``effects.dc = 8 + WIS mod + prof`` — so the
+    existing attacker-must-Wis-save gate in `/use_attack` and the
+    ends-on-offense drop in `/use_attack` + `/cast_spell` enforce it for
+    free. Mirrors the Sanctuary-spell install shape; re-invoking
+    refreshes the ward.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Monk character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    subclass = (sheet.get("subclass") or "").lower()
+    level = _monk_level_from_sheet(sheet)
+    if cls != "monk" or "open hand" not in subclass or level < 11:
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "way of the open hand monk lv 11+",
+            "got_class": cls or "",
+            "got_subclass": sheet.get("subclass") or "",
+            "got_level": level,
+        })
+
+    prof = int(sheet.get("proficiency_bonus") or 2)
+    wis_mod = (int((sheet.get("abilities") or {}).get("WIS") or 10) - 10) // 2
+    save_dc = 8 + wis_mod + prof
+
+    # Install the same `sanctuary` buff the spell uses so the existing
+    # attacker-must-save + ends-on-offense enforcement applies. Lasts
+    # until the next long rest → a very long duration (the ward also
+    # ends early on offense via the shared drop, per RAW).
+    _sanc_template = _SPELL_BUFF_MAP.get("sanctuary") or {}
+    buff = dict(_sanc_template)
+    buff["name"] = "🕊️ Sanctuary (Tranquility)"
+    buff["duration_rounds"] = 100000
+    buff["duration_max"] = 100000
+    buff["source_char_id"] = char.id
+    buff["effects"] = dict(_sanc_template.get("effects") or {})
+    buff["effects"]["dc"] = save_dc
+    buff["desc"] = (
+        f"{char.name} is warded by Tranquility: attackers must make a "
+        f"WIS save (DC {save_dc}) or pick a new target. Ends if the monk "
+        f"attacks or harms an enemy. (Open Hand Monk Lv 11+.)"
+    )
+    buff_installed = await _install_buff(campaign_id, char.id, buff)
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": f"🕊️ Tranquility — Sanctuary (DC {save_dc})",
+            "feature_desc": (
+                f"{char.name} enters a meditative aura of peace: attackers "
+                f"must WIS-save (DC {save_dc}) or choose a new target, "
+                f"until the next long rest or the monk goes on the "
+                f"offensive. (Open Hand Monk Lv 11+.)"
+            ),
+            "source": "tranquility",
+            "save_dc": save_dc,
+            "buff_installed": buff_installed,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "tranquility",
+        "save_dc": save_dc,
+        "buff_installed": buff_installed,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_frenzy")
 async def use_frenzy(
     campaign_id: int,

@@ -378,6 +378,7 @@ or passive damage-boosters that already ride other code paths
 | `use_sculpt_spells` | ✅ tracked | v2.669.0 — installs a `sculpt-spells-active` protection buff riding the Careful Spell auto-pass substrate (`_caster_has_careful_pending_buff` matches the key); protected creatures auto-succeed + take no damage from the evocation AoE |
 | `use_supreme_healing` | ✅ tracked | v2.143.0 — `/cast_spell` target-bound heals max every die via `_max_dice_total` for a Lv 17+ Life cleric; v2.1003.0 — the `/apply_healing` heal-claim (chat-card) path does too. The `use_supreme_healing` endpoint itself is the passive announce; the mechanization lives in both heal pipelines. |
 | `use_totem_spirit` | ✅ tracked | v2.612.2 — installs permanent `totem-spirit-active` flag-buff (per-totem `totem_spirit_*` rage-gated params: Bear resistance-except-psychic / Eagle OA-dis + Dash / Wolf ally-advantage); Phase 8 |
+| `use_tranquility` | ✅ tracked | v2.1016.0 — Open Hand Monk Lv 11+. Installs the shared `sanctuary` buff (`effects.dc = 8 + WIS + prof` + `sanctuary_attacker_must_save`/`sanctuary_ends_on_offense`), so the existing `/use_attack` attacker-must-Wis-save gate + ends-on-offense drop enforce it for free. No action cost; refreshable |
 | `use_unwavering_mark` | ⚪ announce-only | — |
 | `use_visions_of_distant_realms` | ⚪ announce-only | — |
 | `use_whispers_of_the_dead` | ⚪ announce-only | — |
