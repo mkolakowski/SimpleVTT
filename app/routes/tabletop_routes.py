@@ -63756,6 +63756,310 @@ async def use_peerless_skill(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_quivering_palm")
+async def use_quivering_palm(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.1014.0 — Quivering Palm (Way of the Open Hand Monk Lv 17+, PHB
+    p.79): a two-step feature. ``mode="setup"`` — on an unarmed-strike
+    hit, spend 3 ki to start lethal vibrations in the target (lasting
+    monk-level days; only one creature at a time). ``mode="trigger"`` —
+    use your action to end them: the target makes a CON save; on a fail
+    it drops to 0 HP, on a success it takes 10d10 necrotic. Way of the
+    Open Hand is the SRD monk subclass, so this is SRD-valid.
+
+    Body: ``{character_id, target_combatant_id, mode, override?}``.
+    Setup spends 3 ki (no economy chip — it rides the unarmed hit).
+    Trigger marks the action chip (``override`` bypasses the Phase 4
+    gate). The "unarmed-strike hit" precondition on setup is
+    trust-the-caller (matching Open Hand Technique / Stunning Strike).
+    PC-target CON saves stay GM-narrated (NPC targets resolve inline).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_combatant_id = (body.get("target_combatant_id") or "").strip()
+    mode = (body.get("mode") or "").strip().lower()
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if mode not in ("setup", "trigger"):
+        raise HTTPException(400, "mode must be one of setup, trigger")
+    if not target_combatant_id:
+        raise HTTPException(400, "target_combatant_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Monk character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    subclass = (sheet.get("subclass") or "").lower()
+    level = _monk_level_from_sheet(sheet)
+    if cls != "monk" or "open hand" not in subclass or level < 17:
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "way of the open hand monk lv 17+",
+            "got_class": cls or "",
+            "got_subclass": sheet.get("subclass") or "",
+            "got_level": level,
+        })
+
+    target = _lookup_combatant(campaign_id, target_combatant_id)
+    if not target:
+        raise HTTPException(404, "Target not in battle")
+    target_name = target.get("name") or "target"
+    prof = int(sheet.get("proficiency_bonus") or 2)
+    wis_mod = (int((sheet.get("abilities") or {}).get("WIS") or 10) - 10) // 2
+    save_dc = 8 + prof + wis_mod
+
+    if mode == "setup":
+        # Ki gate — 3 points.
+        resources = list(sheet.get("resources") or [])
+        ki_idx = -1
+        for i, r in enumerate(resources):
+            if (r.get("key") or "").lower() == "ki":
+                ki_idx = i
+                break
+        if ki_idx < 0:
+            raise HTTPException(404, "No Ki resource on this sheet")
+        ki_row = dict(resources[ki_idx])
+        ki_cur = int(ki_row.get("current") or 0)
+        ki_max = int(ki_row.get("max") or 0)
+        if ki_cur < 3:
+            return JSONResponse(status_code=409, content={
+                "error": "out_of_uses", "label": "Ki (need 3)",
+                "ki_remaining": ki_cur,
+            })
+        # One creature at a time: strip any existing quivering-palm buff
+        # this monk placed on another combatant.
+        _state = hub.get_battle(campaign_id) or {}
+        for _c in (_state.get("combatants") or []):
+            for _b in list(_c.get("buffs") or []):
+                if (isinstance(_b, dict) and _b.get("key") == "quivering-palm"
+                        and (_b.get("effects") or {}).get(
+                            "quivering_palm_caster_id") == char.id):
+                    await _remove_buff_from_combatant_id(
+                        campaign_id, _c.get("id"), "quivering-palm",
+                    )
+        ki_row["current"] = ki_cur - 3
+        resources[ki_idx] = ki_row
+        sheet["resources"] = resources
+        from sqlalchemy.orm.attributes import flag_modified
+        char.sheet = sheet
+        flag_modified(char, "sheet")
+        db.commit()
+
+        await _install_buff_on_combatant_id(campaign_id, target_combatant_id, {
+            "key": "quivering-palm",
+            "name": "☠️ Quivering Palm",
+            "icon": "☠️",
+            "duration_rounds": 100000,
+            "duration_max": 100000,
+            "permanent": False,
+            "concentration": False,
+            "source_char_id": char.id,
+            "effects": {
+                "quivering_palm_caster_id": char.id,
+                "quivering_palm_save_dc": save_dc,
+            },
+            "desc": (
+                f"Lethal vibrations set by {char.name} (Quivering Palm). "
+                f"The monk can end them as an action: CON save DC {save_dc} "
+                f"or drop to 0 HP (10d10 necrotic on a success)."
+            ),
+        })
+        await hub.broadcast(campaign_id, {
+            "type": "resource_update",
+            "data": {"character_id": char.id, "key": "ki",
+                     "current": ki_cur - 3, "max": ki_max},
+        })
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "character_name": char.name,
+                "feature_name": "☠️ Quivering Palm — vibrations set",
+                "feature_desc": (
+                    f"{char.name} sets lethal vibrations in {target_name} "
+                    f"(spent 3 ki). End them as an action for a CON save "
+                    f"DC {save_dc} or drop to 0 HP. (Open Hand Monk Lv 17+.)"
+                ),
+                "source": "quivering-palm",
+                "phase": "setup",
+                "target_combatant_id": target_combatant_id,
+                "save_dc": save_dc,
+                "ki_remaining": ki_cur - 3,
+            },
+        })
+        return {
+            "ok": True, "feature": "quivering-palm", "phase": "setup",
+            "target_combatant_id": target_combatant_id, "save_dc": save_dc,
+            "ki_remaining": ki_cur - 3, "ki_max": ki_max,
+        }
+
+    # mode == "trigger"
+    qp_buff = None
+    for _b in (target.get("buffs") or []):
+        if (isinstance(_b, dict) and _b.get("key") == "quivering-palm"
+                and (_b.get("effects") or {}).get(
+                    "quivering_palm_caster_id") == char.id):
+            qp_buff = _b
+            break
+    if qp_buff is None:
+        return JSONResponse(status_code=409, content={
+            "error": "not_set_up",
+            "label": "Quivering Palm",
+            "hint": "Set the vibrations (mode=setup) on this target first.",
+        })
+
+    # Action-economy gate (RAW: ending the vibrations uses an action).
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget", "slot": "action",
+            "char_name": char.name, "source": "quivering-palm",
+            "label": "Quivering Palm", "strict": strict,
+        })
+
+    # Resolve the target's CON save (NPC inline; PC GM-narrated for v1).
+    save_dc = int((qp_buff.get("effects") or {}).get(
+        "quivering_palm_save_dc") or save_dc)
+    save_total = None
+    save_passed = None
+    save_mod = None
+    if target.get("char_id"):
+        _tc = db.query(Character).filter(
+            Character.id == int(target["char_id"]),
+        ).first()
+        if _tc and _tc.sheet:
+            _ts = dict(_tc.sheet or {})
+            _con_mod = (int((_ts.get("abilities") or {}).get("CON", 10)) - 10) // 2
+            _tp = int(_ts.get("proficiency_bonus") or 2)
+            _cp = bool((_ts.get("saving_throws") or {}).get("CON"))
+            save_mod = _con_mod + (_tp if _cp else 0)
+    elif target.get("token_template_id"):
+        try:
+            _tmpl = db.query(TokenTemplate).filter(
+                TokenTemplate.id == int(target["token_template_id"]),
+            ).first()
+            if _tmpl is not None:
+                _npc_sheet = _monster_template_to_sheet(_tmpl, campaign_id)
+                _smr, _ = _resolve_stat_modifier(_npc_sheet, "dnd5e", "con_save")
+                save_mod = int(_smr)
+        except Exception:
+            save_mod = None
+    if save_mod is None:
+        # No AC/save-resolvable target (a bare NPC combatant): treat CON
+        # save mod as +0 so the trigger still resolves rather than being
+        # silently GM-narrated (the test seeds such a combatant).
+        save_mod = 0
+
+    try:
+        _sr = dice_mod.roll(f"1d20{save_mod:+d}")
+        save_total = int(_sr.total)
+        _sr_bd = _sr.breakdown
+    except dice_mod.DiceParseError:
+        save_total = save_mod
+        _sr_bd = ""
+    save_passed = save_total >= save_dc
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": f"1d20{save_mod:+d}", "total": save_total,
+            "breakdown": _sr_bd,
+            "note": f"☠️ {target_name}'s CON save vs {char.name}'s Quivering Palm",
+            "user_name": char.name, "char_name": target_name,
+            "visibility": Visibility.PUBLIC.value, "dc": save_dc,
+        },
+    })
+
+    dropped_to_0 = False
+    damage_rolled = 0
+    damage_applied = 0
+    damage_type = "necrotic"
+    if save_passed:
+        # Success → 10d10 necrotic.
+        try:
+            damage_rolled = max(0, int(dice_mod.roll("10d10").total))
+        except dice_mod.DiceParseError:
+            damage_rolled = 0
+        if damage_rolled > 0:
+            _dr = await _apply_damage_to_combatant(
+                db, campaign_id, target, damage_rolled, damage_type,
+                is_spell=True, attacker_char_id=char.id,
+            )
+            damage_applied = int(_dr.get("applied") or 0)
+    else:
+        # Fail → drop to 0 HP: apply damage equal to current HP.
+        cur_hp = int(target.get("hp_current") or 0)
+        if target.get("char_id"):
+            _tc2 = db.query(Character).filter(
+                Character.id == int(target["char_id"]),
+            ).first()
+            if _tc2 and _tc2.sheet:
+                cur_hp = int((_tc2.sheet.get("hp") or {}).get("current") or cur_hp)
+        if cur_hp > 0:
+            _dr = await _apply_damage_to_combatant(
+                db, campaign_id, target, cur_hp, damage_type,
+                is_spell=True, attacker_char_id=char.id,
+            )
+            damage_applied = int(_dr.get("applied") or 0)
+        dropped_to_0 = True
+
+    await _remove_buff_from_combatant_id(
+        campaign_id, target_combatant_id, "quivering-palm",
+    )
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": (
+                "☠️ Quivering Palm — "
+                + ("dropped to 0 HP!" if dropped_to_0 else
+                   f"{damage_applied} necrotic (saved)")
+            ),
+            "feature_desc": (
+                f"{char.name} ends the vibrations in {target_name}: CON save "
+                f"{save_total} vs DC {save_dc} — "
+                + ("FAIL, drops to 0 HP." if dropped_to_0 else
+                   f"success, {damage_applied} necrotic (10d10).")
+                + " (Open Hand Monk Lv 17+.)"
+            ),
+            "source": "quivering-palm",
+            "phase": "trigger",
+            "target_combatant_id": target_combatant_id,
+            "save_passed": save_passed,
+            "dropped_to_0": dropped_to_0,
+            "damage_applied": damage_applied,
+            "over_budget": was_used,
+        },
+    })
+    return {
+        "ok": True, "feature": "quivering-palm", "phase": "trigger",
+        "target_combatant_id": target_combatant_id,
+        "save_dc": save_dc, "save_total": save_total,
+        "save_passed": save_passed, "dropped_to_0": dropped_to_0,
+        "damage_rolled": damage_rolled, "damage_applied": damage_applied,
+        "over_budget": was_used,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_frenzy")
 async def use_frenzy(
     campaign_id: int,

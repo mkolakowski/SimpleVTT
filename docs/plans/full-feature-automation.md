@@ -899,6 +899,20 @@ composition. Batch by class, same cadence as the breadth sweep.
   14 so it's happy-path harness-tested. Harness:
   `test_peerless_skill.py` (+5).
 
+- **v2.1014.0 ("The Lethal Vibration") — Quivering Palm** (Way of the
+  Open Hand Monk Lv 17+): the first two-mode Phase 8 endpoint. `POST
+  /use_quivering_palm` `mode="setup"` gates ≥ 3 ki, strips any existing
+  vibrations this monk placed (RAW one-at-a-time), spends 3 ki, and
+  installs a `quivering-palm` buff on the target (carrying the caster
+  id + save DC) with no economy chip (rides the unarmed hit).
+  `mode="trigger"` requires that buff, gates the action chip
+  (override-bypassable), resolves the target's CON save (NPC inline via
+  the Halo-of-Spores pattern), and on a fail drops the target to 0 HP
+  (damage = current HP) or on a success applies 10d10 necrotic, then
+  consumes the buff. PC-target saves stay GM-narrated. The demo Open
+  Hand Monk (Kael) PATCHes to Lv 17 so it's happy-path harness-tested.
+  Harness: `test_quivering_palm.py` (+8).
+
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`
 `/cast_spell` read site); the earlier "5/6, Improved Reaper is the last" note

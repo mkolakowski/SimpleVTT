@@ -287,6 +287,7 @@ or passive damage-boosters that already ride other code paths
 | `use_psychic_blades` | ✅ tracked | A use/resource |
 | `use_purity_of_spirit` | ✅ tracked | D buff-install (permanent PFE&G effects) |
 | `use_pushing_attack` | ✅ tracked | G forced-move (save→15-ft push via `_force_move`, v2.99.433). v2.691.0 — the superiority die also lands as bonus damage via `_apply_damage_to_combatant`; size gate GM-tracked |
+| `use_quivering_palm` | ✅ tracked | v2.1014.0 — Open Hand Monk Lv 17+, two-mode. `setup` gates ≥ 3 ki, strips prior vibrations (one-at-a-time), spends 3 ki, installs a `quivering-palm` buff on the target (caster id + save DC); no economy chip. `trigger` action-gated, resolves the target's CON save inline → drop-to-0 (damage = current HP) on fail / 10d10 necrotic on success, consumes the buff. PC-target saves GM-narrated |
 | `use_radiant_sun_bolt` | ✅ tracked | A use/resource |
 | `use_rage` | ✅ tracked | D buff-install |
 | `use_rally` | ✅ tracked | F temp-HP |

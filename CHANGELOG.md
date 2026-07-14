@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1014.0] - 2026-07-14 — "The Lethal Vibration"
+
+**Schema version:** 103
+
+**Commit summary:** Quivering Palm (Way of the Open Hand Monk Lv 17+) — `POST /use_quivering_palm` with `mode=setup` spends 3 ki to set lethal vibrations, and `mode=trigger` ends them for a CON-save-or-drop-to-0.
+
+**Description:** Phase 8 higher-level subclass feature — the first two-mode Phase 8 endpoint. Way of the Open Hand is the SRD monk subclass, so Quivering Palm is SRD-valid. `mode="setup"` validates an Open Hand Monk Lv 17+, gates on ≥ 3 ki, strips any existing vibrations this monk placed (RAW one-creature-at-a-time), spends 3 ki, and installs a `quivering-palm` buff on the target combatant carrying the caster id + the save DC (8 + prof + WIS) — no economy chip, since it rides the unarmed-strike hit. `mode="trigger"` requires that buff, gates the action chip (`override`-bypassable), resolves the target's CON save (NPC inline via the Halo-of-Spores pattern; PC GM-narrated), and on a **fail** drops the target to 0 HP (applies damage equal to current HP) or on a **success** applies 10d10 necrotic — then consumes the buff and marks the action. Verified end-to-end: Kael Brightleaf (the demo Open Hand Monk) PATCHed to Lv 17 sets vibrations (3 ki spent, buff installed), the trigger resolves the save and either zeroes the target or applies necrotic and consumes the buff, and the not-set-up / out-of-ki / level / error paths gate correctly. No schema change.
+
+### Added
+- `app/routes/tabletop_routes.py` — `POST /use_quivering_palm` (two-mode: setup spends 3 ki + installs the vibrations buff; trigger resolves the CON save → drop-to-0 or 10d10 necrotic).
+- `tests/harness/test_quivering_palm.py` (new, +8) — setup (ki spend + buff install), trigger (save resolution → 0 HP or 10d10, buff consumed), not-set-up (409), out-of-ki (409), level gate (Lv 5 → 409), and error paths (400 bad mode / 400 missing target / 404 unknown).
+
+### Changed
+- `docs/test-harness-coverage.md` — new `test_quivering_palm.py` section; total bumped 4753 → 4761.
+
 ## [2.1013.0] - 2026-07-14 — "The Sure Hand"
 
 **Schema version:** 103
