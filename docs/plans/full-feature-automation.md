@@ -833,6 +833,19 @@ composition. Batch by class, same cadence as the breadth sweep.
   tests of the pure helper rather than a roll-batch harness test.
   Harness: `test_superior_critical_threshold.py` (+12).
 
+- **v2.1009.0 ("The Last Breath") — Survivor** (Champion Fighter Lv
+  18+): the Champion-subclass companion to Superior Critical. New
+  `_pc_champion_survivor_regen(sheet)` returns `5 + CON mod` for a Lv
+  18+ Champion (single-class + multiclass), `None` otherwise. The
+  turn-advance start-of-turn hook (right after `_tick_auras`, so an
+  aura heal that lifts the Champion above half suppresses Survivor
+  that turn) applies the regen via `_apply_heal_to_combatant` when the
+  active combatant is at `0 < current ≤ max // 2` HP, and broadcasts a
+  `💚 Survivor` feature_used card. RAW's "no benefit at 0 HP" rides
+  the `current > 0` gate. Fully automatic — nothing GM-tracked.
+  SRD-valid (Champion). No Lv-18 PC in the demo, so unit-tested on the
+  helper. Harness: `test_champion_survivor_regen.py` (+12).
+
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`
 `/cast_spell` read site); the earlier "5/6, Improved Reaper is the last" note

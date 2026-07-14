@@ -35996,6 +35996,54 @@ def _attacker_crit_threshold(sheet: dict) -> int:
     return 20
 
 
+def _pc_champion_survivor_regen(sheet: "dict | None") -> "int | None":
+    """v2.1009.0 — RAW: Champion Fighter Lv 18+ Survivor (PHB p.72):
+    "At the start of each of your turns, you regain hit points equal to
+    5 + your Constitution modifier if you have no more than half of your
+    hit points left. You don't gain this benefit if you have 0 hit
+    points." Champion is the SRD fighter subclass, so this is SRD-valid.
+
+    Returns the per-turn regen amount (``5 + CON mod``) for a Lv 18+
+    Champion Fighter, or ``None`` for any other attacker. The HP gates
+    (≤ half, > 0) are applied by the turn-advance caller against the live
+    combatant HP, not here — this helper only answers "does Survivor
+    apply, and for how much." Multiclass: walks ``classes[]`` for a
+    Fighter Champion entry at Lv 18+, matching ``_attacker_crit_threshold``.
+    """
+    if not sheet:
+        return None
+
+    def _regen() -> int:
+        abilities = dict(sheet.get("abilities") or {})
+        try:
+            con_score = int(abilities.get("CON") or 10)
+        except (TypeError, ValueError):
+            con_score = 10
+        return 5 + (con_score - 10) // 2
+
+    cls = (sheet.get("class") or "").strip().lower()
+    if cls == "fighter":
+        try:
+            level = int(sheet.get("level") or 0)
+        except (TypeError, ValueError):
+            return None
+        if level >= 18 and "champion" in (
+            sheet.get("subclass") or "").strip().lower():
+            return _regen()
+        return None
+    for entry in (sheet.get("classes") or []):
+        if (entry.get("class") or "").strip().lower() != "fighter":
+            continue
+        try:
+            level = int(entry.get("level") or 0)
+        except (TypeError, ValueError):
+            continue
+        if level >= 18 and "champion" in (
+            entry.get("subclass") or "").strip().lower():
+            return _regen()
+    return None
+
+
 def _attacker_crit_range_from_buffs(
     campaign_id: int, attacker_char_id: int, target_combatant_id: "str | None",
 ) -> int:
@@ -119799,6 +119847,42 @@ async def update_battle(
             db, campaign_id, state, _active,
             campaign=campaign, prompt_user=user,
         )
+
+        # v2.1009.0 — Champion Fighter Survivor (Lv 18+): at the start of
+        # each of its turns, a Champion at ≤ half HP (and > 0) regains
+        # 5 + CON mod. Runs after the aura tick so a start-of-turn aura
+        # heal that lifts the Champion back above half correctly
+        # suppresses Survivor this turn (both read the live sheet HP).
+        if _active and _active.get("char_id"):
+            try:
+                _surv_char = db.query(Character).filter(
+                    Character.id == int(_active["char_id"]),
+                ).first()
+                _surv_sheet = dict(_surv_char.sheet or {}) if _surv_char else None
+                _surv_regen = _pc_champion_survivor_regen(_surv_sheet)
+                if _surv_regen and _surv_regen > 0:
+                    _surv_hp = dict(_surv_sheet.get("hp") or {})
+                    _surv_cur = int(_surv_hp.get("current") or 0)
+                    _surv_max = int(_surv_hp.get("max") or 0)
+                    # RAW: no more than half HP left, and not at 0 HP.
+                    if 0 < _surv_cur <= _surv_max // 2:
+                        _surv_result = await _apply_heal_to_combatant(
+                            db, campaign_id, _active, _surv_regen,
+                        )
+                        await hub.broadcast(campaign_id, {
+                            "type": "feature_used",
+                            "data": {
+                                "character_name": _surv_char.name,
+                                "feature_name": "💚 Survivor",
+                                "feature_desc": (
+                                    f"Regains {_surv_result.get('applied', 0)} "
+                                    f"HP at the start of its turn (≤ half HP)."
+                                ),
+                                "source": "survivor",
+                            },
+                        })
+            except Exception:
+                logging.exception("Champion Survivor start-of-turn regen failed")
 
         # v2.567.0 — reset the persistent-AoE enter-trigger dedupe each
         # turn so "enters the area for the FIRST TIME on a turn" re-arms

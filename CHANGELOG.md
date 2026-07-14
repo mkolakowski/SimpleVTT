@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1009.0] - 2026-07-13 — "The Last Breath"
+
+**Schema version:** 103
+
+**Commit summary:** Champion Fighter Survivor (Lv 18+) — a Champion that starts its turn at no more than half HP (and above 0) automatically regains 5 + CON mod HP.
+
+**Description:** Phase 8 higher-level subclass feature, pairing with v2.1008.0's Superior Critical. Champion is the SRD fighter subclass, so this is SRD-valid. New `_pc_champion_survivor_regen(sheet)` returns `5 + CON mod` for a Lv 18+ Champion Fighter (single-class or via the multiclass `classes[]` walk) and `None` otherwise. The turn-advance hook — right after the aura tick, so a start-of-turn aura heal that lifts the Champion back above half correctly suppresses Survivor that turn — reads the new active combatant's live sheet HP, and when it's `0 < current ≤ max // 2` applies the regen via the existing `_apply_heal_to_combatant` (caps at max HP, revives handling shared with every other heal) and broadcasts a `💚 Survivor` `feature_used` card. RAW's "no benefit at 0 HP" is enforced by the `current > 0` gate. Still GM-tracked: nothing — the effect is fully automatic on turn start. No schema change. Because the demo has no Lv-18 PC (Garrik is Lv 7), the regen amount + level/subclass gate are covered by in-process unit tests of the pure helper.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_pc_champion_survivor_regen` helper; the turn-advance start-of-turn hook applies the regen to a Lv 18+ Champion at ≤ half HP and broadcasts `feature_used`.
+- `tests/harness/test_champion_survivor_regen.py` (new, +12) — unit tests of the helper: the Lv-17→None / Lv-18→5+CON boundary, CON-mod arithmetic (CON 8/10/14/20), non-Champion + non-Fighter + `None` + bad-level + missing-CON guards, and two multiclass sheets.
+
+### Changed
+- `docs/test-harness-coverage.md` — new `test_champion_survivor_regen.py` section; total bumped 4706 → 4718.
+
 ## [2.1008.0] - 2026-07-13 — "The Widened Edge"
 
 **Schema version:** 103
