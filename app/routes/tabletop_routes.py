@@ -63415,6 +63415,182 @@ async def use_hurl_through_hell(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_retaliation")
+async def use_retaliation(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.1012.0 — Retaliation (Path of the Berserker Barbarian Lv 14+,
+    PHB p.49): "When you take damage from a creature that is within 5
+    feet of you, you can use your reaction to make a melee weapon attack
+    against that creature." Path of the Berserker is the SRD barbarian
+    subclass, so this is SRD-valid.
+
+    Body: ``{character_id, target_combatant_id, attack_index?,
+    override?}`` — ``target_combatant_id`` is the creature that just
+    damaged you. Reaction-chip gated (the test passes ``override: true``
+    to bypass the Phase 4 economy gate). No per-rest resource — the only
+    cost is the reaction.
+
+    Validates Berserker Lv 14+, then resolves the reaction counter
+    server-side exactly like Riposte (minus the superiority die): rolls
+    the chosen melee weapon attack vs the attacker's AC (nat-20 crit /
+    nat-1 miss), and applies the weapon damage on a hit via
+    `_apply_damage_to_combatant`. The 5-ft-adjacency + "you took damage
+    from this creature" preconditions are the caller's to assert (RAW is
+    reactive — trust-the-caller, matching Riposte).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    override = bool(body.get("override"))
+    target_combatant_id = body.get("target_combatant_id") or None
+    attack_index = int(body.get("attack_index") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not target_combatant_id:
+        raise HTTPException(400, "target_combatant_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Barbarian character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_berserker_path(sheet, 14):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "path of the berserker barbarian lv 14+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _barbarian_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "reaction")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "reaction",
+            "char_name": char.name,
+            "source": "retaliation",
+            "label": "Retaliation",
+            "strict": strict,
+        })
+
+    target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+    if not target_combatant:
+        raise HTTPException(404, "Target not in battle")
+    attacks = list(sheet.get("attacks") or [])
+    if not (0 <= attack_index < len(attacks)):
+        raise HTTPException(400, "attack_index out of range")
+    weapon = attacks[attack_index] or {}
+    try:
+        atk_bonus = int(
+            str(weapon.get("attack_bonus") or "0").replace("+", "").strip()
+            or 0)
+    except (TypeError, ValueError):
+        atk_bonus = 0
+    dmg_expr = str(weapon.get("damage") or "1d4")
+    damage_type = str(weapon.get("damage_type") or "")
+    target_ac = _read_target_ac(db, campaign_id, target_combatant)
+
+    atk_roll_expr = f"1d20{atk_bonus:+d}"
+    try:
+        _ar = dice_mod.roll(atk_roll_expr)
+        attack_total, _abd = int(_ar.total), _ar.breakdown
+    except dice_mod.DiceParseError:
+        attack_total, _abd = 0, ""
+    _nat_m = _re.search(r"\[(\d+)\]", _abd)
+    nat = int(_nat_m.group(1)) if _nat_m else (attack_total - atk_bonus)
+    if nat == 20:
+        hit, crit = True, True
+    elif nat == 1:
+        hit, crit = False, False
+    else:
+        hit, crit = (attack_total >= target_ac), False
+
+    damage_rolled = 0
+    damage_applied = 0
+    if hit:
+        w_expr = _double_dice_for_crit(dmg_expr) if crit else dmg_expr
+        try:
+            damage_rolled = max(0, int(dice_mod.roll(w_expr).total))
+        except dice_mod.DiceParseError:
+            damage_rolled = 0
+        if damage_rolled > 0:
+            _res = await _apply_damage_to_combatant(
+                db, campaign_id, target_combatant, damage_rolled,
+                damage_type, is_crit=crit, is_attack=True,
+                attacker_char_id=char.id,
+            )
+            damage_applied = int(_res.get("applied") or 0)
+
+    await _mark_battle_economy(campaign_id, char.id, "reaction")
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🪓 Retaliation — {'hit' if hit else 'miss'}"
+                + (f", {damage_applied} damage" if hit else "")
+            ),
+            "feature_desc": (
+                f"{char.name} retaliates against the creature that "
+                f"damaged them: a melee weapon attack "
+                f"({'hit' if hit else 'miss'}"
+                + (f", {damage_applied} {damage_type} damage"
+                   if hit else "")
+                + "). (Berserker Barbarian Lv 14+ reaction.)"
+            ),
+            "source": "retaliation",
+            "target_combatant_id": target_combatant_id,
+            "over_budget": was_used,
+            "over_budget_slot": "reaction" if was_used else "",
+            "hit": hit,
+            "crit": crit,
+            "damage_applied": damage_applied,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "retaliation",
+        "target_combatant_id": target_combatant_id,
+        "over_budget": was_used,
+        "hit": hit,
+        "crit": crit,
+        "attack_total": attack_total,
+        "target_ac": target_ac,
+        "damage_rolled": damage_rolled,
+        "damage_applied": damage_applied,
+        "damage_type": damage_type,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_frenzy")
 async def use_frenzy(
     campaign_id: int,

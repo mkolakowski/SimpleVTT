@@ -876,6 +876,18 @@ composition. Batch by class, same cadence as the breadth sweep.
   demo Fiend Warlock (Magnus) PATCHes to Lv 14 so it's happy-path
   harness-tested end-to-end. Harness: `test_hurl_through_hell.py` (+7).
 
+- **v2.1012.0 ("The Counterblow") — Retaliation** (Path of the
+  Berserker Barbarian Lv 14+): `POST /use_retaliation` validates a
+  Berserker Lv 14+, gates the reaction chip (override-bypassable), and
+  resolves the counter server-side exactly like Riposte minus the
+  superiority die — rolls the chosen melee weapon attack vs the
+  target's AC (nat-20 crit / nat-1 miss) and applies weapon damage on a
+  hit via `_apply_damage_to_combatant`, then marks the reaction. The
+  5-ft-adjacency + "took damage from this creature" preconditions are
+  trust-the-caller (matching Riposte). The demo Berserker (Krieger)
+  PATCHes to Lv 14 so it's happy-path harness-tested. Harness:
+  `test_retaliation.py` (+7).
+
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`
 `/cast_spell` read site); the earlier "5/6, Improved Reaper is the last" note

@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1012.0] - 2026-07-14 — "The Counterblow"
+
+**Schema version:** 103
+
+**Commit summary:** Retaliation (Path of the Berserker Barbarian Lv 14+) — `POST /use_retaliation` resolves a reaction melee weapon attack against a creature that just damaged you.
+
+**Description:** Phase 8 higher-level subclass feature. Path of the Berserker is the SRD barbarian subclass, so Retaliation is SRD-valid. `POST /use_retaliation` validates a Berserker Barbarian Lv 14+, gates the reaction action-economy chip (bypassable with `override`), then resolves the counter-attack server-side exactly like Riposte minus the superiority die: it rolls the chosen melee weapon attack vs the target's AC (nat-20 crit / nat-1 auto-miss / otherwise total ≥ AC), and on a hit rolls + applies the weapon damage (doubling dice on a crit) via `_apply_damage_to_combatant`, then marks the reaction chip. The 5-ft-adjacency and "you took damage from this creature" preconditions are the caller's to assert (RAW is reactive — trust-the-caller, matching Riposte). Verified end-to-end: Krieger Stonefist (the demo Berserker) PATCHed to Lv 14 lands a hit + applies damage, the reaction chip is consumed (over_budget echoes True on a second call), and the level/error paths gate correctly. No schema change.
+
+### Added
+- `app/routes/tabletop_routes.py` — `POST /use_retaliation` endpoint (Berserker Barbarian Lv 14+; reaction-gated; melee weapon counter-attack vs the damaging creature).
+- `tests/harness/test_retaliation.py` (new, +7) — hit-and-damage (loops with reaction overridden until a hit lands), reaction-economy over_budget echo, level gate (Lv 7 → 409), and error paths (400 missing id / 400 missing target / 400 attack_index out of range / 404 unknown).
+
+### Changed
+- `docs/test-harness-coverage.md` — new `test_retaliation.py` section; total bumped 4741 → 4748.
+
 ## [2.1011.0] - 2026-07-13 — "The Lower Planes"
 
 **Schema version:** 103

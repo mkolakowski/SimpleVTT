@@ -293,6 +293,7 @@ or passive damage-boosters that already ride other code paths
 | `use_rangers_companion` | ✅ tracked | A use/resource |
 | `use_reaction` | ✅ tracked | D buff-install, damage, heal/damage |
 | `use_rebuke_the_violent` | ✅ tracked | v2.672.0 — rolls the attacker's WIS save server-side (NPC via template, PC via sheet) + applies the reflected psychic via `_apply_damage_to_combatant` (full on fail, half on success); announce-only when the attacker has no resolvable sheet |
+| `use_retaliation` | ✅ tracked | v2.1012.0 — Path of the Berserker Barbarian Lv 14+. Reaction-gated; resolves a melee weapon attack vs `target_combatant_id` (the creature that damaged you) like Riposte minus the superiority die — rolls vs `_read_target_ac` (nat-20 crit / nat-1 miss), applies weapon damage on a hit (crit-doubling) via `_apply_damage_to_combatant`, marks the reaction chip. 5-ft-adjacency + damage-source preconditions trust-the-caller |
 | `use_reckless_attack` | ✅ tracked | D buff-install |
 | `use_restore_balance` | ✅ tracked | A use/resource |
 | `use_riposte` | ✅ tracked | damage |
