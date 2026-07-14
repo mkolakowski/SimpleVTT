@@ -888,6 +888,17 @@ composition. Batch by class, same cadence as the breadth sweep.
   PATCHes to Lv 14 so it's happy-path harness-tested. Harness:
   `test_retaliation.py` (+7).
 
+- **v2.1013.0 ("The Sure Hand") — Peerless Skill** (College of Lore
+  Bard Lv 14+): `POST /use_peerless_skill` validates a Lore Bard Lv
+  14+, gates on a remaining Bardic Inspiration use, rolls 1d{BI die
+  size} (d8/d10/d12 by level, the Cutting Words table), decrements the
+  resource, logs the spend for `/undo`, and broadcasts the bonus to add
+  to the caster's own ability check. No economy chip (it's a rider on
+  your own check); the caller applies the bonus (no roll-time intercept
+  yet, matching Cutting Words). The demo Lore Bard (Lyra) PATCHes to Lv
+  14 so it's happy-path harness-tested. Harness:
+  `test_peerless_skill.py` (+5).
+
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`
 `/cast_spell` read site); the earlier "5/6, Improved Reaper is the last" note

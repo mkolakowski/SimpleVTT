@@ -63591,6 +63591,171 @@ async def use_retaliation(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_peerless_skill")
+async def use_peerless_skill(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.1013.0 — Peerless Skill (College of Lore Bard Lv 14+, PHB
+    p.55): "When you make an ability check, you can expend one use of
+    Bardic Inspiration. Roll a Bardic Inspiration die and add the number
+    rolled to your ability check." College of Lore is the SRD bard
+    college, so this is SRD-valid.
+
+    Body: ``{character_id}``. No action/reaction cost — it's a rider on
+    your OWN ability check, so no economy chip is marked; the only cost
+    is one Bardic Inspiration use.
+
+    Validates Lore Bard Lv 14+, gates on a remaining Bardic Inspiration
+    use, rolls 1d{BI die size} (d8/d10/d12 by level), decrements the
+    resource, logs the spend for /undo refund, and broadcasts the bonus
+    to add. Like Cutting Words, the caller applies the rolled bonus to
+    the ability check (no roll-time intercept infrastructure yet).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Bard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    bard_lv = _bard_level_from_sheet(sheet)
+    is_lore = "lore" in (sheet.get("subclass") or "").strip().lower()
+    if not is_lore:
+        for c in sheet.get("classes") or []:
+            if (c.get("class") or "").strip().lower() == "bard" and (
+                "lore" in (c.get("subclass") or "").strip().lower()
+            ):
+                is_lore = True
+                break
+    if not (is_lore and bard_lv >= 14):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "college of lore bard lv 14+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": bard_lv,
+        })
+
+    resources = list(sheet.get("resources") or [])
+    res_row = None
+    res_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "bardic-inspiration":
+            res_row = dict(r)
+            res_idx = i
+            break
+    if res_row is None:
+        raise HTTPException(404, "No Bardic Inspiration resource on this sheet")
+    cur = int(res_row.get("current") or 0)
+    mx = int(res_row.get("max") or 0)
+    if cur <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Bardic Inspiration (Peerless Skill)",
+        })
+
+    # Die size — same table as Bardic Inspiration / Cutting Words.
+    if bard_lv >= 15:
+        die_size = 12
+    elif bard_lv >= 10:
+        die_size = 10
+    elif bard_lv >= 5:
+        die_size = 8
+    else:
+        die_size = 6
+
+    try:
+        result = dice_mod.roll(f"1d{die_size}")
+        rolled = max(1, result.total)
+        breakdown = result.breakdown
+    except dice_mod.DiceParseError:
+        rolled = 1
+        breakdown = ""
+
+    res_row["current"] = cur - 1
+    resources[res_idx] = res_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    ps_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(ps_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "bardic-inspiration",
+        "amount": 1,
+        "source_label": "Peerless Skill",
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": f"🎯 Peerless Skill → +{rolled} to your check",
+            "feature_desc": (
+                f"{char.name} adds a Bardic Inspiration die (+{rolled}) to "
+                f"their own ability check. (College of Lore Bard Lv 14+; "
+                f"{cur - 1}/{mx} inspiration remaining.)"
+            ),
+            "dice_expression": f"1d{die_size}",
+            "dice_total": rolled,
+            "dice_breakdown": breakdown,
+            "dice_note": f"🎯 Peerless Skill → +{rolled}",
+            "source": "peerless-skill",
+            "cast_id": ps_cast_id,
+            "remaining": cur - 1,
+            "max": mx,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id, "key": "bardic-inspiration",
+            "current": cur - 1, "max": mx,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "peerless-skill",
+        "bonus": rolled,
+        "die_size": die_size,
+        "dice_breakdown": breakdown,
+        "remaining": cur - 1,
+        "max": mx,
+        "cast_id": ps_cast_id,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_frenzy")
 async def use_frenzy(
     campaign_id: int,

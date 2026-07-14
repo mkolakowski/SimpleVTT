@@ -277,6 +277,7 @@ or passive damage-boosters that already ride other code paths
 | `use_parry` | ✅ tracked | A use/resource |
 | `use_patient_defense` | ✅ tracked | D buff-install |
 | `use_peerless_athlete` | ✅ tracked | A use/resource |
+| `use_peerless_skill` | ✅ tracked | v2.1013.0 — College of Lore Bard Lv 14+. Spends one Bardic Inspiration use, rolls 1d{BI die size} (d8/d10/d12 by level), decrements the resource + logs the spend for `/undo`, and broadcasts the bonus to add to the caster's own ability check. No economy chip (rider on your own check); the caller applies the bonus (no roll-time intercept, matching Cutting Words) |
 | `use_planar_warrior` | ✅ tracked | D buff-install |
 | `use_portent` | ✅ tracked | A use/resource |
 | `use_precision_attack` | ✅ tracked | A use/resource |

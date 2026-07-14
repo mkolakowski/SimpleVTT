@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1013.0] - 2026-07-14 — "The Sure Hand"
+
+**Schema version:** 103
+
+**Commit summary:** Peerless Skill (College of Lore Bard Lv 14+) — `POST /use_peerless_skill` spends a Bardic Inspiration use and rolls the die to add to your own ability check.
+
+**Description:** Phase 8 higher-level subclass feature. College of Lore is the SRD bard college, so Peerless Skill is SRD-valid. `POST /use_peerless_skill` validates a Lore Bard Lv 14+, gates on a remaining Bardic Inspiration use, rolls 1d{BI die size} (d8/d10/d12 by bard level — the same table as Cutting Words), decrements the resource, logs the spend for `/undo` refund, and broadcasts the rolled bonus to add to the caster's own ability check. It's a rider on your own check, so — unlike Cutting Words — no action/reaction economy chip is marked; the only cost is the one Bardic Inspiration use. Like Cutting Words, the caller applies the rolled bonus to the check (no roll-time intercept infrastructure yet). Verified end-to-end: Lyra Sunstrider (the demo Lore Bard) PATCHed to Lv 14 returns a +1d10 bonus, the Bardic Inspiration pool drops by one, and the out-of-uses / level / error paths gate correctly. No schema change.
+
+### Added
+- `app/routes/tabletop_routes.py` — `POST /use_peerless_skill` endpoint (Lore Bard Lv 14+; spends one Bardic Inspiration; rolls + broadcasts the bonus).
+- `tests/harness/test_peerless_skill.py` (new, +5) — +1d10 bonus + resource decrement + broadcast, out-of-uses (409), level gate (Lv 6 → 409), and error paths (400 missing id / 404 unknown).
+
+### Changed
+- `docs/test-harness-coverage.md` — new `test_peerless_skill.py` section; total bumped 4748 → 4753.
+
 ## [2.1012.0] - 2026-07-14 — "The Counterblow"
 
 **Schema version:** 103
