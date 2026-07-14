@@ -64060,6 +64060,119 @@ async def use_quivering_palm(
     }
 
 
+# v2.1015.0 — the 13 RAW damage types Fiendish Resilience can pick.
+_FIENDISH_RESILIENCE_DAMAGE_TYPES = {
+    "acid", "bludgeoning", "cold", "fire", "force", "lightning",
+    "necrotic", "piercing", "poison", "psychic", "radiant", "slashing",
+    "thunder",
+}
+
+
+@router.post("/api/campaign/{campaign_id}/use_fiendish_resilience")
+async def use_fiendish_resilience(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.1015.0 — Fiendish Resilience (The Fiend Warlock Lv 10+, PHB
+    p.110): "Starting at 10th level, you can choose one damage type when
+    you finish a short or long rest. You gain resistance to that damage
+    type until you choose a different one with this feature. Damage from
+    magical weapons or silver weapons ignores this resistance." The
+    Fiend is the SRD warlock patron, so this is SRD-valid.
+
+    Body: ``{character_id, damage_type}`` — one of the 13 RAW damage
+    types. No action cost (it's chosen on a rest). Installs a stable-key
+    `fiendish-resilience` buff carrying ``effects.resistance_to:
+    [damage_type]``, which the live `_resistance_halve` read-site halves
+    through the real damage pipeline (mirrored to the sheet since
+    resistance is a sheet-read). Re-invoking with a different type
+    replaces the buff (RAW "until you choose a different one"). The
+    magical/silver-weapon exception stays GM-narrated.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    damage_type = (str(body.get("damage_type") or "")).strip().lower()
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if damage_type not in _FIENDISH_RESILIENCE_DAMAGE_TYPES:
+        raise HTTPException(
+            400,
+            f"damage_type must be one of {sorted(_FIENDISH_RESILIENCE_DAMAGE_TYPES)}",
+        )
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Warlock character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_fiend_warlock(sheet, 10):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "the fiend warlock lv 10+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _warlock_level_from_sheet(sheet),
+        })
+
+    icon = _RESISTANCE_DAMAGE_ICONS.get(damage_type, "🛡️")
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "fiendish-resilience",
+        "name": f"🛡️ Fiendish Resilience ({damage_type.title()})",
+        "icon": icon,
+        "duration_rounds": 100000,
+        "duration_max": 100000,
+        "permanent": True,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "resistance_to": [damage_type],
+            "fiendish_resilience_type": damage_type,
+        },
+        "desc": (
+            f"{char.name} has resistance to {damage_type} damage "
+            f"(Fiendish Resilience) until they choose a different type. "
+            f"Magical/silver weapons ignore it (GM-narrated)."
+        ),
+    })
+    if buff_installed:
+        # Resistance is a sheet-read (`_resistance_halve` consults the
+        # DB sheet), so mirror the buff onto the sheet.
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": f"🛡️ Fiendish Resilience → resist {damage_type}",
+            "feature_desc": (
+                f"{char.name} gains resistance to {damage_type} damage "
+                f"until they choose a different type. (Fiend Warlock Lv "
+                f"10+; magical/silver weapons ignore it.)"
+            ),
+            "source": "fiendish-resilience",
+            "damage_type": damage_type,
+            "buff_installed": buff_installed,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "fiendish-resilience",
+        "damage_type": damage_type,
+        "buff_installed": buff_installed,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_frenzy")
 async def use_frenzy(
     campaign_id: int,

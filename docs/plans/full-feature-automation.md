@@ -913,6 +913,20 @@ composition. Batch by class, same cadence as the breadth sweep.
   Hand Monk (Kael) PATCHes to Lv 17 so it's happy-path harness-tested.
   Harness: `test_quivering_palm.py` (+8).
 
+- **v2.1015.0 ("The Infernal Ward") — Fiendish Resilience** (The Fiend
+  Warlock Lv 10+): `POST /use_fiendish_resilience` validates a Fiend
+  Warlock Lv 10+ + the chosen damage type (13 RAW types), and installs
+  a stable-key `fiendish-resilience` buff carrying
+  `effects.resistance_to: [damage_type]` on the shared `_resistance_halve`
+  substrate (mirrored to the sheet since resistance is a sheet-read).
+  Re-invoking with a different type replaces the buff (RAW "until you
+  choose a different one"). No action cost. The magical/silver-weapon
+  exception stays GM-narrated. The demo Fiend Warlock (Magnus) PATCHes
+  to Lv 10 so it's happy-path harness-tested. Harness:
+  `test_fiendish_resilience.py` (+6). *(Note: Draconic Dragon Wings —
+  the originally-picked candidate — was found already shipped at
+  `use_draconic_wings`; Fiendish Resilience shipped in its place.)*
+
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`
 `/cast_spell` read site); the earlier "5/6, Improved Reaper is the last" note

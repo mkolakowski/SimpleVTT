@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1015.0] - 2026-07-14 — "The Infernal Ward"
+
+**Schema version:** 103
+
+**Commit summary:** Fiendish Resilience (The Fiend Warlock Lv 10+) — `POST /use_fiendish_resilience` grants resistance to a chosen damage type until a different one is picked.
+
+**Description:** Phase 8 higher-level subclass feature. The Fiend is the SRD warlock patron, so Fiendish Resilience is SRD-valid. `POST /use_fiendish_resilience` validates a Fiend Warlock Lv 10+, validates the chosen `damage_type` against the 13 RAW types, and installs a stable-key `fiendish-resilience` buff carrying `effects.resistance_to: [damage_type]` — the same marker the live `_resistance_halve` / `_resistance_halve_npc` read-sites halve through the real damage pipeline (no new mechanics), mirrored to the sheet since resistance is a sheet-read. Re-invoking with a different type replaces the buff (RAW "until you choose a different one"). No action cost (it's chosen on a rest). The "magical or silver weapons ignore this resistance" clause stays GM-narrated. Verified end-to-end: Magnus Hexbinder (the demo Fiend Warlock) PATCHed to Lv 10 gains fire resistance (buff carries `resistance_to: ["fire"]`), re-picking cold flips it, and the bad-type / level / error paths gate correctly. No schema change.
+
+### Added
+- `app/routes/tabletop_routes.py` — `POST /use_fiendish_resilience` endpoint + `_FIENDISH_RESILIENCE_DAMAGE_TYPES` (the 13 RAW types); installs the resistance buff on the shared `resistance_to` substrate.
+- `tests/harness/test_fiendish_resilience.py` (new, +6) — grant fire resistance (buff + `resistance_to`), re-pick replaces (fire → cold), bad damage type (400), level gate (Lv 5 → 409), and error paths (400 missing id / 404 unknown).
+
+### Changed
+- `docs/test-harness-coverage.md` — new `test_fiendish_resilience.py` section; total bumped 4761 → 4767.
+
 ## [2.1014.0] - 2026-07-14 — "The Lethal Vibration"
 
 **Schema version:** 103

@@ -214,6 +214,7 @@ or passive damage-boosters that already ride other code paths
 | `use_feature` | ✅ tracked | D buff-install |
 | `use_feinting_attack` | ✅ tracked | A use/resource |
 | `use_fey_presence` | ✅ tracked | C save-or-condition |
+| `use_fiendish_resilience` | ✅ tracked | v2.1015.0 — The Fiend Warlock Lv 10+. Validates the chosen damage type (13 RAW types), installs a stable-key `fiendish-resilience` buff carrying `effects.resistance_to: [type]` on the shared `_resistance_halve` substrate (mirrored to the sheet), re-pickable (RAW "until you choose a different one"). Magical/silver-weapon exception GM-narrated |
 | `use_fighting_spirit` | ✅ tracked | F temp-HP |
 | `use_misty_escape` | ✅ tracked | v2.699.0 — new endpoint (Archfey Warlock Lv 6+, once/short rest): installs an `invisible` buff (attack-edge substrate) + a `disengage` buff (so the 60-ft teleport rides the v2.698.0 OA-free move read); attack/cast-cancel of invisibility GM-narrated |
 | `use_flurry_of_blows` | ✅ tracked | D buff-install |
