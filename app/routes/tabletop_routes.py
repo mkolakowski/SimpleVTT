@@ -64409,6 +64409,129 @@ async def use_natures_sanctuary(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_thiefs_reflexes")
+async def use_thiefs_reflexes(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.1018.0 — Thief's Reflexes (Thief Rogue Lv 17+, PHB p.98): "You
+    can take two turns during the first round of any combat. You take
+    your first turn at your normal initiative and your second turn at
+    your initiative minus 10. You can't use this feature when you're
+    surprised." Thief is the SRD rogue subclass, so this is SRD-valid.
+
+    **Scoped v1 (announce + marker).** The full "second turn slot in the
+    initiative tracker" is a client-side turn-engine change (a phantom
+    turn at init-10, round-1-gated, pruned on round 2, without tripping
+    the tracker's orphan-cleanup) that the HTTP harness can't verify —
+    see [`docs/plans/thiefs-reflexes.md`](../../docs/plans/thiefs-reflexes.md).
+    This endpoint mechanizes the *contract*: it validates Thief Rogue
+    Lv 17+, that combat is in **round 1**, that the caller isn't
+    surprised, and that the thief is in the initiative order — then
+    computes and broadcasts the second-turn initiative (the thief's
+    initiative − 10) so the GM can drop the extra turn into the tracker.
+
+    Body: ``{character_id, surprised?}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    surprised = bool(body.get("surprised"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Rogue character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_thief_features(sheet, 17):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "thief rogue lv 17+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _rogue_level_from_sheet(sheet),
+        })
+
+    if surprised:
+        return JSONResponse(status_code=409, content={
+            "error": "surprised",
+            "label": "Thief's Reflexes",
+            "hint": "RAW: you can't use this feature when you're surprised.",
+        })
+
+    state = hub.get_battle(campaign_id)
+    if not state or not state.get("active"):
+        return JSONResponse(status_code=409, content={
+            "error": "no_active_battle", "label": "Thief's Reflexes",
+        })
+    try:
+        rnd = int(state.get("round") or 0)
+    except (TypeError, ValueError):
+        rnd = 0
+    if rnd != 1:
+        return JSONResponse(status_code=409, content={
+            "error": "not_first_round", "label": "Thief's Reflexes",
+            "round": rnd,
+            "hint": "Thief's Reflexes only grants the extra turn in round 1.",
+        })
+
+    thief_cb = None
+    for c in (state.get("combatants") or []):
+        if c.get("char_id") == char.id:
+            thief_cb = c
+            break
+    if thief_cb is None:
+        return JSONResponse(status_code=409, content={
+            "error": "not_in_initiative", "label": "Thief's Reflexes",
+            "hint": "The thief must be in the initiative order.",
+        })
+    try:
+        base_init = int(thief_cb.get("initiative") or 0)
+    except (TypeError, ValueError):
+        base_init = 0
+    second_turn_initiative = base_init - 10
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": (
+                f"🗡️ Thief's Reflexes — second turn at init "
+                f"{second_turn_initiative}"
+            ),
+            "feature_desc": (
+                f"{char.name} takes a second turn this round at initiative "
+                f"{second_turn_initiative} (normal {base_init} − 10). GM: "
+                f"drop the extra turn into the tracker. (Thief Rogue Lv "
+                f"17+; round 1 only.)"
+            ),
+            "source": "thiefs-reflexes",
+            "base_initiative": base_init,
+            "second_turn_initiative": second_turn_initiative,
+            "round": rnd,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "thiefs-reflexes",
+        "base_initiative": base_init,
+        "second_turn_initiative": second_turn_initiative,
+        "round": rnd,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_frenzy")
 async def use_frenzy(
     campaign_id: int,

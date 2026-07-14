@@ -380,6 +380,7 @@ or passive damage-boosters that already ride other code paths
 | `use_supreme_healing` | ✅ tracked | v2.143.0 — `/cast_spell` target-bound heals max every die via `_max_dice_total` for a Lv 17+ Life cleric; v2.1003.0 — the `/apply_healing` heal-claim (chat-card) path does too. The `use_supreme_healing` endpoint itself is the passive announce; the mechanization lives in both heal pipelines. |
 | `use_totem_spirit` | ✅ tracked | v2.612.2 — installs permanent `totem-spirit-active` flag-buff (per-totem `totem_spirit_*` rage-gated params: Bear resistance-except-psychic / Eagle OA-dis + Dash / Wolf ally-advantage); Phase 8 |
 | `use_tranquility` | ✅ tracked | v2.1016.0 — Open Hand Monk Lv 11+. Installs the shared `sanctuary` buff (`effects.dc = 8 + WIS + prof` + `sanctuary_attacker_must_save`/`sanctuary_ends_on_offense`), so the existing `/use_attack` attacker-must-Wis-save gate + ends-on-offense drop enforce it for free. No action cost; refreshable |
+| `use_thiefs_reflexes` | 🟠 scoped v1 | v2.1018.0 — Thief Rogue Lv 17+. Validates Thief Lv 17 + active round-1 battle + not-surprised + in-initiative, broadcasts the second-turn initiative (base − 10). The full initiative-tracker second turn (phantom turn slot, round-1-gated, pruned on round 2) is filed in `docs/plans/thiefs-reflexes.md` — it's a client-side tracker behavior the HTTP harness can't verify |
 | `use_unwavering_mark` | ⚪ announce-only | — |
 | `use_visions_of_distant_realms` | ⚪ announce-only | — |
 | `use_whispers_of_the_dead` | ⚪ announce-only | — |

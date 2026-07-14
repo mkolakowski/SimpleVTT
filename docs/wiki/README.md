@@ -74,6 +74,7 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 | [Advantage & disadvantage](../plans/advantage-disadvantage.md) | Markdown (design) | Contributors | ✅ effectively complete — Phases 1 + 2a–2f (v2.2.0–v2.157.0) + 4a/4b (v2.252.0–v2.253.0) + Phase 3 positional prone edge (v2.1001.0, on the Maps 2.0 distance substrate); filed tails: Elven Accuracy (out of scope), Elvenkind perception half |
 | [Class / subclass / feat / race content](../plans/class-content-status.md) | Markdown (inventory) | Contributors | 🟢 / 🟠 / ⚪ living inventory |
 | [Full class-feature automation](../plans/full-feature-automation.md) | Markdown (design) | Contributors | 🟠 Phases 0–7 shipped; Phase 8 in progress (v2.158.x) |
+| [Thief's Reflexes (initiative second turn)](../plans/thiefs-reflexes.md) | Markdown (design) | Contributors | 🟠 scoped v1 shipped (v2.1018.0); full initiative-engine turn filed |
 | [On-hit damage riders (automation Phase 2)](../plans/on-hit-riders.md) | Markdown (design) | Contributors | ✅ shipped |
 | [Feature saving throws (automation Phase 3)](../plans/feature-saves.md) | Markdown (design) | Contributors | ✅ shipped |
 | [Temp HP + roll bonuses (automation Phase 4)](../plans/temp-hp-and-bonuses.md) | Markdown (design) | Contributors | ✅ shipped |

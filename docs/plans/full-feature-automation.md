@@ -952,6 +952,26 @@ composition. Batch by class, same cadence as the breadth sweep.
   (beast) and ignore (humanoid) paths are harness-tested. Harness:
   `test_natures_sanctuary.py` (+6).
 
+- **v2.1018.0 ("The Second Wind of Shadows") — Thief's Reflexes**
+  (Thief Rogue Lv 17+): shipped as a **scoped v1** because it's an
+  initiative-tracker behavior, not clean server state — a phantom
+  second-turn slot would collide with orphan-cleanup + the combatant
+  iterators, with weak HTTP-harness coverage. `POST
+  /use_thiefs_reflexes` mechanizes the contract (validates Thief Lv 17
+  + active round-1 battle + not-surprised + in-initiative, broadcasts
+  the second-turn initiative = base − 10); the full initiative-engine
+  turn is filed in [`thiefs-reflexes.md`](thiefs-reflexes.md), gated on
+  the encounter-sim Level-3 net. The demo Rogue (Pip) PATCHes to Lv 17
+  so the contract is harness-tested. Harness:
+  `test_thiefs_reflexes.py` (+7) + a wiki serve test.
+
+**Status: the core SRD Phase 8 subclass-feature tail is now closed** —
+every SRD subclass's higher-level features are mechanized or (for
+Thief's Reflexes) GM-narrated with a scoped-v1 contract endpoint + a
+filed engine plan. Remaining Phase 8 items are the filed Overchannel
+Phase 2 (attack-roll + `/place_aoe` max-damage) + the archetype-J
+announce-only-by-design tail.
+
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`
 `/cast_spell` read site); the earlier "5/6, Improved Reaper is the last" note

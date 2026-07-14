@@ -118,7 +118,7 @@ async def test_wiki_plans_page_renders():
         "plan-race-features", "plan-full-feature-automation",
         "plan-notes-and-handouts", "plan-app-wide-roles-and-storage",
         "plan-pending-resolution-state-machine", "plan-backup-export-overhaul",
-        "plan-editor-controls-reorg",
+        "plan-editor-controls-reorg", "plan-thiefs-reflexes",
         "plan-spell-upcasting", "plan-reactions-automation",
         "plan-campaign-stats", "plan-vision-and-light",
     ):
@@ -494,6 +494,19 @@ async def test_wiki_doc_serves_full_feature_automation_plan():
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "automation" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_thiefs_reflexes_plan():
+    """v2.1018.0: GET /wiki/doc/plan-thiefs-reflexes — 200 + body
+    contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/thiefs-reflexes.md``.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-thiefs-reflexes")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "thief's reflexes" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

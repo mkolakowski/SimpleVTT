@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1018.0] - 2026-07-14 — "The Second Wind of Shadows"
+
+**Schema version:** 103
+
+**Commit summary:** Thief's Reflexes (Thief Rogue Lv 17+) — scoped v1 `POST /use_thiefs_reflexes` announces the round-1 second turn at initiative−10, plus a design plan for the full initiative-engine version.
+
+**Description:** Phase 8 higher-level subclass feature, shipped as a **scoped v1** because — unlike the other Phase 8 features — Thief's Reflexes is fundamentally an initiative-tracker behavior, not a clean server-state mechanization: the round/turn/initiative order is client-managed (pushed via `PUT /battle`), and a phantom "second turn slot" would collide with the tracker's orphan-cleanup + the aura/save iterators, with weak HTTP-harness verification (the class of gap BUGS.md B4 flags). Thief is the SRD rogue subclass, so it's SRD-valid. `POST /use_thiefs_reflexes` mechanizes the **contract**: it validates Thief Rogue Lv 17+, an **active round-1 battle**, that the caller **isn't surprised**, and that the thief is **in the initiative order**, then computes and broadcasts the second-turn initiative (the thief's initiative − 10) so the GM drops the extra turn into the tracker. The full initiative-engine second turn (a phantom turn slot, round-1-gated, pruned on round 2, iterator-aware) is filed in the new [`docs/plans/thiefs-reflexes.md`](docs/plans/thiefs-reflexes.md) plan, gated on the encounter-sim Level-3 test net maturing. Verified end-to-end: Pip Quickfingers (the demo Rogue) PATCHed to Lv 17 in round 1 gets `second_turn_initiative` = 8 (18 − 10) + a broadcast; round-2/surprised/not-in-initiative/level/error paths all gate. No schema change.
+
+### Added
+- `app/routes/tabletop_routes.py` — `POST /use_thiefs_reflexes` endpoint (scoped v1: validates Thief Lv 17 + round-1 + not-surprised + in-initiative; broadcasts the second-turn initiative).
+- `docs/plans/thiefs-reflexes.md` — design plan (Phase 1 v1 shipped; Phase 2 full initiative-engine turn filed), surfaced through the wiki (allowlist + `/wiki/plans` table + `docs/wiki/README.md` + a per-slug harness test).
+- `tests/harness/test_thiefs_reflexes.py` (new, +7) — round-1 second-turn initiative + broadcast, round gate (409), surprised (409), not-in-initiative (409), level gate (Lv 7 → 409), error paths (400/404).
+- `tests/harness/test_wiki.py` — `test_wiki_doc_serves_thiefs_reflexes_plan` (+1) + the new slug in the `/wiki/plans` render list.
+
+### Changed
+- `docs/test-harness-coverage.md` — new `test_thiefs_reflexes.py` section; total bumped 4777 → 4785.
+
 ## [2.1017.0] - 2026-07-14 — "The Warded Grove"
 
 **Schema version:** 103
