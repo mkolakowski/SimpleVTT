@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1019.2] - 2026-07-14 — "The Beast's Own Sheet"
+
+**Schema version:** 103
+
+**Commit summary:** Doc reconciliation — TODO.md's GM-Tools "Unified Monster Sheet in Initiative Tracker" was described as unbuilt, but it shipped at v2.3.10 + v2.99.7 and is harness-tested; marked it done.
+
+**Description:** Doc-only. The GM-Tools TODO entry described the interactive monster sheet as a to-build feature ("Today the initiative tracker opens a read-only stat-block popover…"), but verification against the code shows it's been fully shipped for hundreds of versions: `monster_template_sheet_page` (`GET /campaign/{cid}/monster-template/{tid}/sheet`, v2.3.10) renders the full interactive `sheet_dnd5e.html` for a monster `TokenTemplate` via `_monster_template_to_sheet`, GM-only + read-mostly, and the v2.99.7 click-through wiring gives PC-parity click-to-roll — ability/save/skill rolls route through `/roll` with monster attribution (`actor_name` + `no_char_attribution`), Strike attacks through `/npc_attack`, with a live combatant-HP overlay. Both the init-tracker "📋 Sheet" button and the map-token click open it. Covered by `tests/harness/test_monster_sheet_init.py` (3 tests, confirmed green). Updated the TODO to reflect shipped status + the optional remaining polish (first-class Legendary/Lair-action buttons; primary-click-opens-sheet). No code change.
+
+### Changed
+- `TODO.md` — GM-Tools "Unified Monster Sheet in Initiative Tracker" marked ✅ shipped (v2.3.10 + v2.99.7) with the route/test references + the optional-polish remainder.
+
 ## [2.1019.1] - 2026-07-14 — "The Ledger Reconciled"
 
 **Schema version:** 103
