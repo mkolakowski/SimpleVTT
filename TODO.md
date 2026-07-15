@@ -1027,19 +1027,19 @@ _**Aura of Courage** + **Indomitable** feature automation both shipped — see [
 
 ## Full Class-Feature Automation — remaining backlog
 
-🔥 **IN PROGRESS** — plan: [`docs/plans/full-feature-automation.md`](docs/plans/full-feature-automation.md); live audit: [`docs/automation-coverage.md`](docs/automation-coverage.md). **Phases 0–7 ✅ done** + the entire v2.128.2–v2.149.1 retrofit batch landed (see CHANGELOG). Only Phase 8 (higher-level subclass features Lv 6/10/14/17/20) and a few Phase-1.5 / Phase-2 follow-ups on individual features remain.
+🔥 **IN PROGRESS** — plan: [`docs/plans/full-feature-automation.md`](docs/plans/full-feature-automation.md); live audit: [`docs/automation-coverage.md`](docs/automation-coverage.md). **Phases 0–7 ✅ done** + the v2.128.2–v2.149.1 retrofit batch + **the Phase 8 core SRD subclass-feature tail (v2.1008.0–v2.1019.0, 2026-07-14) ✅ done** (every SRD subclass's Lv 10/14/17/20 feature — see below). What remains is only: the partial/filed items below (Blade Flourish Slashing/Mobile secondary — non-SRD; AP auto-surprise-detect — needs a surprise-state model), the archetype-J announce-only-by-design tail, and the stale-classifier rerun.
 
 **Status by archetype (re-evaluated 2026-06-08):**
 
 Shipped archetypes (Phase 7 reactions, auras E, on-hit B, buff/temp-HP D/F, movement G) live in [`TODONE.md`](TODONE.md#full-class-feature-automation--archetype-bullets-shipped).
 
-- 🟢 **P3 — Phase 8: higher-level subclass features (Lv 6/10/14/17/20).** Mostly composition on the now-built primitives; batch by class. The long tail. **Now the primary remaining work for the parent plan.**
-- 🟢 **P3 — Per-feature Phase-2 finishers (deferred from this session):**
-    - **Blade Flourish Phase 2** — Defensive AC self-buff + Mobile push + Slashing secondary-target routing.
-    - **Fancy Footwork Phase 2** — OA-flow gate reads the `fancy-footwork-blocked` buff and skips OAs against the named char_id.
-    - **Relentless Avenger Phase 2** — `/token/move` consumes `free_movement_remaining_ft` budget + skips OA prompts while `oa_immune_during_move` is set.
-    - **Combat Inspiration Phase 3** — Integrate the AC half into the reactions framework so the prompt fires automatically on `attack_targeted` for any combatant carrying a BI die buff.
-    - **AP Phase 3 / UM Phase 1b** — Auto-install via `/attack` post-hit hook (currently both require player-driven trigger via the `target_surprised` / endpoint call).
+- ✅ **DONE (v2.1008.0–v2.1019.0) — Phase 8 core SRD subclass-feature tail.** The session of 2026-07-14 closed every SRD subclass's higher-level (Lv 10/14/17/20) feature end-to-end: Superior Critical + Survivor (Champion), Overchannel Phase 1 + Phase 2 (Evocation), Hurl Through Hell + Fiendish Resilience (Fiend), Retaliation (Berserker), Peerless Skill (Lore), Quivering Palm + Tranquility (Open Hand), Nature's Sanctuary (Land), Thief's Reflexes (Thief — scoped v1 + [`thiefs-reflexes.md`](docs/plans/thiefs-reflexes.md) plan for the full initiative-engine turn). Every one is happy-path harness-tested (demo PCs PATCHed to level). See [`full-feature-automation.md`](docs/plans/full-feature-automation.md) bottom.
+- 🟢 **P3 — Per-feature Phase-2 finishers (reconciled 2026-07-14 — most already shipped; verified against `app/routes/tabletop_routes.py`):**
+    - ✅ **Fancy Footwork Phase 2** — **shipped v2.158.38.** `_combatant_oa_blocked_against` reads the `fancy-footwork-blocked` buff in the OA-flow (`tabletop_routes.py:~7199`) and skips OAs against the named char_id.
+    - ✅ **Relentless Avenger Phase 2** — **shipped v2.158.51, generalized v2.696.0** into the reusable `oa_immune_during_move` + `free_movement_remaining_ft` free-move substrate read in `/token/move` (`tabletop_routes.py:~18183`).
+    - ✅ **Combat Inspiration Phase 3** — **shipped.** The AC half fires via the `use-combat-inspiration-ac` reaction option on `attack_targeted` (`tabletop_routes.py:~8976/34633`).
+    - 🟠 **Blade Flourish Phase 2 (partial)** — Defensive AC self-buff (v2.158.66) + the +10 ft speed (v2.667.0) are mechanized; the **Slashing secondary-target damage** + **Mobile push** sub-modes are still announce-only (the endpoint describes them but doesn't apply the secondary BI damage / `_force_move` push). Non-SRD (Swords Bard, XGE) — low priority.
+    - 🟠 **AP (Assassinate) Phase 3** — the /attack auto-crit-vs-surprised + advantage-vs-not-acted is mechanized (v2.131.0–v2.132.0) but the `target_surprised` flag is **player-driven** (client-set); auto-detecting surprise needs a surprise-state model (same class of initiative-engine work as [`thiefs-reflexes.md`](docs/plans/thiefs-reflexes.md) Phase 2). Filed.
 - 🟢 **P3 — Classifier rerun for `docs/automation-coverage.md`.** Auto-generated row counts in the "Full classification" table still pin v2.99.460; rerun the classifier after the v2.128.2–v2.149.1 batch so the per-endpoint table reflects reality. Curated bullets + the "Recent retrofits" table are aligned per v2.142.1 + v2.149.1.
 
 The remaining ~30 announce-only rows are **archetype J** (narration-only-by-design: passive senses, language grants, passive damage-boosters that already ride other paths) — leave as-is; see the audit doc's "Notable announce-only backlog" section for the full split.

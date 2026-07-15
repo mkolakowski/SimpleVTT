@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1019.1] - 2026-07-14 — "The Ledger Reconciled"
+
+**Schema version:** 103
+
+**Commit summary:** Doc reconciliation — TODO.md's "per-feature Phase-2 finishers (deferred)" list was stale; verified against the code and marked the shipped ones done + the Phase 8 core tail closed.
+
+**Description:** Doc-only. After the v2.1008.0–v2.1019.0 Phase 8 batch, a verification sweep of `app/routes/tabletop_routes.py` confirmed that three of the TODO.md "deferred Phase-2 finishers" have actually been shipped for a while — the audit text had drifted (the recurring stale-audit pattern): **Fancy Footwork Phase 2** (v2.158.38, `_combatant_oa_blocked_against` in the OA-flow), **Relentless Avenger Phase 2** (v2.158.51 → generalized v2.696.0 into the `oa_immune_during_move` free-move substrate), and **Combat Inspiration Phase 3** (the `use-combat-inspiration-ac` reaction option on `attack_targeted`). The remaining two are correctly partial/filed: **Blade Flourish** Slashing/Mobile secondary application (non-SRD Swords Bard; Defensive AC + speed already done) and **AP (Assassinate)** auto-surprise-detection (needs a surprise-state model, same class as the Thief's Reflexes Phase 2). Updated the TODO's Full Class-Feature Automation section to reflect that the **core SRD Phase 8 subclass-feature tail is closed**. No code change.
+
+### Changed
+- `TODO.md` — reconciled the Phase-8 IN-PROGRESS header + the per-feature Phase-2 finishers list against the code (3 shipped → ✅, 2 partial/filed → 🟠); recorded the v2.1008.0–v2.1019.0 Phase 8 core-tail closure.
+
 ## [2.1019.0] - 2026-07-14 — "The Complete Overload"
 
 **Schema version:** 103
