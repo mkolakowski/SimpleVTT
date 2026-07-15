@@ -231,6 +231,10 @@ def srd_reference_page(request: Request):
     return templates.TemplateResponse("reference.html", {
         "request": request,
         "reference_types": _REFERENCE_TYPES,
+        # Global reference: no campaign context → no pin-to-table buttons
+        # (pinning happens from the campaign-scoped /campaign/{cid}/reference).
+        "campaign_id": None,
+        "is_gm": False,
     })
 
 

@@ -20,6 +20,15 @@
     color: var(--accent, #6a7); }
   .ref-desc { margin: 6px 0 0; white-space: pre-wrap; line-height: 1.5; }
   .ref-empty { color: var(--muted, #888); padding: 24px 0; text-align: center; }
+  /* Compact inline action in a dense result-card header — 32px floor per
+     CLAUDE.md's "deliberately compact panel" exception. */
+  .ref-pin { min-height: 32px; padding: 4px 10px; margin-left: auto;
+    font-size: 0.8rem; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--accent, #6a7); background: transparent;
+    color: var(--accent, #6a7); }
+  .ref-pin:hover { background: color-mix(in srgb, var(--accent, #6a7) 16%, transparent); }
+  .ref-pin:disabled { opacity: 0.6; cursor: default; }
+  .ref-card h3 { justify-content: flex-start; }
 </style>
 {% endblock %}
 {% block content %}
@@ -44,6 +53,10 @@
     </select>
   </div>
 
+  {% if campaign_id and is_gm %}
+  <p class="ref-status">📌 GM: <strong>Pin to table</strong> broadcasts a rule card to every tabletop client for the whole table to see.</p>
+  {% endif %}
+
   <div class="ref-status" id="ref-status">Loading…</div>
   <div id="ref-results"></div>
 </div>
@@ -54,6 +67,8 @@
   const typeEl = document.getElementById('ref-type');
   const statusEl = document.getElementById('ref-status');
   const resultsEl = document.getElementById('ref-results');
+  const CAMPAIGN_ID = {{ campaign_id if campaign_id else 'null' }};
+  const CAN_PIN = {{ 'true' if (campaign_id and is_gm) else 'false' }};
 
   function esc(s) {
     const d = document.createElement('div');
@@ -75,10 +90,34 @@
     resultsEl.innerHTML = results.map(r => (
       '<div class="ref-card">'
       + '<h3>' + esc(r.name)
-      + ' <span class="ref-type">' + esc(r.type_label) + '</span></h3>'
+      + ' <span class="ref-type">' + esc(r.type_label) + '</span>'
+      + (CAN_PIN
+          ? ' <button type="button" class="ref-pin" data-slug="' + esc(r.slug)
+            + '" data-type="' + esc(r.type) + '" title="Pin to the tabletop for the whole table">📌 Pin to table</button>'
+          : '')
+      + '</h3>'
       + '<p class="ref-desc">' + esc(r.desc || '(No description.)') + '</p>'
       + '</div>'
     )).join('');
+    if (CAN_PIN) {
+      resultsEl.querySelectorAll('.ref-pin').forEach(btn => {
+        btn.addEventListener('click', () => pin(btn));
+      });
+    }
+  }
+
+  function pin(btn) {
+    const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Pinning…';
+    fetch('/api/campaign/' + CAMPAIGN_ID + '/pin_rule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: btn.dataset.slug, type: btn.dataset.type }),
+    }).then(r => {
+      btn.disabled = false;
+      btn.textContent = r.ok ? '📌 Pinned ✓' : 'Failed';
+      if (r.ok) setTimeout(() => { btn.textContent = orig; }, 1600);
+    }).catch(() => { btn.disabled = false; btn.textContent = 'Failed'; });
   }
 
   let timer = null;

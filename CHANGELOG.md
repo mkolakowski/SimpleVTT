@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1023.0] - 2026-07-15 — "The Pinned Page"
+
+**Schema version:** 103
+
+**Commit summary:** SRD Reference Phase 2b — a GM can pin an SRD rule to the tabletop so the whole table sees a rule card during play.
+
+**Description:** Completes the SRD reference's "pin a rule snippet to the tabletop" TODO. A new campaign-scoped `GET /campaign/{cid}/reference` renders the same searchable reference page but wired for the campaign — a GM gets a "📌 Pin to table" button on each result. Pinning `POST /api/campaign/{cid}/pin_rule {slug, type}` (GM-only) resolves the shipped-SRD record, stores it as the campaign's current pin (in-memory — a live-play pin is transient), and broadcasts `rule_pinned` with the rule's name + description; every tabletop client renders a fixed, dismissable rule card (bottom-left, themed, frosted). `POST /unpin_rule` broadcasts `rule_unpinned` and every client removes the card; the GM's ✕ unpins for everyone, a player's ✕ hides it locally. `GET /api/campaign/{cid}/pinned_rule` lets a reloading / late-joining tabletop client re-render the current pin (the tabletop fetches it on load + listens for the WS events). Monsters remain excluded (a `type=monsters` pin 400s). No schema change.
+
+### Added
+- `app/routes/tabletop_routes.py` — `GET /campaign/{cid}/reference` (campaign-scoped page) + `POST /pin_rule` + `POST /unpin_rule` + `GET /pinned_rule` (ephemeral per-campaign pin store; GM-gated writes).
+- `app/templates/reference.html` — per-result "📌 Pin to table" button (GM-in-campaign only) that POSTs to `/pin_rule`.
+- `app/static/tabletop.js` — `rule_pinned` / `rule_unpinned` WS handlers + an on-load `GET /pinned_rule` fetch + the `#pinned-rule-card` render/remove (GM ✕ unpins for all, player ✕ hides locally).
+- `app/static/style.css` — the `#pinned-rule-card` styling (fixed, themed, frosted, scrollable body; 32px compact close per the CLAUDE.md exception).
+- `tests/harness/test_pin_rule.py` (new, +6) — pin broadcasts + persists, unpin clears, GM-gate (player → 403), unknown slug → 404, bad type → 400, campaign reference page renders with the pin UI.
+
+### Changed
+- `app/routes/wiki_routes.py` — the global `/reference` passes `campaign_id=None` / `is_gm=False` (no pin buttons off-campaign).
+- `docs/test-harness-coverage.md` — new `test_pin_rule.py` section; total bumped 4797 → 4803.
+
 ## [2.1022.0] - 2026-07-15 — "The Deeper Index"
 
 **Schema version:** 103

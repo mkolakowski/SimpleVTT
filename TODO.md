@@ -973,7 +973,9 @@ All three proposed warm/sepia variants now ship in `style-fantasy-themes.css`: *
 ### SRD Rules in Full Text — 🟠 Phase 1 shipped (v2.1020.0)
 Surface the D&D 5e SRD 5.1 (CC BY 4.0) as searchable in-app reference text so players and GMs can look up rules without leaving the VTT.
 - ✅ **Phase 1 (v2.1020.0 "The Open Compendium")** — the `/reference` page + `GET /api/reference/search` search the shipped SRD content by name across the six player-safe types (conditions, spells, equipment, feats, races, backgrounds), returning full rephrased description text. Offline (shipped tier only, never the network), SRD-only, monsters excluded (GM-visibility). Surfaced via the wiki nav + landing callout. Harness: `test_srd_reference.py` (6).
-- ⚪ **Phase 2 (filed)** — contextual links from the character sheet / encounter panels (click a condition name → its reference entry); a GM "pin a rule snippet to the tabletop" control; full-text (not just name) search; the non-content SRD rules sections (actions in combat, resting, cover, etc. — not in the current per-type JSON).
+- ✅ **Phase 2a (v2.1022.0 "The Deeper Index")** — **full-text search**: the query matches rules descriptions, not just names (name matches ranked first).
+- ✅ **Phase 2b (v2.1023.0 "The Pinned Page")** — **pin a rule to the tabletop**: `/campaign/{cid}/reference` gives the GM a "📌 Pin to table" button per result; `POST /pin_rule` broadcasts `rule_pinned` so every tabletop client shows a dismissable rule card (GM ✕ unpins for all); `GET /pinned_rule` re-renders it for reloading/late-joining clients. Harness: `test_pin_rule.py` (6).
+- ⚪ **Phase 3 (filed)** — contextual links from the character sheet / encounter panels (click a condition name → its reference entry); the non-content SRD rules sections (actions in combat, resting, cover, etc. — not in the current per-type JSON).
 
 Content source: the shipped SRD tier under `app/data/local/dnd5e/` (built from Open5e, CC BY 4.0). Attribution surfaced in-app (CREDITS link on the reference page).
 

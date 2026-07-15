@@ -660,3 +660,62 @@ table.skills td, table.skills th { border-bottom: 1px solid var(--border); paddi
     border-radius: 3px;
     font-size: 12px;
 }
+
+/* ── Pinned SRD rule card (v2.1023.0) ──────────────────────────────────────
+   A fixed, dismissable card the GM pins from the rules reference so the
+   whole table sees a rule during play. Themed via root vars. */
+#pinned-rule-card {
+    position: fixed;
+    left: 16px;
+    bottom: 16px;
+    z-index: 1200;
+    width: min(360px, calc(100vw - 32px));
+    max-height: 46vh;
+    display: flex;
+    flex-direction: column;
+    background: color-mix(in srgb, var(--bg-2) 94%, transparent);
+    color: var(--fg);
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(6px);
+    overflow: hidden;
+}
+#pinned-rule-card .pin-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    border-bottom: 1px solid var(--border);
+}
+#pinned-rule-card .pin-title { font-weight: 600; flex: 1; line-height: 1.25; }
+#pinned-rule-card .pin-type {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    margin-left: 4px;
+}
+/* Compact close ✕ in a dense card header — 32px floor per CLAUDE.md's
+   "deliberately compact panel" exception. */
+#pinned-rule-card .pin-close {
+    min-height: 32px;
+    min-width: 32px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--fg-mute);
+    font-size: 16px;
+    cursor: pointer;
+    border-radius: 6px;
+    line-height: 1;
+}
+#pinned-rule-card .pin-close:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 12%, transparent); }
+#pinned-rule-card .pin-body {
+    padding: 10px 12px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    line-height: 1.5;
+    font-size: 0.92rem;
+}

@@ -16339,6 +16339,114 @@ def srd_search_for_fork(
     return {"records": out}
 
 
+# ── SRD Reference: pin-a-rule-to-the-tabletop (Phase 2b, v2.1023.0) ──────────
+#
+# A GM browsing the campaign-scoped rules reference (`/campaign/{cid}/reference`)
+# can "📌 Pin to table" any SRD entry — its name + description broadcast to
+# every tabletop client as a `rule_pinned` card the whole table sees during
+# play. The current pin is held in-memory per campaign (ephemeral — a live-
+# play pin is transient by nature; `GET /pinned_rule` lets a reloading /
+# late-joining client re-render it within the process lifetime).
+
+_pinned_rules: dict[int, dict] = {}
+
+# The player-safe reference types + singular labels (mirrors
+# wiki_routes._REFERENCE_TYPES; kept local to avoid a cross-router import).
+_TT_REFERENCE_TYPES: list[tuple[str, str]] = [
+    ("conditions", "Condition"), ("spells", "Spell"), ("items", "Equipment"),
+    ("feats", "Feat"), ("races", "Race"), ("backgrounds", "Background"),
+]
+_TT_REFERENCE_LABELS = {t: lbl for t, lbl in _TT_REFERENCE_TYPES}
+_TT_REFERENCE_TYPE_SLUGS = {t for t, _ in _TT_REFERENCE_TYPES}
+
+
+@router.get("/campaign/{campaign_id}/reference", response_class=HTMLResponse)
+def campaign_reference_page(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.1023.0 — the campaign-scoped SRD reference. Same searchable page
+    as the global `/reference`, but wired for the campaign so a GM gets a
+    "📌 Pin to table" button per result (players get a read-only view).
+    Broadcasts land on the campaign's tabletop clients."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    return templates.TemplateResponse("reference.html", {
+        "request": request,
+        "reference_types": _TT_REFERENCE_TYPES,
+        "campaign_id": campaign_id,
+        "is_gm": _user_is_gm(user, campaign, db),
+    })
+
+
+@router.post("/api/campaign/{campaign_id}/pin_rule")
+async def pin_rule(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.1023.0 — GM pins one SRD reference entry to the tabletop. Body:
+    ``{slug, type}``. Resolves the shipped-SRD record, stores it as the
+    campaign's current pin, and broadcasts ``rule_pinned`` so every
+    tabletop client renders the rule card."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    body = await request.json()
+    slug = (str(body.get("slug") or "")).strip().lower()
+    rtype = (str(body.get("type") or "")).strip().lower()
+    if not slug or rtype not in _TT_REFERENCE_TYPE_SLUGS:
+        raise HTTPException(400, "slug + a valid player-safe type are required")
+    resolved = local_content.resolve(slug, type=rtype, campaign_id=None)
+    if not resolved:
+        raise HTTPException(404, "SRD entry not found")
+    rec, _src = resolved
+    pin = {
+        "slug": rec.get("slug"),
+        "name": rec.get("name") or rec.get("slug"),
+        "type": rtype,
+        "type_label": _TT_REFERENCE_LABELS.get(rtype, rtype.title()),
+        "desc": (rec.get("desc") or "").strip(),
+    }
+    _pinned_rules[campaign_id] = pin
+    await hub.broadcast(campaign_id, {"type": "rule_pinned", "data": pin})
+    return {"ok": True, "pinned": pin}
+
+
+@router.post("/api/campaign/{campaign_id}/unpin_rule")
+async def unpin_rule(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.1023.0 — GM clears the campaign's pinned rule + broadcasts
+    ``rule_unpinned`` so every tabletop client removes the card."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    _pinned_rules.pop(campaign_id, None)
+    await hub.broadcast(campaign_id, {"type": "rule_unpinned", "data": {}})
+    return {"ok": True}
+
+
+@router.get("/api/campaign/{campaign_id}/pinned_rule")
+def get_pinned_rule(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.1023.0 — the campaign's current pinned rule (or ``null``) so a
+    reloading / late-joining tabletop client re-renders it. Any member."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    return {"pinned": _pinned_rules.get(campaign_id)}
+
+
 # ── Homebrew import / export / template ─────────────────────────────────────
 #
 # Bulk JSON I/O for every homebrew content type in one combined file. The

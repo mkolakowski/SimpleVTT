@@ -6660,6 +6660,45 @@
         mapPane.addEventListener('touchcancel', endTouches);
     }
 
+    // ---------- Pinned SRD rule card (v2.1023.0) ----------
+    function _removePinnedRule() {
+        const el = document.getElementById('pinned-rule-card');
+        if (el) el.remove();
+    }
+    function _renderPinnedRule(data) {
+        _removePinnedRule();
+        if (!data || !data.name) return;
+        const card = document.createElement('div');
+        card.id = 'pinned-rule-card';
+        const esc = (s) => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+        // GM ✕ unpins for everyone; players get a local dismiss (hide only).
+        const closeTitle = ME.isGm ? 'Unpin for everyone' : 'Hide';
+        card.innerHTML =
+            '<div class="pin-head">'
+            + '<span class="pin-title">📌 ' + esc(data.name)
+            + ' <span class="pin-type">' + esc(data.type_label || '') + '</span></span>'
+            + '<button type="button" class="pin-close" title="' + closeTitle + '" aria-label="' + closeTitle + '">✕</button>'
+            + '</div>'
+            + '<div class="pin-body">' + esc(data.desc || '') + '</div>';
+        card.querySelector('.pin-close').addEventListener('click', () => {
+            if (ME.isGm) {
+                fetch('/api/campaign/' + CAMPAIGN_ID + '/unpin_rule', { method: 'POST' })
+                    .catch(() => {});
+            }
+            _removePinnedRule();  // local removal is immediate either way
+        });
+        document.body.appendChild(card);
+    }
+    // On load, re-render any rule the GM pinned before this client joined /
+    // reloaded (the pin is held in-memory on the server for the process life).
+    (function _loadPinnedRule() {
+        if (typeof CAMPAIGN_ID === 'undefined') return;
+        fetch('/api/campaign/' + CAMPAIGN_ID + '/pinned_rule')
+            .then(r => r.ok ? r.json() : null)
+            .then(d => { if (d && d.pinned) _renderPinnedRule(d.pinned); })
+            .catch(() => {});
+    })();
+
     // ---------- WebSocket ----------
     const wsProto = location.protocol === 'https:' ? 'wss://' : 'ws://';
     let ws;
@@ -6684,6 +6723,17 @@
                 } else {
                     location.href = '/';
                 }
+                return;
+            }
+            // v2.1023.0 — SRD reference "pin a rule to the table". The GM
+            // pins an SRD entry from /campaign/{cid}/reference; every client
+            // renders a dismissable rule card. Unpin clears it for all.
+            if (msg.type === 'rule_pinned') {
+                _renderPinnedRule(msg.data);
+                return;
+            }
+            if (msg.type === 'rule_unpinned') {
+                _removePinnedRule();
                 return;
             }
             // Encounter load swapped the active map under us. The canvas
