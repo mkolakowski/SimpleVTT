@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}SRD Reference — SimpleVTT{% endblock %}
+{% block head %}
+{% include "_wiki_styles.html" %}
+<style>
+  .ref-wrap { max-width: 920px; margin: 0 auto; padding: 16px; }
+  .ref-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+    margin: 12px 0 18px; }
+  .ref-controls input[type="search"] { flex: 1 1 260px; min-width: 200px; }
+  .ref-controls select { flex: 0 0 auto; }
+  .ref-status { color: var(--muted, #888); font-size: 0.9rem; margin: 8px 0; }
+  .ref-card { border: 1px solid var(--border, #4443);
+    border-radius: 10px; padding: 12px 14px; margin: 10px 0;
+    background: color-mix(in srgb, var(--panel, #2223) 88%, transparent); }
+  .ref-card h3 { margin: 0 0 4px; font-size: 1.05rem; display: flex;
+    align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .ref-type { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em;
+    padding: 2px 8px; border-radius: 999px; min-height: 0;
+    background: color-mix(in srgb, var(--accent, #6a7) 24%, transparent);
+    color: var(--accent, #6a7); }
+  .ref-desc { margin: 6px 0 0; white-space: pre-wrap; line-height: 1.5; }
+  .ref-empty { color: var(--muted, #888); padding: 24px 0; text-align: center; }
+</style>
+{% endblock %}
+{% block content %}
+{% include "_wiki_nav.html" %}
+<div class="ref-wrap">
+  <h1>📖 SRD 5.1 Reference</h1>
+  <p class="lede">
+    Search the shipped D&amp;D 5e SRD 5.1 rules content — conditions, spells,
+    equipment, feats, races, and backgrounds — without leaving the VTT. Offline
+    (bundled with the app) and SRD-only (CC BY 4.0 / OGL). Mechanical summaries
+    are rephrased, not verbatim — see <a href="/wiki/doc/credits">CREDITS</a>.
+  </p>
+
+  <div class="ref-controls">
+    <input type="search" id="ref-q" placeholder="Search by name (e.g. Fireball, Grappled, Longsword)…"
+           autocomplete="off" aria-label="Search SRD reference">
+    <select id="ref-type" aria-label="Filter by type">
+      <option value="all">All types</option>
+      {% for slug, label in reference_types %}
+      <option value="{{ slug }}">{{ label }}s</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="ref-status" id="ref-status">Loading…</div>
+  <div id="ref-results"></div>
+</div>
+
+<script>
+(function () {
+  const qEl = document.getElementById('ref-q');
+  const typeEl = document.getElementById('ref-type');
+  const statusEl = document.getElementById('ref-status');
+  const resultsEl = document.getElementById('ref-results');
+
+  function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+
+  function render(data) {
+    const results = (data && data.results) || [];
+    const total = (data && data.total) || 0;
+    if (!results.length) {
+      resultsEl.innerHTML = '<div class="ref-empty">No matching SRD entries.</div>';
+      statusEl.textContent = 'No results.';
+      return;
+    }
+    statusEl.textContent = (total > results.length)
+      ? `Showing ${results.length} of ${total} matches — narrow your search.`
+      : `${results.length} match${results.length === 1 ? '' : 'es'}.`;
+    resultsEl.innerHTML = results.map(r => (
+      '<div class="ref-card">'
+      + '<h3>' + esc(r.name)
+      + ' <span class="ref-type">' + esc(r.type_label) + '</span></h3>'
+      + '<p class="ref-desc">' + esc(r.desc || '(No description.)') + '</p>'
+      + '</div>'
+    )).join('');
+  }
+
+  let timer = null;
+  function run() {
+    const q = qEl.value.trim();
+    const type = typeEl.value;
+    statusEl.textContent = 'Searching…';
+    fetch('/api/reference/search?type=' + encodeURIComponent(type)
+          + '&q=' + encodeURIComponent(q))
+      .then(r => r.json())
+      .then(render)
+      .catch(() => { statusEl.textContent = 'Search failed. Try again.'; });
+  }
+  function debounced() { clearTimeout(timer); timer = setTimeout(run, 180); }
+
+  qEl.addEventListener('input', debounced);
+  typeEl.addEventListener('change', run);
+  run();  // initial load (all types, empty query)
+})();
+</script>
+{% endblock %}

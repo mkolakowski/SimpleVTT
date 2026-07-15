@@ -32,6 +32,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
+from .. import local_content
 from ..auth import get_current_user
 from ..config import get_settings
 from ..database import get_db
@@ -39,6 +40,23 @@ from ..models import User
 from ..templates import templates
 
 router = APIRouter()
+
+# v2.1020.0 — the player-safe shipped-SRD content types the in-app rules
+# reference searches. Monsters are deliberately excluded (GM-visibility
+# data in this codebase); class/subclass features are niche and folded
+# into the character sheet already. Each entry is (type-slug, singular
+# display label). SRD content is CC-BY public, so the reference is
+# unauthenticated (like the wiki).
+_REFERENCE_TYPES: list[tuple[str, str]] = [
+    ("conditions", "Condition"),
+    ("spells", "Spell"),
+    ("items", "Equipment"),
+    ("feats", "Feat"),
+    ("races", "Race"),
+    ("backgrounds", "Background"),
+]
+_REFERENCE_TYPE_SLUGS = {t for t, _ in _REFERENCE_TYPES}
+_REFERENCE_LABELS = {t: lbl for t, lbl in _REFERENCE_TYPES}
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _WIKI_DIR = _REPO_ROOT / "docs" / "wiki"
@@ -198,6 +216,58 @@ def wiki_plans(request: Request):
     wins over the guide catch-all. Same static-template pattern as the home
     page."""
     return templates.TemplateResponse("wiki_plans.html", {"request": request})
+
+
+@router.get("/reference", response_class=HTMLResponse)
+def srd_reference_page(request: Request):
+    """v2.1020.0 — in-app SRD 5.1 rules reference. A searchable browser
+    over the shipped player-safe SRD content (conditions, spells,
+    equipment, feats, races, backgrounds) so players + GMs can look up
+    rules without leaving the VTT. Offline (bundled shipped tier, never
+    the network). SRD content is CC-BY, so the page is public like the
+    wiki. Phase 2 (filed): contextual links from the sheet + pin-a-
+    snippet-to-the-tabletop.
+    """
+    return templates.TemplateResponse("reference.html", {
+        "request": request,
+        "reference_types": _REFERENCE_TYPES,
+    })
+
+
+@router.get("/api/reference/search")
+def srd_reference_search(type: str = "all", q: str = ""):
+    """v2.1020.0 — search the shipped SRD content of one player-safe type
+    (or ``all``) by name, returning full description text for the in-app
+    rules reference. Reads only the shipped SRD tier (``campaign_id=None``
+    + ``_source == 'local-srd'``) — offline + SRD-only, no homebrew, no
+    monsters. Returns up to 60 ``{slug, name, type, type_label, desc,
+    source}`` records sorted by type then name."""
+    type = (type or "all").strip().lower()
+    q = (q or "").strip()
+    if type != "all" and type not in _REFERENCE_TYPE_SLUGS:
+        raise HTTPException(404, f"Unknown reference type: {type!r}")
+    types = [type] if type != "all" else [t for t, _ in _REFERENCE_TYPES]
+    results: list[dict] = []
+    for typ in types:
+        recs, _ = local_content.search(
+            q, type=typ, campaign_id=None, limit=200,
+        )
+        for r in recs:
+            if r.get("_source") != "local-srd":
+                continue
+            results.append({
+                "slug": r.get("slug"),
+                "name": r.get("name") or r.get("slug"),
+                "type": typ,
+                "type_label": _REFERENCE_LABELS.get(typ, typ.title()),
+                "desc": (r.get("desc") or "").strip(),
+                "source": r.get("_source"),
+            })
+    # Stable order: type (in the reference's declared order) then name.
+    _type_order = {t: i for i, (t, _) in enumerate(_REFERENCE_TYPES)}
+    results.sort(key=lambda x: (_type_order.get(x["type"], 99),
+                                (x["name"] or "").lower()))
+    return {"results": results[:60], "total": len(results)}
 
 
 @router.get("/wiki/doc/{slug}", response_class=HTMLResponse)

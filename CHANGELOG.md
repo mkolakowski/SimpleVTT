@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1020.0] - 2026-07-14 — "The Open Compendium"
+
+**Schema version:** 103
+
+**Commit summary:** In-app SRD 5.1 rules reference — a searchable `/reference` page + `/api/reference/search` over the shipped player-safe SRD content (conditions, spells, equipment, feats, races, backgrounds).
+
+**Description:** New feature (Rules Reference bucket, Phase 1). A searchable in-app browser over the shipped SRD 5.1 content so players and GMs can look up rules without leaving the VTT — offline (bundled shipped tier, never the network) and SRD-only (CC BY 4.0 / OGL). `GET /api/reference/search?type=&q=` reads only the shipped SRD tier (`campaign_id=None` + `_source == "local-srd"`) via `local_content.search` and returns up to 60 full-text `{slug, name, type, type_label, desc, source}` records across the six player-safe types (or one filtered type), sorted by type then name. **Monsters are deliberately excluded** (GM-visibility data in this codebase) — requesting `type=monsters` 404s like any unknown type. `GET /reference` renders a page (extends the wiki shell) with a debounced search box + a type filter that live-queries the API and renders each result's full rephrased description. Because SRD content is CC-BY public, the page + API are unauthenticated like the wiki. Surfaced through the wiki: a "📖 SRD Reference" item in the shared wiki nav (on every wiki page) + a callout on the `/wiki` landing page. Phase 2 (filed): contextual links from the character sheet + a GM "pin a rule snippet to the tabletop" control. No schema change.
+
+### Added
+- `app/routes/wiki_routes.py` — `GET /reference` (page) + `GET /api/reference/search` (JSON) + `_REFERENCE_TYPES` (the six player-safe types with display labels).
+- `app/templates/reference.html` — the searchable reference page (debounced search, type filter, full-text result cards; HTML-escaped).
+- `app/templates/_wiki_nav.html` + `wiki.html` — a "📖 SRD Reference" nav item + landing-page callout.
+- `tests/harness/test_srd_reference.py` (new, +6) — page render, all-types search (full-text records, player-safe only), conditions filter (Grappled findable), spell search (Fireball), monsters excluded (404), unknown type (404).
+
+### Changed
+- `docs/test-harness-coverage.md` — new `test_srd_reference.py` section; total bumped 4786 → 4792.
+
 ## [2.1019.2] - 2026-07-14 — "The Beast's Own Sheet"
 
 **Schema version:** 103

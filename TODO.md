@@ -970,14 +970,12 @@ Add a few darker sepia/warm-brown colour themes as alternatives to the existing 
 
 ## Rules Reference
 
-### SRD Rules in Full Text
-Surface the complete D&D 5e Systems Reference Document (SRD 5.1, CC BY 4.0) as searchable in-app reference text. Players and GMs should be able to look up rules without leaving the VTT. Planned scope:
-- Full SRD text indexed and searchable by keyword (conditions, actions, spells, equipment, etc.)
-- Contextual links from the character sheet and encounter panels (e.g. clicking a condition name opens its SRD entry)
-- Offline-capable: content bundled in the Docker image rather than fetched at runtime
-- GM can pin a rule snippet to the tabletop panel for the whole table to see during play
+### SRD Rules in Full Text — 🟠 Phase 1 shipped (v2.1020.0)
+Surface the D&D 5e SRD 5.1 (CC BY 4.0) as searchable in-app reference text so players and GMs can look up rules without leaving the VTT.
+- ✅ **Phase 1 (v2.1020.0 "The Open Compendium")** — the `/reference` page + `GET /api/reference/search` search the shipped SRD content by name across the six player-safe types (conditions, spells, equipment, feats, races, backgrounds), returning full rephrased description text. Offline (shipped tier only, never the network), SRD-only, monsters excluded (GM-visibility). Surfaced via the wiki nav + landing callout. Harness: `test_srd_reference.py` (6).
+- ⚪ **Phase 2 (filed)** — contextual links from the character sheet / encounter panels (click a condition name → its reference entry); a GM "pin a rule snippet to the tabletop" control; full-text (not just name) search; the non-content SRD rules sections (actions in combat, resting, cover, etc. — not in the current per-type JSON).
 
-Content source: the official SRD 5.1 PDF / markdown release from Wizards of the Coast, licensed CC BY 4.0. Attribution required in-app.
+Content source: the shipped SRD tier under `app/data/local/dnd5e/` (built from Open5e, CC BY 4.0). Attribution surfaced in-app (CREDITS link on the reference page).
 
 ### Page Number References in Official Content
 Where SimpleVTT surfaces content from official published sourcebooks (e.g. PHB, MM, DMG) — in spell descriptions, class features, item entries — investigate whether page numbers can be shown alongside the source citation (e.g. "PHB p.218").
