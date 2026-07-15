@@ -41,6 +41,7 @@ VALID_THEMES = {
     "dark", "midnight", "dim", "light", "forest", "bubblegum", "fire", "oled",
     # Fantasy themes
     "hobbiton", "hearthstone", "mosswood", "inkwell", "forge", "sepia",
+    "burnt-manuscript",
 }
 
 

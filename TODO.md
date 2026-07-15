@@ -963,8 +963,8 @@ Core shipped — `realtime.py` broadcasts `presence_update` on connect/disconnec
 ### Slide-Out Menu for Mobile
 On small screens, replace the current sidebar with a proper slide-out drawer triggered by a hamburger button. The map should fill the full viewport and the drawer overlays it rather than pushing it. Needs gesture support (swipe to open/close).
 
-### Darker Sepia Themes
-Add a few darker sepia/warm-brown colour themes as alternatives to the existing dark theme. Candidates: a deep parchment (dark tan background, inked-brown text), a candlelit tavern (very dark brown with amber accents), and a burnt manuscript (near-black with faded sepia highlights). Should slot into the existing theme system with new CSS variable sets — no structural changes needed.
+### Darker Sepia Themes — ✅ DONE (reconciled + completed v2.1021.0)
+All three proposed warm/sepia variants now ship in `style-fantasy-themes.css`: **deep parchment** = the `sepia` theme (#2c1f0e, aged-amber ink), **candlelit tavern** = `hearthstone` (#1a120a, brass-tankard amber — both pre-existing), and **burnt manuscript** = the new `burnt-manuscript` theme (#0d0b08 near-black + faded #c9b48f sepia, v2.1021.0 "The Charred Page"). Plus other warm themes (`hobbiton`, `mosswood`, `inkwell`, `forge`). Each is a `[data-theme=...]` CSS variable set + a `VALID_THEMES` key + a settings picker card.
 
 ---
 

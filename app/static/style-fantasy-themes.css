@@ -164,6 +164,33 @@
     --theme-grain-opacity: 0.06;
 }
 
+/* v2.1021.0 — Burnt Manuscript: a near-black warm ground with faded,
+   smoke-dimmed sepia highlights — a charred, half-legible page. Darker
+   than "sepia" (deep parchment) and "hearthstone" (candlelit tavern),
+   completing the sepia set the TODO's UI/Mobile "darker sepia themes"
+   item proposed. Purely additive. */
+[data-theme="burnt-manuscript"] {
+    --bg:          #0d0b08;       /* charred near-black */
+    --bg-2:        #16120b;       /* smoked panel */
+    --fg:          #c9b48f;       /* faded sepia ink */
+    --fg-mute:     #7a6a4e;       /* smoke-dimmed */
+    --accent:      #b8863a;       /* muted burnt gold */
+    --danger:      #a8492a;       /* scorched ember */
+    --border:      #2a2015;
+    --input-bg:    #120e09;
+    --btn-bg:      #241b11;
+    --btn-hover:   #322515;
+    --error-bg:    #2a0f08;
+    --error-fg:    #e2b49a;
+    /* flavor */
+    --theme-paper: #0d0b08;
+    --theme-rule:  #5c481f;       /* singed gilt */
+    --theme-warm:  #b8863a;
+    --theme-cool:  #4a4234;       /* ash grey-brown */
+    --theme-glow:  rgba(184, 134, 58, 0.22);
+    --theme-grain-opacity: 0.05;
+}
+
 /* v2.84.0 — Sepia wood-grain background.
    Toggle is per-user via /settings (`user.sepia_texture`, default ON).
    The base.html template emits `class="sepia-texture-on"` on <body>

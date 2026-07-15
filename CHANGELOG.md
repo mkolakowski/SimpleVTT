@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1021.0] - 2026-07-14 — "The Charred Page"
+
+**Schema version:** 103
+
+**Commit summary:** New "Burnt Manuscript" theme — a near-black warm ground with faded, smoke-dimmed sepia highlights, completing the "darker sepia themes" UI TODO.
+
+**Description:** Additive theme. Verification against the code showed the TODO's other two proposed sepia variants already ship — `sepia` (#2c1f0e, aged-amber ink) is the "deep parchment" and `hearthstone` (#1a120a, brass-tankard amber) is the "candlelit tavern." The one genuine gap was "burnt manuscript" (near-black with faded sepia highlights), now added: `[data-theme="burnt-manuscript"]` in `style-fantasy-themes.css` (charred `#0d0b08` ground, faded `#c9b48f` sepia ink, muted `#b8863a` burnt-gold accent + the flavor tokens), the `burnt-manuscript` key in `VALID_THEMES`, and a picker card in the settings theme grid. Purely additive — no existing token or selector changed. No schema change.
+
+### Added
+- `app/static/style-fantasy-themes.css` — `[data-theme="burnt-manuscript"]` variable block.
+- `app/models.py` — `burnt-manuscript` added to `VALID_THEMES`.
+- `app/templates/user_settings.html` — Burnt Manuscript theme-picker card.
+- `tests/harness/test_theme_burnt_manuscript.py` (new, +4) — the theme key is accepted by `POST /api/settings/theme` (unknown → 400), the CSS block ships, and the picker card renders.
+
+### Changed
+- `docs/test-harness-coverage.md` — new `test_theme_burnt_manuscript.py` section; total bumped 4792 → 4796.
+
 ## [2.1020.0] - 2026-07-14 — "The Open Compendium"
 
 **Schema version:** 103
