@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1019.0] - 2026-07-14 — "The Complete Overload"
+
+**Schema version:** 103
+
+**Commit summary:** Overchannel Phase 2 — an armed Evoker's max-damage now also applies to the spell-attack-roll damage path (Guiding Bolt / Inflict Wounds / Scorching Ray) and to `/place_aoe`, closing the v2.1010.0 filed follow-up.
+
+**Description:** Extends Overchannel (Evocation Wizard Lv 14+) to the two damage paths Phase 1 (v2.1010.0) left GM-narrated. The `_oc_buff` / `_oc_active` / `_oc_consumed` state is now computed **once up-front** (before the attack-roll block) so both the `/cast_spell` spell-attack-roll damage aggregation (per-beam) and the NPC-save damage path max every roll via the shared `_max_dice_total`; a nat-20 crit doubles the dice first (8d6 → 48 for a 4d6 spell). The end-of-cast **consume block** (drop the one-shot buff + apply the escalating necrotic self-damage + broadcast the ⚡ card) moved out of the save-only `if save_ability` branch to function scope, so an attack-roll cast (which never enters that branch) now correctly consumes the buff and self-damages — previously the max applied but the buff never dropped on a pure attack-roll cast. `/place_aoe` gets the same max + consume via its own `_place_oc_*` state. Every read stays buff-gated (a complete no-op for unarmed casters), and the 32-test cast_spell/evocation/Overchannel-Phase-1 regression suite still passes. No schema change.
+
+### Added
+- `tests/harness/test_overchannel_phase2.py` (new, +1) — Thalindra@Lv14 arms Overchannel + casts Guiding Bolt (4d6 ranged spell attack); on a hit the attack-roll damage is maxed to 24 (or 48 on a crit) and the ⚡ Overchannel card fires.
+
+### Changed
+- `app/routes/tabletop_routes.py` — Overchannel state computed up-front; the spell-attack-roll per-beam damage maxes when armed; the consume block moved to function scope (reached by both damage paths); `/place_aoe` maxes + consumes via `_place_oc_*`.
+- `docs/test-harness-coverage.md` — new `test_overchannel_phase2.py` entry; total bumped 4785 → 4786.
+
 ## [2.1018.0] - 2026-07-14 — "The Second Wind of Shadows"
 
 **Schema version:** 103

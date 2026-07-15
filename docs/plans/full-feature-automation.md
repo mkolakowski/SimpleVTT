@@ -965,12 +965,22 @@ composition. Batch by class, same cadence as the breadth sweep.
   so the contract is harness-tested. Harness:
   `test_thiefs_reflexes.py` (+7) + a wiki serve test.
 
+- **v2.1019.0 ("The Complete Overload") — Overchannel Phase 2**:
+  extends the v2.1010.0 max-damage read to the two paths Phase 1 left
+  GM-narrated. The `_oc_*` state is computed up-front so the
+  `/cast_spell` spell-attack-roll per-beam damage (crit-doubled) + the
+  NPC-save path both max via `_max_dice_total`; the consume block moved
+  out of the save-only branch to function scope so an attack-roll cast
+  also drops the buff + self-damages; `/place_aoe` maxes + consumes via
+  its own `_place_oc_*`. Buff-gated (no-op unarmed); 32-test regression
+  green. Harness: `test_overchannel_phase2.py` (+1).
+
 **Status: the core SRD Phase 8 subclass-feature tail is now closed** —
 every SRD subclass's higher-level features are mechanized or (for
 Thief's Reflexes) GM-narrated with a scoped-v1 contract endpoint + a
-filed engine plan. Remaining Phase 8 items are the filed Overchannel
-Phase 2 (attack-roll + `/place_aoe` max-damage) + the archetype-J
-announce-only-by-design tail.
+filed engine plan. **Overchannel Phase 2 (attack-roll + `/place_aoe`
+max-damage) closed at v2.1019.0.** The only remaining Phase 8 item is
+the archetype-J announce-only-by-design tail.
 
 The Lv-17 cleric subclass capstone batch is **6/6 shipped** — Improved
 Reaper closed at v2.158.9 (install) + v2.158.41 (the `_pc_improved_reaper_params`

@@ -26006,6 +26006,18 @@ async def cast_spell(
     spell_attack_flag = bool(spell.get("attack_roll")) or any(
         bool(a.get("attack_roll")) for a in (spell.get("actions") or [])
     )
+    # v2.1010.0 / v2.1019.0 — Overchannel (Evocation Wizard Lv 14+).
+    # Computed once up-front (before the attack-roll block) so BOTH the
+    # spell-attack-roll damage path (v2.1019.0 Phase 2) and the NPC-save
+    # damage path (v2.1010.0 Phase 1) can max every damage roll of the
+    # spell. `_oc_buff` is None (a complete no-op) for every unarmed
+    # caster, so the damage paths are unchanged for anyone who isn't a
+    # Lv 14+ Evoker who explicitly armed it. `_oc_consumed` is flipped by
+    # whichever path actually maxes damage; the end-of-cast consume block
+    # drops the buff + applies the escalating necrotic self-damage.
+    _oc_buff = _caster_overchannel_buff(campaign_id, char.id, spell_level)
+    _oc_active = _oc_buff is not None
+    _oc_consumed = False
     auto_attack_hit = None
     auto_attack_crit = False
     auto_attack_total = 0
@@ -26169,21 +26181,33 @@ async def cast_spell(
                     roll_expr = (
                         _double_dice_for_crit(_dmg_base) if beam["crit"] else _dmg_base
                     )
-                    # v2.49.125: prefer the per-die roller so Empowered's
-                    # pool reroll can see individual values. Falls back
-                    # to dice_mod.roll for expressions with kh/kl/a/d
-                    # modifiers (none in standard spell damage exprs).
-                    beam_dr_data = _roll_damage_individual_dice(roll_expr)
-                    if beam_dr_data is None:
-                        try:
-                            _dr = dice_mod.roll(roll_expr)
-                            beam["damage_rolled"] = max(0, int(_dr.total))
-                            beam["damage_breakdown"] = _dr.breakdown
-                        except dice_mod.DiceParseError:
-                            beam["damage_rolled"] = 0
+                    if _oc_active:
+                        # v2.1019.0 — Overchannel Phase 2: max the beam's
+                        # damage (skips the per-die roller; a maxed
+                        # expression has no dice for Empowered's pool
+                        # reroll to touch anyway).
+                        _oc_total, _oc_bd = _max_dice_total(roll_expr)
+                        beam["damage_rolled"] = _oc_total
+                        beam["damage_breakdown"] = _oc_bd
+                        beam_dr_data = None
+                        _oc_consumed = True
                     else:
-                        beam["damage_rolled"] = beam_dr_data["total"]
-                        beam["damage_breakdown"] = beam_dr_data["breakdown"]
+                        # v2.49.125: prefer the per-die roller so
+                        # Empowered's pool reroll can see individual
+                        # values. Falls back to dice_mod.roll for
+                        # expressions with kh/kl/a/d modifiers (none in
+                        # standard spell damage exprs).
+                        beam_dr_data = _roll_damage_individual_dice(roll_expr)
+                        if beam_dr_data is None:
+                            try:
+                                _dr = dice_mod.roll(roll_expr)
+                                beam["damage_rolled"] = max(0, int(_dr.total))
+                                beam["damage_breakdown"] = _dr.breakdown
+                            except dice_mod.DiceParseError:
+                                beam["damage_rolled"] = 0
+                        else:
+                            beam["damage_rolled"] = beam_dr_data["total"]
+                            beam["damage_breakdown"] = beam_dr_data["breakdown"]
                 if beam["hit"]:
                     any_hit = True
                 if beam["crit"]:
@@ -26921,19 +26945,10 @@ async def cast_spell(
             campaign_id, char.id, spell_level,
         )
         _ps_fired = False
-        # v2.1010.0 — Overchannel (Evocation Wizard Lv 14+). When the
-        # caster armed it via /use_overchannel and this is a damaging
-        # 1st-5th level spell, every damage roll of the spell is maxed
-        # (via `_max_dice_total`) instead of rolled, and the escalating
-        # necrotic self-damage is applied once. `_oc_buff` is None (a
-        # complete no-op) for every unarmed caster, so the damage path
-        # below is unchanged for everyone who isn't a Lv 14+ Evoker.
-        _oc_buff = (
-            _caster_overchannel_buff(campaign_id, char.id, spell_level)
-            if damage_expr else None
-        )
-        _oc_active = _oc_buff is not None
-        _oc_consumed = False
+        # v2.1010.0 — Overchannel (`_oc_buff` / `_oc_active` /
+        # `_oc_consumed` computed once up-front, before the attack-roll
+        # block). The NPC-save damage path below maxes `_ea_damage_expr`
+        # when `_oc_active`.
         _ea_damage_expr = damage_expr
         if _ea_bonus > 0 and damage_expr:
             _ea_damage_expr = f"{_ea_damage_expr}+{_ea_bonus}"
@@ -27398,75 +27413,10 @@ async def cast_spell(
                 "damage_type": damage_type,
             })
         payload["auto_save_targets"] = auto_save_targets
-
-        # v2.1010.0 — Overchannel consume: once the spell's damage has
-        # been maxed for every target, drop the one-shot armed buff and
-        # apply the escalating necrotic self-damage (2nd+ use since long
-        # rest: `use_number × spell_level` d12, ignoring resistance).
-        if _oc_active and _oc_consumed:
-            await _remove_buff(campaign_id, int(char.id), "overchannel-armed")
-            _oc_use_number = int(
-                (_oc_buff.get("effects") or {}).get("overchannel_use_number") or 1
-            )
-            _oc_self_expr = _overchannel_self_damage_expr(
-                _oc_use_number, spell_level,
-            )
-            _oc_self_applied = 0
-            if _oc_self_expr:
-                try:
-                    _oc_self_rolled = max(0, int(dice_mod.roll(_oc_self_expr).total))
-                except dice_mod.DiceParseError:
-                    _oc_self_rolled = 0
-                if _oc_self_rolled > 0:
-                    # Resolve the caster's own combatant (mirrors the
-                    # Life-cleric self-uplift lookup): the canonical
-                    # `tok_<id>`, else a walk by char_id, else a
-                    # synthesized off-init PC dict so the heal/damage
-                    # helper still routes through the death-save machine.
-                    _oc_self_comb = _lookup_combatant(
-                        campaign_id, f"tok_{char.id}")
-                    if not _oc_self_comb:
-                        _oc_state = hub.get_battle(campaign_id) or {}
-                        for _oc_c in (_oc_state.get("combatants") or []):
-                            if _oc_c.get("char_id") == char.id:
-                                _oc_self_comb = _oc_c
-                                break
-                    if not _oc_self_comb:
-                        _oc_self_comb = {
-                            "char_id": char.id, "id": "", "name": char.name,
-                        }
-                    # RAW ignores resistance/immunity — apply as untyped
-                    # so `_resistance_halve` can't reduce it.
-                    _oc_self_result = await _apply_damage_to_combatant(
-                        db, campaign_id, _oc_self_comb, _oc_self_rolled,
-                        damage_type="", is_spell=False,
-                    )
-                    _oc_self_applied = int(_oc_self_result.get("applied") or 0)
-            payload["overchannel"] = {
-                "maxed": True,
-                "use_number": _oc_use_number,
-                "self_damage_expr": _oc_self_expr,
-                "self_damage_applied": _oc_self_applied,
-            }
-            await hub.broadcast(campaign_id, {
-                "type": "feature_used",
-                "data": {
-                    "character_id": char.id,
-                    "character_name": char.name,
-                    "feature_name": "⚡ Overchannel — maximum damage",
-                    "feature_desc": (
-                        f"{char.name} deals maximum damage with "
-                        f"{payload['spell_name']}."
-                        + (
-                            f" Takes {_oc_self_applied} necrotic "
-                            f"({_oc_self_expr}, ignores resistance) — "
-                            f"use #{_oc_use_number} since long rest."
-                            if _oc_self_expr else ""
-                        )
-                    ),
-                    "source": "overchannel",
-                },
-            })
+        # v2.1019.0 — Overchannel consume moved out of this save-only
+        # block to function scope (below) so the attack-roll damage path
+        # (which doesn't enter this `if save_ability` branch) also drops
+        # the buff + applies self-damage.
 
         # v2.99.38 — drop the Careful Spell pending buff at end of
         # save resolution. The buff stayed armed across the cast so
@@ -27595,6 +27545,76 @@ async def cast_spell(
         payload["auto_save_rolled"] = auto_save_rolled
         payload["auto_save_passed"] = auto_save_passed
         payload["auto_save_breakdown"] = auto_save_breakdown
+
+    # v2.1010.0 / v2.1019.0 — Overchannel consume, at function scope so
+    # BOTH the attack-roll damage path and the NPC-save damage path reach
+    # it. Once a damage path has maxed the spell (`_oc_consumed`), drop
+    # the one-shot armed buff + apply the escalating necrotic self-damage
+    # (2nd+ use since long rest: `use_number × spell_level` d12, ignoring
+    # resistance). No-op for unarmed casters / spells that dealt no damage.
+    if _oc_active and _oc_consumed:
+        await _remove_buff(campaign_id, int(char.id), "overchannel-armed")
+        _oc_use_number = int(
+            (_oc_buff.get("effects") or {}).get("overchannel_use_number") or 1
+        )
+        _oc_self_expr = _overchannel_self_damage_expr(
+            _oc_use_number, spell_level,
+        )
+        _oc_self_applied = 0
+        if _oc_self_expr:
+            try:
+                _oc_self_rolled = max(0, int(dice_mod.roll(_oc_self_expr).total))
+            except dice_mod.DiceParseError:
+                _oc_self_rolled = 0
+            if _oc_self_rolled > 0:
+                # Resolve the caster's own combatant (mirrors the
+                # Life-cleric self-uplift lookup): the canonical
+                # `tok_<id>`, else a walk by char_id, else a synthesized
+                # off-init PC dict so the damage helper still routes
+                # through the death-save machine.
+                _oc_self_comb = _lookup_combatant(campaign_id, f"tok_{char.id}")
+                if not _oc_self_comb:
+                    _oc_state = hub.get_battle(campaign_id) or {}
+                    for _oc_c in (_oc_state.get("combatants") or []):
+                        if _oc_c.get("char_id") == char.id:
+                            _oc_self_comb = _oc_c
+                            break
+                if not _oc_self_comb:
+                    _oc_self_comb = {
+                        "char_id": char.id, "id": "", "name": char.name,
+                    }
+                # RAW ignores resistance/immunity — apply as untyped so
+                # `_resistance_halve` can't reduce it.
+                _oc_self_result = await _apply_damage_to_combatant(
+                    db, campaign_id, _oc_self_comb, _oc_self_rolled,
+                    damage_type="", is_spell=False,
+                )
+                _oc_self_applied = int(_oc_self_result.get("applied") or 0)
+        payload["overchannel"] = {
+            "maxed": True,
+            "use_number": _oc_use_number,
+            "self_damage_expr": _oc_self_expr,
+            "self_damage_applied": _oc_self_applied,
+        }
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "character_name": char.name,
+                "feature_name": "⚡ Overchannel — maximum damage",
+                "feature_desc": (
+                    f"{char.name} deals maximum damage with "
+                    f"{payload['spell_name']}."
+                    + (
+                        f" Takes {_oc_self_applied} necrotic "
+                        f"({_oc_self_expr}, ignores resistance) — "
+                        f"use #{_oc_use_number} since long rest."
+                        if _oc_self_expr else ""
+                    )
+                ),
+                "source": "overchannel",
+            },
+        })
 
     # v2.49.155 — auto-hit multi-target damage path (Magic Missile,
     # Crusader's Mantle bonus damage, etc.). Fires when the spell has
@@ -28472,6 +28492,16 @@ async def place_aoe(
             int(ctx.get("spell_level", -1) if ctx.get("spell_level") is not None else -1),
         )
     _place_ps_fired = False
+    # v2.1019.0 — Overchannel Phase 2 at /place_aoe. If the caster armed
+    # Overchannel (Evocation Wizard Lv 14+) and this placed spell is a
+    # damaging 1st-5th level spell, max every target's damage roll. No-op
+    # (`_place_oc_buff` None) for every unarmed caster.
+    _place_oc_buff = _caster_overchannel_buff(
+        campaign_id, int(ctx.get("caster_char_id") or 0),
+        ctx.get("spell_level"),
+    )
+    _place_oc_active = _place_oc_buff is not None
+    _place_oc_consumed = False
 
     # v2.661.0 — Sorcery Phase 1.5: Empowered Spell reroll across the AoE
     # multi-target loop. RAW PHB p.102 — Empowered rerolls up to CHA-mod
@@ -28898,10 +28928,16 @@ async def place_aoe(
             )
             _place_ps_fired = True
         if damage_expr and auto_apply_damage:
-            # v2.661.0 — Empowered Spell reroll (first-target-wins). Rolls
-            # the EA/EE-augmented expr so the metamagic reroll composes with
-            # the Elemental Affinity / Empowered Evocation flat bonuses.
-            dmg_rolled, dmg_breakdown = await _roll_aoe_damage(_place_aoe_dmg_expr)
+            if _place_oc_active:
+                # v2.1019.0 — Overchannel maxes every target's damage.
+                dmg_rolled, dmg_breakdown = _max_dice_total(_place_aoe_dmg_expr)
+                _place_oc_consumed = True
+            else:
+                # v2.661.0 — Empowered Spell reroll (first-target-wins).
+                # Rolls the EA/EE-augmented expr so the metamagic reroll
+                # composes with the EA / Empowered Evocation flat bonuses.
+                dmg_rolled, dmg_breakdown = await _roll_aoe_damage(
+                    _place_aoe_dmg_expr)
             if dmg_rolled > 0:
                 # v2.51.5: Evasion (Dex saves) — NPC targets won't
                 # have it but the helper short-circuits cleanly. Kept
@@ -28945,6 +28981,60 @@ async def place_aoe(
         await _remove_buff(
             campaign_id, _aoe_caster_id, "sculpt-spells-active",
         )
+
+    # v2.1019.0 — Overchannel Phase 2 consume for /place_aoe: once every
+    # target's damage has been maxed, drop the armed buff + apply the
+    # escalating necrotic self-damage (mirrors the /cast_spell consume).
+    if _place_oc_active and _place_oc_consumed and _aoe_caster_id:
+        await _remove_buff(campaign_id, _aoe_caster_id, "overchannel-armed")
+        _place_oc_use = int(
+            (_place_oc_buff.get("effects") or {}).get(
+                "overchannel_use_number") or 1
+        )
+        _place_oc_expr = _overchannel_self_damage_expr(
+            _place_oc_use, ctx.get("spell_level"),
+        )
+        if _place_oc_expr:
+            try:
+                _place_oc_self = max(0, int(dice_mod.roll(_place_oc_expr).total))
+            except dice_mod.DiceParseError:
+                _place_oc_self = 0
+            if _place_oc_self > 0:
+                _place_oc_comb = _lookup_combatant(
+                    campaign_id, f"tok_{_aoe_caster_id}")
+                if not _place_oc_comb:
+                    _oc_st = hub.get_battle(campaign_id) or {}
+                    for _oc_c in (_oc_st.get("combatants") or []):
+                        if _oc_c.get("char_id") == _aoe_caster_id:
+                            _place_oc_comb = _oc_c
+                            break
+                if not _place_oc_comb:
+                    _place_oc_comb = {
+                        "char_id": _aoe_caster_id, "id": "",
+                        "name": (_caster_char_for_broadcast.name
+                                 if _caster_char_for_broadcast else "Caster"),
+                    }
+                await _apply_damage_to_combatant(
+                    db, campaign_id, _place_oc_comb, _place_oc_self,
+                    damage_type="", is_spell=False,
+                )
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": _aoe_caster_id,
+                "character_name": (
+                    _caster_char_for_broadcast.name
+                    if _caster_char_for_broadcast else "Caster"),
+                "feature_name": "⚡ Overchannel — maximum damage",
+                "feature_desc": (
+                    "Deals maximum damage with the placed spell."
+                    + (f" Takes {_place_oc_expr} necrotic (ignores "
+                       f"resistance) — use #{_place_oc_use} since long rest."
+                       if _place_oc_expr else "")
+                ),
+                "source": "overchannel",
+            },
+        })
 
     # v2.48.5 — push one battle_update so every client's init tracker
     # repaints with the resolved state: auto-added NPC combatants +
