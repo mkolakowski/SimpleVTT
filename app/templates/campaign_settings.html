@@ -688,6 +688,85 @@
             </div>
         </form>
     </details>
+
+    {# v2.1024.0 — Bulk map upload. Multiple files in one go; each map is
+       named from its filename, all share the grid settings below. #}
+    <details style="margin-top:6px;">
+        <summary style="cursor:pointer;font-size:13px;">+ Bulk upload maps</summary>
+        <form id="bulk-map-form" class="stacked" style="margin-top:8px;max-width:480px;"
+              onsubmit="return false;">
+            <p style="font-size:11px;color:var(--fg-mute);margin:0;">
+                Pick several images at once — each becomes a map named from its
+                file name. The grid settings below apply to all of them.
+            </p>
+            <label>Folder <input name="folder" list="map-folder-list" placeholder="Optional — groups the maps together"></label>
+            <label>Tags <input name="tags" list="map-tag-list" placeholder="Comma-separated, optional"></label>
+            <label>Grid type
+                <select name="grid_type">
+                    <option value="square">Square</option>
+                    <option value="hex">Hex</option>
+                    <option value="none">None</option>
+                </select>
+            </label>
+            <label>Grid size (px) <input type="number" name="grid_size_px" value="70" min="20" max="300" style="width:80px;"></label>
+            <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="checkbox" name="show_grid" value="1" checked style="margin:0;width:16px;height:16px;">
+                Show grid overlay
+            </label>
+            <label>Images (png/jpg/webp/gif/mp4/webm — max 80 MB each)
+                <input type="file" id="bulk-map-input" name="images" accept="image/*,video/mp4,video/webm" multiple>
+            </label>
+            <div><button type="submit" id="bulk-map-btn">Upload all</button></div>
+            <div id="bulk-map-progress" style="display:none;margin-top:8px;">
+                <div id="bulk-map-status" style="font-size:11px;color:var(--fg-mute);margin-bottom:4px;">Uploading…</div>
+                <div style="height:6px;background:var(--input-bg);border-radius:3px;overflow:hidden;">
+                    <div id="bulk-map-bar" style="height:100%;width:0%;background:var(--accent);transition:width .1s linear;border-radius:3px;"></div>
+                </div>
+                <ul id="bulk-map-results" style="font-size:11px;margin:6px 0 0;padding-left:18px;"></ul>
+            </div>
+            <script>
+            (function() {
+                const form = document.getElementById('bulk-map-form');
+                const input = document.getElementById('bulk-map-input');
+                const btn = document.getElementById('bulk-map-btn');
+                const prog = document.getElementById('bulk-map-progress');
+                const status = document.getElementById('bulk-map-status');
+                const bar = document.getElementById('bulk-map-bar');
+                const results = document.getElementById('bulk-map-results');
+                if (!form) return;
+                function esc(s){const d=document.createElement('div');d.textContent=s==null?'':String(s);return d.innerHTML;}
+                btn.addEventListener('click', () => {
+                    const files = input.files;
+                    if (!files || !files.length) { status.textContent = 'Pick one or more image files first.'; prog.style.display=''; bar.style.width='0%'; return; }
+                    const fd = new FormData();
+                    fd.append('grid_type', form.grid_type.value);
+                    fd.append('grid_size_px', form.grid_size_px.value);
+                    if (form.show_grid.checked) fd.append('show_grid', '1');
+                    fd.append('folder', form.folder.value);
+                    fd.append('tags', form.tags.value);
+                    for (const f of files) fd.append('images', f);
+                    btn.disabled = true; prog.style.display=''; results.innerHTML='';
+                    status.textContent = 'Uploading ' + files.length + ' file' + (files.length===1?'':'s') + '…';
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', '/campaign/{{ campaign.id }}/settings/maps/bulk');
+                    xhr.upload.onprogress = (e) => { if (e.lengthComputable) bar.style.width = Math.round(e.loaded/e.total*100) + '%'; };
+                    xhr.onload = () => {
+                        btn.disabled = false; bar.style.width = '100%';
+                        let d = {}; try { d = JSON.parse(xhr.responseText); } catch(_) {}
+                        if (xhr.status !== 200) { status.textContent = 'Upload failed (' + xhr.status + ').'; return; }
+                        status.textContent = 'Created ' + (d.created||0) + ' map' + ((d.created===1)?'':'s')
+                            + (d.skipped ? ', skipped ' + d.skipped : '') + '.';
+                        (d.maps||[]).forEach(m => { const li=document.createElement('li'); li.innerHTML='✅ '+esc(m.name); results.appendChild(li); });
+                        (d.errors||[]).forEach(e => { const li=document.createElement('li'); li.style.color='var(--danger)'; li.innerHTML='⚠️ '+esc(e.filename)+' — '+esc(e.error); results.appendChild(li); });
+                        if (d.created) setTimeout(() => location.reload(), 1200);
+                    };
+                    xhr.onerror = () => { btn.disabled = false; status.textContent = 'Upload failed.'; };
+                    xhr.send(fd);
+                });
+            })();
+            </script>
+        </form>
+    </details>
 </section>
 
 <!-- ── Encounter background (campaign default) ── -->

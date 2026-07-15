@@ -899,8 +899,8 @@ Shipped end-to-end — see [`TODONE.md`](TODONE.md) → Combat. Creature picker 
 
 ## Maps & Map Editor
 
-### Bulk Map Upload
-Allow GMs and admins to upload multiple map images at once (e.g. a zip or multi-file picker) rather than one at a time. Should probably show a progress indicator and let the user assign names/grid settings to each before committing.
+### Bulk Map Upload — ✅ DONE (v2.1024.0 "The Cartographer's Haul")
+`POST /campaign/{cid}/settings/maps/bulk` + the "➕ Bulk upload maps" panel in campaign settings let a GM pick several images at once → a Map per file (name derived from the filename), all sharing the chosen grid settings, with an XHR progress bar + per-file ✅/⚠️ result list; bad files are skipped (recorded in `errors`) not fatal. Harness: `test_bulk_map_upload.py` (4). *Possible follow-up:* per-file name/grid override before committing (currently one shared grid + filename-derived names).
 
 ### Map Generator
 Procedural in-browser map generation — produce a playable battle map without any external upload. Minimum viable output: a dungeon room layout (walls, corridors, door placements) rendered to a canvas the GM can place tokens on immediately. Stretch goals: biome presets (dungeon, wilderness, tavern interior), adjustable density/size parameters, and one-click export as a PNG that feeds into the existing map upload flow.

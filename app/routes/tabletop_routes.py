@@ -126366,6 +126366,124 @@ async def settings_upload_map(
     return RedirectResponse(f"/campaign/{campaign_id}/settings#maps", status_code=303)
 
 
+def _map_name_from_filename(filename: str) -> str:
+    """v2.1024.0 — derive a readable map name from an uploaded file name:
+    drop the extension, turn ``-``/``_`` into spaces, collapse whitespace,
+    Title Case, cap at 120 chars. ``"goblin-cave_01.png"`` → ``"Goblin
+    Cave 01"``. Falls back to ``"Map"`` on an empty/odd name."""
+    import os as _os
+    stem = _os.path.splitext(filename or "")[0]
+    cleaned = " ".join(str(stem).replace("-", " ").replace("_", " ").split())
+    cleaned = cleaned.strip()[:120]
+    if not cleaned:
+        return "Map"
+    # Title-case but keep all-caps tokens (e.g. "B2") sensible.
+    return " ".join(w[:1].upper() + w[1:] if w and w[0].islower() else w
+                    for w in cleaned.split())
+
+
+@router.post("/campaign/{campaign_id}/settings/maps/bulk")
+async def settings_bulk_upload_maps(
+    campaign_id: int,
+    grid_type: str = Form("square"),
+    grid_size_px: int = Form(70),
+    show_grid: bool = Form(False),
+    tags: str = Form(""),
+    folder: str = Form(""),
+    images: list[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.1024.0 — Bulk map upload. Accepts multiple image files in one
+    request and creates a ``Map`` per file, each named from its filename,
+    with the shared grid settings (type / size / show-grid / tags /
+    folder) applied to all. Returns a JSON summary the settings UI renders
+    as a per-file result + progress. GM-only. Skips files with an
+    unsupported type / over-size / that trip the storage quota, recording
+    them in ``errors`` rather than failing the whole batch."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    files = [f for f in (images or []) if f and f.filename]
+    if not files:
+        raise HTTPException(400, "No image files provided")
+
+    try:
+        gt = GridType(grid_type)
+    except ValueError:
+        gt = GridType.SQUARE
+    _gsz = max(20, min(int(grid_size_px), 300))
+    _tags = _parse_tags(tags)
+    _folder = folder.strip()[:120]
+
+    from ..storage_quota import check_quota
+    from ..upload_safety import safe_ext, IMAGE_VIDEO_EXTS
+    _MAP_DIR.mkdir(parents=True, exist_ok=True)
+
+    created: list[dict] = []
+    errors: list[dict] = []
+    for f in files:
+        try:
+            if f.content_type not in _ALLOWED_IMG:
+                errors.append({"filename": f.filename, "error": "unsupported type"})
+                continue
+            data = await f.read()
+            if len(data) > 80 * 1024 * 1024:
+                errors.append({"filename": f.filename, "error": "too large (>80 MB)"})
+                continue
+            _q = check_quota(db, campaign_id, len(data))
+            if _q:
+                errors.append({"filename": f.filename, "error": "storage quota exceeded"})
+                continue
+            ext = safe_ext(f.filename, IMAGE_VIDEO_EXTS, message="Unsupported image type")
+            stem = uuid.uuid4().hex
+            (_MAP_DIR / f"{stem}{ext}").write_bytes(data)
+            image_url = f"/static/uploads/maps/{stem}{ext}"
+            width_px, height_px = 2000, 1500
+            if f.content_type and f.content_type.startswith("image/"):
+                try:
+                    import io as _io
+                    from PIL import Image as _PILImage
+                    with _PILImage.open(_io.BytesIO(data)) as _img:
+                        width_px, height_px = _img.size
+                except Exception:
+                    pass
+            thumbnail_url = _make_map_thumbnail(data, f.content_type or "", _MAP_DIR, stem)
+            m = Map(
+                campaign_id=campaign_id,
+                name=_map_name_from_filename(f.filename),
+                image_url=image_url,
+                thumbnail_url=thumbnail_url,
+                grid_type=gt,
+                grid_size_px=_gsz,
+                width_px=max(200, min(int(width_px), 8000)),
+                height_px=max(200, min(int(height_px), 8000)),
+                tags=list(_tags),
+                folder=_folder,
+                show_grid=show_grid,
+            )
+            db.add(m)
+            db.commit()
+            db.refresh(m)
+            if not campaign.active_map_id:
+                campaign.active_map_id = m.id
+                db.commit()
+            created.append({"id": m.id, "name": m.name})
+        except HTTPException as e:
+            errors.append({"filename": f.filename, "error": str(e.detail)})
+        except Exception as e:  # noqa: BLE001
+            logging.exception("bulk map upload failed for %s", f.filename)
+            errors.append({"filename": f.filename, "error": "upload failed"})
+
+    return {
+        "ok": True,
+        "created": len(created),
+        "skipped": len(errors),
+        "maps": created,
+        "errors": errors,
+    }
+
+
 @router.post("/campaign/{campaign_id}/settings/maps/{map_id}/rename")
 async def settings_rename_map(
     campaign_id: int,

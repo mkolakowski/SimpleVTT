@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1024.0] - 2026-07-15 — "The Cartographer's Haul"
+
+**Schema version:** 103
+
+**Commit summary:** Bulk map upload — GMs can upload multiple map images at once; each becomes a Map named from its filename, all sharing the chosen grid settings, with a live progress bar + per-file result.
+
+**Description:** New feature (Maps TODO). `POST /campaign/{cid}/settings/maps/bulk` accepts a `list[UploadFile]` of images in one request and creates a `Map` per file — each named from its filename (`goblin-cave_01.png` → "Goblin Cave 01" via `_map_name_from_filename`) — with the shared grid settings (type / size / show-grid / tags / folder) applied to all. Each file runs the same validation + storage-quota + PIL-dimension + thumbnail path as the single upload, but a bad file (unsupported type, over-size, quota) is **skipped and recorded in `errors`** rather than failing the whole batch. Returns a JSON summary (`created` / `skipped` / `maps` / `errors`) the settings UI renders as a progress bar (XHR upload progress) + a per-file ✅/⚠️ result list, then reloads to show the new maps. GM-only. A new "➕ Bulk upload maps" panel sits beside the single-map form in campaign settings (multi-file picker + the shared grid fields). No schema change.
+
+### Added
+- `app/routes/tabletop_routes.py` — `POST /campaign/{cid}/settings/maps/bulk` + `_map_name_from_filename` helper.
+- `app/templates/campaign_settings.html` — the "Bulk upload maps" `<details>` panel (multi-file input, shared grid settings, XHR progress + per-file results).
+- `tests/harness/test_bulk_map_upload.py` (new, +4) — 3 PNGs → 3 maps with filename-derived names; a mixed batch skips the bad file (created 1 / skipped 1); player → 403; no files → 400/422.
+
+### Changed
+- `docs/test-harness-coverage.md` — new `test_bulk_map_upload.py` section; total bumped 4803 → 4807.
+
 ## [2.1023.0] - 2026-07-15 — "The Pinned Page"
 
 **Schema version:** 103
