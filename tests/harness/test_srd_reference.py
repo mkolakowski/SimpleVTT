@@ -80,6 +80,38 @@ async def test_reference_search_spell_fireball():
     assert fb["desc"]
 
 
+async def test_reference_search_is_full_text():
+    """v2.1022.0 Phase 2a — the query matches description text, not just
+    names. "prone" appears in the Prone condition's name AND in many
+    spell/condition descriptions; a full-text search returns entries
+    whose NAME doesn't contain "prone" but whose DESC does (name_match
+    False), proving description matching works."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        r = await client.get(
+            "/api/reference/search", params={"type": "all", "q": "prone"})
+    assert r.status_code == 200, r.text
+    results = r.json()["results"]
+    assert results, "expected full-text matches for 'prone'"
+    # At least one desc-only match (name doesn't contain the needle).
+    desc_only = [x for x in results
+                 if not x["name_match"] and "prone" not in x["name"].lower()]
+    assert desc_only, (
+        "full-text search should surface entries matching only in the "
+        "description"
+    )
+    # Every result genuinely contains the needle in name or desc.
+    for x in results:
+        assert ("prone" in x["name"].lower()) or ("prone" in x["desc"].lower())
+    # Name matches rank ahead of description-only matches.
+    first_desc_only = next(
+        (i for i, x in enumerate(results) if not x["name_match"]), None)
+    last_name_match = max(
+        (i for i, x in enumerate(results) if x["name_match"]), default=-1)
+    if first_desc_only is not None and last_name_match >= 0:
+        assert last_name_match < first_desc_only, (
+            "name matches should sort before description-only matches")
+
+
 async def test_reference_search_excludes_monsters():
     """Monsters are GM-visibility data — never a valid reference type."""
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:

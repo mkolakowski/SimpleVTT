@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1022.0] - 2026-07-15 — "The Deeper Index"
+
+**Schema version:** 103
+
+**Commit summary:** SRD Reference Phase 2a — the `/reference` search is now full-text (matches rules descriptions, not just names), with name matches ranked first.
+
+**Description:** Builds on v2.1020.0's in-app SRD reference. `GET /api/reference/search` now matches the query against each record's **description** as well as its name, so "difficult terrain" surfaces the spells that create it and "can't see" finds Blinded / Invisibility — not just entries whose title contains the words. It pulls the whole type per query (empty name-filter) and full-text-filters in the endpoint against the shipped SRD tier only. Results rank **name matches first**, then by the reference's type order, then name; each record now carries a `name_match` boolean so the client (and tests) can tell the two tiers apart. The page's search placeholder updates to reflect that names *or* rules text are searched. No schema change.
+
+### Changed
+- `app/routes/wiki_routes.py` — `srd_reference_search` full-text matches name OR desc; ranks name matches first; adds `name_match` to each result.
+- `app/templates/reference.html` — search placeholder reflects full-text.
+- `tests/harness/test_srd_reference.py` (+1) — `test_reference_search_is_full_text`: "prone" returns description-only matches (name doesn't contain it), every result genuinely contains the needle, and name matches sort ahead of description-only matches.
+- `docs/test-harness-coverage.md` — total bumped 4796 → 4797.
+
 ## [2.1021.0] - 2026-07-14 — "The Charred Page"
 
 **Schema version:** 103

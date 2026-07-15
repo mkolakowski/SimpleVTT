@@ -237,36 +237,53 @@ def srd_reference_page(request: Request):
 @router.get("/api/reference/search")
 def srd_reference_search(type: str = "all", q: str = ""):
     """v2.1020.0 — search the shipped SRD content of one player-safe type
-    (or ``all``) by name, returning full description text for the in-app
-    rules reference. Reads only the shipped SRD tier (``campaign_id=None``
-    + ``_source == 'local-srd'``) — offline + SRD-only, no homebrew, no
-    monsters. Returns up to 60 ``{slug, name, type, type_label, desc,
-    source}`` records sorted by type then name."""
+    (or ``all``) for the in-app rules reference. Reads only the shipped
+    SRD tier (``campaign_id=None`` + ``_source == 'local-srd'``) — offline
+    + SRD-only, no homebrew, no monsters.
+
+    v2.1022.0 (Phase 2a) — **full-text**: the query matches the record's
+    name OR its description (not just the name), so "you can't see" finds
+    Blinded/Invisibility and "difficult terrain" finds the relevant
+    spells. Name matches rank above description-only matches; then by
+    type (in the reference's declared order) then name. Returns up to 60
+    ``{slug, name, type, type_label, desc, source, name_match}`` records."""
     type = (type or "all").strip().lower()
     q = (q or "").strip()
     if type != "all" and type not in _REFERENCE_TYPE_SLUGS:
         raise HTTPException(404, f"Unknown reference type: {type!r}")
     types = [type] if type != "all" else [t for t, _ in _REFERENCE_TYPES]
+    needle = q.lower()
     results: list[dict] = []
     for typ in types:
+        # Pull the whole type (empty query → no name filter) so the
+        # full-text pass below can match descriptions too.
         recs, _ = local_content.search(
-            q, type=typ, campaign_id=None, limit=200,
+            "", type=typ, campaign_id=None, limit=5000,
         )
         for r in recs:
             if r.get("_source") != "local-srd":
                 continue
+            name = (r.get("name") or r.get("slug") or "")
+            desc = (r.get("desc") or "").strip()
+            name_match = needle in name.lower()
+            if needle and not name_match and needle not in desc.lower():
+                continue
             results.append({
                 "slug": r.get("slug"),
-                "name": r.get("name") or r.get("slug"),
+                "name": name,
                 "type": typ,
                 "type_label": _REFERENCE_LABELS.get(typ, typ.title()),
-                "desc": (r.get("desc") or "").strip(),
+                "desc": desc,
                 "source": r.get("_source"),
+                "name_match": name_match,
             })
-    # Stable order: type (in the reference's declared order) then name.
+    # Rank: name matches first, then type (declared order), then name.
     _type_order = {t: i for i, (t, _) in enumerate(_REFERENCE_TYPES)}
-    results.sort(key=lambda x: (_type_order.get(x["type"], 99),
-                                (x["name"] or "").lower()))
+    results.sort(key=lambda x: (
+        0 if x["name_match"] else 1,
+        _type_order.get(x["type"], 99),
+        (x["name"] or "").lower(),
+    ))
     return {"results": results[:60], "total": len(results)}
 
 
