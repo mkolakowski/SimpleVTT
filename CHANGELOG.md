@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1028.0] - 2026-07-17 — "The Witness Stand"
+
+**Schema version:** 103
+
+**Commit summary:** Harness coverage for the v2.1027.0 clickable ⚠ Conditions pill — asserts the rendered pill carries the SRD-popover wiring.
+
+**Description:** Locks in the v2.1027.0 "The Table Ruling" encounter-panel change with a harness test. `test_poisoned_pill_is_clickable_srd_reference_link` seeds Pip with a Poisoned buff, renders the tabletop, isolates the pill's own `<span>` tag, and asserts it carries `role="button"` + `data-cond-slugs="poisoned"` — the attributes the delegated tabletop.js handler reads to open the offline SRD-rule popover. A follow-up to v2.1027.0 (its `.mini-ab-cond-warn` render change landed one commit earlier); no code or schema change.
+
+### Added
+- `tests/harness/test_mini_sheet_cond_warn.py` (+1) — `test_poisoned_pill_is_clickable_srd_reference_link`: the rendered pill carries `role="button"` + `data-cond-slugs="poisoned"`.
+
+### Changed
+- `docs/test-harness-coverage.md` — `test_mini_sheet_cond_warn.py` line updated; total bumped 4811 → 4812.
+
 ## [2.1027.0] - 2026-07-17 — "The Table Ruling"
 
 **Schema version:** 103

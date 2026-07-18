@@ -71,6 +71,39 @@ async def test_poisoned_pc_mini_sheet_shows_warning_pill(
     )
 
 
+async def test_poisoned_pill_is_clickable_srd_reference_link(
+    gm_client, roster,
+):
+    """v2.1027.0 (SRD Reference Phase 3) — the ⚠ Conditions pill is a
+    button that opens the SRD-rule popover. The server-rendered pill
+    carries ``role="button"`` and ``data-cond-slugs`` listing the active
+    condition slugs (here: ``poisoned``) so the delegated tabletop.js
+    handler can fetch each one's rule text from GET /api/reference/entry.
+    """
+    pip = roster["Pip Quickfingers"]
+    pip_cid = f"tok_{pip['id']}"
+    await _seed_battle(gm_client, [
+        {"id": pip_cid, "char_id": pip["id"], "name": pip["name"],
+         "initiative": 10, "hp_current": 24, "hp_max": 24,
+         "buffs": [{"key": "poisoned", "name": "Poisoned"}],
+         "economy": {"action": False, "bonus": False,
+                     "reaction": False, "movement": 0}},
+    ])
+    resp = await gm_client.get(f"/campaign/{CAMPAIGN_ID}")
+    assert resp.status_code == 200, resp.text
+    pip_html = _find_char_detail(resp.text, pip["name"])
+    # Isolate the pill's own tag so the assertions can't match unrelated
+    # markup elsewhere in the mini-sheet slice.
+    pidx = pip_html.find("mini-ab-cond-warn")
+    assert pidx >= 0
+    tag_start = pip_html.rfind("<span", 0, pidx)
+    tag_end = pip_html.find(">", pidx)
+    pill_tag = pip_html[tag_start:tag_end + 1]
+    assert 'role="button"' in pill_tag, "pill should be a button"
+    assert 'data-cond-slugs="poisoned"' in pill_tag, (
+        "pill should carry the active condition slugs for the SRD popover")
+
+
 async def test_charmed_pc_mini_sheet_shows_charmer_block_warning(
     gm_client, roster,
 ):
