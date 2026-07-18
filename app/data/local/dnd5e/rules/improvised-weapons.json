@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "improvised-weapons",
+  "name": "Improvised Weapons",
+  "category": "Objects",
+  "desc": "An improvised weapon is any object a creature wields in combat that isn't designed for the purpose — a broken bottle, a table leg, a frying pan. Often an improvised weapon resembles an actual weapon closely enough that the GM treats it as that weapon and uses its damage. Otherwise it deals 1d4 damage of a type appropriate to the object, and a creature proficient with a similar weapon may add its proficiency bonus. An improvised weapon thrown at a target has a normal range of 20 feet and a long range of 60 feet.",
+  "actions": []
+}

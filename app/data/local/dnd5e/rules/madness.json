@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "madness",
+  "name": "Madness",
+  "category": "Adventuring",
+  "desc": "Extreme circumstances — the psychic assault of an aberration, a demonic curse, the raw truth of an elder evil — can strain a character's sanity beyond ordinary fear. A creature that succumbs makes a Wisdom or Charisma saving throw as set by the GM; on a failure it is afflicted with madness for a duration the effect specifies. Short-term madness lasts 1d10 minutes, long-term madness lasts 1d10 × 10 hours, and indefinite madness persists as a new flaw until cured. Effects range from being stunned or frightened to compulsive behaviours, hallucinations, and shifts in personality. A calm emotions spell suppresses madness; lesser restoration ends short-term or long-term madness, and greater restoration or a remove curse or dispel evil effect can lift indefinite madness depending on its source.",
+  "actions": []
+}

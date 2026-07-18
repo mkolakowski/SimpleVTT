@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "ranged-attacks-in-close-combat",
+  "name": "Ranged Attacks in Close Combat",
+  "category": "Combat",
+  "desc": "Aiming a ranged attack is harder when a foe is right next to you. A creature has disadvantage on a ranged attack roll when a hostile creature is within 5 feet of it, can see it, and isn't incapacitated. A ranged attack made at a target beyond the weapon or spell's normal range also has disadvantage, and the attack automatically misses beyond long range. A target that a creature can't see is harder to hit for the same reason: attacks against an unseen target have disadvantage even when the attacker guesses the correct square.",
+  "actions": []
+}

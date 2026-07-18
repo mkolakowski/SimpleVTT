@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "mounted-combat",
+  "name": "Mounted Combat",
+  "category": "Combat",
+  "desc": "A willing creature at least one size larger than the rider and with an appropriate anatomy can serve as a mount. Mounting or dismounting costs half the rider's movement for the turn — so a creature with 30 feet of speed can mount, move 15 feet, and dismount only if it has movement left. If the mount is moved against the rider's will, the rider makes a DC 10 Dexterity saving throw or falls prone in an unoccupied space within 5 feet. The same save applies if the rider is knocked prone while mounted. A mount that is knocked prone lets the rider dismount and land on their feet, otherwise the rider is dismounted and falls prone. A controlled mount acts on the rider's initiative and can only Dash, Disengage, or Dodge; an independent mount keeps its own initiative and acts freely. While mounted, the rider has advantage on melee attack rolls against unmounted creatures at least one size smaller. An attacker can target the mount instead of the rider.",
+  "actions": []
+}

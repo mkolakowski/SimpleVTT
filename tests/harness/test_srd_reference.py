@@ -225,6 +225,44 @@ async def test_reference_rules_adventuring_environment_batch():
     assert "1d6" in falling["desc"], "Falling rule should cite 1d6 per 10 feet"
 
 
+async def test_reference_rules_objects_and_situational_batch():
+    """v2.1031.0 Phase 3 — the third rules batch closes the sections the
+    plan filed as remaining: Objects & interaction, underwater combat,
+    mounted combat, and madness. Underwater Combat is findable by name,
+    and the Objects rule resolves via the single-entry lookup with its
+    material-AC table text."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        s = await client.get(
+            "/api/reference/search",
+            params={"type": "rules", "q": "underwater"})
+        e = await client.get(
+            "/api/reference/entry", params={"type": "rules", "slug": "objects"})
+    assert s.status_code == 200, s.text
+    underwater = next(
+        (r for r in s.json()["results"] if r["slug"] == "underwater-combat"),
+        None)
+    assert underwater is not None, "Underwater Combat rule not found"
+    assert underwater["type_label"] == "Rule"
+    assert e.status_code == 200, e.text
+    objects = e.json()
+    assert objects["slug"] == "objects"
+    assert objects["type"] == "rules"
+    # The material-AC table is the mechanical payload GMs look this up for.
+    assert "AC 15" in objects["desc"], "Objects rule should cite material ACs"
+
+
+async def test_reference_rules_full_text_finds_madness():
+    """The Phase 2a full-text path reaches the new batch too: searching a
+    phrase that appears only in Madness's body (not its name) returns it."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        r = await client.get(
+            "/api/reference/search",
+            params={"type": "rules", "q": "indefinite madness"})
+    assert r.status_code == 200, r.text
+    slugs = {x["slug"] for x in r.json()["results"]}
+    assert "madness" in slugs, f"full-text miss for Madness: {slugs}"
+
+
 async def test_reference_entry_excludes_monsters():
     """Monsters are GM-visibility data — never a valid reference type,
     same perimeter as the search endpoint."""

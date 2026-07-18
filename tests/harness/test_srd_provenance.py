@@ -50,7 +50,9 @@ _FLOORS = {
     "subclass_features": 13,
     "feats": 1,
     "backgrounds": 1,
-    "rules": 26,  # v2.1029.0 combat (16) + v2.1030.0 adventuring/environment (10).
+    # v2.1029.0 combat (16) + v2.1030.0 adventuring/environment (10)
+    # + v2.1031.0 objects/underwater/mounted/madness (8).
+    "rules": 34,
 }
 
 

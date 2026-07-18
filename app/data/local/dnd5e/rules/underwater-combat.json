@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "underwater-combat",
+  "name": "Underwater Combat",
+  "category": "Environment",
+  "desc": "Fighting underwater changes how weapons behave. A creature without a swimming speed has disadvantage on melee weapon attack rolls unless the weapon is a dagger, javelin, shortsword, spear, or trident. A ranged weapon attack automatically misses a target beyond the weapon's normal range, and even within normal range the attack has disadvantage — unless the weapon is a crossbow, a net, or a thrown javelin, spear, trident, or dart. Creatures and objects that are fully immersed in water have resistance to fire damage.",
+  "actions": []
+}

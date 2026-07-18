@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "objects",
+  "name": "Objects and Breaking Them",
+  "category": "Objects",
+  "desc": "When characters attack an inanimate object, the GM assigns it an Armor Class and hit points, or simply decides the attack automatically succeeds. AC reflects the material (cloth or paper AC 11, wood or bone AC 15, stone AC 17, iron or steel AC 19, adamantine AC 23); hit points reflect size and sturdiness, with a Large object typically having more than a Tiny one. Objects are immune to poison and psychic damage, and the GM may rule that a given object has resistance or immunity to other damage types — bludgeoning damage does little to a rope, for instance. Huge and Gargantuan objects are usually broken section by section rather than tracked with a single hit point total, each 5-foot-square section having its own pool. An object reduced to 0 hit points is destroyed. Rather than tracking hit points, the GM can set a DC for a Strength check to break an object in a single effort.",
+  "actions": []
+}

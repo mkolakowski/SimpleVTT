@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "interacting-with-objects",
+  "name": "Interacting with Objects",
+  "category": "Objects",
+  "desc": "A creature can interact with one object or feature of the environment for free during its move or action — drawing a sword, opening an unlocked door, handing an item to another creature, or pulling a lever. Interacting with a second object in the same turn requires the Use an Object action. Some objects always take an action to use, as noted in their description. When a character tries to do something with an object that the rules don't cover, the GM decides whether it is possible and whether a check is required.",
+  "actions": []
+}

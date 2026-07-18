@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1031.0] - 2026-07-18 — "The Salvager's Ledger"
+
+**Schema version:** 103
+
+**Commit summary:** SRD Reference Phase 3 — third `rules` batch: 8 Objects/interaction, underwater-combat, mounted-combat, and madness rules, closing the sections the plan filed as remaining.
+
+**Description:** Completes the `rules` reference type's SRD 5.1 section list. Adds the **Objects** category (Interacting with Objects, Objects and Breaking Them with the material-AC table, Improvised Weapons), the situational **Combat** rules that weren't in the v2.1029.0 batch (Mounted Combat, Ranged Attacks in Close Combat, Two-Weapon Fighting), and the remaining **Environment**/**Adventuring** entries (Underwater Combat, Madness). Each is a rephrased SRD 5.1 summary (CC BY 4.0, `source: "srd"` / `scope: "global"` / SRD `_attribution`) in the shipped tier under `app/data/local/dnd5e/rules/`, bringing the batch to 34 rules. Like the prior two batches they ride the existing reference plumbing (page filter, search, entry, pin-to-table) with **no code change beyond the content** — `category` is a data-only field the UI does not yet group on, so the new `Objects` value is additive. Additive; no schema change.
+
+### Added
+- `app/data/local/dnd5e/rules/` (+8 files) — interacting-with-objects, objects, improvised-weapons, underwater-combat, mounted-combat, ranged-attacks-in-close-combat, two-weapon-fighting, madness.
+- `tests/harness/test_srd_reference.py` (+2) — `test_reference_rules_objects_and_situational_batch`: Underwater Combat findable by name, the Objects entry resolves with its material-AC text. `test_reference_rules_full_text_finds_madness`: the Phase 2a full-text path reaches the new batch (a body-only phrase returns Madness).
+
+### Changed
+- `tests/harness/test_srd_provenance.py` — `_FLOORS["rules"]` bumped 26 → 34.
+- `docs/test-harness-coverage.md` — total bumped 4815 → 4817.
+- `TODO.md` — Rules Reference Phase 3: the filed "remaining rules batches" (Objects & interaction, underwater, mounted, madness) are now shipped.
+
+---
+
 ## [2.1030.0] - 2026-07-18 — "The Wanderer's Almanac"
 
 **Schema version:** 103
