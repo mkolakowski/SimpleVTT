@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1026.0] - 2026-07-17 — "The Severed Cord"
+
+**Schema version:** 103
+
+**Commit summary:** SRD Reference Phase 3 (first consumer) — the character sheet's condition-chip popover now reads its rule text from the offline SRD reference tier instead of the network-capable `/api/open5e/conditions` proxy.
+
+**Description:** Wires the first consumer of v2.1025.0's single-entry endpoint. Clicking a condition chip on the character sheet has always opened an inline description popover; it sourced that text from `/api/open5e/conditions`, which falls back to `api.open5e.com` when the local Open5e mirror isn't ready — a runtime network dependency. The popover now fetches only the clicked condition from `GET /api/reference/entry?type=conditions&slug=<slug>` (shipped SRD tier, offline, per-condition lazy fetch + cache), so the sheet shows the same rephrased SRD 5.1 text as `/reference` and never reaches the network. All 15 sheet conditions resolve in the shipped SRD tier (verified). Client-side only — no endpoint or schema change.
+
+### Changed
+- `app/static/sheet.js` — condition-chip popover fetches per-slug from `/api/reference/entry` (offline SRD tier) + caches, replacing the bulk `/api/open5e/conditions` load.
+
 ## [2.1025.0] - 2026-07-17 — "The Marginal Gloss"
 
 **Schema version:** 103

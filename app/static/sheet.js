@@ -1537,19 +1537,23 @@
     let active = new Set();
     try { active = new Set(JSON.parse(condInput.value || '[]')); } catch {}
 
-    // Lazy-loaded description cache: slug → desc string
+    // Lazy per-condition description cache: slug → desc string.
+    // v2.1026.0 (SRD Reference Phase 3): source the popover text from the
+    // offline SRD reference tier (GET /api/reference/entry) — shipped SRD
+    // content, never the network — instead of the old /api/open5e/conditions
+    // proxy which could fall back to api.open5e.com. Fetch only the clicked
+    // condition and cache it.
     const descCache = {};
-    let descsLoaded = false;
-    async function loadDescs() {
-        if (descsLoaded) return;
-        descsLoaded = true; // set early to prevent parallel fetches
+    async function fetchDesc(slug) {
+        if (slug in descCache) return descCache[slug];
+        let desc = '';
         try {
-            const r = await fetch('/api/open5e/conditions');
-            if (r.ok) {
-                const data = await r.json();
-                (data.results || []).forEach(c => { descCache[c.slug] = c.desc || ''; });
-            }
+            const r = await fetch('/api/reference/entry?type=conditions&slug='
+                                  + encodeURIComponent(slug));
+            if (r.ok) desc = (await r.json()).desc || '';
         } catch {}
+        descCache[slug] = desc;
+        return desc;
     }
 
     function syncInput() {
@@ -1583,13 +1587,12 @@
             }
 
             // Toggle description popover
-            await loadDescs();
             if (descBox) {
                 if (openSlug === slug && descBox.style.display !== 'none') {
                     descBox.style.display = 'none';
                     openSlug = null;
                 } else {
-                    const desc = descCache[slug] || '';
+                    const desc = await fetchDesc(slug);
                     descBox.innerHTML = desc
                         ? `<strong style="color:#dde2f0;">${btn.textContent.trim()}</strong><br><br>${desc}`
                         : '<em style="color:#7a8ab0;">No description available.</em>';
