@@ -291,6 +291,46 @@ def srd_reference_search(type: str = "all", q: str = ""):
     return {"results": results[:60], "total": len(results)}
 
 
+@router.get("/api/reference/entry")
+def srd_reference_entry(type: str, slug: str):
+    """v2.1025.0 (Phase 3) — fetch a SINGLE shipped-SRD reference entry by
+    ``type`` + ``slug``. This is the substrate for inline "click a
+    condition → read its rule" popovers across the character sheet,
+    encounter panel, and mini-sheet: a contextual link can pull one rule's
+    full text without navigating away to ``/reference`` or reaching the
+    network.
+
+    Same perimeter as ``/api/reference/search``: offline + SRD-only
+    (shipped tier, ``_source == 'local-srd'``), the six player-safe types
+    only (no homebrew, no monsters). 404 if the type is unknown, the slug
+    is blank, or no shipped-SRD record with that slug exists.
+
+    Returns a single ``{slug, name, type, type_label, desc, source}``
+    record — the same shape as one ``/api/reference/search`` result — so
+    consumers can reuse the search-card rendering."""
+    typ = (type or "").strip().lower()
+    want = (slug or "").strip().lower()
+    if typ not in _REFERENCE_TYPE_SLUGS:
+        raise HTTPException(404, f"Unknown reference type: {type!r}")
+    if not want:
+        raise HTTPException(404, "Missing slug")
+    recs, _ = local_content.search("", type=typ, campaign_id=None, limit=5000)
+    for r in recs:
+        if r.get("_source") != "local-srd":
+            continue
+        if (r.get("slug") or "").strip().lower() != want:
+            continue
+        return {
+            "slug": r.get("slug"),
+            "name": r.get("name") or r.get("slug") or "",
+            "type": typ,
+            "type_label": _REFERENCE_LABELS.get(typ, typ.title()),
+            "desc": (r.get("desc") or "").strip(),
+            "source": r.get("_source"),
+        }
+    raise HTTPException(404, f"No SRD {typ} entry: {slug!r}")
+
+
 @router.get("/wiki/doc/{slug}", response_class=HTMLResponse)
 def wiki_doc(slug: str, request: Request):
     """v2.49.9: serve a plan / reference / repo-root markdown doc

@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1025.0] - 2026-07-17 — "The Marginal Gloss"
+
+**Schema version:** 103
+
+**Commit summary:** SRD Reference Phase 3 (substrate) — a single-entry lookup endpoint that returns one shipped-SRD rule by type + slug, for inline "click a condition → read its rule" popovers.
+
+**Description:** Lays the substrate for Phase 3's contextual rule links. `GET /api/reference/entry?type=&slug=` returns a **single** shipped-SRD record (`{slug, name, type, type_label, desc, source}` — the same shape as one `/api/reference/search` result), so a future contextual link on the character sheet, encounter panel, or mini-sheet can pull one rule's full text without navigating away to `/reference` and without reaching the network. It shares the search endpoint's perimeter exactly: offline + SRD-only (shipped tier, `_source == 'local-srd'`), the six player-safe types only (conditions, spells, equipment, feats, races, backgrounds) — no homebrew, no monsters. 404 on an unknown type, a blank slug, a monster type, or a slug with no shipped-SRD record. This ships the reusable read surface; the per-consumer wiring (repointing the sheet's condition-chip popover off the network-capable `/api/open5e/conditions` proxy onto this offline SRD tier) follows in a later commit. No schema change.
+
+### Added
+- `app/routes/wiki_routes.py` — `GET /api/reference/entry` (single shipped-SRD record by type + slug; same SRD-only perimeter as `/api/reference/search`).
+- `tests/harness/test_srd_reference.py` (+4) — entry lookup returns one record with desc text; unknown slug → 404; unknown type → 404; monster type → 404 (GM-visibility perimeter).
+
+### Changed
+- `docs/test-harness-coverage.md` — `test_srd_reference.py` section updated; total bumped 4807 → 4811.
+- `TODO.md` — Rules Reference: Phase 3 marked in-progress (substrate shipped).
+
 ## [2.1024.0] - 2026-07-15 — "The Cartographer's Haul"
 
 **Schema version:** 103

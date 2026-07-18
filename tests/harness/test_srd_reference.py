@@ -8,6 +8,8 @@ the page + API are public (like the wiki).
   - GET /reference — the HTML page (search box + type filter).
   - GET /api/reference/search?type=&q= — JSON: full-text records from the
     shipped SRD tier only (no homebrew, no monsters).
+  - GET /api/reference/entry?type=&slug= — JSON: a SINGLE shipped-SRD
+    record (Phase 3 substrate for inline contextual rule popovers).
 
 Tests:
   - Page renders with the search UI + nav.
@@ -17,6 +19,9 @@ Tests:
   - Spell search (Fireball) returns the spell with a description.
   - Monsters are NOT searchable (GM-visibility data excluded).
   - Unknown type → 404.
+  - Entry lookup (conditions/blinded) returns one record with desc text.
+  - Entry lookup rejects an unknown slug (404), an unknown type (404),
+    and a monster type (404 — GM-visibility perimeter).
 """
 import httpx
 
@@ -124,4 +129,53 @@ async def test_reference_search_unknown_type():
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
         r = await client.get(
             "/api/reference/search", params={"type": "bogus"})
+    assert r.status_code == 404, r.text
+
+
+async def test_reference_entry_returns_single_record():
+    """v2.1025.0 Phase 3 — single-entry lookup returns one shipped-SRD
+    record by type + slug, shaped like a search result so consumers can
+    reuse the search-card rendering."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        r = await client.get(
+            "/api/reference/entry",
+            params={"type": "conditions", "slug": "blinded"},
+        )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    for key in ("slug", "name", "type", "type_label", "desc", "source"):
+        assert key in data
+    assert data["slug"] == "blinded"
+    assert data["type"] == "conditions"
+    assert data["type_label"] == "Condition"
+    assert data["source"] == "local-srd"
+    assert data["desc"], "Blinded should carry SRD rule text"
+
+
+async def test_reference_entry_unknown_slug():
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        r = await client.get(
+            "/api/reference/entry",
+            params={"type": "conditions", "slug": "no-such-condition"},
+        )
+    assert r.status_code == 404, r.text
+
+
+async def test_reference_entry_unknown_type():
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        r = await client.get(
+            "/api/reference/entry",
+            params={"type": "bogus", "slug": "blinded"},
+        )
+    assert r.status_code == 404, r.text
+
+
+async def test_reference_entry_excludes_monsters():
+    """Monsters are GM-visibility data — never a valid reference type,
+    same perimeter as the search endpoint."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        r = await client.get(
+            "/api/reference/entry",
+            params={"type": "monsters", "slug": "goblin"},
+        )
     assert r.status_code == 404, r.text
