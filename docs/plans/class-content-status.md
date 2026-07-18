@@ -963,8 +963,14 @@ Master), Lay on Hands (Paladin), Cleansing Touch, Stroke of Luck.
   Metamagic application) — counter exists, picker doesn't.
 - Superiority Dice spend picker (Battle Master maneuvers) — counter
   exists, picker doesn't.
-- Bardic Inspiration recipient-side picker (currently the bard's
-  picker is wired but the recipient's "spend a die" timing isn't).
+- ~~Bardic Inspiration recipient-side picker~~ — ✅ **shipped
+  v2.97.56–v2.97.57** (reconciled 2026-07-18, closes B13). The
+  `/apply_bardic_inspiration_die` endpoint validates the die buff on
+  the recipient, decrements it, and broadcasts `die_consumed`; the
+  recipient gets a "Tap the verse" banner with a one-click apply.
+  RAW pre-d20 declaration is deliberately not enforced — the spell
+  lets the recipient decide after seeing the roll. The only tail
+  still filed is the 60-ft recipient range check.
 
 ### B. Roll-time intercepts — 🟢 PARTIAL (save-roll hooks ✅; attack-roll path partly closed via Reactions framework v2.67.0+)
 
@@ -2918,13 +2924,27 @@ already shipped.
 ## Feat plans (⚪ → 🟠)
 
 Only one SRD feat ships (Grappler); homebrew feats live alongside.
-Mechanical feat effects are uniformly ⚪ today. Each filed feat needs:
+
+**Reconciled 2026-07-18 (closes B12).** Mechanical feat effects are
+**no longer uniformly ⚪** — the Reactions framework (v2.66.x–v2.83.0)
+wired six feats, each via a per-feat `sheet["feats"]` slug/name scan:
+**Lucky** ✅ (v2.77.0 — 3-charge resource, pre-d20 reroll on the
+`attack_targeted` trigger), **Defensive Duelist** ✅ (v2.74.0),
+**War Caster** ✅ (v2.76.0 + v2.83.0 — spell OA + advantage on
+concentration saves), **Mage Slayer** ✅ (v2.75.0), **Sentinel** 🟢
+(v2.66.5–v2.66.6, effect 3 only — effects 1+2 filed pending auto-fire
++ Disengage modeling), **Polearm Master** 🟢 (v2.66.4 enter-reach OA —
+weapon-wielding gate still filed). The two entries below are what
+genuinely remains ⚪; each needs:
 
 - **Grappler (SRD)** — S. Advantage on attack rolls vs creatures you're
   grappling + you can use an action to try to pin them. Both pieces
   need (B) attack-time intercepts. Today the feat description renders
-  on the sheet via the existing feats panel; mechanical wiring is
-  deferred until (B) lands.
+  on the sheet via the existing feats panel; there is **no Grappler
+  feat helper** in `tabletop_routes.py` (the many `grappler` hits there
+  are the *grappled condition* mechanic, not the feat). (B) is now
+  🟢 PARTIAL, so this is buildable on the same per-feat scan the six
+  wired feats use — it simply hasn't been done.
 - **Lucky Strike (demo homebrew)** — S. Reroll a missed attack 1/long
   rest. Same shape as Halfling Lucky / Fighter Indomitable. Needs
   (B) roll-time intercept.

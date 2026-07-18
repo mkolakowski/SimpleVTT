@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1031.1] - 2026-07-18 — "The Errata Sweep"
+
+**Schema version:** 103
+
+**Commit summary:** Stale-doc cleanup — close B12/B13/B14 by reconciling `class-content-status.md` against the code.
+
+**Description:** Doc-only. Three stale-doc bugs in [`BUGS.md`](BUGS.md) all pointed at [`docs/plans/class-content-status.md`](docs/plans/class-content-status.md), where changelog-style version notes near the top already flagged claims further down as stale but the original lines were never edited. Each claim was re-verified against `app/routes/tabletop_routes.py` before editing rather than trusted from the doc's own flag.
+
+**B12** — the "Feat plans" section claimed mechanical feat effects were *uniformly* ⚪. Six feats are in fact wired via the Reactions framework (v2.66.x–v2.83.0), each with a per-feat `sheet["feats"]` slug/name scan: Lucky, Defensive Duelist, War Caster, Mage Slayer ✅; Sentinel, Polearm Master 🟢 (partial, with their specific filed tails). The section now records that split and scopes ⚪ to what remains. **A correction the bug didn't anticipate:** the Grappler bullet's "mechanical wiring is deferred until (B) lands" gate is also stale — (B) is 🟢 PARTIAL — and a naive grep makes Grappler *look* wired (64 `grappler` hits in routes) when those hits are all the **grappled condition** mechanic, not the feat. There is no Grappler feat helper; the bullet now says so explicitly so the next reader doesn't repeat the misread.
+
+**B13** — cross-cutting C still listed the Bardic Inspiration recipient-side picker as unbuilt. It shipped v2.97.56–v2.97.57 (`/apply_bardic_inspiration_die` + "Tap the verse" banner). The bullet now records the endpoint, the deliberate RAW divergence (post-roll declaration is spell-legal), and the one real tail (60-ft recipient range check).
+
+**B14** — resolved as **not a live bug, no doc edit needed.** The cited line is a *historical record* inside a version-note block: it documents that v2.99.192 reactivated a test which had been silently skipping on a wrong template endpoint URL — the fix already shipped. Confirmed by running `tests/harness/test_polymorph_npc_wis_save.py` (1 passed, no skip).
+
+No code, schema, or test changes — the harness suite is unchanged at 4817.
+
+### Fixed
+- `docs/plans/class-content-status.md` — "Feat plans" section reconciled (B12): six wired feats recorded with their versions, ⚪ scoped to Grappler + Lucky Strike, and the Grappler bullet corrected (no feat helper exists; the `grappler` hits in routes are the grappled *condition*).
+- `docs/plans/class-content-status.md` — cross-cutting C Bardic Inspiration recipient bullet struck + reconciled (B13).
+- `BUGS.md` — B12/B13/B14 flipped OPEN → FIXED with the verification evidence for each; B14 annotated as already-resolved.
+
+---
+
 ## [2.1031.0] - 2026-07-18 — "The Salvager's Ledger"
 
 **Schema version:** 103

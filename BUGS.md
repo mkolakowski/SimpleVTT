@@ -50,14 +50,14 @@ The single canonical list of known defects, RAW divergences, latent test-couplin
 ### B11 — Unified-mini-sheet visual regressions slip past the PC harness · 🟢 P3 · OPEN
 **Source:** `docs/plans/unified-mini-sheet.md`. The mini-sheet has 3 mockups but Phases 1–3 are unstarted; visual regressions in the eventual implementation won't be caught by the PC HTTP harness (same class of gap as B4). Re-evaluate when the mini-sheet ships.
 
-### B12 — `class-content-status.md`: stale "feat effects uniformly ⚪" note · 🟢 P3 · OPEN
-**Source:** `docs/plans/class-content-status.md` (the "L416 doc note"). An older line states mechanical feat effects are uniformly ⚪ unstarted; six of seven listed feats now have automated intercepts (War Caster, Mage Slayer, etc.). The living-inventory section already flags this as stale — the original line should be edited to match.
+### B12 — `class-content-status.md`: stale "feat effects uniformly ⚪" note · 🟢 P3 · FIXED (v2.1032.0)
+**Source:** `docs/plans/class-content-status.md` (the "Feat plans" section). An older line stated mechanical feat effects were uniformly ⚪ unstarted. **Fixed:** the line now records the six Reactions-framework-wired feats (Lucky, Defensive Duelist, War Caster, Mage Slayer ✅; Sentinel, Polearm Master 🟢) and scopes the ⚪ to what actually remains. Verified against `tabletop_routes.py` — each wired feat has a `sheet["feats"]` slug/name scan. Also corrected the Grappler bullet: the feat is genuinely unwired (the many `grappler` hits in routes are the *grappled condition*, not the feat), and its "deferred until (B) lands" gate is stale since (B) is 🟢 PARTIAL.
 
-### B13 — `class-content-status.md`: stale "recipient die consume pending" note · 🟢 P3 · OPEN
-**Source:** `docs/plans/class-content-status.md` (cross-cutting C). Bardic Inspiration recipient side shipped (v2.97.56–.57, `/apply_bardic_inspiration_die` + banner). An older cross-cutting note still says the recipient die-consume is pending. Edit the original line.
+### B13 — `class-content-status.md`: stale "recipient die consume pending" note · 🟢 P3 · FIXED (v2.1032.0)
+**Source:** `docs/plans/class-content-status.md` (cross-cutting C). Bardic Inspiration recipient side shipped (v2.97.56–.57, `/apply_bardic_inspiration_die` + banner). **Fixed:** the cross-cutting C bullet now strikes the pending claim and records the shipped endpoint + banner, the deliberate RAW divergence (post-roll declaration is spell-legal), and the one real remaining tail (60-ft recipient range check).
 
-### B14 — `class-content-status.md`: historical template/endpoint-URL silent test-skip · 🟢 P3 · OPEN
-**Source:** `docs/plans/class-content-status.md:330`. A documented case where a test silently skipped due to a template/endpoint URL mismatch. Confirm whether it's still live or already resolved, then close or fix.
+### B14 — `class-content-status.md`: historical template/endpoint-URL silent test-skip · 🟢 P3 · FIXED (v2.1032.0 — was already resolved)
+**Source:** `docs/plans/class-content-status.md:357`. **Verified not a live bug.** The cited line is a *historical record* inside a version-note block — it documents that v2.99.192 reactivated the v2.99.180 NPC WIS save test which had been silently skipping on a wrong template endpoint URL, i.e. the fix already shipped. Confirmed by running `tests/harness/test_polymorph_npc_wis_save.py` — 1 passed, no skip. No doc edit needed; the line correctly describes past work.
 
 ---
 
