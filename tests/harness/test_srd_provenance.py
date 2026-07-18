@@ -50,7 +50,7 @@ _FLOORS = {
     "subclass_features": 13,
     "feats": 1,
     "backgrounds": 1,
-    "rules": 16,  # v2.1029.0 — SRD combat rules-reference batch.
+    "rules": 26,  # v2.1029.0 combat (16) + v2.1030.0 adventuring/environment (10).
 }
 
 

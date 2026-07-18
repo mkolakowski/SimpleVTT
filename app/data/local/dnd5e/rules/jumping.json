@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "jumping",
+  "name": "Jumping",
+  "category": "Adventuring",
+  "desc": "With a running start of at least 10 feet, your long jump distance in feet equals your Strength score; a standing long jump covers half that. For a high jump with a running start, you leap a number of feet equal to 3 + your Strength modifier; a standing high jump covers half that. In either case, each foot cleared costs a foot of movement. The GM may call for a Strength (Athletics) check to clear an unusually difficult jump.",
+  "actions": []
+}

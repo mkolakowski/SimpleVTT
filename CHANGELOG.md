@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1030.0] - 2026-07-18 — "The Wanderer's Almanac"
+
+**Schema version:** 103
+
+**Commit summary:** SRD Reference Phase 3 — second `rules` batch: 10 Adventuring + Environment rules (short/long rest, travel pace, carrying capacity, jumping, climbing/swimming, vision & light, falling, suffocating, food & water).
+
+**Description:** Extends the v2.1029.0 `rules` reference type beyond combat. Adds the SRD 5.1 exploration + survival rules that live in no other per-type JSON: the **Adventuring** category (Short Rest, Long Rest, Travel Pace, Carrying Capacity, Jumping, Climbing/Swimming/Crawling) and the **Environment** category (Vision and Light / obscurement, Falling, Suffocating, Food and Water). Each is a rephrased SRD 5.1 summary (CC BY 4.0, `source: "srd"` / `scope: "global"` / SRD `_attribution`) in the shipped tier under `app/data/local/dnd5e/rules/`, bringing the batch to 26 rules. They ride the existing reference plumbing (page filter, search, entry, pin-to-table) with no code change beyond the content. Additive; no schema change.
+
+### Added
+- `app/data/local/dnd5e/rules/` (+10 files) — short-rest, long-rest, travel-pace, carrying-capacity, jumping, climbing-swimming-crawling, vision-and-light, falling, suffocating, food-and-water.
+- `tests/harness/test_srd_reference.py` (+1) — `test_reference_rules_adventuring_environment_batch`: Long Rest findable by name; the Falling entry resolves with its 1d6-per-10-feet text.
+
+### Changed
+- `tests/harness/test_srd_provenance.py` — `_FLOORS["rules"]` bumped 16 → 26.
+- `docs/test-harness-coverage.md` — total bumped 4814 → 4815.
+- `TODO.md` — Rules Reference Phase 3: adventuring + environment rules batch shipped.
+
 ## [2.1029.0] - 2026-07-18 — "The Combat Codex"
 
 **Schema version:** 103

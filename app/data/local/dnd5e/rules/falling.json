@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "falling",
+  "name": "Falling",
+  "category": "Environment",
+  "desc": "A fall deals 1d6 bludgeoning damage for every 10 feet fallen, to a maximum of 20d6. Unless it somehow avoids taking the damage, the creature lands prone.",
+  "actions": []
+}

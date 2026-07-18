@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "carrying-capacity",
+  "name": "Carrying Capacity",
+  "category": "Adventuring",
+  "desc": "Your carrying capacity equals your Strength score multiplied by 15, in pounds. If you carry weight beyond 5 times your Strength score, you are encumbered, reducing your speed by 10 feet. Beyond 10 times your Strength score you are heavily encumbered: your speed drops by 20 feet, and you have disadvantage on ability checks, attack rolls, and saving throws that use Strength, Dexterity, or Constitution. Size affects capacity: Large or larger creatures multiply these values, Tiny creatures halve them.",
+  "actions": []
+}

@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "food-and-water",
+  "name": "Food and Water",
+  "category": "Environment",
+  "desc": "A character needs about 1 pound of food and 1 gallon of water per day (2 gallons in hot weather). A character can go without food for a number of days equal to 3 plus their Constitution modifier before suffering. At the end of each day beyond that limit, or on any day with less than half the required water, the character gains one level of exhaustion. A day of normal eating and drinking resets the count of days spent going without.",
+  "actions": []
+}

@@ -204,6 +204,27 @@ async def test_reference_entry_returns_rule():
     assert "athletics" in data["desc"].lower()
 
 
+async def test_reference_rules_adventuring_environment_batch():
+    """v2.1030.0 Phase 3 — the second rules batch adds Adventuring +
+    Environment sections. Long Rest is findable by name, and the Falling
+    rule resolves via the single-entry lookup with its 1d6-per-10-feet
+    text."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        s = await client.get(
+            "/api/reference/search", params={"type": "rules", "q": "long rest"})
+        e = await client.get(
+            "/api/reference/entry", params={"type": "rules", "slug": "falling"})
+    assert s.status_code == 200, s.text
+    long_rest = next(
+        (r for r in s.json()["results"] if r["slug"] == "long-rest"), None)
+    assert long_rest is not None, "Long Rest rule not found"
+    assert long_rest["type_label"] == "Rule"
+    assert e.status_code == 200, e.text
+    falling = e.json()
+    assert falling["slug"] == "falling"
+    assert "1d6" in falling["desc"], "Falling rule should cite 1d6 per 10 feet"
+
+
 async def test_reference_entry_excludes_monsters():
     """Monsters are GM-visibility data — never a valid reference type,
     same perimeter as the search endpoint."""

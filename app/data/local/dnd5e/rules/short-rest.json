@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "short-rest",
+  "name": "Short Rest",
+  "category": "Adventuring",
+  "desc": "A short rest is a period of downtime, at least 1 hour long, during which a character does nothing more strenuous than eating, drinking, reading, and tending to wounds. A character can spend one or more Hit Dice at the end of a short rest, up to the character's maximum number of Hit Dice. For each Hit Die spent, the player rolls the die, adds the character's Constitution modifier, and regains that many hit points. Spent Hit Dice are recovered on a long rest.",
+  "actions": []
+}

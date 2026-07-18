@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "climbing-swimming-crawling",
+  "name": "Climbing, Swimming, and Crawling",
+  "category": "Adventuring",
+  "desc": "While climbing or swimming, each foot of movement costs 1 extra foot (2 extra in difficult terrain), unless a creature has a climbing or swimming speed. The GM might call for a Strength (Athletics) check to climb a slippery surface, swim in rough water, or make a particularly tricky ascent. Crawling likewise costs 1 extra foot of movement per foot moved.",
+  "actions": []
+}

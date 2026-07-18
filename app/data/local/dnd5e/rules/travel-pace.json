@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "travel-pace",
+  "name": "Travel Pace",
+  "category": "Adventuring",
+  "desc": "While traveling, a group moves at a fast, normal, or slow pace. A fast pace covers 4 miles per hour (30 per day) but imposes a -5 penalty to passive Wisdom (Perception). A normal pace covers 3 miles per hour (24 per day). A slow pace covers 2 miles per hour (18 per day) but lets travelers move stealthily. These figures assume relatively simple terrain; difficult terrain and other factors can slow travel.",
+  "actions": []
+}

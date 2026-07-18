@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "vision-and-light",
+  "name": "Vision and Light",
+  "category": "Environment",
+  "desc": "A given area may be lightly or heavily obscured. In a lightly obscured area — such as dim light, patchy fog, or moderate foliage — creatures have disadvantage on Wisdom (Perception) checks that rely on sight. A heavily obscured area — darkness, opaque fog, dense foliage — blocks vision entirely, and a creature effectively suffers the blinded condition when trying to see into it. Bright light lets most creatures see normally; dim light (a lightly obscured area) creates a dim twilight; darkness is heavily obscured. Darkvision lets a creature treat darkness within its range as dim light.",
+  "actions": []
+}

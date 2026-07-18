@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "long-rest",
+  "name": "Long Rest",
+  "category": "Adventuring",
+  "desc": "A long rest is a period of extended downtime, at least 8 hours long, during which a character sleeps or performs light activity for no more than 2 hours. At the end of a long rest, a character regains all lost hit points and recovers spent Hit Dice up to a number equal to half the character's total (minimum one). A character must have at least 1 hit point at the start of the rest to gain its benefits, and can't benefit from more than one long rest in a 24-hour period.",
+  "actions": []
+}
