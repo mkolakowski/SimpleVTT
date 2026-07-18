@@ -1164,15 +1164,55 @@
        crowd the header when many conditions stack. */
     .mini-ab-cond-warn {
         font-size: 10px;
-        padding: 2px 7px;
+        /* v2.1027.0: the pill is now a clickable button (opens the SRD-rule
+           popover). It lives in the dense .mini-meta-row alongside the
+           death-saves tracker + Check/Save toggle, so it takes the
+           compact-panel touch-target exception (< 44px) per CLAUDE.md,
+           matching its inline siblings. */
+        min-height: 20px;
+        padding: 3px 8px;
         border: 1px solid color-mix(in srgb, var(--danger) 50%, transparent);
         border-radius: 10px;
         background: color-mix(in srgb, var(--danger) 15%, transparent);
         color: var(--danger);
         line-height: 1.1;
-        cursor: help;
+        cursor: pointer;
         white-space: nowrap;
         flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+    }
+    .mini-ab-cond-warn:hover,
+    .mini-ab-cond-warn:focus-visible {
+        background: color-mix(in srgb, var(--danger) 26%, transparent);
+        outline: none;
+    }
+    /* v2.1027.0 — the SRD condition-rule popover opened from the pill. */
+    #cond-ref-popover {
+        position: fixed;
+        z-index: 4000;
+        width: 320px;
+        max-width: calc(100vw - 16px);
+        max-height: 60vh;
+        overflow-y: auto;
+        padding: 12px 14px;
+        background: var(--panel, #1c2235);
+        border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--border, #2e3550));
+        border-radius: 10px;
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+        font-size: 12px;
+        line-height: 1.5;
+        color: var(--text, #dde2f0);
+    }
+    #cond-ref-popover .cond-ref-entry { margin: 0 0 10px; }
+    #cond-ref-popover .cond-ref-entry:last-of-type { margin-bottom: 0; }
+    #cond-ref-popover .cond-ref-entry strong { color: var(--danger); }
+    #cond-ref-popover .cond-ref-entry p { margin: 4px 0 0; white-space: pre-wrap; }
+    #cond-ref-popover .cond-ref-loading { color: var(--muted, #7a8ab0); }
+    #cond-ref-popover .cond-ref-foot {
+        margin-top: 10px; padding-top: 8px;
+        border-top: 1px solid var(--border, #2e3550);
+        font-size: 10px; color: var(--muted, #7a8ab0); text-align: right;
     }
     /* ── Stat-block header (card header — also the open/close toggle) ── */
     /* v2.4.24: touch-action:manipulation suppresses iOS Safari's double-tap-to-zoom
@@ -9116,18 +9156,25 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         if (existing) existing.remove();
         if (!Array.isArray(buffs) || !buffs.length) return;
         const parts = [];
+        const slugs = [];
         for (const b of buffs) {
             const k = String((b && b.key) || '').toLowerCase().trim();
             if (k && (k in _COND_IMPACT_MAP)) {
                 const name = (b && b.name) || (k.charAt(0).toUpperCase() + k.slice(1));
                 parts.push(name + ': ' + _COND_IMPACT_MAP[k]);
+                slugs.push(k);
             }
         }
         if (!parts.length) return;
         const pill = document.createElement('span');
         pill.className = 'mini-ab-cond-warn';
-        pill.setAttribute('aria-label', 'Active conditions affecting actions or d20 rolls');
-        pill.title = 'Active conditions affecting actions or d20 rolls:\n\n' + parts.join('\n');
+        pill.setAttribute('role', 'button');
+        pill.setAttribute('tabindex', '0');
+        // v2.1027.0 (SRD Reference Phase 3): carry the slugs so the delegated
+        // click handler can open the SRD-rule popover for each condition.
+        pill.setAttribute('data-cond-slugs', slugs.join(','));
+        pill.setAttribute('aria-label', 'Active conditions affecting actions or d20 rolls — click to read the SRD rules');
+        pill.title = 'Active conditions affecting actions or d20 rolls (click for SRD rules):\n\n' + parts.join('\n');
         pill.textContent = '⚠ Conditions';
         // Insert the pill just before the toggle, within the toggle's own
         // parent (the ``.mini-ab-toggle-group`` wrapper) so it sits inline
@@ -9136,6 +9183,89 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         if (toggle && toggle.parentNode) toggle.parentNode.insertBefore(pill, toggle);
         else header.appendChild(pill);
     }
+
+    /* v2.1027.0 (SRD Reference Phase 3) — click the ⚠ Conditions pill to
+     * open a popover listing each active condition with its full SRD 5.1
+     * rule text, fetched from the offline reference tier
+     * (GET /api/reference/entry?type=conditions&slug=). One delegated
+     * handler covers both the server-rendered (Jinja) pill and the
+     * JS-patched NPC pill; a per-slug cache avoids refetching. The popover
+     * is dismissable via outside-click, Escape, or re-clicking the pill. */
+    const _condRefCache = {};
+    async function _condRefEntry(slug) {
+        if (slug in _condRefCache) return _condRefCache[slug];
+        let rec = null;
+        try {
+            const r = await fetch('/api/reference/entry?type=conditions&slug='
+                                  + encodeURIComponent(slug));
+            if (r.ok) rec = await r.json();
+        } catch {}
+        _condRefCache[slug] = rec;
+        return rec;
+    }
+    function _closeCondRefPopover() {
+        const ex = document.getElementById('cond-ref-popover');
+        if (ex) ex.remove();
+    }
+    async function _openCondRefPopover(pill) {
+        const raw = (pill.getAttribute('data-cond-slugs') || '').trim();
+        const slugs = raw ? raw.split(',').map(s => s.trim()).filter(Boolean) : [];
+        if (!slugs.length) return;
+        _closeCondRefPopover();
+        const pop = document.createElement('div');
+        pop.id = 'cond-ref-popover';
+        pop.setAttribute('role', 'dialog');
+        pop.setAttribute('aria-label', 'SRD condition rules');
+        pop.innerHTML = '<div class="cond-ref-loading">Loading SRD rules…</div>';
+        // Anchor under the pill (fixed positioning; clamped to viewport).
+        const rect = pill.getBoundingClientRect();
+        pop.style.top = Math.round(rect.bottom + 6) + 'px';
+        const left = Math.min(Math.round(rect.left), window.innerWidth - 340);
+        pop.style.left = Math.max(8, left) + 'px';
+        document.body.appendChild(pop);
+        const recs = await Promise.all(slugs.map(_condRefEntry));
+        // The popover may have been dismissed while awaiting.
+        if (!document.body.contains(pop)) return;
+        const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+        const blocks = recs.filter(Boolean).map(r => (
+            '<div class="cond-ref-entry"><strong>' + esc(r.name)
+            + '</strong><p>' + esc(r.desc || '(No description.)') + '</p></div>'
+        ));
+        pop.innerHTML = (blocks.length
+            ? blocks.join('')
+            : '<div class="cond-ref-loading">No SRD rule text available.</div>')
+            + '<div class="cond-ref-foot">SRD 5.1 · CC BY 4.0</div>';
+    }
+    document.addEventListener('click', (ev) => {
+        const pill = ev.target.closest && ev.target.closest('.mini-ab-cond-warn');
+        if (pill) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            // Re-click on the same pill toggles the popover closed.
+            const open = document.getElementById('cond-ref-popover');
+            if (open && open.dataset.anchorId === (pill.dataset._anchorId || '')) {
+                _closeCondRefPopover();
+                return;
+            }
+            _openCondRefPopover(pill);
+            const p = document.getElementById('cond-ref-popover');
+            if (p) p.dataset.anchorId = (pill.dataset._anchorId = String(Date.now()));
+            return;
+        }
+        // Outside click (not on the popover itself) dismisses it.
+        if (!(ev.target.closest && ev.target.closest('#cond-ref-popover'))) {
+            _closeCondRefPopover();
+        }
+    });
+    document.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape') { _closeCondRefPopover(); return; }
+        if ((ev.key === 'Enter' || ev.key === ' ')
+            && ev.target && ev.target.classList
+            && ev.target.classList.contains('mini-ab-cond-warn')) {
+            ev.preventDefault();
+            _openCondRefPopover(ev.target);
+        }
+    });
 
     function _hydrateMonsterCard(combatant, slotKey) {
         if (!combatant || !combatant.token_template_id) return false;

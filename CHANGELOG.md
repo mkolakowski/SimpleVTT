@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1027.0] - 2026-07-17 — "The Table Ruling"
+
+**Schema version:** 103
+
+**Commit summary:** SRD Reference Phase 3 (encounter panel) — the initiative tracker's `⚠ Conditions` pill is now clickable, opening a popover with each active condition's full SRD rule text.
+
+**Description:** Extends the Phase 3 contextual-links work from the character sheet to the encounter panel. The `⚠ Conditions` warning pill on each mini-sheet card (PC + NPC) in the initiative tracker previously only carried a hover tooltip listing the conditions' adv/dis impacts. It's now a button: clicking (or Enter/Space on the focused pill) opens a dismissable popover that fetches each active condition from the offline SRD reference tier (`GET /api/reference/entry?type=conditions&slug=<slug>`) and shows the full SRD 5.1 rule text, stacked. Both pill render paths carry the active condition slugs in a new `data-cond-slugs` attribute — the server-rendered Jinja pill (`_mini_sheet_card.html`) and the JS-patched NPC pill (`_updateConditionWarnPill`) — and a single delegated handler covers both, with a per-slug cache, outside-click / Escape / re-click dismissal, and viewport clamping. Reuses v2.1025.0's single-entry endpoint; no new endpoint, no schema change.
+
+### Added
+- `app/templates/tabletop.html` — delegated `.mini-ab-cond-warn` click/keydown handler + `#cond-ref-popover` (fetches `/api/reference/entry` per condition, caches, dismissable) + the popover CSS; the JS pill builder now stamps `data-cond-slugs` + `role="button"`.
+- `app/templates/_mini_sheet_card.html` — the Jinja pill carries `data-cond-slugs` + `role="button"` and a "click for SRD rules" affordance.
+
+### Changed
+- `app/templates/tabletop.html` — `.mini-ab-cond-warn` restyled as a clickable button (pointer cursor + hover/focus state; compact-panel touch-target exception noted).
+- `TODO.md` — Rules Reference Phase 3: encounter-panel condition links marked done.
+
 ## [2.1026.0] - 2026-07-17 — "The Severed Cord"
 
 **Schema version:** 103

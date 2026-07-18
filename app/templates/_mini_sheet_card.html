@@ -121,12 +121,13 @@
                    v2.97.30 ``_buffs_active`` mirror + the shared
                    ``CONDITION_IMPACTS`` Jinja global (also mirrored to JS as
                    ``window._COND_IMPACT_MAP`` via tabletop.html). #}
-                {% set _ab_warn_ns = namespace(parts=[]) %}
+                {% set _ab_warn_ns = namespace(parts=[], slugs=[]) %}
                 {% for _b in (sh.get('_buffs_active') or []) %}
                     {% set _bk = ((_b.get('key') if _b is mapping else '') or '') | lower | trim %}
                     {% if _bk in CONDITION_IMPACTS %}
                         {% set _bname = ((_b.get('name') if _b is mapping else '') or _bk | title) %}
                         {% set _ = _ab_warn_ns.parts.append(_bname ~ ': ' ~ CONDITION_IMPACTS[_bk]) %}
+                        {% set _ = _ab_warn_ns.slugs.append(_bk) %}
                     {% endif %}
                 {% endfor %}
                 {# v2.4.21 + v2.962.0: Roll-state pill + Death-saves tracker +
@@ -143,9 +144,14 @@
                 {% endwith %}
                   <div class="mini-ab-toggle-group" style="display:flex;align-items:center;gap:6px;margin-left:auto;">
                     {% if _ab_warn_ns.parts %}
-                    <span class="mini-ab-cond-warn"
-                          title="Active conditions affecting actions or d20 rolls:&#10;&#10;{{ _ab_warn_ns.parts | join('&#10;') }}"
-                          aria-label="Active conditions affecting actions or d20 rolls">⚠ Conditions</span>
+                    {# v2.1027.0 (SRD Reference Phase 3): the pill is clickable —
+                       ``data-cond-slugs`` carries the active condition slugs so
+                       the delegated handler can open a popover with each one's
+                       SRD rule text (offline, GET /api/reference/entry). #}
+                    <span class="mini-ab-cond-warn" role="button" tabindex="0"
+                          data-cond-slugs="{{ _ab_warn_ns.slugs | join(',') }}"
+                          title="Active conditions affecting actions or d20 rolls (click for SRD rules):&#10;&#10;{{ _ab_warn_ns.parts | join('&#10;') }}"
+                          aria-label="Active conditions affecting actions or d20 rolls — click to read the SRD rules">⚠ Conditions</span>
                     {% endif %}
                     <div class="mini-ab-toggle" data-char-id="{{ c.id }}">
                         <button type="button" class="mini-ab-toggle-btn active" data-char-id="{{ c.id }}" data-mode="check">Check</button>
