@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "actions-in-combat",
+  "name": "Actions in Combat",
+  "category": "Combat",
+  "desc": "On your turn you can take one action. Beyond the Attack, Cast a Spell, Dash, Disengage, Dodge, Help, Hide, Ready, Search, and Use an Object actions described here, you can also improvise an action not on the list, subject to the GM's ruling. Many class features and other abilities grant additional action options.",
+  "actions": []
+}

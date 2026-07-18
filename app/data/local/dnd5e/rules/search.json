@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "search",
+  "name": "Search (Action)",
+  "category": "Combat",
+  "desc": "When you take the Search action you devote your attention to finding something. Depending on the situation, the GM might ask for a Wisdom (Perception) check or an Intelligence (Investigation) check to notice a hidden creature, spot a concealed object, or discern a clue.",
+  "actions": []
+}

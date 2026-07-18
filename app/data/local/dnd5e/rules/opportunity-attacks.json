@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "opportunity-attacks",
+  "name": "Opportunity Attacks",
+  "category": "Combat",
+  "desc": "You can make an opportunity attack when a hostile creature you can see moves out of your reach. To do so, you use your reaction to make one melee attack against the provoking creature; the attack occurs right before it leaves your reach. You can avoid provoking an opportunity attack by taking the Disengage action, and it isn't provoked when a creature is moved without using its movement, action, or reaction (for example, when it is pushed or teleported).",
+  "actions": []
+}

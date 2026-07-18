@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "hide",
+  "name": "Hide (Action)",
+  "category": "Combat",
+  "desc": "When you take the Hide action you make a Dexterity (Stealth) check in an attempt to hide, following the rules for hiding. If you succeed, you gain benefits against creatures that can't see you: you have advantage on attack rolls against them, and they attack you with disadvantage. You can't hide from a creature that can see you clearly, and you give away your position if you make noise.",
+  "actions": []
+}

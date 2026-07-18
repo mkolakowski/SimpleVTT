@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "help",
+  "name": "Help (Action)",
+  "category": "Combat",
+  "desc": "With the Help action you aid another creature in a task, giving it advantage on its next ability check for the task you help with — provided it makes the check before the start of your next turn. You can also help a creature attack a foe within 5 feet of you; that creature gains advantage on its next attack roll against the target before your next turn begins.",
+  "actions": []
+}

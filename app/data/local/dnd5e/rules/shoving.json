@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "shoving",
+  "name": "Shoving a Creature",
+  "category": "Combat",
+  "desc": "Using the Attack action, you can make a special melee attack to shove a creature, either to knock it prone or push it away. The target must be no more than one size larger than you and within your reach. You make a Strength (Athletics) check contested by the target's Strength (Athletics) or Dexterity (Acrobatics) check. If you win, you either knock the target prone or push it 5 feet away from you.",
+  "actions": []
+}

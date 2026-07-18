@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "dash",
+  "name": "Dash (Action)",
+  "category": "Combat",
+  "desc": "Taking the Dash action gains you extra movement for the current turn equal to your speed, after any modifiers are applied. For example, a speed of 30 feet lets you move up to 60 feet on a turn where you Dash. Any increase or decrease to your speed changes this additional movement by the same amount.",
+  "actions": []
+}

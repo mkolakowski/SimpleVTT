@@ -49,6 +49,9 @@ router = APIRouter()
 # unauthenticated (like the wiki).
 _REFERENCE_TYPES: list[tuple[str, str]] = [
     ("conditions", "Condition"),
+    # v2.1029.0 (Phase 3) — the non-content SRD rules sections (actions in
+    # combat, cover, resting, …) that live in no other per-type JSON.
+    ("rules", "Rule"),
     ("spells", "Spell"),
     ("items", "Equipment"),
     ("feats", "Feat"),

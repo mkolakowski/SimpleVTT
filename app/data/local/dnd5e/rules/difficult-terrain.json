@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "difficult-terrain",
+  "name": "Difficult Terrain",
+  "category": "Combat",
+  "desc": "Moving through difficult terrain — such as rubble, dense undergrowth, a swamp, or deep snow — costs 1 extra foot of movement for every foot moved. Difficult terrain isn't cumulative: a square that is difficult for two reasons still costs only 1 extra foot of movement per foot.",
+  "actions": []
+}

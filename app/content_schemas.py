@@ -197,6 +197,19 @@ class Condition(_ProvenanceMixin):
     actions: list[Action] = Field(default_factory=list)
 
 
+# ── Rules sections (v2.1029.0, SRD Reference Phase 3) ────────────────────────
+# The non-content SRD 5.1 rules that live in no other per-type JSON —
+# actions in combat, cover, resting, movement, etc. Modeled like a
+# Condition (a slug/name/desc reference record) plus a ``category`` used
+# to group entries in the reference UI (e.g. "Combat", "Adventuring").
+class Rule(_ProvenanceMixin):
+    slug: str
+    name: str
+    category: str = ""
+    desc: str = ""
+    actions: list[Action] = Field(default_factory=list)
+
+
 # ── Type registry for the local_content resolver ────────────────────────────
 # Keys are the directory names under ``app/data/local/<system>/`` and
 # ``app/data/homebrew/<system>/<scope>/``.
@@ -210,4 +223,5 @@ TYPE_REGISTRY: dict[str, type[BaseModel]] = {
     "backgrounds": Background,
     "monsters": Monster,
     "conditions": Condition,
+    "rules": Rule,
 }

@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1029.0] - 2026-07-18 — "The Combat Codex"
+
+**Schema version:** 103
+
+**Commit summary:** SRD Reference Phase 3 — the non-content SRD rules sections: a new `rules` reference type shipping the combat rules (actions in combat, cover, grappling, opportunity attacks, …) that live in no other per-type JSON.
+
+**Description:** Adds the one genuinely-unbuilt slice of Phase 3. Rules like *Cover*, *Grappling*, *Shoving*, *Opportunity Attacks*, and the standard combat actions (*Dash / Disengage / Dodge / Help / Hide / Ready / Search / Use an Object*) previously appeared *nowhere* in the app's reference surface — the six existing reference types are all record-backed content (conditions, spells, items, feats, races, backgrounds). This introduces a seventh reference type, `rules`, backed by a new `Rule` content model (`slug` / `name` / `category` / `desc`) in the shipped SRD tier under `app/data/local/dnd5e/rules/`. The first batch is 16 combat rules, each an SRD 5.1-sourced **rephrased** summary (CC BY 4.0, `source: "srd"` / `scope: "global"` / SRD `_attribution`). They flow through the existing reference plumbing automatically: `/reference` gains a "Rules" type filter, and both `/api/reference/search` and `/api/reference/entry` return them (so the sheet + encounter-panel popovers and the GM pin-to-table already work on rules with no further wiring). Future batches (Adventuring — resting, vision & light, travel; Environment — falling, suffocation) extend the same type. Additive; no schema change.
+
+### Added
+- `app/content_schemas.py` — new `Rule` content model + `"rules"` entry in `TYPE_REGISTRY`.
+- `app/data/local/dnd5e/rules/` (new, 16 files) — the SRD combat rules-reference batch (actions-in-combat, attack-action, dash, disengage, dodge, help, hide, ready, search, use-an-object, grappling, shoving, opportunity-attacks, cover, difficult-terrain, being-prone).
+- `app/routes/wiki_routes.py` — `"rules"` (label "Rule") added to `_REFERENCE_TYPES`, so search / entry / the page filter include it.
+- `tests/harness/test_srd_reference.py` (+2) — `rules` search finds Cover with its degrees-of-cover text; `entry` resolves the Grappling rule.
+
+### Changed
+- `tests/harness/test_srd_provenance.py` — `_FLOORS` gains `"rules": 16` (provenance + completeness-floor coverage of the new type).
+- `tests/harness/test_srd_reference.py` — the all-types safe set includes `rules`.
+- `docs/test-harness-coverage.md` — total bumped 4812 → 4814.
+- `TODO.md` — Rules Reference Phase 3: non-content rules sections started (combat batch shipped).
+
 ## [2.1028.0] - 2026-07-17 — "The Witness Stand"
 
 **Schema version:** 103

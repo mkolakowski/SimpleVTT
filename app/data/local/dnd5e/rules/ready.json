@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "ready",
+  "name": "Ready (Action)",
+  "category": "Combat",
+  "desc": "The Ready action lets you act using your reaction before the start of your next turn. First you choose a perceivable trigger; then you choose the action you'll take in response, or movement of up to your speed. When the trigger occurs you can take your reaction right after it finishes, or ignore it. Readying a spell requires casting it as normal but holding its energy, which you release with your reaction when the trigger occurs; this requires concentration and expends the slot.",
+  "actions": []
+}

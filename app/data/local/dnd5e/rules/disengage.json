@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "disengage",
+  "name": "Disengage (Action)",
+  "category": "Combat",
+  "desc": "If you take the Disengage action, your movement for the rest of the turn doesn't provoke opportunity attacks from any creature you can see.",
+  "actions": []
+}

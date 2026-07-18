@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "use-an-object",
+  "name": "Use an Object (Action)",
+  "category": "Combat",
+  "desc": "You normally interact with one object for free during your move or action — for example, drawing a weapon as part of an attack. When you want to interact with a second object, or an object that needs your whole attention, you take the Use an Object action.",
+  "actions": []
+}

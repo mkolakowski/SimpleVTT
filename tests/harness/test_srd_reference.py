@@ -51,7 +51,8 @@ async def test_reference_search_all_returns_records():
         assert key in first
     assert first["source"] == "local-srd"
     # Every returned record is one of the player-safe types (never monster).
-    safe = {"conditions", "spells", "items", "feats", "races", "backgrounds"}
+    safe = {"conditions", "rules", "spells", "items", "feats",
+            "races", "backgrounds"}
     assert all(rec["type"] in safe for rec in data["results"])
 
 
@@ -168,6 +169,39 @@ async def test_reference_entry_unknown_type():
             params={"type": "bogus", "slug": "blinded"},
         )
     assert r.status_code == 404, r.text
+
+
+async def test_reference_search_rules_finds_cover():
+    """v2.1029.0 Phase 3 — the new ``rules`` type surfaces the non-content
+    SRD rules sections (actions in combat, cover, resting, …) that live in
+    no other per-type JSON. Cover is findable by name and carries its
+    rephrased rule text."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        r = await client.get(
+            "/api/reference/search", params={"type": "rules", "q": "cover"})
+    assert r.status_code == 200, r.text
+    data = r.json()
+    cover = next((rec for rec in data["results"] if rec["slug"] == "cover"), None)
+    assert cover is not None, "Cover rule not found in SRD reference"
+    assert cover["type"] == "rules"
+    assert cover["type_label"] == "Rule"
+    assert "three-quarters cover" in cover["desc"].lower(), (
+        "Cover rule should describe the degrees of cover")
+
+
+async def test_reference_entry_returns_rule():
+    """The single-entry lookup resolves a rules-type slug (Grappling)."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        r = await client.get(
+            "/api/reference/entry",
+            params={"type": "rules", "slug": "grappling"},
+        )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["slug"] == "grappling"
+    assert data["type"] == "rules"
+    assert data["source"] == "local-srd"
+    assert "athletics" in data["desc"].lower()
 
 
 async def test_reference_entry_excludes_monsters():

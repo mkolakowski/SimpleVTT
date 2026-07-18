@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "being-prone",
+  "name": "Being Prone",
+  "category": "Combat",
+  "desc": "A prone creature's only movement option is to crawl, which costs 1 extra foot per foot moved, unless it stands up and thereby ends the condition (standing costs half its speed). A prone creature has disadvantage on its own attack rolls. An attack roll against a prone creature has advantage if the attacker is within 5 feet; otherwise the attack roll has disadvantage.",
+  "actions": []
+}

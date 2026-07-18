@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "grappling",
+  "name": "Grappling",
+  "category": "Combat",
+  "desc": "When you want to grab a creature or wrestle with it, you can use the Attack action to make a special melee attack: a grapple. The target must be no more than one size larger than you and within your reach. Using at least one free hand, you make a Strength (Athletics) check contested by the target's Strength (Athletics) or Dexterity (Acrobatics) check. If you win, the target is grappled (speed 0). You can release it at any time (no action).",
+  "actions": []
+}

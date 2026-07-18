@@ -1,0 +1,12 @@
+{
+  "system": "dnd5e",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a). Mechanical summaries are rephrased, not verbatim. See CREDITS.md.",
+  "slug": "cover",
+  "name": "Cover",
+  "category": "Combat",
+  "desc": "Cover makes a target harder to harm. Half cover (e.g. a low wall or another creature) grants a +2 bonus to AC and Dexterity saving throws. Three-quarters cover (e.g. an arrow slit or thick tree trunk) grants a +5 bonus to AC and Dexterity saving throws. A target with total cover can't be targeted directly by an attack or a spell, though some area-effect spells can reach it. A target benefits only from the most protective degree of cover available.",
+  "actions": []
+}
