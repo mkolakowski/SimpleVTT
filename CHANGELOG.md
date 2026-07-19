@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1033.0] - 2026-07-19 — "One Spell Too Many"
+
+**Schema version:** 103
+
+**Commit summary:** Close B15 — enforce the SRD bonus-action spell pairing rule in `/cast_spell` with a 409 `bonus_action_spell_pairing`.
+
+**Description:** Implements the rule that v2.1032.1 split out of the stale B6. SRD 5.1 (Casting Time → Bonus Action): *"You can't cast a spell with your action and a spell with your bonus action in the same turn, unless the spell you cast with your action is a cantrip with a casting time of 1 action."* Previously a caster could Misty Step on their bonus action and still Fireball with their action — or Quicken a leveled spell into the bonus slot and cast a second leveled spell — with nothing to stop them.
+
+**The blocker was state, not logic.** The `economy` dict records *that* a slot is burnt, not *what* burnt it, so the rule wasn't expressible. `/cast_spell` now stamps per-turn provenance on each cast (`_mark_spell_cast_kind`) and reads it back on the next one (`_spell_cast_slot_kind`).
+
+**Where that provenance lives was the hard part, and the first attempt was wrong.** It initially followed the established per-turn-flag pattern — a key on the hub-state combatant's `economy` dict, like Colossus Slayer (v2.60.0) and Spell Bombardment (v2.99.231). Probing that build directly showed it **failing open**: the client calls `pushBattle()` on many ordinary interactions, and that wholesale `PUT /battle` replaces hub combatants from a client copy that has never seen the key, erasing the marker mid-turn. Tolerable for a damage-rider flag; not for a rule meant to enforce. Provenance is therefore **server-owned**, keyed `(campaign, character)` and stamped with the `(round, turn_index)` it belongs to — a turn change invalidates it implicitly, and no client push can clear it. The regression is pinned by `test_gate_survives_a_client_battle_push`. *(The same exposure exists for the two pre-existing flags that do use the economy dict; not changed here, but worth knowing.)*
+
+Two follow-on corrections that testing forced: every battle starts at `(round 1, turn 0)`, so markers are now **purged when a battle ends or init is cleared** — otherwise a marker from a finished fight would block the same PC's first legal cast in the next one. And a *cleared* battle is still a truthy dict in hub state, so the "inert out of combat" claim needed explicit `active` / `combatants` checks to actually hold.
+
+**The rule is asymmetric, and the implementation follows it.** RAW constrains the *action* spell, not the bonus one — a leveled bonus-action spell paired with an action **cantrip** is legal. So casting into the bonus slot checks whether the action spell was a cantrip, while casting into the action slot checks whether *this* spell is leveled. A naive symmetric "one spell per turn" gate would be wrong in exactly that case, so it has a dedicated test.
+
+Scope guards: the gate runs **after** the Quickened retarget (so a Quickened cast is judged on the slot it actually consumes), is exempt for reaction casts (`as_reaction` targets neither slot), bypasses for the GM and for `override: true` exactly like `over_budget`, and is inert outside an active battle — out of combat there are no turns to pair within.
+
+No schema change; no new endpoint.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_current_turn_key()` / `_spell_cast_slot_kind()` / `_mark_spell_cast_kind()` + the `_spell_cast_kinds` server-owned per-turn provenance store.
+- `tests/harness/test_bonus_action_spell_pairing.py` (new, +9) — core gate both orderings; the RAW cantrip exception; **the asymmetry case** (action cantrip → leveled bonus spell stays legal); GM bypass; `override` bypass; inert-with-no-battle; **survives a mid-turn client `pushBattle`**; marker expires at turn advance. Runs as `bob_client` (Thalindra, who has Misty Step as a natural 1-bonus-action leveled spell), since the gate exempts the GM.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `/cast_spell` gains the pairing gate (409 `bonus_action_spell_pairing`, carrying `slot` + `prior_slot`) and stamps the cast kind alongside `_mark_battle_economy`; `PUT /battle` purges the campaign's provenance when the battle ends or init is cleared.
+- `BUGS.md` — B15 flipped OPEN → FIXED.
+- `docs/test-harness-coverage.md` — harness total bumped 4820 → 4829.
+
+---
+
 ## [2.1032.1] - 2026-07-19 — "The Closed Case"
 
 **Schema version:** 103

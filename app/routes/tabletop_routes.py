@@ -513,6 +513,83 @@ async def _mark_battle_economy(
     })
 
 
+# ── v2.1033.0 — per-turn spell-cast provenance (B15) ────────────────────────
+# The `economy` dict records THAT a slot is burnt, not WHAT burnt it. The
+# SRD 5.1 "Bonus Action" casting-time rule needs the latter: "You can't
+# cast a spell with your action and a spell with your bonus action in the
+# same turn, unless the spell you cast with your action is a cantrip with
+# a casting time of 1 action."
+#
+# **Why this is NOT stored on the combatant's economy dict** (the pattern
+# Colossus Slayer v2.60.0 / Spell Bombardment v2.99.231 use): the client
+# calls `pushBattle()` on many ordinary interactions, and that `PUT
+# /battle` replaces hub combatants wholesale from a client copy that has
+# never seen this key. Measured directly: stamp → client push → the marker
+# is gone and the gate fails open. That is tolerable for a damage-rider
+# flag; it is not tolerable for a rule that is supposed to enforce.
+#
+# So provenance lives server-side, keyed by (campaign, character) and
+# stamped with the (round, turn_index) it belongs to. A turn change
+# invalidates it implicitly — no client reset needed and no client push
+# can clear it. Reaction casts (War Caster) are never recorded; the rule
+# is about the action/bonus pair only.
+#
+# Known edge: rewinding the turn (battle-prev-btn) back onto a
+# (round, turn_index) that already has an entry resurfaces that entry.
+# Rewind is a GM correction tool and the GM bypasses the gate anyway.
+_spell_cast_kinds: dict[tuple[int, int], dict] = {}
+
+
+def _current_turn_key(campaign_id: int) -> tuple[int, int] | None:
+    """(round, turn_index) of the campaign's active battle, or None when
+    no battle is running — which is what makes the pairing gate inert
+    out of combat (there are no turns to pair within).
+
+    Note a *cleared* battle is still a truthy dict in hub state, so the
+    `active` / `combatants` checks below are load-bearing: without them
+    an ended fight reads as "round 1, turn 0" and the gate keeps firing
+    outside combat.
+    """
+    state = hub.get_battle(campaign_id)
+    if not state or not state.get("active") or not state.get("combatants"):
+        return None
+    return (int(state.get("round") or 1), int(state.get("turn_index") or 0))
+
+
+def _spell_cast_slot_kind(
+    campaign_id: int, character_id: int, slot: str,
+) -> str | None:
+    """Return "cantrip" / "leveled" if the PC already cast a spell in
+    ``slot`` **this turn**, else None."""
+    if slot not in ("action", "bonus"):
+        return None
+    turn = _current_turn_key(campaign_id)
+    if turn is None:
+        return None
+    entry = _spell_cast_kinds.get((campaign_id, character_id))
+    if not entry or entry.get("turn") != turn:
+        return None  # stale entry from an earlier turn — ignore
+    val = entry.get(slot)
+    return str(val) if val else None
+
+
+async def _mark_spell_cast_kind(
+    campaign_id: int, character_id: int, slot: str, kind: str,
+) -> None:
+    """Record that ``slot`` was burnt by a ``kind`` spell this turn."""
+    if slot not in ("action", "bonus"):
+        return
+    turn = _current_turn_key(campaign_id)
+    if turn is None:
+        return
+    key = (campaign_id, character_id)
+    entry = _spell_cast_kinds.get(key)
+    if not entry or entry.get("turn") != turn:
+        entry = {"turn": turn}
+        _spell_cast_kinds[key] = entry
+    entry[slot] = kind
+
+
 # v2.159.34 — legendary-actions Phase 1b: per-combatant action-point
 # pool helpers. RAW DMG p.11: a legendary creature has 3 legendary
 # action points per round (some monsters carry a different default),
@@ -25402,6 +25479,42 @@ async def cast_spell(
             "strict": strict,
         })
 
+    # v2.1033.0 (B15) — SRD 5.1 bonus-action spell pairing rule: "You
+    # can't cast a spell with your action and a spell with your bonus
+    # action in the same turn, unless the spell you cast with your action
+    # is a cantrip with a casting time of 1 action."
+    #
+    # Note the constraint is on the ACTION spell, not the bonus one — a
+    # leveled bonus-action spell paired with an action CANTRIP is legal,
+    # which is why the two branches below are asymmetric. Quickened Spell
+    # is what makes this reachable in play (it retargets a 1-action cast
+    # to the bonus slot just above), so the gate runs AFTER that retarget.
+    # Reaction casts are exempt: `slot_for_economy == "reaction"` matches
+    # neither branch.
+    _pair_prior_slot = ""
+    if slot_for_economy == "bonus":
+        # Something already went out with the action this turn — legal
+        # only if that spell was a cantrip.
+        _prior = _spell_cast_slot_kind(campaign_id, char.id, "action")
+        if _prior is not None and _prior != "cantrip":
+            _pair_prior_slot = "action"
+    elif slot_for_economy == "action":
+        # A spell already went out as a bonus action this turn — this
+        # action spell must therefore be a cantrip.
+        _prior = _spell_cast_slot_kind(campaign_id, char.id, "bonus")
+        if _prior is not None and spell_level >= 1:
+            _pair_prior_slot = "bonus"
+    if _pair_prior_slot and not user_is_gm and not override:
+        return JSONResponse(status_code=409, content={
+            "error": "bonus_action_spell_pairing",
+            "slot": slot_for_economy,
+            "prior_slot": _pair_prior_slot,
+            "char_name": char.name,
+            "source": "spell",
+            "label": spell.get("name", ""),
+            "strict": strict,
+        })
+
     # Resolve caster display info (same shape as roll broadcasts)
     membership = (
         db.query(CampaignMembership)
@@ -28209,6 +28322,13 @@ async def cast_spell(
     # _mark_battle_economy keeps an over-budget cast from re-flipping
     # the chip (it's already used — that's why we got here).
     await _mark_battle_economy(campaign_id, char.id, slot_for_economy)
+    # v2.1033.0 (B15) — stamp what KIND of spell burnt this slot so the
+    # pairing gate above can adjudicate the next cast this turn. Only the
+    # action/bonus pair matters; `_mark_spell_cast_kind` no-ops on others.
+    await _mark_spell_cast_kind(
+        campaign_id, char.id, slot_for_economy,
+        "cantrip" if spell_level < 1 else "leveled",
+    )
     # v2.70.0 Phase 3b — Counterspell trigger walker. Emit a
     # reaction_prompt(spell_cast_near) to every PC watcher within
     # 60 ft of the caster who has Counterspell prepared + a 3rd+
@@ -121023,6 +121143,20 @@ async def update_battle(
     _prev_battle = hub.get_battle(campaign_id) or {}
     _prev_turn = _prev_battle.get("turn_index") if _prev_battle else None
     _new_turn = state.get("turn_index")
+
+    # v2.1033.0 (B15) — drop the per-turn spell-cast provenance when the
+    # battle ends or the init list is cleared. Without this, markers key
+    # on (round, turn_index) and EVERY battle starts at (1, 0), so a
+    # marker from a finished fight would block the same PC's first legal
+    # cast in the next one. Purging on teardown (rather than on every PUT)
+    # is deliberate: a routine `pushBattle()` is also a PUT, and clearing
+    # there is exactly the fail-open bug this storage was moved off the
+    # combatant economy dict to avoid.
+    if isinstance(state, dict) and (
+        not state.get("active") or not state.get("combatants")
+    ):
+        for _k in [k for k in _spell_cast_kinds if k[0] == campaign_id]:
+            _spell_cast_kinds.pop(_k, None)
 
     # v2.169.0 — carry forward the lair-action flags. `/battle` PUT
     # replaces the whole state dict with the client body, which (pre-3c
