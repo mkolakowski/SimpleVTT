@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1032.0] - 2026-07-18 — "The Rules Lawyer's Thumb"
+
+**Schema version:** 103
+
+**Commit summary:** SRD Reference Phase 3 close-out — contextual rules links from the tabletop: a 📖 chip in the initiative tracker's action-economy strip opens the SRD "actions in combat" rules in the shared reference popover.
+
+**Description:** Closes the last open slice of SRD Reference Phase 3. The initiative tracker's econ strip (Act / Bns / Rxn / Mov) gains a 📖 chip that opens the SRD rules for actions in combat — contextual by placement, since it sits exactly where the GM is spending the action it describes. Ten rules ride the popover: `actions-in-combat`, `attack-action`, `dash`, `dodge`, `disengage`, `help`, `hide`, `ready`, `search`, `opportunity-attacks` — all shipped by the v2.1029.0–v2.1031.0 `rules` batches.
+
+**The enabling change is a generalization, not new plumbing.** `_openCondRefPopover` / `_condRefEntry` in `tabletop.html` were conditions-only: the fetch hardcoded `type=conditions` and the slug list was read from `data-cond-slugs`. Both are now type-aware — the popover reads `data-ref-type` + `data-ref-slugs`, and the entry cache is keyed `type/slug` rather than a bare slug (the conditions and rules tiers otherwise share a name space: the `grappled` **condition** vs. the `grappling` **rule**). The original `data-cond-slugs` attribute and a missing `data-ref-type` both still work, so the ⚠ Conditions pill — server-rendered in `_mini_sheet_card.html` and JS-patched by `_updateConditionWarnPill` — is untouched.
+
+**Two deliberate design calls worth recording.** (1) The chip is a real `<button>`, not a `role="button"` span like the ⚠ pill, so Enter/Space fire click natively — and it is therefore *deliberately omitted* from the keydown handler that serves the pill, which would double-fire and immediately re-close the popover. (2) The chip is held at the sibling `.econ-chip` 24px height rather than the 32px dense-panel floor: it lives inside the nowrap flex row at `.mini-header-stats`, and a taller chip breaks the row and ellipsizes the Init/HP text. The initiative tracker is the exact "deliberately compact row-based UI" CLAUDE.md names for this exception; horizontal padding is widened to 7px to recover what tap area the row allows. Both calls are commented at the source.
+
+No endpoint, schema, or server change — `/api/reference/entry` already served `type=rules` as of v2.1029.0.
+
+### Added
+- `app/templates/tabletop.html` — 📖 `.rule-ref-chip` in `renderBattle`'s econ-chip strip + its CSS, and an `is-rules` popover modifier (neutral accent border/heading instead of the conditions red).
+- `tests/harness/test_econ_rule_chip.py` (new, +3) — chip markup/attribute contract; **every slug the chip lists resolves via `/api/reference/entry` with non-empty desc** (parsed out of the page, not hardcoded, so it tracks the chip); unknown-slug 404 error path.
+- `tests/harness_ui/test_econ_rule_chip_popover.py` (new, +4) — browser coverage: chip renders in the strip, click opens the popover with real fetched SRD text, Escape dismisses, **plus a back-compat guard driving the legacy `data-cond-slugs` path through the real delegated handler** (the generalization's actual regression risk — both popover paths now share one function).
+
+### Changed
+- `app/templates/tabletop.html` — `_condRefEntry(slug)` → `_condRefEntry(type, slug)` with a `type/slug` cache key; `_openCondRefPopover` reads `data-ref-type` / `data-ref-slugs` with fallback to the conditions-only originals; the delegated click handler also matches `.rule-ref-chip`.
+- `docs/test-harness-coverage.md` — totals bumped 4817 → 4820 harness, 312 → 316 harness_ui.
+- `TODO.md` — Rules Reference Phase 3 marked complete; the plan's last optional slice is shipped.
+
+---
+
 ## [2.1031.2] - 2026-07-18 — "The Recount"
 
 **Schema version:** 103

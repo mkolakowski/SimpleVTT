@@ -1388,6 +1388,37 @@
     .econ-chip.mov { color: #80e0a0; }
     .econ-chip.mov.near { color: #e8a040; border-color: rgba(232,160,64,.4); background: rgba(232,160,64,.08); }
     .econ-chip.mov.over { color: #ff7070; border-color: rgba(255,112,112,.5); background: rgba(255,112,112,.1); }
+    /* v2.1032.0: 📖 SRD rules chip — opens the "actions in combat" rules in
+       the shared reference popover. Accent-tinted so it reads as a reference
+       affordance, not a spendable economy slot.
+       Touch-target exception (CLAUDE.md dense-panel rule): this sits INSIDE
+       the .econ-chips strip and must match its siblings' 24px height or the
+       nowrap flex row at .mini-header-stats breaks and the Init/HP text
+       ellipsizes. The strip is the initiative tracker — the exact
+       "deliberately compact row-based UI" CLAUDE.md names. Height is held at
+       the sibling 24px rather than the 32px floor; horizontal padding is
+       widened to 7px to recover as much tap area as the row allows. */
+    .rule-ref-chip {
+        font-size: 11px;
+        line-height: 1;
+        padding: 3px 7px;
+        min-height: 24px;
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        background: var(--input-bg);
+        color: var(--accent, #7aa2ff);
+        cursor: pointer;
+        touch-action: manipulation;
+        -webkit-user-select: none;
+        user-select: none;
+        white-space: nowrap;
+    }
+    .rule-ref-chip:hover { background: var(--btn-hover); }
+    /* Rules popover: neutral accent border instead of the conditions red. */
+    #cond-ref-popover.is-rules {
+        border-color: color-mix(in srgb, var(--accent) 40%, var(--border, #2e3550));
+    }
+    #cond-ref-popover.is-rules .cond-ref-entry strong { color: var(--accent, #7aa2ff); }
     /* v2.19.0 Phase C.1: buff chips. Sit below the action-economy chips,
        one chip per active timed buff (Rage, Hunter's Mark, Hex, ...).
        Purple-tinted to distinguish from the green/amber economy chips.
@@ -9191,16 +9222,21 @@ let CONC_DATA = {{ conc_by_char | tojson }};
      * handler covers both the server-rendered (Jinja) pill and the
      * JS-patched NPC pill; a per-slug cache avoids refetching. The popover
      * is dismissable via outside-click, Escape, or re-clicking the pill. */
+    // v2.1032.0 — the cache key is now `type/slug`, not a bare slug, so the
+    // conditions and rules tiers can't collide (both ship a `grappling`-ish
+    // name space: the `grappled` condition vs. the `grappling` rule).
     const _condRefCache = {};
-    async function _condRefEntry(slug) {
-        if (slug in _condRefCache) return _condRefCache[slug];
+    async function _condRefEntry(type, slug) {
+        const key = type + '/' + slug;
+        if (key in _condRefCache) return _condRefCache[key];
         let rec = null;
         try {
-            const r = await fetch('/api/reference/entry?type=conditions&slug='
-                                  + encodeURIComponent(slug));
+            const r = await fetch('/api/reference/entry?type='
+                                  + encodeURIComponent(type)
+                                  + '&slug=' + encodeURIComponent(slug));
             if (r.ok) rec = await r.json();
         } catch {}
-        _condRefCache[slug] = rec;
+        _condRefCache[key] = rec;
         return rec;
     }
     function _closeCondRefPopover() {
@@ -9208,14 +9244,24 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         if (ex) ex.remove();
     }
     async function _openCondRefPopover(pill) {
-        const raw = (pill.getAttribute('data-cond-slugs') || '').trim();
+        // v2.1032.0 — generalized past conditions. `data-ref-type` +
+        // `data-ref-slugs` are the new pair; the original conditions-only
+        // `data-cond-slugs` attribute still works unchanged (the ⚠ pill in
+        // _mini_sheet_card.html and _updateConditionWarnPill both emit it).
+        const type = (pill.getAttribute('data-ref-type') || 'conditions').trim()
+                     || 'conditions';
+        const raw = (pill.getAttribute('data-ref-slugs')
+                     || pill.getAttribute('data-cond-slugs') || '').trim();
         const slugs = raw ? raw.split(',').map(s => s.trim()).filter(Boolean) : [];
         if (!slugs.length) return;
         _closeCondRefPopover();
+        const isRules = type === 'rules';
         const pop = document.createElement('div');
         pop.id = 'cond-ref-popover';
+        if (isRules) pop.className = 'is-rules';
         pop.setAttribute('role', 'dialog');
-        pop.setAttribute('aria-label', 'SRD condition rules');
+        pop.setAttribute('aria-label',
+            isRules ? 'SRD combat rules' : 'SRD condition rules');
         pop.innerHTML = '<div class="cond-ref-loading">Loading SRD rules…</div>';
         // Anchor under the pill (fixed positioning; clamped to viewport).
         const rect = pill.getBoundingClientRect();
@@ -9223,7 +9269,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         const left = Math.min(Math.round(rect.left), window.innerWidth - 340);
         pop.style.left = Math.max(8, left) + 'px';
         document.body.appendChild(pop);
-        const recs = await Promise.all(slugs.map(_condRefEntry));
+        const recs = await Promise.all(slugs.map(s => _condRefEntry(type, s)));
         // The popover may have been dismissed while awaiting.
         if (!document.body.contains(pop)) return;
         const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
@@ -9237,7 +9283,10 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             + '<div class="cond-ref-foot">SRD 5.1 · CC BY 4.0</div>';
     }
     document.addEventListener('click', (ev) => {
-        const pill = ev.target.closest && ev.target.closest('.mini-ab-cond-warn');
+        // v2.1032.0 — `.rule-ref-chip` (the 📖 chip in the econ strip) rides
+        // the same popover as the ⚠ conditions pill.
+        const pill = ev.target.closest
+            && ev.target.closest('.mini-ab-cond-warn, .rule-ref-chip');
         if (pill) {
             ev.preventDefault();
             ev.stopPropagation();
@@ -9669,11 +9718,24 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // the v2.49.101 nowrap-flex + flex-shrink-on-sub rule
                 // — if it overflows on narrow viewports, the Init/HP
                 // text ellipsizes instead of bumping chips to row 2.
+                // v2.1032.0 — SRD Reference Phase 3 close-out: a 📖 chip
+                // next to the action budget opens the SRD "actions in
+                // combat" rules in the same popover the ⚠ conditions pill
+                // uses. Contextual by placement — it sits exactly where the
+                // GM is spending the action it describes. A real <button>
+                // (not a role="button" span like the ⚠ pill) so Enter/Space
+                // fire click natively; it is deliberately NOT added to the
+                // keydown handler, which would double-fire and re-close it.
+                const ruleChip = `<button type="button" class="rule-ref-chip"
+                    data-ref-type="rules"
+                    data-ref-slugs="actions-in-combat,attack-action,dash,dodge,disengage,help,hide,ready,search,opportunity-attacks"
+                    title="SRD: actions in combat" aria-label="SRD actions in combat">📖</button>`;
                 const economyChips = `<div class="econ-chips">
                     ${econChip('action',   'Act', 'Action',         !!econ.action)}
                     ${econChip('bonus',    'Bns', 'Bonus action',   !!econ.bonus)}
                     ${econChip('reaction', 'Rxn', 'Reaction',       !!econ.reaction)}
                     ${movChip}
+                    ${ruleChip}
                 </div>`;
                 // v2.19.0 Phase C.1: buff badges row. Renders one chip
                 // per active buff (Rage, Hunter's Mark, Hex, ...) with
