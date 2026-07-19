@@ -31,8 +31,17 @@ The single canonical list of known defects, RAW divergences, latent test-couplin
 
 ## Rules-engine divergences (RAW-bent / partial automation)
 
-### B6 — Sorcerer Quickened Spell is announce-only · 🟡 P2 · OPEN
-**Source:** `docs/plans/sorcery-points-and-metamagic.md`. 7 of 8 PHB metamagics are fully automated; Quickened Spell only announces (no action-economy override that lets the spell be cast as a bonus action). Needs the action-economy override path. The AoE multi-target Empowered loop is the other outstanding metamagic finisher.
+### B6 — Sorcerer Quickened Spell is announce-only · 🟡 P2 · FIXED (v2.1032.1 — was stale, shipped v2.649.0)
+**Source:** `docs/plans/sorcery-points-and-metamagic.md`. **Both halves of this entry were stale audit text, not open work.** Verified against the code:
+- **Quickened Spell — mechanized v2.649.0.** `POST /use_metamagic_quickened_spell` spends 2 SP and installs `metamagic-quickened-pending`; `/cast_spell` reads it via `_caster_has_quickened_pending` (`tabletop_routes.py:~25362`) and **does** perform the action-economy override the bug says is missing — `slot_for_economy` is retargeted `"action"` → `"bonus"`, the one-use buff is consumed, and a `feature_used` card broadcasts. Built on the v2.643.0–v2.648.8 economy-slot-retarget plumbing (`as_reaction` / `as_war_magic_bonus`). Harness `test_use_metamagic_quickened.py` — 3 tests, green.
+- **AoE multi-target Empowered loop — shipped v2.661.0** (`_aoe_empowered_log` / `_place_empowered_fired` on the `/place_aoe` path, first-target-wins once per cast).
+
+All 8 PHB metamagics are fully shipped end-to-end. The plan doc's own status line has said so since v2.158.68; this tracker entry simply never caught up.
+
+**The genuine remainder this entry was masking** is narrower and is now filed as B15 below: the PHB p.202 bonus-action-spell pairing rule (the plan's Phase 2 `over_quickened_limit` 409), which is unimplemented.
+
+### B15 — PHB p.202 bonus-action spell pairing rule unenforced · 🟡 P2 · OPEN
+**Source:** `docs/plans/sorcery-points-and-metamagic.md` Phase 2 (filed v2.1032.1, split out of the stale B6). RAW: a caster who casts a spell as a **bonus action** can't cast another spell that turn except a cantrip with a 1-action casting time. Quickened Spell makes this reachable — a Sorcerer can Quicken a leveled spell into the bonus slot and then cast a second leveled spell with their action, which SimpleVTT currently allows. The plan spec'd a 409 `over_quickened_limit` for this; `grep` finds no such path in `tabletop_routes.py`. Needs per-turn state recording *that a leveled spell took a given economy slot* (today's `economy` dict records only that a slot is burnt, not what burnt it), then a gate in `/cast_spell`. GM-adjudicable meanwhile.
 
 ### B10 — Fighter Indomitable shipped RAW-bent (advantage, not reroll-on-failure) · 🟢 P3 · WONTFIX (v1)
 **Source:** was `TODO.md` › Class Features (v2.56.0 "Iron Will"). RAW Indomitable lets you **reroll** a failed save; the v1 implementation grants **advantage on the next save** instead, because the true post-roll reroll needs an undo-and-reapply path for already-installed conditions (its own substantial commit). Accepted divergence for v1; filed for a future precise implementation.

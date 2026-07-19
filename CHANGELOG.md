@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1032.1] - 2026-07-19 — "The Closed Case"
+
+**Schema version:** 103
+
+**Commit summary:** Close B6 as stale — Quickened Spell shipped v2.649.0 — and file the narrower rule it was masking as B15.
+
+**Description:** Doc-only. B6 claimed Sorcerer Quickened Spell was announce-only and needed "the action-economy override path." Verifying before building found **both halves of the entry stale**:
+
+- **Quickened Spell has been mechanized since v2.649.0.** `/cast_spell` reads the `metamagic-quickened-pending` buff via `_caster_has_quickened_pending` and performs exactly the override B6 says is missing — `slot_for_economy` retargeted `"action"` → `"bonus"`, buff consumed, `feature_used` broadcast — riding the v2.643.0–v2.648.8 economy-slot-retarget plumbing. `test_use_metamagic_quickened.py` passes (3 tests).
+- **The "other outstanding finisher"**, the AoE multi-target Empowered loop, **shipped v2.661.0** (`_aoe_empowered_log` on the `/place_aoe` path).
+
+All 8 PHB metamagics are shipped end-to-end; the plan doc's status line has said so since v2.158.68 and the tracker never caught up. This is the tenth instance of the check-the-plan-doc-before-promoting-an-audit-item pattern, so the closure records the evidence rather than just flipping a flag.
+
+**B6 was masking a real but much narrower gap, now filed as B15.** RAW (PHB p.202), casting a spell as a bonus action forbids casting another spell that turn except a 1-action cantrip. Quickened makes this reachable — a Sorcerer can Quicken a leveled spell into the bonus slot and still cast a second leveled spell with their action. The plan spec'd a 409 `over_quickened_limit`; no such path exists. It needs per-turn state recording *what* burnt an economy slot (the `economy` dict records only *that* a slot is burnt), so it's a genuine slice rather than a one-line gate — filed at P2, GM-adjudicable meanwhile.
+
+No code, schema, or test changes; suites unchanged at 4820 harness / 316 UI.
+
+### Fixed
+- `BUGS.md` — B6 flipped OPEN → FIXED with the v2.649.0 / v2.661.0 evidence for both halves.
+
+### Added
+- `BUGS.md` — **B15** filed 🟡 P2: PHB p.202 bonus-action spell pairing rule unenforced, with the reason it isn't a one-liner (economy state records slot-burnt, not slot-burnt-by-what).
+
+---
+
 ## [2.1032.0] - 2026-07-18 — "The Rules Lawyer's Thumb"
 
 **Schema version:** 103
