@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1031.2] - 2026-07-18 — "The Recount"
+
+**Schema version:** 103
+
+**Commit summary:** Close B5 — rerun the automation-coverage classifier, and fix the `_install_buff_on_combatant_id` blind spot the rerun exposed.
+
+**Description:** Closes the last stale-doc bug. `docs/automation-coverage.md`'s per-endpoint split had been pinned since v2.612.2; re-running `scripts/classify_feature_endpoints.py` moves it to **306 tracked / 31 announce-only / 9 mechanical** (total 332 → 346 endpoints).
+
+**The rerun surfaced a real classifier bug, not just stale numbers.** `_MUTATORS` listed `_install_buff` but not `_install_buff_on_combatant_id` — so any endpoint that buffs a **target** combatant instead of the caster was scored as having no state mutation and mis-tagged announce-only. `use_fancy_footwork` is the clean example: it installs a 1-round `fancy-footwork-blocked` buff on the target that `_combatant_oa_blocked_against` reads to suppress the OA, yet the classifier called it announce-only. Adding that helper (plus `_grant_movement`) flips `fancy_footwork` and `orders_wrath` to tracked, which accounts for two of the six rows the v2.665.0 drift note had hand-flagged as wrong.
+
+**A finding worth recording: two of the six flagged rows were never drift.** `unwavering_mark` and `scornful_rebuke` are *correctly* tagged announce-only. The classifier scores **endpoints**, while the v2.665.0 spot-check was reasoning about **features** — and those two features are mechanized elsewhere, on the `/attack` on-hit path (`_apply_unwavering_mark_on_hit` is documented as pairing with "v2.99.375's announce-only `/use_unwavering_mark`"). So a ⚪ endpoint tag does not imply an unautomated feature when the mechanization rides an on-hit rider, reaction trigger, or turn-tick. The doc now states that distinction explicitly, so it isn't re-discovered as "drift" a third time, and the verify-before-automating guidance now says to grep both the endpoint body *and* the feature slug across the rider/reaction paths.
+
+No app code, schema, or endpoint changes — the change is one offline audit script + docs. Harness suite unchanged at 4817.
+
+### Fixed
+- `scripts/classify_feature_endpoints.py` — `_MUTATORS` gains `_install_buff_on_combatant_id` (target-side buff installs) + `_grant_movement`, fixing systematic announce-only mis-tagging of target-buffing endpoints.
+- `docs/automation-coverage.md` — Summary counts regenerated 289/35/8 → 306/31/9 (total 346); the v2.665.0 drift callout rewritten to record what the rerun resolved, what was never drift, and how to verify a row before automating it; "59 announce-only rows" corrected to 31.
+- `BUGS.md` — B5 flipped OPEN → FIXED with the blind-spot finding and the endpoint-vs-feature nuance recorded.
+
+---
+
 ## [2.1031.1] - 2026-07-18 — "The Errata Sweep"
 
 **Schema version:** 103

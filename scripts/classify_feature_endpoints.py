@@ -28,6 +28,13 @@ ROUTES = Path(__file__).resolve().parent.parent / "app" / "routes" / "tabletop_r
 # of these inside an endpoint body marks it "tracked".
 _MUTATORS = {
     "_install_buff",
+    # v2.1031.2 — the target-side install helper. Its absence was a real
+    # blind spot: endpoints that buff a *target* combatant (Fancy Footwork,
+    # Order's Wrath, Unwavering Mark, Scornful Rebuke …) call only this and
+    # were mis-tagged announce-only, which is exactly the drift the
+    # v2.665.0 note in docs/automation-coverage.md spot-checked by hand.
+    "_install_buff_on_combatant_id",
+    "_grant_movement",
     "_apply_damage_to_combatant",
     "_grant_temp_hp",
     "_force_move",

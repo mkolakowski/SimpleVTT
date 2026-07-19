@@ -44,8 +44,8 @@ The single canonical list of known defects, RAW divergences, latent test-couplin
 
 ## Stale-doc bugs
 
-### B5 — `automation-coverage.md` row counts pinned at v2.99.460 · 🟢 P3 · OPEN
-**Source:** `docs/automation-coverage.md` + `docs/plans/full-feature-automation.md`. The per-feature coverage counts in `automation-coverage.md` are stale (last recomputed ~v2.99.460). Superseded for headline numbers by the [SRD audit](TODO.md#srd-5e-audit-v23150-refresh); this doc still needs a row-level refresh or a pointer to the audit.
+### B5 — `automation-coverage.md` row counts pinned at v2.99.460 · 🟢 P3 · FIXED (v2.1031.2)
+**Source:** `docs/automation-coverage.md` + `docs/plans/full-feature-automation.md`. **Fixed:** classifier rerun, counts refreshed 289/35/8 → **306/31/9** (total 332 → 346). The rerun also exposed and fixed a real **classifier blind spot** — `_MUTATORS` in `scripts/classify_feature_endpoints.py` listed `_install_buff` but not `_install_buff_on_combatant_id`, so every endpoint buffing a *target* combatant rather than the caster was mis-tagged announce-only; adding it (plus `_grant_movement`) flipped `fancy_footwork` + `orders_wrath` to tracked. That accounts for two of the six rows the v2.665.0 drift note had hand-flagged. **Partly-open nuance recorded in the doc, not re-filed as a bug:** the last two flagged rows (`unwavering_mark`, `scornful_rebuke`) are *correctly* tagged — the classifier scores **endpoints**, and those endpoints are announce-only by design while the feature is mechanized in the `/attack` on-hit path. A ⚪ endpoint tag therefore doesn't imply an unautomated feature; the doc now says so explicitly so the distinction isn't re-discovered as "drift" a third time.
 
 ### B11 — Unified-mini-sheet visual regressions slip past the PC harness · 🟢 P3 · OPEN
 **Source:** `docs/plans/unified-mini-sheet.md`. The mini-sheet has 3 mockups but Phases 1–3 are unstarted; visual regressions in the eventual implementation won't be caught by the PC HTTP harness (same class of gap as B4). Re-evaluate when the mini-sheet ships.

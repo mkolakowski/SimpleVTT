@@ -28,14 +28,14 @@ via a Phase-1 install + deferred read, so the endpoint body itself reads
 announce-only to the classifier), and a few `tracked`-tagged ones only spend a
 resource without a downstream effect.
 
-## Summary (counts regenerated v2.612.2)
+## Summary (counts regenerated v2.1031.2)
 
 | Status | Count | Meaning |
 |---|---|---|
-| ✅ **tracked** | **289** | server-applies effect and/or spends resource |
-| ⚪ **announce-only** | **35** | validates + broadcasts; effect left to the GM |
-| 🔧 mechanical | **8** | helper endpoints (not `feature_used` features) |
-| **Total** | **332** | `use_*` / `cast_*` endpoints |
+| ✅ **tracked** | **306** | server-applies effect and/or spends resource |
+| ⚪ **announce-only** | **31** | validates + broadcasts; effect left to the GM |
+| 🔧 mechanical | **9** | helper endpoints (not `feature_used` features) |
+| **Total** | **346** | `use_*` / `cast_*` endpoints |
 
 > The per-slug table further down still pins the v2.158.35 snapshot in
 > places — it drifts behind the classifier between full reconciliations.
@@ -43,6 +43,15 @@ resource without a downstream effect.
 > (`python3 scripts/classify_feature_endpoints.py`). Recent Phase-8
 > flag-buff flips: `potent_spellcasting` (v2.612.1), `totem_spirit`
 > (v2.612.2) — both announce-only → tracked.
+>
+> **v2.1031.2 rerun also fixed a classifier blind spot.** `_MUTATORS`
+> listed `_install_buff` but not `_install_buff_on_combatant_id`, so
+> every endpoint that buffs a **target** combatant rather than the
+> caster was mis-tagged announce-only. Adding it (plus `_grant_movement`)
+> flipped `fancy_footwork` and `orders_wrath` to tracked — two of the
+> six rows the v2.665.0 hand-spot-check had already flagged as wrong.
+> Counts moved 289/35/8 → 306/31/9 across the v2.612.2 → v2.1031.2 span;
+> the endpoint total grew 332 → 346 over the same period.
 
 At the plan's baseline (v2.99.385) the split was **~60 tracked / ~156
 announce-only**. Phases 1–6 (feature-use registry, on-hit riders, feature
@@ -75,16 +84,30 @@ for the archetype → primitive mapping.
 
 ## Notable announce-only backlog (candidates for automation)
 
-> **⚠ Classifier drift (noted v2.665.0).** The ⚪ announce-only tags in the
-> per-endpoint table below are pinned to an old classifier run and are **stale
-> for several rows** — Aura of Warding, Fancy Footwork, Relentless Avenger,
-> Unwavering Mark, Order's Wrath, and Improved Duplicity were all found
-> already-mechanized when spot-checked. **Verify in code (grep the endpoint
-> body for `_install_buff` / a mechanical read site) before picking a row to
-> automate** — don't trust the tag alone. Re-running the classifier would
-> correct the counts; until then this table over-states the announce-only set.
+> **⚠ Classifier drift — partly resolved (v2.1031.2).** The v2.665.0 note
+> here flagged six rows as already-mechanized despite an ⚪ tag: Aura of
+> Warding, Fancy Footwork, Relentless Avenger, Unwavering Mark, Order's
+> Wrath, Improved Duplicity. Re-running the classifier resolved four of
+> them — Aura of Warding, Relentless Avenger, and Improved Duplicity no
+> longer appear, and Fancy Footwork + Order's Wrath flipped once the
+> `_install_buff_on_combatant_id` blind spot was fixed (see Summary).
+>
+> **The remaining two are not drift — they're a category difference.**
+> `unwavering_mark` and `scornful_rebuke` are correctly tagged: the
+> classifier scores **endpoints**, and those endpoints really are
+> announce-only. The *feature* is mechanized somewhere else — Unwavering
+> Mark's effect lives in the `/attack` on-hit path
+> (`_apply_unwavering_mark_on_hit`), which explicitly "pairs with
+> v2.99.375's announce-only `/use_unwavering_mark`". So a ⚪ endpoint tag
+> does **not** imply an unautomated feature when the mechanization rides
+> an on-hit rider, a reaction trigger, or a turn-tick.
+>
+> **Still verify in code before picking a row to automate** — grep the
+> endpoint body for a mutator *and* grep for the feature slug across
+> `/attack` / `_tick_auras` / the reaction registry. The tag alone won't
+> tell you which of the two shapes you're looking at.
 
-Most of the 59 announce-only rows are **archetype J** (narration /
+Most of the 31 announce-only rows are **archetype J** (narration /
 passive senses: `beast_speech`, `devils_sight`, `eldritch_sight`,
 `mask_of_many_faces`, `eyes_of_the_rune_keeper`, `improved_minor_illusion`, …)
 or passive damage-boosters that already ride other code paths
