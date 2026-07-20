@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1033.1] - 2026-07-20 — "The Red Board"
+
+**Schema version:** 103
+
+**Commit summary:** File B16 — the CI harness suite has been red since ≥2026-07-12; document and cluster the confirmed failures so the baseline is visible.
+
+**Description:** Doc-only. Investigating the "~12 pre-existing harness failures" I flagged while shipping B15 turned up something larger: **all four CI jobs** in `test-harness.yml` (`harness`, `spell-catalog`, `encounter-sim`, `harness-ui`) have been failing since at least the 2026-07-12 run. The CLAUDE.md promise that CI "fails the workflow before merge" is not currently protecting `main` — the board is already red, so a genuinely new regression lands invisibly in the noise. That's the exact failure mode that cost hand-diffing time in the B15 session.
+
+Filed as **B16 (🔴 P1)** with a root-cause cluster table for the 12 `spell-catalog` failures I reproduced on **both** the dev host and CI Linux (so they're real, not macOS artifacts):
+- **Vision/LOS cancels the effect under test** (5: blur, holy-aura, mislead, true-seeing, foresight) — the attacker can't *see* the target on the demo map's dim ambient, so the can't-see cancellation pre-empts the adv/dis being asserted. Test-setup, not a product regression; same root cause as the known vision/lighting flake, now recorded as a third cluster in that memory.
+- **Test helper's derivation ≠ engine's** (3: the two `spell_catalog_attack` + `spell_catalog_save`) — `_expected_attack_bonus` defaults proficiency to 2 while the engine derives it from level. Stale test.
+- **Catalog anchor drift** (3: conjure-family, polymorph ×2) — verify whether the shipped catalog or the test anchor moved.
+- **RNG-dependent** (1: confusion-npc) — "no failed save in 30 tries"; needs a seeded forced-fail.
+
+The `harness` and `encounter-sim` jobs fail a much larger set on CI that does **not** reproduce locally in isolation — flagged in B16 as likely CI-ordering/seed-specific and explicitly *not* folded into the four confirmed clusters, to avoid mischaracterizing them.
+
+No code, schema, or test change — this commit documents the baseline; fixing the clusters is follow-up work (each its own commit). The recommended path: land the two pure test-fix clusters first (vision-setup + the derivation helper) to turn most of `spell-catalog` green, then re-triage the rest against a no-longer-red board.
+
+### Added
+- `BUGS.md` — **B16** filed 🔴 P1 with the four-cluster breakdown table + the un-reproduced-locally CI remainder.
+
+### Changed
+- Memory `project_preexisting_vision_lighting_test_flakes` — added the attack-roll adv/dis spell cluster (blur/holy-aura/mislead/true-seeing/foresight) as a third instance of the demo-dim vision root cause, noting it fails on CI too, and cross-linked B16.
+
+---
+
 ## [2.1033.0] - 2026-07-19 — "One Spell Too Many"
 
 **Schema version:** 103
