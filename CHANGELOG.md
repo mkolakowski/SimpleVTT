@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1033.6] - 2026-07-21 — "The Green Column"
+
+**Schema version:** 103
+
+**Commit summary:** Re-run CI after the B16 cluster fixes — `spell-catalog` is green; triage the residual `harness` failure as one systemic sheet-pollution issue (filed B17); correct the "CI runs on every push" framing.
+
+**Description:** Doc-only. Closes out the B16 investigation with a fresh CI run and two framing corrections.
+
+**Correction: CI is manual-only.** The `test-harness.yml` workflow is `workflow_dispatch`-only — auto-trigger on push/PR was **deliberately disabled at v2.158.95 "per project owner request."** So the "red since 2026-07-12" in B16 was the last *manual* run, not a per-push failure, and none of this session's commits triggered CI. The CLAUDE.md "the CI workflow runs the harness suite on every push" line is stale against this workflow and is flagged for reconciliation. B16's title/body corrected accordingly.
+
+**Fresh CI run (`29792242048`, against `d2c718b2`, all four cluster fixes in):**
+- **`spell-catalog`: ✅ GREEN** — the job that held all 12 confirmed B16 failures now passes on CI Linux. The four cluster fixes (vision, derivation, catalog anchor, index drift) are confirmed cross-platform.
+- **`harness`: ❌** 4715/4829 fail, but as **one systemic issue, not thousands of bugs**: uniform demo-sheet-corruption signatures ("No Ki/Lay-on-Hands/Channel-Divinity/Action-Surge resource", "Thalindra has no Fireball", "assert 5 == 7"). The seed is verified good (sanity-check passes, roster matches the dev host); the corruption happens **mid-run** — a sheet-mutating test's snapshot/restore doesn't hold and cascades. Same order-dependence class as B16 cluster 1's leaked ambient, at scale; never seen locally because the full serial run takes hours. **Filed as B17 (P1)** with the hermeticity fix path. Not app regressions.
+- **`encounter-sim` / `harness-ui`: ❌** browser/Linux-baked-visual flakiness (known, pre-existing).
+
+**Net:** the confirmed, cross-platform-reproduced red set is now green; the residual CI red is two non-product root causes (serial-run sheet-pollution; visual/browser flakiness).
+
+No product-code, schema, or test change.
+
+### Added
+- `BUGS.md` — **B17** (🔴 P1): full-serial `harness` job cascades demo-sheet pollution (~97% fail); hermeticity fix path.
+
+### Changed
+- `BUGS.md` — B16 title + framing corrected (CI is `workflow_dispatch`-only, not per-push); added the post-fix CI-run triage (spell-catalog green, harness→B17, browser/visual remainder).
+
+---
+
 ## [2.1033.5] - 2026-07-20 — "The Right Spell"
 
 **Schema version:** 103
