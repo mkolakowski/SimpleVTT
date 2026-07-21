@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1033.7] - 2026-07-21 — "The Airlock"
+
+**Schema version:** 103
+
+**Commit summary:** Fix B17 — add an autouse `hermetic_pcs` conftest fixture that snapshots each demo PC's pristine mutable sheet fields and restores any that drifted before every test, so a sheet-mutating test's failed restore can no longer cascade through the serial CI `harness` run.
+
+**Description:** Test-infrastructure hermeticity pass. The CI `harness` job runs the whole non-catalog suite serially against one shared demo stack; ~500 tests PATCH a PC's `spells`/`spell_slots`/`resources`/`attacks` via `/sheet-fields` and rely on their own restore-in-`finally`. When one restore doesn't complete (an assertion aborts before the finally, a `pkill`'d run skips teardown, a test simply forgot), the PC is left stripped and **every downstream test needing that PC's spells/resources fails** — the B17 cascade (~97% of the CI job: "Thalindra has no Fireball", "No Ki / Lay on Hands / Channel Divinity resource", "assert 5 == 7"). `clean_pcs` can't recover it: a long rest refills slot *counts* and resource *uses*, but never re-adds a *deleted* spell or a *removed* resource object.
+
+**Fix:** a new autouse `hermetic_pcs` fixture (superset of `clean_pcs`). On the first test — when the freshly-seeded stack is clean (the workflow's sanity-check step guarantees it) — it snapshots each PC's top-level restorable sheet fields (`spells`, `spell_slots`, `resources`, `attacks`, `abilities`, defenses, …). Before every subsequent test it re-reads each PC and PATCHes back only the fields that drifted from pristine. Reads/writes fan out concurrently across the ~15 PCs so the per-test cost stays near a single round-trip. Scope is deliberately **top-level keys only** — those merge straight onto the sheet and `/rest`'s normalize doesn't recompute them, so a bare PATCH is a guaranteed-safe round-trip; the class-scoped `level`/`subclass` fields (which aren't in B17's cascade signature) are left to their tests' existing restore-in-finally.
+
+**Snapshot round-trip is safe:** `/sheet-json` returns the raw dnd5e-normalized `char.sheet` (not a display projection), and every restored key is in `_SHEET_PATCH_KEYS` and none in `_CLASS_SCOPED_KEYS` — so the snapshot values PATCH straight back.
+
+Validated locally against the live stack: the new guard tests plus a representative slice of sheet/resource-mutating tests (`test_use_lay_on_hands`, `test_improved_divine_smite`, `test_acolyte_of_nature`, `test_abjure_enemy`, `test_cast_confusion_npc`) all pass with the fixture live. Full-serial CI confirmation is the remaining verify step (B17 → NEEDS-VERIFY).
+
+### Added
+- `tests/harness/conftest.py` — autouse `hermetic_pcs` fixture + `_read_sheet` / `_snapshot_pristine` / `_restore_pristine` helpers + `_HERMETIC_RESTORE_KEYS`.
+- `tests/harness/test_hermetic_pcs.py` (new, +3) — proves the fixture heals a leaked `spells` strip between tests and that the snapshot/restore helpers round-trip within one test.
+
+### Changed
+- `BUGS.md` — B17 marked `NEEDS-VERIFY` with the fix landed; awaiting a full-serial CI run to confirm the cascade is cleared.
+- `docs/test-harness-coverage.md` — total-test-count line bumped to 4832; `test_hermetic_pcs` catalogued.
+
+---
+
 ## [2.1033.6] - 2026-07-21 — "The Green Column"
 
 **Schema version:** 103

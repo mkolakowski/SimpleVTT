@@ -12,6 +12,7 @@ PCs in a sidecar test campaign per docs/plans/test-harness.md.
 from __future__ import annotations
 
 import asyncio
+import copy
 import os
 from pathlib import Path
 from typing import AsyncIterator
@@ -267,6 +268,118 @@ async def clean_pcs(
             json={"type": "long"},
         )
     return roster
+
+
+# ── B17: hermetic sheet snapshot/restore (autouse) ───────────────────────────
+#
+# The CI ``harness`` job runs the whole non-catalog suite serially against one
+# shared demo stack. ~500 tests mutate a PC's sheet — they PATCH ``spells`` /
+# ``spell_slots`` / ``resources`` / ``attacks`` / ``abilities`` via
+# ``/sheet-fields`` and rely on their own restore-in-``finally`` block. When one
+# of those restores doesn't complete (an assertion aborts the body before the
+# finally, a ``pkill``'d run skips teardown, a test simply forgot to restore),
+# the PC is left stripped and **every downstream test that needs that PC's
+# spells/resources fails** — the B17 cascade (~97% of the CI job: "Thalindra
+# has no Fireball", "No Ki / Lay on Hands / Channel Divinity resource",
+# "assert 5 == 7"). ``clean_pcs`` can't recover this: a long rest refills slot
+# *counts* and resource *uses*, but never re-adds a *deleted* spell or a
+# *removed* resource object.
+#
+# This autouse fixture makes the suite hermetic against that class of leak:
+# it snapshots each demo PC's pristine mutable sheet fields once (on the first
+# test, when the freshly-seeded stack is clean — the workflow's sanity-check
+# step guarantees this), then before every subsequent test restores any field
+# that drifted from pristine. A single test's failed restore is healed at the
+# next test's setup, so it can no longer cascade.
+#
+# Scope note: only **top-level (non class-scoped) keys** are restored. These
+# merge straight onto the sheet via ``/sheet-fields`` and ``/rest``'s normalize
+# pass doesn't recompute them — so a bare PATCH is a guaranteed-safe round-trip.
+# The class-scoped fields (``level`` / ``subclass`` / ``subclass_*``) need a
+# ``class_slug`` to survive normalize and are NOT part of B17's cascade
+# signature (which is spells/resources); tests that mutate those already follow
+# restore-in-finally and are left to it. See ``_SHEET_PATCH_KEYS`` /
+# ``_CLASS_SCOPED_KEYS`` in ``app/routes/tabletop_routes.py``.
+
+# Pristine per-PC sheet snapshots, keyed by character id. A plain module-level
+# dict (pure data, no event-loop affinity) so it can be shared across the
+# function-scoped tests where a live session-scoped httpx client would cross
+# event loops and trip "Future attached to a different loop" (see the
+# ``gm_client`` note above). Populated lazily on the first test.
+_PRISTINE_SHEETS: dict[int, dict] = {}
+
+# Top-level sheet keys a sheet-mutating test can strip/replace and whose loss
+# cascades. All are in ``_SHEET_PATCH_KEYS`` and NONE are in
+# ``_CLASS_SCOPED_KEYS`` — so restoring them is a bare top-level PATCH.
+_HERMETIC_RESTORE_KEYS = (
+    "spells", "spell_slots", "resources", "attacks", "feats",
+    "abilities", "saving_throws", "proficiency_bonus", "inventory",
+    "damage_resistances", "damage_immunities", "damage_vulnerabilities",
+    "condition_immunities", "creature_type", "fighting_style",
+    "favorite_beasts", "hp_rolls",
+)
+
+
+async def _read_sheet(gm_client: httpx.AsyncClient, char_id: int) -> dict:
+    """Return a PC's raw stored sheet dict (``/sheet-json`` gives the
+    dnd5e-normalized ``char.sheet``, not a display projection — so its
+    values round-trip back through ``/sheet-fields``)."""
+    resp = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-json",
+    )
+    if resp.status_code != 200:
+        return {}
+    return resp.json().get("sheet") or {}
+
+
+async def _snapshot_pristine(gm_client: httpx.AsyncClient, char_id: int) -> dict:
+    sheet = await _read_sheet(gm_client, char_id)
+    return {k: copy.deepcopy(sheet[k]) for k in _HERMETIC_RESTORE_KEYS if k in sheet}
+
+
+async def _restore_pristine(
+    gm_client: httpx.AsyncClient, char_id: int, pristine: dict,
+) -> None:
+    """PATCH back any snapshot field that has drifted from pristine. Only
+    writes on actual drift, so an untouched PC pays just the read."""
+    if not pristine:
+        return
+    current = await _read_sheet(gm_client, char_id)
+    drift = {k: v for k, v in pristine.items() if current.get(k) != v}
+    if drift:
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-fields",
+            json=drift,
+        )
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def hermetic_pcs(
+    gm_client: httpx.AsyncClient, roster: dict[str, dict],
+) -> None:
+    """B17 — restore every demo PC's mutable sheet fields to their seed
+    state before each test, so a sheet-mutating test whose own restore
+    didn't complete can't cascade into the rest of the serial run.
+
+    Setup-time gate (like ``clean_pcs``, no teardown): the first test to
+    run captures the pristine snapshot from the freshly-seeded stack;
+    every test after that restores drifted fields first. Reads run
+    concurrently across the ~15 PCs to keep the per-test cost near a
+    single round-trip.
+    """
+    if not _PRISTINE_SHEETS:
+        chars = list(roster.values())
+        snaps = await asyncio.gather(
+            *(_snapshot_pristine(gm_client, c["id"]) for c in chars)
+        )
+        for c, snap in zip(chars, snaps):
+            _PRISTINE_SHEETS[c["id"]] = snap
+        return
+    await asyncio.gather(
+        *(_restore_pristine(gm_client, cid, snap)
+          for cid, snap in _PRISTINE_SHEETS.items()),
+        return_exceptions=True,
+    )
 
 
 # ── Live progress + per-test timing (opt-in via HARNESS_PROGRESS=1) ──────────
