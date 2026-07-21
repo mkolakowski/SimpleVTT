@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1033.4] - 2026-07-20 — "Concentration Restored"
+
+**Schema version:** 103
+
+**Commit summary:** Fix B16 catalog-anchor cluster — the conjure-family + polymorph tests pinned a `concentration:false` data bug that has since been corrected to `true`.
+
+**Description:** Third B16 cluster. `test_cast_conjure_family::test_conjure_family_present_in_catalog` failed on `conjure-celestial`, and the two `test_cast_polymorph` catalog tests on the Polymorph anchor.
+
+**Root cause:** the shipped catalog was **corrected** — all six Conjure spells and Polymorph now carry `concentration: true`, which is RAW-accurate ("Concentration, up to 1 hour"). These tests were written when the catalog carried a stale `concentration: false`, and they pinned that data bug as a deliberate "catalog-vs-runtime divergence" anchor (catalog says false, runtime binds it anyway). The catalog catching up to the runtime removed the divergence, so the anchors stopped matching. The product data improved; the tests were stale.
+
+**Fix:** flip the three `concentration` assertions to `True`, re-document them as the correct RAW value, and rename `test_cast_binds_concentration_despite_catalog_flag` → `test_cast_binds_polymorph_concentration` (the "despite the catalog flag" framing no longer holds now that catalog and runtime agree). The runtime behavior asserted (cast returns `concentration: true` + installs the `concentration-polymorph` anchor) is unchanged.
+
+Left deliberately untouched: the identically-named `test_cast_binds_concentration_despite_catalog_flag` in `test_cast_spiritual_weapon.py` — Spiritual Weapon **is** non-concentration in RAW (2-minute duration), so its catalog `concentration: false` is correct and its house-rule runtime binding is a genuine, still-valid divergence.
+
+No product-code or content change — the catalog correction pre-dates this commit; this only realigns the stale tests. Test count unchanged (one rename).
+
+### Changed
+- `tests/harness/test_cast_conjure_family.py` — `test_conjure_family_present_in_catalog` asserts `concentration: true`.
+- `tests/harness/test_cast_polymorph.py` — `test_polymorph_present_in_catalog` asserts `concentration: true`; `test_cast_binds_concentration_despite_catalog_flag` renamed to `test_cast_binds_polymorph_concentration` with the precondition flipped to `true`.
+- `docs/test-harness-coverage.md` — the two Polymorph rows updated (value + rename).
+- `BUGS.md` — B16 catalog cluster marked ✅ FIXED (3 of 4 clusters done; RNG remains).
+
+---
+
 ## [2.1033.3] - 2026-07-20 — "The Right Modifier"
 
 **Schema version:** 103

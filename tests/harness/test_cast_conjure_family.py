@@ -99,9 +99,9 @@ async def mira_conjure(gm_client, roster):
 def test_conjure_family_present_in_catalog():
     """All five higher conjures are present, Conjuration, at the right
     level, with a single no-save / no-attack / no-damage cast action, the
-    right spell-list membership, and the concentration divergence: catalog
-    ``concentration`` is False yet the duration starts with "Up to" (the
-    runtime concentration convention)."""
+    right spell-list membership, and the correct concentration flag:
+    catalog ``concentration`` is True with an "Up to …" duration (RAW —
+    these are all "Concentration, up to 1 hour" spells)."""
     by_slug = {(s.get("slug") or ""): s for s in load_all_spells()}
     for slug, (level, lists) in _FAMILY.items():
         sp = by_slug.get(slug)
@@ -114,8 +114,13 @@ def test_conjure_family_present_in_catalog():
             assert not a.get("save_ability"), (slug, a)
             assert not a.get("attack_roll"), (slug, a)
             assert not a.get("damage"), (slug, a)
-        # Catalog-vs-runtime concentration divergence.
-        assert sp.get("concentration") is False, slug
+        # v2.1033.4 (B16): the catalog now correctly flags these as
+        # concentration spells (RAW: "Concentration, up to 1 hour"). The
+        # test previously pinned the old `concentration: false` data bug as
+        # a "catalog-vs-runtime divergence" anchor; that divergence is gone
+        # now that the catalog agrees with the runtime, so the assertion is
+        # flipped to the correct value.
+        assert sp.get("concentration") is True, slug
         assert (sp.get("duration") or "").strip().lower().startswith("up to"), (
             slug, sp.get("duration"),
         )

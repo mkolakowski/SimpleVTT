@@ -325,38 +325,47 @@ async def thalindra_poly(gm_client, roster):
 
 async def test_polymorph_present_in_catalog():
     """Catalog anchor — Polymorph present as a 4th-level Transmutation,
-    "Up to 1 hour" duration, WIS save, 60 ft. The catalog flags
-    `concentration: false` (the divergence the next test pins against
-    the runtime cast)."""
+    "Up to 1 hour" duration, WIS save, 60 ft, correctly flagged
+    `concentration: true` (RAW: "Concentration, up to 1 hour").
+
+    v2.1033.4 (B16): previously asserted `concentration: false` to pin a
+    catalog-vs-runtime divergence; the catalog was corrected to True, so
+    the divergence is gone and this now asserts the accurate value."""
     by_slug = {(s.get("slug") or ""): s for s in load_all_spells()}
     assert _SLUG in by_slug, "polymorph absent from catalog"
     spell = by_slug[_SLUG]
     assert int(spell.get("level_int") or 0) == 4, spell.get("level_int")
     assert (spell.get("school") or "").lower() == "transmutation", spell
     assert "hour" in (spell.get("duration") or "").lower(), spell.get("duration")
-    assert spell.get("concentration") is False, (
-        "catalog should flag Polymorph concentration:false — the runtime "
-        "cast binds it; the divergence test depends on this anchor"
+    assert spell.get("concentration") is True, (
+        "catalog should flag Polymorph concentration:true (RAW hour-long "
+        "concentration spell)"
     )
     action = next(a for a in spell["actions"]
                   if (a.get("save_ability") or "").lower() == "wis")
     assert action is not None, spell.get("actions")
 
 
-async def test_cast_binds_concentration_despite_catalog_flag(
+async def test_cast_binds_polymorph_concentration(
     gm_client, thalindra_poly,
 ):
-    """House-rule divergence (mirror of Spiritual Weapon's): the catalog
-    flags Polymorph `concentration: false`, but `/cast_polymorph` returns
-    `concentration: true` and installs a `concentration-polymorph` anchor
-    on the caster (it's an hour-long concentration spell in RAW)."""
+    """`/cast_polymorph` returns `concentration: true` and installs a
+    `concentration-polymorph` anchor on the caster (RAW: an hour-long
+    concentration spell).
+
+    v2.1033.4 (B16): renamed from `test_cast_binds_concentration_despite_
+    catalog_flag`. The catalog used to flag `concentration: false` and
+    this test pinned the runtime binding it "despite" that; the catalog
+    is now corrected to True, so catalog and runtime agree and the
+    "despite" framing is gone. The runtime behavior under test is
+    unchanged and still worth asserting."""
     thalindra = thalindra_poly
     th_tok = f"tok_polycon_{thalindra['id']}"
     await _seed_battle(gm_client, [
         _mkc(th_tok, thalindra["id"], name=thalindra["name"]),
     ])
     by_slug = {(s.get("slug") or ""): s for s in load_all_spells()}
-    assert by_slug[_SLUG].get("concentration") is False  # catalog says no
+    assert by_slug[_SLUG].get("concentration") is True  # catalog now agrees
 
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/cast_polymorph",
