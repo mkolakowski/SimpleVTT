@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1033.8] - 2026-07-21 — "The Manual Switch"
+
+**Schema version:** 103
+
+**Commit summary:** Reconcile the two stale CLAUDE.md lines that claim the test-harness CI workflow "runs on every push" — it's been `workflow_dispatch`-only since v2.158.95 (auto-triggers disabled per project-owner request).
+
+**Description:** Doc-only. The B16/B17 CI triage surfaced that `.github/workflows/test-harness.yml` has no `push:`/`pull_request:` trigger — only `workflow_dispatch:` — so `main` has no *automatic* regression gate; the suite runs only when fired by hand from the Actions tab (or `gh workflow run test-harness.yml --ref main`). Two CLAUDE.md passages still asserted per-push/per-PR runs, which mis-set expectations (a contributor would assume CI caught a regression that in fact never ran). Both are reworded to state the manual-dispatch reality and how to fire it; the "push promptly" discipline is retained (the manual run still needs the latest code on `origin/main`).
+
+Scope is deliberately the doc reconciliation only — whether to *re-enable* the auto-triggers is a separate call left to the project owner (the workflow comment already documents how).
+
+### Changed
+- `CLAUDE.md` — the two "CI runs on every push / PR" claims reworded to "manual-dispatch only (`workflow_dispatch:`)", with the `gh workflow run` invocation and the v2.158.95 disable rationale.
+
+---
+
 ## [2.1033.7] - 2026-07-21 — "The Airlock"
 
 **Schema version:** 103

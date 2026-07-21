@@ -29,7 +29,7 @@ Do this for **every** commit, including doc-only bumps. The "every commit ships 
 
 If the push fails (network blip, auth, non-fast-forward because someone else pushed) investigate before retrying. **Never** use `git push --force` to "fix" a non-fast-forward against `origin/main` — fetch first, see what's upstream, and rebase or merge cleanly. Force-push to `main` overwrites collaborators' work and is one of the few git operations that's genuinely unrecoverable for them. The user must explicitly authorize force-push for it to happen.
 
-The CI workflow at `.github/workflows/test-harness.yml` runs the harness suite on every push to `main` — pushing keeps the regression net hot. Skipping pushes lets a broken main accumulate without the GitHub-side signal.
+The CI workflow at `.github/workflows/test-harness.yml` is **manual-dispatch only** (`workflow_dispatch:` — the `push:`/`pull_request:` auto-triggers were disabled at v2.158.95 "per project owner request"). It does **not** run automatically on push, so `main` currently has no automatic regression gate: fire the workflow by hand from the Actions tab (or `gh workflow run test-harness.yml --ref main`) after a batch of commits to keep the GitHub-side regression signal fresh. Pushing promptly is still required (per the rule above) so the manual run has the latest code and collaborators see the real tip.
 
 **Restart the app container after every version bump.** The dev image bakes the code at build time (no live-reload mount on the `app` service in `docker-compose.yml`) — so a `git commit` that bumps `APP_VERSION` does **not** propagate to the running container automatically. After committing a version bump, run:
 
@@ -102,9 +102,12 @@ doc, and ship the **error-path tests this commit anyway**. Error
 paths exercise the contract surface without needing class-specific
 state. See `tests/harness/test_use_lay_on_hands.py` for the pattern.
 
-**The CI workflow** (`.github/workflows/test-harness.yml`) runs the
-suite on every push to `main`/`dev` and every PR against them. A
-regression fails the workflow before merge, not in production.
+**The CI workflow** (`.github/workflows/test-harness.yml`) is
+**manual-dispatch only** (`workflow_dispatch:`; the push/PR
+auto-triggers were disabled at v2.158.95 per project-owner request).
+Fire it by hand from the Actions tab (or `gh workflow run
+test-harness.yml --ref main`) to catch a contract regression — it
+won't run automatically on push or PR.
 
 **Update the coverage catalog.** Every test change — add, remove,
 rename, or material assertion shift — also updates
