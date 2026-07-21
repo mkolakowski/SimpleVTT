@@ -2,8 +2,8 @@
 
 Closes the loop: the actual /cast_spell flow exercises the path that
 v2.97.71 (catalog entries) + v2.97.70 (helper) + v2.97.62/69 (end-
-of-turn auto-fire) built up. Thalindra is now Lv 7 wizard with L4
-spell slots; Confusion is at spell_index 12.
+of-turn auto-fire) built up. Thalindra is a Lv 7 wizard with L4
+spell slots.
 
 Test flow:
 - Seed battle with Thalindra + a bandit NPC.
@@ -13,10 +13,35 @@ Test flow:
 - Advance the turn from bandit (turn 1) to Thalindra (turn 0, round 2)
   → bandit's turn just ended.
 - Assert a 🔁 End-of-turn save broadcast fires for the bandit.
+
+v2.1033.5 (B16): the Confusion spell index is resolved BY NAME, not
+hardcoded. The old `spell_index: 12` was stale — Thalindra's sheet
+order drifts (index 12 has been observed as Slow and Counterspell;
+Confusion is elsewhere), so the cast hit the wrong spell, no Confused
+ever installed, and the 30-try loop exhausted with "no failed save."
+Same class of drift as the derivation-helper + bonus-action-pairing
+fixes; the failure only *looked* like RNG.
 """
 import asyncio
 
 from .conftest import CAMPAIGN_ID
+
+
+async def _spell_index(gm_client, char_id: int, name: str) -> int:
+    """Resolve a spell's sheet index by name (indices drift as other
+    suites PATCH the shared demo sheet)."""
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-json")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    spells = (body.get("sheet") or body).get("spells") or []
+    for i, s in enumerate(spells):
+        if (s.get("name") or "").strip().lower() == name.strip().lower():
+            return i
+    raise AssertionError(
+        f"{name!r} not on character {char_id}'s sheet; "
+        f"have: {[s.get('name') for s in spells]}"
+    )
 
 
 async def _long_rest(gm_client, char_id: int) -> None:
@@ -48,6 +73,9 @@ async def test_thalindra_casts_confusion_on_bandit_npc(
     bandit_id = "tok_conf_bandit"
     thal_tok = f"tok_conf_thal_{thal['id']}"
 
+    # Resolve Confusion's live sheet index (was hardcoded 12, which drifted).
+    confusion_index = await _spell_index(gm_client, thal["id"], "Confusion")
+
     landed = False
     for _ in range(30):
         await _long_rest(gm_client, thal["id"])
@@ -74,7 +102,7 @@ async def test_thalindra_casts_confusion_on_bandit_npc(
             f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
             json={
                 "character_id": thal["id"],
-                "spell_index": 12,
+                "spell_index": confusion_index,
                 "slot_level": 4,
                 "class_slug": "wizard",
                 "target_combatant_id": bandit_id,

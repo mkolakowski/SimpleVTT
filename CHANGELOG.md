@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1033.5] - 2026-07-20 — "The Right Spell"
+
+**Schema version:** 103
+
+**Commit summary:** Fix B16's last confirmed cluster — `test_cast_confusion_npc` hardcoded a stale Confusion spell index; resolve it by name.
+
+**Description:** Fourth and final confirmed B16 `spell-catalog` cluster. `test_cast_confusion_npc` loops up to 30 times casting Confusion at a bandit until it fails a Wis save and Confused installs, then asserts the end-of-turn save broadcast. It failed with "no failed bandit Wis save in 30 tries."
+
+**Filed as "RNG-dependent" — that was wrong.** The test hardcoded `spell_index: 12` for Confusion, but the demo caster's sheet order drifts (index 12 is now Counterspell; it's also been observed as Slow — Confusion is actually at 16). So all 30 casts hit the *wrong spell*, no Confused ever installed, and the loop exhausted deterministically. It only *looked* like an unlucky save streak. This is the same hardcoded-index drift as the derivation-helper (v2.1033.3) and bonus-action-pairing (v2.1033.0) fixes.
+
+**Fix:** resolve Confusion's index **by name** at test time (`_spell_index`), the pattern CLAUDE.md mandates for character ids and that these suites should use for spell indices too. With the right spell cast, the bandit fails ~65%/try so the loop lands on the first try — no forced-fail seed needed. Runs in ~3s.
+
+**B16 milestone: all four confirmed `spell-catalog` clusters are now fixed** (vision, derivation, catalog anchor, index drift). Three of the four were the *same underlying issue* — stale hardcoded assumptions against a drifted demo sheet, not product regressions. The only remaining B16 work is the un-reproduced-locally `harness`/`encounter-sim` CI remainder, to be triaged against a much-greener baseline once CI re-runs.
+
+Test infrastructure only; no product-code change; test count unchanged.
+
+### Changed
+- `tests/harness/test_cast_confusion_npc.py` — Confusion index resolved by name via a new `_spell_index` helper (was hardcoded `12`).
+- `BUGS.md` — B16 index-drift cluster marked ✅ FIXED with the corrected root cause; fix-path updated (all four confirmed clusters done; only the CI remainder left).
+
+---
+
 ## [2.1033.4] - 2026-07-20 — "Concentration Restored"
 
 **Schema version:** 103
