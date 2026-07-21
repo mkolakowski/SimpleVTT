@@ -37,11 +37,21 @@ _SKIP_SLUGS: dict[str, str] = {}
 
 def _expected_save_dc(sheet: dict) -> int:
     """Replicate the engine's spell-save-DC computation
-    (``tabletop_routes.py`` ~line 19509) so the absolute value is
-    anchored, including the WIS fallback when ``spellcasting_ability``
-    is unset on the demo sheet."""
+    (``8 + proficiency + spellcasting mod``, matching
+    ``_caster_spellcasting_mod`` in ``tabletop_routes.py`` ~line 12882)
+    so the absolute value is anchored.
+
+    v2.1033.3 (B16): the ability is ``spellcasting_ability OR
+    class_spellcasting``. The demo sheets carry it under the top-level
+    ``class_spellcasting`` field with ``spellcasting_ability`` ``None``,
+    so the old bare read fell through to WIS and computed DC 12 for an
+    INT caster the engine derives at 14."""
     prof = int(sheet.get("proficiency_bonus") or 2)
-    spc = (sheet.get("spellcasting_ability") or "").strip().upper()[:3]
+    spc = (
+        sheet.get("spellcasting_ability")
+        or sheet.get("class_spellcasting")
+        or ""
+    ).strip().upper()[:3]
     if spc not in _ABILITIES:
         spc = "WIS"
     ability_score = int((sheet.get("abilities") or {}).get(spc, 10))

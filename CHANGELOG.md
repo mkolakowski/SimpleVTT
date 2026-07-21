@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1033.3] - 2026-07-20 — "The Right Modifier"
+
+**Schema version:** 103
+
+**Commit summary:** Fix B16 derivation-helper cluster — the spell attack-bonus / save-DC test helpers fell through to WIS instead of resolving `class_spellcasting`.
+
+**Description:** Second B16 cluster. `test_spell_catalog_attack` (×2) and `test_spell_catalog_save` compare every catalog spell's engine-derived attack bonus / save DC against a locally-recomputed expectation, and reported "15 attack-bonus mismatches (expected uniform +4)" / "116 save-DC mismatches (expected uniform 12)" — the engine derives +6 / DC 14.
+
+**Root cause:** the demo caster (Thalindra) is **Level 7** (`proficiency_bonus:3`), and its sheet carries the spellcasting ability under the top-level **`class_spellcasting: "INT"`** field with `spellcasting_ability` left `None`. The engine's `_caster_spellcasting_mod` resolves `spellcasting_ability OR class_spellcasting` → INT (mod +3) → +6 / DC 14. The two test helpers read only `spellcasting_ability` and fell through to a blind **WIS** default (mod +1) → +4 / DC 12. So the helpers were stale, not the engine — the WIS fallback was never the demo's real path.
+
+**Fix:** both helpers now resolve `class_spellcasting` too, mirroring `_caster_spellcasting_mod`; the WIS default is demoted to a genuine last resort. Verified both files pass, and still pass under a poisoned `dark` ambient (they're pure bonus/DC math, not vision-sensitive like cluster 1).
+
+Test infrastructure only; no product-code change; test count unchanged.
+
+**Side-finding, filed in B16 not fixed here:** the demo roster was level-bumped (Thalindra is Lv 7) but `README.md` and the demo-content docs still describe the Sundered Vault party as Lv 5. Worth a doc-reconciliation pass and a check that B9's latent Caelan-level-bump test hazard hasn't already fired.
+
+### Changed
+- `tests/harness/test_spell_catalog_attack.py`, `tests/harness/test_spell_catalog_save.py` — `_expected_attack_bonus` / `_expected_save_dc` resolve `spellcasting_ability OR class_spellcasting`, matching the engine.
+- `BUGS.md` — B16 derivation cluster marked ✅ FIXED with the corrected root cause; fix-path updated (clusters 1+2 done, catalog + RNG remain); Lv7-vs-docs side-finding recorded.
+
+---
+
 ## [2.1033.2] - 2026-07-20 — "Torches Lit"
 
 **Schema version:** 103

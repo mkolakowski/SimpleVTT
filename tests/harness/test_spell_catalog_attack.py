@@ -51,11 +51,22 @@ _SKIP_SLUGS: dict[str, str] = {}
 
 def _expected_attack_bonus(sheet: dict) -> int:
     """Caster's spell-attack bonus = ``proficiency + spellcasting mod``,
-    replicating the endpoint (``tabletop_routes.py`` ~line 19215) incl.
-    the WIS fallback when ``spellcasting_ability`` is unset on the demo
-    sheet. (Equals the spell save DC minus 8.)"""
+    replicating the engine's ``_caster_spellcasting_mod``
+    (``tabletop_routes.py`` ~line 12882). (Equals the spell save DC minus 8.)
+
+    v2.1033.3 (B16): the ability is ``spellcasting_ability OR
+    class_spellcasting`` — the demo sheets carry the ability under the
+    top-level ``class_spellcasting`` field with ``spellcasting_ability``
+    left ``None``, so the old bare-``spellcasting_ability`` read fell
+    through to a blind WIS default and computed +4 for an INT caster the
+    engine derives at +6. The WIS default is now a genuine last resort,
+    not the demo's happy path."""
     prof = int(sheet.get("proficiency_bonus") or 2)
-    spc = (sheet.get("spellcasting_ability") or "").strip().upper()[:3]
+    spc = (
+        sheet.get("spellcasting_ability")
+        or sheet.get("class_spellcasting")
+        or ""
+    ).strip().upper()[:3]
     if spc not in _ABILITIES:
         spc = "WIS"
     ability_score = int((sheet.get("abilities") or {}).get(spc, 10))
