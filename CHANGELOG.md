@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1033.9] - 2026-07-21 — "The Level-Up"
+
+**Schema version:** 103
+
+**Commit summary:** Reconcile the README Tavern Brawl PC table with the demo seed — 7 of the 15 Sundered Vault PCs were level-bumped (v2.97.72 onward) without the README following, so the "Class & level" column and four level-derived stats were stale.
+
+**Description:** Doc-only. The B16 derivation-cluster fix (v2.1033.3) surfaced that the demo caster is Lv 7, not the Lv 5 the README still described. A full check against `app/demo_seed.py` (each `_*_sheet()` builder's authoritative `level` + resource values, extracted programmatically — not the live DB, since `level` is class-scoped and the v2.1033.7 hermetic fixture doesn't restore it, so a live read can be test-polluted) found **7 PCs** carrying a stale level and **4 derived numbers** that drifted with the bump. The other 8 PCs (Lyra 6, Mira 5, Zara 5, Rowan 5, Magnus 5, Seraphine 3, Brakka 5, Quan 5) were already correct.
+
+**Seed-authoritative fixes (verified value in parens):**
+- **Pip Quickfingers** Rogue 5 → **7**; **Thalindra Moonwhisper** Wizard 5 → **7**; **Brother Tavik Stonebrow** Cleric 5 → **8** — level-only (no level-derived numbers in their Notes).
+- **Sir Caelan Lightbringer** Paladin 5 → **7**; Lay on Hands pool 25 → **35** (5 × level).
+- **Garrik Ironside** Fighter 5 → **9**; Greatsword to-hit +7 → **+8** (crosses the proficiency-bonus boundary at Lv 9: +3 → +4); added "HP 85 (highest in the party)" — he now out-HPs Krieger.
+- **Kael Brightleaf** Monk 5 → **7**; Ki 5 → **7** (= monk level); reworded "Lv 5 die is 1d6" → "the Lv 5–10 die is 1d6" (still 1d6 at Lv 7).
+- **Krieger Stonefist** Barbarian 5 → **7**; Rage 3 → **4** (Lv 6+); HP 55 → **75**, and dropped the now-false "(highest in the party)" (Garrik's 85 leads).
+
+Left unchanged after seed verification: Kael's Speed-45 (hardcoded 45 in the seed, not the RAW 50) and every attack bonus that didn't cross a proficiency boundary (Kael +7, Krieger +7, Caelan +6 — all prof 3 at both Lv 5 and Lv 7). The five separately-seeded leveled campaigns (L3/L5/L9/L13/L18) and `docs/demo/image-prompts.md` describe *different* campaigns and were already correct.
+
+### Changed
+- `README.md` — Tavern Brawl PC table: 7 stale levels + 4 drifted derived stats reconciled to the demo seed.
+
+---
+
 ## [2.1033.8] - 2026-07-21 — "The Manual Switch"
 
 **Schema version:** 103
