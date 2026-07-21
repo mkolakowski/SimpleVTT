@@ -104,9 +104,12 @@ async def test_cast_blur_is_concentration_1_minute(gm_client, roster):
     assert int(blur.get("duration_rounds") or 0) == 10
 
 
-async def test_blur_imposes_disadvantage_on_attacker(gm_client, roster):
+async def test_blur_imposes_disadvantage_on_attacker(gm_client, roster, bright_map):
     """GATE: with Blur on the target, an attacker's d20 attack roll gets
-    disadvantage (`roll_state_applied == "disadvantage_blur"`)."""
+    disadvantage (`roll_state_applied == "disadvantage_blur"`).
+
+    ``bright_map`` neutralizes inherited ambient darkness so the roll-state
+    reflects Blur, not a can't-see cancellation (B16)."""
     pip = roster["Pip Quickfingers"]
     target = _find_blur_caster(roster)
     if target is None:

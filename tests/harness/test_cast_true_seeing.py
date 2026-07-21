@@ -128,10 +128,14 @@ async def test_cast_ts_on_ally(gm_client, roster):
     assert any(b.get("key") == "true-seeing" for b in ab), ab
 
 
-async def test_ts_attacker_negates_invisible_target_edge(gm_client, roster):
+async def test_ts_attacker_negates_invisible_target_edge(gm_client, roster, bright_map):
     """A True-Seeing attacker (Pip, granted by the caster) attacking an
     invisible target → the invisible-target disadvantage is negated; a
-    control attacker without True Seeing keeps it."""
+    control attacker without True Seeing keeps it.
+
+    ``bright_map`` neutralizes inherited ambient darkness so the control's
+    roll-state reflects the invisibility edge, not a can't-see
+    cancellation (B16)."""
     caster = _find_caster(roster)
     if caster is None:
         import pytest

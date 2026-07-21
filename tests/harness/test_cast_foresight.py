@@ -184,8 +184,11 @@ async def test_foresight_grants_advantage_on_non_str_save(
     )
 
 
-async def test_foresight_grants_advantage_on_attack(gm_client, roster):
-    """The warded creature's attack roll gets advantage."""
+async def test_foresight_grants_advantage_on_attack(gm_client, roster, bright_map):
+    """The warded creature's attack roll gets advantage.
+
+    ``bright_map`` neutralizes inherited ambient darkness so the roll-state
+    reflects Foresight, not a can't-see cancellation (B16)."""
     krieger = roster["Krieger Stonefist"]
     thal = roster["Thalindra Moonwhisper"]
     pip = roster["Pip Quickfingers"]

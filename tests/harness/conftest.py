@@ -156,6 +156,49 @@ async def bob_ws(bob_client: httpx.AsyncClient) -> AsyncIterator[WSCollector]:
         await ws.close()
 
 
+@pytest_asyncio.fixture
+async def bright_map(gm_client: httpx.AsyncClient):
+    """v2.1033.2 (B16) — force the active demo map to ``bright`` ambient
+    for the duration of a vision-sensitive test, then restore the demo's
+    canonical ``dim``.
+
+    Ambient-light state on the shared demo map **leaks between harness
+    tests**: several vision tests set the active map to ``dark`` and don't
+    reset it. A downstream spell-effect gate test that asserts an exact
+    attack roll-state — e.g. Blur's ``disadvantage_blur``, or the
+    ``target_invisible`` edge for True Seeing / Mislead — then reads
+    ``canceled_unseen_attacker_vs_*`` instead, because the attacker can't
+    see the target in the inherited darkness, and the can't-see
+    cancellation pre-empts the effect under test. (These tests all pass in
+    isolation on the canonical ``dim`` map; they only fail after a
+    ``dark``-leaving test, which is why CI's full-suite run is red while a
+    single-file run is green.)
+
+    Forcing ``bright`` fires the engine's vision short-circuit
+    (``_attack_vision_edges`` returns ``(False, False)`` on a bright map
+    with no emitters), so the assertion tests the spell mechanic rather
+    than the ambient light. Restoring ``dim`` in teardown — which runs even
+    when the test body asserts — also heals the leaked state for whatever
+    runs next. Opt-in (not autouse) like ``clean_pcs``: only the
+    vision-sensitive gate tests pay the two extra POSTs.
+    """
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/tokens")
+    map_id = int(r.json()["map_id"])
+
+    async def _set(value: str) -> None:
+        resp = await gm_client.post(
+            f"/campaign/{CAMPAIGN_ID}/settings/maps/{map_id}/ambient_light",
+            json={"ambient_light": value},
+        )
+        assert resp.status_code == 200, resp.text
+
+    await _set("bright")
+    try:
+        yield map_id
+    finally:
+        await _set("dim")
+
+
 # v2.99.5 — session-level PC state reset fixture.
 #
 # Tests that depend on a PC starting from a known-clean state can

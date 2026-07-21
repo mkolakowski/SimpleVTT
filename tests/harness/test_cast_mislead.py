@@ -93,10 +93,13 @@ async def test_cast_mislead_installs_invisible_concentration_buff(gm_client, ros
     assert eff.get("mislead_double") is True
 
 
-async def test_mislead_imposes_attack_disadvantage(gm_client, roster):
+async def test_mislead_imposes_attack_disadvantage(gm_client, roster, bright_map):
     """An attacker swinging at the misleading (invisible) caster gets
     `target_invisible` disadvantage; the control swing before the cast
-    does not."""
+    does not.
+
+    ``bright_map`` neutralizes inherited ambient darkness so the roll-state
+    reflects the invisibility edge, not a can't-see cancellation (B16)."""
     thal = roster["Thalindra Moonwhisper"]
     pip = roster["Pip Quickfingers"]
     thal_tok = "tok_ml_caster"

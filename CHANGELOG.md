@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1033.2] - 2026-07-20 — "Torches Lit"
+
+**Schema version:** 103
+
+**Commit summary:** Fix B16 vision cluster — the 5 spell adv/dis gate tests fail on inherited `dark` ambient; a `bright_map` conftest fixture makes them order-independent.
+
+**Description:** First of the B16 cluster fixes. `test_cast_blur`, `test_cast_holy_aura`, `test_cast_mislead`, `test_cast_true_seeing`, and `test_cast_foresight` each assert an exact attack roll-state (`disadvantage_blur`, the `target_invisible` edge, `advantage_*`), and on CI they returned `canceled_unseen_attacker_vs_*` instead.
+
+**Root cause was mischaracterized when B16 was filed** ("tests don't establish LOS"). The real cause: **these tests pass in isolation on the demo's canonical `dim` map** (dim → *obscured*, which is not an attack edge) and fail only after another test leaves the shared demo map's ambient at `dark` and doesn't restore it — several vision tests set `dark`. On a `dark` map the attacker can't see the target, and the can't-see cancellation pre-empts the adv/dis the test is asserting. Reproduced deterministically by `POST …/ambient_light {ambient_light:"dark"}` then running the gate → `canceled_unseen_attacker_vs_blur`. This is why the full-suite CI run was red while single-file runs were green — a textbook order-dependence, not a product regression.
+
+**Fix:** a `bright_map` fixture in `conftest.py` that the 5 gate tests opt into (like `clean_pcs`). It forces the active map to `bright` — firing `_attack_vision_edges`' short-circuit so vision can't interfere — then restores the canonical `dim` in teardown (which runs even when the body asserts). So the tests become order-independent *and* they heal the leaked ambient for whatever runs next. Verified by poisoning the map to `dark`, running the 5 → all pass, and confirming the map is left `dim`.
+
+No product-code change — test infrastructure only.
+
+### Added
+- `tests/harness/conftest.py` — `bright_map` fixture (force `bright` ambient for a vision-sensitive test, restore `dim` in teardown).
+
+### Changed
+- `tests/harness/test_cast_blur.py`, `test_cast_holy_aura.py`, `test_cast_mislead.py`, `test_cast_true_seeing.py`, `test_cast_foresight.py` — the roll-state gate test in each now requests `bright_map`.
+- `BUGS.md` — B16 vision cluster marked ✅ FIXED with the corrected root cause; fix-path updated (cluster 1 done, derivation-helper cluster next).
+- Memory `project_preexisting_vision_lighting_test_flakes` — corrected the mechanism (inherited `dark`, not "demo is dim") and recorded the `bright_map` pattern.
+
+---
+
 ## [2.1033.1] - 2026-07-20 — "The Red Board"
 
 **Schema version:** 103

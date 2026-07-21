@@ -226,9 +226,12 @@ async def test_holy_aura_grants_advantage_on_non_str_save(
         )
 
 
-async def test_holy_aura_imposes_disadvantage_on_attackers(gm_client, roster):
+async def test_holy_aura_imposes_disadvantage_on_attackers(gm_client, roster, bright_map):
     """An attack against a warded creature rolls at disadvantage (Pip is
-    a clean attacker with no advantage sources to cancel it)."""
+    a clean attacker with no advantage sources to cancel it).
+
+    ``bright_map`` neutralizes inherited ambient darkness so the roll-state
+    reflects Holy Aura, not a can't-see cancellation (B16)."""
     caster = _find_cleric(roster)
     if caster is None:
         import pytest
