@@ -10,7 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
-## [2.1033.12] - 2026-07-21 — "The Dispel"
+## [2.1033.13] - 2026-07-21 — "The Red Herring"
+
+**Schema version:** 103
+
+**Commit summary:** Root-cause and correct B18 class 6 — the "isolation failures" I'd flagged as possible product bugs are actually **test-design bugs**: they use Garrik, the demo's item-showcase PC, whose seeded Frost Brand (fire resistance) and Stone of Good Luck (+1 check bonus) invalidate their clean-control assertions. No product defect.
+
+**Description:** Doc-only. Investigated the B18 class-6 residual (the tests that failed even in local "isolation"). On a **freshly-reseeded** stack, dealing typed damage to an untouched Garrik shows **fire halved, cold/acid/force full** — because Garrik wields an equipped **Frost Brand Longsword** (RAW: resistance to fire). So `_resistance_halve` is correct; `test_potion_of_resistance_type_pick::test_fire_damage_is_not_halved` (deals fire, expects full) is invalid because its fixture PC innately resists fire. Same family: `test_potion_of_climbing` / `test_potion_of_diminution` assert a bare `1d20` STR check but Garrik's equipped **Stone of Good Luck** adds `+1` (→ `1d20+1+1`); `test_defense_fighting_style` / `test_attune_item` / `test_demon_slayer_frighten` are the same Garrik/Kael-loadout interference.
+
+**Two corrections to my earlier triage:**
+1. These are **not product bugs** — the resistance/roll engines are right; the tests pin a control PC whose seed magic-item loadout grew.
+2. **Local "fails in isolation" was an unreliable signal.** The shared demo campaign's inventory `equipped` flags and in-memory battle buffs persist across pytest sessions and across `docker compose restart` — only a DB reseed (`DEMO_RESET_ON_BOOT`) clears them. My local stack was polluted with leaked equipped items (Frost Brand, Potion of Invulnerability) *before* pytest captured its pristine snapshot, so the hermetic fixture "restored" to a dirty baseline. Ground truth requires a fresh reseed (or the CI run, which seeds fresh).
+
+**Fix path (test-side, not shipped here):** swap Garrik for a clean fixture PC or strip the interfering equipped item (Frost Brand / Luckstone) in each of the ~5 tests' setup. No engine change.
+
+### Changed
+- `BUGS.md` — B18 class 6 rewritten with the confirmed root cause (item-showcase-PC interference), the retraction of the "possible product defect" note, and the local-isolation-unreliability caveat; remaining-order updated.
 
 **Schema version:** 103
 
