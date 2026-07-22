@@ -10,7 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
-## [2.1033.13] - 2026-07-21 — "The Red Herring"
+## [2.1033.14] - 2026-07-22 — "The Tale of the Tape"
+
+**Schema version:** 103
+
+**Commit summary:** Record the B18 re-measure CI run — classes 1 & 3 confirmed working (17 tests cleared, 0 regressions); `harness` down from 51/11 to 40 failed / 9 errors.
+
+**Description:** Doc-only. The CI re-measure (`29885036315`, against v2.1033.12) landed: `harness` = **40 failed / 4772 passed / 26 skipped / 9 errors**, down from the 51/11 baseline.
+
+**Confirmed:**
+- **Class 1 (level/subclass hermeticity, v2.1033.11)** cleared the entire `monk_level == 7` cluster — `touch_of_death`, `radiant_sun_bolt`, `shadow_arts`, `storm_aura`, `totem_spirit`, `watchers_will`, `inspiring_smite`, `diamond_soul` — plus `potent_spellcasting` and `item_amulet_of_health`.
+- **Class 3 (buff-clear, v2.1033.12)** cleared `demon_slayer_frighten`, `flame_tongue_ignite`, `divine_strike`, `damage_vulnerability`, `undo_buff_drop_from_save`, `item_passive_stacking`, `place_aoe_range`.
+- **17 cleared, 0 regressions** — the 6 names new to this run (`transform`, `overchannel`, `npc_concentration`, `npc_damage_immunity`, `cast_locate_object`, `form_of_the_beast`) all pass locally in isolation, so they're run-to-run flakes, not fallout from the conftest changes.
+
+**Still open (B18):** class 2 (battle-state — the 9 sphere/cone/line errors), class 6 (Garrik-fixture potion tests — test-side fix), the RNG "no hit in N tries" set, and `aura_of_courage`/`aura_of_devotion`/`break_on_damage` (predicted class-3 clears that did *not* clear — re-triage needed; their leak isn't a simple combatant buff).
+
+### Changed
+- `BUGS.md` — B18 updated with the re-measure result (40/9), the confirmed class-1/3 clears, the 0-regression finding, and the still-open set.
 
 **Schema version:** 103
 
