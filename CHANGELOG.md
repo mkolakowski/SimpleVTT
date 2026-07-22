@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1033.15] - 2026-07-22 — "The Naked Fighter"
+
+**Schema version:** 103
+
+**Commit summary:** Fix the four B18 class-6 tests that failed because they use Garrik, the demo's item-showcase PC, whose seeded equipped loadout interferes with their clean-control assertions.
+
+**Description:** Test-infrastructure. The B18 class-6 root cause (v2.1033.13) was that `test_potion_of_climbing` / `test_potion_of_diminution` / the two `test_potion_of_resistance_*` tests use Garrik, whose seeded **Stone of Good Luck** (+1 to ability checks) and **Frost Brand Longsword** (resistance to fire) break their assertions. Two targeted fixes, each preserving the test's intent:
+
+- **Climbing / Diminution (STR-check advantage/disadvantage):** assert on the leading **dice token** (`_dice_part` → `2d20kh1` / `2d20kl1` / `1d20`), ignoring the trailing `+1` modifiers Garrik's Luckstone appends. The advantage/disadvantage mechanic under test lives entirely in the dice token, so this is both correct and robust to any future check-bonus item.
+- **Resistance type-pick / drink-time-pick:** the fixture un-equips Garrik's entire loadout (`equipped: False` on every item) before the drink, so his Frost Brand's innate fire resistance is gone and the **drunk potion is the only resistance in play** — restoring the valid "fire not halved" control. The `finally` block restores the original inventory.
+
+Validated on a freshly-reseeded stack (Garrik's Frost Brand + Luckstone present): all 8 tests pass. Robust by construction — the dice-token assertion ignores modifiers, and the un-equip makes the resistance control independent of Garrik's seed loadout.
+
+Still open in B18 class 6 (same item-state family, not fixed here): `test_defense_fighting_style` (Kael AC 18 — likely leaked equipped armor), `test_attune_item`, `test_demon_slayer_rider`.
+
+### Changed
+- `tests/harness/test_potion_of_climbing.py` / `test_potion_of_diminution.py` — assert on the dice token via a new `_dice_part` helper instead of the exact expression.
+- `tests/harness/test_potion_of_resistance_type_pick.py` / `test_potion_of_resistance_drink_time_pick.py` — fixture un-equips Garrik's loadout so the drunk potion is the sole resistance source.
+- `BUGS.md` / `docs/test-harness-coverage.md` — B18 class 6 marked 4-fixed; catalog entries updated for the robust assertions + un-equip fixup.
+
+---
+
 ## [2.1033.14] - 2026-07-22 — "The Tale of the Tape"
 
 **Schema version:** 103

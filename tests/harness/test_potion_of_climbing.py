@@ -14,9 +14,22 @@ the `/roll` endpoint (stat_key="str_check") rather than the STR-*save*
 path via a spell. Garrik is a Fighter with no innate STR-check
 advantage, so Climbing is the sole source — a clean control.
 """
+import re
+
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
+
+
+def _dice_part(expr: str) -> str:
+    """Leading dice token of a roll expression, stripped of trailing
+    modifiers. Garrik (the demo's item-showcase PC) carries a Stone of
+    Good Luck (+1 to ability checks), so a STR check comes back as e.g.
+    ``2d20kh1+1+1`` — the advantage/disadvantage mechanic under test lives
+    entirely in the dice token, so assert on that, not the exact string.
+    See BUGS.md B18 class 6."""
+    m = re.match(r"^\s*(\d+d\d+(?:kh1|kl1)?)", str(expr))
+    return m.group(1) if m else str(expr)
 
 
 async def _sheet(gm_client, char_id):
@@ -111,7 +124,7 @@ async def test_climbing_grants_advantage_on_str_check(
 
     rr = _last_roll(gm_ws)
     assert rr is not None, "expected a roll broadcast for Garrik's STR check"
-    assert rr["data"]["expression"] == "2d20kh1", (
+    assert _dice_part(rr["data"]["expression"]) == "2d20kh1", (
         f"Climbing should grant advantage on STR checks; got "
         f"{rr['data']['expression']!r}"
     )
@@ -129,7 +142,7 @@ async def test_no_climbing_str_check_is_plain(
 
     rr = _last_roll(gm_ws)
     assert rr is not None
-    assert rr["data"]["expression"] == "1d20", (
+    assert _dice_part(rr["data"]["expression"]) == "1d20", (
         f"un-climbing Garrik should have no STR-check advantage; got "
         f"{rr['data']['expression']!r}"
     )

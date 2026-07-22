@@ -63,6 +63,17 @@ async def garrik_drank_cold_resistance(gm_client, roster):
     idx = _cold_potion_index(inventory)
     assert idx >= 0, "Garrik must carry a seeded Potion of Cold Resistance"
 
+    # B18 class 6: Garrik is the demo's item-showcase PC — his seeded
+    # equipped Frost Brand Longsword grants innate fire resistance, which
+    # would make the "fire not halved" control fail. Un-equip everything so
+    # the ONLY resistance in play is the potion the test drinks; the finally
+    # block restores the original inventory.
+    clean_inv = [{**it, "equipped": False} for it in inventory]
+    await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/sheet-fields",
+        json={"inventory": clean_inv},
+    )
+
     await gm_client.put(
         f"/api/campaign/{CAMPAIGN_ID}/battle",
         json={

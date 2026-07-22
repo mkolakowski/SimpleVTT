@@ -63,6 +63,15 @@ async def garrik_drank_generic_lightning(gm_client, roster):
     idx = _generic_potion_index(inventory)
     assert idx >= 0, "Garrik must carry a generic (untyped) Potion of Resistance"
 
+    # B18 class 6: un-equip Garrik's item-showcase loadout (his Frost Brand
+    # grants innate fire resistance) so the only resistance is the potion
+    # drunk below; the finally block restores the original inventory.
+    clean_inv = [{**it, "equipped": False} for it in inventory]
+    await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/sheet-fields",
+        json={"inventory": clean_inv},
+    )
+
     await gm_client.put(
         f"/api/campaign/{CAMPAIGN_ID}/battle",
         json={

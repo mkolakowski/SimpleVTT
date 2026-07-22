@@ -15,9 +15,20 @@ Mirrors `test_potion_of_climbing.py` but on the inverse marker — Garrik is
 a Fighter with no innate STR-check (dis)advantage, so the potion is the
 sole source, giving a clean control.
 """
+import re
+
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
+
+
+def _dice_part(expr: str) -> str:
+    """Leading dice token, stripped of trailing modifiers — Garrik's
+    Stone of Good Luck adds a +1 check bonus, so assert on the
+    advantage/disadvantage dice mechanic, not the exact string.
+    See BUGS.md B18 class 6."""
+    m = re.match(r"^\s*(\d+d\d+(?:kh1|kl1)?)", str(expr))
+    return m.group(1) if m else str(expr)
 
 
 async def _sheet(gm_client, char_id):
@@ -112,7 +123,7 @@ async def test_diminution_imposes_disadvantage_on_str_check(
 
     rr = _last_roll(gm_ws)
     assert rr is not None, "expected a roll broadcast for Garrik's STR check"
-    assert rr["data"]["expression"] == "2d20kl1", (
+    assert _dice_part(rr["data"]["expression"]) == "2d20kl1", (
         f"Diminution should impose disadvantage on STR checks; got "
         f"{rr['data']['expression']!r}"
     )
@@ -130,7 +141,7 @@ async def test_no_diminution_str_check_is_plain(
 
     rr = _last_roll(gm_ws)
     assert rr is not None
-    assert rr["data"]["expression"] == "1d20", (
+    assert _dice_part(rr["data"]["expression"]) == "1d20", (
         f"un-reduced Garrik should have no STR-check disadvantage; got "
         f"{rr['data']['expression']!r}"
     )
