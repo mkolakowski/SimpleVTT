@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1033.12] - 2026-07-21 — "The Dispel"
+
+**Schema version:** 103
+
+**Commit summary:** Generalize `clean_pcs` to clear **every** buff currently on each PC's combatant (read from `GET /battle`), not just the hardcoded `_LEAKABLE_BUFF_KEYS` — closing the B18 class-3 buff-leak class. Plus an honest re-bucketing: six tests I'd filed under class 3 actually fail in isolation (pre-existing bugs, not pollution).
+
+**Description:** Test-infrastructure follow-up (B18 class 3). Buffs live on the battle combatant (`GET /battle` → `combatants[].buffs`, keyed by `char_id`), and a test can install one whose key isn't in `_LEAKABLE_BUFF_KEYS` — `resistance-fire` from a Potion of Resistance drink, `turned`, `potion-of-climbing` — and leak it if its cleanup doesn't run. That leaked buff then degrades the next test (fire wrongly halved, a bogus STR-check advantage, a leaked disadvantage making seeded swings whiff).
+
+**Fix:** `clean_pcs` now reads the live battle once, collects every buff key on each PC combatant, and ends each (union with the hardcoded list) before the long-rest — so any leaked buff is cleared regardless of key. Best-effort read (no battle ⇒ no buffs ⇒ falls back to the hardcoded set). Validated with a leak-`resistance-cold`→next-test-clear guard.
+
+**Honest re-scoping of B18 class 3.** While validating, six tests I'd bucketed as buff-leaks turned out to **fail in isolation** (fresh single-file run) — so they're pre-existing bugs, not pollution, and no fixture can fix them: `test_potion_of_climbing` / `test_potion_of_diminution` (stale `1d20+1+1` roll-expression assertions), `test_potion_of_resistance_type_pick::test_fire_damage_is_not_halved` (fire halved despite a *cold* potion — a possible real type-pick/resistance defect), `test_defense_fighting_style`, `test_attune_item`, `test_demon_slayer_frighten`. Moved to a new B18 **class 6** for individual triage. The genuine-pollution members (pass in isolation, fail only in the full run) are `test_break_on_damage` / `test_aura_of_devotion` / `test_aura_of_courage`, which the buff-clear addresses.
+
+Net CI effect (how many of the residual 51 this clears) needs another ~4.75 h `harness` run to measure; the fix is a strict, validated hermeticity improvement regardless.
+
+### Changed
+- `tests/harness/conftest.py` — `clean_pcs` reads `GET /battle` and ends every buff on each PC combatant (union with `_LEAKABLE_BUFF_KEYS`).
+- `tests/harness/test_hermetic_pcs.py` (+2 → 8 tests) — guard that a leaked non-hardcoded buff (`resistance-cold`) is cleared by `clean_pcs` between tests.
+- `BUGS.md` — B18 class 3 marked fix-shipped with the corrected (smaller) pollution set; new class 6 for the six isolation-failures; remaining order re-pointed at class 2 (battle snapshot) + the class-6 bugs.
+- `docs/test-harness-coverage.md` — total-test-count line bumped to 4837; `test_hermetic_pcs` entry updated.
+
+---
+
 ## [2.1033.11] - 2026-07-21 — "The Second Seal"
 
 **Schema version:** 103

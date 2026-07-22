@@ -255,10 +255,42 @@ async def clean_pcs(
     end_buff calls, but eliminates cross-test state leak at the
     cost of suite runtime (~5.5 min → ~17 min). The trade-off is
     deterministic test pass rates over speed.
+
+    v2.1033.12 (B18 class 3) — clear **every** buff currently on each
+    PC's combatant, not just the hardcoded ``_LEAKABLE_BUFF_KEYS``.
+    Buffs live on the battle combatant (``GET /battle`` →
+    ``combatants[].buffs``, keyed by ``char_id``), and a test can install
+    one whose key isn't in the list — e.g. ``resistance-fire`` from a
+    Potion of Resistance drink, ``potion-of-climbing``, ``turned`` — and
+    leave it if its cleanup doesn't run. That leaked buff then degrades
+    the next test (fire wrongly halved, a bogus STR-check advantage, a
+    leaked disadvantage that makes seeded attack rolls whiff). Reading the
+    live buff set and ending each key clears the whole class regardless of
+    key. (Item/attunement leaks are inventory state, restored separately
+    by ``hermetic_pcs``.)
     """
+    # Snapshot every buff key currently on a PC combatant so we clear the
+    # actual leaked set, not just the known-key list. Best-effort: if
+    # there's no battle the read is empty and we fall back to the hardcoded
+    # keys (buffs only exist on combatants, so "no battle" ⇒ "no buffs").
+    live_buff_keys: dict[int, set[str]] = {}
+    try:
+        resp = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/battle")
+        battle = (resp.json() or {}).get("battle") or {}
+        for cbt in battle.get("combatants") or []:
+            cid = cbt.get("char_id")
+            if cid is None:
+                continue
+            keys = {(b or {}).get("key") for b in (cbt.get("buffs") or [])}
+            keys.discard(None)
+            if keys:
+                live_buff_keys.setdefault(cid, set()).update(keys)
+    except Exception:
+        pass
+
     for char in roster.values():
         char_id = char["id"]
-        for key in _LEAKABLE_BUFF_KEYS:
+        for key in set(_LEAKABLE_BUFF_KEYS) | live_buff_keys.get(char_id, set()):
             await gm_client.post(
                 f"/api/campaign/{CAMPAIGN_ID}/end_buff",
                 json={"character_id": char_id, "key": key},

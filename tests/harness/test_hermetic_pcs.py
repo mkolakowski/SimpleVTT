@@ -16,6 +16,10 @@ test. These two tests exercise that directly:
 
 Also asserts the fixture's snapshot/restore helpers round-trip a resource
 strip within a single test.
+
+v2.1033.11 (B18 class 1) adds class-scoped level/subclass leak/restore guards.
+v2.1033.12 (B18 class 3) adds a guard that `clean_pcs` clears a leaked buff
+whose key isn't in the hardcoded `_LEAKABLE_BUFF_KEYS`.
 """
 import pytest_asyncio
 
@@ -122,3 +126,45 @@ async def test_class_scoped_restore_round_trips(gm_client, thalindra):
 
     await _restore_pristine(gm_client, char_id, pristine)
     assert await _level(gm_client, char_id) == 7, "class-scoped restore should return level to 7"
+
+
+# ── B18 class 3: clean_pcs clears any leaked buff (not just the hardcoded list) ─
+
+async def _garrik_buff_keys(gm_client, garrik_id) -> set:
+    b = (await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/battle")).json().get("battle") or {}
+    for cbt in b.get("combatants") or []:
+        if cbt.get("char_id") == garrik_id:
+            return {(x or {}).get("key") for x in (cbt.get("buffs") or [])}
+    return set()
+
+
+async def test_leak_nonhardcoded_buff(gm_client, roster):
+    """Install a buff whose key is NOT in `_LEAKABLE_BUFF_KEYS`
+    (`resistance-cold` from a Potion of Resistance drink) on Garrik's
+    combatant and leak it — `clean_pcs` must clear it for the next test."""
+    garrik = roster["Garrik Ironside"]
+    sheet = await _read_sheet(gm_client, garrik["id"])
+    idx = next(i for i, it in enumerate(sheet.get("inventory") or [])
+               if (it.get("_slug") or "") == "potion-of-resistance")
+    await gm_client.put(f"/api/campaign/{CAMPAIGN_ID}/battle", json={"combatants": [{
+        "id": "tok_hermetic_garrik", "char_id": garrik["id"], "name": "Garrik Ironside",
+        "initiative": 10, "hp_current": 85, "hp_max": 85, "buffs": []}]})
+    drink = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/use_item_action",
+        json={"inventory_index": idx, "action_key": "drink"})
+    assert drink.status_code == 200, drink.text
+    assert drink.json().get("buff_installed") is True
+    assert any(str(k).startswith("resistance-")
+               for k in await _garrik_buff_keys(gm_client, garrik["id"]))
+    # Intentionally no cleanup — clean_pcs must handle it.
+
+
+async def test_next_test_sees_cleared_buff(gm_client, roster):
+    """The leaked non-hardcoded buff was cleared by `clean_pcs` at setup."""
+    garrik = roster["Garrik Ironside"]
+    keys = await _garrik_buff_keys(gm_client, garrik["id"])
+    assert not any(str(k).startswith("resistance-") for k in keys), (
+        f"clean_pcs did not clear the leaked resistance buff; Garrik has {keys}"
+    )
+    # Tidy up the battle we leaked so we don't pollute the rest of the run.
+    await gm_client.put(f"/api/campaign/{CAMPAIGN_ID}/battle", json={"combatants": []})
