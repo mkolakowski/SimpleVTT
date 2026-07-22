@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1033.10] - 2026-07-21 — "The Green Verdict"
+
+**Schema version:** 103
+
+**Commit summary:** Record the B17 verdict — CI run `29867270217` confirms the hermetic fixture cleared the ~97% cascade (now 51 failed / 4754 passed). Close B17 FIXED and file the scattered residual as B18 (P2) with a five-class triage.
+
+**Description:** Doc-only bookkeeping for the B17 verification run (post-v2.1033.7–.9, against `16878ab2`).
+
+**Verdict:** the full-serial `harness` job went from **4715/4829 failing (~97%)** to **51 failed / 4754 passed / 26 skipped / 11 errors**; `spell-catalog` also green. The `hermetic_pcs` sheet-snapshot/restore fixture eliminated the systemic sheet-strip cascade — B17's specific mode is resolved. The residual ~51 is *scattered* (1–2 per file across ~50 files), the signature of independent flakes, not one poisoner.
+
+**Residual triaged into five leak classes (B18), most-actionable first:** (1) class-scoped `level`/`subclass` drift (~10 — the fixture restores top-level keys only; extending it to `level`/`subclass` via `class_slug` subsumes B9); (2) battle/global-state leaks (~15 — `PUT /battle` overwrites the shared battle; the B4 gap at scale); (3) buff/item-state leaks (~12 — `clean_pcs`'s hardcoded key-list misses leaked resistance/frightened/attunement); (4) RNG "no hit in N tries" (~10 — likely *downstream* of class 3's leaked disadvantage buffs); (5) auth/individual (~4, including one real 500 in `test_buff_attack_hooks` worth a direct look).
+
+### Changed
+- `BUGS.md` — B17 → **FIXED (v2.1033.7)** with the CI confirmation; new **B18** (🟡 P2) filed with the five-class residual triage and the highest-leverage fix order (level/subclass hermeticity → buff snapshot → battle snapshot → singletons).
+- `docs/test-harness-coverage.md` — "Known flakes" note updated with the confirmed 97% → 51 CI numbers and a pointer to B18.
+
+---
+
 ## [2.1033.9] - 2026-07-21 — "The Level-Up"
 
 **Schema version:** 103
