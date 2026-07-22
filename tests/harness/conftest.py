@@ -292,13 +292,14 @@ async def clean_pcs(
 # that drifted from pristine. A single test's failed restore is healed at the
 # next test's setup, so it can no longer cascade.
 #
-# Scope note: only **top-level (non class-scoped) keys** are restored. These
-# merge straight onto the sheet via ``/sheet-fields`` and ``/rest``'s normalize
-# pass doesn't recompute them — so a bare PATCH is a guaranteed-safe round-trip.
-# The class-scoped fields (``level`` / ``subclass`` / ``subclass_*``) need a
-# ``class_slug`` to survive normalize and are NOT part of B17's cascade
-# signature (which is spells/resources); tests that mutate those already follow
-# restore-in-finally and are left to it. See ``_SHEET_PATCH_KEYS`` /
+# Scope note: restores both **top-level** keys (bare ``/sheet-fields`` PATCH —
+# ``/rest``'s normalize doesn't recompute them, so a guaranteed-safe round-trip)
+# and, since v2.1033.11 (B18 class 1), the **class-scoped** ``level`` /
+# ``subclass`` / ``subclass_*`` fields (restored in a separate PATCH carrying the
+# PC's primary ``class_slug`` so normalize can't undo them). The top-level set
+# was B17's cascade signature (spells/resources); the class-scoped set is the
+# level/subclass drift that left ``test_touch_of_death`` reading
+# ``monk_level == 5`` (and closes B9). See ``_SHEET_PATCH_KEYS`` /
 # ``_CLASS_SCOPED_KEYS`` in ``app/routes/tabletop_routes.py``.
 
 # Pristine per-PC sheet snapshots, keyed by character id. A plain module-level
@@ -319,6 +320,32 @@ _HERMETIC_RESTORE_KEYS = (
     "favorite_beasts", "hp_rolls",
 )
 
+# v2.1033.11 (B18 class 1) — class-scoped sheet keys. These are in
+# ``_CLASS_SCOPED_KEYS``: a bare top-level PATCH is silently undone by the next
+# ``/rest`` (whose ``normalize_dnd5e_sheet`` re-mirrors ``classes[0]`` over the
+# top-level fields), so restoring them requires a ``class_slug`` so the PATCH
+# writes the matching ``classes[]`` entry too. Level/subclass drift is what
+# leaves ``test_touch_of_death`` reading ``monk_level == 5`` and
+# ``test_potent_spellcasting`` seeing a leaked "light domain" — the B18 class-1
+# residual. Snapshotting + restoring these (with the PC's primary class_slug)
+# closes that class AND B9 (the Caelan level-bump coupling).
+_HERMETIC_CLASS_SCOPED_KEYS = (
+    "level", "subclass", "subclass_name", "subclass_flavor",
+    "subclass_features", "subclass_choice", "subclass_features_data",
+)
+
+
+def _primary_class_slug(sheet: dict) -> str:
+    """Slug of the PC's primary (first) class — the ``class_slug`` a
+    class-scoped ``/sheet-fields`` PATCH needs so ``/rest``'s normalize
+    doesn't undo it. Demo PCs are single-class, so ``classes[0]`` is
+    the primary; all SRD class names are single words, so lower-casing
+    (with spaces→hyphens for safety) matches the server's ``_class_slug``."""
+    classes = sheet.get("classes") or []
+    if classes and isinstance(classes[0], dict):
+        return str(classes[0].get("class") or "").strip().lower().replace(" ", "-")
+    return ""
+
 
 async def _read_sheet(gm_client: httpx.AsyncClient, char_id: int) -> dict:
     """Return a PC's raw stored sheet dict (``/sheet-json`` gives the
@@ -333,33 +360,50 @@ async def _read_sheet(gm_client: httpx.AsyncClient, char_id: int) -> dict:
 
 
 async def _snapshot_pristine(gm_client: httpx.AsyncClient, char_id: int) -> dict:
+    """Snapshot a PC's pristine restorable fields, split into ``top``
+    (bare-PATCH keys) and ``cls`` (class-scoped keys, restored with the
+    captured primary ``slug``)."""
     sheet = await _read_sheet(gm_client, char_id)
-    return {k: copy.deepcopy(sheet[k]) for k in _HERMETIC_RESTORE_KEYS if k in sheet}
+    return {
+        "top": {k: copy.deepcopy(sheet[k])
+                for k in _HERMETIC_RESTORE_KEYS if k in sheet},
+        "cls": {k: copy.deepcopy(sheet[k])
+                for k in _HERMETIC_CLASS_SCOPED_KEYS if k in sheet},
+        "slug": _primary_class_slug(sheet),
+    }
 
 
 async def _restore_pristine(
     gm_client: httpx.AsyncClient, char_id: int, pristine: dict,
 ) -> None:
     """PATCH back any snapshot field that has drifted from pristine. Only
-    writes on actual drift, so an untouched PC pays just the read."""
+    writes on actual drift, so an untouched PC pays just the read.
+    Class-scoped keys go in a separate PATCH carrying ``class_slug`` so
+    ``/rest``'s normalize can't undo them."""
     if not pristine:
         return
     current = await _read_sheet(gm_client, char_id)
-    drift = {k: v for k, v in pristine.items() if current.get(k) != v}
-    if drift:
-        await gm_client.patch(
-            f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-fields",
-            json=drift,
-        )
+    url = f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-fields"
+    top = pristine.get("top") or {}
+    cls = pristine.get("cls") or {}
+    slug = pristine.get("slug") or ""
+    top_drift = {k: v for k, v in top.items() if current.get(k) != v}
+    if top_drift:
+        await gm_client.patch(url, json=top_drift)
+    cls_drift = {k: v for k, v in cls.items() if current.get(k) != v}
+    if cls_drift and slug:
+        await gm_client.patch(url, json={**cls_drift, "class_slug": slug})
 
 
 @pytest_asyncio.fixture(autouse=True)
 async def hermetic_pcs(
     gm_client: httpx.AsyncClient, roster: dict[str, dict],
 ) -> None:
-    """B17 — restore every demo PC's mutable sheet fields to their seed
-    state before each test, so a sheet-mutating test whose own restore
-    didn't complete can't cascade into the rest of the serial run.
+    """B17 / B18 — restore every demo PC's mutable sheet fields to their
+    seed state before each test, so a sheet-mutating test whose own
+    restore didn't complete can't cascade into the rest of the serial
+    run. Covers both top-level fields (spells/resources/slots — the B17
+    cascade) and class-scoped level/subclass (B18 class 1 / B9).
 
     Setup-time gate (like ``clean_pcs``, no teardown): the first test to
     run captures the pristine snapshot from the freshly-seeded stack;

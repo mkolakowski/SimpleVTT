@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1033.11] - 2026-07-21 — "The Second Seal"
+
+**Schema version:** 103
+
+**Commit summary:** Extend the `hermetic_pcs` fixture to also restore class-scoped `level`/`subclass`/`subclass_*` drift (with the PC's primary `class_slug`), closing B18 class 1 — the `assert 5 == 7` cluster — and B9.
+
+**Description:** Test-infrastructure follow-up to B17. The v2.1033.7 fixture restored only **top-level** sheet keys; the CI verification run (B18) then showed the largest residual class was **class-scoped level/subclass drift** (~10 failures: `test_touch_of_death` reading `monk_level == 5`, `test_potent_spellcasting` seeing a leaked "light domain" Lv 6, `test_watchers_will` `6 == 7`, …). Those fields (`level`, `subclass`, `subclass_*`) live in `_CLASS_SCOPED_KEYS`: a bare PATCH is silently undone by the next `/rest` (whose `normalize_dnd5e_sheet` re-mirrors `classes[0]` over the top-level fields), so a test that bumps a PC's level and doesn't restore it leaves every downstream level/subclass-reading test wrong.
+
+**Fix:** the snapshot now captures a per-PC record split into `top` (bare-PATCH keys) and `cls` (class-scoped keys) plus the primary `class_slug` (derived from `classes[0].class`); restore PATCHes any drifted class-scoped field in a separate call carrying `class_slug`, exactly as the level/subclass-mutating tests do in their own restore-in-`finally`. Drift-gated, so an untouched PC still pays only the read.
+
+**Validated locally:** a real-world reproduction (a leaker test bumps Kael to Lv 5 with no restore, then `test_touch_of_death::test_use_tod_happy_lv7` — which asserts `monk_level == 7`) now passes because the fixture heals Kael's level at setup; without the class-scoped restore it fails with the exact `assert 5 == 7` residual signature. Three new guard tests cover the mechanic.
+
+**Closes B9** (a Caelan level-bump in one test breaking `test_attack_divine_smite_spends_slot`) — the same class-scoped-level leak, now healed globally. Full CI re-measure of the remaining B18 classes (battle-state, buff-state) needs another ~4.75 h `harness` run.
+
+### Changed
+- `tests/harness/conftest.py` — `hermetic_pcs` extended: `_HERMETIC_CLASS_SCOPED_KEYS` + `_primary_class_slug`; `_snapshot_pristine`/`_restore_pristine` now split top-level vs class-scoped and restore the latter with `class_slug`.
+- `tests/harness/test_hermetic_pcs.py` (+3 → 6 tests) — class-scoped level leak/restore guards + updated round-trip for the new snapshot shape.
+- `BUGS.md` — B18 class 1 marked shipped; B9 → FIXED (subsumed).
+- `docs/test-harness-coverage.md` — total-test-count line bumped to 4835; `test_hermetic_pcs` entry updated.
+
+---
+
 ## [2.1033.10] - 2026-07-21 — "The Green Verdict"
 
 **Schema version:** 103
