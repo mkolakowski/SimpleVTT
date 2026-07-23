@@ -122,30 +122,34 @@ async def test_no_defense_no_bonus(gm_client, roster):
 
 
 async def test_defense_no_bonus_without_armor(gm_client, roster):
-    """Kael (Monk, Unarmored Defense) has no equipped armor item.
-    PATCH him to fighting_style="defense" — the +1 should NOT
-    apply because RAW gates on "wearing armor". Kael's sheet AC
-    is 16 (Unarmored Defense); we expect 16, not 17.
+    """Kael (Monk, Unarmored Defense) has no equipped armor item, so the
+    Defense fighting style's +1 must NOT apply (RAW gates on "wearing
+    armor"). Asserts on the DELTA (Defense adds 0 to Kael's AC), not an
+    absolute value — Kael is an item-rich showcase PC (his equipped
+    Bracers of Defense add +2 to his unarmored AC), so the absolute AC is
+    18, but the fighting-style contribution is what's under test. B18 class 6.
     """
     kael = roster["Kael Brightleaf"]
     tavik = roster["Brother Tavik Stonebrow"]
+    kael_tok = f"tok_def_kael_{kael['id']}"
+    tavik_tok = f"tok_def_kael_{tavik['id']}"
     try:
-        await gm_client.patch(
-            f"/api/campaign/{CAMPAIGN_ID}/character/{kael['id']}/sheet-fields",
-            json={"fighting_style": "defense"},
-        )
-        kael_tok = f"tok_def_kael_{kael['id']}"
-        tavik_tok = f"tok_def_kael_{tavik['id']}"
-        await _seed_battle(gm_client, [
-            _mkc(tavik_tok, tavik["id"], name=tavik["name"]),
-            _mkc(kael_tok, kael["id"], name=kael["name"]),
-        ])
-        target_ac = await _attack_for_target_ac(
-            gm_client, tavik["id"], kael_tok,
-        )
-        assert target_ac == 16, (
-            f"Defense requires worn armor (Kael is unarmored); "
-            f"expected AC 16, got {target_ac!r}"
+        async def _ac(style):
+            await gm_client.patch(
+                f"/api/campaign/{CAMPAIGN_ID}/character/{kael['id']}/sheet-fields",
+                json={"fighting_style": style},
+            )
+            await _seed_battle(gm_client, [
+                _mkc(tavik_tok, tavik["id"], name=tavik["name"]),
+                _mkc(kael_tok, kael["id"], name=kael["name"]),
+            ])
+            return await _attack_for_target_ac(gm_client, tavik["id"], kael_tok)
+
+        ac_base = await _ac("")          # no fighting style
+        ac_defense = await _ac("defense")  # Defense style, still unarmored
+        assert ac_defense == ac_base, (
+            f"Defense requires worn armor (Kael is unarmored); it must add "
+            f"nothing to his AC, but AC went {ac_base} → {ac_defense}"
         )
     finally:
         await gm_client.patch(

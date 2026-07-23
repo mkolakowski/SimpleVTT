@@ -10,7 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
-## [2.1033.15] - 2026-07-22 — "The Naked Fighter"
+## [2.1033.16] - 2026-07-22 — "The Misplaced Rapier"
+
+**Schema version:** 103
+
+**Commit summary:** Fix two more B18 class-6 tests — `test_defense_fighting_style` (Kael's Bracers of Defense) and the demon-slayer detune tests (stale hardcoded inventory index) — and re-file `test_attune_item` as an attunement-state leak, not a class-6 assertion bug.
+
+**Description:** Test-infrastructure, continuing the B18 class-6 cleanup.
+
+- **`test_defense_fighting_style::test_defense_no_bonus_without_armor`** asserted Kael's unarmored AC is exactly 16, but Kael (another item-rich showcase PC) wears **Bracers of Defense** (+2 AC when unarmored) → AC 18. Rewrote it to assert the Defense fighting-style **delta** — AC with the style must equal AC without it (the style adds nothing without worn armor) — isolating the mechanic under test from Kael's item bonuses.
+- **`test_demon_slayer_rider` / `test_demon_slayer_frighten`** (the detune tests) hardcoded `LYRA_DEMON_SLAYER_INV_IDX = 7`, but Lyra's Demon Slayer Rapier drifted to inventory index **11**. So the detune hit the wrong item, the Rapier stayed attuned, and the rider kept firing (the test's whole point is that a *detuned* weapon doesn't fire). Both now resolve the index **by name** — the same by-name mandate CLAUDE.md sets for character/spell ids (cf. the B16 confusion-index fix).
+
+**Re-filed:** `test_attune_item::test_attune_cap_blocks_fourth` is NOT a showcase-PC assertion bug — Pip's seeded 3/3 attunement (Cloak/Ring/Sword of Sharpness) gets mutated mid-run and the restore doesn't recover it, so a later test finds her at cap with the wrong items attuned. That's an **attunement-state leak** (the `inventory`-field restore isn't holding for `attuned` flags), moved out of class 6 for a separate look.
+
+Validated locally: `test_defense_fighting_style` and both demon-slayer files' detune tests pass. (`test_demon_slayer_frighten::…_broadcast_on_fiend` fails **locally only** — it needs the TEST_MODE-gated `/api/test/dice/seed`, which is off on the dev container; it passed on the CI re-measure and isn't in scope.)
+
+### Changed
+- `tests/harness/test_defense_fighting_style.py` — Kael test asserts the fighting-style AC delta, not an absolute AC.
+- `tests/harness/test_demon_slayer_rider.py` / `test_demon_slayer_frighten.py` — resolve the Demon Slayer Rapier's inventory index by name (`_demon_slayer_inv_idx`) instead of the stale constant `7`.
+- `BUGS.md` — B18 class 6: defense + demon-slayer marked fixed; `test_attune_item` re-filed as an attunement-state leak.
 
 **Schema version:** 103
 

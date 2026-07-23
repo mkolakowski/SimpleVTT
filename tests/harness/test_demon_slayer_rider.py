@@ -17,7 +17,21 @@ from .conftest import CAMPAIGN_ID
 
 
 LYRA_DEMON_SLAYER_ATTACK_IDX = 3
-LYRA_DEMON_SLAYER_INV_IDX = 7
+
+
+async def _demon_slayer_inv_idx(gm_client, char_id):
+    """Resolve the Demon Slayer Rapier's inventory index by name. The seed
+    inventory order drifts (this was hardcoded 7; the Rapier is now at 11),
+    so a stale constant detunes the WRONG item and the rider keeps firing.
+    CLAUDE.md mandates resolving indices by name — B18 class 6."""
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-json",
+    )
+    inv = (r.json().get("sheet") or {}).get("inventory") or []
+    for i, it in enumerate(inv):
+        if "Demon Slayer" in (it.get("name") or ""):
+            return i
+    raise AssertionError("Lyra must carry a Demon Slayer Rapier")
 
 
 def _uplifts(data, source):
@@ -119,10 +133,10 @@ async def test_demon_slayer_silent_on_humanoid(gm_client, lyra):
 async def test_demon_slayer_suppressed_when_detuned(gm_client, lyra):
     """v2.158.97: detuning the Rapier suppresses the rider even on
     a fiend target. Restores attunement in teardown."""
+    inv_idx = await _demon_slayer_inv_idx(gm_client, lyra["id"])
     detune = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/character/{lyra['id']}/attune",
-        json={"inventory_index": LYRA_DEMON_SLAYER_INV_IDX,
-              "attuned": False},
+        json={"inventory_index": inv_idx, "attuned": False},
     )
     assert detune.status_code == 200, detune.text
 
@@ -151,6 +165,5 @@ async def test_demon_slayer_suppressed_when_detuned(gm_client, lyra):
     finally:
         await gm_client.post(
             f"/api/campaign/{CAMPAIGN_ID}/character/{lyra['id']}/attune",
-            json={"inventory_index": LYRA_DEMON_SLAYER_INV_IDX,
-                  "attuned": True},
+            json={"inventory_index": inv_idx, "attuned": True},
         )
