@@ -168,3 +168,31 @@ async def test_next_test_sees_cleared_buff(gm_client, roster):
     )
     # Tidy up the battle we leaked so we don't pollute the rest of the run.
     await gm_client.put(f"/api/campaign/{CAMPAIGN_ID}/battle", json={"combatants": []})
+
+
+# ── B18 class 2: hermetic_battle restores the seeded battle roster ────────────
+
+async def _seeded_token_ids(gm_client) -> set:
+    b = (await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/battle")).json().get("battle") or {}
+    return {c.get("source_token_id") for c in (b.get("combatants") or []) if c.get("source_token_id")}
+
+
+async def test_leak_battle_roster(gm_client):
+    """Overwrite the demo's seeded battle with a custom combatant and leak
+    it — `hermetic_battle` must restore the seeded roster for the next test."""
+    assert len(await _seeded_token_ids(gm_client)) >= 4, "demo should seed ≥4 combatants"
+    r = await gm_client.put(f"/api/campaign/{CAMPAIGN_ID}/battle", json={
+        "combatants": [{"id": "tok_battle_leak", "char_id": None, "name": "Dummy",
+                        "initiative": 1, "hp_current": 1, "hp_max": 1, "buffs": []}],
+        "turn_index": 0, "round": 1, "active": True})
+    assert r.status_code == 200
+    assert await _seeded_token_ids(gm_client) == set(), "seeded roster should be gone after the overwrite"
+    # Intentionally no restore.
+
+
+async def test_next_test_sees_restored_battle(gm_client):
+    """`hermetic_battle` restored the seeded combatant roster at this test's setup."""
+    assert len(await _seeded_token_ids(gm_client)) >= 4, (
+        "hermetic_battle did not restore the demo's seeded battle roster that the "
+        "prior test overwrote — the B18 class-2 guard is broken"
+    )

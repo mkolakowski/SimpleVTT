@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1033.17] - 2026-07-22 — "The Muster"
+
+**Schema version:** 103
+
+**Commit summary:** Add the autouse `hermetic_battle` fixture that restores the demo's seeded battle roster before every test whose predecessor overwrote it — closing B18 class 2 (the battle-state hermeticity gap).
+
+**Description:** Test-infrastructure, B18 class 2. The demo seeds a Tavern Brawl battle (14 combatants, each with a `source_token_id`) that lives in the in-memory battle hub and persists across tests and the DB reseed. A test that `PUT`s its own combatants for a scenario and doesn't restore them leaves the seeded battle overwritten, so downstream tests that need the seeded roster fail: the sphere/cone/line geometry targeters require ≥4 combatants with a `source_token_id` ("got 0 seeded combatants" — the 9 CI errors), and `test_demo_dragon_spawn` needs Drakkasha present.
+
+**Fix:** `hermetic_battle` (autouse, alongside `clean_pcs` / `hermetic_pcs`) snapshots the pristine battle on the first test and, before every subsequent test, restores it **only when the seeded roster drifted** — drift keyed on the set of `source_token_id`s, so a test that replaces the battle with ad-hoc combatants (no source_token_id) triggers a restore for the next test, while a test that merely damages a seeded combatant (roster intact) pays just the read. Restoring the seeded battle is the demo's default state; a test that relied on a prior test's leftover battle was already non-hermetic, and any test that seeds its own battle overwrites the restore in its body exactly as before.
+
+**Validated** on a freshly-reseeded stack: a leak→restore reproduction (overwrite the seeded battle, next test finds the roster restored) plus the sphere/cone/line + `demo_dragon_spawn` targets all pass with the fixture live; a causation check (restore disabled) confirmed the fixture does **not** cause the pre-existing `aura_*` residual failures. Two guard tests added. (Local pristine-capture requires a freshly-seeded battle — a documented caveat of the shared demo campaign; CI seeds fresh on boot.)
+
+### Added
+- `tests/harness/conftest.py` — autouse `hermetic_battle` fixture + `_read_battle` / `_battle_roster_ids` helpers + `_PRISTINE_BATTLE`.
+- `tests/harness/test_hermetic_pcs.py` (+2 → 10 tests) — B18 class-2 guard: leak the seeded battle roster, assert the next test sees it restored.
+
+### Changed
+- `BUGS.md` — B18 class 2 marked fixed (corrects an earlier mislink: class 2 is battle-state hermeticity, distinct from B4's Playwright/DOM coverage gap). `docs/test-harness-coverage.md` — total-test-count → 4839; `test_hermetic_pcs` entry updated.
+
+---
+
 ## [2.1033.16] - 2026-07-22 — "The Misplaced Rapier"
 
 **Schema version:** 103

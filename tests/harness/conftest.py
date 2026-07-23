@@ -458,6 +458,74 @@ async def hermetic_pcs(
     )
 
 
+# ── B18 class 2: hermetic battle-state snapshot/restore (autouse) ─────────────
+#
+# The demo seeds a Tavern Brawl battle — 14 combatants, each carrying a
+# ``source_token_id`` (the seeded PCs + NPCs). It lives in the in-memory battle
+# hub and persists across tests AND the periodic DB reseed (see the note in
+# ``app/database.py`` — the authoritative battle survives a reseed). A test that
+# ``PUT``s its own combatants for a scenario and doesn't restore them leaves the
+# seeded battle overwritten, so downstream tests that need the seeded roster —
+# the sphere/cone/line geometry targeters (which require ≥4 combatants with a
+# ``source_token_id``) and the Drakkasha demo-spawn check — fail with
+# "got 0 seeded combatants". This is B18 class 2 (the B4 gap at scale).
+#
+# This autouse fixture snapshots the pristine battle on the first test (when the
+# freshly-booted stack still carries the seeded roster) and, before every
+# subsequent test, restores it IF the seeded roster is no longer intact. Drift is
+# keyed on the set of ``source_token_id``s: a test that replaces the battle with
+# custom combatants (no source_token_id) drops the seeded ids, so the next test
+# gets the seeded battle back — then that test's own ``PUT /battle`` (if any)
+# overwrites it in its body, exactly as before. Restoring the seeded battle is
+# the demo's *default* state, so a test that relied on a prior test's leftover
+# battle was already non-hermetic.
+
+_PRISTINE_BATTLE: dict = {}
+
+
+async def _read_battle(gm_client: httpx.AsyncClient) -> dict:
+    resp = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/battle")
+    if resp.status_code != 200:
+        return {}
+    return (resp.json() or {}).get("battle") or {}
+
+
+def _battle_roster_ids(battle: dict) -> tuple:
+    """Identity of the seeded roster: the sorted set of ``source_token_id``s.
+    Seeded combatants carry one; ad-hoc test combatants don't."""
+    return tuple(sorted(
+        str(c.get("source_token_id"))
+        for c in (battle.get("combatants") or [])
+        if c.get("source_token_id")
+    ))
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def hermetic_battle(gm_client: httpx.AsyncClient) -> None:
+    """B18 class 2 — restore the demo's seeded battle before each test whose
+    predecessor overwrote it, so tests that depend on the seeded combatant
+    roster can't be poisoned by an earlier test's ``PUT /battle``. Setup-time
+    gate (like ``clean_pcs`` / ``hermetic_pcs``); the first test captures the
+    pristine battle, and restore fires only when the seeded roster drifted."""
+    global _PRISTINE_BATTLE
+    if not _PRISTINE_BATTLE:
+        _PRISTINE_BATTLE = copy.deepcopy(await _read_battle(gm_client))
+        return
+    if not _PRISTINE_BATTLE.get("combatants"):
+        return  # no seeded battle was captured — nothing to restore
+    current = await _read_battle(gm_client)
+    if _battle_roster_ids(current) != _battle_roster_ids(_PRISTINE_BATTLE):
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/battle",
+            json={
+                "combatants": _PRISTINE_BATTLE.get("combatants") or [],
+                "turn_index": _PRISTINE_BATTLE.get("turn_index", 0),
+                "round": _PRISTINE_BATTLE.get("round", 1),
+                "active": _PRISTINE_BATTLE.get("active", False),
+            },
+        )
+
+
 # ── Live progress + per-test timing (opt-in via HARNESS_PROGRESS=1) ──────────
 # scripts/run_harness.sh sets HARNESS_PROGRESS=1 to stream a timestamped line
 # when each test STARTS and again when it FINISHES (with its duration), so a
