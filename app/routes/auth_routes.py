@@ -101,6 +101,12 @@ def _safe_next_path(raw: Optional[str]) -> str:
     if not raw:
         return "/"
     candidate = raw.strip()
+    # v2.1036.1 — reject backslash-based open redirects: browsers normalize
+    # "\" → "/", so "/\evil.com" becomes protocol-relative "//evil.com".
+    # Block the decoded + encoded backslash and control/whitespace smuggling.
+    if "%5c" in candidate.lower() or any(ch in candidate for ch in ("\t", "\n", "\r", "\x00")):
+        return "/"
+    candidate = candidate.replace("\\", "/")
     # Reject absolute URLs and protocol-relative URLs.
     if not candidate.startswith("/") or candidate.startswith("//"):
         return "/"

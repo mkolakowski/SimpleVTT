@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1036.1] - 2026-07-31 — "The Straight Path"
+
+**Schema version:** 103
+
+**Commit summary:** Fix a backslash-based open-redirect bypass in the post-login `next=` scrubbers — `/\evil.com` (and encoded/control-char variants) now collapse to `/`.
+
+**Description:** Security fix (audit follow-up). `safe_next_path` (`app/auth.py`) and its mirror `_safe_next_path` (`app/routes/auth_routes.py`) rejected `//` and scheme-smuggling but not a leading backslash: `/\evil.com` passed the guard, and browsers normalize `\`→`/`, so the `Location` resolves to protocol-relative `//evil.com` — an open redirect usable for post-login phishing. Both scrubbers now normalize `\`→`/` before the existing checks, and reject the still-encoded `%5c` plus tab/newline/CR/NUL control chars (CRLF `Location` smuggling). Legitimate same-origin paths are unaffected.
+
+### Fixed
+- `app/auth.py` / `app/routes/auth_routes.py` — backslash + encoded-backslash + control-char open-redirect bypass in the `next=` scrubbers.
+
+### Added
+- `tests/harness/test_safe_next_path.py` — 30 in-process unit tests (both scrubbers × hostile targets rejected / legit paths preserved / empty+None → `/`).
+
+---
+
 ## [2.1036.0] - 2026-07-31 — "The Deadbolt"
 
 **Schema version:** 103

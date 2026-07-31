@@ -173,6 +173,13 @@ def safe_next_path(raw: Optional[str]) -> str:
     if not raw or not isinstance(raw, str):
         return "/"
     c = raw.strip()
+    # v2.1036.1 — browsers normalize backslashes to forward slashes, so
+    # "/\evil.com" resolves to protocol-relative "//evil.com" (open redirect).
+    # Normalize "\" → "/" (catches the decoded form) and reject the still-
+    # encoded form + control/whitespace chars that smuggle past URL parsers.
+    if "%5c" in c.lower() or any(ch in c for ch in ("\t", "\n", "\r", "\x00")):
+        return "/"
+    c = c.replace("\\", "/")
     if not c.startswith("/") or c.startswith("//"):
         return "/"
     parts = c.split("/", 2)
