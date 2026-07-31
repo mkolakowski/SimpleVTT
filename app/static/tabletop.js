@@ -1420,7 +1420,7 @@
         const el = document.createElement('div');
         el.id = 'target-picker-hint';
         el.innerHTML =
-            `<strong>🎯 ${spellName}</strong> · ` +
+            `<strong>🎯 ${escapeHTML(spellName)}</strong> · ` +
             `<span class="muted">pick ${picked} / ${required} target${required === 1 ? '' : 's'} · ` +
             `click target · right-click to undo · Enter to commit · Esc to cancel</span>`;
         Object.assign(el.style, {
@@ -1961,7 +1961,7 @@
             verb = 'click to place';
         }
         el.innerHTML =
-            `<strong>💥 ${spellName}</strong> · ${sizeFt} ft ${shapeLabel} · ` +
+            `<strong>💥 ${escapeHTML(spellName)}</strong> · ${sizeFt} ft ${shapeLabel} · ` +
             `<span class="muted">${verb} · Esc to cancel</span>`;
         Object.assign(el.style, {
             position: 'absolute',

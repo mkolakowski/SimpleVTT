@@ -10,6 +10,19 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1040.1] - 2026-07-31 — "The Warded Name"
+
+**Schema version:** 103
+
+**Commit summary:** Escape `spellName` in the two tabletop AoE / target-picker hint banners (front-end self-XSS from a crafted homebrew spell name).
+
+**Description:** Security fix (audit follow-up, XSS batch). Two `innerHTML` sinks in `app/static/tabletop.js` (the 🎯 target-picker hint at ~L1423 and the 💥 AoE-placement hint at ~L1964) interpolated `${spellName}` without escaping, while sibling fields everywhere else in the file are consistently `escapeHTML`'d. `spellName` is the name of the spell the current user is casting (SRD or campaign-homebrew), so a malicious homebrew spell name would execute in the caster's own browser (self-XSS — it renders only in the acting client, not cross-user). Both now use the shared `escapeHTML()` helper. Front-end-only change — no endpoint / WS contract change, so no harness test (JS DOM rendering isn't covered by the HTTP+WS harness); `node --check` clean.
+
+### Fixed
+- `app/static/tabletop.js` — `escapeHTML(spellName)` in `_showTargetPickerHint` + `_showAoePickerHint` banner `innerHTML`.
+
+---
+
 ## [2.1040.0] - 2026-07-31 — "The Bomb Squad"
 
 **Schema version:** 103
