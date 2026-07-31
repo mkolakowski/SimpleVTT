@@ -8,7 +8,9 @@ See .env.example for the full list of variables and their defaults.
 """
 from __future__ import annotations
 
+import logging
 import os
+import secrets
 from functools import lru_cache
 from typing import List, Optional
 
@@ -20,6 +22,49 @@ def _env_bool(name: str, default: bool = False) -> bool:
     if raw is None or raw == "":
         return default
     return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+# v2.1036.0 — session-secret hardening (security audit). The session cookie +
+# demo magic-link tokens are HMAC-signed with APP_SECRET_KEY; a blank / known /
+# placeholder key lets an attacker forge a session for any user (full auth
+# bypass). Known-weak values we refuse to sign with.
+_WEAK_SECRET_KEYS = frozenset({
+    "", "change-me", "changeme", "secret", "your-secret-key",
+    "CHANGE_ME_TO_A_LONG_RANDOM_STRING",
+})
+_MIN_SECRET_KEY_LEN = 16
+
+
+def _resolve_secret_key() -> str:
+    """Return a safe session-signing key.
+
+    A strong operator-supplied ``APP_SECRET_KEY`` is used as-is. A blank / known-
+    placeholder / too-short value is UNSAFE: by default we generate a strong
+    random *ephemeral* key for this process (so the app is never trivially
+    forgeable — the trade-off is that sessions reset on restart) and log a
+    CRITICAL warning. Set ``APP_SECRET_KEY_STRICT=true`` to hard-fail the boot
+    instead (recommended for a persistent production deploy)."""
+    raw = (os.environ.get("APP_SECRET_KEY") or "").strip()
+    if raw and raw not in _WEAK_SECRET_KEYS and len(raw) >= _MIN_SECRET_KEY_LEN:
+        return raw
+    msg = (
+        "APP_SECRET_KEY is unset, a known placeholder, or shorter than "
+        f"{_MIN_SECRET_KEY_LEN} chars. Session cookies and demo magic-link "
+        "tokens are signed with this key; a guessable value allows session "
+        "forgery (full authentication bypass)."
+    )
+    if _env_bool("APP_SECRET_KEY_STRICT", False):
+        raise RuntimeError(
+            msg + " APP_SECRET_KEY_STRICT is set — refusing to boot. Generate one "
+            "with: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+        )
+    logging.getLogger("app.config").critical(
+        "%s Generating a random EPHEMERAL key for this process — all sessions "
+        "will reset on restart. Set a persistent APP_SECRET_KEY in your "
+        "environment (or APP_SECRET_KEY_STRICT=true to fail closed instead).",
+        msg,
+    )
+    return secrets.token_urlsafe(48)
 
 
 def _env_list(name: str, default: Optional[List[str]] = None) -> List[str]:
@@ -103,7 +148,7 @@ class Settings(BaseModel):
 def get_settings() -> Settings:
     settings = Settings(
         app=AppSection(
-            secret_key=os.environ.get("APP_SECRET_KEY", "change-me"),
+            secret_key=_resolve_secret_key(),
             base_url=os.environ.get("APP_BASE_URL", "http://localhost:8013"),
             allow_local_registration=_env_bool("APP_ALLOW_LOCAL_REGISTRATION", True),
         ),

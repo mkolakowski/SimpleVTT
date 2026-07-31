@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1036.0] - 2026-07-31 — "The Deadbolt"
+
+**Schema version:** 103
+
+**Commit summary:** Harden APP_SECRET_KEY handling — a blank / placeholder / too-short session-signing key now auto-generates a strong ephemeral key (with a CRITICAL warning) instead of silently signing with a guessable value, plus an opt-in APP_SECRET_KEY_STRICT to hard-fail the boot.
+
+**Description:** Security hardening (audit follow-up). The session cookie and the demo magic-link tokens are HMAC-signed with `APP_SECRET_KEY`; the previous default fell back to the literal `"change-me"` (and docker-compose interpolates an empty string when the var is unset), so a misconfigured deploy could sign sessions with a **guessable key** — allowing an attacker to forge a session for any user (full auth bypass) and mint valid magic-link tokens. The audit rated this the highest-leverage single fix.
+
+`app/config._resolve_secret_key()` now classifies the key: a strong operator value (≥16 chars, not a known placeholder) is used verbatim; anything unsafe is, by default, replaced with a `secrets.token_urlsafe(48)` **ephemeral** key for that process (never trivially forgeable — the trade-off is sessions reset on restart) and logged at CRITICAL. Operators who want fail-closed behavior set `APP_SECRET_KEY_STRICT=true`, which raises at boot instead. Deploys that already set a strong key (verified: this stack's is 64 chars) are unaffected.
+
+### Added
+- `app/config.py` — `_resolve_secret_key()` + `APP_SECRET_KEY_STRICT` handling; `_WEAK_SECRET_KEYS` / `_MIN_SECRET_KEY_LEN`.
+- `.env.example` — expanded `APP_SECRET_KEY` guidance + `APP_SECRET_KEY_STRICT`.
+- `tests/harness/test_secret_key_guard.py` — 8 in-process unit tests: strong key used verbatim, weak/blank/placeholder/short auto-generated (distinct per call), strict mode hard-fails on weak but passes a strong key.
+
+### Changed
+- `app/config.py` — `Settings.app.secret_key` now sourced from `_resolve_secret_key()` instead of `os.environ.get("APP_SECRET_KEY", "change-me")`.
+
+---
+
 ## [2.1035.0] - 2026-07-31 — "The Hard Hat"
 
 **Schema version:** 103
