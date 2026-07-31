@@ -31,7 +31,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from sqlalchemy.orm import Session
 
 from .. import dice as dice_mod
-from ..auth import get_current_user, require_gm, require_user
+from ..auth import get_current_user, require_gm, require_uploads_enabled, require_user
 from ..config import get_settings
 from ..database import SessionLocal, get_db
 from ..game_systems import SYSTEMS, get_system, system_choices
@@ -16937,6 +16937,7 @@ async def import_character(
     mode: str = Form("clone"),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
+    _uploads_gate: None = Depends(require_uploads_enabled),
 ):
     """Import a PC from a ``simplevtt-export`` (level=character) zip into this
     campaign. GM only. ``mode=clone`` creates a brand-new character (fresh id,
@@ -16990,6 +16991,7 @@ async def import_campaign(
     target_campaign_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
+    _uploads_gate: None = Depends(require_uploads_enabled),
 ):
     """Import a whole-campaign ``simplevtt-export`` (level=campaign) zip.
 
@@ -22365,6 +22367,7 @@ async def upload_token_image(
     image: UploadFile = File(...),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
+    _uploads_gate: None = Depends(require_uploads_enabled),
 ):
     import uuid
     from pathlib import Path as _Path
@@ -121958,6 +121961,7 @@ async def upload_portrait(
     portrait: UploadFile = File(...),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
+    _uploads_gate: None = Depends(require_uploads_enabled),
 ):
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     char = db.query(Character).filter(Character.id == char_id).first()
@@ -123861,6 +123865,7 @@ async def upload_template_image(
     image: UploadFile = File(...),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
+    _uploads_gate: None = Depends(require_uploads_enabled),
 ):
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_is_gm(user, campaign, db):
@@ -126442,6 +126447,7 @@ async def settings_upload_map(
     image: UploadFile = File(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
+    _uploads_gate: None = Depends(require_uploads_enabled),
 ):
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_is_gm(user, campaign, db):
@@ -126527,6 +126533,7 @@ async def settings_bulk_upload_maps(
     images: list[UploadFile] = File(...),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
+    _uploads_gate: None = Depends(require_uploads_enabled),
 ):
     """v2.1024.0 — Bulk map upload. Accepts multiple image files in one
     request and creates a ``Map`` per file, each named from its filename,
@@ -128469,6 +128476,7 @@ async def upload_encounter_background(
     clear: bool = Form(False),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
+    _uploads_gate: None = Depends(require_uploads_enabled),
 ):
     """Set or clear the background bound to a specific encounter. GM-only.
 
@@ -128511,6 +128519,7 @@ async def set_campaign_background(
     clear: bool = Form(False),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
+    _uploads_gate: None = Depends(require_uploads_enabled),
 ):
     """Set or clear the campaign's **default** background. GM-only.
 

@@ -26,7 +26,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
-from ..auth import require_user
+from ..auth import require_uploads_enabled, require_user
 from ..database import get_db
 from ..models import (
     Campaign,
@@ -637,6 +637,7 @@ async def upload_handout_image(
     image: UploadFile = File(...),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
+    _uploads_gate: None = Depends(require_uploads_enabled),
 ):
     """Upload an image for a handout (GM/co-GM only) → returns its URL,
     which the client puts in the handout's ``image_url``. Stored under

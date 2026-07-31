@@ -68,6 +68,17 @@ class Settings(BaseModel):
     demo_reset_on_boot: bool = True
     demo_credentials_visible: bool = True   # show login creds on /login
 
+    # Lock down user file uploads on a public demo (v2.1034.0). Only takes
+    # effect when ``demo_mode`` is ALSO true — a normal deploy is never
+    # affected. When both are true, every user-facing upload endpoint
+    # (token/portrait/template/map/handout/encounter-background images, audio
+    # tracks, and character/campaign import) returns 403 so anonymous demo
+    # visitors can't push arbitrary files into the shared uploads volume.
+    # Defaults true so a public demo is locked down out of the box; set
+    # ``DEMO_DISABLE_UPLOADS=false`` to re-enable uploads on a demo instance
+    # you control. See docs/plans/demo-mode.md.
+    demo_disable_uploads: bool = True
+
     # Version-number display (v2.776.0). Operator toggles for the masthead /
     # footer version stamp. All default true so a fresh deploy looks the same
     # as before. ``show_version`` hides the stamp entirely;
@@ -112,6 +123,7 @@ def get_settings() -> Settings:
         demo_reset_interval_minutes=max(5, min(1440, int(os.environ.get("DEMO_RESET_INTERVAL_MINUTES") or 60))),
         demo_reset_on_boot=_env_bool("DEMO_RESET_ON_BOOT", True),
         demo_credentials_visible=_env_bool("DEMO_CREDENTIALS_VISIBLE", True),
+        demo_disable_uploads=_env_bool("DEMO_DISABLE_UPLOADS", True),
         show_version=_env_bool("SHOW_VERSION", True),
         version_link_changelog=_env_bool("VERSION_LINK_CHANGELOG", True),
         show_version_name=_env_bool("SHOW_VERSION_NAME", True),

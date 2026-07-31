@@ -145,6 +145,26 @@ def require_gm(
     return user
 
 
+def uploads_disabled_in_demo(settings: Optional[Settings] = None) -> bool:
+    """True when this instance is a locked-down public demo — ``DEMO_MODE``
+    and ``DEMO_DISABLE_UPLOADS`` both on (the latter defaults true). Pure
+    predicate, so it's unit-testable without a request/DB. See
+    ``require_uploads_enabled`` and docs/plans/demo-mode.md."""
+    settings = settings or get_settings()
+    return bool(settings.demo_mode and settings.demo_disable_uploads)
+
+
+def require_uploads_enabled() -> None:
+    """FastAPI dependency guarding user file-upload endpoints on a public
+    demo (v2.1034.0). When ``DEMO_MODE`` and ``DEMO_DISABLE_UPLOADS`` are both
+    on, refuse the upload with 403 so demo visitors can't fill the shared
+    uploads volume with arbitrary files. No effect on a normal deploy
+    (``DEMO_MODE=false``): the demo reseeds hourly and its seed already ships
+    the showcase media, so uploads are pure abuse surface there."""
+    if uploads_disabled_in_demo():
+        raise HTTPException(status_code=403, detail="Uploads are disabled on this demo instance")
+
+
 def safe_next_path(raw: Optional[str]) -> str:
     """v2.785.0 — scrub a post-login redirect target to a same-origin path
     (no scheme, no protocol-relative ``//``). Falls back to ``/``. Shared by

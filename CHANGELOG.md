@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1034.0] - 2026-07-31 — "The Velvet Rope"
+
+**Schema version:** 103
+
+**Commit summary:** Add a `DEMO_DISABLE_UPLOADS` env toggle (default on) that blocks every user-facing file-upload endpoint with 403 on a public demo, gated behind `DEMO_MODE` so normal deploys are unaffected.
+
+**Description:** Feature — demo-mode hardening. A public demo hands a single URL to anonymous visitors and reseeds hourly, so letting them push arbitrary files into the shared `uploads_data` volume is pure abuse surface (disk fill, unmoderated content that lingers until the next reset). This adds a second demo gate, `DEMO_DISABLE_UPLOADS`, that — **only when `DEMO_MODE` is also true** — makes every user-facing upload endpoint return `403 {"detail": "Uploads are disabled on this demo instance"}`.
+
+**Mechanism:** a shared FastAPI dependency, `app.auth.require_uploads_enabled` (with a unit-testable predicate `uploads_disabled_in_demo`), attached to the 11 dedicated upload endpoints across `tabletop_routes.py`, `notes_routes.py`, and `audio_routes.py`: token/portrait/template/map (single + bulk)/handout/encounter-background/campaign-background images, audio track upload, and character/campaign import. The flag defaults **true**, so a public demo is locked down out of the box; an operator running a demo they control sets `DEMO_DISABLE_UPLOADS=false` to re-enable uploads. Zero effect on any non-demo deploy (`DEMO_MODE=false` → the dependency is a silent no-op).
+
+**Scope note:** only the user-facing upload endpoints are gated. Admin-only upload routes (`admin_routes.py`, the admin-center map upload) already sit behind `require_admin` + destructive gates and are out of scope; campaign creation / settings-save (which accept an *optional* thumbnail as a side channel) are left functional so core demo flows aren't broken. Widen on request.
+
+### Added
+- `app/config.py` — `Settings.demo_disable_uploads` (default `True`), wired from `DEMO_DISABLE_UPLOADS` via `_env_bool`.
+- `app/auth.py` — `uploads_disabled_in_demo(settings)` predicate + `require_uploads_enabled()` FastAPI dependency.
+- `DEMO_DISABLE_UPLOADS` passthrough in `docker-compose.yml` + `docker-compose.ghcr.yml` (app service), documented block in `.env.example`.
+- `tests/harness/test_demo_disable_uploads.py` — 6 in-process unit tests (predicate truth table + dependency raise/no-op + default-true) and 1 adaptive integration test that proves the guard is wired to a real upload endpoint over HTTP (403 with the exact guard detail on a locked demo, 200 otherwise), so it passes against a dev stack or a live `DEMO_MODE=true` demo. Validated on this operator's demo stack (`DEMO_MODE=true`): all 7 pass, the upload correctly returns `403 "Uploads are disabled on this demo instance"`.
+
+### Changed
+- `app/routes/tabletop_routes.py`, `app/routes/notes_routes.py`, `app/routes/audio_routes.py` — 11 upload handlers gain `Depends(require_uploads_enabled)`.
+- `docs/plans/demo-mode.md` — documents the new toggle. `docs/test-harness-coverage.md` — new test entry + total-count bump.
+
+---
+
 ## [2.1033.17] - 2026-07-22 — "The Muster"
 
 **Schema version:** 103

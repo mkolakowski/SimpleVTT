@@ -64,6 +64,8 @@ services:
       DEMO_RESET_INTERVAL_MINUTES: ${DEMO_RESET_INTERVAL_MINUTES:-60}
       DEMO_RESET_ON_BOOT: ${DEMO_RESET_ON_BOOT:-true}
       DEMO_CREDENTIALS_VISIBLE: ${DEMO_CREDENTIALS_VISIBLE:-true}
+      # Block user file uploads when DEMO_MODE is also true (v2.1034.0).
+      DEMO_DISABLE_UPLOADS: ${DEMO_DISABLE_UPLOADS:-true}
     volumes:
       - uploads_data:/app/app/static/uploads
     ports:

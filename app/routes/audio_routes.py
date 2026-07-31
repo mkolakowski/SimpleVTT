@@ -29,7 +29,7 @@ from fastapi import (
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from ..auth import require_user
+from ..auth import require_uploads_enabled, require_user
 from ..database import get_db
 from ..models import (
     AUDIO_CATEGORIES,
@@ -376,6 +376,7 @@ async def upload_track(
     audio: list[UploadFile] = File(...),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
+    _uploads_gate: None = Depends(require_uploads_enabled),
 ):
     _require_campaign_gm(db, user, campaign_id)
     pl = (
