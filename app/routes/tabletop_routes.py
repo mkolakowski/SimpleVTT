@@ -126554,6 +126554,10 @@ async def settings_bulk_upload_maps(
     files = [f for f in (images or []) if f and f.filename]
     if not files:
         raise HTTPException(400, "No image files provided")
+    # v2.1040.0 — cap files-per-request (DoS: unbounded bulk upload). Env-overridable.
+    _max_bulk = int(os.getenv("MAX_BULK_UPLOAD_FILES", "100") or 100)
+    if len(files) > _max_bulk:
+        raise HTTPException(400, f"Too many files in one request (max {_max_bulk}).")
 
     try:
         gt = GridType(grid_type)

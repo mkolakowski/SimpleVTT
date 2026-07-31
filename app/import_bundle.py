@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import re
 import uuid
 import zipfile
@@ -24,6 +25,38 @@ from pathlib import Path
 from typing import Any, Optional
 
 from .export_bundle import EXPORT_FORMAT, EXPORT_VERSION
+
+# v2.1040.0 — zip-bomb / resource-exhaustion guards (security audit). A small
+# crafted archive can declare gigabytes of uncompressed content; ``zf.read()``
+# inflates a member fully into memory. We reject an archive whose declared
+# uncompressed total (or any single entry, or entry count) exceeds a ceiling
+# BEFORE reading anything. Sizes come from the zip central directory — a real
+# DEFLATE bomb's declared file_size is genuinely huge, which is exactly what we
+# catch; a lie about file_size makes zipfile.read() itself raise on mismatch.
+_MAX_ARCHIVE_ENTRIES = 10000
+_MAX_ENTRY_UNCOMPRESSED_BYTES = 512 * 1024 * 1024  # 512 MiB per member
+
+
+def _max_uncompressed_bytes() -> int:
+    """Total-uncompressed ceiling; env-overridable (default 1 GiB)."""
+    try:
+        return max(1, int(os.environ.get("MAX_IMPORT_UNCOMPRESSED_BYTES", str(1024 * 1024 * 1024))))
+    except ValueError:
+        return 1024 * 1024 * 1024
+
+
+def _guard_archive_size(zf: zipfile.ZipFile) -> None:
+    infos = zf.infolist()
+    if len(infos) > _MAX_ARCHIVE_ENTRIES:
+        raise BundleError(f"Archive has too many entries (> {_MAX_ARCHIVE_ENTRIES}).")
+    total_limit = _max_uncompressed_bytes()
+    total = 0
+    for zi in infos:
+        if zi.file_size > _MAX_ENTRY_UNCOMPRESSED_BYTES:
+            raise BundleError("An archive entry exceeds the uncompressed-size limit.")
+        total += zi.file_size
+        if total > total_limit:
+            raise BundleError("Archive uncompressed size exceeds the limit (possible zip bomb).")
 
 _STATIC_ROOT = Path(__file__).resolve().parent / "static"
 _UPLOADS_ROOT = _STATIC_ROOT / "uploads"
@@ -39,9 +72,11 @@ class BundleError(ValueError):
 
 def open_archive(raw: bytes) -> zipfile.ZipFile:
     try:
-        return zipfile.ZipFile(io.BytesIO(raw))
+        zf = zipfile.ZipFile(io.BytesIO(raw))
     except zipfile.BadZipFile as e:
         raise BundleError("Not a valid zip archive.") from e
+    _guard_archive_size(zf)  # reject zip bombs before any member is read
+    return zf
 
 
 def read_manifest(zf: zipfile.ZipFile, *, expected_level: Optional[str] = None) -> dict:

@@ -12,6 +12,7 @@ Player-side:
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -379,6 +380,11 @@ async def upload_track(
     _uploads_gate: None = Depends(require_uploads_enabled),
 ):
     _require_campaign_gm(db, user, campaign_id)
+    # v2.1040.0 — cap files-per-request (DoS: unbounded audio upload). Env-overridable.
+    _tracks = [f for f in (audio or []) if f and f.filename]
+    _max_audio = int(os.getenv("MAX_AUDIO_UPLOAD_FILES", "50") or 50)
+    if len(_tracks) > _max_audio:
+        raise HTTPException(400, f"Too many files in one request (max {_max_audio}).")
     pl = (
         db.query(Playlist)
         .filter(Playlist.id == playlist_id, Playlist.campaign_id == campaign_id)

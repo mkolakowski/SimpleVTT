@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1040.0] - 2026-07-31 — "The Bomb Squad"
+
+**Schema version:** 103
+
+**Commit summary:** Add zip-bomb guards to character/campaign import and per-request file-count caps to the bulk-map + audio uploads (DoS resource-exhaustion defense).
+
+**Description:** Security hardening (audit follow-up, DoS batch). Two resource-exhaustion gaps the audit flagged:
+
+- **Zip bomb on import.** `import_bundle.open_archive` fed straight into `zf.read()`, which inflates a member fully into memory — a small crafted archive could declare gigabytes and OOM the process. `open_archive` now calls `_guard_archive_size` first: it rejects an archive whose declared **uncompressed total** exceeds `MAX_IMPORT_UNCOMPRESSED_BYTES` (default 1 GiB, env-overridable), whose any single member exceeds 512 MiB, or whose entry count exceeds 10 000 — all read from the zip central directory **before** any member is decompressed.
+- **Unbounded bulk uploads.** `settings_bulk_upload_maps` (`images: list`) and `upload_track` (`audio: list`) accepted an unbounded number of files per request. Each now caps at `MAX_BULK_UPLOAD_FILES` (default 100) / `MAX_AUDIO_UPLOAD_FILES` (default 50) with a `400`.
+
+### Added
+- `app/import_bundle.py` — `_guard_archive_size` + `_max_uncompressed_bytes` + `_MAX_ARCHIVE_ENTRIES` / `_MAX_ENTRY_UNCOMPRESSED_BYTES`; `open_archive` invokes the guard.
+- `.env.example` — `MAX_IMPORT_UNCOMPRESSED_BYTES` / `MAX_BULK_UPLOAD_FILES` / `MAX_AUDIO_UPLOAD_FILES`.
+- `tests/harness/test_import_zip_guard.py` — 6 in-process unit tests (small ok / oversized total / oversized entry / too many entries / bad zip / default ceiling).
+
+### Changed
+- `app/routes/tabletop_routes.py::settings_bulk_upload_maps` + `app/routes/audio_routes.py::upload_track` — per-request file-count caps.
+
+---
+
 ## [2.1039.0] - 2026-07-31 — "The Cooldown"
 
 **Schema version:** 103
