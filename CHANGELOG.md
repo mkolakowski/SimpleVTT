@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1040.2] - 2026-07-31 — "The Members' Entrance"
+
+**Schema version:** 103
+
+**Commit summary:** Require login on `GET /api/open5e/items` — it was an unauthenticated outbound-request relay.
+
+**Description:** Security fix (audit follow-up). The Open5e item-search proxy (`open5e_items_proxy`) took no auth, so an anonymous visitor could make the server issue outbound GETs to `api.open5e.com` (a low-grade request relay / a way to hammer the upstream in the server's name). The host/path prefix are hardcoded so it's not internal SSRF, but there's no reason to leave it open: its only caller is the D&D 5e character sheet's item search, which is already behind login. Added `Depends(require_user)`; anonymous callers now get `401`.
+
+### Changed
+- `app/routes/tabletop_routes.py::open5e_items_proxy` — now requires `require_user`.
+
+### Added
+- `tests/harness/test_open5e_items_auth.py` — error-path test (unauthenticated → 401).
+
+---
+
 ## [2.1040.1] - 2026-07-31 — "The Warded Name"
 
 **Schema version:** 103

@@ -120090,11 +120090,20 @@ async def undo_attack_damage(
 # ----------- API: Open5e item proxy (weapons / armor / magic items) -----------
 
 @router.get("/api/open5e/items")
-def open5e_items_proxy(type: str = "weapons", search: str = "", limit: int = 60):
+def open5e_items_proxy(
+    type: str = "weapons",
+    search: str = "",
+    limit: int = 60,
+    user: User = Depends(require_user),
+):
     """Search Open5e for weapons / armor / magic items.
 
     Items aren't part of the local Open5e cache, so this always proxies the
     public API. Type is one of "weapons", "armor", "magicitems".
+
+    v2.1040.2 — requires auth: it's an outbound server-side request primitive,
+    and the only caller (the D&D 5e sheet's item search) is already behind
+    login, so gating it removes an unauthenticated request relay.
     """
     cat = (type or "weapons").strip().lower()
     if cat not in ("weapons", "armor", "magicitems"):
